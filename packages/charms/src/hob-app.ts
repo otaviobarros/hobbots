@@ -168,13 +168,13 @@ export const hobAppName = (hobName: string) => {
 /** The manifest GitHub makes the hob's app from (ADR 022). */
 export const hobAppManifest = (hobName: string, redirectUrl: string) => ({
   name: hobAppName(hobName),
-  url: "https://hobbots.ai",
+  url: "https://hobbots.app",
   description: `${hobName}'s identity on GitHub, made by Hobbots for this hob alone. It acts only where you install it.`,
   public: false,
   default_permissions: HOB_APP_PERMISSIONS,
   default_events: [],
   // GitHub asks for a webhook URL; the app subscribes to no event and its webhook stays off.
-  hook_attributes: { url: "https://hobbots.ai", active: false },
+  hook_attributes: { url: "https://hobbots.app", active: false },
   redirect_url: redirectUrl,
 });
 

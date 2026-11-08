@@ -299,7 +299,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       // The hub asks the user whether Bracken will write code, in the Quest's chat, and no hob asks (#1241).
       const { body } = await request<{ readonly questions: ReadonlyArray<HubQuestion> }>("GET", "/api/hub-questions");
       const asked = body.questions.filter(
-        (question) => question.subject.kind === "coding-setup" && question.subject.key === member.id,
+        (question) => question.ask.kind === "coding-setup" && question.key === member.id,
       );
       expect(asked).toEqual([expect.objectContaining({ chat: { agentId: lead.id, threadId: thread.id } })]);
 

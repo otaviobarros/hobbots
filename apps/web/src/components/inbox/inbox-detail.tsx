@@ -27,7 +27,8 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
-import { CodingSetupActions, isCodingSetup } from "../coding-setup/coding-setup.tsx";
+import { HubQuestionAnswer } from "../coding-setup/coding-setup.tsx";
+import { shownHubQuestion } from "../hub-question/shown.ts";
 import { scopeName } from "../memory/memory-model.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
 import { shareDestination } from "../memory/review-model.ts";
@@ -37,7 +38,7 @@ import type { FocusTargets } from "../move-on/follow-focus.ts";
 import { useMoveOn } from "../move-on/move-on.tsx";
 import { DeviceFacts, MatchingCode, PairingActions } from "../pairing/device-request.tsx";
 import { messages as pairingCopy } from "../pairing/messages.ts";
-import { AnswerForm, HubAnswerForm } from "../quest/answer-form.tsx";
+import { AnswerForm } from "../quest/answer-form.tsx";
 import { controlError } from "../quest/control-room.ts";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
@@ -246,6 +247,7 @@ function HubQuestionDetail({
   targets,
 }: { question: HubQuestion; row: InboxRow } & DetailContext) {
   const hub = copy.row.hub;
+  const shown = shownHubQuestion(question);
   return (
     <DetailFrame
       label={copy.question.label({ name: hub })}
@@ -257,27 +259,23 @@ function HubQuestionDetail({
       <div className="flex items-start gap-3">
         <EntryPortrait hob={undefined} device={false} hub waiting={false} />
         <blockquote className="m-0 min-w-0 flex-1 rounded-[4px_14px_14px_14px] bg-card px-4 py-3 text-reading leading-normal whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">
-          {question.text}
+          {shown.text}
         </blockquote>
       </div>
       <Facts
         rows={[
-          [copy.detail.about, question.subject.title],
+          [copy.detail.about, shown.title],
           [copy.detail.thread, question.chat === null ? undefined : directory.threadTitle(question.chat.threadId)],
           [copy.detail.when, formatWhen(question.createdAt, now)],
         ]}
       />
-      {isCodingSetup(question) ? (
-        <CodingSetupActions question={question} askerName={copy.row.hubInSentence} via="inbox" targets={targets} />
-      ) : (
-        <HubAnswerForm
-          question={question}
-          askerName={copy.row.hubInSentence}
-          via="inbox"
-          hint={copy.question.goesToHub}
-          targets={targets}
-        />
-      )}
+      <HubQuestionAnswer
+        question={question}
+        askerName={copy.row.hubInSentence}
+        via="inbox"
+        hint={copy.question.goesToHub}
+        targets={targets}
+      />
     </DetailFrame>
   );
 }

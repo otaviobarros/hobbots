@@ -3,7 +3,7 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { useId, useState } from "react";
 import { type FirstHobDraft, LABEL_MAX, pickRole, roleRequestUrl } from "../../api/first-hob.ts";
-import { ChoresField, draftRolePicker, FIELD, SigilPicker } from "../hob-form/hob-form.tsx";
+import { ChoresField, draftRolePicker, FIELD, GoodAtField, SigilPicker } from "../hob-form/hob-form.tsx";
 import { RoleSheet } from "../roles/role-sheet.tsx";
 import { RoleSigil } from "../roles/role-sigil.tsx";
 import { messages } from "./messages.ts";
@@ -25,7 +25,8 @@ function SigilTile({ sigil }: { sigil: RoleId }) {
 
 /**
  * Step 1, what the hob helps with: the eight common roles as cards, every role in the role sheet,
- * or a title in the user's own words with a borrowed sigil, then the chores in their words.
+ * or a title in the user's own words with a borrowed sigil, then the chores in their words and what
+ * the hob is good at, for other hobs.
  */
 export function RoleStep({ draft, onChange, name }: { draft: FirstHobDraft; onChange: Update; name: string }) {
   return (
@@ -35,6 +36,7 @@ export function RoleStep({ draft, onChange, name }: { draft: FirstHobDraft; onCh
       <OwnTitle draft={draft} onChange={onChange} />
 
       <ChoresField draft={draft} onChange={onChange} rows={3} label={copy.chores} className="lbl text-label" />
+      <GoodAtField draft={draft} onChange={onChange} />
       <a
         href={roleRequestUrl(draft.role === null ? draft.ownTitle : "")}
         target="_blank"

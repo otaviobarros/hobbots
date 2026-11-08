@@ -1,4 +1,4 @@
-import { BackpackDisposition } from "@hobbots/domain";
+import { BackpackDisposition, starterRole } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -21,6 +21,8 @@ import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
 import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
+import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
+import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1177,6 +1179,213 @@ describe("0074_milestone_reached_by", () => {
     expect(rows.map(({ id, reachedBy }) => ({ id, reachedBy }))).toEqual([
       { id: "built", reachedBy: "nettle" },
       { id: "committed", reachedBy: null },
+    ]);
+  });
+});
+
+describe("0079_hob_visibility", () => {
+  // covers AG-002, DP-003
+  it("[TC-DP-1233-01] leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it", async () => {
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: null,
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 1,
+        createdAt: "2026-11-08T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        name: "Pip",
+        roleTitle: "Writer",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-11-08T00:00:00.000Z",
+      })}`;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "5d1c7a2e-3b4f-4c6d-8e9f-0a1b2c3d4e5f",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-11-08T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobVisibility;
+      return {
+        agents: yield* sql`SELECT visible_to_hobs FROM agents`,
+        versions: yield* sql`SELECT visible_to_hobs FROM agent_config_versions`,
+        entries: yield* (yield* EventJournal).readAfter(0),
+      };
+    }).pipe(
+      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0079"))))),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(result.agents.map((row) => Number(row.visibleToHobs))).toEqual([1]);
+    expect(result.versions.map((row) => Number(row.visibleToHobs))).toEqual([1]);
+    expect(result.entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "AgentUpserted", agent: { id: "pip", visibleToHobs: true } },
+    ]);
+  });
+});
+
+describe("0080_hob_good_at", () => {
+  const longChores = `${"Answer every letter. ".repeat(12)}Then file them.`;
+  // Each hob as the profile showed its good at before 0080: from its chores, else its starter role's note.
+  const hobs = [
+    {
+      id: "chores",
+      role: "writer",
+      roleTitle: "Writer",
+      instructions: "Your chores, in the user's words:\nSort the inbox.\n  Pay the bills.",
+    },
+    { id: "role", role: "writer", roleTitle: "Writer", instructions: "Write short answers." },
+    { id: "own", role: null, roleTitle: "Gardener", instructions: "Water the plants." },
+    { id: "long", role: null, roleTitle: "Clerk", instructions: `Your chores, in the user's words:\n${longChores}` },
+  ] as const;
+
+  // covers AG-002, DP-003
+  it("[TC-AG-1232-03] fills every hob and version with the good at the profile showed, and shortens one past the limit", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const hob of hobs) {
+        const fields = { role: hob.role, roleTitle: hob.roleTitle, instructions: hob.instructions };
+        yield* sql`INSERT INTO agents ${sql.insert({
+          id: hob.id,
+          name: "Pip",
+          ...fields,
+          runtime: "claude-code",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 2,
+          createdAt: "2026-11-08T00:00:00.000Z",
+        })}`;
+        // An older version without chores shows the starter role's note, or nothing.
+        yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+          agentId: hob.id,
+          version: 1,
+          ...fields,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          createdAt: "2026-11-08T00:00:00.000Z",
+        })}`;
+        yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+          agentId: hob.id,
+          version: 2,
+          ...fields,
+          lookSeed: 1,
+          lookColor: "moss",
+          createdAt: "2026-11-08T00:00:00.000Z",
+        })}`;
+      }
+      yield* hobGoodAt;
+      return {
+        agents: yield* sql`SELECT id, good_at FROM agents ORDER BY id`,
+        versions: yield* sql`SELECT agent_id, version, good_at FROM agent_config_versions ORDER BY agent_id, version`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0080"))), Effect.runPromise);
+
+    const note = starterRole("writer").note;
+    const shortened = `${longChores.slice(0, 200).slice(0, longChores.slice(0, 200).lastIndexOf(" "))}…`;
+    expect(shortened.length).toBeLessThanOrEqual(200);
+    expect(result.agents).toEqual([
+      { id: "chores", goodAt: "Sort the inbox. Pay the bills." },
+      { id: "long", goodAt: shortened },
+      { id: "own", goodAt: null },
+      { id: "role", goodAt: note },
+    ]);
+    expect(result.versions).toEqual([
+      { agentId: "chores", version: 1, goodAt: note },
+      { agentId: "chores", version: 2, goodAt: "Sort the inbox. Pay the bills." },
+      { agentId: "long", version: 1, goodAt: null },
+      { agentId: "long", version: 2, goodAt: shortened },
+      { agentId: "own", version: 1, goodAt: null },
+      { agentId: "own", version: 2, goodAt: null },
+      { agentId: "role", version: 1, goodAt: note },
+      { agentId: "role", version: 2, goodAt: note },
+    ]);
+  });
+
+  // covers DP-003
+  it("[TC-DP-1232-01] still reads a hob event journaled before good at was stored, with none", async () => {
+    // The AgentUpserted payload as the hub journaled it before 0080, with no good at.
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: "writer",
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        voice: "default",
+        length: "balanced",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 1,
+        createdAt: "2026-11-08T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const database = TestDatabaseAt(migrationsBefore("0080"));
+    const entries = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "5d0c7e1a-2b3c-4d5e-8f60-718293a4b5c6",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-11-08T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobGoodAt;
+      return yield* (yield* EventJournal).readAfter(0);
+    }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
+
+    expect(entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "AgentUpserted", agent: { id: "pip", goodAt: null } },
     ]);
   });
 });

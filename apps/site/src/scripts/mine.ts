@@ -2,7 +2,7 @@ import type { HobColor } from "@hobbots/art/look";
 import { hobLook } from "@hobbots/art/look";
 import { redraw } from "./pixels.ts";
 
-/** The visitor's own hob: rolled on the page, it keeps their spot and follows them down the page. */
+/** The visitor's own hob, rolled on the page. */
 
 export interface Mine {
   readonly seed: number;
@@ -29,8 +29,6 @@ export const NAMES = [
   "Bracken",
 ];
 
-export const MINE_CHIRP = [698, 880, 784];
-
 let mine: Mine = { seed: 11, color: "violet", name: "Pip" };
 
 export const getMine = () => mine;
@@ -47,9 +45,6 @@ const render = () => {
   }
   setText("[data-mine-name]", mine.name);
   setText("[data-mine-look]", look.recipe);
-  setText("[data-save-label]", `Save ${mine.name}’s spot`);
-  for (const button of document.querySelectorAll("[data-mine-label]"))
-    button.setAttribute("aria-label", `Say hi to ${mine.name}`);
 };
 
 export const setMine = (next: Partial<Mine>) => {

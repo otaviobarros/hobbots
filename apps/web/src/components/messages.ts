@@ -204,9 +204,20 @@ export const messages = {
     talks: ({ name }: { name: string }) => `How ${name} talks`,
     thinks: ({ name }: { name: string }) => `How ${name} thinks`,
     connectAnother: "Connect another AI in Settings",
+    visibility: {
+      heading: "Other hobs",
+      label: "Visible to other hobs",
+      on: ({ name }: { name: string }) =>
+        `Other hobs see ${name}'s name, role, what it is good at, whether it is paused, the AI it thinks with and its Charms. Never its instructions, memory or threads.`,
+      off: ({ name }: { name: string }) =>
+        `Other hobs don't see ${name} at all. A hob you tell to give ${name} a Task can still find it by name.`,
+    },
     changeRole: "Change role",
     noTitle: "No title yet",
     ownRole: "A role in your own words.",
+    goodAt: "Good at",
+    goodAtNote: ({ name }: { name: string }) =>
+      `Other hobs read this to know when to come to ${name}. It never changes how ${name} behaves. Every hob can see it, so keep anything private out.`,
     shouldDo: ({ name }: { name: string }) => `What ${name} should do`,
     shouldDoNote: ({ name }: { name: string }) =>
       `${name} reads this before every reply. Write it the way you would brief a person.`,
@@ -1126,6 +1137,11 @@ export const messages = {
   },
   hobForm: {
     choresPlaceholder: "Tell it about the chores, like you would tell a friend who is helping out.",
+    goodAt: "Good at",
+    goodAtPlaceholder: "Like “Planting calendars and watering reminders”",
+    goodAtNote:
+      "Other hobs read this to know when to come to this hob. It never changes how it behaves. Every hob can see it, so keep anything private out.",
+    goodAtFilled: "Filled in from the chores and the role until you change it.",
     ownTitle: "Your own role title",
     ownTitlePlaceholder: "Its role, in your words. e.g. Garden planner",
     sigil: "Sigil",

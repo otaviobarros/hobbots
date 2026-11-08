@@ -1,52 +1,39 @@
-import { AgentId, type ApprovalSurface, CODING_SETUP_KIND, type HubQuestion } from "@hobbots/domain";
+import { AgentId, type HubQuestion } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import type { ComponentProps } from "react";
 import { codingSetupQuery, useClearCodingSetup } from "../../api/github.ts";
 import { useHobDirectory } from "../../lib/use-hob-directory.ts";
-import type { FocusTargets } from "../move-on/follow-focus.ts";
 import { HubAnswerForm } from "../quest/answer-form.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages;
 
 /** Whether a hub question asks if a hob will write code (#1241). */
-export const isCodingSetup = (question: HubQuestion) => question.subject.kind === CODING_SETUP_KIND;
+const isCodingSetup = (question: HubQuestion) => question.ask.kind === "coding-setup";
+
+type AnswerProps = ComponentProps<typeof HubAnswerForm>;
+
+/** How you answer a hub question: the coding setup card's own actions, or the usual form. */
+export function HubQuestionAnswer(props: AnswerProps) {
+  return isCodingSetup(props.question) ? <CodingSetupActions {...props} /> : <HubAnswerForm {...props} />;
+}
 
 /**
  * The card's actions (#1241): Set up GitHub opens the hob's Charms tab, where its GitHub section
  * is, and leaves the card open; its choices stop the card for this hob or for every hob. There is
  * no answer box: there is nothing to type.
  */
-export function CodingSetupActions({
-  question,
-  askerName,
-  via,
-  targets,
-}: {
-  question: HubQuestion;
-  askerName: string;
-  via: ApprovalSurface;
-  targets?: FocusTargets;
-}) {
+function CodingSetupActions({ question, ...place }: AnswerProps) {
   return (
     <div className="flex flex-col gap-2">
       <Button asChild className="self-start">
-        <Link
-          to="/hobs/$hobId/profile"
-          params={{ hobId: AgentId.make(question.subject.key) }}
-          search={{ tab: "charms" }}
-        >
+        <Link to="/hobs/$hobId/profile" params={{ hobId: AgentId.make(question.key) }} search={{ tab: "charms" }}>
           {copy.setUp}
         </Link>
       </Button>
-      <HubAnswerForm
-        question={question}
-        askerName={askerName}
-        via={via}
-        inWords={false}
-        {...(targets === undefined ? {} : { targets })}
-      />
+      <HubAnswerForm question={question} {...place} inWords={false} />
     </div>
   );
 }

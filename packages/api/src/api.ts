@@ -53,6 +53,7 @@ import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
+import { SkillUpdatesGroup } from "./skill-updates.ts";
 import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
 import { UsageGroup } from "./usage.ts";
@@ -79,6 +80,12 @@ export const CreateAgentPayload = Schema.Struct({
   /** The hat and tool the sprite wears, or null to leave them to the look seed. */
   hat: Schema.NullOr(RoleHat),
   tool: Schema.NullOr(RoleTool),
+  /**
+   * What the hob is good at, for other hobs (ADR 032): one line of up to 200 characters once its
+   * whitespace is collapsed, or null for none. Left out, the hub fills in the prefill of the chores
+   * in the instructions and the starter role.
+   */
+  goodAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   /** How the hob talks; Default and Balanced when left out. */
   voice: Schema.optionalKey(Voice),
   length: Schema.optionalKey(ReplyLength),
@@ -90,6 +97,8 @@ export const CreateAgentPayload = Schema.Struct({
   /** An effort the model accepts, or null for its default. */
   effort: Schema.NullOr(Effort),
   instructions: Schema.String.check(Schema.isMaxLength(20_000)),
+  /** Whether other hobs see this hob in their directory (ADR 032); on when left out. */
+  visibleToHobs: Schema.optionalKey(Schema.Boolean),
 });
 export type CreateAgentPayload = typeof CreateAgentPayload.Type;
 
@@ -105,6 +114,8 @@ export const UpdateAgentPayload = Schema.Struct({
   sigil: Schema.optionalKey(RoleId),
   hat: Schema.optionalKey(Schema.NullOr(RoleHat)),
   tool: Schema.optionalKey(Schema.NullOr(RoleTool)),
+  /** What the hob is good at, as on create; changing the instructions never changes it. */
+  goodAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   voice: Schema.optionalKey(Voice),
   length: Schema.optionalKey(ReplyLength),
   lookSeed: Schema.optionalKey(LookSeed),
@@ -114,6 +125,8 @@ export const UpdateAgentPayload = Schema.Struct({
   model: Schema.optionalKey(Schema.NullOr(Schema.NonEmptyString)),
   effort: Schema.optionalKey(Schema.NullOr(Effort)),
   instructions: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
+  /** Hidden from or shown to other hobs; it applies from every other hob's next turn (ADR 032). */
+  visibleToHobs: Schema.optionalKey(Schema.Boolean),
 });
 export type UpdateAgentPayload = typeof UpdateAgentPayload.Type;
 
@@ -416,4 +429,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(MemorySharesGroup)
   .add(HobMemoryGroup)
   .add(SkillsGroup)
-  .add(SkillProposalsGroup) {}
+  .add(SkillProposalsGroup)
+  .add(SkillUpdatesGroup) {}

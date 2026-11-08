@@ -28,7 +28,7 @@ export const HubCommitIdentityRepository = Layer.effect(
   }),
 );
 
-/** Where the user said not to ask whether a hob will write code (migration 0077, #1241). */
+/** Where the user said not to ask whether a hob will write code (migration 0081, #1241). */
 export const CodingSetupDismissalRepository = Layer.effect(
   CodingSetupDismissals,
   Effect.gen(function* () {

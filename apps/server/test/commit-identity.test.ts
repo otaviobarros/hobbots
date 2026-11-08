@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
-  ANY_HOB_LABEL,
   ApprovalService,
   ChatService,
   CommitIdentityQuestions,
@@ -12,16 +11,25 @@ import {
   GrantService,
   HobAdmission,
   HobbotsRepository,
+  HobGitHubApps,
   HobLifecycle,
   HobService,
   HobTools,
   HubQuestions,
-  notForLabel,
   PermissionSummary,
   UserGitIdentity,
 } from "@hobbots/agents";
 import { HubQuestionsRead } from "@hobbots/api";
-import { Agent, AgentId, type GitHubUser, type GitIdentity, type HubQuestion, Thread, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type GitHubUser,
+  type GitIdentity,
+  type HobGitHubApp,
+  type HubQuestion,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -47,12 +55,12 @@ import { Installation } from "../src/installation.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
-// Issues #741 and #1241: on a computer whose Git config sets no name and email, a hob on the user's
-// account cannot commit and may not set an identity. With the hub's GitHub account connected, hobs
-// commit as it without asking. Otherwise the hub asks, once per hob and in plain words, whether the
-// hob will write code, and the user can say not for this hob or not for any, which Settings clears.
-// The hub's own composition runs on SQLite or PostgreSQL (TestDatabase); the fake runtime runs no
-// command, so the commit runs here with the environment the Claude Code adapter gives a turn's commands.
+// Issue #741: on a computer whose Git config sets no name and email, a hob on the user's account
+// could not commit, could not set an identity, and kept asking the user who to commit as, though
+// nothing could act on the answer. Now the hub asks the user itself, once, with their GitHub
+// account recommended, keeps the answer, and the hob's next turn commits under it. The hub's own
+// composition runs on SQLite or PostgreSQL (TestDatabase); the fake runtime runs no command, so the
+// commit runs here with the environment the Claude Code adapter gives a turn's commands.
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-commit-identity-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -87,8 +95,31 @@ let gitConfig: GitIdentity = { name: null, email: null };
 let githubReads = 0;
 /** What a read of the GitHub account waits on before it answers: nothing until a test holds it. */
 let githubAnswers: Promise<void> = Promise.resolve();
+/** Whether the hub's GitHub account is connected now. */
+let signedIn = true;
+/** Each hob's own GitHub app, once a test gives it one. */
+const hobApps = new Map<string, HobGitHubApp>();
+const NETTLE_APP: HobGitHubApp = {
+  appId: 1,
+  clientId: "Iv1.nettle",
+  slug: "nettle-hobbots",
+  owner: "otaviobarros",
+  botUserId: 7,
+  htmlUrl: "https://github.com/apps/nettle-hobbots",
+  connectedAt: NOW,
+};
+const FakeHobApps = Layer.succeed(
+  HobGitHubApps,
+  HobGitHubApps.of({
+    get: (agentId) => Effect.sync(() => hobApps.get(agentId) ?? null),
+    leftOver: () => Effect.succeed(null),
+    save: (agentId, app) => Effect.sync(() => void hobApps.set(agentId, app)),
+    leave: () => Effect.void,
+    remove: (agentId) => Effect.sync(() => void hobApps.delete(agentId)),
+  }),
+);
 
-const FakeGitHub = (signedIn: boolean) =>
+const FakeGitHub = () =>
   Layer.succeed(
     ConnectedGitHubUser,
     ConnectedGitHubUser.of({
@@ -109,13 +140,17 @@ afterEach(async () => {
   gitConfig = { name: null, email: null };
   githubReads = 0;
   githubAnswers = Promise.resolve();
+  signedIn = true;
+  hobApps.clear();
 });
 
-const startHub = async (signedIn = true) => {
+const startHub = async (connected = true) => {
+  signedIn = connected;
   const Tools = HobToolsLive.pipe(
     Layer.provideMerge(CommitIdentityQuestions.layer),
     Layer.provideMerge(HubQuestions.layer),
-    Layer.provide(FakeGitHub(signedIn)),
+    Layer.provide(FakeGitHub()),
+    Layer.provideMerge(FakeHobApps),
     Layer.provide(Layer.succeed(UserGitIdentity, UserGitIdentity.of({ read: Effect.sync(() => gitConfig) }))),
   );
   const App = HobLifecycle.layer.pipe(
@@ -203,8 +238,16 @@ const startHub = async (signedIn = true) => {
     },
     answer: (question: HubQuestion, answer: string) =>
       request("POST", `/api/hub-questions/${question.id}/answer`, { answer, via: "inbox" }),
-    /** The hob got its own GitHub app, as the hub's page for GitHub's redirect says. */
-    settle: (hob: Agent) => runtime.runPromise(CommitIdentityQuestions.use((setup) => setup.settled(hob.id))),
+    pick: (question: HubQuestion, picked: string) =>
+      request("POST", `/api/hub-questions/${question.id}/answer`, { picked, via: "inbox" }),
+    /** The hob got its own GitHub app, as the hub's page for GitHub's redirect saves it and says so. */
+    connectApp: (hob: Agent) =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          hobApps.set(hob.id, NETTLE_APP);
+          yield* CommitIdentityQuestions.use((setup) => setup.settled(hob.id));
+        }),
+      ),
     dispose: async () => {
       await web.dispose();
       await runtime.dispose();
@@ -232,9 +275,10 @@ const commitAs = (access: Parameters<typeof turnCommits>[0]) => {
   }
 };
 
-/** The coding setup cards open now, by the hob each is about. */
-const cards = async (current: Hub) =>
-  (await current.open()).filter((question) => question.subject.kind === "coding-setup");
+/** The coding setup cards open now. */
+const cards = async (current: Hub) => (await current.open()).filter((question) => question.ask.kind === "coding-setup");
+const keys = async (current: Hub) => (await cards(current)).map((question) => question.key);
+const choices = async (current: Hub) => (await current.request("GET", "/api/charms/github/coding-setup")).body;
 
 describe("who a hob on your account commits as when your Git config sets no one", () => {
   // covers OR-004, IN-004
@@ -259,7 +303,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
   }, 30_000);
 
   // covers OR-004, IN-004, UX-001
-  it("[TC-OR-1241-02] without one, each hob gets one plain coding setup card, with no Git terms and no typed answer", async () => {
+  it("[TC-OR-1241-02] without one, each hob gets one coding setup card with two choices and no typed answer", async () => {
     hub = await startHub(false);
     const current = hub;
 
@@ -271,18 +315,24 @@ describe("who a hob on your account commits as when your Git config sets no one"
     await current.access();
     const [card, ...others] = await cards(current);
     expect(others).toEqual([]);
+    // It names the hob in data and its choices by key; the client words it (#1045).
     expect(card).toMatchObject({
-      subject: { kind: "coding-setup", key: "nettle", title: "Coding setup for Nettle" },
+      key: "nettle",
+      ask: { kind: "coding-setup", hob: "Nettle" },
       chat: QUEST_CHAT,
-      options: [{ label: "Not for Nettle" }, { label: ANY_HOB_LABEL }],
+      options: ["not-this-hob", "no-hob"],
       recommended: null,
     });
-    expect(card?.text).toMatch(/^Will Nettle write code\?/);
-    expect(card?.text).not.toMatch(/git config|user\.name|user\.email|-c /);
+    // Anything typed is not a choice: it says not to ask for no hob, and the next turn asks again.
+    expect((await current.answer(card as HubQuestion, "Otavio <otavio@example.com>")).status).toBe(200);
+    await until(async () => (await cards(current)).length === 0);
+    expect(await choices(current)).toEqual({ allHobs: false, hobs: [] });
+    await current.access();
+    expect(await keys(current)).toEqual(["nettle"]);
 
     // Another hob gets a card of its own.
     await current.access(fern);
-    expect((await cards(current)).map((question) => question.subject.key)).toEqual(["nettle", "fern"]);
+    expect(await keys(current)).toEqual(["nettle", "fern"]);
 
     // Once your Git config sets an identity, no hob is asked again.
     gitConfig = { name: "Ada Lovelace", email: "ada@example.com" };
@@ -298,25 +348,20 @@ describe("who a hob on your account commits as when your Git config sets no one"
     const [nettleCard, fernCard] = await cards(current);
 
     // Not for Nettle: Nettle is never asked again, Fern's card stays.
-    expect((await current.answer(nettleCard as HubQuestion, notForLabel(nettle))).status).toBe(200);
+    expect((await current.pick(nettleCard as HubQuestion, "not-this-hob")).status).toBe(200);
     await until(
-      async () =>
-        JSON.stringify((await current.request("GET", "/api/charms/github/coding-setup")).body) ===
-        JSON.stringify({ allHobs: false, hobs: ["nettle"] }),
+      async () => JSON.stringify(await choices(current)) === JSON.stringify({ allHobs: false, hobs: ["nettle"] }),
     );
     await current.access();
-    expect((await cards(current)).map((question) => question.subject.key)).toEqual(["fern"]);
+    expect(await keys(current)).toEqual(["fern"]);
 
     // Don't ask for any hob: Fern's card leaves too, and no hob is asked.
-    expect((await current.answer(fernCard as HubQuestion, ANY_HOB_LABEL)).status).toBe(200);
+    expect((await current.pick(fernCard as HubQuestion, "no-hob")).status).toBe(200);
     await until(async () => (await cards(current)).length === 0);
     await current.access(fern);
     await current.access();
     expect(await cards(current)).toEqual([]);
-    expect((await current.request("GET", "/api/charms/github/coding-setup")).body).toEqual({
-      allHobs: true,
-      hobs: ["nettle"],
-    });
+    expect(await choices(current)).toEqual({ allHobs: true, hobs: ["nettle"] });
 
     // Settings clears both: the next turn of each hob asks again.
     expect((await current.request("DELETE", "/api/charms/github/coding-setup")).body).toEqual({
@@ -325,7 +370,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     });
     await current.access();
     await current.access(fern);
-    expect((await cards(current)).map((question) => question.subject.key)).toEqual(["nettle", "fern"]);
+    expect(await keys(current)).toEqual(["nettle", "fern"]);
   }, 30_000);
 
   // covers OR-004
@@ -336,7 +381,42 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(await cards(current)).toHaveLength(1);
 
     // The hob commits as its own app now: its card is no longer needed.
-    await current.settle(nettle);
+    await current.connectApp(nettle);
+    expect(await cards(current)).toEqual([]);
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-1241-07] a GitHub account connected after a card was raised is used by the very next turn", async () => {
+    hub = await startHub(false);
+    const current = hub;
+    await current.access();
+    expect(await keys(current)).toEqual(["nettle"]);
+
+    // You connect the hub's GitHub account: the next turn commits as it at once, and the card leaves.
+    signedIn = true;
+    const next = await current.access();
+    expect(next?.commitsAs).toMatchObject({ _tag: "UserGiven", identity: { name: "otaviobarros", email: NOREPLY } });
+    expect(await cards(current)).toEqual([]);
+  }, 30_000);
+
+  // covers OR-004
+  it("[TC-OR-1241-08] a turn still reading GitHub when the hob gets its own app raises no card", async () => {
+    hub = await startHub(false);
+    const current = hub;
+    // The turn waits on GitHub, which finds no account.
+    let answerGitHub: () => void = () => {};
+    githubAnswers = new Promise((resolve) => {
+      answerGitHub = () => resolve();
+    });
+    const slow = current.access();
+    await until(async () => githubReads === 1);
+
+    // Meanwhile the hob gets its own GitHub app.
+    await current.connectApp(nettle);
+
+    // GitHub answers the turn now: it finds the hob's app and raises no card.
+    answerGitHub();
+    await slow;
     expect(await cards(current)).toEqual([]);
   }, 30_000);
 });

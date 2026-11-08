@@ -189,9 +189,28 @@ export interface SkillSetAdded {
   readonly leftOut: number;
 }
 
+/** A skill or set a source holds, checked with its files, or the rule it broke. */
+export interface SourceSkill {
+  /** Its folder in the source, "" when the source is the skill. */
+  readonly folder: string;
+  readonly skill: CheckedSkill | null;
+  readonly refusal: SkillRefused | null;
+}
+
+/** What a source holds now: the commit it was read at, for Git, and each skill and set, checked. */
+export interface SourceRead {
+  readonly commit: string | null;
+  readonly skills: ReadonlyArray<SourceSkill>;
+}
+
 export interface SkillImporterShape {
   /** Lists the skills a source holds, checked, writing nothing. */
   readonly scan: (source: SkillImportSource) => Effect.Effect<SkillScan, SkillSourceUnreadable>;
+  /**
+   * Reads and checks every skill and set a source holds, with their files, writing nothing: what an
+   * update check compares with the library (ADR 029, Updates from a source).
+   */
+  readonly read: (source: SkillImportSource) => Effect.Effect<SourceRead, SkillSourceUnreadable>;
   /**
    * Adds the skills a source holds to the library, each as a new skill or a new revision of
    * `skillId`. Every one is checked first, and a refusal writes nothing. Content the library has
@@ -590,6 +609,21 @@ export const SkillImporterLive = Layer.effect(
         }),
       );
 
+    const read = (source: SkillImportSource) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const tree = yield* openTree(source);
+          const { results } = yield* checkAll(tree, topNameOf(source));
+          const skills = results.map(
+            ({ result }): SourceSkill =>
+              result._tag === "Passed"
+                ? { folder: result.skill.folder, skill: result.skill, refusal: null }
+                : { folder: result.folder, skill: null, refusal: result.refusal },
+          );
+          return { commit: tree.commit, skills } satisfies SourceRead;
+        }),
+      );
+
     /** The checked skills to take, failing on the first refusal or a folder the source does not hold. */
     const picked = (checked: ReadonlyArray<Checked>, options: SkillImportOptions) =>
       Effect.gen(function* () {
@@ -813,6 +847,6 @@ export const SkillImporterLive = Layer.effect(
         }),
       );
 
-    return SkillImporter.of({ scan, add, addSet });
+    return SkillImporter.of({ scan, read, add, addSet });
   }),
 );

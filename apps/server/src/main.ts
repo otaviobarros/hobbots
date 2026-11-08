@@ -143,6 +143,7 @@ import { QuietRoutineReads } from "./request-log.ts";
 import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { SkillUpdateChecks } from "./skill-updates.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
@@ -451,6 +452,8 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
+            // Skills from Git are checked for updates once a day (ADR 029).
+            SkillUpdateChecks,
             // What happens in each thread goes to its hob's memory (ADR 028).
             memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).

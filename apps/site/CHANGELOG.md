@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/otaviobarros/hobbots/compare/site-v0.1.1...site-v0.2.0) (2026-11-08)
+
+
+### Features
+
+* **site:** replace the coming soon page with the 0.0.3 launch page ([#1226](https://github.com/otaviobarros/hobbots/issues/1226)) ([bb2ee01](https://github.com/otaviobarros/hobbots/commit/bb2ee013166fc0c41c083c238178a65628cc77f1))
+
 ## [0.1.1](https://github.com/otaviobarros/hobbots/compare/site-v0.1.0...site-v0.1.1) (2026-11-01)
 
 

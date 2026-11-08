@@ -8,6 +8,7 @@ import { MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
 import { SkillCopy } from "./skill-copy.tsx";
 import { droppedLine } from "./skill-flags.tsx";
+import { SkillFollow } from "./skill-follow.tsx";
 import { SkillRemove } from "./skill-remove.tsx";
 import type { Say } from "./skills-flash.ts";
 import {
@@ -190,6 +191,7 @@ export function SkillAside({
           <span className="text-detail text-text-secondary">{copy.agents.noEdit}</span>
         )}
       </MemoryCard>
+      <SkillFollow skill={detail.skill} list={list} say={say} />
       <Origin detail={detail} list={list} folder={folder} />
     </aside>
   );

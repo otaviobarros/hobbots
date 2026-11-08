@@ -32,24 +32,58 @@ const hashOf = (text: string): number => {
 };
 
 /**
- * Deals the recorded tests out to `total` shards, longest first, each to the shard with the least
- * time so far. Each of `tags` with no recorded time yet goes to a shard picked by a hash of the
- * tag, so new tests spread over every shard and a new test never moves another. The same
- * durations and tags always give the same shards.
+ * When a shard of `workers` workers finishes, if each worker takes the next test in `order` as
+ * soon as it is free, as Playwright's workers do with fully parallel tests. A test late in that
+ * order starts late, so a long one there sets the end of the whole shard.
+ */
+const finishOf = (
+  durations: Durations,
+  tags: ReadonlyArray<string>,
+  rank: ReadonlyMap<string, number>,
+  workers: number,
+): number => {
+  const free = Array.from({ length: workers }, () => 0);
+  const inOrder = [...tags].sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity));
+  for (const tag of inOrder) {
+    const next = free.indexOf(Math.min(...free));
+    free[next] = (free[next] ?? 0) + (durations[tag] ?? 0);
+  }
+  return Math.max(...free);
+};
+
+/**
+ * Deals the recorded tests out to `total` shards, longest first, each to the shard that would
+ * then finish soonest, with `workers` workers running the shard's tests in the order of `tags`
+ * (the order Playwright runs them in). With one worker that is the shard with the least time so
+ * far. Each of `tags` with no recorded time yet goes to a shard picked by a hash of the tag, so
+ * new tests spread over every shard and a new test never moves another. The same durations,
+ * tags and workers always give the same shards.
  */
 export const planShards = (
   durations: Durations,
   total: number,
   tags: ReadonlyArray<string> = [],
+  workers = 1,
 ): ReadonlyArray<ReadonlyArray<string>> => {
+  const rank = new Map<string, number>();
+  for (const tag of tags) if (!rank.has(tag)) rank.set(tag, rank.size);
   const shards = Array.from({ length: total }, () => ({ load: 0, tags: [] as string[] }));
   const longestFirst = Object.entries(durations).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1));
   for (const [tag, duration] of longestFirst) {
-    const lightest = shards.reduce((best, shard) => (shard.load < best.load ? shard : best));
-    lightest.load += duration;
-    lightest.tags.push(tag);
+    let best = shards[0];
+    let bestFinish = Infinity;
+    for (const shard of shards) {
+      const finish = workers === 1 ? shard.load + duration : finishOf(durations, [...shard.tags, tag], rank, workers);
+      if (finish < bestFinish || (finish === bestFinish && best !== undefined && shard.load < best.load)) {
+        best = shard;
+        bestFinish = finish;
+      }
+    }
+    if (best === undefined) break;
+    best.load += duration;
+    best.tags.push(tag);
   }
-  const unrecorded = [...new Set(tags)].filter((tag) => !Object.hasOwn(durations, tag)).sort();
+  const unrecorded = [...rank.keys()].filter((tag) => !Object.hasOwn(durations, tag)).sort();
   for (const tag of unrecorded) shards[hashOf(tag) % total]?.tags.push(tag);
   return shards.map((shard) => shard.tags);
 };
@@ -67,21 +101,23 @@ export interface ShardFilter {
 
 /**
  * Runs the tests planned for shard `current`, from the recorded `durations` and the `tags` found
- * in the spec files. The last shard also runs every test the others do not, so a test whose tag
- * could not be read from its source still runs once. With no recorded times at all, it falls back
- * to Playwright's own sharding by test count.
+ * in the spec files in the order they run, for shards of `workers` workers. The last shard also
+ * runs every test the others do not, so a test whose tag could not be read from its source still
+ * runs once. With no recorded times at all, it falls back to Playwright's own sharding by test
+ * count.
  */
 export const shardFilter = (
   durations: Durations | undefined,
   current: number,
   total: number,
   tags: ReadonlyArray<string> = [],
+  workers = 1,
 ): ShardFilter => {
   if (!Number.isInteger(total) || total < 1 || !Number.isInteger(current) || current < 1 || current > total) {
     throw new Error(`A shard is current/total with 1 <= current <= total, not ${current}/${total}.`);
   }
   if (durations === undefined || Object.keys(durations).length === 0) return { shard: { current, total } };
-  const shards = planShards(durations, total, tags);
+  const shards = planShards(durations, total, tags, workers);
   if (current < total) return { grep: anyOf(shards[current - 1] ?? []) };
   const others = shards.slice(0, -1).flat();
   return others.length === 0 ? {} : { grepInvert: anyOf(others) };

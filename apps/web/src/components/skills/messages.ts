@@ -27,6 +27,7 @@ export const messages = {
     label: "Skill scopes",
     overview: "Overview",
     review: "To review",
+    updates: "Updates",
     changes: "What changed",
     shared: "Shared",
     hobs: "Hobs",
@@ -90,6 +91,8 @@ export const messages = {
     heldOld: "Kept on an older revision",
     older: "On an older revision",
     onlyWhenAsked: "Only when asked",
+    updateAvailable: "Update available",
+    updatesAutomatically: "Updates automatically",
     set: ({ count }: { count: number }) => `Set of ${skills(count)}`,
   },
   review: {
@@ -107,6 +110,71 @@ export const messages = {
     retry: "Try again",
     openChat: "Open the chat",
   },
+  updates: {
+    title: "Updates",
+    check: "Check for updates",
+    checking: "Checking…",
+    checked: ({ count, waiting, updated }: { count: number; waiting: number; updated: number }) =>
+      [
+        `Checked ${skills(count)} from Git.`,
+        waiting === 0
+          ? "Nothing waits for you."
+          : `${formatCount(waiting)} ${plural(waiting, { one: "update waits", other: "updates wait" })} for you.`,
+        updated === 0 ? "" : `${skills(updated)} updated automatically.`,
+      ]
+        .filter((part) => part !== "")
+        .join(" "),
+    checkFailed: "The check could not run. Try again in a moment.",
+    listLabel: "Updates that wait for you",
+    revs: ({ from, to, scope }: { from: string; to: string; scope: string }) => `${from} → ${to} · ${scope}`,
+    clean: "Clean",
+    addsScript: "Adds a script",
+    addsLink: "Adds a link",
+    hiddenText: "Hidden text",
+    notGiven: "Not given to anyone",
+    lastChecked: ({ when }: { when: string }) =>
+      `Checked ${when}. Hobbots looks once a day, and never changes a skill until you update it or turn on Update automatically.`,
+    neverChecked:
+      "Not checked yet. Hobbots looks once a day, and never changes a skill until you update it or turn on Update automatically.",
+    problem: ({ where, message }: { where: string; message: string }) => `${where} could not be checked: ${message}`,
+    emptyTitle: "Every skill is up to date",
+    emptyBody:
+      "Hobbots checks skills from Git once a day. When a repository has a new revision, it shows here with what changed.",
+    back: "Back to the overview",
+    found: ({ when }: { when: string }) => `found ${when}`,
+    waitsBody: "It waits for you even with Update automatically on.",
+    otherFiles: "Other files",
+    noOtherFiles: "No other files changed",
+    fileNote: { added: "New", removed: "Removed", changed: "Changed" },
+    scriptNote: { added: "New script", removed: "Removed script", changed: "Changed script" },
+    accept: ({ count }: { count: number }) =>
+      count === 0
+        ? "Update"
+        : `Update and roll out to ${formatCount(count)} ${plural(count, { one: "hob", other: "hobs" })}`,
+    notNow: "Not now",
+    cut: ({ where }: { where: string }) =>
+      `This SKILL.md is too long to show whole: only its first 200,000 characters are here, so a change after them does not show. Read the whole file in ${where} before you update.`,
+    readWhole: "I read the whole SKILL.md in the repository, and want this update",
+    accepted: ({ title, to, from }: { title: string; to: string; from: string }) =>
+      `${title} ${to} is in your library and rolls out from each hob's next chat. ${from} stays in the history.`,
+    dismissed: ({ title, rev }: { title: string; rev: string }) =>
+      `Not now. ${title} stays on ${rev}. Hobbots shows the next upstream change.`,
+    moved: "The repository changed since this check. Check for updates again to see what it holds now.",
+    stale: "This skill changed in Hobbots since this check. Check for updates again.",
+    failed: "The update could not be added. Try again in a moment.",
+    readFailed: "Updates could not be read.",
+    retry: "Try again",
+    auto: "Update automatically",
+    autoOn:
+      "On. New revisions from this repository roll out to every hob as they arrive, and show in What changed with Roll back.",
+    autoOff:
+      "Off. Turn it on to take clean updates from this repository as they arrive. Updates that add a script or a link still wait for you.",
+    autoFrom: ({ where }: { where: string }) => `Updates automatically from ${where}`,
+    autoFailed: "Update automatically could not be changed. Try again in a moment.",
+    available: ({ to }: { to: string }) => `Update available: ${to}`,
+    facts: { who: "Who gets it", upstream: "Upstream" },
+    nobody: "Nobody yet",
+  },
   changes: {
     title: "What changed",
     intro: "Every new revision, rollout and skill given or taken away, newest first, with a way back.",
@@ -118,6 +186,8 @@ export const messages = {
     bySource: "Its source",
     byHob: ({ name }: { name: string }) => name,
     saved: ({ by }: { by: string }) => `${by} saved`,
+    updatedAutomatically: "Updated automatically",
+    updatedFrom: ({ where }: { where: string }) => `From ${where} · clean: no new script, link or hidden text`,
     savedLine: ({ name, rev, count }: { name: string; rev: string; count: number }) =>
       count === 0
         ? `${name} ${rev}, rolled out to nobody yet`

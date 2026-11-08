@@ -1,7 +1,5 @@
 import {
   AgentId,
-  CODING_SETUP_KIND,
-  type CommitIdentity,
   type CommitsAs,
   type GitHubUser,
   type GitIdentity,
@@ -9,20 +7,19 @@ import {
   type HubQuestion,
   type HubQuestionChat,
   parseCommitIdentity,
-  type QuestionOption,
   type RaiseHubQuestion,
   settleCommitsAs,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Semaphore } from "effect";
 import { type HubQuestionHandler, HubQuestionRepository, HubQuestions } from "./hub-questions.ts";
-import { CodingSetupDismissals, HubCommitIdentities } from "./ports.ts";
+import { CodingSetupDismissals, HobGitHubApps, HubCommitIdentities } from "./ports.ts";
 
 /**
  * Who hobs on the user's account commit as when the user's Git config sets no identity (#741). A
  * hob may never set one itself (#700). With the hub's GitHub account connected, hobs commit as it
- * without asking. Otherwise the hub asks, once per hob and in plain words, whether the hob will
- * write code, and leads you to its GitHub section (#1241). You can say not for this hob, or not for
- * any hob, and clear both in Settings.
+ * without asking. Otherwise the hub asks, once per hob, whether the hob will write code, and leads
+ * you to its GitHub section (#1241). You can say not for this hob, or not for any hob, and clear
+ * both in Settings.
  */
 
 /** The name and email the user's own Git config sets now, read where the hub runs. */
@@ -42,8 +39,7 @@ export class ConnectedGitHubUser extends Context.Service<
 /** The dismissal that covers every hob. */
 export const ALL_HOBS = "*";
 
-/** The choice that stops the card for every hob. */
-export const ANY_HOB_LABEL = "Don't ask for any hob";
+const KIND = "coding-setup";
 
 /** A hob as the card names it. */
 export interface CodingHob {
@@ -51,43 +47,20 @@ export interface CodingHob {
   readonly name: string;
 }
 
-const short = (name: string) => (name.length > 40 ? `${name.slice(0, 39)}…` : name);
+/** The card: whether the hob will write code. The client words it (#1045). */
+const codingSetupQuestion = (hob: CodingHob, chat: HubQuestionChat | null): RaiseHubQuestion => ({
+  key: hob.id,
+  ...(chat === null ? {} : { chat }),
+  ask: { kind: KIND, hob: hob.name.trim().slice(0, 200) || hob.id },
+  options: ["not-this-hob", "no-hob"],
+});
 
-/** The choice that stops the card for one hob. */
-export const notForLabel = (hob: Pick<CodingHob, "name">) => `Not for ${short(hob.name)}`;
-
-const choices = (hob: CodingHob): ReadonlyArray<QuestionOption> => [
-  { label: notForLabel(hob), consequence: `Hobbots won't ask about ${short(hob.name)} again.` },
-  {
-    label: ANY_HOB_LABEL,
-    consequence: "Hobbots won't ask about any hob. You can turn it back on in Settings › Connections › Charms.",
-  },
-];
-
-/** The card: whether the hob will write code, and why it would need GitHub, in plain words. */
-const codingSetupQuestion = (hob: CodingHob, chat: HubQuestionChat | null): RaiseHubQuestion => {
-  const name = short(hob.name);
-  return {
-    subject: { kind: CODING_SETUP_KIND, key: hob.id, title: `Coding setup for ${name}` },
-    ...(chat === null ? {} : { chat }),
-    text: [
-      `Will ${name} write code?`,
-      `If ${name} will work on code, link a GitHub account so its changes are saved under a name. It takes a minute in the GitHub section of ${name}'s profile.`,
-      `If ${name} is just for writing, research or chatting, you don't need this.`,
-    ].join("\n\n"),
-    options: [...choices(hob)],
-  };
-};
-
-// Before #1241 the hub asked who hobs commit as, in words. An answer it has not applied yet is
-// still kept; an open one is withdrawn, since the coding setup card replaces it.
+// Before #1241 the hub asked who hobs commit as, in words (#741). An answer it has not applied yet
+// is still kept; an open question is withdrawn, since the coding setup card replaces it (#1244).
 const LEGACY_KIND = "commit-identity";
-const GITHUB_PREFIX = "Commits are made as ";
-const GITHUB_SUFFIX = ", which GitHub links to your account.";
-const legacyIdentity = (question: HubQuestion): CommitIdentity | null => {
-  const picked = question.picked === null ? undefined : question.options[question.picked];
-  if (picked?.consequence.startsWith(GITHUB_PREFIX) && picked.consequence.endsWith(GITHUB_SUFFIX))
-    return parseCommitIdentity(picked.consequence.slice(GITHUB_PREFIX.length, -GITHUB_SUFFIX.length));
+const legacyIdentity = (question: HubQuestion) => {
+  if (question.ask.kind !== LEGACY_KIND) return null;
+  if (question.picked === "github") return question.ask.github?.identity ?? null;
   return question.picked === null ? parseCommitIdentity(question.answer ?? "") : null;
 };
 
@@ -123,16 +96,15 @@ export class CommitIdentityQuestions extends Context.Service<
       const asked = yield* HubQuestionRepository;
       const git = yield* UserGitIdentity;
       const github = Option.getOrUndefined(yield* Effect.serviceOption(ConnectedGitHubUser));
-      // Whether to ask is decided and the question raised under one permit, so two turns never both ask.
+      const apps = Option.getOrUndefined(yield* Effect.serviceOption(HobGitHubApps));
+      // Raising a card, settling one and applying an answer all happen under one permit, so a card is
+      // never raised after its hob got its own app or you said not to ask, and two turns never both ask.
       const deciding = yield* Semaphore.make(1);
 
       const openCards = (key?: string) =>
         questions.listOpen.pipe(
           Effect.map((open) =>
-            open.filter(
-              (question) =>
-                question.subject.kind === CODING_SETUP_KIND && (key === undefined || question.subject.key === key),
-            ),
+            open.filter((question) => question.ask.kind === KIND && (key === undefined || question.key === key)),
           ),
         );
       const withdrawCards = (key?: string) =>
@@ -142,57 +114,56 @@ export class CommitIdentityQuestions extends Context.Service<
       const quiet = (hob: CodingHob) =>
         Effect.gen(function* () {
           if ((yield* openCards(hob.id)).length > 0) return true;
-          const unapplied = yield* asked.listUnapplied(CODING_SETUP_KIND);
-          if (unapplied.some((question) => question.subject.key === hob.id)) return true;
+          const unapplied = yield* asked.listUnapplied(KIND);
+          if (unapplied.some((question) => question.key === hob.id)) return true;
           const said = yield* dismissals.list;
           return said.includes(ALL_HOBS) || said.includes(hob.id);
+        });
+
+      /** Whether the hob needs no card: an identity was saved, Git sets one, or it has its own app now. */
+      const settledMeanwhile = (hob: CodingHob) =>
+        Effect.gen(function* () {
+          if ((yield* identities.get) !== null || (yield* git.read).email !== null) return true;
+          return apps !== undefined && (yield* apps.get(hob.id)) !== null;
         });
 
       const ask = (hob: CodingHob, chat: HubQuestionChat | null) =>
         Semaphore.withPermit(
           deciding,
           Effect.gen(function* () {
-            if (yield* quiet(hob)) return;
-            // An identity saved meanwhile, by another turn or in Git, needs no card.
-            if ((yield* identities.get) !== null || (yield* git.read).email !== null) return;
+            if ((yield* quiet(hob)) || (yield* settledMeanwhile(hob))) return;
             yield* questions.raise(codingSetupQuestion(hob, chat));
           }),
         );
 
-      /** Commits as the hub's GitHub account when one is connected, keeping it; null when none is. */
-      // A read that found no account is trusted for a minute, so a hub without one, or offline, does
-      // not hold every turn on GitHub.
-      let noGitHubUntil = 0;
+      /**
+       * Commits as the hub's GitHub account when one is connected, keeping it; null when none is. It
+       * asks GitHub each time, so an account connected a moment ago is used at once.
+       */
       const useGitHub = (hob: CodingHob) =>
         Effect.gen(function* () {
-          const now = DateTime.toEpochMillis(yield* DateTime.now);
-          if (github === undefined || now < noGitHubUntil) return null;
-          const user = yield* github.get(hob.id);
-          if (user === null) {
-            noGitHubUntil = now + 60_000;
-            return null;
-          }
+          const user = github === undefined ? null : yield* github.get(hob.id);
+          if (user === null) return null;
           const identity = githubUserCommitIdentity(user);
           yield* identities.save(identity, DateTime.formatIso(yield* DateTime.now));
-          yield* withdrawCards();
+          yield* Semaphore.withPermit(deciding, withdrawCards());
           return identity;
         });
 
-      // Under the same permit as asking, so a card is never raised after you said not to ask.
       const apply = (question: HubQuestion) =>
         Semaphore.withPermit(
           deciding,
           Effect.gen(function* () {
             const at = DateTime.formatIso(yield* DateTime.now);
-            // The choices are in a fixed order: this hob, then every hob. Anything typed changes nothing.
-            if (question.picked === 0) yield* dismissals.dismiss(question.subject.key, at);
-            if (question.picked === 1) {
+            // A choice is applied by its key (#1045). Anything typed changes nothing.
+            if (question.picked === "not-this-hob") yield* dismissals.dismiss(question.key, at);
+            if (question.picked === "no-hob") {
               yield* dismissals.dismiss(ALL_HOBS, at);
               yield* withdrawCards();
             }
           }),
         );
-      yield* questions.handle({ kind: CODING_SETUP_KIND, apply } satisfies HubQuestionHandler);
+      yield* questions.handle({ kind: KIND, apply } satisfies HubQuestionHandler);
 
       const applyLegacy = (question: HubQuestion) =>
         Effect.gen(function* () {
@@ -200,7 +171,7 @@ export class CommitIdentityQuestions extends Context.Service<
           if (identity !== null) yield* identities.save(identity, DateTime.formatIso(yield* DateTime.now));
         });
       yield* questions.handle({ kind: LEGACY_KIND, apply: applyLegacy });
-      const legacyOpen = (yield* questions.listOpen).filter((question) => question.subject.kind === LEGACY_KIND);
+      const legacyOpen = (yield* questions.listOpen).filter((question) => question.ask.kind === LEGACY_KIND);
       yield* Effect.forEach(legacyOpen, (question) => questions.withdraw(question.id));
 
       return CommitIdentityQuestions.of({
@@ -221,7 +192,7 @@ export class CommitIdentityQuestions extends Context.Service<
             );
             return settleCommitsAs(null, config, null);
           }),
-        settled: (agentId) => withdrawCards(agentId).pipe(Effect.asVoid),
+        settled: (agentId) => Semaphore.withPermit(deciding, withdrawCards(agentId)).pipe(Effect.asVoid),
         dismissed: Effect.map(dismissals.list, (said) => ({
           allHobs: said.includes(ALL_HOBS),
           hobs: said.filter((scope) => scope !== ALL_HOBS).map((scope) => AgentId.make(scope)),

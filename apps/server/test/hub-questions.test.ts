@@ -12,7 +12,7 @@ import {
   PermissionSummary,
 } from "@hobbots/agents";
 import { HubQuestionsRead } from "@hobbots/api";
-import { HubQuestion, pickedOption, type QuestionOption } from "@hobbots/domain";
+import { HubQuestion } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -37,20 +37,24 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Issue #976: the hub itself asks you, with choices, about a decision only it can apply. The
 // question goes straight to you over the same API the Inbox reads, never to a lead, and the part
-// of the hub that raised it applies the choice you picked or the words you typed. The fake
+// of the hub that raised it applies the choice you picked or the words you typed. Issue #1045: it
+// sends codes and keys, never sentences, and a choice is picked and applied by its key. The fake
 // runtime stands in for every hob; none takes part.
 
-const GITHUB: QuestionOption = { label: "My GitHub account", consequence: "Commits show as you on GitHub." };
-const TYPED: QuestionOption = { label: "A name and email I type", consequence: "" };
-const SUBJECT = { kind: "commit-identity", key: "default", title: "Commit identity" };
+const KIND = "commit-identity";
+const ASK = {
+  kind: KIND,
+  reason: "no-git-identity",
+  github: { login: "ada", identity: { name: "Ada", email: "1+ada@users.noreply.github.com" } },
+  unread: null,
+} as const;
 
-/** What the stand-in for the commit identity's handler applied, in order: the label picked, or the words typed. */
+/** What the stand-in for the commit identity's handler applied, in order: the key picked, or the words typed. */
 let applied: Array<{ readonly answer: string | null; readonly picked: string | null }>;
 
 const identityHandler: HubQuestionHandler = {
-  kind: SUBJECT.kind,
-  apply: (question) =>
-    Effect.sync(() => void applied.push({ answer: question.answer, picked: pickedOption(question)?.label ?? null })),
+  kind: KIND,
+  apply: (question) => Effect.sync(() => void applied.push({ answer: question.answer, picked: question.picked })),
 };
 
 type Hub = Awaited<ReturnType<typeof startHub>>;
@@ -135,7 +139,7 @@ const startHub = async () => {
 };
 
 const raise = (questions: HubQuestions["Service"]) =>
-  questions.raise({ subject: SUBJECT, text: "Who should hobs commit as?", options: [GITHUB, TYPED], recommended: 0 });
+  questions.raise({ key: "default", ask: ASK, options: ["github", "own-git"], recommended: "github" });
 
 const readOpen = async (current: Hub) => {
   const { status, body } = await current.request("GET", "/api/hub-questions");
@@ -157,27 +161,43 @@ describe("a question the hub asks you itself", () => {
     current.handle(identityHandler);
     const raised = await current.run(HubQuestions.use(raise));
 
-    // It waits for you with its choices and the recommended one, about the subject the hub named.
+    // It waits for you with what it asks as codes, its choices' keys and the recommended one.
     const open = await readOpen(current);
     expect(open).toHaveLength(1);
-    expect(open[0]).toMatchObject({ id: raised.id, subject: SUBJECT, options: [GITHUB, TYPED], recommended: 0 });
+    expect(open[0]).toMatchObject({
+      id: raised.id,
+      key: "default",
+      ask: ASK,
+      options: ["github", "own-git"],
+      recommended: "github",
+    });
+    expect(JSON.stringify(open[0])).not.toMatch(/"text"|"label"|"title"/);
 
-    // You pick a choice in the Inbox as its button does, sending its label; any case names it.
+    // A key it does not offer is refused, and it stays open.
+    const unknown = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, { picked: "nightly" });
+    expect(unknown).toMatchObject({ status: 400, body: { _tag: "HubChoiceNotOffered" } });
+    const both = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, {
+      picked: "github",
+      answer: "github",
+    });
+    expect(both.status).toBe(400);
+
+    // You pick a choice in the Inbox as its button does, sending its key.
     const answered = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, {
-      answer: "my github account",
+      picked: "github",
       via: "inbox",
     });
     expect(answered.status).toBe(200);
     expect(Schema.decodeUnknownSync(HubQuestion)(answered.body)).toMatchObject({
       state: "answered",
-      answer: GITHUB.label,
-      picked: 0,
+      answer: null,
+      picked: "github",
       answeredVia: "inbox",
     });
 
-    // The hub applies the choice you picked, once, and the question leaves the Inbox.
+    // The hub applies the choice you picked by its key, once, and the question leaves the Inbox.
     await until(() => applied.length > 0);
-    expect(applied).toEqual([{ answer: GITHUB.label, picked: GITHUB.label }]);
+    expect(applied).toEqual([{ answer: null, picked: "github" }]);
     expect(await readOpen(current)).toEqual([]);
 
     // It is answered: a second answer is refused, and so is one to a question that does not exist.
@@ -216,7 +236,7 @@ describe("a question the hub asks you itself", () => {
     // The first handler fails, as one would when what it changes is out of reach.
     let tries = 0;
     const failing = current.handle({
-      kind: SUBJECT.kind,
+      kind: KIND,
       apply: () =>
         Effect.suspend(() => {
           tries++;
@@ -224,7 +244,7 @@ describe("a question the hub asks you itself", () => {
         }),
     });
     const raised = await current.run(HubQuestions.use(raise));
-    const answered = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, { answer: TYPED.label });
+    const answered = await current.request("POST", `/api/hub-questions/${raised.id}/answer`, { picked: "own-git" });
     expect(answered.status).toBe(200);
     await until(() => tries > 0);
     expect(applied).toEqual([]);
@@ -233,7 +253,7 @@ describe("a question the hub asks you itself", () => {
     await Effect.runPromise(Fiber.interrupt(failing));
     current.handle(identityHandler);
     await until(() => applied.length > 0);
-    expect(applied).toEqual([{ answer: TYPED.label, picked: TYPED.label }]);
+    expect(applied).toEqual([{ answer: null, picked: "own-git" }]);
     expect(tries).toBe(1);
 
     // Applied answers are not applied again by a later registration.

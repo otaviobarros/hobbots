@@ -629,18 +629,22 @@ export class ChatService extends Context.Service<
           });
 
           // Saves a step's change with the reply. A tool call that starts is stamped with when.
-          const saveStep = (event: RuntimeEvent) =>
+          // `takes` says whether the reply takes the step at all.
+          const saveStep = (event: RuntimeEvent, takes: (message: Message) => boolean = () => true) =>
             Effect.gen(function* () {
               const now = yield* nowIso;
               return yield* update((m) => {
+                if (!takes(m)) return undefined;
                 const steps = nextSteps(m.steps, reply.stepsFrom, event, now);
                 return steps === null ? undefined : MessageTransitions.setSteps(m, steps);
               });
             });
           // A tool call the policy allowed is saved before it runs, so a crash while it runs leaves it
           // uncertain rather than unknown (EX-004). A reply that has ended takes no new step: refused.
+          // So is one you asked to stop: a runtime woken while it shuts down, as Claude Code is when
+          // Stop waiting ends the command it waited on, must not start that command again (#1217).
           const recordToolStart = (event: ToolStartedEvent) =>
-            saveStep(redactEvent(event, redactor)).pipe(Effect.map(Option.isSome));
+            saveStep(redactEvent(event, redactor), (m) => m.status !== "stopping").pipe(Effect.map(Option.isSome));
 
           // The brief the turn sent counts as received only once the runtime answers the prompt that
           // carried it: anything it reports after starting the session. A runtime that starts the

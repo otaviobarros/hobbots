@@ -1,5 +1,6 @@
 import {
   type Effort,
+  GOOD_AT_MAX,
   type RoleId,
   RUNTIME_NAMES,
   type RuntimeKind,
@@ -19,6 +20,7 @@ import {
   ALL_ROLES,
   type BrainChoice,
   CHORES_MAX,
+  draftGoodAt,
   effortWords,
   type FirstHobDraft,
   LABEL_MAX,
@@ -154,6 +156,42 @@ export function ChoresField<D extends FirstHobDraft>({
           : draft.role === null
             ? "Tell it about the chores in your own words."
             : "Filled in from the role. Write it in your own words."}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * What the hob is good at, for other hobs: filled in from the chores and the role until the user
+ * writes their own (ADR 032).
+ */
+export function GoodAtField<D extends FirstHobDraft>({
+  draft,
+  onChange,
+}: {
+  draft: D;
+  onChange: (update: (draft: D) => D) => void;
+}) {
+  const copy = messages.hobForm;
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor="hob-good-at" className="lbl text-label">
+        {copy.goodAt}
+      </label>
+      <input
+        id="hob-good-at"
+        value={draftGoodAt(draft)}
+        maxLength={GOOD_AT_MAX}
+        onChange={(e) => {
+          const goodAt = e.target.value;
+          onChange((d) => ({ ...d, goodAt, goodAtEdited: true }));
+        }}
+        aria-describedby="hob-good-at-note"
+        placeholder={copy.goodAtPlaceholder}
+        className={FIELD}
+      />
+      <span id="hob-good-at-note" className="text-detail text-label">
+        {copy.goodAtNote} {!draft.goodAtEdited && copy.goodAtFilled}
       </span>
     </div>
   );

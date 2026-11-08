@@ -14,9 +14,9 @@ const asked = {
 const fromHub = (id: string, threadId: ThreadId | null, state: "open" | "answered" = "open") =>
   new HubQuestion({
     id: HubQuestionId.make(id),
-    subject: { kind: "commit-identity", key: id, title: "Commit identity" },
+    key: id,
     chat: threadId === null ? null : { agentId: AgentId.make("aldric"), threadId },
-    text: "Who should hobs commit as?",
+    ask: { kind: "commit-identity", reason: "no-git-identity", github: null, unread: null },
     options: [],
     recommended: null,
     state,

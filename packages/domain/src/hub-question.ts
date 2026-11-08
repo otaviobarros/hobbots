@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { DeviceId } from "./device.ts";
 import { AgentId, ThreadId } from "./ids.ts";
-import { choicesProblem, MAX_QUESTION_OPTIONS, QuestionOption, QuestionState, QuestionSurface } from "./quest.ts";
+import { MAX_QUESTION_OPTIONS, QuestionState, QuestionSurface } from "./quest.ts";
 import { Revision } from "./revision.ts";
 
 /**
@@ -9,22 +9,81 @@ import { Revision } from "./revision.ts";
  * to commit as. It has no Task and no asking hob: it is about a subject the hub names, goes
  * straight to you and never climbs leads. It offers choices by the same rules as a hob's question
  * (#740), and the answer goes to the part of the hub that raised it.
+ *
+ * The hub sends codes and data, never sentences (#1045, STD-I18N-005): what it asks is an `ask` of
+ * one known kind, its choices are stable keys, and the client turns both into text.
  */
 
 export const HubQuestionId = Schema.String.pipe(Schema.brand("HubQuestionId"));
 export type HubQuestionId = typeof HubQuestionId.Type;
 
-/**
- * What a hub question is about. `kind` names the part of the hub that raised it and applies the
- * answer, such as `commit-identity`; `key` tells apart the things of that kind, so the hub asks
- * about each one once at a time; `title` is how a card names it.
- */
-export const HubQuestionSubject = Schema.Struct({
-  kind: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/)),
-  key: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(200)),
-  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(120)),
+/** The name and email a commit is made as, as a hub question carries it. */
+const Identity = Schema.Struct({
+  name: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(200)),
+  email: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(200)),
 });
-export type HubQuestionSubject = typeof HubQuestionSubject.Type;
+
+/**
+ * Who hobs on your account commit as (#741). The hub no longer asks it since #1241; questions
+ * raised before are still read. `reason` says why the hub asks: your Git config sets
+ * no identity, or it could not read one in your last answer, which `unread` holds. `github` is the
+ * connected GitHub account, with the identity its choice commits as, when the hub reached one.
+ */
+export const CommitIdentityAsk = Schema.Struct({
+  kind: Schema.Literal("commit-identity"),
+  reason: Schema.Literals(["no-git-identity", "unreadable-answer"]),
+  github: Schema.NullOr(
+    Schema.Struct({
+      login: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(100)),
+      identity: Identity,
+    }),
+  ),
+  unread: Schema.NullOr(Schema.String.check(Schema.isMaxLength(200))),
+});
+export type CommitIdentityAsk = typeof CommitIdentityAsk.Type;
+
+/**
+ * Whether a hob will write code (#1241), asked when it may commit and no identity applies. The
+ * question's key is the hob's id, and `hob` its name as the card shows it.
+ */
+export const CodingSetupAsk = Schema.Struct({
+  kind: Schema.Literal("coding-setup"),
+  hob: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(200)),
+});
+export type CodingSetupAsk = typeof CodingSetupAsk.Type;
+
+/**
+ * The made-up questions behind `HOBBOTS_FAKE_HUB_QUESTIONS`, for trying hub questions and for
+ * browser tests: how often to back up, what to call the hub, and, once one is answered, what the
+ * hub applied, which `applied` holds: the choice picked, or the words typed.
+ */
+export const FakeCheckAsk = Schema.Struct({
+  kind: Schema.Literal("fake-check"),
+  check: Schema.Literals(["backups", "hub-name", "applied"]),
+  applied: Schema.NullOr(
+    Schema.Struct({
+      picked: Schema.NullOr(Schema.Literals(["nightly", "weekly"])),
+      answer: Schema.NullOr(Schema.String.check(Schema.isMaxLength(4000))),
+    }),
+  ),
+});
+export type FakeCheckAsk = typeof FakeCheckAsk.Type;
+
+/** What a hub question asks, by kind: the part of the hub that raised it and applies the answer. */
+export const HubQuestionAsk = Schema.Union([CommitIdentityAsk, CodingSetupAsk, FakeCheckAsk]);
+export type HubQuestionAsk = typeof HubQuestionAsk.Type;
+export type HubQuestionKind = HubQuestionAsk["kind"];
+
+/** The choices each kind of hub question can offer, by their stable keys. */
+export const HUB_QUESTION_CHOICES = {
+  "commit-identity": ["github", "own-git"],
+  "coding-setup": ["not-this-hob", "no-hob"],
+  "fake-check": ["nightly", "weekly"],
+} as const satisfies Record<HubQuestionKind, ReadonlyArray<string>>;
+export type HubQuestionChoice<K extends HubQuestionKind = HubQuestionKind> = (typeof HUB_QUESTION_CHOICES)[K][number];
+
+/** A choice's key: lowercase words joined by hyphens, never shown to you as it is. */
+export const HubQuestionChoiceKey = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/));
 
 /** The chat a hub question concerns, whose Needs-you tray shows it too. */
 export const HubQuestionChat = Schema.Struct({ agentId: AgentId, threadId: ThreadId });
@@ -43,40 +102,64 @@ export const taskChat = (
   return task.threadId === null || root === undefined ? null : { agentId: root.ownerId, threadId: task.threadId };
 };
 
+/** Tells apart the things of one kind, so the hub asks about each one once at a time. */
+export const HubQuestionKey = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(200));
+
+interface Choices {
+  readonly ask: HubQuestionAsk;
+  readonly options?: ReadonlyArray<string>;
+  readonly recommended?: string;
+}
+
 /**
- * What the hub raises a question with. It needs a subject and never names a Task; its choices follow
- * the same rules as a hob's (#740), with `recommended` an index from 0.
+ * Why a hub question's choices are not right, or undefined when they are: each is one its kind
+ * offers, none twice, the recommended one among them, and the GitHub choice only with an account.
+ */
+export const hubChoicesProblem = ({ ask, options, recommended }: Choices): string | undefined => {
+  const known: ReadonlyArray<string> = HUB_QUESTION_CHOICES[ask.kind];
+  const unknown = options?.find((key) => !known.includes(key));
+  if (unknown !== undefined) return `A ${ask.kind} question offers no choice "${unknown}".`;
+  if (options !== undefined && new Set(options).size !== options.length) return "Each choice is offered once.";
+  if (recommended !== undefined && !options?.includes(recommended)) return "recommended is one of the choices.";
+  if (ask.kind === "commit-identity" && ask.github === null && options?.includes("github"))
+    return "The GitHub choice needs a GitHub account.";
+  return undefined;
+};
+
+/**
+ * What the hub raises a question with. It needs a `key` and an `ask` and never names a Task; its
+ * choices follow the same rules as a hob's (#740), by key, with `recommended` one of them.
  */
 export const RaiseHubQuestion = Schema.Struct({
-  subject: HubQuestionSubject,
+  key: HubQuestionKey,
   chat: Schema.optionalKey(HubQuestionChat),
-  text: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
+  ask: HubQuestionAsk,
   options: Schema.optionalKey(
-    Schema.Array(QuestionOption).check(Schema.isMinLength(2), Schema.isMaxLength(MAX_QUESTION_OPTIONS)),
+    Schema.Array(HubQuestionChoiceKey).check(Schema.isMinLength(2), Schema.isMaxLength(MAX_QUESTION_OPTIONS)),
   ),
-  recommended: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-}).check(
-  Schema.makeFilter((input: { readonly options?: ReadonlyArray<QuestionOption>; readonly recommended?: number }) =>
-    choicesProblem(input.options, input.recommended, 0),
-  ),
-);
+  recommended: Schema.optionalKey(HubQuestionChoiceKey),
+}).check(Schema.makeFilter((input: Choices) => hubChoicesProblem(input)));
 export type RaiseHubQuestion = typeof RaiseHubQuestion.Type;
+
+/** How you answered a hub question: by picking one of its choices, or in your own words. */
+export type HubAnswer = { readonly picked: string } | { readonly words: string };
 
 /** A question from the hub, open until you answer it or the hub no longer needs the answer. */
 export class HubQuestion extends Schema.Class<HubQuestion>("HubQuestion")({
   id: HubQuestionId,
-  subject: HubQuestionSubject,
+  key: HubQuestionKey,
   chat: Schema.NullOr(HubQuestionChat),
-  text: Schema.String,
-  /** The choices it offers, none for a question answered in words only. */
-  options: Schema.Array(QuestionOption),
-  /** The index in `options` of the one the hub recommends, if any. */
-  recommended: Schema.NullOr(Schema.Int),
+  ask: HubQuestionAsk,
+  /** The keys of the choices it offers, none for a question answered in words only. */
+  options: Schema.Array(HubQuestionChoiceKey),
+  /** The key of the choice the hub recommends, if any. */
+  recommended: Schema.NullOr(HubQuestionChoiceKey),
   /** Withdrawn once the hub no longer needs the answer, such as when the decision was made elsewhere. */
   state: QuestionState,
+  /** Once answered in your own words, those words; null for a picked choice. */
   answer: Schema.NullOr(Schema.String),
-  /** Once answered, the index in `options` of the choice picked; null when the answer was typed. */
-  picked: Schema.NullOr(Schema.Int),
+  /** Once answered by a choice, its key; null when the answer was typed. */
+  picked: Schema.NullOr(HubQuestionChoiceKey),
   createdAt: Schema.String,
   answeredAt: Schema.NullOr(Schema.String),
   /** The approved device you answered it from, and where. */

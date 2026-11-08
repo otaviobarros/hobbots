@@ -1,0 +1,26 @@
+# Hobbots
+
+> Hobbots is a free, open source desktop app that turns the Claude or ChatGPT plan you already pay for into a small team of AI helpers, called hobs, on your own computer. Each hob has its own name, folders, skills and memory. You hand one a goal; it plans the work, brings in other hobs, and asks you only for the decisions that matter.
+
+- Current version: 0.0.3 beta, released November 8, 2026.
+- Runs on: macOS 13 or later (Apple silicon and Intel). An experimental, not fully tested build for Linux: Ubuntu 24.04 or later and Debian (.deb), Fedora (.rpm), x64 and arm64. Windows, iPhone and Android are planned.
+- Needs: a Claude or ChatGPT plan, signed in on the same computer. No API key and no Hobbots account.
+- Price and license: free forever, Apache 2.0.
+- Privacy: threads, memory, skills and backups stay on your computer. Hobs talk to Claude or ChatGPT the same way their own apps do.
+- Not built yet: browser use, and hobs that manage other hobs.
+
+## What it does
+
+- Quests: a lead hob splits a goal into tasks, hands them to other hobs, and each works in its own lane while you watch.
+- Questions and approvals: real decisions and risky steps wait for you in one Inbox, with a recommended answer. Every tool a hob uses is Allow, Ask or Never.
+- Memory: each hob keeps what it learned as pages you can read, edit, pin or delete.
+- Skills: your way of doing something, written down (a checklist, a brand voice). Give one to a single hob or to all; every change is a version you roll out when ready.
+- Themes: Workshop (pixel art) and Lamplight (smooth), each in dark and light.
+
+## Links
+
+- [Website](https://hobbots.app/)
+- [Download and release notes for 0.0.3](https://github.com/otaviobarros/hobbots/releases/tag/v0.0.3)
+- [Source code on GitHub](https://github.com/otaviobarros/hobbots)
+- [Report a problem](https://github.com/otaviobarros/hobbots/issues/new/choose)
+- Contact: aldric@hobbots.app

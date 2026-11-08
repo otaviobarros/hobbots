@@ -1,6 +1,6 @@
 ---
 import { CHIEF, CHIEF_PALETTE } from "@hobbots/art/chief";
-import { CONTACT, GITHUB } from "../data/copy.ts";
+import { CONTACT, GITHUB, RELEASES, REPORT } from "../data/copy.ts";
 import PixelArt from "./PixelArt.astro";
 ---
 
@@ -10,18 +10,18 @@ import PixelArt from "./PixelArt.astro";
       <PixelArt rows={CHIEF} palette={CHIEF_PALETTE} size={28} />
       <span>hobbots.app · Apache 2.0 · Free forever</span>
     </div>
-    <a href={`mailto:${CONTACT}`}>{CONTACT}</a>
     <a href={GITHUB}>GitHub</a>
-    <a href={`${GITHUB}/blob/main/CONTRIBUTING.md`}>Contribute</a>
+    <a href={RELEASES}>Releases</a>
+    <a href={REPORT}>Report a problem</a>
+    <a href={`mailto:${CONTACT}`}>{CONTACT}</a>
   </div>
 </footer>
 
 <style>
   footer {
-    padding-block: 28px;
+    padding-block: 32px;
     background: var(--color-deep);
-    border-top: 2px solid var(--color-line);
-    font-size: 15px;
+    font-size: 14px;
   }
   .wrap {
     display: flex;
@@ -34,7 +34,7 @@ import PixelArt from "./PixelArt.astro";
     align-items: center;
     gap: 10px;
     margin-right: auto;
-    color: var(--color-secondary-text);
+    color: var(--color-label);
   }
   a {
     color: var(--color-secondary-text);
@@ -43,5 +43,10 @@ import PixelArt from "./PixelArt.astro";
   a:hover {
     color: var(--color-moonlight);
     text-decoration: underline;
+  }
+  @media (max-width: 640px) {
+    footer {
+      padding-bottom: 96px;
+    }
   }
 </style>

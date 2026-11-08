@@ -1,12 +1,13 @@
-import type { HubQuestion, Question, QuestionSurface } from "@hobbots/domain";
+import { type HubQuestion, optionNamed, type Question, type QuestionSurface } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
-import { useAnswerHubQuestion } from "../../api/hub-questions.ts";
+import { type HubAnswerSent, useAnswerHubQuestion } from "../../api/hub-questions.ts";
 import { useAnswerQuestion } from "../../api/questions.ts";
 import { firstLine } from "../../lib/format.ts";
+import { shownHubQuestion } from "../hub-question/shown.ts";
 import { type FocusTargets, NO_TARGETS } from "../move-on/follow-focus.ts";
 import { useMoveOn } from "../move-on/move-on.tsx";
 import { enterSends } from "./enter-sends.ts";
@@ -28,25 +29,29 @@ interface FormPlace {
   inWords?: boolean;
 }
 
-/** How an answer box sends its answer, whoever asked: whether it is on its way, and why it failed. */
+/**
+ * How an answer box sends its answer, whoever asked: whether it is on its way, and why it failed.
+ * `picked` is the index of the choice picked, or null for words typed in the box.
+ */
 interface AnswerSend {
   /** Sends the answer; it resolves once the hub took it. */
-  readonly answer: (words: string) => Promise<unknown>;
+  readonly answer: (words: string, picked: number | null) => Promise<unknown>;
   readonly pending: boolean;
   readonly error: string | null;
 }
 
 /** An answer mutation as the box sends with it; `closedTag` is the error that says it was already answered. */
-const sendOf = <Id,>(
+const sendOf = <Id, Answer>(
   mutation: {
-    readonly mutateAsync: (input: { questionId: Id; answer: string }) => Promise<unknown>;
+    readonly mutateAsync: (input: { questionId: Id; answer: Answer }) => Promise<unknown>;
     readonly isPending: boolean;
     readonly error: unknown;
   },
   questionId: Id,
   closedTag: string,
+  answerOf: (words: string, picked: number | null) => Answer,
 ): AnswerSend => ({
-  answer: (words) => mutation.mutateAsync({ questionId, answer: words }),
+  answer: (words, picked) => mutation.mutateAsync({ questionId, answer: answerOf(words, picked) }),
   pending: mutation.isPending,
   error:
     mutation.error === null || mutation.error === undefined
@@ -66,13 +71,25 @@ const sendOf = <Id,>(
  */
 export function AnswerForm({ question, ...place }: { question: Question } & FormPlace) {
   const send = useAnswerQuestion(place.via);
-  return <ChoicesForm question={question} send={sendOf(send, question.id, "QuestionClosed")} {...place} />;
+  // A hob reads a picked choice by its label (#740).
+  return (
+    <ChoicesForm question={question} send={sendOf(send, question.id, "QuestionClosed", (words) => words)} {...place} />
+  );
 }
 
-/** The same answer box for a question the hub itself asks you (#976); your answer goes to the hub. */
+/**
+ * The same answer box for a question the hub itself asks you (#976); your answer goes to the hub.
+ * The hub reads a choice by its key, never its words (#1045): a picked choice, or words that name
+ * one, send its key, and anything else your words.
+ */
 export function HubAnswerForm({ question, ...place }: { question: HubQuestion } & FormPlace) {
   const send = useAnswerHubQuestion(place.via);
-  return <ChoicesForm question={question} send={sendOf(send, question.id, "HubQuestionClosed")} {...place} />;
+  const shown = shownHubQuestion(question);
+  const answerOf = (words: string, picked: number | null): HubAnswerSent => {
+    const key = question.options[picked ?? optionNamed(shown.options, words) ?? -1];
+    return key === undefined ? { answer: words } : { picked: key };
+  };
+  return <ChoicesForm question={shown} send={sendOf(send, question.id, "HubQuestionClosed", answerOf)} {...place} />;
 }
 
 function ChoicesForm({
@@ -89,12 +106,12 @@ function ChoicesForm({
   const form = useRef<HTMLFormElement>(null);
   const moveOn = useMoveOn();
   const text = answer.trim();
-  const answerWith = (words: string) => {
+  const answerWith = (words: string, picked: number | null = null) => {
     if (words === "" || send.pending) return;
     moveOn({
       from: form.current,
       targets,
-      sent: send.answer(words),
+      sent: send.answer(words, picked),
       say: copy.sent({ name: askerName, answer: firstLine(words) }),
     });
   };
@@ -196,11 +213,12 @@ function SendRow({
 
 /** A choice's number key, pressed in the answer form outside its box, answers with that choice (#740). */
 const choiceKeys =
-  (question: Pick<Question, "options">, answerWith: (words: string) => void) =>
+  (question: Pick<Question, "options">, answerWith: (words: string, picked: number) => void) =>
   (event: KeyboardEvent<HTMLFormElement>) => {
     if (event.target instanceof HTMLTextAreaElement || event.altKey || event.ctrlKey || event.metaKey) return;
-    const option = question.options[Number(event.key) - 1];
+    const index = Number(event.key) - 1;
+    const option = question.options[index];
     if (option === undefined) return;
     event.preventDefault();
-    answerWith(option.label);
+    answerWith(option.label, index);
   };

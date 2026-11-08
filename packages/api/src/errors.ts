@@ -231,6 +231,13 @@ export class HubQuestionClosed extends Schema.TaggedError<HubQuestionClosed>()(
   { httpApiStatus: 409 },
 ) {}
 
+/** An answer to a question from the hub that picked a choice the question does not offer (#1045). */
+export class HubChoiceNotOffered extends Schema.TaggedError<HubChoiceNotOffered>()(
+  "HubChoiceNotOffered",
+  { hubQuestionId: HubQuestionId },
+  { httpApiStatus: 400 },
+) {}
+
 /**
  * A note the Task can no longer take: the Task has ended, or the note's key was already used for
  * another Task or text.

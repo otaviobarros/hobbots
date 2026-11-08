@@ -45,7 +45,7 @@ import {
   type SkillRevisionHash,
   skillUseWeekStart,
 } from "@hobbots/domain";
-import { EventJournal, RestoreRepository } from "@hobbots/persistence";
+import { EventJournal, RestoreRepository, SkillUpdateLogLive } from "@hobbots/persistence";
 import {
   AgentsFolder,
   AgentsFolderLive,
@@ -58,6 +58,7 @@ import {
   type SkillImportSource,
   SkillObjects,
   SkillObjectsLive,
+  SkillUpdatesLive,
   SkillWriterLive,
   setLinksOf,
   writeSkillExport,
@@ -686,12 +687,13 @@ export const agentsSkillsFolder = (setting: Option.Option<string>, runtime: "cla
 
 /**
  * Skills on the hub (ADR 029): each revision's files under `skills/objects` in the data folder,
- * import into the library, and `~/.agents/skills` read into it when there is one to read.
+ * import into the library, updates from Git sources, and `~/.agents/skills` read into it when there
+ * is one to read.
  */
 export const SkillsLive = (dataDir: string, agentsFolder: string | null) => {
-  const services = SkillWriterLive.pipe(
+  const services = Layer.mergeAll(SkillWriterLive, SkillUpdatesLive).pipe(
     Layer.provideMerge(SkillImporterLive),
-    Layer.provideMerge(SkillObjectsLive(dataDir)),
+    Layer.provideMerge(Layer.mergeAll(SkillObjectsLive(dataDir), SkillUpdateLogLive)),
   );
   return agentsFolder === null
     ? services
