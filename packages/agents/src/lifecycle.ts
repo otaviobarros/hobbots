@@ -1,5 +1,13 @@
 import { type AgentNotFound, HobUnavailable } from "@hobbots/api";
-import { type Agent, type AgentId, AgentTransitions, InvalidAgentTransition, type RetireWork } from "@hobbots/domain";
+import {
+  type Agent,
+  type AgentId,
+  AgentTransitions,
+  type ChangeActor,
+  InvalidAgentTransition,
+  type RetireWork,
+  YOU,
+} from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
@@ -9,18 +17,25 @@ import { foundAgent } from "./hobs.ts";
 import { EventPublisher, RetiredHobGitHubApp } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
-/** Pauses, wakes, retires and brings back hobs (AG-006). Nothing here deletes a hob or its threads. */
+/**
+ * Pauses, wakes, retires and brings back hobs (AG-006), each journaled with who did it, you when
+ * left out (ADR 034). Nothing here deletes a hob or its threads.
+ */
 export class HobLifecycle extends Context.Service<
   HobLifecycle,
   {
-    readonly pause: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
-    readonly wake: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
-    readonly retire: (agentId: AgentId, activeWork: RetireWork) => Effect.Effect<Agent, AgentNotFound>;
+    readonly pause: (agentId: AgentId, actor?: ChangeActor) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
+    readonly wake: (agentId: AgentId, actor?: ChangeActor) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
+    readonly retire: (
+      agentId: AgentId,
+      activeWork: RetireWork,
+      actor?: ChangeActor,
+    ) => Effect.Effect<Agent, AgentNotFound>;
     /**
      * Brings a retired hob back, active with all its threads. The rules and the GitHub app it lost
      * on retiring stay gone (ADR 015, ADR 022). Refused for a paused hob; an active one is unchanged.
      */
-    readonly bringBack: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
+    readonly bringBack: (agentId: AgentId, actor?: ChangeActor) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
   }
 >()("@hobbots/agents/HobLifecycle") {
   static readonly layer = Layer.effect(
@@ -42,6 +57,7 @@ export class HobLifecycle extends Context.Service<
       const apply = Effect.fn("HobLifecycle.apply")(function* (
         agentId: AgentId,
         transition: (agent: Agent) => Agent | InvalidAgentTransition,
+        actor: ChangeActor,
       ) {
         while (true) {
           const agent = yield* findAgent(agentId);
@@ -50,7 +66,7 @@ export class HobLifecycle extends Context.Service<
             return yield* new HobUnavailable({ agentId, status: next.from });
           }
           if (next.status === agent.status) return next;
-          const committed = yield* repo.setAgentStatus(next, agent.status);
+          const committed = yield* repo.setAgentStatus(next, agent.status, actor);
           if (Option.isSome(committed)) {
             yield* bus.publish(committed.value.entries);
             return committed.value.value;
@@ -58,21 +74,26 @@ export class HobLifecycle extends Context.Service<
         }
       });
 
-      const pause = (agentId: AgentId) => admission.withHob(agentId, apply(agentId, AgentTransitions.pause));
+      const pause = (agentId: AgentId, actor: ChangeActor = YOU) =>
+        admission.withHob(agentId, apply(agentId, AgentTransitions.pause, actor));
       // Messages that queued while the hob slept start once it is awake (CH-008).
-      const wake = (agentId: AgentId) =>
+      const wake = (agentId: AgentId, actor: ChangeActor = YOU) =>
         admission
-          .withHob(agentId, apply(agentId, AgentTransitions.wake))
+          .withHob(agentId, apply(agentId, AgentTransitions.wake, actor))
           .pipe(Effect.tap(() => chat.drainAgent(agentId)));
 
       // Under the hob's lock, every turn admitted before the retirement is already registered and
       // none can be admitted until the hob is retired, so "stop" reaches all of its running replies.
-      const retire = Effect.fn("HobLifecycle.retire")(function* (agentId: AgentId, activeWork: RetireWork) {
+      const retire = Effect.fn("HobLifecycle.retire")(function* (
+        agentId: AgentId,
+        activeWork: RetireWork,
+        actor: ChangeActor = YOU,
+      ) {
         const retired = yield* admission.withHob(
           agentId,
           Effect.gen(function* () {
             const at = DateTime.formatIso(yield* DateTime.now);
-            const retired = yield* apply(agentId, (agent) => AgentTransitions.retire(agent, at)).pipe(
+            const retired = yield* apply(agentId, (agent) => AgentTransitions.retire(agent, at), actor).pipe(
               // Retiring is allowed from every state, so the transition cannot be refused.
               Effect.catchTag("HobUnavailable", Effect.die),
             );
@@ -90,7 +111,8 @@ export class HobLifecycle extends Context.Service<
         return retired;
       });
 
-      const bringBack = (agentId: AgentId) => admission.withHob(agentId, apply(agentId, AgentTransitions.bringBack));
+      const bringBack = (agentId: AgentId, actor: ChangeActor = YOU) =>
+        admission.withHob(agentId, apply(agentId, AgentTransitions.bringBack, actor));
 
       return HobLifecycle.of({ pause, wake, retire, bringBack });
     }),

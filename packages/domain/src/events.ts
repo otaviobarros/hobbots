@@ -3,6 +3,7 @@ import { CommandId, CommandRecord, FileChange, FileChangeId, FolderScan } from "
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
+import { ChangeActor, YOU } from "./change-actor.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HubQuestion } from "./hub-question.ts";
@@ -37,7 +38,14 @@ import {
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 
-const AgentUpserted = Schema.TaggedStruct("AgentUpserted", { agent: Agent });
+/**
+ * A hob was created, changed, paused, woken, retired or brought back, by `actor` (ADR 034). Events
+ * journaled before the actor was recorded read as yours, since only you could change a hob then.
+ */
+const AgentUpserted = Schema.TaggedStruct("AgentUpserted", {
+  agent: Agent,
+  actor: ChangeActor.pipe(Schema.withDecodingDefaultKey(Effect.succeed(YOU))),
+});
 const ThreadUpserted = Schema.TaggedStruct("ThreadUpserted", { thread: Thread });
 const MessageUpserted = Schema.TaggedStruct("MessageUpserted", { message: Message });
 /** A user message joined its thread's queue because a reply was running. */
@@ -332,6 +340,7 @@ export type MessageDelta = typeof MessageDelta.Type;
 /** Each journaled event type's payload version, from 1; an incompatible payload change bumps it (ADR 013). */
 export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // A hob's GitHub overrides moved to its Charm overrides under their Charm ids, read from the old names, compatibly.
+  // Its `actor`, and the hob's `summonedBy`, `summonedFor` and `summonedUnattended`, were added with defaults, compatibly.
   AgentUpserted: 1,
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly.

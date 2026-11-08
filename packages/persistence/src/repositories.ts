@@ -3,6 +3,7 @@ import {
   Agent,
   AgentConfiguration,
   AgentStatus,
+  type ChangeActor,
   type Committed,
   type HobPolicy,
   heldCharms,
@@ -16,6 +17,7 @@ import {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  YOU,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -34,17 +36,22 @@ interface AgentRow {
   readonly signCommits?: unknown;
   readonly charms?: unknown;
   readonly visibleToHobs?: unknown;
+  readonly summonedUnattended?: unknown;
+  readonly actor?: unknown;
 }
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
 // The policy's three JSON text columns (migration 0015), its signing flag (0021) and the ids of its
-// Charms (0076) become the hob's one `policy` field. Being visible to other hobs is 0 or 1 (0079).
+// Charms (0076) become the hob's one `policy` field. Being visible to other hobs is 0 or 1 (0079), and
+// so is being summoned unattended on a hob; a configuration version's actor is JSON text (0082).
 const agentRows = (rows: ReadonlyArray<AgentRow>) =>
   rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, charms, visibleToHobs, ...row }) => ({
     ...row,
     lookSeed: Number(row.lookSeed),
     visibleToHobs: Number(visibleToHobs) === 1,
     ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
+    ...(row.summonedUnattended === undefined ? {} : { summonedUnattended: Number(row.summonedUnattended) === 1 }),
+    ...(row.actor === undefined ? {} : { actor: JSON.parse(String(row.actor)) }),
     policy: {
       ownFolders: JSON.parse(String(ownFolders)),
       hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
@@ -264,11 +271,12 @@ export const HobbotsRepositoryLive = Layer.effect(
         ),
     });
 
-    const insertConfig = (agent: Agent, createdAt: string) =>
+    const insertConfig = (agent: Agent, actor: ChangeActor, createdAt: string) =>
       sql`INSERT INTO agent_config_versions ${sql.insert({
         agent_id: agent.id,
         version: agent.configVersion,
         ...configColumns(agent),
+        actor: JSON.stringify(actor),
         created_at: createdAt,
       })}`;
 
@@ -276,7 +284,7 @@ export const HobbotsRepositoryLive = Layer.effect(
     const always = <A>(effect: Effect.Effect<Option.Option<Committed<A>>>) =>
       effect.pipe(Effect.map(Option.getOrThrow));
 
-    const insertAgent = (input: Agent) =>
+    const insertAgent = (input: Agent, actor: ChangeActor = YOU) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
           const agent = new Agent({ ...input, revision });
@@ -286,17 +294,20 @@ export const HobbotsRepositoryLive = Layer.effect(
             config_version: agent.configVersion,
             status: agent.status,
             retired_at: agent.retiredAt,
+            summoned_by: agent.summonedBy,
+            summoned_for: agent.summonedFor,
+            summoned_unattended: agent.summonedUnattended ? 1 : 0,
             created_at: agent.createdAt,
             revision,
           })} ON CONFLICT (id) DO NOTHING RETURNING id`;
           if (inserted.length === 0) return null;
-          yield* insertConfig(agent, agent.createdAt);
-          return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
+          yield* insertConfig(agent, actor, agent.createdAt);
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
         }),
       );
 
     // The version check makes concurrent edits of one hob land one at a time.
-    const updateAgentConfig = (input: Agent, createdAt: string) =>
+    const updateAgentConfig = (input: Agent, actor: ChangeActor, createdAt: string) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
           const agent = new Agent({ ...input, revision });
@@ -305,12 +316,12 @@ export const HobbotsRepositoryLive = Layer.effect(
             WHERE id = ${agent.id} AND config_version = ${agent.configVersion - 1}
             RETURNING id`;
           if (updated.length === 0) return null;
-          yield* insertConfig(agent, createdAt);
-          return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
+          yield* insertConfig(agent, actor, createdAt);
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
         }),
       );
 
-    const setAgentStatus = (input: Agent, from: AgentStatus) =>
+    const setAgentStatus = (input: Agent, from: AgentStatus, actor: ChangeActor = YOU) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
           const agent = new Agent({ ...input, revision });
@@ -318,7 +329,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             SET status = ${agent.status}, retired_at = ${agent.retiredAt}, revision = ${revision}
             WHERE id = ${agent.id} AND status = ${from} RETURNING id`;
           if (updated.length === 0) return null;
-          return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
         }),
       );
 
@@ -477,8 +488,8 @@ export const HobbotsRepositoryLive = Layer.effect(
       setAgentStatus,
       insertAgent,
       findAgentConfig: (agentId, version) => findAgentConfig({ agentId, version }).pipe(Effect.orDie),
-      updateAgentConfig: (agent) =>
-        DateTime.now.pipe(Effect.flatMap((now) => updateAgentConfig(agent, DateTime.formatIso(now)))),
+      updateAgentConfig: (agent, actor = YOU) =>
+        DateTime.now.pipe(Effect.flatMap((now) => updateAgentConfig(agent, actor, DateTime.formatIso(now)))),
       listThreads: (agentId) => listThreads(agentId).pipe(Effect.orDie),
       listArchivedThreads: (agentId) => listArchivedThreads(agentId).pipe(Effect.orDie),
       findThread: (id) => findThread(id).pipe(Effect.orDie),

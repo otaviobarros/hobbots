@@ -2,7 +2,6 @@ import { Agent, AgentId, RuntimeModel, RuntimeModels, starterRole } from "@hobbo
 import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
-  aboutLine,
   changeCount,
   draftProblem,
   isDirty,
@@ -12,6 +11,7 @@ import {
   rebaseDraft,
   retiredSummary,
   roleProblem,
+  summonerOf,
 } from "./profile.ts";
 
 const model = (id: string, displayName: string, efforts: RuntimeModel["efforts"]) =>
@@ -153,8 +153,13 @@ describe("hob profile", () => {
     expect(isDirty(saved, afterAnswer)).toBe(true);
   });
 
-  it("sums up where the hob works, when it was summoned and its version", () => {
-    expect(aboutLine(hob({ configVersion: 3 }))).toMatch(/^Works on the hub · Summoned Oct \d+ · Version 3$/);
+  it("names who summoned the hob, and a summoner not found only once every hob was read", () => {
+    const ada = { id: AgentId.make("ada"), name: "Ada" };
+    expect(summonerOf(hob(), [ada], false)).toEqual({ kind: "you" });
+    expect(summonerOf(hob({ summonedBy: ada.id }), [ada], false)).toEqual({ kind: "hob", name: "Ada" });
+    expect(summonerOf(hob({ summonedBy: ada.id }), [], false)).toEqual({ kind: "unknown" });
+    // A summoner deleted since is not named.
+    expect(summonerOf(hob({ summonedBy: ada.id }), [], true)).toEqual({ kind: "gone" });
   });
 
   it("says what retiring did with the hob's work", () => {

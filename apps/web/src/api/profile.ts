@@ -14,7 +14,6 @@ import {
   starterRole,
   type Voice,
 } from "@hobbots/domain";
-import { formatMonthDay } from "../lib/format.ts";
 import { type BrainChoice, settleBrain } from "./first-hob.ts";
 
 /** A hob's role as the profile edits it: a starter role, or a title in the user's own words. */
@@ -210,12 +209,30 @@ export const changeCount = (base: ProfileDraft, draft: ProfileDraft): number =>
 /** Whether the draft differs from where the form started. */
 export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean => changeCount(base, draft) > 0;
 
-/** Where the hob works, when it was summoned and its version, for the line under the profile. */
-export const aboutLine = (hob: Pick<Agent, "createdAt" | "configVersion">): string =>
-  `Works on the hub · ${summonedLine(hob.createdAt)} · Version ${hob.configVersion}`;
+/**
+ * Who summoned the hob (ADR 034): you, a hob by its name, a hob that is no longer kept, or not known
+ * yet while the hobs that could have summoned it are still being read.
+ */
+export type Summoner =
+  | { readonly kind: "you" }
+  | { readonly kind: "hob"; readonly name: string }
+  | { readonly kind: "gone" }
+  | { readonly kind: "unknown" };
 
-/** When the hob was summoned, as "Summoned Oct 2". */
-const summonedLine = (createdAt: string): string => `Summoned ${formatMonthDay(new Date(createdAt))}`;
+/**
+ * Who summoned the hob, looked up among `hobs`. A summoner missing from them is gone only once
+ * `complete` says every hob it could be was read.
+ */
+export const summonerOf = (
+  hob: Pick<Agent, "summonedBy">,
+  hobs: ReadonlyArray<Pick<Agent, "id" | "name">>,
+  complete: boolean,
+): Summoner => {
+  if (hob.summonedBy === null) return { kind: "you" };
+  const found = hobs.find((other) => other.id === hob.summonedBy);
+  if (found !== undefined) return { kind: "hob", name: found.name };
+  return complete ? { kind: "gone" } : { kind: "unknown" };
+};
 
 /** The choices Retire offers for the hob's running replies, in the order shown. */
 export const RETIRE_OPTIONS: ReadonlyArray<{

@@ -3,6 +3,7 @@ import type {
   AgentConfiguration,
   AgentId,
   AgentStatus,
+  ChangeActor,
   Committed,
   Message,
   MessageId,
@@ -22,18 +23,27 @@ export class HobbotsRepository extends Context.Service<
     readonly listAgentsWithStatus: (statuses: ReadonlyArray<AgentStatus>) => Effect.Effect<ReadonlyArray<Agent>>;
     readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
     /**
-     * Saves the hob's lifecycle fields (status and retirement time) from `next`. None, and nothing
-     * changed, when its stored status is no longer `from` (another change landed first).
+     * Saves the hob's lifecycle fields (status and retirement time) from `next`, journaled as made by
+     * `actor`, you when left out (ADR 034). None, and nothing changed, when its stored status is no
+     * longer `from` (another change landed first).
      */
-    readonly setAgentStatus: (next: Agent, from: AgentStatus) => Effect.Effect<Option.Option<Committed<Agent>>>;
-    /** Inserts the hob and its first configuration unless one with its id exists; none when it was not inserted. */
-    readonly insertAgent: (agent: Agent) => Effect.Effect<Option.Option<Committed<Agent>>>;
+    readonly setAgentStatus: (
+      next: Agent,
+      from: AgentStatus,
+      actor?: ChangeActor,
+    ) => Effect.Effect<Option.Option<Committed<Agent>>>;
+    /**
+     * Inserts the hob and its first configuration, made by `actor` (you when left out), unless one
+     * with its id exists; none when it was not inserted.
+     */
+    readonly insertAgent: (agent: Agent, actor?: ChangeActor) => Effect.Effect<Option.Option<Committed<Agent>>>;
     readonly findAgentConfig: (id: AgentId, version: number) => Effect.Effect<Option.Option<AgentConfiguration>>;
     /**
-     * Stores the hob's next configuration version and makes it current. None, and nothing stored,
-     * when the hob's current version is no longer the one before it (another edit landed first).
+     * Stores the hob's next configuration version, made by `actor` (you when left out), and makes it
+     * current. None, and nothing stored, when the hob's current version is no longer the one before
+     * it (another edit landed first).
      */
-    readonly updateAgentConfig: (agent: Agent) => Effect.Effect<Option.Option<Committed<Agent>>>;
+    readonly updateAgentConfig: (agent: Agent, actor?: ChangeActor) => Effect.Effect<Option.Option<Committed<Agent>>>;
     /** The hob's live threads, most recently active first; archived threads are left out. */
     readonly listThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
     /** The hob's archived threads, most recently archived first. */

@@ -1,17 +1,17 @@
 import { Schema } from "effect";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, TaskId, ThreadId } from "./ids.ts";
 import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";
+
+// The Task id lives with the other ids, so a hob can name the Task it was summoned for without a cycle.
+export { TaskId } from "./ids.ts";
 
 /**
  * Tasks of ADR 018: one hob's piece of work, end to end. Steps, a party member's work and nested
  * Quests are all Tasks in one tree, each with its owner, parent and root. A retry is a new Attempt
  * of the same Task, never a new Task (EX-001).
  */
-
-export const TaskId = Schema.String.pipe(Schema.brand("TaskId"));
-export type TaskId = typeof TaskId.Type;
 
 export const AttemptId = Schema.String.pipe(Schema.brand("AttemptId"));
 export type AttemptId = typeof AttemptId.Type;
