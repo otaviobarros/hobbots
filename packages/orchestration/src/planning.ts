@@ -37,7 +37,8 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import { namedFolders, parentOf, pathsIn, requestedFolders, withFolders } from "./default-folders.ts";
+import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
+import { type DestinationDeps, missingDestinations, notThere } from "./destinations.ts";
 import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 
 /**
@@ -50,37 +51,6 @@ const notDelivered = (task: Task, delivered: boolean | undefined) =>
       "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile."
     : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
       "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
-
-/**
- * Why a Quest's lead may not say it delivered yet (#1215): nothing is where the user asked for it.
- * Its member could not write there, and the lead chose another place itself, so the Quest read done
- * with a file somewhere the user never agreed to.
- */
-const notThere = (task: Task, missing: ReadonlyArray<string>) =>
-  `Task ${task.id} is not complete: the user asked for ${missing.join(", ")}, and nothing is there. ` +
-  "A file anywhere else is not delivered where they asked. Finish it there, or, if it cannot go there, ask the user with ask where it should go instead, " +
-  `naming ${missing.length === 1 ? "that path" : "those paths"} in the question, and leave the Quest open until they answer. ` +
-  "Never choose another place yourself, nor let a member choose one.";
-
-/**
- * What the user wrote after asking for the Quest: their answers to its questions, their notes on its
- * Tasks, and the message this turn answers when they sent it while the work ran. A path they name
- * there, such as where to save the file instead, is held to as the request's own are.
- */
-const userWordsSince = (scope: CallScope): ReadonlyArray<string> => [
-  ...scope.tree.questions.flatMap((question) =>
-    question.answeredBy?._tag === "User" && question.answer !== null ? [question.answer] : [],
-  ),
-  ...scope.tree.notes.flatMap((note) => (note.senderId === undefined || note.senderId === null ? [note.text] : [])),
-  ...(scope.caller.steers === undefined ? [] : [scope.caller.steers]),
-];
-
-/**
- * Whether the user decided where `path` goes instead: they answered a question that named it, as a
- * lead asks once the work cannot go there. An answer to anything else leaves the lead held to it.
- */
-const decidedBy = (scope: CallScope, path: string) =>
-  scope.tree.questions.some((question) => question.answeredBy?._tag === "User" && question.text.includes(path));
 
 /** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
 const REASON_LIMIT = 600;
@@ -95,11 +65,8 @@ interface Deps {
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
   readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
-  /** Of the absolute paths given, those where no regular file is now and `attempts` did not take away (see `delivery.ts`). */
-  readonly missingAt: (
-    paths: ReadonlyArray<string>,
-    attempts: ReadonlyArray<AttemptId>,
-  ) => Effect.Effect<ReadonlyArray<string>>;
+  readonly missingAt: DestinationDeps["missingAt"];
+  readonly approvedRemovals: DestinationDeps["approvedRemovals"];
   /** Why the file artifacts a Task returns could not be opened once it completes, or null (see `delivery.ts`). */
   readonly delivered: (
     folders: ReadonlyArray<string>,
@@ -116,41 +83,12 @@ const isQuestTop = (scope: CallScope, task: Task) =>
   task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id);
 
 /**
- * The files the user named that are not there now (#1215): each absolute path that is not a folder
- * in the Quest's top Task's brief, which is what the user asked, or in what they wrote since. A file
- * the work only reads is there; one it was to write is there only once it was written; one it was
- * to delete or rename is gone because the work took it away, which does not count. A file right
- * under the root is not counted, since a closing tag such as `</p>` reads as one. A path the user
- * answered a question about, which named it, is theirs to have moved.
- */
-const missingDestinations = (
-  { missingAt, folderChecks, separator }: Pick<Deps, "missingAt" | "folderChecks" | "separator">,
-  scope: CallScope,
-  task: Task,
-) =>
-  Effect.gen(function* () {
-    const named = [
-      ...new Set([task.brief, ...userWordsSince(scope)].flatMap((text) => pathsIn(text, separator))),
-    ].filter(
-      // A name right under the root, such as the `/p` of a closing `</p>` tag, is not taken for a file.
-      (path) => !path.endsWith(separator) && parentOf(path, separator) !== null && !decidedBy(scope, path),
-    );
-    const files = yield* Effect.filter(named, (path) => Effect.isFailure(folderChecks.check(path)), {
-      concurrency: 8,
-    });
-    return yield* missingAt(
-      files,
-      scope.tree.attempts.map((attempt) => attempt.id),
-    );
-  });
-
-/**
  * Refuses a completion that would read done without the delivery: a Quest whose lead does not say
  * it delivered what the user asked for (#1181), a file no one could open afterwards (#1180), or a
  * Quest with nothing where the user asked for it (#1215).
  */
 const deliveredOrRefused = (
-  deps: Pick<Deps, "delivered" | "authority" | "missingAt" | "folderChecks" | "separator">,
+  deps: Pick<Deps, "delivered" | "authority" | "missingAt" | "approvedRemovals" | "folderChecks" | "separator">,
   scope: CallScope,
   task: Task,
   questTop: boolean,
@@ -321,6 +259,7 @@ export const makePlanning = ({
   wrapUp,
   delivered,
   missingAt,
+  approvedRemovals,
   folderChecks,
   authority,
   separator,
@@ -461,7 +400,7 @@ export const makePlanning = ({
       }
       const questTop = isQuestTop(scope, task);
       yield* deliveredOrRefused(
-        { delivered, authority, missingAt, folderChecks, separator },
+        { delivered, authority, missingAt, approvedRemovals, folderChecks, separator },
         scope,
         task,
         questTop,

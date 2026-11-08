@@ -9,8 +9,9 @@ import { firstPending, hub, partyHub, send, treeWhen } from "./party-hub.ts";
 // lead where to save it instead, the lead answered itself ("save it in the source folder") and
 // completed the Quest with delivered: true, and the Quest read done with a file where you never
 // agreed. complete_task on a Quest's top Task now holds the lead to the files you named: each must
-// be there, unless the work took it away, as a rename or a deletion does, or you answered a question
-// that named it. The hub checks the call, so it holds for every runtime.
+// be there, unless you answered a question that named it with another place, or the work took it
+// away as you allowed: a rename to a path you named, or a deletion you approved. The hub checks the
+// call, so it holds for every runtime.
 
 let dispose: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -121,7 +122,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
   }, 30_000);
 
   // covers OR-004, OR-002, IN-004
-  it("[TC-OR-666] completes somewhere else once you answer the question its lead passed up about where to save it", async () => {
+  it("[TC-OR-666] completes somewhere else once you answer the question about where to save it with the new place", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -137,7 +138,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
         2,
       ),
     );
-    await escalatedAndAnswered(party, "Save it in the source folder");
+    await escalatedAndAnswered(party, `Save it as ${saved}`);
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(answers.get("wrap")).toContain("is complete");
     expect(done.questions[0]?.answeredBy).toEqual({ _tag: "User" });
@@ -193,7 +194,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
   }, 30_000);
 
   // covers OR-004, UX-002
-  it("[TC-OR-669] completes once the work renamed and deleted the files you asked it to", async () => {
+  it("[TC-OR-669] completes once the work renamed a file to the path you named and deleted one you approved deleting", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -220,5 +221,52 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(answers.get("wrap")).toContain("is complete");
     expect(done.quests[0]?.state).not.toBe("active");
+  }, 30_000);
+
+  // covers OR-004, OR-002
+  it("[TC-OR-670] stays open when you answer the question about where to save it by keeping the place you asked for", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true });
+    dispose = party.dispose;
+    const { run, answers, project, temp, reactions } = party;
+    const wanted = join(temp, "System", "skills-check.html");
+    const saved = join(project, "skills-check.html");
+    writeFileSync(saved, "<!doctype html>\n");
+    reactions.push(ESCALATES);
+    await run(
+      quest(
+        `Have Rook save a short summary as ${wanted}`,
+        askedWhere(wanted),
+        { key: "wrap", delivered: true, summary: "Saved in the source folder", artifacts: [file(saved)] },
+        2,
+      ),
+    );
+    await escalatedAndAnswered(party, "No, keep the original destination");
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(wanted);
+    expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, UX-002
+  it("[TC-OR-671] stays open when the work moved the file you asked to update somewhere you never named", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
+    dispose = party.dispose;
+    const { run, answers, project } = party;
+    const report = join(project, "report.html");
+    writeFileSync(report, "<h1>Report</h1>\n");
+    // A script moves it, which the safety preset does not ask about, as no command it can read deletes it.
+    const archive = JSON.stringify({
+      command: "python3 archive.py",
+      writes: { "report.html": null, "archive/report.html": "<h1>Report</h1>\n" },
+    });
+    await run(
+      quest(
+        `Update ${report} with this week's numbers`,
+        [`fake:run ${archive}`, hub("complete_task", { key: "rook", summary: "Updated and archived" })],
+        { key: "wrap", delivered: true, summary: "The report is updated" },
+      ),
+    );
+    const refused = await run(treeWhen((tree) => tree.refusals.some((each) => each.reason === "not-at-destination")));
+    expect(answers.get("wrap")).toContain(report);
+    expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 });
