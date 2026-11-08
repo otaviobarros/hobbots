@@ -117,12 +117,12 @@ interface Gates {
 
 /**
  * What a test runs at a chosen moment, so a change made meanwhile lands deterministically (#408):
- * `onStop` once a held turn is stopped, and `staleOpen` as a hob's open Tasks the next time they
- * are counted, as if counted just before the last one ended.
+ * `onStop` once a held turn is stopped, and `afterCount` right after a hob's open Tasks are next
+ * counted, before what counted them goes on.
  */
 interface Hooks {
   onStop: Effect.Effect<void> | undefined;
-  staleOpen: { readonly agentId: AgentId; readonly tasks: ReadonlyArray<Task> } | undefined;
+  afterCount: { readonly agentId: AgentId; readonly run: Effect.Effect<void> } | undefined;
 }
 
 const scripted = (gates: Gates, requests: Array<PromptRequest>, hooks: Hooks) =>
@@ -175,7 +175,7 @@ const Party = Layer.effectDiscard(
   }),
 );
 
-/** The Task records, counting a hob's open Tasks from `hooks.staleOpen` once when it is set. */
+/** The Task records, running `hooks.afterCount` once a hob's open Tasks are counted, when it is set. */
 const HookedTasks = (hooks: Hooks) =>
   Layer.effect(
     TaskRepository,
@@ -183,10 +183,10 @@ const HookedTasks = (hooks: Hooks) =>
       TaskRepository.of({
         ...tasks,
         listOpenTasks: (ownerId) => {
-          const stale = hooks.staleOpen;
-          if (stale === undefined || stale.agentId !== ownerId) return tasks.listOpenTasks(ownerId);
-          hooks.staleOpen = undefined;
-          return Effect.succeed(stale.tasks);
+          const hook = hooks.afterCount;
+          if (hook === undefined || hook.agentId !== ownerId) return tasks.listOpenTasks(ownerId);
+          hooks.afterCount = undefined;
+          return Effect.tap(tasks.listOpenTasks(ownerId), () => hook.run);
         },
       }),
     ),
@@ -241,7 +241,7 @@ afterEach(async () => {
 const setUp = () => {
   const requests: Array<PromptRequest> = [];
   const gates = { hold: Deferred.makeUnsafe<void>(), stuck: Deferred.makeUnsafe<void>() };
-  const hooks: Hooks = { onStop: undefined, staleOpen: undefined };
+  const hooks: Hooks = { onStop: undefined, afterCount: undefined };
   const app = ManagedRuntime.make(makeApp(gates, requests, hooks));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
@@ -1015,22 +1015,45 @@ describe("retiring a hob with open work", () => {
   }, 20_000);
 
   // covers AG-006
-  it("[TC-AG-1250] Finish, then retire retires a hob whose last Task ended after it was counted", async () => {
-    const { run, release, hooks } = setUp();
+  it("[TC-AG-1250] Finish, then retire gives no Task to the hob once it counted nothing open, and retires it", async () => {
+    const { run, hooks } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
-    const copy = ownedBy(before, QUILL);
-    if (copy === undefined) throw new Error("no Task for Quill");
-    await release();
-    await run(treeWhen((tree) => tree.tasks.find((task) => task.id === copy.id)?.state === "completed"));
+    const build = ownedBy(before, ADA);
+    if (build === undefined) throw new Error("no Task for Ada");
 
-    // Counted as still open, as just before it ended: its end found Quill not yet retiring.
-    hooks.staleOpen = { agentId: QUILL, tasks: [copy] };
-    expect(await run(lifecycle((each) => each.retireWhenDone(QUILL)))).toMatchObject({
+    // Pip has nothing open; right after that is counted, you hand Ada's queued Task to Pip.
+    let reassigned: unknown;
+    hooks.afterCount = {
+      agentId: PIP,
+      run: await run(
+        Effect.gen(function* () {
+          const session = yield* UserSession;
+          const each = yield* TaskControls;
+          return each.reassign(build.id, PIP).pipe(
+            Effect.provideService(UserSession, session),
+            Effect.match({
+              onFailure: (error) => {
+                reassigned = error;
+              },
+              onSuccess: () => {
+                reassigned = "given";
+              },
+            }),
+          );
+        }),
+      ),
+    };
+    expect(await run(lifecycle((each) => each.retireWhenDone(PIP)))).toMatchObject({
       status: "retired",
       retiring: null,
     });
-    expect(hooks.staleOpen).toBeUndefined();
+    expect(hooks.afterCount).toBeUndefined();
+    // Marked before it counted, Pip could not take the Task, which stays Ada's and does not fail.
+    expect(reassigned).toMatchObject({ _tag: "HobUnavailable", status: "retiring" });
+    const after = await run(treeWhen(() => true));
+    expect(after.tasks.find((task) => task.id === build.id)).toMatchObject({ ownerId: ADA });
+    expect(after.tasks.some((task) => task.state === "failed")).toBe(false);
   }, 20_000);
 
   // covers AG-006

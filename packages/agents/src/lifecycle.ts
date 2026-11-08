@@ -262,14 +262,12 @@ export class HobLifecycle extends Context.Service<
             const agent = yield* findAgent(agentId);
             if (agent.status === "retired") return yield* new HobUnavailable({ agentId, status: "retired" });
             if (agent.retiring !== null) return { agent, retired: false };
-            if ((yield* openTasks(agentId)).length === 0) {
-              return { agent: yield* retireHeld(agentId, "finish", actor), retired: true };
-            }
+            // Marked first, so no Task can be given to it once its open ones are counted: a Reassign
+            // checks the hob as it writes. A last Task that ended before the mark found the hob not
+            // yet retiring, so this count is what retires it.
             const committed = yield* repo.setAgentRetiring(agentId, { since: yield* nowIso, by: actor }, actor);
             if (Option.isNone(committed)) return { agent: yield* findAgent(agentId), retired: false };
             yield* bus.publish(committed.value.entries);
-            // The last Task may have ended after it was counted, before the hob was marked: its end
-            // found the hob not yet retiring, so nothing else retires it.
             if ((yield* openTasks(agentId)).length === 0) {
               return { agent: yield* retireHeld(agentId, "finish", actor), retired: true };
             }
