@@ -71,7 +71,10 @@ describe("HobChanges", () => {
       status: "paused",
       origin: { charm: null, taskId: null, threadId: "t1", messageId: "m1" },
     });
-    expect(result.forHob[1]).toMatchObject({ config: { version: 2, name: "Ash" }, previous: { version: 1, name: "Wren" } });
+    expect(result.forHob[1]).toMatchObject({
+      config: { version: 2, name: "Ash" },
+      previous: { version: 1, name: "Wren" },
+    });
     expect(result.forHob[2]).toMatchObject({ actor: YOU, origin: null, previous: null });
     // The newest across every hob, each version still with the one before it.
     expect(result.latest).toHaveLength(2);
