@@ -307,6 +307,7 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
 // covers AG-002
 test("[TC-AG-1233-03] turning Visible to other hobs off and on in the profile saves each as the next version", async ({
   page,
+  scan,
 }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
@@ -316,6 +317,7 @@ test("[TC-AG-1233-03] turning Visible to other hobs off and on in the profile sa
   const visible = others.getByRole("switch", { name: "Visible to other hobs" });
   await expect(visible).toBeChecked();
   await expect(others).toContainText("Other hobs see Pip's name, role");
+  await scan();
 
   const saved = async () =>
     (await api<Array<Hob & { visibleToHobs: boolean }>>(current, "GET", "/api/agents")).find((h) => h.id === pip.id);
@@ -327,6 +329,7 @@ test("[TC-AG-1233-03] turning Visible to other hobs off and on in the profile sa
 
   await visible.click();
   await expect(others).toContainText("Other hobs don't see Pip at all.");
+  await scan(others);
   await save();
   expect([(await saved())?.visibleToHobs, (await saved())?.configVersion]).toEqual([false, 2]);
   await page.reload();
