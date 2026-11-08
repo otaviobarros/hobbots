@@ -10,6 +10,7 @@ import {
   type CharmOperationId,
   type CharmOverrides,
   DEFAULT_SIGIL,
+  DEFAULT_SUMMON_LIMITS,
   DRAFT_FIELDS,
   fieldsSet,
   HOB_LABEL_MAX,
@@ -34,20 +35,24 @@ import {
   SUMMONING_CHECK_TOOL,
   SUMMONING_FIELD_WORDS,
   SUMMONING_TOOLS,
+  type SummonCaps,
   type SummoningChange,
   type SummoningDraft,
   type SummoningField,
   SummoningInputs,
   type SummoningToolName,
+  type SummonLimits,
   selfFieldOperation,
   starterRole,
   summoningFieldOperation,
   summoningScopeOf,
   summoningToolJsonSchema,
   type TaskId,
+  unattendedSummonsBy,
+  unattendedSummonsIn,
   withSummoningForEveryHob,
 } from "@hobbots/domain";
-import { Context, Deferred, Effect, Layer, Option } from "effect";
+import { Context, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import type { AskableVerdict } from "./asking.ts";
 import { type Charm, defineCharm } from "./charms.ts";
 import { ChatService } from "./chat.ts";
@@ -66,6 +71,7 @@ import {
   type ToolPolicy,
   type TurnApprovals,
 } from "./runtime.ts";
+import { TaskRepository } from "./tasks.ts";
 import { operationDecision } from "./tools.ts";
 
 /**
@@ -86,7 +92,25 @@ export interface SummoningServices {
   readonly apps: Option.Option<HobGitHubApps["Service"]>;
   /** Writes a permissions change and takes back from the hob's grants and turns what it took away. */
   readonly changePermissions: ReturnType<typeof changePermissions>;
+  /** The Task trees a summon's tree cap counts in. */
+  readonly tasks: TaskRepository["Service"];
+  readonly limits: SummonLimits;
 }
+
+/**
+ * The caps on summons that run without asking you (ADR 034), 4 per manager and 3 per Task tree
+ * unless the hub's composition sets others.
+ */
+export const UnattendedSummonLimits = Context.Reference<SummonLimits>("@hobbots/agents/UnattendedSummonLimits", {
+  defaultValue: () => DEFAULT_SUMMON_LIMITS,
+});
+
+/** A hob's unattended summons against the caps, as the Charms tab shows them (ADR 034). */
+export const summonCapsOf = (agents: ReadonlyArray<Agent>, agentId: AgentId, limits: SummonLimits): SummonCaps => ({
+  live: unattendedSummonsBy(agents, agentId),
+  perHob: limits.maxUnattendedPerHob,
+  perTree: limits.maxUnattendedPerTree,
+});
 
 /**
  * The hob use cases the Summoning Charm calls, bound once the hub has built them. The Charm is
@@ -129,6 +153,8 @@ export class SummoningHub extends Context.Service<
           chat: yield* ChatService,
           charms: yield* CharmDeclarations,
         }),
+        tasks: yield* TaskRepository,
+        limits: yield* UnattendedSummonLimits,
       });
     }),
   );
@@ -270,6 +296,47 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
     const hub = yield* SummoningHub;
     const { decide, separator } = options;
     const declared = SUMMONING_CHARM.operations;
+
+    // One lock per manager, held while its unattended summons are counted and stored, so two
+    // summons at once never both take the last place under a cap (ADR 034).
+    const managerLocks = new Map<AgentId, Semaphore.Semaphore>();
+    const underManagerLock = <A, E, R>(managerId: AgentId, effect: Effect.Effect<A, E, R>) => {
+      let lock = managerLocks.get(managerId);
+      if (lock === undefined) {
+        lock = Semaphore.makeUnsafe(1);
+        managerLocks.set(managerId, lock);
+      }
+      return Semaphore.withPermit(lock, effect);
+    };
+
+    /** Every Task of the tree `taskId` is in, or none for a summon outside any Task. */
+    const treeTasks = (services: SummoningServices, taskId: TaskId | null) =>
+      taskId === null
+        ? Effect.succeed(new Set<string>())
+        : Effect.map(
+            services.tasks.readTree(taskId),
+            (tree) => new Set<string>(Option.isSome(tree) ? tree.value.tasks.map((task) => task.id) : [taskId]),
+          );
+
+    /**
+     * Why `adding` more unattended summons would pass a cap, read now: the manager's live hobs summoned
+     * without a card, and the tree's, against the limits; null while there is room (ADR 034).
+     */
+    const capReached = (services: SummoningServices, managerId: AgentId, taskId: TaskId | null, adding: number) =>
+      Effect.gen(function* () {
+        const agents = yield* services.repo.listAgents;
+        const { maxUnattendedPerHob, maxUnattendedPerTree } = services.limits;
+        const byManager = unattendedSummonsBy(agents, managerId);
+        if (byManager + adding > maxUnattendedPerHob) {
+          return `You have ${byManager} live ${byManager === 1 ? "hob" : "hobs"} summoned without asking the user, and the cap is ${maxUnattendedPerHob}, so this summon asks the user.`;
+        }
+        if (taskId === null) return null;
+        const inTree = unattendedSummonsIn(agents, yield* treeTasks(services, taskId));
+        if (inTree + adding > maxUnattendedPerTree) {
+          return `This work has ${inTree} live ${inTree === 1 ? "hob" : "hobs"} summoned without asking the user, and the cap is ${maxUnattendedPerTree}, so this summon asks the user.`;
+        }
+        return null;
+      });
 
     /** A hob's policy as its turns run under it, with "Summoning for every hob" applied. */
     const effectivePolicy = (agent: Agent, services: SummoningServices) =>
@@ -711,6 +778,11 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           for (const change of input.change ?? []) {
             rows.push(rowText((yield* checkChange(change, manager, agents, context, services)).row));
           }
+          const drafts = input.summon?.length ?? 0;
+          if (drafts > 0 && manager.answer(SUMMON_OPERATION) === "allow") {
+            const cap = yield* capReached(services, manager.agent.id, taskOf(context), drafts);
+            if (cap !== null) rows.push(`- Summoning them: ${cap}`);
+          }
           const text =
             rows.length === 0
               ? "Give drafts of new hobs under summon, or of changes under change, to check them."
@@ -741,11 +813,22 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             return yield* new HubRefusal({ message: `No hob was summoned.\n${wrong.map(rowText).join("\n")}` });
           }
           const ids = input.hobs.map(() => AgentId.make(crypto.randomUUID()));
-          const unattended = manager.answer(SUMMON_OPERATION) === "allow";
+          const managerId = manager.agent.id;
+          const taskId = taskOf(context);
+          const withoutCard = manager.answer(SUMMON_OPERATION) === "allow";
+          // At a cap the summon asks instead of being refused, and one you approve is never counted.
+          const cap = withoutCard ? yield* capReached(services, managerId, taskId, input.hobs.length) : null;
+          const unattended = withoutCard && cap === null;
           const actor = actorOf(context);
           const names = input.hobs.map((draft) => (draft.name ?? "").trim());
           const hiddenShared = shared.filter((folder) => !manager.shared.includes(folder));
-          const send = Effect.gen(function* () {
+          const create = Effect.gen(function* () {
+            // Counted again under the manager's lock: another summon may have taken the last place.
+            const taken = unattended ? yield* capReached(services, managerId, taskId, input.hobs.length) : null;
+            if (taken !== null) {
+              const text = `No hob was summoned: another summon reached the cap meanwhile. Call again and it will ask the user. ${taken}`;
+              return { _tag: "Refused", text } as const;
+            }
             const created: Array<Agent> = [];
             const failed: Array<string> = [];
             for (const [index, draft] of input.hobs.entries()) {
@@ -770,7 +853,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               const seed = Math.floor(Math.random() * 2 ** 32);
               const payload = createPayload(draft, ids[index] as AgentId, manager.agent, seed);
               const hob = yield* services.hobs
-                .create(payload, { actor, taskId: taskOf(context), unattended, policy })
+                .create(payload, { actor, taskId, unattended, policy })
                 .pipe(Effect.result);
               if (hob._tag === "Success") created.push(hob.success);
               else failed.push(`- ${payload.name}: ${failure(hob.failure)}`);
@@ -784,8 +867,9 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             ].join("\n");
             return { _tag: "Applied", text } as const;
           });
+          const send = underManagerLock(managerId, create);
           return {
-            request: request(SUMMON_OPERATION, [part(SUMMON_OPERATION, names)]),
+            request: request(SUMMON_OPERATION, [part(SUMMON_OPERATION, names)], cap),
             card: card(input, `Summon ${names.join(", ")}`),
             write: {
               site: `summon:${context.turn.agentId}`,

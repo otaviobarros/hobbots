@@ -29,6 +29,7 @@ import {
   SkillTrialsLive,
   SummoningHub,
   TaskFiles,
+  UnattendedSummonLimits,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -599,6 +600,8 @@ const ServerLive = Layer.unwrap(
             EventBus.layer,
             HobAdmission.layer,
             SummoningHub.layer,
+            // The caps on summons that run without asking you (ADR 034).
+            Layer.succeed(UnattendedSummonLimits, config.summonLimits),
             NodeFolderChecks,
             HeldRuntime,
             identity,
