@@ -149,25 +149,31 @@ export const foundUrlKey = (raw: string): string | null => {
 };
 
 /** Closing marks a URL in prose often ends with, which belong to the sentence rather than the URL. */
-const TRAILING = /[.,;:!?'"*_]+$/;
+const TRAILING = new Set([".", ",", ";", ":", "!", "?", "'", '"', "*", "_"]);
 
-const PAIRS: ReadonlyArray<readonly [string, string]> = [
-  ["(", ")"],
-  ["[", "]"],
-  ["{", "}"],
-];
+/** Each closing bracket and the bracket that opens it. */
+const OPENS: Readonly<Record<string, string>> = { ")": "(", "]": "[", "}": "{" };
 
-/** A URL cut from prose without the marks after it, keeping a closing bracket the URL itself opened. */
+const BRACKETS = new Set(["(", ")", "[", "]", "{", "}"]);
+
+/**
+ * A URL cut from prose without the marks after it, keeping a closing bracket the URL itself opened.
+ * It counts the brackets once and reads back from the end, so it stays linear on any text (STD-SEC-005).
+ */
 const trimUrl = (raw: string): string => {
-  let url = raw.replace(TRAILING, "");
-  for (;;) {
-    const last = url.at(-1);
-    const pair = PAIRS.find(([, close]) => close === last);
-    if (pair === undefined) return url;
-    const [open, close] = pair;
-    if (url.split(open).length >= url.split(close).length) return url;
-    url = url.slice(0, -1).replace(TRAILING, "");
+  const count = new Map<string, number>();
+  for (const char of raw) if (BRACKETS.has(char)) count.set(char, (count.get(char) ?? 0) + 1);
+  let end = raw.length;
+  while (end > 0) {
+    const last = raw.charAt(end - 1);
+    const open = OPENS[last];
+    if (TRAILING.has(last)) end -= 1;
+    else if (open !== undefined && (count.get(last) ?? 0) > (count.get(open) ?? 0)) {
+      count.set(last, (count.get(last) ?? 0) - 1);
+      end -= 1;
+    } else break;
   }
+  return raw.slice(0, end);
 };
 
 /** The http and https URLs written in `text`, each once, as `foundUrlKey` gives them. */

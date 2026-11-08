@@ -44,8 +44,19 @@ export const contentTypeOf = (
 };
 
 /** The charset an HTML page names in its own `<meta>` near the top, when the header named none. */
-const metaCharset = (body: Uint8Array): string | undefined =>
-  /<meta[^>]+charset\s*=\s*["']?([\w-]+)/i.exec(new TextDecoder("latin1").decode(body.subarray(0, 4096)))?.[1];
+const metaCharset = (body: Uint8Array): string | undefined => {
+  const head = new TextDecoder("latin1").decode(body.subarray(0, 4096));
+  // Each tag is cut out by index first, so no pattern runs over more than one tag.
+  for (let at = head.search(/<meta/i); at !== -1; ) {
+    const end = head.indexOf(">", at);
+    const tag = head.slice(at, end === -1 ? head.length : end);
+    const charset = /charset\s*=\s*["']?([\w-]+)/i.exec(tag)?.[1];
+    if (charset !== undefined) return charset;
+    const next = head.slice(at + 5).search(/<meta/i);
+    at = next === -1 ? -1 : at + 5 + next;
+  }
+  return undefined;
+};
 
 /** The body as text in its charset, UTF-8 when it names none this platform knows. */
 export const decodeBody = (body: Uint8Array, kind: PageKind, charset: string | undefined): string => {

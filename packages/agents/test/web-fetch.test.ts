@@ -25,6 +25,16 @@ describe("web_fetch's found URLs (ADR 036)", () => {
     ]);
   });
 
+  it("reads a long run of marks or brackets after a URL in linear time", () => {
+    const text = `https://example.com/a${"!".repeat(100_000)}x`;
+    const started = performance.now();
+    expect(urlsIn(text)).toEqual([`https://example.com/a${"!".repeat(100_000)}x`]);
+    expect(urlsIn(`https://example.com/b${"!".repeat(100_000)}`)).toEqual(["https://example.com/b"]);
+    expect(urlsIn(`https://example.com/c${")".repeat(100_000)}`)).toEqual(["https://example.com/c"]);
+    expect(urlsIn(`https://example.com/d${").".repeat(50_000)}`)).toEqual(["https://example.com/d"]);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("keeps a found set by the chat, or by the Task a session outside a chat works on", () => {
     expect(webWorkOf({ threadId: ThreadId.make("t1") })).toBe("thread:t1");
     expect(webWorkOf({ threadId: null, taskId: TaskId.make("k1") })).toBe("task:k1");
