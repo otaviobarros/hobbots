@@ -1,5 +1,6 @@
 import { clip } from "@hobbots/agents";
 import {
+  APPROVAL_RULE,
   ancestorsOf,
   answerHow,
   type BackpackItem,
@@ -186,6 +187,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     `${lead} gave you this Task as part of a Quest ${lead} leads. You work on it in your own session, and you deal only with ${lead}, never with the other hobs on the Quest.`,
     RESULTS_RULE,
     COMMIT_RULE,
+    APPROVAL_RULE,
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),

@@ -22,6 +22,15 @@ export const CHECKPOINT_WORDS = 8;
 export const LEAN_CHAT_RULE =
   "In the chat, write only the plan, a question no lead can answer and the finish; otherwise end your turn without a message, until the user writes.";
 
+/**
+ * Who approves an action (PE-006, #1216): only the user, on the approval request Hobbots makes when
+ * a hob's policy asks first. A question about permission is not a request, and a lead's answer to
+ * one approves nothing, so no hob asks another for permission, gives it or reports it given.
+ * Briefings and tool descriptions carry the same words.
+ */
+export const APPROVAL_RULE =
+  "Only the user approves an action. Never ask a hob for permission to make a tool call, give it or say one gave it: make the call, and Hobbots asks the user when your policy says to.";
+
 /** What a lead's finish says (#901). */
 export const FINISH_RULE = "The finish says in short what was made, where it is and who did what.";
 
@@ -276,7 +285,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   },
   {
     name: "delegate_task",
-    description: `Give another hob a Task under one you own, with a brief, milestones and dependencies. You become its lead. Its authority is yours narrowed by what you pass, never wider. ${LEAN_CHAT_RULE}`,
+    description: `Give another hob a Task under one you own, with a brief, milestones and dependencies. You become its lead. Its authority is yours narrowed by what you pass, never wider. Never tell it to ask you before an action: the user approves what its policy asks first. ${LEAN_CHAT_RULE}`,
     label: "Delegating a Task",
   },
   {
@@ -287,12 +296,12 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "ask",
     description:
-      "Ask a question about a Task you own. It goes to your nearest lead, who answers or passes it up; it reaches the user only when no lead can answer. When the answer is a choice, give the choices as options, with the one you recommend, so the user can pick one with a click.",
+      "Ask a question about a Task you own. It goes to your nearest lead, who answers or passes it up; it reaches the user only when no lead can answer. When the answer is a choice, give the choices as options, with the one you recommend, so the user can pick one with a click. Never ask for permission to make a tool call: make the call, and Hobbots asks the user when your policy says to.",
     label: "Asking a question",
   },
   {
     name: "answer",
-    description: "Answer a question a hob under you asked. The answer goes back to the hob that asked.",
+    description: `Answer a question a hob under you asked. The answer goes back to the hob that asked. ${APPROVAL_RULE} So never answer a question that asks permission for a tool call: tell the hob to make the call and wait for the user's decision.`,
     label: "Answering a question",
   },
   {
