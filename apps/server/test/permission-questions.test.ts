@@ -9,9 +9,9 @@ import { firstPending, hub, partyHub, send, treeWhen } from "./party-hub.ts";
 // a decision. Nettle asked its lead "May I run rm scratch/tmp-notes.txt?", Pip answered yes, and the
 // top lead told the user the delete was "approved by Pip as lead, not by you". Only the user decides
 // what the policy asks them (PE-006): a lead's answer approves nothing, and the delete still waits
-// for the user. Every hob is told so, in its tool descriptions, its briefing, the turn a permission
-// question reaches its lead, and the answer it hears back, all of which the hub writes, so it holds
-// for every runtime.
+// for the user. The hub says so in the tool descriptions, the member's prompt, the turn a permission
+// question reaches its lead and the lead's answer the member hears back, though not in the lead's
+// briefing. The hub writes all of it, so it holds for every runtime.
 
 let dispose: (() => Promise<void>) | undefined;
 afterEach(async () => {
