@@ -51,7 +51,11 @@ function OtherFiles({ update }: { update: SkillUpdate }) {
   );
 }
 
-/** Accept or Not now, each saying what it did. */
+/**
+ * Accept or Not now, each saying what it did. The line is said from the mutation's own promise, not
+ * its per-call callbacks: the event the change publishes can take this update off the page before the
+ * answer arrives, and callbacks of an unmounted observer never run.
+ */
 function UpdateDecision({ update, list, say }: { update: SkillUpdate; list: SkillsList; say: Say }) {
   const writes = useSkillUpdateWrites();
   const title = skillTitle(update.name);
@@ -77,12 +81,9 @@ function UpdateDecision({ update, list, say }: { update: SkillUpdate; list: Skil
         <Button
           disabled={writes.busy || (cut && !read)}
           onClick={() =>
-            writes.accept.mutate(
-              { ...input, base: update.base },
-              {
-                onSuccess: () => say({ tone: "done", message: copy.accepted({ title, to, from }) }),
-                onError: (error) => say({ tone: "failed", message: acceptFailure(error) }),
-              },
+            void writes.accept.mutateAsync({ ...input, base: update.base }).then(
+              () => say({ tone: "done", message: copy.accepted({ title, to, from }) }),
+              (error: unknown) => say({ tone: "failed", message: acceptFailure(error) }),
             )
           }
         >
@@ -92,10 +93,10 @@ function UpdateDecision({ update, list, say }: { update: SkillUpdate; list: Skil
           variant="outline"
           disabled={writes.busy}
           onClick={() =>
-            writes.dismiss.mutate(input, {
-              onSuccess: () => say({ tone: "done", message: copy.dismissed({ title, rev: from }) }),
-              onError: () => say({ tone: "failed", message: copy.failed }),
-            })
+            void writes.dismiss.mutateAsync(input).then(
+              () => say({ tone: "done", message: copy.dismissed({ title, rev: from }) }),
+              () => say({ tone: "failed", message: copy.failed }),
+            )
           }
         >
           {copy.notNow}
