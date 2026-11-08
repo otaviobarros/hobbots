@@ -78,23 +78,42 @@ jobs:
     env:
       HOBBOTS_TEST_DB: ${{ matrix.db }}
       HOBBOTS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-      VITEST_MAX_WORKERS: 2
+      # As in the CI job, so the hunt runs the tests under the same load.
+      VITEST_MAX_WORKERS: 3
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      # Each test runs three times with no retry, so a test that fails on any run fails the job.
-      # Each package writes its report beside its package.json. --continue lets the other package
-      # finish its runs and its report when one fails; the job still fails.
-      - run: >-
-          pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server --force
-          --continue=dependencies-successful -- --repeats=2 --retry=0 --reporter=default --reporter=json --outputFile.json=flake-hunt.json
+      # As in the CI job: a test database needs no crash safety (#1066).
+      - if: matrix.db == 'postgres'
+        name: Let the test database skip flushing to disk
+        run: >-
+          docker exec ${{ job.services.postgres.id }} psql -U postgres
+          -c "ALTER SYSTEM SET fsync = off" -c "ALTER SYSTEM SET synchronous_commit = off"
+          -c "ALTER SYSTEM SET full_page_writes = off" -c "SELECT pg_reload_conf()"
+      # Each suite runs three times with no retry, each run a fresh `vitest run` with its own report,
+      # so no run sees state an earlier one left in its process or data folders. `--repeats` would
+      # run each test again in the same process, which tests that set up once per file do not
+      # survive (#1066). A test that fails on any run fails the job; the report step counts each
+      # test's three runs together. Each package writes its reports beside its package.json.
+      # --continue lets the other package finish its run when one fails.
+      - name: Run the suites three times
+        run: |
+          status=0
+          for run in 1 2 3; do
+            echo "::group::Run $run of 3"
+            pnpm turbo run test --filter=@hobbots/persistence --filter=@hobbots/server --force \
+              --continue=dependencies-successful -- --retry=0 --reporter=default --reporter=json \
+              --outputFile.json="flake-hunt-$run.json" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
       - if: always()
         uses: actions/upload-artifact@v7
         with:
           name: hunt-server-${{ matrix.db }}
           path: |
-            packages/persistence/flake-hunt.json
-            apps/server/flake-hunt.json
+            packages/persistence/flake-hunt-*.json
+            apps/server/flake-hunt-*.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -114,6 +133,8 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       BROWSER: ${{ needs.browser-tests.result }}
       SERVER: ${{ needs.server-tests.result }}
+      # A run started by hand can test a branch; the issue then says which.
+      REF: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -125,12 +146,24 @@ jobs:
           path: reports
       - name: Open or update the flake hunt issue
         run: |
-          found=$(find reports -name '*.json' -print0 | xargs -0 --no-run-if-empty node scripts/flaky-tests.mjs)
+          # Each database's runs are counted apart, so a test that fails every run on one database
+          # and passes on the other is listed as failed there, not as flaky. The browser tests run
+          # on SQLite only.
+          args=()
+          for dir in reports/hunt-*/; do
+            case "$dir" in
+              *-postgres/) args+=(--on PostgreSQL) ;;
+              *-sqlite/) args+=(--on SQLite) ;;
+              *) args+=(--on "") ;;
+            esac
+            while IFS= read -r -d '' report; do args+=("$report"); done < <(find "$dir" -name '*.json' -print0)
+          done
+          found=$(node scripts/flaky-tests.mjs "${args[@]}")
           if [[ -z "$found" && "$BROWSER" == success && "$SERVER" == success ]]; then
             echo "No flaky tests tonight." >> "$GITHUB_STEP_SUMMARY"
             issue=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
             if [[ -n "$issue" ]]; then
-              gh issue comment "$issue" --body "The [flake hunt]($RUN_URL) of $(date -u +%F) found no flaky tests."
+              gh issue comment "$issue" --body "The [flake hunt]($RUN_URL) of $(date -u +%F) found no flaky tests on ${REF}."
             fi
             exit 0
           fi
@@ -138,14 +171,14 @@ jobs:
             found="A job ended without listing a test: browser tests ${BROWSER}, server tests ${SERVER}. See the run's logs."
           fi
           body=$(printf '%s\n\n%s\n\n%s\n' \
-            "The nightly [flake hunt]($RUN_URL) of $(date -u +%F) ran main's tests several times over. Each test below failed on at least one run. Fix each one, or open an issue for it within a day (STD-TEST-009). The traces are in the run's \`hunt-browser-traces-N\` artifacts." \
+            "The nightly [flake hunt]($RUN_URL) of $(date -u +%F) ran ${REF}'s tests several times over. Each test below failed on at least one run. Fix each one, or open an issue for it within a day (STD-TEST-009). The traces are in the run's \`hunt-browser-traces-N\` artifacts." \
             "$found" \
             "This issue is updated by \`.github/workflows/flake-hunt.yml\` each night that finds a flaky test.")
           echo "$body" >> "$GITHUB_STEP_SUMMARY"
           issue=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
           if [[ -n "$issue" ]]; then
             gh issue edit "$issue" --body "$body"
-            gh issue comment "$issue" --body "The [flake hunt]($RUN_URL) of $(date -u +%F) found flaky tests; the list above is tonight's."
+            gh issue comment "$issue" --body "The [flake hunt]($RUN_URL) of $(date -u +%F) found flaky tests on ${REF}; the list above is from it."
           else
             gh issue create --title "$TITLE" --label "type: test" --label "area: ci" --body "$body"
           fi

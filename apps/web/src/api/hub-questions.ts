@@ -49,12 +49,15 @@ export const useHubQuestionsQuery = () => useQuery(hubQuestionsQuery);
 /** The hub's questions for you, oldest first; none until read. */
 export const useHubQuestions = (): ReadonlyArray<HubQuestion> => useHubQuestionsQuery().data ?? NONE;
 
+/** Your answer to a hub question: the key of the choice you picked, or your own words (#1045). */
+export type HubAnswerSent = { readonly picked: string } | { readonly answer: string };
+
 /** Sends your answer to a hub question, saying `via` where you answered it; it leaves the list at once. */
 export const useAnswerHubQuestion = (via: QuestionSurface) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ questionId, answer }: { questionId: HubQuestionId; answer: string }) =>
-      call((c) => c.questions.answerHub({ params: { hubQuestionId: questionId }, payload: { answer, via } })),
+    mutationFn: ({ questionId, answer }: { questionId: HubQuestionId; answer: HubAnswerSent }) =>
+      call((c) => c.questions.answerHub({ params: { hubQuestionId: questionId }, payload: { ...answer, via } })),
     onSuccess: (question) => void hubQuestionChanged(queryClient, question),
   });
 };

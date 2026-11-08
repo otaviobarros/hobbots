@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, HubQuestionRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-// Issue #976: a question the hub itself asks keeps its subject, the chat it concerns, its choices
-// and your answer, on SQLite and PostgreSQL alike.
+// Issue #976: a question the hub itself asks keeps what it asks, the chat it concerns, its choices
+// and your answer, on SQLite and PostgreSQL alike. Issue #1045: what it asks is codes and data, and
+// its choices are keys, picked by key.
 
 const TestLayer = Layer.mergeAll(HubQuestionRepositoryLive, HobbotsRepositoryLive, EventJournal.layer).pipe(
   Layer.provideMerge(TestDatabase),
@@ -21,11 +22,13 @@ const LATER = "2026-11-05T10:05:00.000Z";
 const FRODO = AgentId.make("frodo");
 const CHAT = ThreadId.make("first-run");
 const DEVICE = DeviceId.make("window");
-const subject = { kind: "commit-identity", key: "default", title: "Commit identity" };
-const options = [
-  { label: "My GitHub account", consequence: "Commits show as you on GitHub." },
-  { label: "A name and email I type", consequence: "" },
-];
+const ask = {
+  kind: "commit-identity",
+  reason: "no-git-identity",
+  github: { login: "frodo", identity: { name: "Frodo", email: "1+frodo@users.noreply.github.com" } },
+  unread: null,
+} as const;
+const options = ["github", "own-git"];
 
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
@@ -53,18 +56,18 @@ const raise = (id: string, chat = true) =>
   Effect.flatMap(HubQuestionRepository, (questions) =>
     questions.raise({
       id: HubQuestionId.make(id),
-      subject,
+      key: "default",
       ...(chat ? { chat: { agentId: FRODO, threadId: CHAT } } : {}),
-      text: "Who should hobs commit as?",
+      ask,
       options,
-      recommended: 0,
+      recommended: "github",
       createdAt: NOW,
     }),
   );
 
 describe("HubQuestionRepository", () => {
   // covers OR-004, DP-003
-  it("[TC-DP-260] keeps a hub question's subject, chat and choices, and journals it once per subject", async () => {
+  it("[TC-DP-260] keeps what a hub question asks, its chat and choices, and journals it once per thing it asks about", async () => {
     const { raised, again, read, open, events } = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -78,10 +81,11 @@ describe("HubQuestionRepository", () => {
     );
     expect(raised.value).toMatchObject({
       id: "q1",
-      subject,
+      key: "default",
+      ask,
       chat: { agentId: FRODO, threadId: CHAT },
       options,
-      recommended: 0,
+      recommended: "github",
       state: "open",
       picked: null,
     });
@@ -96,29 +100,32 @@ describe("HubQuestionRepository", () => {
   });
 
   // covers OR-004, DP-003
-  it("[TC-DP-261] records a picked choice in its own words, a typed answer as typed, and what the hub applied", async () => {
+  it("[TC-DP-261] records a picked choice by its key, a typed answer as typed, and what the hub applied", async () => {
     const result = await run(
       Effect.gen(function* () {
         const questions = yield* HubQuestionRepository;
         yield* raise("picked", false);
-        const picked = yield* questions.answer(HubQuestionId.make("picked"), "my github ACCOUNT", LATER, {
-          deviceId: DEVICE,
-          via: "inbox",
-        });
+        const from = { deviceId: DEVICE, via: "inbox" } as const;
+        // A choice the question does not offer is refused, and the question stays open.
+        const unknown = yield* questions
+          .answer(HubQuestionId.make("picked"), { picked: "nightly" }, LATER, from)
+          .pipe(Effect.flip);
+        const picked = yield* questions.answer(HubQuestionId.make("picked"), { picked: "github" }, LATER, from);
         const twice = yield* questions
-          .answer(HubQuestionId.make("picked"), "again", LATER, { deviceId: DEVICE, via: "inbox" })
+          .answer(HubQuestionId.make("picked"), { words: "again" }, LATER, from)
           .pipe(Effect.flip);
         const missing = yield* questions
-          .answer(HubQuestionId.make("nope"), "again", LATER, { deviceId: DEVICE, via: "inbox" })
+          .answer(HubQuestionId.make("nope"), { words: "again" }, LATER, from)
           .pipe(Effect.flip);
         yield* questions.raise({
           id: HubQuestionId.make("typed"),
-          subject: { ...subject, key: "other" },
-          text: "Who should hobs commit as?",
+          key: "other",
+          ask,
           options,
           createdAt: LATER,
         });
-        const typed = yield* questions.answer(HubQuestionId.make("typed"), "Ada <ada@example.com>", LATER, {
+        // Typed words that read like a choice stay words: only a key picks one.
+        const typed = yield* questions.answer(HubQuestionId.make("typed"), { words: "github" }, LATER, {
           deviceId: DEVICE,
           via: "chat",
         });
@@ -126,13 +133,14 @@ describe("HubQuestionRepository", () => {
         yield* questions.markApplied(HubQuestionId.make("picked"), LATER);
         const left = yield* questions.listUnapplied("commit-identity");
         const read = yield* questions.find(HubQuestionId.make("typed"));
-        return { picked, twice, missing, typed, unapplied, left, read, open: yield* questions.listOpen };
+        return { unknown, picked, twice, missing, typed, unapplied, left, read, open: yield* questions.listOpen };
       }),
     );
+    expect(result.unknown.reason).toBe("unknown-choice");
     expect(result.picked.value).toMatchObject({
       state: "answered",
-      answer: "My GitHub account",
-      picked: 0,
+      answer: null,
+      picked: "github",
       answeredAt: LATER,
       answeredByDeviceId: DEVICE,
       answeredVia: "inbox",
@@ -141,7 +149,7 @@ describe("HubQuestionRepository", () => {
     expect(result.picked.entries.map((each) => each.type)).toEqual(["HubQuestionAnswered"]);
     expect(result.twice.reason).toBe("closed");
     expect(result.missing.reason).toBe("missing");
-    expect(result.typed.value).toMatchObject({ answer: "Ada <ada@example.com>", picked: null, answeredVia: "chat" });
+    expect(result.typed.value).toMatchObject({ answer: "github", picked: null, answeredVia: "chat" });
     expect(Option.getOrThrow(result.read)).toEqual(result.typed.value);
     expect(result.unapplied.map((each) => each.id)).toEqual(["picked", "typed"]);
     expect(result.left.map((each) => each.id)).toEqual(["typed"]);

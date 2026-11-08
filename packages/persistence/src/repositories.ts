@@ -38,7 +38,7 @@ interface AgentRow {
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
 // The policy's three JSON text columns (migration 0015), its signing flag (0021) and the ids of its
-// Charms (0076) become the hob's one `policy` field. Being visible to other hobs is 0 or 1 (0078).
+// Charms (0076) become the hob's one `policy` field. Being visible to other hobs is 0 or 1 (0079).
 const agentRows = (rows: ReadonlyArray<AgentRow>) =>
   rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, charms, visibleToHobs, ...row }) => ({
     ...row,

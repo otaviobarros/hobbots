@@ -21,7 +21,7 @@ import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
 import threadReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
-import hobVisibility from "../src/migrations/0078_hob_visibility.ts";
+import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1182,7 +1182,7 @@ describe("0074_milestone_reached_by", () => {
   });
 });
 
-describe("0078_hob_visibility", () => {
+describe("0079_hob_visibility", () => {
   // covers AG-002, DP-003
   it("[TC-DP-1233-01] leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it", async () => {
     const before = {
@@ -1247,7 +1247,7 @@ describe("0078_hob_visibility", () => {
         entries: yield* (yield* EventJournal).readAfter(0),
       };
     }).pipe(
-      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0078"))))),
+      Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0079"))))),
       Effect.scoped,
       Effect.runPromise,
     );

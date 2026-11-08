@@ -361,9 +361,11 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionAnswered: 1,
   QuestionEscalated: 1,
   QuestionWithdrawn: 1,
-  HubQuestionRaised: 1,
-  HubQuestionAnswered: 1,
-  HubQuestionWithdrawn: 1,
+  // 2: a hub question carries an `ask` and its choices' keys, not text and labels (#1045); migration
+  // 0078 rewrote the stored entries.
+  HubQuestionRaised: 2,
+  HubQuestionAnswered: 2,
+  HubQuestionWithdrawn: 2,
   // A note's `messageId`, `fromNoteId`, `pickedUpBy` and `pickedUpAt` were added with defaults, compatibly.
   NoteLeft: 1,
   NotePickedUp: 1,
