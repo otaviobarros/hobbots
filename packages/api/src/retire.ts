@@ -61,8 +61,10 @@ export const RetireAgentPayload = Schema.Union([
 export type RetireAgentPayload = typeof RetireAgentPayload.Type;
 
 /**
- * A hand-over that cannot be made, so nothing changed: the hob to take the work is the one
- * retiring, missing, or does not take new work, or some open Tasks cannot go to it.
+ * A hand-over that cannot be made: the hob to take the work is the one retiring, missing, or does
+ * not take new work, or some open Tasks cannot go to it, and nothing changed. When a Task could
+ * not go only once the hob's running work had stopped, that work stays stopped, the Tasks that
+ * could go have gone, and the hob keeps those listed and is not retired.
  */
 export class HandOverRefused extends Schema.TaggedError<HandOverRefused>()(
   "HandOverRefused",

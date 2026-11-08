@@ -462,6 +462,13 @@ export class ChatService extends Context.Service<
           ? Effect.void
           : Effect.fail(new HobUnavailable({ agentId: agent.id, status: hobStanding(agent) }));
 
+      // A hob that is awake: it may go on with work it already has, even while it finishes its open
+      // Tasks before it retires (#408); `requireActive` also turns away new work.
+      const requireAwake = (agent: Agent) =>
+        agent.status === "active"
+          ? Effect.void
+          : Effect.fail(new HobUnavailable({ agentId: agent.id, status: hobStanding(agent) }));
+
       // A hob finishing its open Tasks before it retires takes messages only in a thread where one
       // of them is open, since they go on with it; anywhere else a message would be new work (#408).
       const requireOpenTaskWhileRetiring = (agent: Agent, threadId: ThreadId) =>
@@ -1483,7 +1490,9 @@ export class ChatService extends Context.Service<
       ) {
         return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
-            yield* requireActive(agent);
+            // Continuing a reply goes on with work the hob has; while it retires, only that of an open Task.
+            yield* requireAwake(agent);
+            yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
             const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
             const message = transcript.at(-1);

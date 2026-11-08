@@ -620,11 +620,29 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    /** Who may take a member's Task: a hob that exists, is not its owner and owns nothing on its way up. */
+    // The hob taking a Task, read in the write's transaction. On PostgreSQL its row stays locked until
+    // the write commits, so retiring it waits; SQLite's one connection already runs writes one at a time.
+    const lockTaker = (ownerId: AgentId) =>
+      sql.onDialectOrElse({
+        pg: () =>
+          sql<{ readonly status: string; readonly retiring: string | null }>`SELECT status, retiring FROM agents
+            WHERE id = ${ownerId} FOR UPDATE`,
+        orElse: () =>
+          sql<{ readonly status: string; readonly retiring: string | null }>`SELECT status, retiring FROM agents
+            WHERE id = ${ownerId}`,
+      });
+
+    /**
+     * Who may take a member's Task: a hob that exists, is neither retired nor finishing its open Tasks
+     * before it retires (#408), is not its owner and owns nothing on its way up.
+     */
     const newOwner = (task: Task, ownerId: AgentId) =>
       Effect.gen(function* () {
-        const [owner] = yield* sql`SELECT id FROM agents WHERE id = ${ownerId}`;
+        const [owner] = yield* lockTaker(ownerId);
         if (owner === undefined) return yield* refuse("owner-missing", `No hob ${ownerId}`);
+        if (owner.status === "retired" || owner.retiring != null) {
+          return yield* refuse("owner-unavailable", `${ownerId} is retired or retiring, so it takes no new work`);
+        }
         if (task.ownerId === ownerId) return yield* refuse("same-owner", `Task ${task.id} is already ${ownerId}'s`);
         const tree = yield* read.treeOf(task.rootId);
         if (ancestorsOf(task, tree).some((above) => above.ownerId === ownerId)) {

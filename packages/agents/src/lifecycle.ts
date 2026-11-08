@@ -7,7 +7,7 @@ import {
   InvalidAgentTransition,
   type RetireWork,
   type Task,
-  type TaskRefused,
+  TaskRefused,
   takesNewWork,
   YOU,
 } from "@hobbots/domain";
@@ -163,19 +163,48 @@ export class HobLifecycle extends Context.Service<
           return checked.flatMap(({ task, refused }) => (refused === null ? [] : [{ task, refused }]));
         });
 
-      /** Gives the Task, as it is stored now that its turn has stopped, to `to`. */
+      /**
+       * Gives the Task, as it is stored now that its turn has stopped, to `to`: null once it changed
+       * hands or ended, otherwise why it could not.
+       */
       const giveTo = (task: Task, to: AgentId, at: string) =>
         Effect.gen(function* () {
-          if (Option.isNone(tasks)) return;
+          if (Option.isNone(tasks)) return null;
           const found = yield* tasks.value.readTree(task.id);
           const now = Option.isSome(found) ? found.value.tasks[0] : undefined;
-          if (now === undefined || now.ownerId !== task.ownerId) return;
+          if (now === undefined || now.ownerId !== task.ownerId) return null;
           const committed = yield* tasks.value.reassignTask(now.id, now.revision, to, at);
           yield* bus.publish(committed.entries);
+          return null;
         }).pipe(
-          // A Task that could not change hands after all fails with its hob, as any retired hob's does.
-          Effect.catchCause((cause) => Effect.logWarning(`Could not hand Task ${task.id} over to ${to}`, cause)),
+          Effect.catchTag("TaskRefused", (refused) => Effect.succeed(refused)),
+          Effect.catchTags({
+            StaleTask: () => Effect.succeed(changed(task)),
+            IllegalTaskTransition: () => Effect.succeed(changed(task)),
+          }),
         );
+
+      const changed = (task: Task) =>
+        new TaskRefused({ reason: "task-changed", message: `Task ${task.id} changed while it was handed over` });
+
+      /**
+       * Stops the hob's running work while it is still active, so a member's turn leaves its Task
+       * waiting rather than failed, then checks its open Tasks again: stopping may have left one with
+       * work open under it or a Quest of its own. Only when every one can go does any go. A Task
+       * that still could not is kept by the hob, which is not retired.
+       */
+      const stopAndGive = (agentId: AgentId, to: AgentId) =>
+        Effect.gen(function* () {
+          yield* chat.interruptAgent(agentId);
+          const open = yield* openTasks(agentId);
+          const blocked = yield* handOverBlocks(open, to);
+          if (blocked.length > 0) return blocked;
+          const at = yield* nowIso;
+          const given = yield* Effect.forEach(open, (task) =>
+            Effect.map(giveTo(task, to, at), (refused) => ({ task, refused })),
+          );
+          return given.flatMap(({ task, refused }) => (refused === null ? [] : [{ task, refused }]));
+        });
 
       const handOver = Effect.fn("HobLifecycle.handOver")(function* (
         agentId: AgentId,
@@ -193,34 +222,34 @@ export class HobLifecycle extends Context.Service<
               block: { reason: refused.reason, message: refused.message },
             })),
           });
-        const retired = yield* admission.withHob(
+        const outcome = yield* admission.withHob(
           agentId,
           Effect.gen(function* () {
             const agent = yield* findAgent(agentId);
-            if (agent.status === "retired") return Option.none<Agent>();
+            if (agent.status === "retired") return { _tag: "Already" } as const;
             if (to === agentId) return yield* refuse("A hob cannot hand its work to itself.");
             const target = yield* repo.findAgent(to);
             if (Option.isNone(target) || !takesNewWork(target.value)) {
               return yield* refuse(`The hob ${to} does not take new work, so it cannot take ${agent.name}'s Tasks.`);
             }
-            const open = yield* openTasks(agentId);
-            const blocked = yield* handOverBlocks(open, to);
+            const blocked = yield* handOverBlocks(yield* openTasks(agentId), to);
             if (blocked.length > 0) {
               return yield* refuse(`Some of ${agent.name}'s open Tasks cannot go to ${target.value.name}.`, blocked);
             }
-            // Stopped while the hob is still active, a member's turn leaves its Task waiting rather
-            // than failed, and no new turn can start until the lock is let go.
-            yield* chat.interruptAgent(agentId);
-            const at = yield* nowIso;
-            yield* Effect.forEach(open, (task) => giveTo(task, to, at), { discard: true });
-            return Option.some(yield* retireHeld(agentId, "stop", actor));
+            const kept = yield* stopAndGive(agentId, to);
+            if (kept.length > 0) {
+              const message = `${agent.name}'s running work stopped, but some of its open Tasks could not go to ${target.value.name}, so ${agent.name} was not retired.`;
+              return { _tag: "Kept", refused: refuse(message, kept) } as const;
+            }
+            return { _tag: "Retired", agent: yield* retireHeld(agentId, "stop", actor) } as const;
           }),
         );
-        if (Option.isNone(retired)) return yield* findAgent(agentId);
-        yield* removeApp(agentId);
-        // The Tasks it handed over start under their new owner.
+        if (outcome._tag === "Already") return yield* findAgent(agentId);
+        // The Tasks it handed over start under their new owner, and those it kept under it.
         if (Option.isSome(turns)) yield* turns.value.reviewTasks;
-        return retired.value;
+        if (outcome._tag === "Kept") return yield* outcome.refused;
+        yield* removeApp(agentId);
+        return outcome.agent;
       });
 
       const retireWhenDone = Effect.fn("HobLifecycle.retireWhenDone")(function* (
@@ -239,6 +268,11 @@ export class HobLifecycle extends Context.Service<
             const committed = yield* repo.setAgentRetiring(agentId, { since: yield* nowIso, by: actor }, actor);
             if (Option.isNone(committed)) return { agent: yield* findAgent(agentId), retired: false };
             yield* bus.publish(committed.value.entries);
+            // The last Task may have ended after it was counted, before the hob was marked: its end
+            // found the hob not yet retiring, so nothing else retires it.
+            if ((yield* openTasks(agentId)).length === 0) {
+              return { agent: yield* retireHeld(agentId, "finish", actor), retired: true };
+            }
             return { agent: committed.value.value, retired: false };
           }),
         );

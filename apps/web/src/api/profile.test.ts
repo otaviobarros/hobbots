@@ -191,6 +191,9 @@ describe("hob profile", () => {
     expect(handOverBlockText({ reason: "lineage-owner", message: "" }, "Rook")).toBe(
       "Rook already works on the Task above this one.",
     );
+    expect(handOverBlockText({ reason: "owner-unavailable", message: "" }, "Rook")).toBe(
+      "Rook is retiring, so it takes no new work.",
+    );
   });
 
   it("takes a starter role with its title, sigil, hat and tool, as one edit", () => {

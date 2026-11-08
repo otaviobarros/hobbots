@@ -295,6 +295,8 @@ export const handOverBlockText = (block: HandOverBlock, taker: string): string =
   switch (block.reason) {
     case "lineage-owner":
       return `${taker} already works on the Task above this one.`;
+    case "owner-unavailable":
+      return `${taker} is retiring, so it takes no new work.`;
     case "not-delegated":
       return "You asked for this Task in its chat, so it stays with its hob.";
     case "children-open":
