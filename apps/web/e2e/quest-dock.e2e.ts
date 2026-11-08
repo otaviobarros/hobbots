@@ -165,8 +165,9 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with t
 test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry", async ({
   page,
 }) => {
-  const script13 = Array.from({ length: 13 }, (_, i) => `echo step ${i + 1}`).join("\n");
-  const script20 = Array.from({ length: 20 }, (_, i) => `echo step ${i + 1}`).join("\n");
+  // Lines with no spaces, so Aldric's echo of the brief, paced a word at a time, stays short.
+  const script13 = Array.from({ length: 13 }, (_, i) => `step${i + 1}`).join("\n");
+  const script20 = Array.from({ length: 20 }, (_, i) => `step${i + 1}`).join("\n");
   // Quill's first try writes the script with a shell command and is cut off; her retry, a turn of
   // its own that starts from what the first left, writes it again, longer.
   await startParty(page, [
