@@ -11,6 +11,7 @@ export * from "./events.ts";
 export * from "./export.ts";
 export * from "./github.ts";
 export * from "./github-account.ts";
+export * from "./good-at.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";
 export * from "./history.ts";

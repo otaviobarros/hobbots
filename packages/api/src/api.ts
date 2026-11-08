@@ -80,6 +80,12 @@ export const CreateAgentPayload = Schema.Struct({
   /** The hat and tool the sprite wears, or null to leave them to the look seed. */
   hat: Schema.NullOr(RoleHat),
   tool: Schema.NullOr(RoleTool),
+  /**
+   * What the hob is good at, for other hobs (ADR 032): one line of up to 200 characters once its
+   * whitespace is collapsed, or null for none. Left out, the hub fills in the prefill of the chores
+   * in the instructions and the starter role.
+   */
+  goodAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   /** How the hob talks; Default and Balanced when left out. */
   voice: Schema.optionalKey(Voice),
   length: Schema.optionalKey(ReplyLength),
@@ -108,6 +114,8 @@ export const UpdateAgentPayload = Schema.Struct({
   sigil: Schema.optionalKey(RoleId),
   hat: Schema.optionalKey(Schema.NullOr(RoleHat)),
   tool: Schema.optionalKey(Schema.NullOr(RoleTool)),
+  /** What the hob is good at, as on create; changing the instructions never changes it. */
+  goodAt: Schema.optionalKey(Schema.NullOr(Schema.String)),
   voice: Schema.optionalKey(Voice),
   length: Schema.optionalKey(ReplyLength),
   lookSeed: Schema.optionalKey(LookSeed),

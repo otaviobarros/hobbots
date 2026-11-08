@@ -2,11 +2,14 @@ import type { CreateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
   AgentId,
+  choresInstructions,
   DEFAULT_LENGTH,
   DEFAULT_SIGIL,
   DEFAULT_VOICE,
   type Effort,
+  goodAtPrefill,
   type HobColor,
+  normalizeGoodAt,
   type ReplyLength,
   ROLE_FAMILIES,
   type RoleFamily,
@@ -223,6 +226,10 @@ export interface FirstHobDraft extends BrainChoice {
   readonly chores: string;
   /** Whether the user typed the chores, so picking another role keeps them. */
   readonly choresEdited: boolean;
+  /** What the hob is good at, as the user typed it; only read once `goodAtEdited` is set. */
+  readonly goodAt: string;
+  /** Whether the user typed good at, so picking another role or changing the chores keeps it. */
+  readonly goodAtEdited: boolean;
   readonly name: string;
   /** Whether the user typed or rolled the name. */
   readonly named: boolean;
@@ -255,6 +262,8 @@ export const newDraft = (
     tool: starterRole(role).tool,
     chores: sampleChores(role),
     choresEdited: false,
+    goodAt: "",
+    goodAtEdited: false,
     name: "Pip",
     named: false,
     lookSeed,
@@ -423,6 +432,13 @@ export const gearOf = (draft: FirstHobDraft): Required<Pick<Agent, "hat" | "tool
   tool: draft.tool,
 });
 
+/**
+ * What the hob is good at, as the form shows it: what the user typed, or else the prefill of the
+ * chores and the role, which picking another role or changing the chores fills in again (ADR 032).
+ */
+export const draftGoodAt = (draft: FirstHobDraft): string =>
+  draft.goodAtEdited ? draft.goodAt : (goodAtPrefill(draft.chores, draft.role) ?? "");
+
 /** What still stops the hob from being created, in words for the footer; undefined when ready. */
 export const draftProblem = (draft: FirstHobDraft): string | undefined => {
   if (draft.role === null && draft.ownTitle.trim() === "") return "Give your hob's role a title";
@@ -439,7 +455,6 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
   const name = draft.name.trim();
   const title = roleTitleOf(draft);
   const { role } = draft;
-  const chores = draft.chores.trim();
   return {
     id: AgentId.make(draft.id),
     name,
@@ -447,6 +462,7 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     // The hat and tool as the user left them next to the look, which may differ from the role's.
     hat: draft.hat,
     tool: draft.tool,
+    goodAt: normalizeGoodAt(draftGoodAt(draft)),
     lookSeed: draft.lookSeed,
     lookColor: draft.lookColor,
     // Defaults are left out, so a request matches the one an older client sent for the same hob.
@@ -455,7 +471,7 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     runtime: draft.runtime,
     model: draft.model === null || draft.model === "default" ? null : draft.model,
     effort: draft.effort,
-    instructions: chores ? `Your chores, in the user's words:\n${chores}` : "",
+    instructions: choresInstructions(draft.chores),
   };
 };
 

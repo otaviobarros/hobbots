@@ -1,11 +1,10 @@
-import { Agent, AgentId, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { Agent, AgentId, RuntimeModel, RuntimeModels, starterRole } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
   aboutLine,
   changeCount,
   draftProblem,
-  goodAt,
   isDirty,
   pickRole,
   profileDraft,
@@ -44,6 +43,7 @@ describe("hob profile", () => {
   it("starts from the hob's configuration, with no model as the runtime's default", () => {
     expect(profileDraft(hob(), offered)).toEqual({
       name: "Pip",
+      goodAt: "",
       lookSeed: 4821,
       lookColor: "violet",
       role: null,
@@ -241,10 +241,43 @@ describe("hob profile", () => {
     });
   });
 
-  it("says what the hob is good at from its chores, else from its starter role", () => {
-    const summoned = firstHobPayload({ ...newDraft(), name: "Pip", chores: "Sort my inbox.\nDraft replies." });
-    expect(goodAt({ instructions: summoned.instructions, role: null })).toBe("Sort my inbox. Draft replies.");
-    expect(goodAt({ instructions: "Be brief.", role: "qa" })).toMatch(/\S/);
-    expect(goodAt({ instructions: "Be brief.", role: null })).toBeUndefined();
+  it("sends good at as one line, apart from the instructions, and keeps it when another window saves", () => {
+    const pip = hob({ goodAt: "Release notes" });
+    const base = profileDraft(pip, offered);
+    expect(base.goodAt).toBe("Release notes");
+    const draft = { ...base, goodAt: "  Release notes\n and   changelogs " };
+    expect(isDirty(base, draft)).toBe(true);
+    expect(profileEdit(pip, draft)).toEqual({ goodAt: "Release notes and changelogs" });
+    expect(profileEdit(pip, { ...base, goodAt: " Release notes " })).toEqual({});
+    expect(profileEdit(pip, { ...base, goodAt: "  " })).toEqual({ goodAt: null });
+    expect(profileEdit(pip, { ...base, instructions: "Your chores, in the user's words:\nPoems." })).toEqual({
+      instructions: "Your chores, in the user's words:\nPoems.",
+    });
+    expect(draftProblem({ ...base, goodAt: "x".repeat(201) })).toBe("Keep good at to 200 characters.");
+    const after = hob({ goodAt: "Release notes", instructions: "Be brief.", configVersion: 2 });
+    expect(rebaseDraft(base, profileDraft(after, offered), draft)).toMatchObject({
+      goodAt: draft.goodAt,
+      instructions: "Be brief.",
+    });
+  });
+
+  it("refills good at with a new starter role only while it holds the old role's note", () => {
+    const writer = hob({ role: "writer", roleTitle: "Writer", sigil: "writer", goodAt: starterRole("writer").note });
+    expect(pickRole(profileDraft(writer, offered), "qa").goodAt).toBe(starterRole("qa").note);
+    const own = hob({ role: "writer", roleTitle: "Writer", sigil: "writer", goodAt: "Launch emails" });
+    expect(pickRole(profileDraft(own, offered), "qa").goodAt).toBe("Launch emails");
+    expect(pickRole(profileDraft(writer, offered), null).goodAt).toBe(starterRole("writer").note);
+    expect(pickRole(profileDraft(hob(), offered), "qa").goodAt).toBe("");
+  });
+
+  it("creates a summoned hob with good at from its chores, else its role, unless the user wrote it", () => {
+    const chores = firstHobPayload({ ...newDraft(), name: "Pip", chores: "Sort my inbox.\nDraft replies." });
+    expect(chores.goodAt).toBe("Sort my inbox. Draft replies.");
+    const role = firstHobPayload({ ...newDraft(), name: "Pip", chores: " " });
+    expect(role).toMatchObject({ goodAt: starterRole("assistant").note, instructions: "" });
+    const own = firstHobPayload({ ...newDraft(), name: "Pip", goodAt: " Inbox  zero ", goodAtEdited: true });
+    expect(own.goodAt).toBe("Inbox zero");
+    const cleared = firstHobPayload({ ...newDraft(), name: "Pip", goodAt: "", goodAtEdited: true });
+    expect(cleared.goodAt).toBeNull();
   });
 });

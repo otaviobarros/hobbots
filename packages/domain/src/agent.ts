@@ -66,6 +66,18 @@ const toneSchemaFields = {
 };
 
 /**
+ * What the hob is good at, the one public line other hobs read to know when to come to it (ADR 032),
+ * or null for none. Hob events journaled before it was stored carry none, so decoding them fills in
+ * null: an event records what was saved then.
+ */
+const goodAtSchemaFields = {
+  goodAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+};
+
+/**
  * The hob's own folders and overrides (ADR 014). Hob events journaled before policies existed carry
  * none, so decoding them fills in the empty policy: the shared folders and the preset as they are.
  */
@@ -91,6 +103,7 @@ export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,
   ...roleSchemaFields,
+  ...goodAtSchemaFields,
   ...toneSchemaFields,
   ...policySchemaFields,
   ...visibilitySchemaFields,
@@ -122,6 +135,7 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   /** Versioned since a hob can be renamed, so a turn is told the name it started with. */
   name: Schema.String,
   ...roleSchemaFields,
+  ...goodAtSchemaFields,
   ...toneSchemaFields,
   ...policySchemaFields,
   ...visibilitySchemaFields,
