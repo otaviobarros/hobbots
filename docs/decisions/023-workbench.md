@@ -26,7 +26,7 @@ It is docked in the Quest room, under the lanes, beside the chat column. It neve
 
 A lane filters it to that hob, and the attempt picked in a lane filters it to that try. For a Task with no try picked it shows the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
 
-A retry works on what the tries before it left in the hob's folders. So Changes and Files show a try together with the tries before it: each file once, from what it held before the first try that changed it to what the latest left, and a file one try made and the next rewrote reads Added ([#1218](https://github.com/otaviobarros/hobbots/issues/1218)). A file the shown try did not change says which tries did. Terminal shows the shown try's own commands.
+A retry works on what the tries before it left in the hob's folders. So Changes and Files show a try together with the tries before it: each file once, from what it held before the first try that changed it to what the latest left, a file one try made and the next rewrote reads Added, a file a later try put back as it was drops out, a file deleted by one try stays Deleted whatever later tries move across its path, and a file changed while another hob worked in its folder keeps that warning through later tries ([#1218](https://github.com/otaviobarros/hobbots/issues/1218)). A file the shown try did not change says which tries did. Terminal shows the shown try's own commands.
 
 Paths read from the Quest's folders: the folders its Quests work in and each folder a Task in it changed or touched files in, less any another of them holds. A member narrowed to a subfolder and its lead then show one file under the same path, and a list with files in more than one of these folders leads each path with its folder's name ([#643](https://github.com/otaviobarros/hobbots/issues/643)).
 
@@ -158,7 +158,7 @@ Comparing the folders before and after the turn is the only way to catch edits a
 
 Saying when a change happened while another hob worked in the same folder is more honest than guessing whose it was.
 
-Each Attempt keeps its own records against its own start, so a single try still reads as it ran. The Workbench joins a Task's tries when it shows them, since what is on disk and in a commit is their sum: a retry shown alone hid what a stopped try made and called a file it rewrote Edited.
+Each Attempt keeps its own records, each change against the start of the turn that made it, so a single try still reads as it ran. A later turn of the same Attempt replaces an earlier turn's record of the same path, so a file one turn made and the next edited still reads Edited within that try. The Workbench joins a Task's tries when it shows them, since what is on disk and in a commit is their sum: a retry shown alone hid what a stopped try made and called a file it rewrote Edited.
 
 Keeping the small records with the Task and the heavy details for 30 days keeps the Workbench useful for every Task while bounding disk use, and matches the backpack's window.
 

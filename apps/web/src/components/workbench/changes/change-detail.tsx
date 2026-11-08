@@ -110,7 +110,10 @@ function ChangeNotes({
   hobs: HobLookup;
 }) {
   const { change, activity } = item;
-  const shared = sharedHobs(change, activity).map((id) => hobs(id).name);
+  // Who else worked there while any of its tries changed it, not just the latest.
+  const shared = sharedHobs(change, { attempt: activity.attempt, sharedWithHobs: item.sharedWithHobs }).map(
+    (id) => hobs(id).name,
+  );
   const tries = item.attempts.map((each) => each.number);
   return (
     <>

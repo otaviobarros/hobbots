@@ -1,4 +1,5 @@
 import {
+  AgentId,
   Attempt,
   AttemptActivity,
   AttemptId,
@@ -41,14 +42,18 @@ const change = (
     recordedAt: AT,
   });
 
-const recorded = (of: Attempt, changes: ReadonlyArray<FileChange>) =>
+const recorded = (
+  of: Attempt,
+  changes: ReadonlyArray<FileChange>,
+  sharedWithHobs: AttemptActivity["sharedWithHobs"] = [],
+) =>
   new AttemptActivity({
     attempt: of,
     commands: [],
     changes: [...changes],
     scans: [],
     artifacts: [],
-    sharedWithHobs: [],
+    sharedWithHobs: [...sharedWithHobs],
     detailsClearedAt: null,
   });
 
@@ -167,5 +172,66 @@ describe("a Task's changes across its tries", () => {
       { path: "a.md", kind: "added", movedFrom: null, before: null, after: "x", keptIn: [2, 2], tries: [2] },
       { path: "b.md", kind: "moved", movedFrom: "a.md", before: "a0", after: "a1", keptIn: [1, 2], tries: [1, 2] },
     ]);
+  });
+
+  it("keeps a file a try deleted when a later try moves another onto its path and back (#1218)", () => {
+    expect(
+      shown([
+        recorded(first, [change(first, "b.md", "deleted", "b0", null)]),
+        recorded(second, [change(second, "b.md", "moved", "a0", "a0", "a.md")]),
+        recorded(third, [change(third, "a.md", "moved", "a0", "a0", "b.md")]),
+      ]),
+    ).toEqual([
+      { path: "b.md", kind: "deleted", movedFrom: null, before: "b0", after: null, keptIn: [1, 3], tries: [1, 2, 3] },
+    ]);
+  });
+
+  it("reads a file moved onto a path that held another as that path's edit, and the path it left as deleted", () => {
+    expect(
+      shown([
+        recorded(first, [change(first, "b.md", "deleted", "b0", null)]),
+        recorded(second, [change(second, "b.md", "moved", "a0", "a0", "a.md")]),
+      ]),
+    ).toEqual([
+      { path: "a.md", kind: "deleted", movedFrom: null, before: "a0", after: null, keptIn: [2, 2], tries: [2] },
+      { path: "b.md", kind: "edited", movedFrom: null, before: "b0", after: "a0", keptIn: [1, 2], tries: [1, 2] },
+    ]);
+  });
+
+  it("keeps two files that swapped places in one try as two edits", () => {
+    expect(
+      shown([
+        recorded(first, [
+          change(first, "a.md", "moved", "b0", "b0", "b.md"),
+          change(first, "b.md", "moved", "a0", "a0", "a.md"),
+        ]),
+      ]).map(({ path, kind, before, after }) => ({ path, kind, before, after })),
+    ).toEqual([
+      { path: "a.md", kind: "edited", before: "a0", after: "b0" },
+      { path: "b.md", kind: "edited", before: "b0", after: "a0" },
+    ]);
+  });
+
+  it("keeps a file a later try made a link holding the same text, as a link is not that file", () => {
+    const link: FileVersion = { ...text("t"), kind: "link" };
+    const one = recorded(first, [change(first, "a.md", "edited", "a0", "t")]);
+    const two = recorded(second, [{ ...change(second, "a.md", "link", "t", null), after: link }]);
+    expect(shown([one, two])).toEqual([
+      { path: "a.md", kind: "link", movedFrom: null, before: "a0", after: "t", keptIn: [1, 2], tries: [1, 2] },
+    ]);
+  });
+
+  it("keeps who else worked there while an earlier try changed a file a solo retry changed again", () => {
+    const ada = AgentId.make("ada");
+    const hers = AttemptId.make("ada-try");
+    const one = recorded(
+      first,
+      [{ ...change(first, "a.md", "edited", "a0", "a1"), sharedWith: [hers] }],
+      [{ attemptId: hers, agentId: ada }],
+    );
+    const two = recorded(second, [change(second, "a.md", "edited", "a1", "a2")]);
+    const [only] = taskChanges([one, two]);
+    expect(only?.change.sharedWith).toEqual([hers]);
+    expect(only?.sharedWithHobs).toEqual([{ attemptId: hers, agentId: ada }]);
   });
 });

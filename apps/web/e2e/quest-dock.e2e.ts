@@ -166,6 +166,7 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with t
 // covers UX-002, OR-007
 test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry", async ({
   page,
+  scan,
 }) => {
   // Lines with no spaces, so Aldric's echo of the brief, paced a word at a time, stays short.
   const script13 = Array.from({ length: 13 }, (_, i) => `step${i + 1}`).join("\n");
@@ -191,11 +192,13 @@ test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added w
   await expect(
     bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "check.sh" }),
   ).toContainText("Changed in attempts 1 and 2.");
+  await scan(bench);
 });
 
 // covers UX-002, OR-001
 test("[TC-UX-1146] a file reads under the same path for a lead and for a member narrowed to a subfolder", async ({
   page,
+  scan,
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub({ "test/README.md": "# Tests\n" }, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
@@ -231,8 +234,10 @@ test("[TC-UX-1146] a file reads under the same path for a lead and for a member 
   await expect(changes.getByRole("button")).toHaveText([/^NOTES\.md, by Aldric/, /^NOTES\.md, by Quill/]);
   await expect(changes.getByRole("button", { name: /^NOTES\.md\s*, by Quill/ })).toContainText("Edited");
   for (const row of await changes.getByRole("button").all()) await expect(row).toContainText("test/docs/");
+  await scan(bench);
   await bench.getByRole("tab", { name: /^Files/ }).click();
   for (const row of await files.getByRole("button").all()) await expect(row).toContainText("test/docs/");
+  await scan(bench);
 });
 
 // covers UX-002, UX-006

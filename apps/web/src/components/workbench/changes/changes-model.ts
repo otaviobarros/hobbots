@@ -72,7 +72,10 @@ export const selectedChange = (
   null;
 
 /** The hobs that worked in the same folder while a change was made, for "Changed while Ada was also working here". */
-export const sharedHobs = (change: FileChange, activity: AttemptActivity): ReadonlyArray<AgentId> => {
+export const sharedHobs = (
+  change: FileChange,
+  activity: Pick<AttemptActivity, "attempt" | "sharedWithHobs">,
+): ReadonlyArray<AgentId> => {
   const hobs = new Set<AgentId>();
   for (const attemptId of change.sharedWith) {
     const found = activity.sharedWithHobs.find((each) => each.attemptId === attemptId);
