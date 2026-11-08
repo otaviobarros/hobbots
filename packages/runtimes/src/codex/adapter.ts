@@ -35,14 +35,14 @@ export const codexWebSearch = (version: string | null): RuntimeEnforcement["webS
   version !== null && CACHED_SEARCH_CODEX_VERSIONS.includes(version)
     ? {
         status: "verified",
-        evidence: `Codex ${version} searches OpenAI's cached index only; it opens no page, and live search stays off.`,
+        evidence: "This Codex searches OpenAI's cached index only; it opens no page, and live search stays off.",
       }
     : {
         status: "unverified",
         evidence:
           version === null
             ? "No Codex was found, so its search is not offered."
-            : `Cached search is not yet checked on Codex ${version}, so its search is not offered.`,
+            : "Cached search is not yet checked on this Codex version, so its search is not offered.",
       };
 
 /**
