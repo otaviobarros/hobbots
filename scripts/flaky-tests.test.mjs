@@ -87,18 +87,21 @@ test("a Vitest test that failed in its only run is failed", () => {
   assert.doesNotMatch(markdown, /Flaky|TC-OR-404|TC-OR-405/);
 });
 
+/** One run's Vitest report of `[TC-OP-042]` with `status`, and of a steady `[TC-OP-043]`. */
+const exportRun = (status) => ({
+  testResults: [
+    {
+      name: `${process.cwd()}/test/export.test.ts`,
+      assertionResults: [
+        { fullName: "exports [TC-OP-042] never writes over", status, location: { line: 7, column: 3 } },
+        { fullName: "exports [TC-OP-043] steady", status: "passed", location: { line: 30, column: 3 } },
+      ],
+    },
+  ],
+});
+
 test("a Vitest test's runs in separate reports count together, so one that failed once is flaky", () => {
-  const run = (status) => ({
-    testResults: [
-      {
-        name: `${process.cwd()}/test/export.test.ts`,
-        assertionResults: [
-          { fullName: "exports [TC-OP-042] never writes over", status, location: { line: 7, column: 3 } },
-          { fullName: "exports [TC-OP-043] steady", status: "passed", location: { line: 30, column: 3 } },
-        ],
-      },
-    ],
-  });
+  const run = exportRun;
   const outcomes = [run("passed"), run("failed"), run("passed")].flatMap(outcomesOf);
   const markdown = flakyTestsMarkdown(outcomes);
   assert.match(
@@ -109,16 +112,7 @@ test("a Vitest test's runs in separate reports count together, so one that faile
 });
 
 test("the same test on two databases is two tests: one that fails every run on PostgreSQL is failed there, not flaky", () => {
-  const run = (status) => ({
-    testResults: [
-      {
-        name: `${process.cwd()}/test/export.test.ts`,
-        assertionResults: [
-          { fullName: "exports [TC-OP-042] never writes over", status, location: { line: 7, column: 3 } },
-        ],
-      },
-    ],
-  });
+  const run = exportRun;
   const reports = new Map([
     ["sqlite-1.json", run("passed")],
     ["sqlite-2.json", run("passed")],
