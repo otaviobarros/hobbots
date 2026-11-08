@@ -488,6 +488,21 @@ describe("a hob's overrides", () => {
     });
   });
 
+  // covers AG-004, ADR 036
+  it("[TC-AG-1266-01] sets Search the web to Never, and refuses Ask for it, which it does not take", async () => {
+    const agent = await newHob();
+    expect((await request("GET", permissions(agent))).body).toMatchObject({ decisions: { "search-web": "allow" } });
+
+    const asked = await request("PATCH", permissions(agent), { overrides: { "search-web": "ask" } });
+    expect(asked).toMatchObject({ status: 400, body: { _tag: "UnofferedAnswer", operations: ["search-web"] } });
+
+    const never = await request("PATCH", permissions(agent), { overrides: { "search-web": "deny" } });
+    expect(never).toMatchObject({
+      status: 200,
+      body: { configVersion: 2, policy: { overrides: { "search-web": "deny" } }, decisions: { "search-web": "deny" } },
+    });
+  });
+
   // covers AG-004, PE-008
   it("[TC-AG-094] keeps an override narrowing under a stricter preset picked later", async () => {
     const agent = await newHob();

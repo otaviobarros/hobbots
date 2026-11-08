@@ -80,7 +80,7 @@ import { nextSteps, replyStepId, stoppedCommands, uncertainCalls } from "./steps
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
-import { accessNow, HobTools, narrows } from "./tools.ts";
+import { accessNow, HobTools, narrows, turnWebSearch } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import { workHeld } from "./work-hold.ts";
 
@@ -947,6 +947,8 @@ export class ChatService extends Context.Service<
                 model: brain.model,
                 effort: brain.effort,
                 tools,
+                // Settled from the policy as the turn starts, as its tools are (ADR 036).
+                webSearch: turnWebSearch(tools),
                 skills: skills.mounts,
                 askedSkill: asked,
                 approvals: turnApprovals?.approvals ?? null,

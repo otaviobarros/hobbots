@@ -22,6 +22,7 @@ import {
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
+  SearchOperation,
   SkillOperation,
   stableJson,
 } from "@hobbots/domain";
@@ -163,6 +164,13 @@ export const PolicyRequest = Schema.TaggedUnion({
    * for, for the approval card. No grant answers an Ask, as for memory.
    */
   Directory: { operation: DirectoryOperation, hob: Schema.String },
+  /**
+   * A web search the runtime runs on its provider's servers (ADR 036), such as Claude Code's
+   * `WebSearch`. It reaches no host from the hub, so it is decided on the hob's answers alone, and
+   * Allow or Never only: an Ask refuses it, since a search on Codex cannot pause and every runtime
+   * must act the same. `query` is the search, for the step.
+   */
+  Search: { operation: SearchOperation, query: Schema.String },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -261,7 +269,8 @@ export type ResolvedRequest =
   | (Omit<Extract<PolicyRequest, { readonly _tag: "Charm" }>, "folder"> & { readonly folder?: ResolvedTarget })
   | Extract<PolicyRequest, { readonly _tag: "Memory" }>
   | Extract<PolicyRequest, { readonly _tag: "Skills" }>
-  | Extract<PolicyRequest, { readonly _tag: "Directory" }>;
+  | Extract<PolicyRequest, { readonly _tag: "Directory" }>
+  | Extract<PolicyRequest, { readonly _tag: "Search" }>;
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -322,6 +331,7 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "propose-skill": "suggesting a skill",
   "skill-feedback": "reporting a skill problem",
   "read-hobs": "reading other hobs",
+  "search-web": "searching the web",
 };
 
 /** The words for an operation in a reason: a built-in one's own, or the ones its Charm declares. */
@@ -709,6 +719,15 @@ const evaluateCharm = (
   };
 };
 
+/**
+ * An answer for an operation that takes Allow or Never only (ADR 036): an Ask, as a restriction
+ * saved before could give, refuses the call, as it would on a runtime that cannot pause it.
+ */
+const allowOrNever = (answer: Answer): Answer =>
+  answer.decision === "ask"
+    ? { ...answer, decision: "deny", message: `${answer.message} It takes no Ask, so the call does not run.` }
+    : answer;
+
 const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): Evaluated => {
   switch (request._tag) {
     case "Files":
@@ -727,6 +746,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return { targets: [request.skill], answers: [fromLayers(context, request.operation)] };
     case "Directory":
       return { targets: [request.hob], answers: [fromLayers(context, request.operation)] };
+    case "Search":
+      return { targets: [request.query], answers: [allowOrNever(fromLayers(context, request.operation))] };
   }
 };
 
@@ -879,11 +900,6 @@ export class PolicyEngine extends Context.Service<
                   Effect.map((resolved) => ({ ...push, cwd: resolved })),
                 );
           }
-          case "Web":
-          case "Memory":
-          case "Skills":
-          case "Directory":
-            return Effect.succeed(request);
           case "Charm": {
             const { folder, ...call } = request;
             return folder === undefined
@@ -892,6 +908,9 @@ export class PolicyEngine extends Context.Service<
                   Effect.map((resolved) => ({ ...call, folder: resolved })),
                 );
           }
+          default:
+            // Web, Memory, Skills, Directory and Search name no path to resolve.
+            return Effect.succeed(request);
         }
       };
 

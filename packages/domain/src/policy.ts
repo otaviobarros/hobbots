@@ -27,6 +27,7 @@ export const PolicyOperation = Schema.Literals([
   "propose-skill",
   "skill-feedback",
   "read-hobs",
+  "search-web",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
 
@@ -51,6 +52,21 @@ export type SkillOperation = typeof SkillOperation.Type;
  */
 export const DirectoryOperation = Schema.Literals(["read-hobs"]);
 export type DirectoryOperation = typeof DirectoryOperation.Type;
+
+/**
+ * Search the web (ADR 036), in the Web group beside Use the web: the runtime's own search, run on its
+ * provider's servers. Allow offers it for the turn; Never offers none. It has no Ask, since Codex's
+ * search runs inside the model's turn and cannot pause, and the answer must act the same on every
+ * runtime.
+ */
+export const SearchOperation = Schema.Literals(["search-web"]);
+export type SearchOperation = typeof SearchOperation.Type;
+
+/**
+ * The built-in operations that take Allow or Never only (ADR 036). An override of Ask for one is
+ * refused when saved, and a turn is offered the operation only when its answer is Allow.
+ */
+export const ALLOW_OR_NEVER_OPERATIONS: ReadonlyArray<PolicyOperation> = ["search-web"];
 
 /** Allow proceeds, Ask pauses the turn for an approval, Deny refuses (the UI says Never). */
 export const PolicyDecision = Schema.Literals(["allow", "ask", "deny"]);
@@ -84,6 +100,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "propose-skill": "allow",
     "skill-feedback": "allow",
     "read-hobs": "allow",
+    "search-web": "allow",
   },
   balanced: {
     "read-files": "allow",
@@ -101,6 +118,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "propose-skill": "allow",
     "skill-feedback": "allow",
     "read-hobs": "allow",
+    "search-web": "allow",
   },
   trusting: {
     "read-files": "allow",
@@ -118,6 +136,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "propose-skill": "allow",
     "skill-feedback": "allow",
     "read-hobs": "allow",
+    "search-web": "allow",
   },
 };
 
@@ -265,6 +284,7 @@ export const PolicyOverrides = Schema.Struct({
   "propose-skill": Schema.optionalKey(PolicyDecision),
   "skill-feedback": Schema.optionalKey(PolicyDecision),
   "read-hobs": Schema.optionalKey(PolicyDecision),
+  "search-web": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 

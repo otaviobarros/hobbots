@@ -665,6 +665,7 @@ export const messages = {
       "propose-skill": "Drafts a skill. Nothing changes until you add it.",
       "skill-feedback": "Leaves a note on a skill. Nothing changes.",
       "read-hobs": "Reads only. Nothing changes.",
+      "search-web": "Sends the search to its AI's provider. Nothing changes.",
     },
   },
   charms: {
@@ -1064,7 +1065,7 @@ export const messages = {
       skills: "Skills",
       hobs: "Other hobs",
       commands: "Commands",
-      internet: "Internet",
+      web: "Web",
       outside: "Outside its folders",
     },
     checked: "Checked",
@@ -1082,7 +1083,16 @@ export const messages = {
     sandbox: "Sandbox",
     details: "Details: how these rules are kept",
     detailsNote: ({ name }: { name: string }) =>
-      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory. Skill rules work the same way: a skill itself grants nothing, and its scripts run under the rules above.`,
+      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory. Skill rules work the same way: a skill itself grants nothing, and its scripts run under the rules above. Search the web is Allow or Never only, because Codex runs its search inside the AI's turn and cannot pause for you.`,
+    /** Search the web's note, by the runtime the hob thinks with (ADR 036). */
+    searchWeb: {
+      "claude-code": "Look things up with Claude Code's search. The query goes to Anthropic, who runs the search.",
+      codex:
+        "Look things up with Codex's search, from OpenAI's cached index. The query goes to OpenAI, who runs the search.",
+      notOffered:
+        "Look things up and bring back links. The AI this hob thinks with has no search Hobbots can check, so it is off.",
+    },
+    notOffered: "Not offered on this AI",
   },
   signing: {
     label: "Sign commits with my 1Password key",
@@ -1103,6 +1113,7 @@ export const messages = {
       hubTools: "Charms and coordination tools",
       toolEvents: "Tool steps reported",
       toolInterruption: "Running tools can be stopped",
+      webSearch: "Its own web search",
     },
     status: { verified: "Verified", unverified: "Not verified", unsupported: "Unsupported" },
     needsSandbox: "Needs the sandbox",

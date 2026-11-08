@@ -139,6 +139,7 @@ describe("report", () => {
           hubTools: { status: "verified", evidence: "" },
           toolEvents: { status: "verified", evidence: "" },
           toolInterruption: { status: "verified", evidence: "" },
+          webSearch: { status: "verified", evidence: "" },
         },
       }),
     ],
