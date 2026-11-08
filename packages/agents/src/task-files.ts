@@ -39,6 +39,11 @@ export interface HobFilesShape {
   readonly look: (folder: string, path: string) => Effect.Effect<Option.Option<FileNow>>;
   /** The first `maxBytes` of a regular file inside `folder` now, reached through no link. */
   readonly read: (folder: string, path: string, maxBytes: number) => Effect.Effect<Option.Option<Uint8Array>>;
+  /**
+   * Whether a regular file is at the absolute `path` now, wherever it is on the hub: where the user
+   * asked a Quest to deliver may be outside every folder (#1215). Only says it is there; never read.
+   */
+  readonly isFile: (path: string) => Effect.Effect<boolean>;
 }
 
 /** The hob's folders on the hub, as the Files tab reads them. */

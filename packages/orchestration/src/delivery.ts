@@ -57,3 +57,15 @@ export const makeDeliveryCheck = Effect.gen(function* () {
       return problems.length === 0 ? null : `${problems.join(" ")} ${instead(folders)}`;
     });
 });
+
+/**
+ * Reads, of the absolute paths a user's request names, those where no regular file is now (#1215).
+ * A hub that does not read files, as in tests of the tools alone, finds none missing.
+ */
+export const makeDestinationCheck = Effect.gen(function* () {
+  const files = yield* Effect.serviceOption(HobFiles);
+  return (paths: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
+    Option.isNone(files)
+      ? Effect.succeed([])
+      : Effect.filter(paths, (path) => Effect.map(files.value.isFile(path), (there) => !there), { concurrency: 8 });
+});

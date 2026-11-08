@@ -231,7 +231,7 @@ export const TaskToolInputs = {
     delivered: Schema.optionalKey(
       Schema.Boolean.annotate({
         description:
-          "For a Quest you lead: true only when the result delivers everything the user asked for, where they asked for it. Completing the Quest is refused without true: if something is missing, finish it, or ask the user what to do, and leave the Quest open.",
+          "For a Quest you lead: true only when the result delivers everything the user asked for, where they asked for it. A file somewhere else is not delivered. Completing the Quest is refused without true: if something is missing, finish it, or ask the user what to do, and leave the Quest open.",
       }),
     ),
     artifacts: Schema.optionalKey(
@@ -297,7 +297,8 @@ export const TASK_TOOLS: ReadonlyArray<{
   },
   {
     name: "escalate",
-    description: "Pass a question you cannot answer to the next lead up, or to the user when you are the top lead.",
+    description:
+      "Pass a question you cannot answer to the next lead up, or to the user when you are the top lead. Always pass up a question about putting the user's work anywhere other than where they asked: that is theirs to decide.",
     label: "Escalating a question",
   },
   {
@@ -375,6 +376,8 @@ export const TaskToolRefusal = Schema.Literals([
   "artifact-unreachable",
   // A Quest's lead completing it without saying it delivered what the user asked for (#1181).
   "not-delivered",
+  // A Quest's lead saying it delivered while nothing is where the user asked for it (#1215).
+  "not-at-destination",
   // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
   "charm-refused",
 ]);

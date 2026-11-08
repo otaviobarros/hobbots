@@ -52,7 +52,7 @@ import {
 import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
-import { makeDeliveryCheck } from "./delivery.ts";
+import { makeDeliveryCheck, makeDestinationCheck } from "./delivery.ts";
 import { flagIdleQuest } from "./empty-quests.ts";
 import { makeHeldCommits } from "./held-commits.ts";
 import { makeLeading } from "./leading.ts";
@@ -161,6 +161,7 @@ export class TaskTools extends Context.Service<
         const hobs = yield* HobbotsRepository;
         const wrapUp = yield* makeWrapUp;
         const delivered = yield* makeDeliveryCheck;
+        const missingAt = yield* makeDestinationCheck;
         const settle = yield* makeSettle;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
         const heldCommit = yield* makeHeldCommits;
@@ -171,6 +172,7 @@ export class TaskTools extends Context.Service<
             limits,
             wrapUp,
             delivered,
+            missingAt,
             folderChecks,
             authority: authority.of,
             separator,

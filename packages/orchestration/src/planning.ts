@@ -37,7 +37,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
+import { namedFolders, pathsIn, requestedFolders, withFolders } from "./default-folders.ts";
 import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 
 /**
@@ -50,6 +50,26 @@ const notDelivered = (task: Task, delivered: boolean | undefined) =>
       "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile."
     : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
       "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
+
+/**
+ * Why a Quest's lead may not say it delivered yet (#1215): nothing is where the user asked for it.
+ * Its member could not write there, and the lead chose another place itself, so the Quest read done
+ * with a file somewhere the user never agreed to.
+ */
+const notThere = (task: Task, missing: ReadonlyArray<string>) =>
+  `Task ${task.id} is not complete: the user asked for ${missing.join(", ")}, and nothing is there. ` +
+  "A file anywhere else is not delivered where they asked. Finish it there, or, if it cannot go there, ask the user with ask where it should go, " +
+  "and leave the Quest open until they answer. Never choose another place yourself, nor let a member choose one.";
+
+/**
+ * Whether the user spoke after asking for the Quest: answered a question in its tree, left a note on
+ * one of its Tasks, or sent the message this turn answers while the work ran. What they said may
+ * change where the work goes, so the hub no longer holds the lead to the paths of the first request.
+ */
+const userSpokeSince = (scope: CallScope) =>
+  (scope.caller.steers?.trim() ?? "") !== "" ||
+  scope.tree.questions.some((question) => question.answeredBy?._tag === "User") ||
+  scope.tree.notes.some((note) => note.senderId === undefined || note.senderId === null);
 
 /** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
 const REASON_LIMIT = 600;
@@ -64,6 +84,8 @@ interface Deps {
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
   readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
+  /** Of the absolute paths given, those where no regular file is now (see `delivery.ts`). */
+  readonly missingAt: (paths: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<string>>;
   /** Why the file artifacts a Task returns could not be opened once it completes, or null (see `delivery.ts`). */
   readonly delivered: (
     folders: ReadonlyArray<string>,
@@ -80,11 +102,32 @@ const isQuestTop = (scope: CallScope, task: Task) =>
   task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id);
 
 /**
+ * The files the user's request names that are not there now (#1215): each absolute path in the
+ * Quest's top Task's brief, which is what the user asked, that is not a folder. A file the work only
+ * reads is there; one it was to write is there only once it was written. None once the user spoke
+ * after asking.
+ */
+const missingDestinations = (
+  { missingAt, folderChecks, separator }: Pick<Deps, "missingAt" | "folderChecks" | "separator">,
+  scope: CallScope,
+  task: Task,
+) =>
+  Effect.gen(function* () {
+    if (userSpokeSince(scope)) return [];
+    const named = pathsIn(task.brief, separator).filter((path) => !path.endsWith(separator));
+    const files = yield* Effect.filter(named, (path) => Effect.isFailure(folderChecks.check(path)), {
+      concurrency: 8,
+    });
+    return yield* missingAt(files);
+  });
+
+/**
  * Refuses a completion that would read done without the delivery: a Quest whose lead does not say
- * it delivered what the user asked for (#1181), or a file no one could open afterwards (#1180).
+ * it delivered what the user asked for (#1181), a file no one could open afterwards (#1180), or a
+ * Quest with nothing where the user asked for it (#1215).
  */
 const deliveredOrRefused = (
-  { delivered, authority }: Pick<Deps, "delivered" | "authority">,
+  deps: Pick<Deps, "delivered" | "authority" | "missingAt" | "folderChecks" | "separator">,
   scope: CallScope,
   task: Task,
   questTop: boolean,
@@ -94,10 +137,13 @@ const deliveredOrRefused = (
     if (questTop && input.delivered !== true) {
       return yield* refuse("not-delivered", notDelivered(task, input.delivered));
     }
-    const undelivered = yield* delivered((yield* authority(scope, task)).folders, input.artifacts ?? []);
+    const undelivered = yield* deps.delivered((yield* deps.authority(scope, task)).folders, input.artifacts ?? []);
     if (undelivered !== null) {
       return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${undelivered}`);
     }
+    if (!questTop) return;
+    const missing = yield* missingDestinations(deps, scope, task);
+    if (missing.length > 0) return yield* refuse("not-at-destination", notThere(task, missing));
   });
 
 /**
@@ -251,6 +297,7 @@ export const makePlanning = ({
   limits,
   wrapUp,
   delivered,
+  missingAt,
   folderChecks,
   authority,
   separator,
@@ -390,7 +437,13 @@ export const makePlanning = ({
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const questTop = isQuestTop(scope, task);
-      yield* deliveredOrRefused({ delivered, authority }, scope, task, questTop, input);
+      yield* deliveredOrRefused(
+        { delivered, authority, missingAt, folderChecks, separator },
+        scope,
+        task,
+        questTop,
+        input,
+      );
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
       // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
       const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);

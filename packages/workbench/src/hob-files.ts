@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 import { HobFiles } from "@hobbots/agents";
 import { SERVED_FILE_BYTES } from "@hobbots/domain";
@@ -110,6 +110,13 @@ export const makeHobFiles = () => {
     place: (folders, value) => optional(() => place(folders, value)),
     look: (folder, path) => optional(() => look(folder, path)),
     read: (folder, path, maxBytes) => optional(() => read(folder, path, maxBytes)),
+    isFile: (path) =>
+      isAbsolute(path)
+        ? Effect.tryPromise(() => stat(path)).pipe(
+            Effect.map((found) => found.isFile()),
+            Effect.orElseSucceed(() => false),
+          )
+        : Effect.succeed(false),
   });
 };
 
