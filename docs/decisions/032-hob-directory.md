@@ -130,8 +130,9 @@ The roster rides in the context block, which every adapter already delivers, and
 - [#1233](https://github.com/otaviobarros/hobbots/issues/1233) adds `visibleToHobs`, its migration and the profile switch.
 - [#1234](https://github.com/otaviobarros/hobbots/issues/1234) builds the public card, the roster and `read_hob`, adds `read-hobs` to the policy, and offers both on every runtime.
 - [#1235](https://github.com/otaviobarros/hobbots/issues/1235) proves it end to end.
-- The Summoning slice ([#403](https://github.com/otaviobarros/hobbots/issues/403)) builds on the cards: a hob finds who holds the Summoning Charm from the roster, and the Charm sets good at like any other field. ADR 033 records that slice and refers here for the card, good at and the switch.
+- The Summoning slice ([#403](https://github.com/otaviobarros/hobbots/issues/403)) builds on the cards: a hob finds who holds the Summoning Charm from the roster, and the Charm sets good at like any other field. Its ADR ([#404](https://github.com/otaviobarros/hobbots/issues/404)) refers here for the card, good at and the switch.
 - The card gains "Summoned by" once #405 records who summoned a hob.
+- How hobs take on work ([#1157](https://github.com/otaviobarros/hobbots/issues/1157)) extends this directory with specialty tags and `find_hobs` ([#1165](https://github.com/otaviobarros/hobbots/issues/1165)), rather than adding a second roster.
 - `apps/web` stops computing good at and reads the stored field.
 
 ## Validation
