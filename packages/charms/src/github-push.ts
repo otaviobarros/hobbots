@@ -56,6 +56,14 @@ const short = (commit: string) => commit.slice(0, 12);
 const alreadyThere = (replaces: string | null, commit: string, sentAs: string | null) =>
   replaces === commit || (sentAs !== null && replaces === sentAs);
 
+/**
+ * Why a push that would create a branch with no commit GitHub lacks is refused (#1219): the branch is
+ * at a commit GitHub already has, so the hob's own work, if any, was never committed.
+ */
+const noNewCommits = (plan: GitHubPushPlan) =>
+  `${plan.branch} is at ${short(plan.commit)}, which ${plan.repository} already has, so pushing it would only create ${plan.remoteBranch} with no new commits. Nothing was pushed. ` +
+  "Commit your work first, then push. If your commit was refused, tell the user why instead of pushing.";
+
 /** The most commit pairs a pushed answer lists, so a long history does not fill the hob's context. */
 const PAIRS_SHOWN = 20;
 
@@ -298,6 +306,11 @@ export const makeGitHubPush = (repositoryFor: RepositoryFor) =>
                 _tag: "NoCall",
                 text: `${plan.repository} branch ${remoteBranch} is already at ${short(staged.commit)}, so there was nothing to push.`,
               } as const;
+            }
+            // A new branch with no commit GitHub lacks only names a commit GitHub has, such as the default
+            // branch's after a hob's own commit was refused (#1219), so no card offers it as a push.
+            if (replaces === null && commits.count === 0) {
+              return yield* new HubRefusal({ message: noNewCommits(plan) });
             }
             const request: PolicyRequest = {
               _tag: "Push",

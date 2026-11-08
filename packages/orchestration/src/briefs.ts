@@ -17,6 +17,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { type BriefPart, fixed, renderBrief, rule } from "./brief-parts.ts";
+import { DESTINATION_WORDING } from "./destinations.ts";
 
 /**
  * What a step's fresh session and its owner's chat are told (ADR 018). A step sees only its brief
@@ -151,11 +152,14 @@ export const RESULTS_RULE =
 
 /**
  * What the lead of a Quest is told in each turn on its Task, after the rule itself. Where the user
- * asked for the work to go is theirs to change (#1215).
+ * asked for the work to go is theirs to change (#1215): their answer is passed on as they gave it,
+ * and a question to them about it is worded as the hub words it from the first one (#1219).
  */
 const LEAD_DUTY =
   "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running. " +
-  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself.";
+  "Where the user asked for the work to go is theirs to change: when it cannot go there, escalate a member's question about where else to put it, or ask the user, and never choose another place yourself. " +
+  "Once the user has answered, pass their answer on to a member in their own words, never a place of your own. " +
+  DESTINATION_WORDING;
 
 /**
  * What a turn on `task` is told when that Task leads a Quest: the rule, then the lead's duty. Both

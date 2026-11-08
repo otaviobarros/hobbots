@@ -733,6 +733,46 @@ describe("hob tools for Tasks and Quests", () => {
     );
   });
 
+  // covers OR-001, OR-002 (#1219)
+  it("[TC-OR-1219-01] a lead's own milestone is never credited to a member it leads, nor to a hob beside it", async () => {
+    await run(seed);
+    const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Review written"] });
+    await delegate(ALDRIC, TOP, "Rook", "art");
+    // Quill leads a nested Quest of its own: Pip works under Quill's Task.
+    await delegate(QUILL, quill, "Pip", "proofread");
+    const [review] = (await tree()).milestones.filter((each) => each.taskId === quill);
+    if (review === undefined) throw new Error("expected a milestone");
+
+    const before = await head();
+    for (const [key, named] of [
+      ["member", "Pip"],
+      ["beside", "Rook"],
+    ] as const) {
+      const refusal = await refused(QUILL, quill, "report_checkpoint", {
+        key,
+        kind: "milestone",
+        summary: "Review written",
+        milestone_id: review.id,
+        reached_by: named,
+      });
+      expect(refusal.reason).toBe("milestone-mismatch");
+      expect(refusal.message).toContain(`${named} does not lead Task ${quill}`);
+      expect(refusal.message).toContain("leave reached_by out");
+    }
+    await onlyRefusalsSince(before);
+
+    await done(QUILL, quill, "report_checkpoint", {
+      key: "own",
+      kind: "milestone",
+      summary: "Review written",
+      milestone_id: review.id,
+    });
+    const milestones = (await tree()).milestones.filter((each) => each.taskId === quill);
+    expect(milestones.map(({ title, reachedBy }) => ({ title, reachedBy }))).toEqual([
+      { title: "Review written", reachedBy: QUILL },
+    ]);
+  });
+
   // covers OR-001
   it("[TC-OR-017] a refused or malformed call writes nothing and says why", async () => {
     await run(seed);

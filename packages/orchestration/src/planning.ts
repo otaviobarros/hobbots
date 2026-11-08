@@ -52,6 +52,20 @@ const notDelivered = (task: Task, delivered: boolean | undefined) =>
     : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
       "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
 
+/**
+ * The files a completion kept, as whoever reports it is told (#1219). A lead whose earlier completion
+ * was refused for a file in its turn's temporary folder told the user that file had succeeded; what
+ * it reports is what Hobbots kept, here, and nothing else.
+ */
+const keptText = (
+  artifacts: ReadonlyArray<{ readonly kind: string; readonly label: string; readonly value: string }>,
+) => {
+  const files = artifacts.filter((artifact) => artifact.kind === "file");
+  if (files.length === 0) return "";
+  const listed = files.map((file) => `"${file.label}" at ${file.value}`).join(", ");
+  return ` Hobbots kept ${listed}. Tell whoever you report to only of the files it kept: one it refused was not delivered.`;
+};
+
 /** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
 const REASON_LIMIT = 600;
 
@@ -428,10 +442,10 @@ export const makePlanning = ({
           }),
         ),
       );
+      const complete = `Task ${task.id} is complete.${keptText(artifacts)}`;
       return {
         done: {
-          message:
-            left.warning === null ? `Task ${task.id} is complete.` : `Task ${task.id} is complete. ${left.warning}`,
+          message: left.warning === null ? complete : `${complete} ${left.warning}`,
           details: {
             artifacts: artifacts.map((artifact) => artifact.id as string),
             ...(left.uncommitted === undefined ? {} : { uncommitted: left.uncommitted.summary }),
