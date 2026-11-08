@@ -7,6 +7,7 @@ import {
   checkpointText,
   choicesText,
   type EventEnvelope,
+  type HobProposal,
   isLiveAttempt,
   isTerminalTask,
   MEMORY_SAVE_TOOL,
@@ -180,10 +181,14 @@ const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" |
       return `Deadline passed at ${payload.dueAt} (Task ${payload.taskId})`;
     case "skill-proposal":
       return skillProposalText(payload.proposal);
-    case "hob-proposal":
-      return `Your proposal on ${payload.proposal.rows.map((row) => row.label).join(", ")} was decided (${payload.proposal.id})`;
+    default:
+      return hobProposalText(payload.proposal);
   }
 };
+
+/** A hob proposal the user decided (ADR 034), as the manager's memory keeps it. */
+const hobProposalText = (proposal: HobProposal) =>
+  `Your proposal on ${proposal.rows.map((row) => row.label).join(", ")} was decided (${proposal.id})`;
 
 /**
  * What a backpack item adds once the runtime accepted the turn it was put into (#1028): the work, to

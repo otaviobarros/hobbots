@@ -810,10 +810,7 @@ describe("the Summoning Charm, end to end", () => {
   // covers ADR 034 (A decision per row, the manager hears row by row, Changed since), #409 done when 2
   it("[TC-AG-409-02] a change to three hobs is allowed for two and denied for one, and the chief hears which", async () => {
     await chiefAnswers({ "summoning.summon": "allow" });
-    await turn(
-      chief,
-      hub("summoning_summon", { key: "hire-crew", hobs: [draft("Ivy"), draft("Jo"), draft("Kit")] }),
-    );
+    await turn(chief, hub("summoning_summon", { key: "hire-crew", hobs: [draft("Ivy"), draft("Jo"), draft("Kit")] }));
     await chiefAnswers({});
     const asked = await turn(
       chief,

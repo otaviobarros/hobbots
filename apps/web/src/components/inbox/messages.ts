@@ -39,6 +39,7 @@ export const messages = {
     device: "New device",
     share: "Share",
     skill: "Skill",
+    hobs: "Hobs",
   },
   /** One row of the list: who asked, as a chain, and when. */
   row: {
@@ -82,6 +83,7 @@ export const messages = {
   pickOne: "Pick a request to see what it would do.",
   failed: "Hobbots could not read the Inbox.",
   skillsFailed: "Hobbots could not read the skills your hobs propose.",
+  hobProposalsFailed: "Hobbots could not read what your managers propose for your hobs.",
   requestFailed: "Hobbots could not read this request. It stays open here until you try again or pick another.",
   retry: "Try again",
   detail: {
@@ -111,6 +113,7 @@ export const messages = {
     shareLabel: ({ name }: { name: string }) => `Share from ${name}`,
     shareDiff: "What would be shared",
     skillLabel: ({ name }: { name: string }) => `Skill from ${name}`,
+    hobsLabel: ({ name }: { name: string }) => `Hob proposal from ${name}`,
   },
   history: {
     heading: "Decision history",

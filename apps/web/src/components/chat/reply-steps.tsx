@@ -45,12 +45,15 @@ export function ReplySteps({
   inProgress,
   logUrl,
   settle,
+  proposal,
 }: {
   steps: ReadonlyArray<ReplyStep>;
   inProgress: boolean;
   logUrl: LogUrl;
   /** What an uncertain tool step offers to settle it, such as a Charm call's (ADR 020). */
   settle?: (stepId: string) => ReactNode;
+  /** The card of the hob proposal a Summoning call made (ADR 034), under its step. */
+  proposal?: (proposalId: string) => ReactNode;
 }) {
   const shown = shownSteps(steps, inProgress);
   if (shown.length === 0) return null;
@@ -68,6 +71,7 @@ export function ReplySteps({
               outcome={step.state}
               logUrl={logUrl}
               settle={step.state === "uncertain" ? settle?.(step.id) : undefined}
+              proposal={step.proposalId === undefined ? undefined : proposal?.(step.proposalId)}
             />
           ) : (
             <>
@@ -138,12 +142,14 @@ function ToolStep({
   outcome,
   logUrl,
   settle,
+  proposal,
 }: {
   step: ReplyStep;
   call: ToolCall;
   outcome: StepState;
   logUrl: LogUrl;
   settle?: ReactNode;
+  proposal?: ReactNode;
 }) {
   // A wait's clock moves once a minute (#1056).
   const now = useNow(waitedOn(step) ? 60_000 : null);
@@ -171,6 +177,7 @@ function ToolStep({
         </span>
       )}
       {settle}
+      {proposal}
       <CollapsibleContent>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-meta text-text-secondary">
           <dt className="text-label">{copy.tool}</dt>

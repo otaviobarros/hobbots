@@ -1,4 +1,4 @@
-import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type { HobProposalView, SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -28,6 +28,8 @@ import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { HubQuestionAnswer } from "../coding-setup/coding-setup.tsx";
+import { HobProposalCard } from "../hob-proposal/hob-proposal-card.tsx";
+import { messages as hobProposalCopy } from "../hob-proposal/messages.ts";
 import { shownHubQuestion } from "../hub-question/shown.ts";
 import { scopeName } from "../memory/memory-model.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
@@ -96,6 +98,9 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
     case "skill":
       // Keyed by the entry, so an edit begun on one proposal never shows on the next.
       return <ProposalDetail key={entry.key} view={entry.view} hob={hob} row={row} {...context} />;
+    case "hob-proposal":
+      // Keyed by the entry, so a ticked confirmation on one proposal never shows on the next.
+      return <HobProposalDetail key={entry.key} view={entry.hobs} hob={hob} row={row} {...context} />;
     default:
       return <DeviceDetail device={entry.device} row={row} now={context.now} />;
   }
@@ -496,6 +501,46 @@ function ProposalDetail({
         ]}
       />
       <ProposalDecision view={view} who={who} />
+    </DetailFrame>
+  );
+}
+
+/**
+ * A manager's proposal to summon, change, pause, wake or retire hobs (ADR 034): the card with a row per
+ * hob, decided row by row or all at once, the same card the call's step shows in the chat.
+ */
+function HobProposalDetail({
+  view,
+  hob,
+  row,
+  directory,
+  questOf,
+  now,
+}: { view: HobProposalView; hob: Agent | undefined; row: InboxRow } & DetailContext) {
+  const { proposal } = view;
+  const who = directory.hobName(proposal.agentId);
+  return (
+    <DetailFrame
+      label={copy.detail.hobsLabel({ name: who })}
+      portrait={<EntryPortrait hob={hob} device={false} waiting={row.tag === "needs-you"} large />}
+      row={row}
+      why={hobProposalCopy.why}
+      chat={chatLink(
+        (proposal.threadId === null ? undefined : directory.threadHob(proposal.threadId)) ?? proposal.agentId,
+        proposal.threadId,
+        proposal.messageId === null ? null : { messageId: proposal.messageId },
+      )}
+    >
+      <Facts
+        rows={[
+          [copy.detail.quest, questName(proposal.taskId === null ? undefined : questOf(proposal.taskId), directory)],
+          [copy.detail.thread, proposal.threadId === null ? undefined : directory.threadTitle(proposal.threadId)],
+          [copy.detail.askedBy, row.chain.join(copy.row.arrow)],
+          [copy.detail.when, formatWhen(proposal.createdAt, now)],
+          [copy.detail.decided, proposal.settledAt === null ? undefined : formatWhen(proposal.settledAt, now)],
+        ]}
+      />
+      <HobProposalCard view={view} who={who} />
     </DetailFrame>
   );
 }

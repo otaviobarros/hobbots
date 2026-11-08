@@ -53,10 +53,7 @@ export interface HobProposalApplier {
   /** Whether the row's hob changed since the row was made, so it is never applied. */
   readonly changedSince: (row: HobProposalRow) => Effect.Effect<boolean>;
   /** Sets `operation` to Allow on the manager's Summoning Charm, as a change made by you. */
-  readonly alwaysAllow: (
-    proposal: HobProposal,
-    operation: CharmOperationId,
-  ) => Effect.Effect<void, HobProposalRefused>;
+  readonly alwaysAllow: (proposal: HobProposal, operation: CharmOperationId) => Effect.Effect<void, HobProposalRefused>;
 }
 
 /** What a Summoning call's plan gives to record a proposal. */
@@ -176,11 +173,20 @@ export class HobProposals extends Context.Service<
           const call = yield* calls.find(proposal.agentId, [proposal.call.scope], proposal.call.key);
           if (Option.isNone(call) || (call.value.state !== "sending" && call.value.state !== "uncertain")) return;
           const made = proposal.rows.some((row) => row.state === "allowed");
-          yield* calls.settle(call.value, made ? "applied" : "refused", hobProposalOutcomeText(proposal), yield* nowIso);
+          yield* calls.settle(
+            call.value,
+            made ? "applied" : "refused",
+            hobProposalOutcomeText(proposal),
+            yield* nowIso,
+          );
         });
 
       /** Saves the proposal's next state; once every row is decided it settles, and its call hears how. */
-      const save = (proposal: HobProposal, rows: ReadonlyArray<HobProposalRow>, alwaysAllowed = proposal.alwaysAllowed) =>
+      const save = (
+        proposal: HobProposal,
+        rows: ReadonlyArray<HobProposalRow>,
+        alwaysAllowed = proposal.alwaysAllowed,
+      ) =>
         Effect.gen(function* () {
           const at = yield* nowIso;
           const settles = everyRowDecided(rows);

@@ -38,9 +38,9 @@ import {
   RETIRE_OPERATION,
   SELF_FIELD_OF,
   SUMMON_OPERATION,
+  SUMMONING_CHANGE_TOOL,
   SUMMONING_CHARM,
   SUMMONING_CHARM_ID,
-  SUMMONING_CHANGE_TOOL,
   SUMMONING_CHECK_TOOL,
   SUMMONING_FIELD_WORDS,
   SUMMONING_SUMMON_TOOL,
@@ -65,9 +65,9 @@ import { type Charm, defineCharm } from "./charms.ts";
 import { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, GrantService } from "./grants.ts";
+import { type HobProposalApplier, HobProposals, pendingRow } from "./hob-proposals.ts";
 import { changedPolicy, checkGoodAt, checkRole, checkRuntimeBrain, HobService } from "./hobs.ts";
 import { type HubAction, type HubPlanContext, HubRefusal, hubAction } from "./hub-actions.ts";
-import { type HobProposalApplier, HobProposals, pendingRow } from "./hob-proposals.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { changePermissions } from "./permissions.ts";
 import { FolderChecks, HobGitHubApps, InstallationSettings } from "./ports.ts";
@@ -645,6 +645,17 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
 
     const colors = HobColor.literals;
 
+    /** A draft with its look drawn, when it leaves the look to Summon. */
+    const pinnedLook = (draft: SummoningDraft): SummoningDraft => {
+      if (draft.look_seed !== undefined && draft.look_color !== undefined) return draft;
+      const lookSeed = draft.look_seed ?? Math.floor(Math.random() * 2 ** 32);
+      return {
+        ...draft,
+        look_seed: lookSeed,
+        look_color: draft.look_color ?? (colors[lookSeed % colors.length] as HobColor),
+      };
+    };
+
     /** The fields given a value, so one left out stays out of the request. */
     const defined = (fields: Record<string, unknown>) =>
       Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
@@ -942,7 +953,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               id: String(index + 1),
               hobId: ids[index] as AgentId,
               label: names[index] ?? "",
-              draft,
+              // The look is drawn now, so the card shows the hob that allowing it makes.
+              draft: pinnedLook(draft),
               change: null,
               before: null,
               configVersion: null,
@@ -1191,7 +1203,10 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               if (checked.row.problems.length > 0 || checked.found === null) return yield* refuse(checked.row.problems);
               const made = yield* changeOne(checked.found.agent, row.change, services, actor).pipe(Effect.result);
               return made._tag === "Success"
-                ? ({ _tag: "Applied", text: `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.` } as const)
+                ? ({
+                    _tag: "Applied",
+                    text: `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`,
+                  } as const)
                 : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
             }
             default: {

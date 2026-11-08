@@ -6,6 +6,7 @@ import { BackpackItem } from "./backpack.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
+import { HobProposal } from "./hob-proposals.ts";
 import { HubQuestion } from "./hub-question.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
@@ -24,7 +25,6 @@ import {
   TaskWait,
 } from "./quest.ts";
 import { SkillFeedback, SkillProposal } from "./skill-proposals.ts";
-import { HobProposal } from "./hob-proposals.ts";
 import { SkillUpdate } from "./skill-updates.ts";
 import {
   Skill,

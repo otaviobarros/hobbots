@@ -123,9 +123,7 @@ export const hobProposalOutcomeText = (proposal: Pick<HobProposal, "rows" | "alw
     proposal.alwaysAllowed.length === 0
       ? []
       : [`The user set ${proposal.alwaysAllowed.join(", ")} to Allow for you, so calls like it no longer ask.`];
-  return [
-    "Hobbots showed the user your proposal as a card, and they decided it row by row:",
-    ...lines,
-    ...always,
-  ].join("\n");
+  return ["Hobbots showed the user your proposal as a card, and they decided it row by row:", ...lines, ...always].join(
+    "\n",
+  );
 };

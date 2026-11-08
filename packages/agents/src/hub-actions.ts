@@ -480,16 +480,24 @@ export const makeHubActions =
      * step, the proposal is written under its key, and the step waits on it. A proposal you denied
      * row by row is a refused answer that names each row; one you allowed any of answers what was made.
      */
-    const propose = (
+    /**
+     * A keyed write with a proposal that asks becomes the proposal (ADR 034, Asking is a proposal):
+     * its step waits on it, and the write's send is the proposal settling. Null when it does not ask.
+     */
+    const proposeWhenAsked = (
       action: HubAction<R>,
-      write: HubWritePlan<R>["write"],
-      proposal: NonNullable<HubWritePlan<R>["write"]["proposal"]>,
-      keyed: { readonly key: string; readonly input: unknown },
+      plan: HubPlan<R>,
+      access: ToolAccess,
+      keyed: { readonly key: string; readonly input: unknown } | null,
       step: HubCallStep | undefined,
       tool: HubTool & { readonly label: string },
-      verdict: V,
     ) =>
       Effect.gen(function* () {
+        if (!("write" in plan) || plan.write.proposal === undefined || keyed === null) return null;
+        const { write } = plan;
+        const proposal = plan.write.proposal;
+        const verdict = yield* options.decide(turn.approvals, access, plan.request)(null);
+        if (verdict.decision !== "ask") return null;
         yield* record(step, tool, verdict);
         const waiting = (proposalId: string) =>
           step?.report({
@@ -518,11 +526,8 @@ export const makeHubActions =
       Effect.gen(function* () {
         const { summary } = plan.card;
         const tool = { ...action.tool, label: plan.card.label ?? action.tool.label };
-        const proposal = "write" in plan ? plan.write.proposal : undefined;
-        if (proposal !== undefined && "write" in plan && keyed !== null) {
-          const first = yield* options.decide(turn.approvals, access, plan.request)(null);
-          if (first.decision === "ask") return yield* propose(action, plan.write, proposal, keyed, step, tool, first);
-        }
+        const proposed = yield* proposeWhenAsked(action, plan, access, keyed, step, tool);
+        if (proposed !== null) return proposed;
         const decision = yield* askOnStep({
           call: {
             id: step?.id ?? tool.name,

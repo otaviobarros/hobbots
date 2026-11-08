@@ -1,4 +1,4 @@
-import type { SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type { HobProposalView, SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import {
   type AgentId,
   type ApprovalRequest,
@@ -6,6 +6,7 @@ import {
   type BackpackItem,
   type FailedTask,
   type HubQuestion,
+  hobProposalOpen,
   type MemoryShare,
   memoryShareWaits,
   openBlocker,
@@ -17,6 +18,7 @@ import {
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
+import { hobProposalWhat } from "../hob-proposal/hob-proposal-model.ts";
 import { shownHubQuestion } from "../hub-question/shown.ts";
 import { shareWhat } from "../memory/review-model.ts";
 import { taskTitle } from "../quest/work-model.ts";
@@ -30,7 +32,7 @@ const copy = messages;
  * One thing in the Inbox list. Every kind shows as the same row and opens beside the list: a
  * request to approve, a question no lead could answer, a question the hub itself asks (#976), work
  * that is stuck, a party member's Task that failed while its Quest goes on (ADR 027), a device
- * asking to pair, a hob asking to share what it learned (ADR 028), or a hob that drafted a skill (ADR 029). `key` names it in the address: a request by its own id, so links from Home and the chat
+ * asking to pair, a hob asking to share what it learned (ADR 028), or a hob that drafted a skill (ADR 029), or a manager's proposal to summon, change or retire hobs (ADR 034). `key` names it in the address: a request by its own id, so links from Home and the chat
  * still open it, and the other kinds by their kind and id.
  */
 export type InboxEntry =
@@ -41,7 +43,8 @@ export type InboxEntry =
   | { readonly kind: "failed"; readonly key: string; readonly failed: FailedTask }
   | { readonly kind: "device"; readonly key: string; readonly device: WaitingDevice }
   | { readonly kind: "memory"; readonly key: string; readonly share: MemoryShare }
-  | { readonly kind: "skill"; readonly key: string; readonly view: SkillProposalView };
+  | { readonly kind: "skill"; readonly key: string; readonly view: SkillProposalView }
+  | { readonly kind: "hob-proposal"; readonly key: string; readonly hobs: HobProposalView };
 
 export const approvalEntry = (request: ApprovalRequest): InboxEntry => ({ kind: "approval", key: request.id, request });
 
@@ -79,6 +82,12 @@ const skillEntry = (view: SkillProposalView): InboxEntry => ({
   view,
 });
 
+const hobProposalEntry = (hobs: HobProposalView): InboxEntry => ({
+  kind: "hob-proposal",
+  key: `hob-proposal:${hobs.proposal.id}`,
+  hobs,
+});
+
 /** Whether a key from the address names a request, which the Inbox can read on its own. */
 export const namesRequest = (key: string): boolean => !key.includes(":");
 
@@ -96,6 +105,7 @@ export const needsEntries = ({
   requests,
   shares = [],
   proposals = [],
+  hobProposals = [],
   selected,
 }: {
   readonly devices: ReadonlyArray<WaitingDevice>;
@@ -106,6 +116,8 @@ export const needsEntries = ({
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly shares?: ReadonlyArray<MemoryShare>;
   readonly proposals?: ReadonlyArray<SkillProposalView>;
+  /** The proposals managers made to summon, change or retire hobs (ADR 034). */
+  readonly hobProposals?: ReadonlyArray<HobProposalView>;
   /** The key the address names, to keep a share or a proposal decided there in view. */
   readonly selected?: string | undefined;
 }): Array<InboxEntry> => [
@@ -119,6 +131,9 @@ export const needsEntries = ({
   ...proposals
     .filter((view) => skillProposalOpen(view.proposal) || `skill:${view.proposal.id}` === selected)
     .map(skillEntry),
+  ...hobProposals
+    .filter((view) => hobProposalOpen(view.proposal) || `hob-proposal:${view.proposal.id}` === selected)
+    .map(hobProposalEntry),
 ];
 
 /** The thread an entry is about, or null for a device, or a hub question about no chat, which are about this hub. */
@@ -138,6 +153,8 @@ export const entryThread = (entry: InboxEntry): ThreadId | null => {
       return entry.share.threadId;
     case "skill":
       return entry.view.proposal.threadId;
+    case "hob-proposal":
+      return entry.hobs.proposal.threadId;
     default:
       return null;
   }
@@ -158,6 +175,8 @@ export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
       return entry.share.agentId;
     case "skill":
       return entry.view.proposal.agentId;
+    case "hob-proposal":
+      return entry.hobs.proposal.agentId;
     default:
       return undefined;
   }
@@ -174,6 +193,8 @@ const entryTask = (entry: InboxEntry): TaskId | null => {
       return entry.item.taskId;
     case "failed":
       return entry.failed.task.id;
+    case "hob-proposal":
+      return entry.hobs.proposal.taskId;
     default:
       return null;
   }
@@ -271,6 +292,13 @@ const urgency = (entry: InboxEntry) => {
         risky: false,
         expiresAt: null,
         since: entry.view.proposal.createdAt,
+      };
+    case "hob-proposal":
+      return {
+        closed: !hobProposalOpen(entry.hobs.proposal),
+        risky: hobProposalOpen(entry.hobs.proposal) && entry.hobs.proposal.highRisk,
+        expiresAt: null,
+        since: entry.hobs.proposal.createdAt,
       };
     default:
       return {
@@ -440,6 +468,15 @@ const proposalRow = ({ proposal }: SkillProposalView, names: HobName): InboxRow 
   tone: "plain",
 });
 
+const hobProposalRow = ({ proposal }: HobProposalView, names: HobName): InboxRow => ({
+  chain: [names(proposal.agentId), copy.row.youEnd],
+  kind: copy.kind.hobs,
+  tag: hobProposalOpen(proposal) ? "needs-you" : "muted",
+  what: hobProposalWhat(proposal, names(proposal.agentId)),
+  when: copy.row.waitingOn({ name: names(proposal.agentId) }),
+  tone: "plain",
+});
+
 const deviceRow = ({ request }: WaitingDevice, now: Date): InboxRow => ({
   chain: [request.name, copy.row.youEnd],
   kind: copy.kind.device,
@@ -469,6 +506,8 @@ export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | unde
       return shareRow(entry.share, names);
     case "skill":
       return proposalRow(entry.view, names);
+    case "hob-proposal":
+      return hobProposalRow(entry.hobs, names);
     default:
       return deviceRow(entry.device, now);
   }
