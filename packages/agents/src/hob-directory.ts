@@ -135,11 +135,13 @@ export const ROSTER_LIMITS = {
 
 const ROSTER_HEADING = "## Other hobs on this hub";
 
+const CLOSING_INTRO = "Also on this hub, left out for space: ";
+
 const READ_HOB_LINE = `${READ_HOB_TOOL} returns any hob's full card, by its name or id.`;
 
 /** The closing line naming the hobs that did not fit, within its own budget, ending "and N more" past it. */
 const closingLine = (left: ReadonlyArray<HobCard>, shared: ReadonlySet<string>) => {
-  const intro = "Also on this hub, left out for space: ";
+  const intro = CLOSING_INTRO;
   const names = left.map((card) => shownName(card, shared));
   for (let shown = names.length; shown >= 0; shown--) {
     const rest = names.length - shown;
@@ -175,6 +177,20 @@ export const renderRoster = (
     length += line.length + 1;
   }
   return [head, lines.join("\n")].join("\n\n");
+};
+
+/**
+ * A briefing parted into the roster section it carries, if any, and the rest of it, as the roster
+ * was rendered: its heading, its label, its lines and the closing line when hobs were left out. The
+ * fake runtime uses it to keep the roster out of its echo, so a test sees it only when it asks.
+ */
+export const splitRoster = (briefing: string): { readonly roster: string | null; readonly rest: string | null } => {
+  const parts = briefing.split("\n\n");
+  const start = parts.indexOf(ROSTER_HEADING);
+  if (start === -1) return { roster: null, rest: briefing };
+  const end = parts[start + 3]?.startsWith(CLOSING_INTRO) === true ? start + 4 : start + 3;
+  const rest = [...parts.slice(0, start), ...parts.slice(end)];
+  return { roster: parts.slice(start, end).join("\n\n"), rest: rest.length === 0 ? null : rest.join("\n\n") };
 };
 
 /**

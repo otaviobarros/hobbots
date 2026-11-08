@@ -7,6 +7,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
   RuntimeLimitReached,
+  splitRoster,
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
@@ -195,6 +196,13 @@ export const fakeInstructionsPrompt = "/instructions";
  * marked when it is Only when asked. Like every runtime, it loads no skill from anywhere else.
  */
 export const fakeSkillsPrompt = "/skills";
+
+/**
+ * Asked this, the fake runtime answers with the roster of other hobs its turn was briefed with
+ * (ADR 032), or says it had none. Its echo leaves the roster out, so a reply reads the same however
+ * many hobs the hub has.
+ */
+export const fakeRosterPrompt = "/roster";
 
 /** The fake's answer to `fakeSkillsPrompt`. */
 export const fakeSkillsReply = (skills: PromptRequest["skills"]) =>
@@ -723,11 +731,14 @@ const fakeFailure = (
  * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
  * keeps the instructions it started with unless the turn carries changed ones.
  */
-/** What the fake says back: the session's instructions, the turn's skills, or the prompt. */
-const fakeEcho = (request: PromptRequest, followed: string, told: string) => {
+/** What the fake says back: the session's instructions, the turn's skills, its roster, or the prompt. */
+const fakeEcho = (request: PromptRequest, followed: string) => {
   if (request.prompt === fakeInstructionsPrompt) return followed;
   if (request.prompt === fakeSkillsPrompt) return fakeSkillsReply(request.skills);
-  return `Echo: ${told}`;
+  const { roster, rest } = splitRoster(request.briefing ?? "");
+  if (request.prompt === fakeRosterPrompt) return roster ?? "No roster.";
+  // The briefing, roster aside, is echoed ahead of the prompt, so a test can see what the session was told.
+  return `Echo: ${rest ? `${rest}\n\n${request.prompt}` : request.prompt}`;
 };
 
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
@@ -754,9 +765,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const later = known?.later ?? [];
     const scripted = onceOnly([...later, request.prompt].join("\n"), ran);
     sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted) });
-    // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
-    const echo = fakeEcho(request, followed, told);
+    const echo = fakeEcho(request, followed);
     const quiet = options.quietContinuations === true && request.prompt.startsWith(CONTINUATION_HEADER);
     // The turn's own prompt decides first, so a line kept from before never hides its directive.
     const own = fakeEnding(request.prompt);

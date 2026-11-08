@@ -72,10 +72,12 @@ test("[TC-UX-1234-01] a hob's reply sees the visible hobs and reads one card wit
 }) => {
   const { url, pip } = await hubWithTeam();
   await page.goto(`${url}/#/hobs/${pip.id}/new`);
-  await send(page, ["Who on the team writes release notes?", 'fake:hub read_hob {"hob":"Quill"}']);
+  // The fake answers this with the roster its turn was briefed with.
+  await send(page, ["/roster"]);
   const main = page.getByRole("main");
   await expect(main).toContainText("Other hobs on this hub");
   await expect(main).toContainText('good at "Release notes, short and plain."');
+  await send(page, ["Who on the team writes release notes?", 'fake:hub read_hob {"hob":"Quill"}']);
   await expect(main).toContainText("read_hob: Hobbots collected this about the other hobs");
   await expect(main).toContainText("Reading a hob's card");
   await expect(main).not.toContainText("Wren");

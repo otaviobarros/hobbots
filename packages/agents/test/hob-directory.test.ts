@@ -11,6 +11,7 @@ import {
   ROSTER_LIMITS,
   readHobAnswer,
   renderRoster,
+  splitRoster,
   startedRoster,
   turnRoster,
 } from "../src/hob-directory.ts";
@@ -125,6 +126,21 @@ describe("the roster", () => {
     const closing = text.split("\n").at(-1) ?? "";
     expect(closing).toMatch(/^Also on this hub, left out for space: "Hob \d{3}", .* and \d+ more\.$/);
     expect(closing.length).toBeLessThanOrEqual(ROSTER_LIMITS.closing);
+  });
+
+  it("[TC-AG-1234-15] parts out of a briefing whole, closing line included, and leaves the rest as it was", () => {
+    const many = Array.from({ length: 200 }, (_, index) =>
+      card(`hob-${index}`, `Hob ${index}`, { goodAt: "x".repeat(150) }),
+    );
+    for (const cards of [[card("pip", "Pip")], many]) {
+      const text = renderRoster(cards, new Set(), true) ?? "";
+      expect(splitRoster(["## What you remember\n\nA fact.", text, "Your Task."].join("\n\n"))).toEqual({
+        roster: text,
+        rest: "## What you remember\n\nA fact.\n\nYour Task.",
+      });
+      expect(splitRoster(text)).toEqual({ roster: text, rest: null });
+    }
+    expect(splitRoster("Your Task.")).toEqual({ roster: null, rest: "Your Task." });
   });
 
   // covers ADR 032 (Outside data)
