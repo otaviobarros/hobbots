@@ -628,8 +628,7 @@ const codexSettings = (governed: ReturnType<typeof governedTurn>): CodexSettings
  * (ADR 036). It goes on that process's command line, never into the home other turns of the hob
  * share at the same time, so a turn under Never cannot start with a sibling's search on.
  */
-const searchArgs = (webSearch: boolean): ReadonlyArray<string> =>
-  webSearch ? ["-c", 'web_search="cached"'] : [];
+const searchArgs = (webSearch: boolean): ReadonlyArray<string> => (webSearch ? ["-c", 'web_search="cached"'] : []);
 
 /**
  * The sandbox prepared for the turn, released when the turn ends, or null when none started on this
