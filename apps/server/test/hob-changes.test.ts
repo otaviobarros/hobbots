@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
@@ -215,5 +218,36 @@ describe("a hob's History and the Changes log", () => {
     // The revert is journaled with you as its actor, so open screens update live.
     const events = await runtime.runPromise(EventJournal.use((journal) => journal.readAfter(0)));
     expect(events.at(-1)?.payload).toMatchObject({ _tag: "AgentUpserted", agent: { configVersion: 3 }, actor: YOU });
+  });
+  it("[TC-AG-411-05] checks a folder a revert gives back as adding it would: gone is refused, a link is stored canonical", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "hob-revert-")));
+    try {
+      const created = (await request("POST", "/api/agents", hob)).body as Agent;
+      const policy = (ownFolders: ReadonlyArray<string>) =>
+        runtime.runPromise(HobService.use((hobs) => hobs.updatePolicy(created.id, { ownFolders })));
+      const gone = join(root, "gone");
+      mkdirSync(gone);
+      await policy([gone]);
+      await policy([]);
+      rmSync(gone, { recursive: true });
+      // Reverting the removal would give back a folder no longer on the hub.
+      expect(await request("POST", `/api/agents/${created.id}/versions/3/revert`)).toMatchObject({
+        body: { _tag: "InvalidFolder", folder: gone },
+      });
+
+      const linked = join(root, "linked");
+      const target = join(root, "target");
+      mkdirSync(linked);
+      mkdirSync(target);
+      await policy([linked]);
+      await policy([]);
+      rmSync(linked, { recursive: true });
+      symlinkSync(target, linked);
+      // The folder is a link now, so the revert stores where it leads, as adding it would.
+      const reverted = await request("POST", `/api/agents/${created.id}/versions/5/revert`);
+      expect(reverted).toMatchObject({ status: 200, body: { configVersion: 6, policy: { ownFolders: [target] } } });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

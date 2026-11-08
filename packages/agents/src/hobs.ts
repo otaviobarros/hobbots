@@ -616,7 +616,18 @@ export class HobService extends Context.Service<
                 return yield* new RevertRefused({ agentId: id, version, reason: "not-latest" });
               }
               const previous = yield* repo.findAgentConfig(id, version - 1).pipe(Effect.map(Option.getOrThrow));
-              const restored = new Agent({ ...agent, ...configurationFields(previous) });
+              const fields = configurationFields(previous);
+              // A folder the revert gives back is checked on the hub as adding it would be: it must
+              // still be there, and it is stored canonical. Folders the hob keeps are left as they are.
+              const kept = agent.policy.ownFolders;
+              const ownFolders = [
+                ...new Set(
+                  yield* Effect.forEach(fields.policy.ownFolders, (folder) =>
+                    kept.includes(folder) ? Effect.succeed(folder) : folders.check(folder),
+                  ),
+                ),
+              ];
+              const restored = new Agent({ ...agent, ...fields, policy: { ...fields.policy, ownFolders } });
               const sameBrain =
                 restored.runtime === agent.runtime &&
                 restored.model === agent.model &&
@@ -624,9 +635,7 @@ export class HobService extends Context.Service<
               const invalid = sameBrain ? undefined : yield* checkRuntimeBrain(adapters, restored);
               if (invalid !== undefined) return yield* invalid;
               const { approvedFolders } = yield* setup.get;
-              const shared = restored.policy.ownFolders.find(
-                (folder) => !agent.policy.ownFolders.includes(folder) && approvedFolders.includes(folder),
-              );
+              const shared = ownFolders.find((folder) => !kept.includes(folder) && approvedFolders.includes(folder));
               if (shared !== undefined) {
                 return yield* new InvalidFolder({
                   folder: shared,

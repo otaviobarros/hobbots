@@ -128,6 +128,31 @@ export interface ChangeFilters {
 
 export const NO_FILTERS: ChangeFilters = { hob: null, actor: null, charm: null };
 
+/**
+ * The Changes log's filters as they sit in the address (STD-REACT-002): `?hob=`, `?by=` ("you" or a
+ * hob's id) and `?charm=`, where "none" is the changes made through no Charm.
+ */
+export interface ChangesSearch {
+  readonly hob?: string | undefined;
+  readonly by?: string | undefined;
+  readonly charm?: string | undefined;
+}
+
+const NO_CHARM = "none";
+
+export const filtersFromSearch = (search: ChangesSearch): ChangeFilters => ({
+  hob: search.hob === undefined ? null : (search.hob as AgentId),
+  actor: search.by === undefined ? null : (search.by as ChangeFilters["actor"]),
+  charm: search.charm === undefined ? null : search.charm === NO_CHARM ? "" : search.charm,
+});
+
+/** The address for `filters`, leaving out each filter that shows every value. */
+export const searchFromFilters = (filters: ChangeFilters): ChangesSearch => ({
+  ...(filters.hob === null ? {} : { hob: filters.hob }),
+  ...(filters.actor === null ? {} : { by: filters.actor }),
+  ...(filters.charm === null ? {} : { charm: filters.charm === "" ? NO_CHARM : filters.charm }),
+});
+
 const charmOf = (change: HobChange): string => change.origin?.charm ?? "";
 
 export const matchesFilters = (change: HobChange, filters: ChangeFilters): boolean =>

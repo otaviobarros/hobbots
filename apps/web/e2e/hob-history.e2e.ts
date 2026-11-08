@@ -135,6 +135,11 @@ test("[TC-AG-411-04] History and the Changes log show who changed a hob and what
   await expect(log.getByRole("listitem")).toHaveCount(1);
   await expect(log.getByText("Through Summoning")).toBeVisible();
   await scan();
+  // The filter lives in the address, so a reload opens the same view.
+  await expect(page).toHaveURL(new RegExp(`by=${ada.id}`));
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Made by" })).toHaveValue(ada.id);
+  await expect(log.getByRole("listitem")).toHaveCount(1);
   await page.getByRole("combobox", { name: "Made by" }).selectOption({ label: "Any" });
   await api(current, "POST", `/api/agents/${ada.id}/pause`);
   await expect(log.getByRole("listitem")).toHaveCount(5);

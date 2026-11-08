@@ -13,9 +13,11 @@ import {
   changedByNote,
   fieldDiffs,
   filterChoices,
+  filtersFromSearch,
   makerOf,
   matchesFilters,
   NO_FILTERS,
+  searchFromFilters,
   type VersionChange,
 } from "./hob-changes-model.ts";
 
@@ -117,5 +119,19 @@ describe("a hob's changes", () => {
     expect(changedByNote(wren, changes, "2026-11-03T10:00:00.000Z")).toBeNull();
     expect(changedByNote(wren, [version(2)], undefined)).toBeNull();
     expect(changedByNote(chief, changes, undefined)).toBeNull();
+  });
+});
+
+describe("the Changes log's address", () => {
+  it("keeps each filter, and a change made through no Charm as none", () => {
+    const filters = { hob: AgentId.make("pip"), actor: "you", charm: "" } as const;
+    expect(searchFromFilters(filters)).toEqual({ hob: "pip", by: "you", charm: "none" });
+    expect(filtersFromSearch(searchFromFilters(filters))).toEqual(filters);
+  });
+
+  it("leaves out a filter that shows every value", () => {
+    expect(searchFromFilters(NO_FILTERS)).toEqual({});
+    expect(filtersFromSearch({})).toEqual(NO_FILTERS);
+    expect(filtersFromSearch({ charm: "github" })).toEqual({ ...NO_FILTERS, charm: "github" });
   });
 });

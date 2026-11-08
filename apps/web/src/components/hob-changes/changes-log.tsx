@@ -2,10 +2,19 @@ import type { AgentId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useId } from "react";
 import { changesLogQuery } from "../../api/hob-changes.ts";
 import { ChangeList } from "./change-list.tsx";
-import { type ChangeFilters, filterChoices, matchesFilters, NO_FILTERS } from "./hob-changes-model.ts";
+import {
+  type ChangeFilters,
+  type ChangesSearch,
+  filterChoices,
+  filtersFromSearch,
+  matchesFilters,
+  NO_FILTERS,
+  searchFromFilters,
+} from "./hob-changes-model.ts";
 import { namedIn, useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
 
@@ -51,11 +60,20 @@ function FilterSelect({
 /**
  * Settings › Changes (ADR 034): every change to every hob, newest first, filterable by the hob it
  * changed, who made it and the Charm it came through. It follows the hub's events, so a change made
- * by a hob or on another device shows live.
+ * by a hob or on another device shows live. The filters live in the address, so a link, Back or a
+ * reload opens the same view.
  */
-export function ChangesLog() {
+export function ChangesLog({ search }: { search: ChangesSearch }) {
   const log = useQuery(changesLogQuery);
-  const [filters, setFilters] = useState<ChangeFilters>(NO_FILTERS);
+  const navigate = useNavigate();
+  const filters = filtersFromSearch(search);
+  const setFilters = (change: (was: ChangeFilters) => ChangeFilters) =>
+    void navigate({
+      to: "/settings/$section",
+      params: { section: "changes" },
+      search: searchFromFilters(change(filters)),
+      replace: true,
+    });
   const changes = log.data?.changes ?? [];
   const hobs = useHobsNamed(namedIn(changes));
   const choices = filterChoices(changes);
@@ -109,7 +127,7 @@ export function ChangesLog() {
       {shown.length === 0 ? (
         <p className="m-0 flex flex-wrap items-center gap-3 text-ui text-text-secondary">
           <span>{copy.none}</span>
-          <Button type="button" variant="chip" size="xs" onClick={() => setFilters(NO_FILTERS)}>
+          <Button type="button" variant="chip" size="xs" onClick={() => setFilters(() => NO_FILTERS)}>
             {copy.clear}
           </Button>
         </p>
