@@ -77,10 +77,13 @@ function UpdateDecision({ update, list, say }: { update: SkillUpdate; list: Skil
         <Button
           disabled={writes.busy || (cut && !read)}
           onClick={() =>
-            writes.accept.mutate(input, {
-              onSuccess: () => say({ tone: "done", message: copy.accepted({ title, to, from }) }),
-              onError: (error) => say({ tone: "failed", message: acceptFailure(error) }),
-            })
+            writes.accept.mutate(
+              { ...input, base: update.base },
+              {
+                onSuccess: () => say({ tone: "done", message: copy.accepted({ title, to, from }) }),
+                onError: (error) => say({ tone: "failed", message: acceptFailure(error) }),
+              },
+            )
           }
         >
           {copy.accept({ count: rolloutOf(update.skillId, list).length })}

@@ -451,13 +451,18 @@ describe("skills routes", () => {
     // Nothing moved yet.
     expect((await request("GET", `/api/skills/${skill.id}`)).body.skill.revisions).toBe(1);
 
-    const accepted = await request("POST", `/api/skill-updates/${skill.id}/accept`, { hash: update.hash });
+    const accepted = await request("POST", `/api/skill-updates/${skill.id}/accept`, {
+      hash: update.hash,
+      base: update.base,
+    });
     expect(accepted.status).toBe(200);
     expect(accepted.body.revision).toMatchObject({ number: 2, hash: update.hash });
     expect(accepted.body.rolledOut).toHaveLength(1);
     expect((await request("GET", "/api/skill-updates")).body.updates).toEqual([]);
     // Accepting it again finds nothing to accept.
-    expect((await request("POST", `/api/skill-updates/${skill.id}/accept`, { hash: update.hash })).status).toBe(404);
+    expect(
+      (await request("POST", `/api/skill-updates/${skill.id}/accept`, { hash: update.hash, base: update.base })).status,
+    ).toBe(404);
 
     const on = await request("PUT", `/api/skill-updates/${skill.id}/automatic`, { on: true });
     expect(on.body.automatic).toEqual([skill.id]);

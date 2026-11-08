@@ -129,7 +129,7 @@ describe("skill updates from Git", () => {
 
         // Accept adds it as r2 and rolls it out, and the update leaves Updates.
         if (update === undefined) return;
-        const accepted = yield* updates.accept(first.skill.id, update.hash, you);
+        const accepted = yield* updates.accept(first.skill.id, update, you);
         expect(accepted.revision).toMatchObject({ number: 2, hash: update.hash, commit: head, addedBy: you });
         expect(accepted.rolledOut.map((one) => one.pin)).toEqual([update.hash]);
         expect(yield* log.waiting).toEqual([]);
@@ -240,7 +240,7 @@ describe("skill updates from Git", () => {
 
         // The branch moved on since: accepting what you reviewed is refused, and nothing is added.
         yield* Effect.promise(() => upstream.commit({ "notes.md": "Two." }));
-        const moved = yield* Effect.flip(updates.accept(first.skill.id, update.hash, you));
+        const moved = yield* Effect.flip(updates.accept(first.skill.id, update, you));
         expect(moved._tag).toBe("SkillSourceChanged");
         expect((yield* (yield* SkillLibrary).get(first.skill.id))?.revisions).toBe(1);
 
@@ -255,7 +255,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-06] reviews a waiting update again after you edit the skill, so Update still adds it", async () => {
+  it("[TC-AG-1097-06] reviews a waiting update again after you edit the skill, and refuses the older review", async () => {
     const upstream = await upstreamOf({ "SKILL.md": skillMd("triage") });
     await run(await updatesLayer())(
       Effect.gen(function* () {
@@ -280,8 +280,12 @@ describe("skill updates from Git", () => {
         const [again] = yield* log.waiting;
         expect(again).toMatchObject({ hash: found?.hash, base: edited.value.revision.hash, baseNumber: 2 });
 
-        if (again === undefined) return;
-        const accepted = yield* updates.accept(first.skill.id, again.hash, you);
+        // A device that still shows the review against r1 cannot accept it: it never showed this diff.
+        if (found === undefined || again === undefined) return;
+        const stale = yield* Effect.flip(updates.accept(first.skill.id, found, you));
+        expect(stale._tag).toBe("SkillMovedOn");
+
+        const accepted = yield* updates.accept(first.skill.id, again, you);
         expect(accepted.revision.number).toBe(3);
         expect(yield* log.waiting).toEqual([]);
       }),
@@ -289,7 +293,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-07] finishes the rollout of an Update that stopped after adding its revision", async () => {
+  it("[TC-AG-1097-07] finishes the rollout of an Update that stopped after adding its revision, even after upstream moves on", async () => {
     const upstream = await upstreamOf({ "SKILL.md": skillMd("deploy") });
     await run(await updatesLayer())(
       Effect.gen(function* () {
@@ -312,10 +316,16 @@ describe("skill updates from Git", () => {
         });
         expect((yield* library.assignments(first.skill.id)).map((one) => one.pin)).toEqual([first.revision.hash]);
 
-        // The next check rolls it out and clears it.
+        // Upstream moves on before the next check: that check still rolls out what you accepted first,
+        // then finds the newer change as an update against it.
+        yield* Effect.promise(() => upstream.commit({ "notes.md": "Two." }));
         yield* updates.check;
         expect((yield* library.assignments(first.skill.id)).map((one) => one.pin)).toEqual([update.hash]);
-        expect(yield* log.get(first.skill.id)).toBeNull();
+        const [next] = yield* log.waiting;
+        expect(next?.base).toBe(update.hash);
+        expect(next?.hash).not.toBe(update.hash);
+        if (next === undefined) return;
+        yield* updates.dismiss(first.skill.id, next.hash);
 
         // A rollback made after it stays: a finished rollout is not made again.
         const [assignment] = yield* library.assignments(first.skill.id);

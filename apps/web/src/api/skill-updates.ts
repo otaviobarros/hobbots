@@ -21,8 +21,10 @@ export const skillUpdatesQuery = queryOptions({
 export const checkSkillUpdates = () => call((c) => c.skillUpdates.check());
 
 /** Accepts the update of `hash`: a new revision, rolled out to every hob that is not held back. */
-export const acceptSkillUpdate = (input: { skillId: SkillId; hash: SkillRevisionHash }) =>
-  call((c) => c.skillUpdates.accept({ params: { skillId: input.skillId }, payload: { hash: input.hash } }));
+export const acceptSkillUpdate = (input: { skillId: SkillId; hash: SkillRevisionHash; base: SkillRevisionHash }) =>
+  call((c) =>
+    c.skillUpdates.accept({ params: { skillId: input.skillId }, payload: { hash: input.hash, base: input.base } }),
+  );
 
 /** Not now: the update leaves Updates until the source changes again. */
 export const dismissSkillUpdate = (input: { skillId: SkillId; hash: SkillRevisionHash }) =>

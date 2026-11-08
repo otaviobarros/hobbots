@@ -39,10 +39,11 @@ export class SkillUpdatesGroup extends HttpApiGroup.make("skillUpdates")
     HttpApiEndpoint.post("check", "/skill-updates/check", { success: SkillUpdatesChecked }),
   )
   .add(
-    // Accepts the update of `hash`: a new revision, rolled out to every assignment that is not held.
+    // Accepts the update of `hash` as reviewed against `base`: a new revision, rolled out to every
+    // assignment that is not held. A review compared with another revision since is refused as stale.
     HttpApiEndpoint.post("accept", "/skill-updates/:skillId/accept", {
       params: skillParams,
-      payload: Schema.Struct({ hash: SkillRevisionHash }),
+      payload: Schema.Struct({ hash: SkillRevisionHash, base: SkillRevisionHash }),
       success: RevisedSkill,
       error: importErrors,
     }),

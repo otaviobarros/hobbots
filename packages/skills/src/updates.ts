@@ -12,6 +12,7 @@ import {
   type SkillAssignment,
   type SkillBy,
   type SkillId,
+  SkillMovedOn,
   SkillNotFound,
   type SkillRevision,
   type SkillRevisionHash,
@@ -54,13 +55,16 @@ export interface SkillUpdatesShape {
   /** Checks every Git source the library follows, one check at a time, and records when it ran. */
   readonly check: Effect.Effect<SkillUpdateCheckDone>;
   /**
-   * Accepts a skill's waiting update of `hash`: reads it from its source again, adds it as a new
-   * revision only while the source still holds exactly that content and the skill's newest is still
-   * the revision it was compared with, then rolls it out to every assignment that is not held.
+   * Accepts a skill's waiting update as it was reviewed: upstream content `hash`, compared with the
+   * skill's revision `base`. Refused with `SkillMovedOn` when the review now compares it with another
+   * revision, so a device that showed an older review never accepts a diff it did not show. It reads
+   * the update from its source again, adds it as a new revision only while the source still holds
+   * exactly that content and the skill's newest is still `base`, then rolls it out to every assignment
+   * that is not held.
    */
   readonly accept: (
     skillId: SkillId,
-    hash: SkillRevisionHash,
+    reviewed: { readonly hash: SkillRevisionHash; readonly base: SkillRevisionHash },
     by: SkillBy,
   ) => Effect.Effect<SkillUpdateAccepted, SkillImportError>;
   /** Not now: the update of `hash` leaves Updates until the source changes again. Null when none waits. */
@@ -146,10 +150,11 @@ export const SkillUpdatesLive = Layer.effect(
         });
       });
 
-    const accept: SkillUpdatesShape["accept"] = (skillId, hash, by) =>
+    const accept: SkillUpdatesShape["accept"] = (skillId, { hash, base }, by) =>
       Effect.gen(function* () {
         const update = yield* log.get(skillId);
         if (update === null || update.hash !== hash) return yield* new SkillNotFound({ id: hash });
+        if (update.base !== base) return yield* new SkillMovedOn({ skillId, latest: update.base });
         const source = (yield* library.sources).find((one) => one.id === update.sourceId);
         if (source === undefined || !isGit(source)) return yield* new SkillNotFound({ id: update.sourceId });
         const folder = update.path ?? "";
@@ -166,19 +171,23 @@ export const SkillUpdatesLive = Layer.effect(
       });
 
     /**
-     * Upstream holds content the library has already: Updates is cleared. An Update that stopped after
-     * adding that revision and before its rollout has its rollout finished first; a `pending` rollout
-     * moves nothing once it ran, so a rollback made since stays.
+     * An Update that stopped after adding its revision and before its rollout: the update it accepted
+     * is still recorded and the library has its revision. Its rollout is finished and the update
+     * cleared, whatever the source holds now, before the check looks upstream, so a newer upstream
+     * change never replaces it first. A `pending` rollout moves nothing once it ran, so a rollback made
+     * since stays.
      */
-    const settleKnown = (skillId: SkillId, had: SkillRevision) =>
+    const finishAccepted = (skillId: SkillId) =>
       Effect.gen(function* () {
-        if ((yield* log.get(skillId))?.hash === had.hash) {
-          const finished = yield* library
-            .rollOutRevision(skillId, had.hash, had.addedBy, "pending")
-            .pipe(Effect.orElseSucceed(() => null));
-          if (finished !== null) yield* announce(finished.entries);
-        }
-        const cleared = yield* log.clear(skillId);
+        const recorded = yield* log.get(skillId);
+        if (recorded === null) return;
+        const added = yield* library.revision(skillId, recorded.hash);
+        if (added === null) return;
+        const finished = yield* library
+          .rollOutRevision(skillId, added.hash, added.addedBy, "pending")
+          .pipe(Effect.orElseSucceed(() => null));
+        if (finished !== null) yield* announce(finished.entries);
+        const cleared = yield* log.clear(skillId, recorded.hash);
         if (cleared !== null) yield* announce(cleared.entries);
       });
 
@@ -200,9 +209,9 @@ export const SkillUpdatesLive = Layer.effect(
         const upstream = found?.skill;
         if (upstream == null) return { problem: null, updated: false };
         // Content the library has already, upstream unchanged or back to an earlier revision, is no update.
-        const had = revisions.find((revision) => revision.hash === upstream.hash);
-        if (had !== undefined) {
-          yield* settleKnown(skill.id, had);
+        if (revisions.some((revision) => revision.hash === upstream.hash)) {
+          const cleared = yield* log.clear(skill.id);
+          if (cleared !== null) yield* announce(cleared.entries);
           return { problem: null, updated: false };
         }
         const update = yield* updateOf(skill, latest, source, upstream, { commit: read.commit, at: context.at });
@@ -215,7 +224,7 @@ export const SkillUpdatesLive = Layer.effect(
           current.hash === update.hash &&
           skillUpdateIsClean(current);
         if (!automatic) return { problem: null, updated: false };
-        const applied = yield* Effect.result(accept(skill.id, update.hash, { _tag: "Source", sourceId: source.id }));
+        const applied = yield* Effect.result(accept(skill.id, update, { _tag: "Source", sourceId: source.id }));
         return Result.isSuccess(applied)
           ? { problem: null, updated: true }
           : { problem: `${skill.name} could not update by itself: ${applied.failure._tag}.`, updated: false };
@@ -228,6 +237,7 @@ export const SkillUpdatesLive = Layer.effect(
       context: { readonly at: string; readonly automatic: ReadonlySet<SkillId> },
     ) =>
       Effect.gen(function* () {
+        for (const skill of skills) yield* finishAccepted(skill.id);
         const read = yield* Effect.result(
           importer.read({ _tag: "Git", url: source.origin.url, ref: source.origin.ref }),
         );
