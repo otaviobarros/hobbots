@@ -180,6 +180,8 @@ const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" |
       return `Deadline passed at ${payload.dueAt} (Task ${payload.taskId})`;
     case "skill-proposal":
       return skillProposalText(payload.proposal);
+    case "hob-proposal":
+      return `Your proposal on ${payload.proposal.rows.map((row) => row.label).join(", ")} was decided (${payload.proposal.id})`;
   }
 };
 

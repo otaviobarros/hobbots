@@ -16,6 +16,7 @@ export * from "./good-at.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";
 export * from "./history.ts";
+export * from "./hob-proposals.ts";
 export * from "./hob-change.ts";
 export * from "./hub-question.ts";
 export * from "./ids.ts";

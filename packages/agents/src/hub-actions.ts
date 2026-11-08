@@ -1,6 +1,6 @@
 import { type AnyOperation, type CharmDeclaration, CharmWriteKey, toolInputJsonSchema } from "@hobbots/domain";
 import { Effect, Option, Schema, type Scope } from "effect";
-import { type AskableVerdict, approvalNote, askOnStep } from "./asking.ts";
+import { type AskableVerdict, approvalNote, askOnStep, showStarted } from "./asking.ts";
 import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import type { CharmTurn } from "./charms.ts";
 import {
@@ -122,6 +122,17 @@ export interface HubWritePlan<R extends HubRequest> extends HubPlanBase<R> {
     /** What the hob is also told once the call ran or was not sent, such as what was redacted. */
     readonly note?: string;
     readonly send: Effect.Effect<WriteOutcome>;
+    /**
+     * For an action whose Ask is a proposal (ADR 034): when the policy asks, the pipeline runs this
+     * instead of asking on an approval card and sending. It records the proposal on the call, reports
+     * it with `waiting` so the call's step (`stepId`) shows its card, waits for you to decide its
+     * rows, and says how it ended. It never runs `send`, since what you allow is made by your own use
+     * cases.
+     */
+    readonly proposal?: (asked: {
+      readonly stepId: string | null;
+      readonly waiting: (proposalId: string) => void;
+    }) => Effect.Effect<WriteOutcome>;
   };
 }
 
@@ -464,6 +475,38 @@ export const makeHubActions =
         return yield* refuse(`${outcome.text}${note}${approved}`);
       });
 
+    /**
+     * A write whose Ask is a proposal (ADR 034), once the policy asked: the call is recorded on its
+     * step, the proposal is written under its key, and the step waits on it. A proposal you denied
+     * row by row is a refused answer that names each row; one you allowed any of answers what was made.
+     */
+    const propose = (
+      action: HubAction<R>,
+      write: HubWritePlan<R>["write"],
+      proposal: NonNullable<HubWritePlan<R>["write"]["proposal"]>,
+      keyed: { readonly key: string; readonly input: unknown },
+      step: HubCallStep | undefined,
+      tool: HubTool & { readonly label: string },
+      verdict: V,
+    ) =>
+      Effect.gen(function* () {
+        yield* record(step, tool, verdict);
+        const waiting = (proposalId: string) =>
+          step?.report({
+            _tag: "ToolAwaitingProposal",
+            id: step.id,
+            proposalId,
+            tool: tool.name,
+            operation: verdict.operation,
+            targets: verdict.targets,
+            label: tool.label,
+          });
+        const decided = proposal({ stepId: step?.id ?? null, waiting }).pipe(
+          Effect.tap(() => Effect.sync(() => showStarted(step, tool.name, tool.label, verdict))),
+        );
+        return yield* sendWrite(action, { ...write, send: decided }, keyed, step, "");
+      });
+
     /** Decides, asks, records and sends a planned call. */
     const decideAndSend = (
       action: HubAction<R>,
@@ -475,6 +518,11 @@ export const makeHubActions =
       Effect.gen(function* () {
         const { summary } = plan.card;
         const tool = { ...action.tool, label: plan.card.label ?? action.tool.label };
+        const proposal = "write" in plan ? plan.write.proposal : undefined;
+        if (proposal !== undefined && "write" in plan && keyed !== null) {
+          const first = yield* options.decide(turn.approvals, access, plan.request)(null);
+          if (first.decision === "ask") return yield* propose(action, plan.write, proposal, keyed, step, tool, first);
+        }
         const decision = yield* askOnStep({
           call: {
             id: step?.id ?? tool.name,

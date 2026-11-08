@@ -107,6 +107,19 @@ export type RuntimeEvent =
       readonly label: string;
     }
   /**
+   * A hub call whose Ask became a proposal waits for the user to decide its rows (ADR 034). The
+   * hub reports it on the call's step; it starts again with the same `id` once the proposal settles.
+   */
+  | {
+      readonly _tag: "ToolAwaitingProposal";
+      readonly id: string;
+      readonly proposalId: string;
+      readonly tool: string;
+      readonly operation: AnyOperation;
+      readonly targets: ReadonlyArray<string>;
+      readonly label: string;
+    }
+  /**
    * A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included.
    * `output` is what the call printed, or its error, whole: Hobbots redacts and cuts it, never the adapter.
    */

@@ -34,6 +34,8 @@ export * from "./repository.ts";
 export * from "./runtime.ts";
 export * from "./secrets.ts";
 export * from "./skill-health.ts";
+export * from "./hob-proposal-log.ts";
+export * from "./hob-proposals.ts";
 export * from "./skill-proposals.ts";
 export * from "./skill-repositories.ts";
 export * from "./skill-reviews.ts";

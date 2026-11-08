@@ -55,6 +55,7 @@ import { HandOverRefused, OpenWork, RetireAgentPayload } from "./retire.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { SkillHealthGroup } from "./skill-health.ts";
+import { HobProposalsGroup } from "./hob-proposals.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
 import { SkillRepositoriesGroup } from "./skill-repositories.ts";
 import { SkillTrialsGroup } from "./skill-trials.ts";
@@ -437,6 +438,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HobMemoryGroup)
   .add(SkillsGroup)
   .add(SkillProposalsGroup)
+  .add(HobProposalsGroup)
   .add(SkillUpdatesGroup)
   .add(SkillTrialsGroup)
   .add(SkillHealthGroup)

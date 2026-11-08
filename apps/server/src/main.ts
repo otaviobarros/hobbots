@@ -27,6 +27,7 @@ import {
   SecretRedaction,
   SkillReviewsLive,
   SkillTrialsLive,
+  HobProposals,
   SummoningHub,
   TaskFiles,
 } from "@hobbots/agents";
@@ -91,6 +92,7 @@ import {
   SearchIndex,
   SetupRepository,
   SkillLibraryLive,
+  HobProposalLogLive,
   SkillProposalLogLive,
   SqliteLive,
   TaskRepositoryLive,
@@ -314,6 +316,7 @@ const ServerLive = Layer.unwrap(
       MemoryShareLogLive,
       SkillLibraryLive,
       SkillProposalLogLive,
+      HobProposalLogLive,
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
@@ -555,6 +558,8 @@ const ServerLive = Layer.unwrap(
       )
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
+      // Before the Summoning Charm's hob use cases: a call that asks waits on its proposal (ADR 034).
+      .pipe(Layer.provideMerge(HobProposals.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before every turn's tools: who a hob on your account commits as when your Git config sets no
       // one, which the hub asks you and keeps (#741).

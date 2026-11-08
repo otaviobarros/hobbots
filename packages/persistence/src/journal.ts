@@ -187,6 +187,16 @@ const restCorrelationOf = (
         threadId: event.share.threadId,
         messageId: event.share.messageId,
       };
+    // A hob proposal names its manager, and the reply or Task it was proposed from (ADR 034).
+    case "HobProposalRequested":
+    case "HobProposalChanged":
+      return {
+        ...NONE,
+        agentId: event.proposal.agentId,
+        threadId: event.proposal.threadId,
+        messageId: event.proposal.messageId,
+        taskId: event.proposal.taskId,
+      };
     default:
       return { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }

@@ -38,6 +38,7 @@ import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertM
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
+import { hobProposalsChanged } from "./hob-proposals.ts";
 import { skillProposalsChanged } from "./skill-proposals.ts";
 import { refreshSkillUpdates } from "./skill-updates.ts";
 import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.ts";
@@ -230,6 +231,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (applySkillEvent(queryClient, event)) return;
+  // A hob proposal was made or moved (ADR 034): the Inbox and the reply step that shows it read it again.
+  if (event._tag === "HobProposalRequested" || event._tag === "HobProposalChanged") {
+    void hobProposalsChanged(queryClient);
+    return;
+  }
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);
     return;

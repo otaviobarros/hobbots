@@ -45,6 +45,7 @@ import { RemoteAccessHandlers } from "./remote-access.ts";
 import { openWork, retireAs } from "./retire.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
+import { HobProposalsHandlers } from "./hob-proposals.ts";
 import { SkillProposalsHandlers } from "./skill-proposals.ts";
 import { SkillRepositoriesHandlers } from "./skill-repositories.ts";
 import { SkillHealthHandlers, SkillTrialsHandlers } from "./skill-trials.ts";
@@ -248,6 +249,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobMemoryHandlers,
     SkillsHandlers,
     SkillProposalsHandlers,
+    HobProposalsHandlers,
     SkillUpdatesHandlers,
     SkillRepositoriesHandlers,
     SkillTrialsHandlers,

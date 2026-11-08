@@ -91,12 +91,16 @@ export const nextSteps = (
     case "StepEnded":
       return end(steps, own(event.id), "done");
     case "ToolAwaitingApproval":
+    case "ToolAwaitingProposal":
     case "ToolStarted":
     case "ToolDenied": {
       const call = { tool: event.tool, operation: event.operation, targets: event.targets };
       const step: ReplyStep = { id: own(event.id), kind: "tool", label: event.label, state: "running", call };
       if (event._tag === "ToolAwaitingApproval") {
         return upsert(steps, { ...step, state: "awaiting", approvalId: event.approvalId });
+      }
+      if (event._tag === "ToolAwaitingProposal") {
+        return upsert(steps, { ...step, state: "awaiting", proposalId: event.proposalId });
       }
       if (event._tag === "ToolStarted") return upsert(steps, now === undefined ? step : { ...step, startedAt: now });
       return upsert(steps, { ...step, state: "denied", reason: event.reason, decidedBy: event.decidedBy });
