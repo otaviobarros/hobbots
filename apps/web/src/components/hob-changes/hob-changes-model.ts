@@ -3,10 +3,12 @@ import {
   type AgentId,
   type AnyOperation,
   configurationFields,
+  DEFAULT_SUMMONING_SCOPE,
   type HobChange,
   heldCharms,
   hobAnswers,
   hobBehind,
+  holdsCharm,
   lengthChoice,
   ROLE_HAT_TITLES,
   ROLE_TOOL_TITLES,
@@ -52,8 +54,27 @@ const rulesText = (config: Config) =>
 
 const listText = (items: ReadonlyArray<string>) => items.join("\n");
 
-/** Each field the History shows, in the profile's order, as text. */
-const FIELDS: ReadonlyArray<readonly [FieldDiff["key"], (config: Config) => string, boolean]> = [
+const yesNo = (on: boolean) => (on ? values.yes : values.no);
+
+/**
+ * Which hobs the hob may manage through the Summoning Charm, one line each, while it holds the
+ * Charm or keeps a scope for it. Picked hobs are named by `nameOf`.
+ */
+const summoningText = (config: Config, nameOf: (id: string) => string) => {
+  const kept = config.policy.charms?.summoning;
+  if (kept === undefined && !holdsCharm(config.policy, "summoning")) return "";
+  const scope = kept ?? DEFAULT_SUMMONING_SCOPE;
+  return [
+    values.scopeSummoned({ answer: yesNo(scope.summoned) }),
+    values.scopeSelf({ answer: yesNo(scope.self) }),
+    ...scope.hobs.map((id) => values.scopePicked({ hob: nameOf(id) })),
+  ].join("\n");
+};
+
+/** Each field the History shows, in the profile's order, as text; `nameOf` names a hob by its id. */
+const FIELDS: ReadonlyArray<
+  readonly [FieldDiff["key"], (config: Config, nameOf: (id: string) => string) => string, boolean]
+> = [
   ["name", (c) => c.name, false],
   ["role", (c) => c.roleTitle, false],
   ["goodAt", (c) => c.goodAt ?? values.none, false],
@@ -75,20 +96,26 @@ const FIELDS: ReadonlyArray<readonly [FieldDiff["key"], (config: Config) => stri
   ["ownFolders", (c) => listText(c.policy.ownFolders), true],
   ["hiddenSharedFolders", (c) => listText(c.policy.hiddenSharedFolders), true],
   ["charms", (c) => listText(heldCharms(c.policy).map((id) => values.charms[id] ?? id)), true],
+  ["withheldCharms", (c) => listText((c.policy.charms?.withheld ?? []).map((id) => values.charms[id] ?? id)), true],
+  ["summoning", summoningText, true],
   ["rules", rulesText, true],
   ["signCommits", (c) => (c.policy.signCommits === true ? values.yes : values.no), false],
 ];
 
 /**
  * What a version changed, field by field, against the version before it. The first version, which
- * the hob was summoned with, lists every field it set as added.
+ * the hob was summoned with, lists every field it set as added. `nameOf` names a hob the change
+ * refers to, such as one picked for a Summoning scope.
  */
-export const fieldDiffs = (change: VersionChange): ReadonlyArray<FieldDiff> => {
+export const fieldDiffs = (
+  change: VersionChange,
+  nameOf: (id: string) => string = () => messages.someHob,
+): ReadonlyArray<FieldDiff> => {
   const after = configurationFields(change.config);
   const before = change.previous === null ? null : configurationFields(change.previous);
   return FIELDS.flatMap(([key, text, lines]) => {
-    const now = text(after);
-    const then = before === null ? "" : text(before);
+    const now = text(after, nameOf);
+    const then = before === null ? "" : text(before, nameOf);
     if (now === then) return [];
     return [{ key, label: messages.fields[key], before: then, after: now, lines }];
   });

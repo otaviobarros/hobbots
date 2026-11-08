@@ -358,7 +358,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             SET status = ${agent.status}, retired_at = ${agent.retiredAt}, revision = ${revision}
             WHERE id = ${agent.id} AND status = ${from} RETURNING id`;
           if (updated.length === 0) return null;
-          // Kept for the hob's History and the Changes log, which outlive the journal (migration 0083).
+          // Kept for the hob's History and the Changes log, which outlive the journal (migration 0085).
           yield* sql`INSERT INTO agent_status_changes ${sql.insert({
             agent_id: agent.id,
             revision,

@@ -71,6 +71,25 @@ describe("a hob's changes", () => {
     ]);
   });
 
+  it("shows a change to which hobs Summoning manages, and to the Charms taken away", () => {
+    const summoning = (scope: { summoned: boolean; hobs: ReadonlyArray<string>; self: boolean }) => ({
+      ...EMPTY_HOB_POLICY,
+      charms: { granted: ["summoning" as const], summoning: scope },
+    });
+    const held = config(1, { policy: summoning({ summoned: true, hobs: [], self: false }) });
+    const narrowed = version(2, { policy: summoning({ summoned: false, hobs: [chief], self: false }) }, YOU, held);
+    const names = (id: string) => (id === chief ? "Chief" : "another hob");
+    expect(fieldDiffs(narrowed, names).map(({ key, before, after }) => [key, before, after])).toEqual([
+      ["summoning", "Hobs it summoned: Yes\nItself: No", "Hobs it summoned: No\nItself: No\nPicked by you: Chief"],
+    ]);
+
+    const withheld = version(2, { policy: { ...EMPTY_HOB_POLICY, charms: { withheld: ["github"] } } });
+    expect(fieldDiffs(withheld).find((diff) => diff.key === "withheldCharms")).toMatchObject({
+      before: "",
+      after: "GitHub",
+    });
+  });
+
   it("shows the first version's fields as added", () => {
     const diffs = fieldDiffs(version(1));
     expect(diffs.find((diff) => diff.key === "name")).toMatchObject({ before: "", after: "Wren" });

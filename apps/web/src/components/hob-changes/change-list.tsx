@@ -124,7 +124,8 @@ function ChangeRow({
 }) {
   const [open, setOpen] = useState(latest);
   const target = hobs.get(change.hobId);
-  const diffs = change._tag === "Version" ? fieldDiffs(change) : [];
+  const diffs =
+    change._tag === "Version" ? fieldDiffs(change, (id) => hobs.get(id as AgentId)?.name ?? messages.someHob) : [];
   const revertable = change._tag === "Version" && canRevert(change, target);
   return (
     <li

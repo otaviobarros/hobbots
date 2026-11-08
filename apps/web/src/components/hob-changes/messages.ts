@@ -61,6 +61,8 @@ export const messages = {
     ownFolders: "Its own folders",
     hiddenSharedFolders: "Hidden shared folders",
     charms: "Charms",
+    withheldCharms: "Charms taken away",
+    summoning: "Summoning manages",
     rules: "Rules",
     signCommits: "Signs commits",
   },
@@ -89,6 +91,9 @@ export const messages = {
     brain: ({ runtime, model, effort }: { runtime: string; model: string; effort: string }) =>
       `${runtime} · ${model} · ${effort}`,
     rule: ({ operation, answer }: { operation: string; answer: string }) => `${operation}: ${answer}`,
+    scopeSummoned: ({ answer }: { answer: string }) => `Hobs it summoned: ${answer}`,
+    scopeSelf: ({ answer }: { answer: string }) => `Itself: ${answer}`,
+    scopePicked: ({ hob }: { hob: string }) => `Picked by you: ${hob}`,
     answers: { allow: "Allow", ask: "Ask", deny: "Never" } as Record<string, string>,
     colors: {
       violet: "Violet",

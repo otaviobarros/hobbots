@@ -37,7 +37,7 @@ const newestFirst = (a: HobChange, b: HobChange) => b.at.localeCompare(a.at) || 
 
 /**
  * The SQL change records: configuration versions with their actor (migrations 0007 and 0082) and
- * status changes (0083). The request behind a hob's change is read from its Charm call record
+ * status changes (0085). The request behind a hob's change is read from its Charm call record
  * (0028) and its call's scope (0045): a call whose record is gone still names its Task or reply.
  */
 export const HobChangesLive = Layer.effect(
