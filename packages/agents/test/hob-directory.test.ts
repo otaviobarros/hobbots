@@ -1,4 +1,12 @@
-import { Agent, AgentId, EMPTY_HOB_POLICY, type HobPolicy, type PolicyOverrides, roleFields } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  EMPTY_HOB_POLICY,
+  type HobPolicy,
+  type PolicyOverrides,
+  READ_HOB_DESCRIPTION,
+  roleFields,
+} from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { DirectoryTools } from "../src/charms.ts";
@@ -115,6 +123,19 @@ describe("the roster", () => {
     // A turn that does not hold read_hob is never pointed at it.
     expect(renderRoster([pip], new Set(), false)).not.toContain("read_hob");
     expect(renderRoster([], new Set(), true)).toBeNull();
+  });
+
+  // covers ADR 032 (The roster)
+  it("[TC-AG-1307-01] tells the hob a card holds no more than its line, so it answers from the list and reads a card only when asked or left out", () => {
+    const text = renderRoster([card("pip", "Pip", {}, ["GitHub"])], new Set(), true) ?? "";
+    expect(text).toContain("a card holds no more than the hob's line below");
+    expect(text).toContain("Answer questions about these hobs from this list.");
+    expect(text).toContain("Read a card only when you are asked to, or for a hob this list leaves out.");
+    expect(text).not.toContain("full card");
+    expect(READ_HOB_DESCRIPTION).toContain(
+      "only when you are asked to read a card, or for a hob the roster leaves out",
+    );
+    expect(READ_HOB_DESCRIPTION).not.toContain("answer a question about the team");
   });
 
   // covers ADR 032 (The roster, Size)

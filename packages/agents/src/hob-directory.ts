@@ -138,7 +138,11 @@ const ROSTER_HEADING = "## Other hobs on this hub";
 
 const CLOSING_INTRO = "Also on this hub, left out for space: ";
 
-const READ_HOB_LINE = `${READ_HOB_TOOL} returns any hob's full card, by its name or id.`;
+/**
+ * Each line already holds all a card does, so the hob is told to answer from the list and read a card
+ * only when asked to, or for a hob the list left out (#1307).
+ */
+const READ_HOB_LINE = `${READ_HOB_TOOL} returns a hob's card by its name or id, and a card holds no more than the hob's line below. Answer questions about these hobs from this list. Read a card only when you are asked to, or for a hob this list leaves out.`;
 
 /** The closing line naming the hobs that did not fit, within its own budget, ending "and N more" past it. */
 const closingLine = (left: ReadonlyArray<HobCard>, shared: ReadonlySet<string>) => {

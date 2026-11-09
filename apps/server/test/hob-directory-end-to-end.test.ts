@@ -214,7 +214,7 @@ describe("the hob directory, end to end", () => {
     const { sent } = await exchange(thread, "Who on the team can push to GitHub?");
     const roster = sent.briefing ?? "";
     expect(roster).toMatch(/^## Other hobs on this hub\n\nHobbots collected this about the other hobs/);
-    expect(roster).toContain("read_hob returns any hob's full card");
+    expect(roster).toContain("a card holds no more than the hob's line below");
     const lines = roster.split("\n").filter((line) => line.startsWith("- "));
     // Active hobs first, then paused ones; never the reader, a hidden hob or a retired one.
     expect(lines.map((line) => line.split(":")[0])).toEqual(['- "Pip"', '- "Quill"']);
