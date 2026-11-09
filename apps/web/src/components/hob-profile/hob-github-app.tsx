@@ -1,11 +1,16 @@
-import type { HobGitHubAppDisconnected, HobGitHubAppStarted, HobGitHubAppStatus } from "@hobbots/api";
+import type {
+  HobGitHubAppDisconnected,
+  HobGitHubAppLinked,
+  HobGitHubAppStarted,
+  HobGitHubAppStatus,
+} from "@hobbots/api";
 import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, hobAppBot } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { githubStatusQuery } from "../../api/github.ts";
 import {
@@ -13,17 +18,22 @@ import {
   hobGitHubAppQuery,
   useDisconnectHobGitHubApp,
   useHobGitHubAppInstallations,
+  useLinkHobGitHubApp,
   useStartHobGitHubApp,
 } from "../../api/hob-github-app.ts";
 import { formatDay } from "../../lib/format.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
+import { LinkExistingApp, MissingPermissions } from "./hob-github-app-link.tsx";
 
 const copy = messages.charms.github.app;
 
 type Started = HobGitHubAppStarted;
 
 type Connected = Extract<HobGitHubAppStatus, { _tag: "Connected" }>;
+
+/** What the last disconnect did, and whether the app was one the user linked, which stays on GitHub as it was. */
+type Disconnected = HobGitHubAppDisconnected & { readonly linked: boolean };
 
 /** The hub's own words for a refusal, such as starting from another device, or a plain fallback. */
 const refusalOf = (error: unknown, fallback: string): string =>
@@ -47,17 +57,21 @@ const openInBrowser = (url: string) => {
 
 /**
  * Who the hob acts as on GitHub (ADR 022): you, by default, or its own GitHub App, made from a
- * manifest on GitHub. Shows where the app is installed, what needs fixing, and disconnects it. No key
- * or token ever reaches this page.
+ * manifest on GitHub or one you already have and link (#1321). Shows where the app is installed, what
+ * needs fixing, and disconnects it. No token ever reaches this page, and a key you link is sent to the
+ * hub once and not kept here.
  */
 export function HobGitHubApp({ hob }: { hob: Agent }) {
   // Set while the user is on GitHub making the app: the hub page that takes them there, until it expires.
   const [started, setStarted] = useState<Started | null>(null);
   const [expired, setExpired] = useState(false);
-  const [disconnected, setDisconnected] = useState<HobGitHubAppDisconnected | null>(null);
+  const [disconnected, setDisconnected] = useState<Disconnected | null>(null);
+  // Set while the user fills in the form to link an app they already have.
+  const [linking, setLinking] = useState(false);
   const [watching, watch] = useWatch();
   const status = useQuery(hobGitHubAppQuery(hob.id, watching));
   const start = useStartHobGitHubApp(hob.id);
+  const link = useLinkHobGitHubApp(hob.id);
   const disconnect = useDisconnectHobGitHubApp(hob.id);
   const tag = status.data?._tag;
   // Once the app is made, there is nothing left to finish on GitHub.
@@ -88,13 +102,17 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
     });
   // A new app replaces one GitHub no longer accepts: the old one is removed, dismissed if anything of
   // it is left, and the new one started, in one action.
-  const replace = () =>
+  // A linked app whose key GitHub refuses is linked again with a new key, the same way.
+  const replace = (linked: boolean) =>
     disconnect.mutate(undefined, {
       onSuccess: (gone) => {
         const dismiss = gone.problem === null ? Promise.resolve(gone) : disconnect.mutateAsync();
         void dismiss.then((last) => {
-          setDisconnected({ deleteUrl: gone.deleteUrl ?? last.deleteUrl, problem: null });
-          begin();
+          setDisconnected({ deleteUrl: gone.deleteUrl ?? last.deleteUrl, problem: null, linked });
+          if (linked) {
+            link.reset();
+            setLinking(true);
+          } else begin();
         });
       },
     });
@@ -125,6 +143,14 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
             begin();
           }}
           onCancel={() => setStarted(null)}
+          linking={linking}
+          link={link}
+          onCloseLink={() => setLinking(false)}
+          onLink={() => {
+            setDisconnected(null);
+            link.reset();
+            setLinking(true);
+          }}
         />
       )}
       {status.data?._tag === "Connected" && (
@@ -134,9 +160,13 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
           pending={disconnect.isPending || start.isPending}
           onWatch={watch}
           watching={watching}
-          onNewApp={replace}
-          onDisconnect={() => disconnect.mutate(undefined, { onSuccess: setDisconnected })}
-        />
+          onNewApp={() => replace(status.data?._tag === "Connected" && status.data.app.origin === "linked")}
+          onDisconnect={(linked) =>
+            disconnect.mutate(undefined, { onSuccess: (gone) => setDisconnected({ ...gone, linked }) })
+          }
+        >
+          <MissingPermissions hob={hob} missing={missingAfterLink(link.data, status.data.app)} />
+        </ConnectedApp>
       )}
       {status.data?._tag === "LeftOver" && (
         <LeftOver
@@ -171,7 +201,7 @@ function Outcome({
   changeFailed,
 }: {
   hob: Agent;
-  disconnected: HobGitHubAppDisconnected | null;
+  disconnected: Disconnected | null;
   startError: unknown;
   changeFailed: boolean;
 }) {
@@ -179,7 +209,7 @@ function Outcome({
     <>
       {disconnected !== null && (
         <span role="status" className="rounded-control bg-notice px-3 py-2 text-detail text-text">
-          {copy.disconnected({ name: hob.name })}
+          {disconnected.linked ? copy.unlinked({ name: hob.name }) : copy.disconnected({ name: hob.name })}
           {disconnected.deleteUrl !== null && (
             <>
               {" "}
@@ -289,6 +319,10 @@ function NoApp({
   pending,
   onGive,
   onCancel,
+  linking,
+  link,
+  onCloseLink,
+  onLink,
 }: {
   hob: Agent;
   cannotCreate: "no-keychain" | null;
@@ -297,12 +331,19 @@ function NoApp({
   pending: boolean;
   onGive: () => void;
   onCancel: () => void;
+  /** Whether the form to link an app the user already has is open. */
+  linking: boolean;
+  link: ReturnType<typeof useLinkHobGitHubApp>;
+  onCloseLink: () => void;
+  onLink: () => void;
 }) {
+  const offering = cannotCreate === null && hob.status !== "retired" && started === null;
   return (
     <>
       {started === null && <You hob={hob} />}
       {cannotCreate === "no-keychain" && <span className="text-detail text-label">{copy.noKeychain}</span>}
-      {cannotCreate === null && hob.status !== "retired" && started === null && (
+      {offering && linking && <LinkExistingApp hob={hob} link={link} onClose={onCloseLink} />}
+      {offering && !linking && (
         <div className={OFFER}>
           <span className="flex min-w-[220px] flex-1 flex-col">
             <strong className="text-ui text-text-strong">{copy.give({ name: hob.name })}</strong>
@@ -313,6 +354,11 @@ function NoApp({
             {copy.makeApp}
           </Button>
         </div>
+      )}
+      {offering && !linking && (
+        <Button variant="ghost" size="sm" className="self-start" onClick={onLink}>
+          {copy.useExisting}
+        </Button>
       )}
       {started !== null && (
         <Finishing hob={hob} started={started} pending={pending} onRestart={onGive} onCancel={onCancel} />
@@ -329,6 +375,7 @@ function ConnectedApp({
   onWatch,
   onNewApp,
   onDisconnect,
+  children,
 }: {
   hob: Agent;
   status: Connected;
@@ -336,10 +383,13 @@ function ConnectedApp({
   watching: boolean;
   onWatch: () => void;
   onNewApp: () => void;
-  onDisconnect: () => void;
+  onDisconnect: (linked: boolean) => void;
+  /** What to say about the app just after it was linked, under who the hob acts as. */
+  children?: ReactNode;
 }) {
   const [confirming, setConfirming] = useState(false);
   const { app, needsReconnect } = status;
+  const linked = app.origin === "linked";
   return (
     <>
       <div className="flex items-center gap-3">
@@ -364,23 +414,24 @@ function ConnectedApp({
             </a>
             <Badge variant="waiting">{copy.ownApp}</Badge>
           </span>
-          <span className="text-detail text-text-secondary">{copy.made({ since: formatDay(app.connectedAt) })}</span>
+          <span className="text-detail text-text-secondary">
+            {linked
+              ? copy.linked({ since: formatDay(app.connectedAt) })
+              : copy.made({ since: formatDay(app.connectedAt) })}
+          </span>
         </span>
       </div>
+      {children}
       {needsReconnect !== null && (
         <div role="alert" className={PROBLEM}>
           <span className="flex items-center gap-2">
             <strong className="text-text-strong">{copy.reconnectTitle}</strong>
             <Badge variant="failed">{copy.cannotAct}</Badge>
           </span>
-          <span className="text-ui text-text">
-            {needsReconnect.reason === "key"
-              ? copy.reconnectKey({ name: hob.name })
-              : copy.reconnectInstallation({ name: hob.name })}
-          </span>
+          <span className="text-ui text-text">{reconnectText(needsReconnect.reason, linked, hob.name)}</span>
           {needsReconnect.reason === "key" ? (
             <Button disabled={pending} onClick={onNewApp}>
-              {copy.newApp({ name: hob.name })}
+              {linked ? copy.linkAgain : copy.newApp({ name: hob.name })}
             </Button>
           ) : (
             <Button asChild>
@@ -396,10 +447,12 @@ function ConnectedApp({
       )}
       {confirming ? (
         <div className={PROBLEM}>
-          <span className="text-ui text-text">{copy.confirmDisconnect({ name: hob.name })}</span>
+          <span className="text-ui text-text">
+            {linked ? copy.confirmUnlink({ name: hob.name }) : copy.confirmDisconnect({ name: hob.name })}
+          </span>
           <span className="flex flex-wrap gap-2">
-            <Button variant="deny" disabled={pending} onClick={onDisconnect}>
-              {copy.disconnect}
+            <Button variant="deny" disabled={pending} onClick={() => onDisconnect(linked)}>
+              {linked ? copy.unlink : copy.disconnect}
             </Button>
             <Button variant="outline" onClick={() => setConfirming(false)}>
               {copy.keep}
@@ -408,12 +461,22 @@ function ConnectedApp({
         </div>
       ) : (
         <Button variant="ghost" size="sm" className="self-start" disabled={pending} onClick={() => setConfirming(true)}>
-          {copy.disconnectAsk}
+          {linked ? copy.unlinkAsk : copy.disconnectAsk}
         </Button>
       )}
     </>
   );
 }
+
+/** The permissions the app the user just linked lacks, while it is still the hob's app; none otherwise. */
+const missingAfterLink = (linked: HobGitHubAppLinked | undefined, app: Connected["app"]) =>
+  linked?.app.appId === app.appId ? linked.missingPermissions : [];
+
+/** Why the hob's app cannot act: a key GitHub refuses, which a linked app fixes with a new key, or its installation. */
+const reconnectText = (reason: "key" | "installation", linked: boolean, name: string) => {
+  if (reason === "installation") return copy.reconnectInstallation({ name });
+  return linked ? copy.reconnectLinkedKey({ name }) : copy.reconnectKey({ name });
+};
 
 /** Where the hob's app is installed, with where to change each, or a prompt to install it. */
 function Installations({
@@ -531,11 +594,13 @@ function LeftOver({
         {copy.leftOver} {status.problem}
       </span>
       <span className="flex flex-wrap items-center gap-3">
-        <Button asChild variant="outline">
-          <a href={status.deleteUrl} target="_blank" rel="noreferrer">
-            {copy.deleteOnGitHub}
-          </a>
-        </Button>
+        {status.app.origin === "made" && (
+          <Button asChild variant="outline">
+            <a href={status.deleteUrl} target="_blank" rel="noreferrer">
+              {copy.deleteOnGitHub}
+            </a>
+          </Button>
+        )}
         <Button variant="ghost" disabled={pending} onClick={onDismiss}>
           {copy.dismiss}
         </Button>

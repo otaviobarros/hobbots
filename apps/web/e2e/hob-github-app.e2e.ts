@@ -48,6 +48,7 @@ const app = {
   clientId: "Iv23pip",
   slug: "pip-hobbots",
   owner: "otaviobarros",
+  origin: "made",
   botUserId: 90_000_007,
   htmlUrl: "https://github.com/apps/pip-hobbots",
   connectedAt: "2026-11-02T12:00:00.000Z",
@@ -308,4 +309,105 @@ test("[TC-GEN-058] disconnects a hob's app after asking, and shows an old app th
   state.status = { _tag: "None", cannotCreate: null };
   await left.getByRole("button", { name: "Dismiss" }).click();
   await expect(section.getByRole("button", { name: "Make its app" })).toBeVisible();
+});
+
+const KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAstandin\n-----END RSA PRIVATE KEY-----";
+const linkedApp = { ...app, appId: 3_141_592, slug: "pips-own-bot", origin: "linked", owner: "the-shire" };
+
+// covers PE-002, #1321
+test("[TC-GEN-408] links a GitHub app the user already has, and unlinking leaves it on GitHub", async ({ page }) => {
+  const { current } = await openPipCharms(page);
+  hub = current;
+  const section = page.getByRole("region", { name: "Acts on GitHub as" });
+  const { state, asked, disconnects } = await standIn(page, { status: { _tag: "None", cannotCreate: null } });
+  // The hub's answers to linking, in order, and what the page sent it.
+  const links: Array<{ status: number; json: unknown }> = [
+    { status: 409, json: { _tag: "HobGitHubAppRefused", reason: "key-refused", message: "refused" } },
+    { status: 409, json: { _tag: "HobGitHubAppRefused", reason: "taken", message: "taken" } },
+  ];
+  const sent: Array<{ appId: string; privateKey: string }> = [];
+  await page.route("**/api/agents/*/github-app/link", (route, request) => {
+    sent.push(request.postDataJSON());
+    const next = links.shift();
+    if (next !== undefined) return route.fulfill(next);
+    state.status = {
+      _tag: "Connected",
+      app: linkedApp,
+      bot: "pips-own-bot[bot]",
+      installUrl: "https://github.com/apps/pips-own-bot/installations/new",
+      deleteUrl: "https://github.com/settings/apps/pips-own-bot/advanced",
+      needsReconnect: null,
+    };
+    return route.fulfill({
+      json: {
+        app: linkedApp,
+        bot: "pips-own-bot[bot]",
+        missingPermissions: [
+          { name: "contents", access: "write" },
+          { name: "workflows", access: "write" },
+        ],
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("tab", { name: "Charms" }).click();
+
+  await section.getByRole("button", { name: "Use an app you already have…" }).click();
+  const form = section.getByRole("form", { name: "Link an app you already have" });
+  await expect(form.getByRole("link", { name: "Open your apps on GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/settings/apps",
+  );
+  // The form says what is wrong before anything is sent.
+  await form.getByRole("button", { name: "Link the app" }).click();
+  await expect(form.getByText("Give the App ID or Client ID", { exact: false })).toBeVisible();
+  await expect(form.getByText("Paste the private key GitHub gave you", { exact: false })).toBeVisible();
+  expect(sent).toEqual([]);
+
+  const appId = form.getByRole("textbox", { name: "App ID" });
+  const key = form.getByRole("textbox", { name: "Private key" });
+  await appId.fill("3141592");
+  await form.getByLabel("Choose the .pem file").setInputFiles({
+    name: "pips-own-bot.2026-11-09.private-key.pem",
+    mimeType: "application/x-pem-file",
+    buffer: Buffer.from(`${KEY}\n`),
+  });
+  await expect(key).toHaveValue(`${KEY}\n`);
+
+  // A key GitHub refuses shows by the key, and what the user gave stays.
+  await form.getByRole("button", { name: "Link the app" }).click();
+  await expect(form.getByText("GitHub did not accept this key for that app", { exact: false })).toBeVisible();
+  await expect(appId).toHaveValue("3141592");
+  expect(sent).toEqual([{ appId: "3141592", privateKey: KEY }]);
+  // An app another hob has is said for the whole form.
+  await form.getByRole("button", { name: "Link the app" }).click();
+  await expect(form.getByRole("alert").filter({ hasText: "already another hob's" })).toBeVisible();
+
+  await form.getByRole("button", { name: "Link the app" }).click();
+  await expect(section.getByRole("link", { name: "pips-own-bot[bot]" })).toBeVisible();
+  await expect(form).toBeHidden();
+  await expect(section.getByText("Linked Nov 2, 2026", { exact: false })).toBeVisible();
+  await expect(section.getByRole("status").filter({ hasText: "lacks permissions" })).toContainText(
+    "Contents (read and write) and Workflows (read and write)",
+  );
+  // The key went to the hub once, and the page no longer holds it.
+  expect(sent).toHaveLength(3);
+  expect(await page.content()).not.toContain("PRIVATE KEY");
+
+  // Unlinking asks first, says the app stays on GitHub, and offers no delete.
+  await section.getByRole("button", { name: "Unlink its app…" }).click();
+  await expect(section.getByText("The app and its installations stay on GitHub", { exact: false })).toBeVisible();
+  disconnects.push({ deleteUrl: null, problem: null });
+  state.status = { _tag: "None", cannotCreate: null };
+  await section.getByRole("button", { name: "Unlink", exact: true }).click();
+  await expect(section.getByRole("status")).toContainText("Unlinked. Pip acts as you again.");
+  await expect(section.getByRole("link", { name: "Delete the app on GitHub" })).toBeHidden();
+  expect(asked).toContain("POST /disconnect");
+
+  // Cancel closes the form without sending anything.
+  await section.getByRole("button", { name: "Use an app you already have…" }).click();
+  await section.getByRole("button", { name: "Cancel" }).click();
+  await expect(form).toBeHidden();
+  await expect(section.getByRole("button", { name: "Make its app" })).toBeVisible();
+  expect(sent).toHaveLength(3);
 });

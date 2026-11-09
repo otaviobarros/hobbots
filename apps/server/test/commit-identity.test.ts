@@ -104,6 +104,7 @@ const NETTLE_APP: HobGitHubApp = {
   clientId: "Iv1.nettle",
   slug: "nettle-hobbots",
   owner: "otaviobarros",
+  origin: "made",
   botUserId: 7,
   htmlUrl: "https://github.com/apps/nettle-hobbots",
   connectedAt: NOW,
@@ -115,6 +116,7 @@ const FakeHobApps = Layer.succeed(
     leftOver: () => Effect.succeed(null),
     save: (agentId, app) => Effect.sync(() => void hobApps.set(agentId, app)),
     leave: () => Effect.void,
+    holder: () => Effect.succeed(null),
     remove: (agentId) => Effect.sync(() => void hobApps.delete(agentId)),
   }),
 );

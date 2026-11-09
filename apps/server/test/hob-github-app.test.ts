@@ -64,6 +64,7 @@ const FRODO = AgentId.make("frodo");
 const MERRY = AgentId.make("merry");
 const PIPPIN = AgentId.make("pippin");
 const SAM = AgentId.make("sam");
+const ROSIE = AgentId.make("rosie");
 
 // A test names the Tailscale node a request comes from with this header; without it, it is local.
 const NODE_HEADER = "x-test-tailnet-node";
@@ -170,6 +171,7 @@ beforeAll(async () => {
         repo.insertAgent(hob(MERRY, "Merry")),
         repo.insertAgent(hob(PIPPIN, "Pippin")),
         repo.insertAgent(hob(SAM, "Sam")),
+        repo.insertAgent(hob(ROSIE, "Rosie")),
       ]),
     ),
   );
@@ -507,6 +509,43 @@ describe("A hob's own GitHub App on a hub", () => {
     expect(decided.body).toMatchObject({ _tag: "ApprovalClosed", state: "expired" });
     expect(outcome).toEqual({ _tag: "Expired" });
     expect(saved).toEqual([]);
+  });
+
+  // covers #1321, ADR 022
+  it("[TC-PE-521] links an app the user already has only from the hub's own computer, and unlinking leaves it installed", async () => {
+    const mine = github.makeAppByHand("Rosie by hand");
+    github.installApp(mine.app.slug, "all");
+    const path = `/api/agents/${ROSIE}/github-app/link`;
+    const body = { appId: String(mine.app.id), privateKey: mine.pem };
+
+    // From another computer the key would cross the network, so the hub refuses it.
+    const named = await handler(
+      new Request(`http://hub.example.ts.net${path}`, {
+        method: "POST",
+        headers: { host: "hub.example.ts.net", "content-type": "application/json", ...AS_WINDOW },
+        body: JSON.stringify(body),
+      }),
+    );
+    expect(named.status).toBe(409);
+    expect(await named.json()).toMatchObject({ reason: "not-local" });
+    expect(await readKey(ROSIE)).toBeNull();
+
+    const refused = await api("POST", path, AS_WINDOW, { ...body, appId: "nope" });
+    expect(refused).toMatchObject({ status: 409, body: { _tag: "HobGitHubAppRefused", reason: "bad-id" } });
+
+    const linked = await api<Record<string, unknown>>("POST", path, AS_WINDOW, body);
+    expect(linked).toMatchObject({
+      status: 200,
+      body: { app: { slug: mine.app.slug, origin: "linked" }, bot: `${mine.app.slug}[bot]`, missingPermissions: [] },
+    });
+    expect(await readKey(ROSIE)).toBe("kept");
+    const status = await api<Record<string, unknown>>("GET", `/api/agents/${ROSIE}/github-app`);
+    expect(status.body).toMatchObject({ _tag: "Connected", app: { origin: "linked" } });
+
+    const unlinked = await api("POST", `/api/agents/${ROSIE}/github-app/disconnect`);
+    expect(unlinked.body).toEqual({ deleteUrl: null, problem: null });
+    expect(mine.app.installations).toHaveLength(1);
+    expect(await readKey(ROSIE)).toBeNull();
   });
 
   // covers ADR 022

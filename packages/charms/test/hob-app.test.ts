@@ -165,6 +165,7 @@ const appsOf = (w: World) =>
           w.leftOver.delete(id);
         }),
       leave: (id, problem) => Effect.sync(() => void w.leftOver.set(id, problem)),
+      holder: (appId) => Effect.sync(() => [...w.apps].find(([, app]) => app.appId === appId)?.[0] ?? null),
       remove: (id) =>
         Effect.sync(() => {
           w.apps.delete(id);
@@ -675,6 +676,198 @@ describe("A hob's own GitHub App", () => {
     expect(outcome.usable).toBe(false);
     const refused = outcome.refused;
     expect(refused).toMatchObject({ reason: "no-keychain" });
+  });
+});
+
+/** Links an app the user made on GitHub themselves, by its ID and the key GitHub gave them (#1321). */
+const linkBy = (agentId: AgentId, appId: string | number, pem: string) =>
+  Effect.flatMap(HobGitHubAppService, (service) =>
+    service.link(agentId, { appId: String(appId), privateKey: Redacted.make(pem) }),
+  );
+
+describe("Linking a GitHub App the user already has", () => {
+  // covers #1321, ADR 022
+  it("[TC-GEN-405] links an app by its ID or client ID and key, keeps the key only in the keychain, and lists its installations", async () => {
+    const w = world();
+    const mine = github.makeAppByHand("Frodo's bot");
+    const lean = github.makeAppByHand("Sam's helper", { metadata: "read", contents: "read", issues: "write" });
+    github.installApp(mine.app.slug, "all");
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        // Pasted with the blank lines a copy from a file often carries.
+        const linked = yield* linkBy(FRODO, mine.app.id, `\n${mine.pem}\n\n`);
+        const status = yield* service.status(FRODO);
+        const installations = yield* service.installations(FRODO);
+        const byClientId = yield* linkBy(SAM, lean.app.clientId, lean.pem);
+        const key = yield* (yield* HobAppKeys).read(FRODO);
+        return { linked, status, installations, byClientId, key };
+      }),
+    );
+    expect(outcome.linked).toEqual({
+      app: {
+        appId: mine.app.id,
+        clientId: mine.app.clientId,
+        slug: mine.app.slug,
+        owner: "otaviobarros",
+        origin: "linked",
+        botUserId: mine.app.botId,
+        htmlUrl: `https://github.com/apps/${mine.app.slug}`,
+        connectedAt: expect.any(String),
+      },
+      bot: `${mine.app.slug}[bot]`,
+      missingPermissions: [],
+    });
+    expect(outcome.status).toMatchObject({ _tag: "Connected", bot: `${mine.app.slug}[bot]`, needsReconnect: null });
+    expect(outcome.installations).toEqual([
+      expect.objectContaining({ account: "otaviobarros", repositorySelection: "all", suspended: false }),
+    ]);
+    // The permissions the hob's actions need that the app was not given, so the user can add them.
+    expect(outcome.byClientId.app).toMatchObject({ appId: lean.app.id, origin: "linked" });
+    expect(outcome.byClientId.missingPermissions).toEqual([
+      { name: "contents", access: "write" },
+      { name: "pull_requests", access: "write" },
+      { name: "checks", access: "read" },
+      { name: "actions", access: "read" },
+      { name: "statuses", access: "read" },
+      { name: "workflows", access: "write" },
+    ]);
+    // The key is in the keychain as GitHub gave it, and nowhere in what the hub keeps of the app.
+    expect(Option.map(outcome.key, Redacted.value)).toEqual(Option.some(mine.pem));
+    expect(JSON.stringify([...w.apps.values()])).not.toContain("PRIVATE KEY");
+    expect(w.redactor.text(`key: ${mine.pem}`)).not.toContain("PRIVATE KEY-----\n");
+    // Like a made app, linking one revokes what the hob was allowed as the user.
+    expect(w.revokedGitHub).toEqual([FRODO, SAM]);
+  });
+
+  // covers #1321, ADR 022
+  it("[TC-PE-520] refuses an ID or key that is not the app's, an app another hob has, and a hob that cannot take one", async () => {
+    const w = world();
+    const first = github.makeAppByHand("First by hand");
+    const second = github.makeAppByHand("Second by hand");
+    const revoked = github.makeAppByHand("Revoked by hand");
+    revoked.app.keyLive = false;
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const refusal = (agentId: AgentId, appId: string | number, pem: string) =>
+          Effect.flip(linkBy(agentId, appId, pem)).pipe(Effect.map((error) => error.reason));
+        const badId = yield* refusal(FRODO, "my app", first.pem);
+        const notAKey = yield* refusal(
+          FRODO,
+          first.app.id,
+          "-----BEGIN RSA PRIVATE KEY-----\nnope\n-----END RSA PRIVATE KEY-----",
+        );
+        const otherKey = yield* refusal(FRODO, first.app.id, second.pem);
+        const revokedKey = yield* refusal(FRODO, revoked.app.id, revoked.pem);
+        const before = yield* (yield* HobAppKeys).read(FRODO);
+        yield* linkBy(FRODO, first.app.id, first.pem);
+        const taken = yield* refusal(SAM, first.app.id, first.pem);
+        const connected = yield* refusal(FRODO, second.app.id, second.pem);
+        w.hobs.set(SAM, agent(SAM, "Sam", "retired"));
+        const retired = yield* refusal(SAM, second.app.id, second.pem);
+        return {
+          badId,
+          notAKey,
+          otherKey,
+          revokedKey,
+          before,
+          taken,
+          connected,
+          retired,
+          sam: yield* (yield* HobAppKeys).read(SAM),
+        };
+      }),
+    );
+    expect(outcome).toMatchObject({
+      badId: "bad-id",
+      notAKey: "not-a-key",
+      otherKey: "key-refused",
+      revokedKey: "key-refused",
+      taken: "taken",
+      connected: "connected",
+      retired: "retired",
+    });
+    // Nothing refused left a key in the keychain or an app on the hob.
+    expect(Option.isNone(outcome.before)).toBe(true);
+    expect(Option.isNone(outcome.sam)).toBe(true);
+    expect([...w.apps.keys()]).toEqual([FRODO]);
+
+    const noKeychain = new KeychainError({ reason: "unavailable", message: "No keychain here." });
+    const none = Layer.succeed(
+      HobAppKeys,
+      HobAppKeys.of({
+        usable: Effect.succeed(false),
+        read: () => Effect.fail(noKeychain),
+        write: () => Effect.fail(noKeychain),
+        remove: () => Effect.fail(noKeychain),
+      }),
+    );
+    const locked = Layer.succeed(
+      HobAppKeys,
+      HobAppKeys.of({
+        usable: Effect.succeed(true),
+        read: () => Effect.succeed(Option.none()),
+        write: () => Effect.fail(new KeychainError({ reason: "failed", message: "The keychain is locked." })),
+        remove: () => Effect.void,
+      }),
+    );
+    const bare = world();
+    const unkept = await Effect.runPromise(
+      Effect.all([
+        Effect.flip(linkBy(FRODO, second.app.id, second.pem)).pipe(Effect.provide(layer(bare, none))),
+        Effect.flip(linkBy(FRODO, second.app.id, second.pem)).pipe(Effect.provide(layer(bare, locked))),
+      ]),
+    );
+    expect(unkept[0]).toMatchObject({ reason: "no-keychain" });
+    expect(unkept[1]).toMatchObject({
+      reason: "keychain-failed",
+      message: expect.stringContaining("The keychain is locked."),
+    });
+    // The key never went to GitHub's side, and the hob keeps no app whose key the keychain lost.
+    expect(bare.apps.size).toBe(0);
+  });
+
+  // covers #1321, ADR 022
+  it("[TC-GEN-406] unlinking an app, or retiring its hob, forgets its key and leaves its installations on GitHub", async () => {
+    const w = world();
+    const frodoApp = github.makeAppByHand("Frodo unlinks");
+    const samApp = github.makeAppByHand("Sam retires");
+    github.installApp(frodoApp.app.slug, "all");
+    github.installApp(samApp.app.slug, "selected");
+    const since = github.requests.length;
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        const keys = yield* HobAppKeys;
+        yield* linkBy(FRODO, frodoApp.app.id, frodoApp.pem);
+        yield* linkBy(SAM, samApp.app.id, samApp.pem);
+        const unlinked = yield* service.disconnect(FRODO);
+        yield* (yield* RetiredHobGitHubApp).remove(SAM);
+        return {
+          unlinked,
+          frodo: yield* service.status(FRODO),
+          frodoKey: yield* keys.read(FRODO),
+          samKey: yield* keys.read(SAM),
+        };
+      }),
+    );
+    // No link to delete an app the hub did not make, and nothing left to show.
+    expect(outcome.unlinked).toEqual({ deleteUrl: null, problem: null });
+    expect(outcome.frodo).toEqual({ _tag: "None", cannotCreate: null });
+    expect(Option.isNone(outcome.frodoKey)).toBe(true);
+    expect(Option.isNone(outcome.samKey)).toBe(true);
+    expect(w.apps.size).toBe(0);
+    expect(frodoApp.app.installations).toHaveLength(1);
+    expect(samApp.app.installations).toHaveLength(1);
+    // No installation was asked to be removed.
+    const removals = github.requests
+      .slice(since)
+      .filter((request) => request.method === "DELETE" && request.path.startsWith("/app/"));
+    expect(removals).toEqual([]);
+    expect(w.revokedGitHub).toEqual([FRODO, SAM, FRODO, SAM]);
   });
 });
 

@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import type { GitHubHosts } from "./github-sign-in.ts";
+import { HOB_APP_PERMISSIONS } from "./hob-app.ts";
 
 /**
  * A fake GitHub for tests (#325), on one local HTTP server: the device flow and token refresh of a
@@ -169,6 +170,14 @@ export interface FakeGitHub {
    * on every repository of the account, or on the `repositories` given.
    */
   readonly installApp: (slug: string, selection?: "all" | "selected", repositories?: ReadonlyArray<string>) => number;
+  /**
+   * Makes an app on the account as the user would by hand on GitHub, with `permissions` (the
+   * Hobbots app's by default), and answers its private key as GitHub's Generate a private key does.
+   */
+  readonly makeAppByHand: (
+    name: string,
+    permissions?: Readonly<Record<string, string>>,
+  ) => { readonly app: FakeApp; readonly pem: string };
   /** Removes every installation of an app made from a manifest, as the user would on GitHub. */
   readonly uninstallApp: (slug: string) => void;
   /** Moves GitHub's clock ahead, for what lapses with time: tokens, JWTs and manifest codes. */
@@ -696,7 +705,25 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     const pending = codes.get(code);
     codes.delete(code);
     if (pending === undefined || pending.expiresAt <= clock()) return notFound;
-    const name = String(pending.manifest.name ?? "app");
+    const { app, pem } = makeApp(pending.manifest);
+    const clientSecret = randomBytes(20).toString("hex");
+    const webhookSecret = randomBytes(20).toString("hex");
+    issued.push(clientSecret, webhookSecret);
+    return json(201, {
+      ...appJson(app),
+      client_secret: clientSecret,
+      webhook_secret: webhookSecret,
+      pem,
+      description: pending.manifest.description ?? null,
+      events: pending.manifest.default_events ?? [],
+      created_at: now(),
+      updated_at: now(),
+    });
+  };
+
+  /** A new app on the account from `manifest`, with a new key whose private half is answered once. */
+  const makeApp = (manifest: Record<string, unknown>) => {
+    const name = String(manifest.name ?? "app");
     // App names are unique on GitHub: a taken one is renamed, as the user would on the page.
     const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     let slug = base;
@@ -708,35 +735,29 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       id,
       slug,
       clientId: `Iv23${randomBytes(8).toString("hex")}`,
-      manifest: pending.manifest,
+      manifest,
       botId: 90_000_000 + id,
       installations: [],
       keyLive: true,
     };
     apps.push(app);
     appKeys.set(id, publicKey);
-    const clientSecret = randomBytes(20).toString("hex");
-    const webhookSecret = randomBytes(20).toString("hex");
-    issued.push(pem, clientSecret, webhookSecret);
-    return json(201, {
-      id,
-      slug,
-      node_id: `A_${id}`,
-      client_id: app.clientId,
-      client_secret: clientSecret,
-      webhook_secret: webhookSecret,
-      pem,
-      name,
-      description: pending.manifest.description ?? null,
-      external_url: pending.manifest.url,
-      html_url: `https://github.com/apps/${slug}`,
-      owner: { login, id: 1, type: "User" },
-      permissions: pending.manifest.default_permissions ?? {},
-      events: pending.manifest.default_events ?? [],
-      created_at: now(),
-      updated_at: now(),
-    });
+    issued.push(pem);
+    return { app, pem };
   };
+
+  /** What GitHub says of an app, as `GET /app` and the manifest conversion both answer it. */
+  const appJson = (app: FakeApp) => ({
+    id: app.id,
+    slug: app.slug,
+    node_id: `A_${app.id}`,
+    client_id: app.clientId,
+    name: String(app.manifest.name ?? app.slug),
+    external_url: app.manifest.url ?? null,
+    html_url: `https://github.com/apps/${app.slug}`,
+    owner: { login, id: 1, type: "User" },
+    permissions: app.manifest.default_permissions ?? {},
+  });
 
   /** A JWT's three parts and what its header and claims say, or null when it is not one. */
   const jwtOf = (request: FakeGitHubRequest) => {
@@ -793,6 +814,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   const appApi = (request: FakeGitHubRequest) => {
     const app = appOf(request);
     if (app === null) return json(401, { message: "A JSON web token could not be decoded" });
+    if (request.path === "/app" && request.method === "GET") return json(200, appJson(app));
     if (request.path === "/app/installations" && request.method === "GET") {
       return json(
         200,
@@ -914,7 +936,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     if (request.path === "/settings/apps/new" && request.method === "POST") return newApp(request);
     const manifestCode = /^\/app-manifests\/([^/]+)\/conversions$/.exec(request.path);
     if (manifestCode !== null && request.method === "POST") return conversion(manifestCode[1] ?? "");
-    if (request.path.startsWith("/app/")) return appApi(request);
+    if (request.path === "/app" || request.path.startsWith("/app/")) return appApi(request);
     const userPath = /^\/users\/([^/]+)$/.exec(request.path);
     if (userPath !== null && request.method === "GET") return user(userPath[1] ?? "");
     const installedOn = /^\/repos\/([^/]+)\/([^/]+)\/installation$/.exec(request.path);
@@ -1116,6 +1138,8 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       app.installations.push({ id, selection, repositories: [...reached] });
       return id;
     },
+    makeAppByHand: (name, permissions: Readonly<Record<string, string>> = HOB_APP_PERMISSIONS) =>
+      makeApp({ name, url: "https://example.com", default_permissions: permissions }),
     uninstallApp: (slug) => {
       const app = apps.find((each) => each.slug === slug);
       if (app === undefined) throw new Error(`The fake GitHub has no app ${slug}`);

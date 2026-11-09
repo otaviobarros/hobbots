@@ -30,6 +30,12 @@ const notLocal = new HobGitHubAppRefused({
   message: "Give a hob its own GitHub app from the hub's computer, where GitHub can send you back to the hub.",
 });
 
+// An app's private key never crosses the network to the hub (#1321).
+const linkNotLocal = new HobGitHubAppRefused({
+  reason: "not-local",
+  message: "Link a hob's GitHub app from the hub's computer, so its private key never leaves it.",
+});
+
 const refusal = (agentId: AgentId) => (refused: HobAppRefused) =>
   refused.reason === "not-found"
     ? new AgentNotFound({ agentId })
@@ -52,6 +58,7 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
       return handlers.handleAll({
         status: () => Effect.succeed(NONE),
         start: () => Effect.fail(absent),
+        link: () => Effect.fail(absent),
         installations: () => Effect.succeed({ installations: [] }),
         disconnect: () => Effect.succeed({ deleteUrl: null, problem: null }),
       });
@@ -72,6 +79,20 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
           // The device the middleware admitted, which the state is bound to.
           const device = yield* gate.admit(request);
           return yield* service.start(params.agentId, device.id, hubUrl).pipe(Effect.mapError(refusal(params.agentId)));
+        }),
+      link: ({ params, payload }) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const place = yield* gate.placeOf(request);
+          // As for making an app: a request through `tailscale serve` reaches the hub locally, by its tailnet name.
+          if (!Option.exists(place, (where) => where._tag === "Local") || hubUrlOf(request) === null) {
+            return yield* linkNotLocal;
+          }
+          const linked = yield* service.link(params.agentId, payload).pipe(Effect.mapError(refusal(params.agentId)));
+          // The hob commits as its own app now, so its coding setup card is no longer needed (#1241).
+          const codingSetup = yield* Effect.serviceOption(CommitIdentityQuestions);
+          if (Option.isSome(codingSetup)) yield* codingSetup.value.settled(params.agentId);
+          return linked;
         }),
       installations: ({ params }) =>
         service.installations(params.agentId).pipe(

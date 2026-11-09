@@ -41,8 +41,8 @@ export const GitHubReachableRepository = Schema.Struct({
 export type GitHubReachableRepository = typeof GitHubReachableRepository.Type;
 
 /**
- * A hob's own GitHub App (ADR 022): made for one hob from a manifest, owned by the user's personal
- * account, so the hob acts on GitHub as its bot, `<slug>[bot]`. Only its identity is kept here; its
+ * A hob's own GitHub App (ADR 022): made for one hob from a manifest, or an app the user already had
+ * and linked, so the hob acts on GitHub as its bot, `<slug>[bot]`. Only its identity is kept here; its
  * private key lives in the OS keychain on the hub, and GitHub's other secrets are never kept.
  */
 export const HobGitHubApp = Schema.Struct({
@@ -52,8 +52,13 @@ export const HobGitHubApp = Schema.Struct({
   clientId: Schema.String,
   /** The app's name in its `github.com/apps/<slug>` address. */
   slug: Schema.String,
-  /** The personal account that owns the app, and the only one it can be installed on. */
+  /** The account that owns the app. A made app's is the user's personal account, the only one it can be installed on. */
   owner: Schema.String,
+  /**
+   * `made`: the hub made it from a manifest for this hob, so disconnecting removes its installations.
+   * `linked`: the user linked an app they already had (#1321), so the hub only forgets its key.
+   */
+  origin: Schema.Literals(["made", "linked"]),
   /** The bot's user ID, for its commit email; null when GitHub did not give it when the app was made. */
   botUserId: Schema.NullOr(Schema.Number),
   /** The app's page on GitHub. */

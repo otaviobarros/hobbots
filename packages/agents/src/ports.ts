@@ -136,6 +136,8 @@ export class HobGitHubApps extends Context.Service<
     readonly save: (agentId: AgentId, app: HobGitHubApp) => Effect.Effect<void>;
     /** Keeps the hob's app as left over, with what could not be removed, until the user dismisses it. */
     readonly leave: (agentId: AgentId, problem: string) => Effect.Effect<void>;
+    /** The hob that has the app with GitHub's `appId`, left over or not, or null. */
+    readonly holder: (appId: number) => Effect.Effect<AgentId | null>;
     readonly remove: (agentId: AgentId) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/HobGitHubApps") {}

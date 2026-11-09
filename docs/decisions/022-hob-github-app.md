@@ -1,6 +1,6 @@
 # ADR 022 — A hob's own GitHub App
 
-Status: **Accepted.** Adds a second credential to the GitHub Charm of [ADR 020](020-github-charm.md), behind its `GitHubCredential` service, so a hob can act on GitHub under its own name ([#221](https://github.com/otaviobarros/hobbots/issues/221)). Uses the Charms of [ADR 014](014-tool-policy-and-enforcement.md) and the devices of [ADR 021](021-devices-and-remote-access.md).
+Status: **Accepted.** Amended by [#1321](https://github.com/otaviobarros/hobbots/issues/1321), which lets you link an app you already have. Adds a second credential to the GitHub Charm of [ADR 020](020-github-charm.md), behind its `GitHubCredential` service, so a hob can act on GitHub under its own name ([#221](https://github.com/otaviobarros/hobbots/issues/221)). Uses the Charms of [ADR 014](014-tool-policy-and-enforcement.md) and the devices of [ADR 021](021-devices-and-remote-access.md).
 
 ## Context
 
@@ -38,7 +38,7 @@ GitHub's behaviour here comes from its documentation for registering a GitHub Ap
 
 ### Creating the app from a manifest
 
-You never create an app by hand or handle a key file. Connecting a hob's app (#223) works like this:
+You never create an app by hand or handle a key file, unless you link an app you already have (below). Connecting a hob's app (#223) works like this:
 
 1. In the hob's Charms tab, **Give it its own GitHub app** opens a hub page in your default browser, where you are signed in to GitHub.
 2. That page posts the manifest to `https://github.com/settings/apps/new?state=<state>`. GitHub shows the app's name, which you can change, and its permissions.
@@ -65,6 +65,23 @@ You never create an app by hand or handle a key file. Connecting a hob's app (#2
 
 **The state.** The hub makes the state from 32 random bytes from the system's secure random source. It is bound to the hob and the device that started it, used once, and expires after an hour, the same window GitHub gives the code. The hub stores only its hash.
 
+### Linking an app you already have
+
+Making an app from a manifest stays the default. Someone who already has a GitHub App, such as one they made by hand for a bot or one an organization made, can give it to a hob instead ([#1321](https://github.com/otaviobarros/hobbots/issues/1321)):
+
+1. In the hob's Charms tab, **Use an app you already have** opens a form.
+2. You give the app's ID, or its client ID, and its private key. You paste the key, or pick the `.pem` file GitHub downloaded. The browser reads the file; it is never uploaded anywhere but the hub.
+3. The hub signs a JWT with that key, with the ID as `iss`, and reads `GET /app`. GitHub answers only for the key's own app, so this proves the key and gives the app's ID, client ID, slug, owner and permissions. The hub then looks up the bot's user ID, as above.
+4. The hub writes the key to the keychain, then gives the hob the app, exactly as for a made app. The hub keeps it as `linked`.
+5. The Charms tab lists where the app is installed. You never type an installation ID.
+
+- **From the hub's own computer only.** The key is sent to the hub once. The hub takes it only from a local request to its loopback address, like starting a manifest, so it never crosses the network. The API decodes it straight into a redacted value, the hub redacts it by value before anything else reads it, and the form forgets it once the hub has it.
+- **What it refuses**, each with its own reason the Charms tab words: an ID that is no app ID or client ID, a key the hub cannot read, a key GitHub does not take for that app, an app another hob already has, left over or not, and the refusals of making an app (retired, already has one, an old app left over, no keychain).
+- **Missing permissions are said, not refused.** The app may have fewer permissions than a made app's. The hub links it and the Charms tab names the missing ones, so you can add them on GitHub. Until then, the actions that need them fail when GitHub refuses their token.
+- **Any owner.** A linked app can be owned by an organization. Its installations are found the same way, and each token still names one repository of one installation.
+- **Unlinking keeps the app as it is.** The hub did not make a linked app, so it does not take it apart. Disconnecting it, or retiring the hob, deletes its key from the keychain and forgets it, and revokes the hob's GitHub grants as above. It leaves the app's installations on GitHub, and links to no page that deletes the app.
+- **A refused key is fixed by linking again.** When GitHub no longer accepts a linked app's key, the Charms tab offers to link the app again with a new key, not to make a new app.
+
 ### How the redirect reaches the hub
 
 - **Loopback first.** The `redirect_url` is `http://127.0.0.1:<port>/github/hob-app/callback`, at the hub's current port. A browser on the hub reaches it, so creating a hob's app works from the hub's window and from a browser on the hub.
@@ -77,7 +94,7 @@ You never create an app by hand or handle a key file. Connecting a hob's app (#2
 - **In the keychain on the hub.** The private key is one item in the OS keychain per hob: the macOS Keychain, or the Secret Service on Linux, through the same keychain access as ADR 020. Like the sign-in, the keys are the hub's own, under a service named after its data folder (`ai.hobbots.hub-<id>.github.hob-app`), and a hub moves the key of each hob with an app out of the service every hub shared before ([#1214](https://github.com/otaviobarros/hobbots/issues/1214)). It never goes on a command line, in the database, the event journal, logs, the browser or the sandbox. Without a usable keychain the hub refuses to create the app rather than write the key to a file.
 - **Written before it is used.** The hub writes the key to the keychain before it marks the hob's app connected. If the write fails, the Charms tab says so and links to the app's settings page on GitHub, so you can delete the app GitHub already made.
 - **Redacted by value.** The key, every JWT and every installation token join the known values the hub redacts (permissions contract). Private key blocks are already redacted by shape.
-- **No key files and no rotation.** GitHub keys do not expire. The hub never asks for a key file. If a key is revoked or lost, you reconnect, which creates a new app.
+- **No key files to make an app, and no rotation.** GitHub keys do not expire. Making an app never asks for a key file. If a key is revoked or lost, you reconnect, which creates a new app, or links a linked app again with a new key.
 - **Removed with the hob's app.** Disconnecting the hob's app, or retiring the hob, does this:
   1. With a JWT, the hub removes the app's installations (`DELETE /app/installations/{installation_id}`), so the app can no longer reach your repositories even if the key leaked earlier. A failure here is shown, not retried in a loop. The hob's app is then kept as left over: it no longer acts, and the Charms tab shows what could not be removed with the link below until you dismiss it, so a failure during retirement is not lost.
   2. It deletes the keychain item.
@@ -134,12 +151,12 @@ With the hob's app, Push stays the same action, with the same policy, the same o
 
 ### What stays out
 
-- **Organization-owned apps.** They need an organization owner's approval. Later.
+- **Making organization-owned apps.** They need an organization owner's approval. Later. An organization's app that already exists can be linked.
 - **Webhooks.** A hob reacting to GitHub events needs a public address and a webhook secret. Later.
-- **Apps shared by several hobs.** One app is one hob's name.
+- **Apps shared by several hobs.** One app is one hob's name, linked or made.
 - **The redirect from other devices** (above).
 - **The hob's app acting as you.** No user access token is ever made for it.
-- **Key files, and deleting the app from the hub.** You delete an app on GitHub.
+- **Deleting the app from the hub.** You delete an app on GitHub. A key file is asked for only when you link an app you already have.
 
 ## Rationale
 
@@ -161,7 +178,8 @@ Loopback is enough for the first version, because the hub's computer is where yo
 - **#228** proves the feature end to end against the fake GitHub API of #325.
 - The fake GitHub API grows the manifest conversion, the app and installation endpoints, the Git database endpoints and a signed-commit flag.
 - The permissions contract points here for the hob's app.
-- A hob with its own app reaches only repositories your personal account owns.
+- A hob with an app made from a manifest reaches only repositories your personal account owns. A linked app reaches wherever it is installed.
+- **#1321** links an app you already have: the form, the check with GitHub, the keychain item, and unlinking without touching its installations.
 - A hob's commits on GitHub have different IDs from its local ones until a Fetch action lets it catch up.
 
 ## Validation
@@ -176,4 +194,5 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - An approved push creates commits that GitHub shows as the bot's and Verified, moves the branch with Git so a moved branch is refused and a force push keeps its lease, and a second push sends only newer commits. A failure before the branch moves changes no branch, and calling again moves it once. Proven against the fake GitHub API, whose signed-commit flag stands in for GitHub's signature: `[TC-GEN-087]` to `[TC-GEN-091]`. A retry after GitHub made the commits but before the branch moved still asks for Workflows when they change one: `[TC-GEN-097]`. The branch moves only once the hub has saved which commits GitHub made, in one transaction: `[TC-GEN-098]`. End to end over the hub's API, after a card that names the bot: `[TC-GEN-111]`. Not proven yet against GitHub itself, including whether GitHub signs commits an installation token makes through the Git database API: [#420](https://github.com/otaviobarros/hobbots/issues/420).
 - A hob opens a pull request and comments as its bot, with the same policy and card, which name the bot as who acts. Opening a draft pull request and commenting as the bot, each with a token for that action alone, never the user's account, and a card and step that say "as Frodo's app, frodo-hobbots[bot]": `[TC-GEN-092]`, `[TC-GEN-093]`. The hob's policy unchanged, with the step alone naming the bot when nothing asks: `[TC-GEN-094]`. A card that waits while the app is disconnected sends nothing, and calling again asks again as you: `[TC-GEN-095]`. A lost answer read back as the bot's, never the user's pull request from the same head: `[TC-GEN-096]`. Proven against the fake GitHub API with the in-memory keychain, and end to end over the hub's API, with a hob without its own app still acting as you: `[TC-GEN-112]`, `[TC-GEN-113]`. Not proven yet against GitHub itself: [#420](https://github.com/otaviobarros/hobbots/issues/420).
 - The Charms tab gives a hob its own app, lists where it is installed, and fixes a reconnect in one action. Proven in a browser against a hub from source, with GitHub's page stood in and, once the app exists, the hub's answers about it stood in: `[TC-GEN-056]`, `[TC-GEN-057]`, including the tab reading the app's status again after reading its installations marks it: `[TC-GEN-057]`. The hub names the repositories each installation reaches from `GET /installation/repositories`, with one token per installation that reads metadata only and is kept until five minutes before it lapses: `[TC-GEN-084]`. Removing the installations needs only their IDs, so names GitHub will not give never keep an installation in place on disconnect or retirement: `[TC-GEN-085]`. Not proven yet: the flow against GitHub itself ([#420](https://github.com/otaviobarros/hobbots/issues/420)).
+- You link an app you already have by its ID or client ID and its key: the hub checks the key with GitHub, keeps it only in the keychain, redacts it, lists the app's installations, and says which permissions it lacks. It refuses a wrong ID or key, an app another hob has and a hob that cannot take an app, keeps nothing when it refuses, and takes the key only from the hub's own computer. Unlinking or retiring the hob deletes the key and leaves the installations. Proven against the fake GitHub API with the in-memory keychain: `[TC-GEN-405]`, `[TC-PE-520]`, `[TC-GEN-406]`; the stored origin and the app's holder on SQLite and PostgreSQL: `[TC-GEN-407]`; over the hub's API: `[TC-PE-521]`; and the Charms tab's form, a refusal by its field and unlinking, in a browser with the hub's answers stood in: `[TC-GEN-408]`. Not proven yet against GitHub itself: [#420](https://github.com/otaviobarros/hobbots/issues/420).
 - End to end against the fake GitHub API with the fake runtime, a hob pushes and opens a pull request as its bot with verified commits, and no key or token reaches the sandbox's environment, files or tool output. Proven over the hub's API with its own composition: `[TC-GEN-110]` to `[TC-GEN-113]`, and the app's key, its JWTs and its tokens found nowhere in the sandbox's environment, any file on the hub, any table or any API answer: `[TC-GEN-118]`. Not proven yet against GitHub itself: [#420](https://github.com/otaviobarros/hobbots/issues/420).

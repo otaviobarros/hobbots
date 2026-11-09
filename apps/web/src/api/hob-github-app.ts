@@ -1,3 +1,4 @@
+import type { HobGitHubAppLink } from "@hobbots/api";
 import type { AgentId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
@@ -45,6 +46,15 @@ export const useHobGitHubAppInstallations = (agentId: AgentId, appId: number, wa
 /** Opens the hub page that takes the user to GitHub to make the hob's app. */
 export const useStartHobGitHubApp = (agentId: AgentId) =>
   useMutation({ mutationFn: () => call((c) => c.hobGitHubApp.start({ params: { agentId } })) });
+
+/** Links an app the user already has to the hob (#1321), then reads its status again. */
+export const useLinkHobGitHubApp = (agentId: AgentId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (link: HobGitHubAppLink) => call((c) => c.hobGitHubApp.link({ params: { agentId }, payload: link })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: hobGitHubAppKey(agentId) }),
+  });
+};
 
 /** Removes the hob's app from the hub, or dismisses an old one left over; then reads its status again. */
 export const useDisconnectHobGitHubApp = (agentId: AgentId) => {
