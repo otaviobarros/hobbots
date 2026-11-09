@@ -17,6 +17,7 @@ import {
   RuntimeKind,
   RuntimeModels,
   SkillName,
+  SummonCaps,
   THREAD_TITLE_MAX,
   Thread,
   ThreadId,
@@ -46,6 +47,7 @@ import { GitHubGroup } from "./github.ts";
 import { HobChangesGroup } from "./hob-changes.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
 import { HobMemoryGroup } from "./hob-memory.ts";
+import { HobProposalsGroup } from "./hob-proposals.ts";
 import { MemoryGroup } from "./memory.ts";
 import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
@@ -63,6 +65,7 @@ import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
 import { UsageGroup } from "./usage.ts";
 import { DeviceSession } from "./user-session.ts";
+import { WebGroup } from "./web.ts";
 import { WorkbenchGroup } from "./workbench.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
@@ -278,6 +281,12 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       success: Thread,
       error: [AgentNotFound, HobUnavailable],
     }),
+    // The hob's live hobs summoned without asking you, and the caps on them (ADR 034).
+    HttpApiEndpoint.get("summonCaps", "/agents/:agentId/summon-caps", {
+      params: { agentId: AgentId },
+      success: SummonCaps,
+      error: AgentNotFound,
+    }),
   )
   .middleware(DeviceSession)
   .prefix("/api") {}
@@ -431,12 +440,14 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(DiagnosticsGroup)
   .add(ExportsGroup)
   .add(UsageGroup)
+  .add(WebGroup)
   .add(MemoryGroup)
   .add(MemoryPagesGroup)
   .add(MemorySharesGroup)
   .add(HobMemoryGroup)
   .add(SkillsGroup)
   .add(SkillProposalsGroup)
+  .add(HobProposalsGroup)
   .add(SkillUpdatesGroup)
   .add(SkillTrialsGroup)
   .add(SkillHealthGroup)

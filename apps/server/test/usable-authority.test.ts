@@ -71,7 +71,9 @@ describe("a delegation whose authority leaves the member no tool for its brief",
       ]),
     );
     const rook = taskOf(await run(treeWhen((each) => memberTask(each, ROOK) !== undefined)), ROOK);
-    expect(answers.get("commit")).toContain("Rook will have: file reads, file edits, commands, git_init.");
+    // The Task shows in the tree before the call that made it ends, so the answer is waited for.
+    const answer = await run(waitToFind("the answer to the delegation", () => answers.get("commit")));
+    expect(answer).toContain("Rook will have: file reads, file edits, commands, git_init.");
 
     const request = await run(waitToFind("Rook's first prompt", () => promptsTo(requests, rook)[0]));
     const turn = toolTurn(request.tools, "on");
@@ -102,7 +104,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
       ]),
     );
     const rook = taskOf(await run(treeWhen((each) => memberTask(each, ROOK) !== undefined)), ROOK);
-    const answer = answers.get("commit");
+    const answer = await run(waitToFind("the answer to the delegation", () => answers.get("commit")));
     expect(answer).toContain(
       "Rook will have no tools: no folder is both yours and its own, so its turns are chat-only.",
     );

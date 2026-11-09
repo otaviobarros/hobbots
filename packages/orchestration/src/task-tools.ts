@@ -33,6 +33,7 @@ import {
   TaskToolInputs,
   type TaskToolName,
   TaskToolRefused,
+  type ThreadId,
   type TurnEnding,
   taskToolJsonSchema,
   taskToolText,
@@ -99,6 +100,8 @@ const withShown = (caller: TaskToolCaller, shown: ReadonlyMap<string, CarriedIte
 export interface SessionCharms {
   /** The Attempt the session runs as: a memory save it makes settles in that Attempt's session (#1049). */
   readonly attemptId: AttemptId;
+  /** The chat the Task belongs to, which the session's web records name (ADR 036). */
+  readonly threadId: ThreadId | null;
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly redactor: Redactor;
   readonly approvals: TurnApprovals | null;
@@ -477,6 +480,11 @@ export class TaskTools extends Context.Service<
                 threadId: null,
                 messageId: null,
                 taskId: caller.taskId,
+                webPlace: {
+                  threadId: turn.threadId,
+                  taskId: Effect.succeed(caller.taskId),
+                  attemptId: Effect.succeed(turn.attemptId),
+                },
                 scope,
               },
               { writes: false },

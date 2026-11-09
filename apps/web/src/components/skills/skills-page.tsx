@@ -80,7 +80,7 @@ function EditBody({
   const readOnly =
     skill !== undefined &&
     listed !== undefined &&
-    (agentsFolderOf(skill, listed.sources) !== null || listed.sets.some((set) => set.skillId === skillId));
+    (agentsFolderOf(skill, listed) !== null || listed.sets.some((set) => set.skillId === skillId));
   if (listed === undefined || !readOnly)
     return <SkillEditor skillId={skillId} hobs={reads.hobs} say={say} trial={trial} />;
   return (

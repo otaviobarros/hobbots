@@ -11,8 +11,10 @@ import {
   missingRuntimeModels,
   readToolLog,
   runtimeAdapters,
+  summonCapsOf,
   type TaskRepository,
   ToolLogs,
+  UnattendedSummonLimits,
 } from "@hobbots/agents";
 import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import type { ThreadId } from "@hobbots/domain";
@@ -35,6 +37,7 @@ import { HobChangesHandlers } from "./hob-changes.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { HobMemoryHandlers } from "./hob-memory.ts";
+import { HobProposalsHandlers } from "./hob-proposals.ts";
 import { Installation } from "./installation.ts";
 import { MemoryPagesHandlers } from "./memory.ts";
 import { MemoryHandlers } from "./memory-settings.ts";
@@ -53,6 +56,7 @@ import { SkillsHandlers } from "./skills.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
 import { UsageHandlers } from "./usage.ts";
 import { DeviceSessionLive } from "./user-session.ts";
+import { WebHandlers } from "./web-usage.ts";
 import { WorkbenchHandlers } from "./workbench.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
@@ -62,6 +66,7 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
     const chat = yield* ChatService;
     const hobs = yield* HobService;
     const lifecycle = yield* HobLifecycle;
+    const summonLimits = yield* UnattendedSummonLimits;
     const context = yield* Effect.context<HobbotsRepository | TaskRepository | ApprovalService | Backpack>();
     return handlers.handleAll({
       list: ({ query }) => repo.listAgentsWithStatus(query.status ? [query.status] : ["active", "paused"]),
@@ -81,6 +86,12 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
           ),
         ),
       createThread: ({ params }) => chat.createThread(params.agentId),
+      summonCaps: ({ params }) =>
+        repo.findAgent(params.agentId).pipe(
+          Effect.flatMap(foundAgent(params.agentId)),
+          Effect.andThen(repo.listAgents),
+          Effect.map((agents) => summonCapsOf(agents, params.agentId, summonLimits)),
+        ),
     });
   }),
 ).pipe(Layer.provide(HobInputErrorsLayer));
@@ -242,12 +253,14 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     DiagnosticsHandlers,
     ExportsHandlers,
     UsageHandlers,
+    WebHandlers,
     MemoryHandlers,
     MemoryPagesHandlers,
     MemorySharesHandlers,
     HobMemoryHandlers,
     SkillsHandlers,
     SkillProposalsHandlers,
+    HobProposalsHandlers,
     SkillUpdatesHandlers,
     SkillRepositoriesHandlers,
     SkillTrialsHandlers,

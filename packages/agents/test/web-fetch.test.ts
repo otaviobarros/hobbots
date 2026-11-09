@@ -104,6 +104,7 @@ describe("web_fetch's page parts (ADR 036)", () => {
   it("tells the hob the page is outside data, where it came from, and which part comes next", () => {
     const page = {
       url: "https://example.com/b",
+      status: 200,
       title: "Lamps",
       contentType: "text/html",
       text: "x".repeat(150_000),

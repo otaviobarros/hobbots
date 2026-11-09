@@ -1,4 +1,4 @@
-import type { AgentId, RuntimeHealth, SkillId } from "@hobbots/domain";
+import type { AgentId, HobProposalRow, RuntimeHealth, SkillId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Stepper } from "@hobbots/ui/components/stepper";
 import { focusElement } from "@hobbots/ui/lib/restore-focus";
@@ -16,6 +16,7 @@ import {
   settleSummonDraft,
   submitDraft,
 } from "../../api/first-hob.ts";
+import { useDecideHobProposal } from "../../api/hob-proposals.ts";
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../../api/queries.ts";
 import { signInProblem } from "../../api/runtime-health.ts";
 import { presetInfo } from "../../api/safety.ts";
@@ -24,6 +25,8 @@ import { openSummonDraft, summonProblem } from "../../api/summon.ts";
 import { motionReduced } from "../../lib/motion.ts";
 import { readyProviders } from "../../lib/providers.ts";
 import { useSettledBrain, useSettledRuntime } from "../hob-form/hob-form.tsx";
+import { editedSummoningDraft, summonFormDraft } from "../hob-proposal/hob-proposal-model.ts";
+import { messages as proposalCopy } from "../hob-proposal/messages.ts";
 import { ownScope } from "../hob-skills/hob-skills-model.ts";
 import { type HobSkillWrites, useHobSkillWrites } from "../hob-skills/use-hob-skill-writes.ts";
 import { messages as shared } from "../messages.ts";
@@ -38,12 +41,31 @@ import { SUMMONING_MS, Summoning } from "./summoning.tsx";
 const copy = messages;
 
 /**
+ * A summon row of a hob proposal opened in Summon to edit (ADR 034): Summon starts on the row's
+ * draft, and its last step allows your version instead of summoning, so the hob is made by you.
+ */
+export interface SummonEditing {
+  readonly proposalId: string;
+  readonly row: HobProposalRow;
+  /** The manager's name. */
+  readonly who: string;
+}
+
+/**
  * Summon a hob, after onboarding, in three steps: what it helps with, its name and look, then a
  * plain summary with the AI it thinks with. A live preview follows every choice. The step lives in
  * the address, so Back and a reload keep it; the draft is kept until the hob exists. The summon
  * plays the summoning while the hub makes the hob, then shows it on the Arrived screen.
  */
-export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: SummonStep) => void }) {
+export function Summon({
+  step,
+  onStep,
+  editing,
+}: {
+  step: SummonStep;
+  onStep: (step: SummonStep) => void;
+  editing?: SummonEditing | undefined;
+}) {
   const navigate = useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
@@ -53,16 +75,24 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   const create = useCreateHob();
   // The route loads the hob list first, so a fresh name avoids the hobs the user already has and a
   // draft whose hob already joined is not brought back.
-  const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
+  const [draft, setDraft] = useState<FirstHobDraft>(() =>
+    editing === undefined ? openSummonDraft(keptSummonDraft(), hobs.data ?? []) : summonFormDraft(editing.row),
+  );
   const models = useQuery(modelsQuery(draft.runtime));
   const [tried, setTried] = useState(false);
   // The library skills to give the hob once it exists; Everyone's and its projects' come by themselves.
   const [skills, setSkills] = useState<ReadonlyArray<SkillId>>([]);
+  const allow = useAllowEdited(editing, draft);
   const { left, summon, summoning } = useSummonHob(draft, setDraft, create, skills);
+  const sending = editing === undefined ? create : allow.mutation;
+  const words = editWords(editing, draft);
   const { scroller, heading } = useStepStart(step);
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
-  useEffect(() => keepSummonDraft(draft), [draft]);
+  // Your version of a proposal row lives only on this page: Summon's own draft is left as it was.
+  useEffect(() => {
+    if (editing === undefined) keepSummonDraft(draft);
+  }, [draft, editing]);
   useSettledRuntime(readyProviders(runtimes.data), setDraft);
   useSettledBrain(models.data, setDraft);
 
@@ -74,20 +104,20 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
   // The AI it would think with is signed out: Ready leads with how to fix it.
   const signedOut = signedOutHealth(health);
   const model = models.data?.models.find((m) => m.id === draft.model);
-  const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
+  const rejected = rejectedBy(sending.error);
   const problem = summonProblem(
     draft,
     { pending: runtimes.isPending, failed: runtimes.isError, health },
     model !== undefined,
   );
   const stepProblem = index === 0 ? roleProblem(draft) : undefined;
-  const hint = summonHint({ create, rejected, name, problem: last ? problem : stepProblem });
-  const blocked = last ? problem !== undefined || create.isPending : stepProblem !== undefined;
+  const hint = summonHint({ create: sending, rejected, name, problem: last ? problem : stepProblem, editing });
+  const blocked = last ? problem !== undefined || sending.isPending : stepProblem !== undefined;
 
   // Cancel drops the draft; leaving any other way keeps it for next time.
   const cancel = () => {
     left.current = true;
-    if (!locked) keepSummonDraft(null);
+    if (!locked && editing === undefined) keepSummonDraft(null);
     if (canGoBack) router.history.back();
     else void navigate({ to: "/hobs" });
   };
@@ -96,7 +126,8 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
     setTried(true);
     if (blocked) return;
     setTried(false);
-    if (last) void summon();
+    if (last && editing !== undefined) void allow.send();
+    else if (last) void summon();
     else onStep(stepAt(index + 1));
   };
 
@@ -112,7 +143,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
       <form onSubmit={next} className="mx-auto flex w-full max-w-[1064px] flex-col gap-6 px-8 py-8">
         <header className="flex flex-col gap-3.5">
           <div className="flex items-center gap-4">
-            <h1 className="lbl m-0 flex-1 text-label">{copy.heading}</h1>
+            <h1 className="lbl m-0 flex-1 text-label">{words.heading}</h1>
             <Button type="button" variant="ghost" size="sm" onClick={cancel} className="text-text-secondary">
               {copy.cancel}
             </Button>
@@ -162,8 +193,9 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
               locked={locked}
               blocked={blocked}
               warn={blocked && tried}
-              failed={create.isError}
+              failed={sending.isError}
               hint={hint}
+              submit={words.submit}
               onBack={() => onStep(stepAt(index - 1))}
             />
           </div>
@@ -184,6 +216,40 @@ const stepIntro = (step: SummonStep, name: string) =>
   step === "role" ? copy.role.intro : step === "look" ? copy.look.intro : copy.ready.intro({ name });
 
 type Create = ReturnType<typeof useCreateHob>;
+
+/** Why the hub refused what was sent, when it said: Summon's create, or your version of a proposal row. */
+const rejectedBy = (error: unknown): ApiError | undefined =>
+  error instanceof ApiError && (error.tag === "InvalidHob" || error.tag === "HobProposalRefused") ? error : undefined;
+
+/** The heading and the last step's label: Summon's own, or for your version of a proposal row. */
+const editWords = (editing: SummonEditing | undefined, draft: FirstHobDraft) => {
+  if (editing === undefined) return { heading: copy.heading, submit: undefined };
+  const name = draft.name.trim() || editing.row.label;
+  return { heading: proposalCopy.editing.heading({ who: editing.who }), submit: proposalCopy.editing.allow({ name }) };
+};
+
+/** What the last step's send reads: Summon's create, or allowing your version of a proposal row. */
+type Sending = Pick<Create, "isPending" | "isError" | "error">;
+
+/** Allows your version of a proposal row once, then opens the hob it made. */
+function useAllowEdited(editing: SummonEditing | undefined, draft: FirstHobDraft) {
+  const navigate = useNavigate();
+  const mutation = useDecideHobProposal(editing?.proposalId ?? "");
+  const send = async () => {
+    if (editing === undefined) return;
+    try {
+      await mutation.mutateAsync({
+        _tag: "allow",
+        rowId: editing.row.id,
+        edited: editedSummoningDraft(draft, editing.row),
+      });
+      void navigate({ to: "/hobs/$hobId/profile", params: { hobId: editing.row.hobId }, replace: true });
+    } catch {
+      // The footer says why; the draft stays to change and allow again.
+    }
+  };
+  return { mutation, send };
+}
 
 /**
  * A new step starts at its top, with focus on its heading (WCAG 2.4.3), not at the step before's
@@ -207,13 +273,16 @@ const summonHint = ({
   rejected,
   name,
   problem,
+  editing,
 }: {
-  create: Create;
+  create: Sending;
   rejected: ApiError | undefined;
   name: string;
   problem: string | undefined;
+  editing: SummonEditing | undefined;
 }) => {
-  if (create.isPending) return shared.summon.summoning({ name });
+  if (create.isPending)
+    return editing === undefined ? shared.summon.summoning({ name }) : proposalCopy.editing.allowing({ name });
   if (rejected) return shared.summon.rejected({ name, reason: rejected.message });
   if (create.isError) return shared.onboarding.ready.failed({ name });
   return problem;
@@ -302,6 +371,7 @@ function SummonFooter({
   warn,
   failed,
   hint,
+  submit,
   onBack,
 }: {
   index: number;
@@ -311,6 +381,8 @@ function SummonFooter({
   warn: boolean;
   failed: boolean;
   hint: string | undefined;
+  /** The last step's label when it does something else than summon. */
+  submit?: string | undefined;
   onBack: () => void;
 }) {
   const last = index === 2;
@@ -328,7 +400,7 @@ function SummonFooter({
         className={cn(blocked && "opacity-50")}
       >
         {last && <span aria-hidden>✦</span>}
-        {last ? copy.ready.summon({ name }) : index === 0 ? copy.role.next : copy.look.next}
+        {last ? (submit ?? copy.ready.summon({ name })) : index === 0 ? copy.role.next : copy.look.next}
       </Button>
       <span
         id="summon-hint"

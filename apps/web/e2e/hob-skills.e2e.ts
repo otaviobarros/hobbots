@@ -149,10 +149,13 @@ test("[TC-UX-1062-06] What changed lists a save with its rollout and rolls it ba
   await main.getByRole("button", { name: "Roll back to r1" }).click();
   await expect(main).toContainText("Review checklist is back on r1 where it moved.");
   await expect(main).toContainText("Review checklist moved from r2 to r1 for Pip");
+  // The r2 row has nothing left to roll back, and the use line names the revision Pip is on (#1220).
+  await expect(main.getByRole("button", { name: "Roll back to r1" })).toHaveCount(0);
 
   await main.getByRole("link", { name: "Review checklist" }).first().click();
   await main.getByRole("tab", { name: /Activity/ }).click();
   await expect(main).toContainText("No hob has used it yet.");
+  await expect(main).toContainText("Used Review checklist (r1) under a reply that used it");
   const notes = main.getByRole("region", { name: "Notes from hobs" });
   await expect(notes).toContainText("“Step 1 does not say which diff.”", { timeout: 20_000 });
   await expect(notes).toContainText(/Pip, unclear · .* · 2 more notes suggest a revision/);

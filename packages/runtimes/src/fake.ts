@@ -26,9 +26,9 @@ import {
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { type Cause, Clock, Duration, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
-import { decideCall, grantedHosts, startCall } from "./approval.ts";
+import { type CallDecision, decideCall, grantedHosts, startCall } from "./approval.ts";
 import { backgroundFinished } from "./background-commands.ts";
-import { sessionPolicy, toolTurn } from "./claude-code.ts";
+import { sessionPolicy, type ToolTurn, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { mountName } from "./skills.ts";
@@ -571,7 +571,7 @@ export const scriptedToolEvents = (
             (event) => Queue.offerUnsafe(queue, event),
             turn,
             request.redaction,
-          );
+          ).pipe(Effect.flatMap((decided) => searchLimited(decided, call, turn)));
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const command =
             decision._tag === "Run" ? scriptedCommand(call, decision.verdict.targets, sandbox) : undefined;
@@ -607,6 +607,14 @@ export const scriptedToolEvents = (
     ),
   );
 };
+
+/** A search past one of the hub's limits is refused with its words, as on Claude Code (ADR 036). */
+const searchLimited = (decision: CallDecision, call: ScriptedCall, turn: ToolTurn): Effect.Effect<CallDecision> =>
+  decision._tag !== "Run" || call.tool !== WEB_SEARCH_TOOL || turn.checkWebSearch === undefined
+    ? Effect.succeed(decision)
+    : Effect.map(turn.checkWebSearch(String(call.input.query ?? "")), (reason) =>
+        reason === null ? decision : { _tag: "Refuse", verdict: decision.verdict, reason },
+      );
 
 /**
  * A prompt line `fake:hub <tool> <JSON input>` asks the fake runtime to call that Hobbots tool

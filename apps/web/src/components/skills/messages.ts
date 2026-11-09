@@ -35,10 +35,11 @@ export const messages = {
   overview: {
     library: "Your library",
     libraryHint: "Hobs load a skill only once it is given to them",
-    note: "Hobs get only what is here. Skills, plugins and MCP servers you installed in your own Claude Code or Codex stay out of Hobbots. Skills in ~/.agents/skills show up here by themselves.",
+    note: ({ folder }: { folder: string }) =>
+      `Hobs get only what is here. Skills, plugins and MCP servers you installed in your own Claude Code or Codex stay out of Hobbots. Skills in ${folder} show up here by themselves.`,
     worth: "Worth a look",
-    agentsProblem: ({ folder }: { folder: string }) => `${folder} in ~/.agents/skills was not added`,
-    agentsUnreadable: "~/.agents/skills could not be read",
+    agentsProblem: ({ folder, where }: { folder: string; where: string }) => `${folder} in ${where} was not added`,
+    agentsUnreadable: ({ where }: { where: string }) => `${where} could not be read`,
     flagged: ({ name }: { name: string }) => `${name} has something to look at`,
     flaggedHint: "A script, a link or hidden text. Open it to see where.",
     updated: ({ when }: { when: string }) => `Changed ${when}`,
@@ -107,15 +108,15 @@ export const messages = {
   },
   export: {
     title: "Export skills",
-    intro:
-      "Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library, except skills in ~/.agents/skills.",
+    intro: ({ folder }: { folder: string }) =>
+      `Makes a folder with each skill and a skills.lock.json that names its source and revision, so another hub gets exactly the same ones. Backups already include your whole library, except skills in ${folder}.`,
     list: "Skills to export",
     pick: ({ name }: { name: string }) => `Export ${name}`,
     more: ({ name, count }: { name: string; count: number }) => `${name} +${formatCount(count)}`,
     notExported: "Not exported",
-    notExportedScope: "Everyone · ~/.agents",
-    notExportedNote:
-      "Skills in ~/.agents/skills stay in that folder. Another computer's Hobbots reads its own ~/.agents/skills. Make a copy first if you want to take one with you.",
+    notExportedScope: ({ folder }: { folder: string }) => `Everyone · ${folder}`,
+    notExportedNote: ({ folder }: { folder: string }) =>
+      `Skills in ${folder} stay in that folder. Another computer's Hobbots reads its own. Make a copy first if you want to take one with you.`,
     assignments: "Include who gets each skill",
     assignmentsHint:
       "Keeps Everyone, project and hob assignments, and held revisions. A hub without those hobs or projects keeps the skills in its library only.",
@@ -147,7 +148,7 @@ export const messages = {
     unknown: "From a source",
   },
   chips: {
-    agents: "From ~/.agents",
+    agents: ({ folder }: { folder: string }) => `From ${folder}`,
     held: ({ rev }: { rev: string }) => `Kept on ${rev}`,
     heldOld: "Kept on an older revision",
     older: "On an older revision",
@@ -415,13 +416,14 @@ export const messages = {
     leftOut: "Left out",
   },
   agents: {
-    byline: ({ when }: { when: string }) => `from ~/.agents/skills on this computer · picked up ${when}`,
+    byline: ({ folder, when }: { folder: string; when: string }) =>
+      `from ${folder} on this computer · picked up ${when}`,
     note: ({ folder }: { folder: string }) =>
       `This skill lives in ${folder}, which other tools on this computer use too, so Hobbots only reads it. Change it in that folder: each change becomes a new revision here and rolls out to every hob. To change it just for your hobs, make a copy.`,
     readOnly: "read-only",
-    fileReadOnly: "Read-only. Change it in its folder in ~/.agents/skills.",
-    noEdit:
-      "No Edit or Remove here: delete its folder in ~/.agents/skills to remove it, or turn it off for one hob on that hob's skills list.",
+    fileReadOnly: ({ folder }: { folder: string }) => `Read-only. Change it in its folder in ${folder}.`,
+    noEdit: ({ folder }: { folder: string }) =>
+      `No Edit or Remove here: delete its folder in ${folder} to remove it, or turn it off for one hob on that hob's skills list.`,
     source: ({ folder }: { folder: string }) => `${folder} on this computer`,
     revisions: "Revisions",
     revisionsText: "Made when the folder changes. Roll back and holding a hob back still work.",
@@ -492,8 +494,8 @@ export const messages = {
     confirm: "Make the copy",
     copying: "Copying…",
     cancel: "Cancel",
-    done: ({ name }: { name: string }) =>
-      `${name} is in your library at r1, and you can edit it. The original in ~/.agents/skills is unchanged.`,
+    done: ({ name, folder }: { name: string; folder: string }) =>
+      `${name} is in your library at r1, and you can edit it. The original in ${folder} is unchanged.`,
     doneSet: ({ name, set }: { name: string; set: string }) =>
       `${name} is in your library at r1, and you can edit it. ${set} is unchanged.`,
     taken: "Your library has a skill of that name. Pick another name.",

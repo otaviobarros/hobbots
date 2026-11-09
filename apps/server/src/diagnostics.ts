@@ -13,6 +13,7 @@ import {
   SecretRedaction,
   stalledWork,
   TaskRepository,
+  WebRecords,
   workHeld,
 } from "@hobbots/agents";
 import { DiagnosticsReportRefused, HobbotsApi, QuestNotFound, type QuestTrace } from "@hobbots/api";
@@ -52,6 +53,19 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
     const startedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     // Each hob's skills by name and revision, never their contents (ADR 029).
     const skills = yield* hobSkillLines;
+    // Web search's limits and counts, never a query, a URL or a site (ADR 036).
+    const webRecords = yield* Effect.serviceOption(WebRecords);
+    const web = Effect.gen(function* () {
+      if (Option.isNone(webRecords)) return undefined;
+      const settings = yield* webRecords.value.settings;
+      const since = new Date((yield* Clock.currentTimeMillis) - 24 * 60 * 60 * 1000).toISOString();
+      const { count } = yield* webRecords.value.usage({ since }, 0);
+      return {
+        limits: settings.limits,
+        blockedSites: settings.blockedSites.length,
+        lastDay: { searches: count.searches, pages: count.pages },
+      };
+    });
 
     const now = Effect.gen(function* () {
       const at = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -81,6 +95,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
         workHeld: yield* held,
         startedAt,
         skills: yield* skills,
+        web: yield* web,
       };
     });
 
@@ -131,6 +146,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
           stalled: current.stalled,
           recovery: current.recovery,
           skills: current.skills,
+          ...(current.web === undefined ? {} : { web: current.web }),
           trace: followed,
           includeTitles,
         });

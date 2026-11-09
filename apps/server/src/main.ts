@@ -15,6 +15,7 @@ import {
   GrantService,
   HobAdmission,
   HobLifecycle,
+  HobProposals,
   HobService,
   HubQuestions,
   MemoryBriefReceipts,
@@ -29,6 +30,7 @@ import {
   SkillTrialsLive,
   SummoningHub,
   TaskFiles,
+  UnattendedSummonLimits,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -82,6 +84,7 @@ import {
   HobbotsRepositoryLive,
   HobChangesLive,
   HobGitHubAppRepository,
+  HobProposalLogLive,
   HubCommitIdentityRepository,
   HubQuestionRepositoryLive,
   MemoryCaptureLive,
@@ -96,6 +99,7 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
   WebFoundUrlsLive,
+  WebRecordsLive,
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
@@ -314,6 +318,7 @@ const ServerLive = Layer.unwrap(
       MemoryShareLogLive,
       SkillLibraryLive,
       SkillProposalLogLive,
+      HobProposalLogLive,
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
@@ -322,6 +327,7 @@ const ServerLive = Layer.unwrap(
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
       WebFoundUrlsLive,
+      WebRecordsLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -555,6 +561,8 @@ const ServerLive = Layer.unwrap(
       )
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
+      // Before the Summoning Charm's hob use cases: a call that asks waits on its proposal (ADR 034).
+      .pipe(Layer.provideMerge(HobProposals.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before every turn's tools: who a hob on your account commits as when your Git config sets no
       // one, which the hub asks you and keeps (#741).
@@ -601,6 +609,8 @@ const ServerLive = Layer.unwrap(
             EventBus.layer,
             HobAdmission.layer,
             SummoningHub.layer,
+            // The caps on summons that run without asking you (ADR 034).
+            Layer.succeed(UnattendedSummonLimits, config.summonLimits),
             NodeFolderChecks,
             HeldRuntime,
             identity,

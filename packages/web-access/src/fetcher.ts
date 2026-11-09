@@ -133,6 +133,7 @@ const answerOf = (response: HttpClientResponse.HttpClientResponse, url: URL) =>
     const read = readPage(decodeBody(body, kind, charset), kind, url.href);
     const page: WebPage = {
       url: url.href,
+      status: response.status,
       title: read.title,
       contentType: mediaType,
       text: read.text,

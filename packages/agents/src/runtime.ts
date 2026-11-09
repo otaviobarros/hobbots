@@ -108,6 +108,19 @@ export type RuntimeEvent =
       readonly label: string;
     }
   /**
+   * A hub call whose Ask became a proposal waits for the user to decide its rows (ADR 034). The
+   * hub reports it on the call's step; it starts again with the same `id` once the proposal settles.
+   */
+  | {
+      readonly _tag: "ToolAwaitingProposal";
+      readonly id: string;
+      readonly proposalId: string;
+      readonly tool: string;
+      readonly operation: AnyOperation;
+      readonly targets: ReadonlyArray<string>;
+      readonly label: string;
+    }
+  /**
    * A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included.
    * `output` is what the call printed, or its error, whole: Hobbots redacts and cuts it, never the adapter.
    */
@@ -504,6 +517,14 @@ export interface PromptRequest {
    * A defect is ignored. Absent or null, nothing waits.
    */
   readonly recordSearch?: ((event: WebSearchedEvent) => Effect.Effect<void>) | null;
+  /**
+   * The hub's limits on the runtime's own web search (ADR 036, Usage and limits): asked before each
+   * search runs, with its query, and answers why it is refused, or null to let it run. An adapter
+   * whose runtime can refuse one search asks it for every search, and refuses with that answer; one
+   * that cannot, as Codex's hosted search, never asks it, and the hub turns search off for the next
+   * turn instead. The adapter knows no limit itself. Absent or null, no search is limited.
+   */
+  readonly checkWebSearch?: ((query: string) => Effect.Effect<string | null>) | null;
   /**
    * Hobbots tools the turn offers over the runtime's control channel, for a turn that works on a
    * Task (ADR 018). Absent or null, it offers none. The hub decides each call, not the policy hook.

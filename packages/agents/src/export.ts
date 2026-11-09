@@ -16,6 +16,7 @@ import {
   type ExportedTask,
   type ExportedThread,
   type ExportedTree,
+  type ExportedWeb,
   type ExportScope,
   HobbotsExport,
   isSecretFile,
@@ -41,6 +42,10 @@ import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
 import { HobFiles } from "./task-files.ts";
 import { TaskRepository } from "./tasks.ts";
+import { WebRecords } from "./web-usage.ts";
+
+/** The most searches, and the most pages, one export holds: the newest. */
+const EXPORT_WEB_RECORDS = 100_000;
 
 /**
  * Exports of ADR 026: one thread, one hob or everything, as a folder of Markdown and versioned
@@ -251,6 +256,8 @@ export class DataExport extends Context.Service<
         const setup = yield* InstallationSettings;
         // A hub without memory exports none.
         const memoryStore = yield* Effect.serviceOption(MemoryStore);
+        // A hub without web records exports none (ADR 036).
+        const webRecords = yield* Effect.serviceOption(WebRecords);
         // Without the hub's redactor, secret shapes are still redacted.
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
 
@@ -428,6 +435,35 @@ export class DataExport extends Context.Service<
             ),
           );
 
+        /**
+         * The scope's web searches and pages (ADR 036): a thread's, a hob's, or every one with Settings ›
+         * Web and each hob's own limits. None on a hub that keeps no web records.
+         */
+        const gatherWeb = (scope: ExportScope, hobs: ReadonlyArray<Agent>) =>
+          Effect.gen(function* () {
+            if (Option.isNone(webRecords)) return null;
+            const store = webRecords.value;
+            const filter =
+              scope._tag === "Thread"
+                ? { threadId: scope.threadId }
+                : scope._tag === "Hob"
+                  ? { agentId: scope.agentId }
+                  : {};
+            const read = yield* store.usage(filter, EXPORT_WEB_RECORDS);
+            const everything = scope._tag === "Everything";
+            const hobLimits = everything
+              ? yield* Effect.forEach(hobs, (hob) =>
+                  Effect.map(store.hobLimits(hob.id), (limits) => ({ agentId: hob.id, limits })),
+                )
+              : [];
+            return {
+              searches: read.searches,
+              pages: read.pages,
+              settings: everything ? yield* store.settings : null,
+              hobLimits: hobLimits.filter(({ limits }) => Object.values(limits).some((limit) => limit !== null)),
+            } satisfies ExportedWeb;
+          });
+
         /** The hobs the export names: every hob for everything, else those its records mention. */
         const namedHobs = (scope: ExportScope, gathered: Gathered, trees: ReadonlyArray<ExportedTree>) => {
           if (scope._tag === "Everything") return gathered.hobs;
@@ -473,6 +509,7 @@ export class DataExport extends Context.Service<
                 }
               }
             }
+            const web = yield* gatherWeb(scope, gathered.hobs);
             const data: HobbotsExport = {
               format: EXPORT_FORMAT,
               version: EXPORT_VERSION,
@@ -483,6 +520,7 @@ export class DataExport extends Context.Service<
               threads,
               quests: trees,
               memory,
+              ...(web === null ? {} : { web }),
             };
             return { data, sources };
           });

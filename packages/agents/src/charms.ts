@@ -40,6 +40,13 @@ import type {
 import type { Redactor } from "./secrets.ts";
 import { SkillTools } from "./skill-proposals.ts";
 
+/** The chat, Task and Attempt a turn's web records name. */
+export interface WebRecordPlace {
+  readonly threadId: ThreadId | null;
+  readonly taskId: Effect.Effect<TaskId | null>;
+  readonly attemptId: Effect.Effect<AttemptId | null>;
+}
+
 /** A turn that may offer Charm tools: its hob, and how to read the hob's tool access now. */
 export interface CharmTurn {
   readonly agentId: AgentId;
@@ -50,6 +57,12 @@ export interface CharmTurn {
   readonly attemptId?: AttemptId;
   /** The Task a turn outside any chat works on, whose found URLs it reads (ADR 036). */
   readonly taskId?: TaskId;
+  /**
+   * Where the turn's web records belong (ADR 036, Usage and limits): the chat, and the Task and
+   * Attempt it works on once known. A chat turn's Task comes from the thread's work, and a session's
+   * chat from its Task. Absent, its records name the fields above.
+   */
+  readonly webPlace?: WebRecordPlace;
   /** The work the turn's call keys belong to now (#660), from `callScope`, as its Task tools key theirs. */
   readonly scope: () => string;
   /** Another scope a retry of a key is found in: the turn's reply, as for its Task tools. */

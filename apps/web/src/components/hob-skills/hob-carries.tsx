@@ -48,7 +48,8 @@ function RowNotes({ row, hob, hobs }: { row: CarriedRow; hob: Agent; hobs: HobDi
   if (row.onlyWhenAsked) notes.push({ key: "asked", tone: "waiting", text: copy.onlyWhenAsked });
   for (const charm of row.missingCharms)
     notes.push({ key: `charm-${charm}`, tone: "needs", text: copy.needs({ charm: charmName(charm) }) });
-  if (row.newer !== null)
+  // A replaced skill does not load, so it names no revision: the one that replaces it says its own.
+  if (row.newer !== null && row.state._tag !== "Replaced")
     notes.push({
       key: "newer",
       tone: "later",
@@ -94,7 +95,9 @@ function Row({
             {title}
           </Link>
           {row.member !== null && <SkillChip tone="set">{copy.inSet({ set: row.skill.name })}</SkillChip>}
-          {row.number !== null && <RevTag label={skillRevisionLabel({ number: row.number })} />}
+          {row.number !== null && row.state._tag !== "Replaced" && (
+            <RevTag label={skillRevisionLabel({ number: row.number })} />
+          )}
           <RowNotes row={row} hob={hob} hobs={hobs} />
         </span>
         <span className="truncate text-meta text-label">{row.member?.description ?? row.skill.description}</span>

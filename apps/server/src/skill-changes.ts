@@ -3,6 +3,7 @@ import type {
   EventEnvelope,
   JournaledEvent,
   SkillAssignment,
+  SkillAssignmentId,
   SkillId,
   SkillName,
   SkillRevisionHash,
@@ -22,10 +23,14 @@ export const SKILL_CHANGE_TYPES = [
 /** How long after a save its rollout and holds still read as part of it, and a rollout's moves as one. */
 const SAME_CHANGE_MS = 60_000;
 
-/** What the changes need from the library: a skill's name and the number of each of its revisions. */
+/**
+ * What the changes need from the library: a skill's name, the number of each of its revisions, and
+ * the revision each assignment is pinned to now, or null once it is gone.
+ */
 export interface SkillChangeLookup {
   readonly name: (skillId: SkillId) => SkillName | null;
   readonly number: (skillId: SkillId, hash: SkillRevisionHash) => number | null;
+  readonly pin: (assignmentId: SkillAssignmentId) => SkillRevisionHash | null;
 }
 
 type Draft = { -readonly [K in keyof SkillChange]: SkillChange[K] } & {
@@ -168,6 +173,16 @@ const withPrevious = (change: SkillChange, lookup: SkillChangeLookup): SkillChan
 };
 
 /**
+ * The places Roll back can still move: those a save or rollout moved that are still on the revision
+ * it moved them to. A place rolled back since, moved on, or taken away is left out, so a change whose
+ * places all moved again offers no Roll back.
+ */
+const stillMoved = (change: SkillChange, pin: SkillRevisionHash | null, lookup: SkillChangeLookup): SkillChange => {
+  if (pin === null || change.moved.length === 0) return change;
+  return { ...change, moved: change.moved.filter((one) => lookup.pin(one.assignmentId) === pin) };
+};
+
+/**
  * The journal's skill entries as What changed lists them (ADR 029, The Skills page), newest first.
  * A save's rollout and the holds it set read as part of the save, and a rollout's moves of one skill
  * to one revision as one change. `envelopes` come in any order; at most `limit` changes are kept.
@@ -196,7 +211,7 @@ export const skillChangesOf = (
   return changes.list
     .reverse()
     .slice(0, limit)
-    .map(({ pin: _pin, ms: _ms, ...change }) => withPrevious(change, lookup));
+    .map(({ pin, ms: _ms, ...change }) => stillMoved(withPrevious(change, lookup), pin, lookup));
 };
 
 /** The skill a journaled skill change is about. */

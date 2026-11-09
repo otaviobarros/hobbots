@@ -14,7 +14,7 @@ export const fromGit = (skill: { readonly sourceId: SkillsList["skills"][number]
 
 /** Where a skill updates from, in a few words, as `github.com/acme/skills · main`. */
 export const updatesFrom = (sourceId: SkillUpdate["sourceId"], list: SkillsList): string =>
-  originText(originOf(sourceId, list.sources));
+  originText(originOf(sourceId, list.sources), list.agentsFolder.home);
 
 /** How many skills a check reads: every skill whose revisions come from Git. */
 export const gitSkillCount = (list: SkillsList): number => list.skills.filter((skill) => fromGit(skill, list)).length;

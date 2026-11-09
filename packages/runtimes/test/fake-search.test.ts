@@ -23,7 +23,11 @@ const access = (hob: HobPolicy = EMPTY_HOB_POLICY): ToolAccess => ({
   commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
-const turn = (hob: HobPolicy, webSearch: boolean): Promise<ReadonlyArray<RuntimeEvent>> =>
+const turn = (
+  hob: HobPolicy,
+  webSearch: boolean,
+  checkWebSearch?: (query: string) => Effect.Effect<string | null>,
+): Promise<ReadonlyArray<RuntimeEvent>> =>
   makeFakeRuntime({ engine })
     .sendPrompt({
       prompt: `${FAKE_SEARCH_DIRECTIVE} hobbots releases`,
@@ -34,6 +38,7 @@ const turn = (hob: HobPolicy, webSearch: boolean): Promise<ReadonlyArray<Runtime
       effort: null,
       tools: access(hob),
       webSearch,
+      ...(checkWebSearch ? { checkWebSearch } : {}),
     })
     .pipe(Stream.runCollect, Effect.runPromise)
     .then((events) => Array.from(events));
@@ -88,5 +93,15 @@ describe("the fake runtime's web search", () => {
       })
       .pipe(Stream.runDrain, Effect.runPromise);
     expect(order).toEqual(["found hobbots releases", "web_fetch"]);
+  });
+
+  // covers ADR 036 (Usage and limits)
+  it("[TC-RT-1269-02] refuses a search the hub's limits refuse, with their words, as Claude Code does", async () => {
+    const limit = "This hob reached its limit of 0 web searches a day, set in Settings › Web.";
+    const events = await turn(EMPTY_HOB_POLICY, true, () => Effect.succeed(limit));
+    expect(events).toContainEqual(
+      expect.objectContaining({ _tag: "ToolDenied", operation: "search-web", reason: limit }),
+    );
+    expect(events.map((event) => event._tag)).not.toContain("WebSearched");
   });
 });

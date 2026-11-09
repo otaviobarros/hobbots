@@ -27,6 +27,9 @@ import {
   trackTurn,
   turnWebSearch,
   webMarkBriefing,
+  webSearchRequest,
+  webSearchTurn,
+  webWorkOf,
   withWebMark,
 } from "@hobbots/agents";
 import {
@@ -43,6 +46,7 @@ import {
   stripEscapes,
   systemInstructions,
   type TaskId,
+  type ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Option, Semaphore, Stream } from "effect";
 
@@ -60,6 +64,8 @@ export interface SessionTurn {
   readonly taskId: TaskId;
   /** The Attempt the turn runs as, which its commands and file changes are recorded on (ADR 023). */
   readonly attemptId: AttemptId;
+  /** The chat the Task belongs to, which its web records name (ADR 036). */
+  readonly threadId: ThreadId | null;
   /** The runtime session to resume, or null for a fresh one with nothing of the hob's chat. */
   readonly sessionId: string | null;
   readonly access: ToolAccess | null;
@@ -217,11 +223,22 @@ export const runSessionTurn = (
           : recordRoster(session, deliveredRoster(roster, rosterMark)),
       );
     });
+    // What the turn searched is recorded, against the hob's web limits (ADR 036, Usage and limits).
+    const webUse = yield* webSearchTurn({
+      agentId: turn.agent.id,
+      threadId: turn.threadId,
+      messageId: null,
+      runtime: turn.config.runtime,
+      work: webWorkOf({ threadId: null, taskId: turn.taskId }),
+      taskId: Effect.succeed(turn.taskId),
+      attemptId: Effect.succeed(turn.attemptId),
+    });
+    const search = webSearchRequest(turnWebSearch(turn.access), webUse);
     yield* activity
       .run(
         {
           prompt: turn.prompt,
-          briefing: contextBlock([memory, roster], webMarkBriefing(markedBefore)),
+          briefing: contextBlock([memory, roster], webMarkBriefing(markedBefore), search.note),
           sessionId: turn.sessionId,
           instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
@@ -229,7 +246,8 @@ export const runSessionTurn = (
           effort: turn.config.effort,
           tools: turn.access,
           // Settled from the policy as the turn starts, as a chat turn's is (ADR 036).
-          webSearch: turnWebSearch(turn.access),
+          webSearch: search.webSearch,
+          checkWebSearch: search.checkWebSearch,
           skills,
           approvals,
           redaction: redactor,
@@ -248,6 +266,7 @@ export const runSessionTurn = (
         adapter.sendPrompt,
       )
       .pipe(
+        Stream.tap((event) => webUse.see(redactEvent(event, redactor))),
         Stream.runForEach((event) => {
           if (event._tag === "SkillUsed") return Effect.asVoid(skillUses.record(event));
           if (event._tag === "SessionStarted") {
@@ -297,7 +316,7 @@ export const runSessionTurn = (
               };
             }),
         }),
-        Effect.ensuring(Effect.andThen(endSteps, endTurn)),
+        Effect.ensuring(Effect.andThen(Effect.andThen(endSteps, endTurn), webUse.end)),
       );
     return ending;
   }).pipe(

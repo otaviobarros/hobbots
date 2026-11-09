@@ -32,8 +32,9 @@ export interface BackpackContext {
   /** The tool call the change was made by, or null for a change the hub or you made. */
   readonly toolCall: ToolCallSource | null;
   /**
-   * Whether the approval requests the change decides or expires have no live turn waiting for
-   * them, so each outcome goes to its hob's backpack (ADR 019), as when Hobbots restarted.
+   * Whether the approval requests the change decides or expires, or the hob proposals it settles
+   * (ADR 034), have no live turn waiting for them, so each outcome goes to its hob's backpack
+   * (ADR 019), as when Hobbots restarted.
    */
   readonly approvalOutcomes?: boolean;
 }
@@ -314,6 +315,30 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
     ];
   });
 
+/**
+ * How a hob proposal settled (ADR 034), for its manager, when no call waits for it any more: in the
+ * thread it was proposed in, or for a party member, on the Task its turn worked on. Recorded only for
+ * a settling the hub marks unwaited, as an approval's outcome is.
+ */
+const hobProposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
+  events.flatMap((event): ReadonlyArray<NewBackpackItem> => {
+    if (event._tag !== "HobProposalChanged" || event.proposal.state !== "settled") return [];
+    const { proposal } = event;
+    const draft = { record: `hob-proposal:${proposal.id}`, version: null };
+    return [
+      {
+        recipientId: proposal.agentId,
+        taskId: proposal.messageId === null ? proposal.taskId : null,
+        questId: null,
+        attemptId: null,
+        threadId: proposal.threadId,
+        dedupeKey: dedupeKey(draft, "hob-proposal", toolCall),
+        payload: { _tag: "hob-proposal", proposal },
+        notBefore: null,
+      },
+    ];
+  });
+
 /** Whether a proposal moved to where the hob that made it hears of it: you added it, or said Not now. */
 const decidedProposal = (event: JournaledEvent) =>
   event._tag === "SkillProposalChanged" &&
@@ -383,7 +408,10 @@ export const backpackItemsFor = (
     all: context.tasks,
     movedFor: movedFor(events),
   };
-  const outcomes = context.approvalOutcomes === true ? approvalOutcomes(events, context.toolCall) : [];
+  const outcomes =
+    context.approvalOutcomes === true
+      ? [...approvalOutcomes(events, context.toolCall), ...hobProposalOutcomes(events, context.toolCall)]
+      : [];
   const fromTasks = events.flatMap((event) =>
     drafts(event, trees).map((draft) => ({
       recipientId: draft.recipientId,

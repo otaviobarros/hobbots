@@ -344,6 +344,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               config,
               taskId: task.id,
               attemptId,
+              threadId: task.threadId,
               prompt,
               sessionId,
               access: run.access,
@@ -352,7 +353,13 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               offer: (approvals) =>
                 deps.tools.forSession(
                   { agentId: agent.id, taskId: task.id, carried: work.holding },
-                  { attemptId, currentAccess: currentAccessOf(run), redactor: deps.redactor, approvals },
+                  {
+                    attemptId,
+                    threadId: task.threadId,
+                    currentAccess: currentAccessOf(run),
+                    redactor: deps.redactor,
+                    approvals,
+                  },
                 ),
               started: (started) => {
                 session = started.sessionId;

@@ -56,6 +56,12 @@ export interface HubCallRuntime {
     request: PromptRequest,
     calls: ReadonlyArray<ScriptedHubCall>,
   ) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
+  /**
+   * Every text the turns' model was sent so far, in order: the briefing and prompt the fake was
+   * handed, or each string in the requests the stand-in model received, its instructions, prompt,
+   * tools and tool results among them. So a suite can see what reached the model, not only the hub.
+   */
+  readonly modelText: () => ReadonlyArray<string>;
   readonly close: () => void;
 }
 
@@ -63,12 +69,17 @@ export interface HubCallRuntime {
 const INSTRUCTIONS = "You are Pip, a hob making scripted hub calls.";
 
 /**
- * The turn's own request: only what a hub hands it for hub calls, so a runtime starts no sandbox,
- * resumes no session and reaches only its stand-in model.
+ * The turn's own request: only what a hub hands it for hub calls and its briefing, the context block
+ * that carries the roster of other hobs (ADR 032), so a runtime starts no sandbox, resumes no session
+ * and reaches only its stand-in model.
  */
-const scripted = (request: Pick<PromptRequest, "hubTools" | "recordToolStart" | "approvals" | "redaction">) =>
+const scripted = (
+  request: Pick<PromptRequest, "hubTools" | "recordToolStart" | "approvals" | "redaction"> &
+    Partial<Pick<PromptRequest, "briefing">>,
+) =>
   ({
     prompt: "Make the scripted calls.",
+    briefing: request.briefing ?? null,
     sessionId: null,
     instructions: INSTRUCTIONS,
     instructionsChanged: false,
@@ -91,27 +102,42 @@ const base = (turn: HubCallTurn): PromptRequest =>
 const collect = (events: Stream.Stream<RuntimeEvent, unknown>) =>
   Effect.runPromise(Stream.runCollect(events).pipe(Effect.exit)).then((exit) => ({ exit }));
 
+/** Every string in a model request, depth first, so what reached the model reads as plain text. */
+const strings = (value: unknown): ReadonlyArray<string> => {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(strings);
+  if (value !== null && typeof value === "object") return Object.values(value).flatMap(strings);
+  return [];
+};
+
 /** A runtime whose `events` makes the calls, with `turn` running them to the end. */
 const hubCallRuntime = (
   name: HubCallRuntime["name"],
   events: HubCallRuntime["events"],
+  modelRequests: ReadonlyArray<unknown>,
   close: () => void,
 ): HubCallRuntime => ({
   name,
   events,
   turn: (turn) => collect(events(base(turn), turn.calls)),
+  modelText: () => modelRequests.flatMap(strings),
   close,
 });
 
 const fakeRuntime = (): HubCallRuntime => {
   const runtime = makeFakeRuntime();
+  const told: Array<{ readonly briefing: string | null; readonly prompt: string }> = [];
   return hubCallRuntime(
     "fake",
-    (request, calls) =>
-      runtime.sendPrompt({
+    (request, calls) => {
+      const sent = {
         ...scripted(request),
         prompt: calls.map((call) => `${FAKE_HUB_DIRECTIVE} ${call.tool} ${JSON.stringify(call.input)}`).join("\n"),
-      }),
+      };
+      told.push({ briefing: sent.briefing, prompt: sent.prompt });
+      return runtime.sendPrompt(sent);
+    },
+    told,
     () => {},
   );
 };
@@ -148,6 +174,7 @@ const claudeCodeRuntime = async (executable: string, root: string): Promise<HubC
         });
         return adapter.sendPrompt(scripted(request));
       }).pipe(Stream.ensuring(Effect.sync(() => (model.moves.length = 0)))),
+    model.requests,
     () => {
       for (const key of Object.keys(process.env)) delete process.env[key];
       Object.assign(process.env, saved);
@@ -203,6 +230,7 @@ const codexRuntime = async (binary: string, root: string): Promise<HubCallRuntim
         );
         return runCodexTurn(config, scripted(request));
       }).pipe(Stream.ensuring(Effect.sync(() => (model.moves.length = 0)))),
+    model.requests,
     () => model.server.close(),
   );
 };

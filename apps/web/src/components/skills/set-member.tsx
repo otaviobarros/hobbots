@@ -77,7 +77,7 @@ function MemberAside({
       </ActionsCard>
       <OriginCard>
         <OriginRow label={copy.skill.sourceLabel}>
-          {originText(originOf(detail.skill.sourceId, list.sources))}
+          {originText(originOf(detail.skill.sourceId, list.sources), list.agentsFolder.home)}
         </OriginRow>
         <OriginRow label={copy.skill.folder} mono>
           {member.path}

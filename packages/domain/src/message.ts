@@ -38,7 +38,8 @@ export const isResumable = (status: MessageStatus): boolean => status === "inter
 
 /**
  * - `running`: under way; for a tool call, the policy allowed it and it started.
- * - `awaiting`: a tool call paused on Ask until the user decides (`approvalId`).
+ * - `awaiting`: a tool call paused on Ask until the user decides (`approvalId`), or a Summoning call
+ *   whose Ask became a proposal, until the user decides its rows (`proposalId`, ADR 034).
  * - `done`: ended; a tool call ended without an error.
  * - `failed`: a tool call ended with an error, a sandbox refusal included.
  * - `denied`: a tool call never ran; `reason` says why and `decidedBy` who refused it.
@@ -96,6 +97,8 @@ export const ReplyStep = Schema.Struct({
   endedAt: Schema.optionalKey(Schema.String),
   /** For an `awaiting` step: the approval it waits on. */
   approvalId: Schema.optionalKey(Schema.String),
+  /** For a Summoning call whose Ask became a proposal (ADR 034): the proposal, which its card shows. */
+  proposalId: Schema.optionalKey(Schema.String),
   /** For a `denied` step: why the call was refused. For an `uncertain` one: what is known of its outcome. */
   reason: Schema.optionalKey(Schema.String),
   /** For a `denied` step: the policy hook refused it, the user denied its Ask, or the OS sandbox did. */

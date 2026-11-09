@@ -9,6 +9,8 @@ import {
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
   ThreadId,
+  type WebFetchRecord,
+  type WebSearchRecord,
 } from "@hobbots/domain";
 import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
@@ -82,6 +84,7 @@ const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
 };
 
 const correlationOf = (event: JournaledEventType): RowCorrelation => {
+  if (isWebEvent(event)) return webCorrelationOf(event);
   switch (event._tag) {
     case "AgentUpserted":
       return { ...NONE, agentId: event.agent.id };
@@ -114,6 +117,28 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     default:
       return restCorrelationOf(event);
   }
+};
+
+type WebEvent = Extract<
+  JournaledEventType,
+  { readonly _tag: "WebSearched" | "WebFetched" | "WebSettingsChanged" | "HobWebLimitsChanged" }
+>;
+const WEB_EVENTS: ReadonlySet<string> = new Set([
+  "WebSearched",
+  "WebFetched",
+  "WebSettingsChanged",
+  "HobWebLimitsChanged",
+]);
+const isWebEvent = (event: JournaledEventType): event is WebEvent => WEB_EVENTS.has(event._tag);
+
+/** A web record names its hob, chat, reply and Task (ADR 036); Settings › Web belongs to no hob. */
+const webCorrelationOf = (event: WebEvent): RowCorrelation => {
+  const record: WebSearchRecord | WebFetchRecord | null =
+    event._tag === "WebSearched" ? event.search : event._tag === "WebFetched" ? event.fetch : null;
+  if (record !== null) {
+    return { agentId: record.agentId, threadId: record.threadId, messageId: record.messageId, taskId: record.taskId };
+  }
+  return event._tag === "HobWebLimitsChanged" ? { ...NONE, agentId: event.agentId } : NONE;
 };
 
 const hubQuestionCorrelation = (question: HubQuestion): RowCorrelation =>
@@ -154,7 +179,11 @@ const restCorrelationOf = (
         | "MessageUpserted"
         | "MessageQueued"
         | "PairingRequested"
-        | "PairingChanged";
+        | "PairingChanged"
+        | "WebSearched"
+        | "WebFetched"
+        | "WebSettingsChanged"
+        | "HobWebLimitsChanged";
     }
   >,
 ): RowCorrelation => {
@@ -186,6 +215,16 @@ const restCorrelationOf = (
         agentId: event.share.agentId,
         threadId: event.share.threadId,
         messageId: event.share.messageId,
+      };
+    // A hob proposal names its manager, and the reply or Task it was proposed from (ADR 034).
+    case "HobProposalRequested":
+    case "HobProposalChanged":
+      return {
+        ...NONE,
+        agentId: event.proposal.agentId,
+        threadId: event.proposal.threadId,
+        messageId: event.proposal.messageId,
+        taskId: event.proposal.taskId,
       };
     default:
       return { ...NONE, threadId: event.threadId, messageId: event.messageId };

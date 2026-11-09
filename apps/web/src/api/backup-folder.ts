@@ -19,5 +19,7 @@ export const chooseBackupFolder = (folder: string) => {
 };
 
 /** The folder backups save to: the one chosen under Backups, or else `fallback`, the hub's default. */
-export const useBackupFolder = (fallback: string | undefined) =>
-  useSyncExternalStore(subscribe, () => chosen) ?? fallback ?? "";
+export const useBackupFolder = (fallback: string | undefined) => useChosenBackupFolder() ?? fallback ?? "";
+
+/** The folder chosen under Backups, or null while backups go to the hub's default folder. */
+export const useChosenBackupFolder = (): string | null => useSyncExternalStore(subscribe, () => chosen);
