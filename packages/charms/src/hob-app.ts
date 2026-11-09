@@ -184,6 +184,10 @@ export class HobGitHubAppService extends Context.Service<
     ) => Effect.Effect<ReadonlyArray<HobGitHubAppInstallation>, GitHubError | HobAppRefused>;
     /** Checks an app the user already has against GitHub, keeps its key and gives it to the hob (#1321). */
     readonly link: (agentId: AgentId, request: HobAppLinkRequest) => Effect.Effect<HobAppLinked, HobAppRefused>;
+    /** The permissions the hob's actions use that the app itself lacks, as GitHub lists the app's now. */
+    readonly appMissing: (
+      agentId: AgentId,
+    ) => Effect.Effect<ReadonlyArray<HobGitHubAppMissingPermission>, GitHubError | HobAppRefused>;
     /** Removes a made app's installations, then its key, then forgets it. A linked app keeps its installations. */
     readonly disconnect: (agentId: AgentId) => Effect.Effect<HobAppDisconnected, HobAppRefused>;
   }
@@ -763,6 +767,23 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           return yield* named(agentId, app, jwt, listed);
         });
 
+      /**
+       * The permissions the hob's actions use that the app itself lacks, from `GET /app`: what an app
+       * installed nowhere yet still needs, which no installation can say (#1321).
+       */
+      const appMissing = (agentId: AgentId) =>
+        Effect.gen(function* () {
+          yield* agentOf(agentId);
+          const app = yield* apps.get(agentId);
+          if (app === null) return [];
+          const jwt = yield* jwtFor(agentId, app);
+          const response = yield* send(asApp("/app", jwt), "the app");
+          if (response.status === 401) return yield* Effect.flip(tokens.keyRefused(agentId, app));
+          if (response.status !== 200) return yield* answered(response.status, "the app");
+          const found = yield* read(response, AppJson, "the app");
+          return missingPermissions(found.permissions);
+        });
+
       /** Removes every installation of the app, so it reaches no repository even with a leaked key. */
       const uninstall = (agentId: AgentId, app: HobGitHubApp) =>
         Effect.gen(function* () {
@@ -847,7 +868,16 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           Effect.map(({ deleteUrl, problem }) => ({ deleteUrl, problem })),
         );
 
-      const service = HobGitHubAppService.of({ status, start, form, complete, link, installations, disconnect });
+      const service = HobGitHubAppService.of({
+        status,
+        start,
+        form,
+        complete,
+        link,
+        installations,
+        appMissing,
+        disconnect,
+      });
       const retired = RetiredHobGitHubApp.of({
         remove: (agentId) =>
           // What could not be removed stays with the hob's app as left over, shown by its status.

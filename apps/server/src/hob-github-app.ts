@@ -68,7 +68,7 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
         status: () => Effect.succeed(NONE),
         start: () => Effect.fail(absent),
         link: () => Effect.fail(absent),
-        installations: () => Effect.succeed({ installations: [] }),
+        installations: () => Effect.succeed({ installations: [], missingPermissions: [] }),
         disconnect: () => Effect.succeed({ deleteUrl: null, problem: null }),
       });
     }
@@ -109,7 +109,13 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
         }),
       installations: ({ params }) =>
         service.installations(params.agentId).pipe(
-          Effect.map((installations) => ({ installations })),
+          Effect.flatMap((installations) =>
+            installations.length > 0
+              ? Effect.succeed({ installations, missingPermissions: [] })
+              : service
+                  .appMissing(params.agentId)
+                  .pipe(Effect.map((missingPermissions) => ({ installations, missingPermissions }))),
+          ),
           Effect.mapError((error) =>
             error._tag === "HobAppRefused"
               ? new AgentNotFound({ agentId: params.agentId })

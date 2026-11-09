@@ -496,8 +496,8 @@ function ConnectedApp({
 
 /**
  * The permissions the hob's actions use that its app's installations lack, as GitHub lists them now,
- * so the note stays after the profile is opened again. An app installed nowhere yet has only what
- * linking it found, while it is still the hob's app.
+ * so the note stays after the profile is opened again. For an app installed nowhere yet, the hub reads
+ * what the app itself lacks; until that answers, what linking it found says.
  */
 function MissingNow(props: {
   hob: Agent;
@@ -523,7 +523,8 @@ function MissingListed({
   const installations = useHobGitHubAppInstallations(hob.id, status.app.appId, watching);
   const listed = installations.data?.installations ?? [];
   const justLinked = linked?.app.appId === status.app.appId ? linked.missingPermissions : [];
-  const missing = listed.length > 0 ? missingAcross(listed) : justLinked;
+  const appLacks = installations.data?.missingPermissions ?? justLinked;
+  const missing = listed.length > 0 ? missingAcross(listed) : appLacks;
   return <MissingPermissions hob={hob} missing={missing} />;
 }
 

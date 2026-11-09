@@ -73,9 +73,11 @@ const standIn = async (page: Page, initial: { status: unknown; installations?: R
   const state: {
     status: unknown;
     installations: ReadonlyArray<unknown>;
+    /** What the app itself lacks, which the hub says while it is installed nowhere. */
+    appMissing: ReadonlyArray<unknown>;
     /** When set, reading the installations fails, as when GitHub refuses the app's key, and the hub marks it so. */
     refusing: unknown;
-  } = { ...initial, installations: initial.installations ?? [], refusing: null };
+  } = { ...initial, installations: initial.installations ?? [], appMissing: [], refusing: null };
   const asked: Array<string> = [];
   const disconnects: Array<unknown> = [];
   await page.route("**/api/agents/*/github-app**", (route: Route, request: Request) => {
@@ -87,7 +89,12 @@ const standIn = async (page: Page, initial: { status: unknown; installations?: R
       state.status = state.refusing;
       return route.fulfill({ status: 502, json: { _tag: "GitHubFailed", message: "GitHub refused the app's key." } });
     }
-    if (path === "/installations") return answer({ installations: state.installations });
+    if (path === "/installations") {
+      return answer({
+        installations: state.installations,
+        missingPermissions: state.installations.length > 0 ? [] : state.appMissing,
+      });
+    }
     if (path === "/disconnect") return answer(disconnects.shift() ?? { deleteUrl, problem: null });
     return route.continue();
   });
@@ -337,6 +344,11 @@ test("[TC-GEN-408] links a GitHub app the user already has, and unlinking leaves
     sent.push(request.postDataJSON());
     const next = links.shift();
     if (next !== undefined) return route.fulfill(next);
+    // What the app lacks, as linking finds it and the hub reads it again while it is installed nowhere.
+    state.appMissing = [
+      { name: "contents", access: "write" },
+      { name: "workflows", access: "write" },
+    ];
     state.status = {
       _tag: "Connected",
       app: linkedApp,
@@ -405,7 +417,15 @@ test("[TC-GEN-408] links a GitHub app the user already has, and unlinking leaves
   expect(sent).toHaveLength(3);
   expect(await page.content()).not.toContain("PRIVATE KEY");
 
-  // Opened again, the profile still says what the app lacks, now as its installation lists it.
+  // Opened again before it is installed anywhere, the hub says what the app itself lacks.
+  await page.reload();
+  await page.getByRole("tab", { name: "Charms" }).click();
+  await expect(section.getByRole("link", { name: "Install on GitHub" })).toBeVisible();
+  await expect(section.getByRole("status").filter({ hasText: "lacks permissions" })).toContainText(
+    "Contents (read and write) and Workflows (read and write)",
+  );
+
+  // Once installed, the profile says what its installation lists.
   state.installations = [
     {
       id: 52,

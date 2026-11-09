@@ -132,7 +132,14 @@ export class HobGitHubAppGroup extends HttpApiGroup.make("hobGitHubApp")
     }),
     HttpApiEndpoint.get("installations", "/agents/:agentId/github-app/installations", {
       params: { agentId: AgentId },
-      success: Schema.Struct({ installations: Schema.Array(HobGitHubAppInstallation) }),
+      success: Schema.Struct({
+        installations: Schema.Array(HobGitHubAppInstallation),
+        /**
+         * While the app is installed nowhere, the permissions the hob's actions use that the app itself
+         * lacks, which no installation can say yet. Empty once it is installed: each installation says.
+         */
+        missingPermissions: Schema.Array(HobGitHubAppMissingPermission),
+      }),
       error: [AgentNotFound, GitHubUnreachable],
     }),
     // Removes a made app's installations, and the key of any app; the hob acts as you again. A linked

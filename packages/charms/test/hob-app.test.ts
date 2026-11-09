@@ -703,8 +703,9 @@ describe("Linking a GitHub App the user already has", () => {
         const installations = yield* service.installations(FRODO);
         const byClientId = yield* linkBy(SAM, lean.app.clientId, lean.pem);
         const leanInstallations = yield* service.installations(SAM);
+        const appLacks = { frodo: yield* service.appMissing(FRODO), sam: yield* service.appMissing(SAM) };
         const key = yield* (yield* HobAppKeys).read(FRODO);
-        return { linked, status, installations, byClientId, leanInstallations, key };
+        return { linked, status, installations, byClientId, leanInstallations, appLacks, key };
       }),
     );
     expect(outcome.linked).toEqual({
@@ -744,6 +745,8 @@ describe("Linking a GitHub App the user already has", () => {
     expect(outcome.leanInstallations.map((each) => each.missingPermissions)).toEqual([
       outcome.byClientId.missingPermissions,
     ]);
+    // And the app itself says it, for an app installed nowhere yet.
+    expect(outcome.appLacks).toEqual({ frodo: [], sam: outcome.byClientId.missingPermissions });
     // The key is in the keychain as GitHub gave it, and nowhere in what the hub keeps of the app.
     expect(Option.map(outcome.key, Redacted.value)).toEqual(Option.some(mine.pem));
     expect(JSON.stringify([...w.apps.values()])).not.toContain("PRIVATE KEY");
