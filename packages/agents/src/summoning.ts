@@ -1171,6 +1171,36 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
       }
     };
 
+    /**
+     * The hob a pause, wake or retire names, within the manager's scope as it is now, never itself,
+     * and with the operation not at Never; or why not. The plan and the applier both read it, so a
+     * proposal you allow after its scope or answer narrowed is refused (ADR 034, Applying re-checks).
+     */
+    const lifecycleTarget = (
+      name: LifecycleTool,
+      agents: ReadonlyArray<Agent>,
+      manager: Authority & { readonly agent: Agent; readonly policy: HobPolicy },
+      named: string,
+    ) => {
+      const found = target(agents, { id: manager.agent.id, policy: manager.policy }, named);
+      if (typeof found === "string") {
+        const code = found.startsWith("There is no") || found.startsWith("Several") ? "unknown-hob" : "outside-scope";
+        return { _tag: "Refused", code, text: found } as const;
+      }
+      if (found.self) {
+        return {
+          _tag: "Refused",
+          code: "outside-scope",
+          text: `You never ${LIFECYCLE[name].verb.replace(/d$/, "")} yourself.`,
+        } as const;
+      }
+      const operation = name === "summoning_retire" ? RETIRE_OPERATION : PAUSE_OPERATION;
+      if (manager.answer(operation) === "deny") {
+        return { _tag: "Refused", code: "never", text: `${wordsOf(operation)} is at Never for you.` } as const;
+      }
+      return { _tag: "Found", agent: found.agent, operation } as const;
+    };
+
     /** Pause, wake or retire one hob within the scope, never the manager itself. */
     const lifecycleAction = (name: LifecycleTool) => {
       const { verb, status, kind } = LIFECYCLE[name];
@@ -1189,17 +1219,9 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         plan: (input: { readonly hob: string; readonly running_replies?: "finish" | "stop" }, context) =>
           Effect.gen(function* () {
             const { services, agents, manager } = yield* prepare(context);
-            const found = target(agents, { id: manager.agent.id, policy: manager.policy }, input.hob);
-            if (typeof found === "string") {
-              const code =
-                found.startsWith("There is no") || found.startsWith("Several") ? "unknown-hob" : "outside-scope";
-              return yield* refused(code, found);
-            }
-            if (found.self) return yield* refused("outside-scope", `You never ${verb.replace(/d$/, "")} yourself.`);
-            const operation = name === "summoning_retire" ? RETIRE_OPERATION : PAUSE_OPERATION;
-            if (manager.answer(operation) === "deny") {
-              return yield* refused("never", `${wordsOf(operation)} is at Never for you.`);
-            }
+            const found = lifecycleTarget(name, agents, manager, input.hob);
+            if (found._tag === "Refused") return yield* refused(found.code, found.text);
+            const { operation } = found;
             const policy = yield* effectivePolicy(found.agent, services);
             const authority = yield* authorityOf(found.agent.id, policy, context.access.policy, services);
             const wider = widerFields(authority, manager, operationsOf(context));
@@ -1283,6 +1305,9 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             case "summon": {
               const draft = edited ?? row.draft;
               if (draft === null) return yield* refuse(["This row has no draft."]);
+              if (manager.answer(SUMMON_OPERATION) === "deny") {
+                return yield* refuse([`${wordsOf(SUMMON_OPERATION)} is at Never for you.`]);
+              }
               // Your version is checked as the manager's was: never wider than the manager.
               const checked = yield* checkDraft(draft, manager, services, context.access.policy.sharedFolders);
               if (checked.problems.length > 0) return yield* refuse(checked.problems);
@@ -1307,10 +1332,14 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
                 : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
             }
             default: {
-              const agent = agents.find((each) => each.id === row.hobId);
-              if (agent === undefined) return yield* refuse([`There is no hob ${row.label} on this hub any more.`]);
+              if (!agents.some((each) => each.id === row.hobId)) {
+                return yield* refuse([`There is no hob ${row.label} on this hub any more.`]);
+              }
               const name = LIFECYCLE_TOOL[proposal.kind];
-              const made = yield* lifecycleRun(name, services, agent, row.runningReplies ?? "finish", actor).pipe(
+              // Checked again as the call was: the scope, and the operation's answer, as they are now.
+              const found = lifecycleTarget(name, agents, manager, row.hobId);
+              if (found._tag === "Refused") return yield* refuse([found.text]);
+              const made = yield* lifecycleRun(name, services, found.agent, row.runningReplies ?? "finish", actor).pipe(
                 Effect.result,
               );
               return made._tag === "Success"

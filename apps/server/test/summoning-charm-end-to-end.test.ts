@@ -228,6 +228,12 @@ const turn = async (hob: Agent, ...calls: Array<string>) => {
   });
 };
 
+/** The live hob the chief summoned under `name`. */
+const summonedNamed = async (name: string) =>
+  (await allHobs()).find(
+    (agent) => agent.name === name && agent.status !== "retired" && agent.summonedBy === chief.id,
+  ) as Agent;
+
 const proposalOf = async (id: string) => {
   const found = await request<HobProposalView>("GET", `/api/hob-proposals/${id}`);
   expect(found.status).toBe(200);
@@ -1115,5 +1121,61 @@ describe("the Summoning Charm, end to end", () => {
       return read.body.items.find((item) => item.payload._tag === "hob-proposal");
     });
     expect(backpack).toBeDefined();
+  });
+  // covers ADR 034 (Applying re-checks), AG-002
+  it("[TC-AG-409-07] a proposal you allow after its operation went to Never, or its hob left the scope, is refused and changes nothing", async () => {
+    await chiefAnswers({});
+    const hire = await turn(chief, hub("summoning_summon", { key: "hire-pair", hobs: [draft("Opal"), draft("Pim")] }));
+    await decideProposal(hire, "allow-all");
+    const [opal, pim] = ["Opal", "Pim"].map((name) => summonedNamed(name));
+    await chiefAnswers({ "summoning.pause": "ask" });
+
+    // The answer went to Never while the proposal waited.
+    const pauseOpal = await turn(chief, hub("summoning_pause", { key: "pause-opal", hob: "Opal" }));
+    const opalView = pauseOpal.proposal as HobProposalView;
+    await chiefAnswers({ "summoning.pause": "deny" });
+    const never = await onProposal(opalView, `rows/${opalView.proposal.rows[0]?.id}/allow`);
+    expect(never.status).toBe(422);
+    expect(JSON.stringify(never.body)).toContain("is at Never for you");
+    expect((await hob((await opal).id)).status).toBe("active");
+    await decideProposal(pauseOpal, "deny-all");
+
+    // The hob left the chief's scope while the proposal waited.
+    await chiefAnswers({ "summoning.pause": "ask" });
+    const pausePim = await turn(chief, hub("summoning_pause", { key: "pause-pim", hob: "Pim" }));
+    const pimView = pausePim.proposal as HobProposalView;
+    await permissions(chief, {
+      charms: {
+        granted: ["github", "summoning"],
+        overrides: { ...SUMMONING_DEFAULTS, "summoning.pause": "ask" },
+        summoning: { summoned: false, hobs: [], self: false },
+      },
+    });
+    try {
+      const outside = await onProposal(pimView, `rows/${pimView.proposal.rows[0]?.id}/allow`);
+      expect(outside.status).toBe(422);
+      expect(JSON.stringify(outside.body)).toContain("is outside your Summoning scope");
+      expect((await hob((await pim).id)).status).toBe("active");
+    } finally {
+      await permissions(chief, {
+        charms: {
+          granted: ["github", "summoning"],
+          overrides: SUMMONING_DEFAULTS,
+          summoning: { summoned: true, hobs: [], self: false },
+        },
+      });
+    }
+    await decideProposal(pausePim, "deny-all");
+
+    // Summoning itself went to Never while a summon waited.
+    await chiefAnswers({});
+    const hireQuill = await turn(chief, hub("summoning_summon", { key: "hire-quill", hobs: [draft("Quill")] }));
+    const quillView = hireQuill.proposal as HobProposalView;
+    await chiefAnswers({ "summoning.summon": "deny" });
+    const summonNever = await onProposal(quillView, `rows/${quillView.proposal.rows[0]?.id}/allow`);
+    expect(summonNever.status).toBe(422);
+    expect((await allHobs()).some((agent) => agent.name === "Quill")).toBe(false);
+    await chiefAnswers({});
+    await decideProposal(hireQuill, "deny-all");
   });
 });
