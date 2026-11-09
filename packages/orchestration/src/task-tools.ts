@@ -479,8 +479,9 @@ export class TaskTools extends Context.Service<
           });
 
         /**
-         * The Charms a session outside any chat offers: none of their writes. A write whose answer
-         * is lost waits for you to settle it on the reply step it showed as (ADR 020), and such a
+         * The Charms a session outside any chat offers: none of their writes, but those of a Charm
+         * whose writes all read back from the hub's own records (ADR 034). A write whose answer is
+         * lost waits for you to settle it on the reply step it showed as (ADR 020), and such a
          * session has no reply, so its writes stay with the lead's chat until it does. A call to one
          * is refused as a tool the session does not offer, and a `git push` is decided as a push: the
          * session's steering takes over none of the Charms' requests.

@@ -45,6 +45,7 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [Tools under policy on real Claude Code](checklists/tools-under-policy.md)
 - [The Quest room on real Claude Code](checklists/quest-room.md)
 - [Hobs see each other with real models](checklists/hobs-see-each-other.md)
+- [Hobs manage hobs with real models](checklists/hob-management.md)
 
 ## Records
 
@@ -86,3 +87,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-09 Hobs see each other with real models on Claude Code and Codex](2026-11-09-hobs-see-each-other-real-models.md)
 - [2026-11-09 A hob's first commit runs without a refused step, on real Claude Code and Codex](2026-11-09-first-commit-identity.md)
 - [2026-11-09 Real Claude Code and Codex hobs answer a team question from the roster without reading cards](2026-11-09-roster-answers-without-card-reads.md)
+- [2026-11-09 Hobs manage hobs end to end: hand-off, proposals, caps and retire](2026-11-09-hob-management.md)
