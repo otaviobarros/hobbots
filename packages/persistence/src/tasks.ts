@@ -49,7 +49,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
-import { makeJournaledChange } from "./journal.ts";
+import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
 import { makeTaskReads, taskColumns } from "./task-rows.ts";
 
@@ -86,6 +86,7 @@ export const TaskRepositoryLive = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const change = makeJournaledChange(sql);
+    const journaled = makeJournaled(sql);
     const read = makeTaskReads(sql);
     const ledger = makeLedger(sql);
 
@@ -1140,8 +1141,19 @@ export const TaskRepositoryLive = Layer.effect(
           })} ON CONFLICT (attempt_id, started_at) DO NOTHING`,
         ]).pipe(sql.withTransaction, Effect.asVoid, Effect.orDie),
       markAttemptReadWeb: (attemptId, mark) =>
-        sql`UPDATE attempts SET read_web_since = COALESCE(read_web_since, ${mark.since}),
-          read_web_source = ${mark.source} WHERE id = ${attemptId}`.pipe(Effect.asVoid, Effect.orDie),
+        journaled(1, () =>
+          Effect.gen(function* () {
+            const [before] = yield* read.attempt(attemptId);
+            if (before === undefined) return null;
+            // The mark keeps when the session first read the web, and names what it read last.
+            const readWeb = { since: before.readWeb?.since ?? mark.since, source: mark.source };
+            if (before.readWeb?.since === readWeb.since && before.readWeb.source === readWeb.source) return null;
+            yield* sql`UPDATE attempts SET read_web_since = ${readWeb.since}, read_web_source = ${readWeb.source}
+              WHERE id = ${attemptId}`;
+            const attempt = new Attempt({ ...before, readWeb });
+            return { value: attempt, events: [{ _tag: "AttemptReadWeb" as const, taskId: attempt.taskId, attempt }] };
+          }),
+        ),
       endTurn: (turn, usage, endedAt) =>
         sql`UPDATE attempt_turns SET ended_at = ${endedAt}, input_tokens = ${usage?.inputTokens ?? null},
           output_tokens = ${usage?.outputTokens ?? null}, cache_read_tokens = ${usage?.cacheReadTokens ?? null},

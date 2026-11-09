@@ -41,6 +41,7 @@ import { emptyQuestFinding } from "./empty-quests.ts";
 import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
 import type { TaskTools } from "./task-tools.ts";
 import { endTurn } from "./turn-end.ts";
+import { attemptMarkKeeper } from "./web-marks.ts";
 
 /** What the member runner shares with the step runner it runs beside. */
 export interface MemberDeps {
@@ -375,6 +376,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 );
               },
               turns: tasks,
+              keepMark: attemptMarkKeeper(tasks, attemptId, deps.announce),
             },
             deps.recorder,
           );

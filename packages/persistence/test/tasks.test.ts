@@ -1621,6 +1621,41 @@ describe("Task records the third run found gaps in", () => {
     });
   });
 
+  // covers ADR 036 (The read-the-web mark), ADR 013
+  it("[TC-DP-1268-01] an Attempt's read-the-web mark is journaled as it changes: since its first read, naming its last", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = yield* latest("copy");
+        const a1 = AttemptId.make("a1");
+        yield* tasks.startAttempt(copy.id, copy.revision, attempt("a1"));
+        const first = yield* tasks.markAttemptReadWeb(a1, { since: now, source: "https://a.test/page" });
+        const again = yield* tasks.markAttemptReadWeb(a1, { since: later, source: "https://a.test/page" });
+        const next = yield* tasks.markAttemptReadWeb(a1, { since: later, source: "https://b.test/page" });
+        const missing = yield* tasks.markAttemptReadWeb(AttemptId.make("nowhere"), { since: now, source: "x" });
+        return {
+          first: Option.getOrThrow(first).entries.map((entry) => entry.payload),
+          again,
+          next: Option.getOrThrow(next).value,
+          missing,
+          stored: Option.getOrThrow(yield* tasks.readTree(copy.id)).attempts[0],
+        };
+      }),
+    );
+    expect(result.first).toMatchObject([
+      {
+        _tag: "AttemptReadWeb",
+        taskId: "copy",
+        attempt: { id: "a1", readWeb: { since: now, source: "https://a.test/page" } },
+      },
+    ]);
+    expect(Option.isNone(result.again)).toBe(true);
+    expect(result.next.readWeb).toEqual({ since: now, source: "https://b.test/page" });
+    expect(Option.isNone(result.missing)).toBe(true);
+    expect(result.stored?.readWeb).toEqual({ since: now, source: "https://b.test/page" });
+  });
+
   // covers OR-003
   it("[TC-OR-520] a Task that ends drops its wait, whether it completes or fails", async () => {
     const result = await run(

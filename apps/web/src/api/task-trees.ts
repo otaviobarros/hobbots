@@ -1,7 +1,7 @@
 import {
   type ApprovalRequest,
   type ArtifactRef,
-  type Attempt,
+  Attempt,
   type HobbotsEvent,
   isTerminalTask,
   type Milestone,
@@ -45,6 +45,7 @@ export type TaskEvent =
         readonly _tag:
           | "TaskCreated"
           | "TaskStateChanged"
+          | "AttemptReadWeb"
           | "QuestStarted"
           | "CheckpointRecorded"
           | "QuestionAsked"
@@ -196,6 +197,15 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
           ...withControl(tree, event),
         }
       : null,
+  // Only the mark changes: the Attempt's state stays as the tree knows it, whichever came last.
+  AttemptReadWeb: (tree, { taskId, attempt }, ids) => {
+    if (!ids.has(taskId) || !tree.attempts.some((each) => each.id === attempt.id)) return null;
+    return {
+      attempts: tree.attempts.map((each) =>
+        each.id === attempt.id ? new Attempt({ ...each, readWeb: attempt.readWeb ?? null }) : each,
+      ),
+    };
+  },
   TaskCompleted: (tree, event, ids) =>
     ids.has(event.task.id)
       ? {

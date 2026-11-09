@@ -13,6 +13,7 @@ const workbenchTask = (event: HobbotsEvent | HubTransientEvent): TaskId | null =
       return event.command.taskId;
     case "FileChangesRecorded":
     case "AttemptStepsRecorded":
+    case "AttemptReadWeb":
     case "CommandOutput":
       return event.taskId;
     case "FolderScanned":

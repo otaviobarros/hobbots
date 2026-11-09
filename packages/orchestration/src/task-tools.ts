@@ -63,6 +63,7 @@ import { routineReply, waitingForYou } from "./quiet-replies.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
 import { endTurn, type TurnEndDeps } from "./turn-end.ts";
+import { attemptMarkKeeper } from "./web-marks.ts";
 import { makeSettle, makeWrapUp } from "./wrap-up.ts";
 
 type ToolHandler = (scope: CallScope, input: never) => Effect.Effect<TaskToolOutcome, TaskToolRefused>;
@@ -441,7 +442,11 @@ export class TaskTools extends Context.Service<
               recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
               attempt: Effect.sync(() => attemptId),
               readWeb: (mark) =>
-                Effect.suspend(() => (attemptId === null ? Effect.void : tasks.markAttemptReadWeb(attemptId, mark))),
+                Effect.suspend(() =>
+                  attemptId === null
+                    ? Effect.void
+                    : attemptMarkKeeper(tasks, attemptId, (kept) => announce(kept.entries))(mark),
+                ),
               quiet: Effect.suspend(() =>
                 turn.promptId != null || known === null
                   ? Effect.succeed(false)

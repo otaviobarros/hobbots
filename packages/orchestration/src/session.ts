@@ -47,8 +47,10 @@ import {
   systemInstructions,
   type TaskId,
   type ThreadId,
+  type WebReadMark,
 } from "@hobbots/domain";
 import { DateTime, Effect, Option, Semaphore, Stream } from "effect";
+import { markOfSession } from "./web-marks.ts";
 
 /** How a session's turn ended: with a final reply, or failed with a reason. */
 export type Ending =
@@ -82,25 +84,22 @@ export interface SessionTurn {
   readonly started: (session: { readonly sessionId: string; readonly policyVersion?: string }) => Effect.Effect<void>;
   /**
    * Records the turn under its hob, runtime and model once the runtime takes it, and what it used once
-   * it ends (#1011), and its session's read-the-web mark on its Attempt (ADR 036).
+   * it ends (#1011), and reads its Task's Attempts for the mark its session holds (ADR 036).
    */
-  readonly turns: Pick<TaskRepository["Service"], "startTurn" | "endTurn" | "markAttemptReadWeb" | "readTree">;
+  readonly turns: Pick<TaskRepository["Service"], "startTurn" | "endTurn" | "readTree">;
+  /** Keeps its session's read-the-web mark on its Attempt, announced for a Workbench already open (ADR 036). */
+  readonly keepMark: (mark: WebReadMark) => Effect.Effect<void>;
 }
 
-/**
- * The read-the-web mark the session a turn resumes holds (ADR 036): the one an Attempt of its Task
- * recorded for that session. A fresh session holds none.
- */
-const sessionMark = (turn: SessionTurn) =>
-  turn.sessionId === null
+/** The read-the-web mark the session a turn resumes holds (ADR 036). A fresh session holds none. */
+const sessionMark = (turn: SessionTurn) => {
+  const { sessionId } = turn;
+  return sessionId === null
     ? Effect.succeed(null)
-    : Effect.map(
-        turn.turns.readTree(turn.taskId),
-        (tree) =>
-          Option.getOrUndefined(tree)?.attempts.find(
-            (attempt) => attempt.sessionId === turn.sessionId && attempt.readWeb != null,
-          )?.readWeb ?? null,
+    : Effect.map(turn.turns.readTree(turn.taskId), (tree) =>
+        Option.match(tree, { onNone: () => null, onSome: ({ attempts }) => markOfSession(attempts, sessionId) }),
       );
+};
 
 /** Runs one turn of a Task's own session to its end: its final reply, or why it ended without one. */
 export const runSessionTurn = (
@@ -189,7 +188,9 @@ export const runSessionTurn = (
     // The session's read-the-web mark (ADR 036): a resumed session holds the one an Attempt of the
     // Task recorded for it, and the turn keeps every change on its own Attempt.
     const markedBefore = yield* sessionMark(turn);
-    const webMark = yield* makeWebMark(markedBefore, (mark) => turn.turns.markAttemptReadWeb(turn.attemptId, mark));
+    // A new Attempt that resumes a marked session holds the mark from its start, read again or not.
+    if (markedBefore !== null) yield* turn.keepMark(markedBefore);
+    const webMark = yield* makeWebMark(markedBefore, turn.keepMark);
     const approvals = withWebMark(turn.approvals, webMark, Effect.succeed(turn.access));
     // Counted as received only once the runtime answers the prompt that carried it.
     let session: string | null = null;
