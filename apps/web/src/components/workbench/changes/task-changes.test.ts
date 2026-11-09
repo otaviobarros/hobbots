@@ -343,7 +343,8 @@ const byPath = (changes: ReadonlyArray<Pick<FileChange, "path" | "movedFrom" | "
 };
 
 describe("a Task's changes across generated tries", () => {
-  it("always sum to what the folder held before the first try against what the last left", () => {
+  // Ten thousand runs take under a second alone, but past the default 5 seconds on a busy CI runner.
+  it("always sum to what the folder held before the first try against what the last left", { timeout: 30_000 }, () => {
     for (let seed = 1; seed <= 10000; seed += 1) {
       const next = random(seed);
       // Half the runs start with a second file, so moves land both on empty paths and beside others.
