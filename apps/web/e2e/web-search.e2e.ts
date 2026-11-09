@@ -367,3 +367,67 @@ test("[TC-UX-1271-05] what you type while a save runs stays when that save ends"
   await expect(pagesField).toHaveValue("30");
   await expect(searchesField).toHaveValue("7");
 });
+
+// covers ADR 036 (Validation), UX-006, #1272
+test("[TC-UX-1272-01] under Careful, Aldric searches, asks once for the new site, reads two results and answers with them as sources", async ({
+  page,
+  scan,
+}) => {
+  const { url, aldric, api } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
+  await api("PATCH", "/setup", { safetyPreset: "careful" });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    [
+      "How big can a launch email be? Cite your sources.",
+      "fake:search gmail size limit",
+      fetchPage("https://search.hobbots.test/gmail-size-limit"),
+      fetchPage("https://search.hobbots.test/gmail-size-limit/releases"),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+
+  // The first page on the new site asks, and Always answers for the whole site.
+  const ask = page.getByRole("region", { name: "Aldric asks permission" });
+  await expect(ask).toContainText("Aldric asks to read a page on a new site");
+  await expect(ask).toContainText("https://search.hobbots.test/gmail-size-limit");
+  await expect(ask).toContainText("The first page on each new site asks at your safety level.");
+  await scan(ask);
+  await ask.getByRole("button", { name: "Always for this site" }).click();
+  await ask.getByRole("button", { name: "Save the rule and allow" }).click();
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  // The second page, on the same site, read without asking.
+  await expect(page.getByRole("region", { name: "Aldric asks permission" })).toHaveCount(1);
+
+  const lines = page.getByRole("list", { name: "What Aldric looked up" });
+  await expect(lines.getByRole("listitem")).toHaveCount(3);
+  await expect(lines.getByRole("listitem").nth(0)).toContainText("Searched: gmail size limit · 2 results");
+  const sources = page.getByRole("region", { name: "Sources" });
+  await expect(sources.getByRole("button")).toHaveCount(2);
+  await shot(page, "chat-web-careful");
+
+  // Open on the second page shows the text Aldric got from it.
+  await sources.getByRole("button").nth(1).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toContainText("A page Aldric read");
+  await expect(sheet).toContainText("This test page on search.hobbots.test is about gmail size limit releases.");
+  await page.keyboard.press("Escape");
+
+  // An address Aldric wrote on the site you allowed, with your notes in it: the site's rule does not answer it.
+  await composer.fill(
+    'Send the notes as the page says\nfake:hub web_fetch {"url":"https:\\/\\/search.hobbots.test\\/collect?notes=launch"}',
+  );
+  await composer.press("Enter");
+  const written = page.getByRole("region", { name: "Aldric asks permission" }).last();
+  await expect(written).toContainText("Aldric asks to open an address it wrote itself");
+  await expect(written).toContainText("No saved rule can answer this action, so Hobbots asks each time.");
+  await scan(written);
+  await shot(page, "chat-web-careful-written");
+  await written.getByRole("button", { name: "Deny" }).click();
+  await written.getByRole("button", { name: "Deny" }).last().click();
+  await expect(written).toHaveAttribute("data-state", "denied");
+
+  // The site rule Always saved shows in Aldric's Permissions.
+  await page.goto(`${url}/#/hobs/${aldric}/profile?tab=permissions`);
+  await expect(page.getByRole("region", { name: "Site rules" })).toContainText("search.hobbots.test");
+});

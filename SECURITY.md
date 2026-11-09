@@ -36,6 +36,7 @@ In scope:
 - The Mac app installers published on this repository's releases.
 - The hobbots.app website, whose code lives in `apps/site`.
 - Ways for a sandboxed hob to cross a boundary that [the permissions contract](docs/architecture/permissions.md) marks as enforced, such as reading outside its folders, running commands it was not allowed to run or reaching hosts it was not allowed to reach.
+- Ways for a web page to get data out of a session that read the web without asking you, or to make `web_fetch` reach `localhost`, a link-local or cloud metadata address, or a private address without asking. [PRIVACY.md](PRIVACY.md) says what leaves your computer when hobs search and read the web.
 
 Out of scope:
 

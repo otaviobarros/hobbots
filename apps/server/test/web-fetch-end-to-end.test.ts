@@ -88,6 +88,14 @@ const PUBLIC = "203.0.113.7";
 const SEARCH_HOST = "search.hobbots.test";
 const NAS = "10.0.0.8";
 
+/** The robots.txt each site answers; any other site has none. */
+const ROBOTS: Readonly<Record<string, string>> = {
+  // Asks Hobbots by name not to read it.
+  "private.test": "User-agent: Hobbots\nDisallow: /\n",
+  // Asks only crawlers in general not to: a page a person's hob asked for is not crawling.
+  "crawlers.test": "User-agent: *\nDisallow: /\n",
+};
+
 /** Each path the test site was asked for, in order. */
 const asked: Array<string> = [];
 const site = createServer((req, res) => {
@@ -103,8 +111,9 @@ const site = createServer((req, res) => {
     return;
   }
   if (req.url === "/robots.txt") {
-    res.writeHead(404);
-    res.end();
+    const rules = ROBOTS[req.headers.host?.split(":")[0] ?? ""];
+    res.writeHead(rules === undefined ? 404 : 200, { "content-type": "text/plain" });
+    res.end(rules);
     return;
   }
   if (req.url?.startsWith("/long")) {
@@ -158,6 +167,8 @@ beforeAll(async () => {
           "lamps.test": [PUBLIC],
           "oil.test": [PUBLIC],
           "nas.test": [NAS],
+          "private.test": [PUBLIC],
+          "crawlers.test": [PUBLIC],
           "loop.test": ["127.0.0.1"],
           [SEARCH_HOST]: [PUBLIC],
         },
@@ -909,5 +920,97 @@ describe("the hub records what hobs search and read, and holds them to their lim
     // Each shows where it belongs: the step's Task and the chat's thread.
     expect((await usage(`taskId=${step?.taskId}`)).pages.map((page) => page.id)).toContain(step?.id);
     expect((await usage(`threadId=${thread.id}`)).totals.pages).toBe(2);
+  }, 30_000);
+});
+
+describe("hobs search and read the web, end to end (#1272)", () => {
+  const usage = async (query: string) => (await request<WebUsage>("GET", `/api/web/usage?${query}`)).body;
+
+  // covers ADR 036 (Validation), EX-004
+  it("[TC-PE-1272-01] a hob searches, reads two pages from the results and answers with them as sources, asking nothing", async () => {
+    await preset("balanced");
+    const linden = await summon("Linden", 1272_1);
+    const thread = (await request<Thread>("POST", `/api/agents/${linden.id}/threads`)).body;
+    const before = asked.length;
+    const { pending, reply } = await send(
+      thread,
+      "How should lamp tallow be kept? Cite your sources.",
+      "fake:search lamp tallow",
+      fetchOf(result("/lamp-tallow")),
+      fetchOf(result("/lamp-tallow/releases")),
+    );
+    expect(pending).toBeUndefined();
+    const answer = reply as Message;
+    // Both pages reached the hob as other people's text, each on its own step.
+    expect(answer.content).toContain("Title: Lamps on lamps.test");
+    expect(webSteps(answer).map((step) => step.state)).toEqual(["done", "done"]);
+    for (const step of webSteps(answer)) expect(step.output?.head).toContain("written by other people");
+    expect(asked.slice(before).filter((line) => !line.endsWith("/robots.txt"))).toEqual([
+      "lamps.test /lamp-tallow",
+      "lamps.test /lamp-tallow/releases",
+    ]);
+    // The turn's records are its sources: the search with its two results, and the two pages it read.
+    const turn = await usage(`messageId=${answer.id}`);
+    expect(turn.totals).toMatchObject({ searches: 1, pages: 2 });
+    expect(turn.searches[0]).toMatchObject({ query: "lamp tallow", resultCount: 2 });
+    const found = (turn.searches[0]?.results ?? []).map((hit) => hit.url);
+    expect(found).toEqual([`https://${SEARCH_HOST}/lamp-tallow`, `https://${SEARCH_HOST}/lamp-tallow/releases`]);
+    expect(turn.pages.map((page) => page.url).toSorted()).toEqual(found.toSorted());
+    expect(turn.pages.map((page) => page.stepId).toSorted()).toEqual(
+      webSteps(answer)
+        .map((step) => step.id)
+        .toSorted(),
+    );
+  }, 30_000);
+
+  // covers ADR 036 (Validation), PE-001
+  it("[TC-PE-1272-02] Never for Search the web and Never for Use the web each close their tool", async () => {
+    await preset("balanced");
+    const alder = await summon("Alder", 1272_2);
+    const thread = (await request<Thread>("POST", `/api/agents/${alder.id}/threads`)).body;
+    const searched = await send(thread, "Look up lamp soot", "fake:search lamp soot");
+    expect(requests.at(-1)?.webSearch).toBe(true);
+    expect((await usage(`messageId=${searched.reply?.id}`)).totals.searches).toBe(1);
+
+    const never = (overrides: Record<string, string>) =>
+      request("PATCH", `/api/agents/${alder.id}/permissions`, { overrides });
+    expect((await never({ "search-web": "deny" })).status).toBe(200);
+    const unsearched = await send(thread, "Look it up again", "fake:search lamp soot", fetchOf(result("/lamp-soot")));
+    expect(unsearched.pending).toBeUndefined();
+    expect(requests.at(-1)?.webSearch).toBe(false);
+    expect(requests.at(-1)?.hubTools?.tools.map((tool) => tool.name)).toContain("web_fetch");
+    expect((await usage(`messageId=${unsearched.reply?.id}`)).totals).toMatchObject({ searches: 0, pages: 1 });
+
+    expect((await never({ "search-web": "deny", "use-web": "deny" })).status).toBe(200);
+    const unread = await send(thread, "Read it again", fetchOf(result("/lamp-soot")));
+    expect(unread.pending).toBeUndefined();
+    expect(requests.at(-1)?.webSearch).toBe(false);
+    expect(requests.at(-1)?.hubTools?.tools.map((tool) => tool.name) ?? []).not.toContain("web_fetch");
+    expect((await usage(`messageId=${unread.reply?.id}`)).totals).toMatchObject({ searches: 0, pages: 0 });
+  }, 30_000);
+
+  // covers ADR 036 (robots.txt)
+  it("[TC-PE-1272-03] a site whose robots.txt disallows Hobbots is refused, and one that disallows only crawlers in general is read", async () => {
+    await preset("trusting");
+    const hazel = await summon("Hazel", 1272_3);
+    const thread = (await request<Thread>("POST", `/api/agents/${hazel.id}/threads`)).body;
+    const before = asked.length;
+    const { pending, reply } = await send(
+      thread,
+      `Read ${url("private.test", "/notes")} and ${url("crawlers.test", "/notes")}`,
+      fetchOf(url("private.test", "/notes")),
+      fetchOf(url("crawlers.test", "/notes")),
+    );
+    expect(pending).toBeUndefined();
+    const text = reply?.content ?? "";
+    expect(text).toContain(`private.test asks Hobbots not to read ${url("private.test", "/notes")} (robots.txt).`);
+    expect(text).toContain("Title: Lamps on crawlers.test");
+    // The refused page was never asked for: only its robots.txt was.
+    expect(asked.slice(before)).toEqual([
+      "private.test /robots.txt",
+      "crawlers.test /robots.txt",
+      "crawlers.test /notes",
+    ]);
+    expect((await usage(`messageId=${reply?.id}`)).totals.pages).toBe(1);
   }, 30_000);
 });
