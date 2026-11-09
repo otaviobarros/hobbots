@@ -47,7 +47,12 @@ const fromRow = {
     revision: int(row.revision),
   }),
   delegation: (row: Row) => ({ ...row, authority: json(row.authority), timeoutMs: int(row.timeoutMs) }),
-  attempt: (row: Row) => ({ ...row, number: int(row.number), configVersion: int(row.configVersion) }),
+  attempt: (row: Row) => ({
+    ...row,
+    number: int(row.number),
+    configVersion: int(row.configVersion),
+    readWeb: row.readWebSince == null ? null : { since: row.readWebSince, source: row.readWebSource },
+  }),
   milestone: (row: Row) => ({ ...row, position: int(row.position) }),
   checkpoint: (row: Row) => ({ ...row, revision: int(row.revision) }),
   question: (row: Row) => ({

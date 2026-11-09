@@ -3,6 +3,7 @@ import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { AgentId, TaskId, ThreadId } from "./ids.ts";
 import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";
+import { WebReadMark } from "./web-mark.ts";
 
 // The Task id lives with the other ids, so a hob can name the Task it was summoned for without a cycle.
 export { TaskId } from "./ids.ts";
@@ -112,6 +113,11 @@ export class Attempt extends Schema.Class<Attempt>("Attempt")({
   outcome: Schema.NullOr(Schema.String),
   startedAt: Schema.String,
   endedAt: Schema.NullOr(Schema.String),
+  /**
+   * The read-the-web mark of the session it ran in (ADR 036), once that session searched or read a
+   * page, which the Workbench shows. Absent or null while it read nothing.
+   */
+  readWeb: Schema.optionalKey(Schema.NullOr(WebReadMark)),
 }) {}
 
 /** A change of state the Task's current state does not allow. */

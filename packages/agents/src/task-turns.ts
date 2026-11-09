@@ -8,6 +8,7 @@ import type {
   TaskId,
   ThreadId,
   TurnEnding,
+  WebReadMark,
 } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { HubTools } from "./runtime.ts";
@@ -87,6 +88,11 @@ export interface ChatTaskTurn {
    * with the session the turn ran in and the policy version its tools ran under.
    */
   readonly end: (ending: TurnEnding, sessionId: string | null, policyVersion: string | null) => Effect.Effect<void>;
+  /**
+   * Records the read-the-web mark of the turn's session (ADR 036) on the Attempt the turn runs on
+   * its Task, if it runs one yet.
+   */
+  readonly readWeb: (mark: WebReadMark) => Effect.Effect<void>;
 }
 
 /**

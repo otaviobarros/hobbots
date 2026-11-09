@@ -40,6 +40,7 @@ import {
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { grantedHosts } from "../src/approval.ts";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
 import { applyScriptedWrites } from "../src/fake-writes.ts";
@@ -408,6 +409,49 @@ describe("Claude Code tool calls under the policy hook", () => {
     ]);
     expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolStarted"]);
     expect(events[0]).toMatchObject({ id: "t1", approvalId: "approval-1", operation: "push" });
+  });
+
+  // covers ADR 036 (The read-the-web mark)
+  it("[TC-RT-1268-01] asks before a push once the session has read the web, and the sandbox proxy refuses a new host", async () => {
+    const READ_MARK = {
+      current: Effect.succeed({ since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" }),
+      read: () => Effect.void,
+    };
+    const trusting: ToolAccess = { ...access(), policy: { ...access().policy, preset: "trusting" } };
+    const pushed = async (approvals: TurnApprovals) => {
+      const turn = toolTurn(trusting, "on");
+      if (turn === null) throw new Error("expected a tool turn");
+      const { hooks } = policyHooks(engine, turn, () => {}, approvals);
+      const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
+      const output = await pre?.(
+        {
+          session_id: "s",
+          transcript_path: "",
+          cwd: project,
+          tool_name: "Bash",
+          tool_input: { command: "git push origin feature" },
+          tool_use_id: "t1",
+          hook_event_name: "PreToolUse",
+        } as HookInput,
+        "t1",
+        { signal: new AbortController().signal },
+      );
+      return (output as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } })
+        .hookSpecificOutput;
+    };
+    expect((await pushed(approvalsAnswering(approve).approvals))?.permissionDecision).toBe("allow");
+    const marked = await pushed({ ...approvalsAnswering(approve).approvals, webMark: READ_MARK });
+    expect(marked).toMatchObject({ permissionDecision: "ask" });
+    expect(marked?.permissionDecisionReason).toContain("This session read the web");
+
+    // The proxy decides each new host a command reaches under the mark, and cannot ask, so it refuses.
+    const turn = toolTurn(trusting, "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const host = (approvals: TurnApprovals) => grantedHosts(engine, turn.context, approvals)("collector.example");
+    expect(await host(approvalsAnswering(approve).approvals)).toBe(true);
+    expect(await host({ ...approvalsAnswering(approve).approvals, webMark: READ_MARK })).toEqual(
+      expect.stringContaining("This session read the web"),
+    );
   });
 
   // covers PE-003

@@ -349,15 +349,11 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               access: run.access,
               approvals: handle?.approvals ?? null,
               recordToolStart: deps.recordToolStart(task),
-              offer: deps.tools.forSession(
-                { agentId: agent.id, taskId: task.id, carried: work.holding },
-                {
-                  attemptId,
-                  currentAccess: currentAccessOf(run),
-                  redactor: deps.redactor,
-                  approvals: handle?.approvals ?? null,
-                },
-              ),
+              offer: (approvals) =>
+                deps.tools.forSession(
+                  { agentId: agent.id, taskId: task.id, carried: work.holding },
+                  { attemptId, currentAccess: currentAccessOf(run), redactor: deps.redactor, approvals },
+                ),
               started: (started) => {
                 session = started.sessionId;
                 return (accepts ? work.accepted(started.sessionId) : Effect.void).pipe(

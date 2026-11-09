@@ -49,6 +49,7 @@ import type {
   TaskWait,
   ThreadId,
   WaitMode,
+  WebReadMark,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
@@ -370,6 +371,12 @@ export class TaskRepository extends Context.Service<
      * Recording it again changes nothing.
      */
     readonly startTurn: (turn: AttemptTurn) => Effect.Effect<void>;
+    /**
+     * Records the read-the-web mark of the session an Attempt runs in (ADR 036): it keeps when its
+     * session first read the web, and takes the source the mark names now. Changes nothing for an
+     * Attempt that does not exist.
+     */
+    readonly markAttemptReadWeb: (attemptId: AttemptId, mark: WebReadMark) => Effect.Effect<void>;
     /** Records what the turn used, once it ends; null when its runtime reported nothing. */
     readonly endTurn: (
       turn: Pick<AttemptTurn, "attemptId" | "startedAt">,

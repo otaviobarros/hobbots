@@ -484,7 +484,7 @@ export const makeHubActions =
           },
           step,
           approvals: turn.approvals,
-          decide: options.decide(turn.approvals, access, plan.request),
+          decide: options.decide(turn.approvals, access, sending(action, plan.request)),
         });
         if (decision._tag === "Refuse") {
           return yield* deny(step, tool, decision.verdict, decision.reason, decision.decidedBy);
@@ -546,6 +546,14 @@ export const makeHubActions =
 
     return { tools: actions.map((action) => action.tool), call };
   };
+
+/**
+ * The request a call is decided as: a Charm write's `Charm` request says it sends, which the
+ * pipeline sets rather than the Charm, so no write asks less while its session has read the web
+ * (ADR 036).
+ */
+const sending = <R extends HubRequest>(action: HubAction<R>, request: R): R =>
+  action.effect === "write" && request._tag === "Charm" ? { ...request, sends: true } : request;
 
 /** Whether `action` is a Charm write, which carries a key and runs as a recorded call (ADR 020, ADR 031). */
 const isCharmWrite = <R extends HubRequest>(owner: HubActionOwner, action: HubAction<R>) =>

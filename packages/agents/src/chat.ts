@@ -44,6 +44,7 @@ import {
   takesNewWork,
   titleFromPrompt,
   toolsSucceeded,
+  type WebReadMark,
   waitedSteps,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
@@ -86,6 +87,7 @@ import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows, turnWebSearch } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import { makeWebProvenance } from "./web-fetch.ts";
+import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
 import { workHeld } from "./work-hold.ts";
 
 interface Reply {
@@ -190,6 +192,32 @@ const withSession = (
 };
 
 /** What the thread's session on `runtime` was last told of the Task its hob works on (#1027). */
+/**
+ * What a started session keeps of the session the thread knew: what it was told of its Task
+ * (#1027) and its read-the-web mark (ADR 036) hold only for the same session.
+ */
+const carriedMarks = (
+  known: RuntimeSession | undefined,
+  sessionId: string,
+): Pick<RuntimeSession, "taskBrief" | "readWeb"> => {
+  if (known?.sessionId !== sessionId) return {};
+  return {
+    ...(known.taskBrief === undefined ? {} : { taskBrief: known.taskBrief }),
+    ...(known.readWeb == null ? {} : { readWeb: known.readWeb }),
+  };
+};
+
+/** The read-the-web mark of the session a turn resumes, if it read the web. */
+const readWebOf = (known: RuntimeSession | undefined): WebReadMark | null => known?.readWeb ?? null;
+
+/** The thread's session with its read-the-web mark set, or null when it already holds it. */
+const markedSession = (known: RuntimeSession, mark: WebReadMark): RuntimeSession | null =>
+  known.readWeb?.since === mark.since && known.readWeb.source === mark.source ? null : { ...known, readWeb: mark };
+
+/** Records the mark on the Attempt the turn runs as, if it has one and the session read the web. */
+const attemptReadWeb = (turn: ChatTaskTurn | null, mark: WebReadMark | null): Effect.Effect<void> =>
+  turn === null || mark === null ? Effect.void : turn.readWeb(mark);
+
 const taskBriefIn = (thread: Thread, runtime: RuntimeKind): TaskBriefMark | null =>
   thread.sessions.find((s) => s.runtime === runtime)?.taskBrief ?? null;
 
@@ -793,15 +821,13 @@ export class ChatService extends Context.Service<
                     // Without memory, a session keeps whatever brief it was last told of.
                     const memoryBrief =
                       memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, event.sessionId);
-                    // What it was told of its Task holds only for the session that was told it (#1027).
-                    const taskBrief = known?.sessionId === event.sessionId ? known.taskBrief : undefined;
                     const rosterMark = rosterAtStart(roster, known, expected, event.sessionId);
                     const session: RuntimeSession = {
                       runtime: brain.runtime,
                       sessionId: event.sessionId,
                       seenThrough,
                       ...(memoryBrief === undefined ? {} : { memoryBrief }),
-                      ...(taskBrief === undefined ? {} : { taskBrief }),
+                      ...carriedMarks(known, event.sessionId),
                       ...(rosterMark === undefined ? {} : { roster: rosterMark }),
                     };
                     if (
@@ -911,6 +937,17 @@ export class ChatService extends Context.Service<
             : null;
           // The session the turn expects to resume, and what it was last told of its Task (#1027).
           toldBefore = thread.sessions.find((s) => s.runtime === brain.runtime);
+          // The session's read-the-web mark (ADR 036): held from where the resumed session left it, and
+          // kept on the thread's session and on the Attempt the turn runs as, if any.
+          const markedBefore = readWebOf(toldBefore);
+          const webMark = yield* makeWebMark(markedBefore, (mark) =>
+            Effect.andThen(
+              changeSession(turnSession, (known) => markedSession(known, mark)),
+              Effect.suspend(() => attemptReadWeb(onTask, mark)),
+            ),
+          );
+          // Every call of the turn is decided under the mark, by the runtime and the hub's tools alike.
+          const callApprovals = withWebMark(turnApprovals?.approvals ?? null, webMark, currentAccess(agent.id));
           // The Task the hob works on in this thread, if any: its tools, and what its steps returned.
           // The turn's Attempt on it ends with the turn.
           const taskTurn = Option.isSome(taskTurns)
@@ -928,7 +965,12 @@ export class ChatService extends Context.Service<
                   told: taskBriefIn(thread, brain.runtime),
                 }),
                 (turn) =>
-                  Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession, turnPolicy))),
+                  // An Attempt the turn started after its session read the web carries the mark too.
+                  webMark.current.pipe(
+                    Effect.flatMap((mark) => attemptReadWeb(turn, mark)),
+                    Effect.andThen(Ref.get(reply.current)),
+                    Effect.flatMap((m) => turn.end(turnEnding(m), turnSession, turnPolicy)),
+                  ),
               )
             : null;
           onTask = taskTurn;
@@ -966,7 +1008,12 @@ export class ChatService extends Context.Service<
             .run(
               {
                 prompt: runtimePrompt(prompt, asked, named),
-                briefing: contextBlock([memory, roster], briefing, taskTurn?.briefing ?? null),
+                briefing: contextBlock(
+                  [memory, roster],
+                  webMarkBriefing(markedBefore),
+                  briefing,
+                  taskTurn?.briefing ?? null,
+                ),
                 sessionId: expected?.sessionId ?? null,
                 instructions: systemInstructions(config.name, config),
                 instructionsChanged: changed,
@@ -977,11 +1024,16 @@ export class ChatService extends Context.Service<
                 webSearch: turnWebSearch(tools),
                 skills: skills.mounts,
                 askedSkill: asked,
-                approvals: turnApprovals?.approvals ?? null,
+                approvals: callApprovals,
                 redaction: redactor,
                 recordToolStart,
-                // A search's results are found URLs in the chat before the hob can act on them (ADR 036).
-                recordSearch: web.searched({ threadId: thread.id }, redactor),
+                // A search's results are found URLs in the chat before the hob can act on them, and
+                // its session is marked as having read the web (ADR 036).
+                recordSearch: (event) =>
+                  Effect.andThen(
+                    web.searched({ threadId: thread.id }, redactor)(event),
+                    webMark.read({ _tag: "Search", query: redactor.text(event.query) }),
+                  ),
                 // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
                 ...(yield* Effect.gen(function* () {
                   const messageId = (yield* Ref.get(reply.current)).id;
@@ -993,7 +1045,7 @@ export class ChatService extends Context.Service<
                     also: callScope.reply(messageId),
                     currentAccess: currentAccess(agent.id),
                     redactor,
-                    approvals: turnApprovals?.approvals ?? null,
+                    approvals: callApprovals,
                   };
                   // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);

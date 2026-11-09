@@ -16,6 +16,8 @@ import {
   offerHubActions,
   type Redactor,
   type ToolAccess,
+  type WebMark,
+  webSourceLine,
 } from "@hobbots/agents";
 import {
   MEMORY_SAVE_DESCRIPTION,
@@ -39,6 +41,7 @@ import {
   memorySavedText,
   memoryToolJsonSchema,
   stableJson,
+  type WebReadMark,
 } from "@hobbots/domain";
 import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { DateTime, Effect, Layer, Option } from "effect";
@@ -74,6 +77,8 @@ const memoryRequest = (operation: MemoryOperation, scope: MemoryScope): PolicyRe
   _tag: "Memory",
   operation,
   scope: memoryScopeWords(scope),
+  // A save shared beyond the hob reaches other hobs, so it asks while the session has read the web (ADR 036).
+  ...(operation === "save-memory" && scope._tag !== "Hob" ? { shared: true } : {}),
 });
 
 /** The memory a scope names, in words for the hob and the approval card. */
@@ -136,10 +141,13 @@ const identityOf = (input: MemorySaveInput) => {
   return { key: digestOf("key", key), input: digestOf("input", stableJson(rest)) };
 };
 
-/** The page a save writes, redacted before it is recorded, as everything the journal holds is. */
-const draftOf = (redactor: Redactor, input: MemorySaveInput): MemoryDraft => ({
+/**
+ * The page a save writes, redacted before it is recorded, as everything the journal holds is. A save
+ * made while its session has read the web ends with the page it read, as its source (ADR 036).
+ */
+const draftOf = (redactor: Redactor, input: MemorySaveInput, read: WebReadMark | null): MemoryDraft => ({
   path: input.path,
-  markdown: redactor.text(input.markdown),
+  markdown: redactor.text(read === null ? input.markdown : `${input.markdown.trimEnd()}\n\n${webSourceLine(read)}\n`),
   tags: (input.tags ?? []).map((tag) => redactor.text(tag)),
   pinned: false,
 });
@@ -210,14 +218,20 @@ export const MemoryToolsLive = Layer.effect(
       });
 
     /** A save to the hob's own memory: recorded, journaled, then sent, once per key. */
-    const saveOwn = (redactor: Redactor, turn: PlannedTurn, access: ToolAccess, input: MemorySaveInput) =>
+    const saveOwn = (
+      redactor: Redactor,
+      turn: PlannedTurn,
+      access: ToolAccess,
+      input: MemorySaveInput,
+      read: WebReadMark | null,
+    ) =>
       Effect.gen(function* () {
         const identity = identityOf(input);
         // The key as the hob is told it, should it be refused: redacted, as every answer is.
         const shownKey = redactor.text(input.key);
         const actor = actorOf(turn, yield* projectsOf(access.folders));
         const at = DateTime.formatIso(yield* DateTime.now);
-        const draft = draftOf(redactor, input);
+        const draft = draftOf(redactor, input, read);
         const save = new MemorySave({
           id: crypto.randomUUID(),
           agentId: turn.agentId,
@@ -274,6 +288,7 @@ export const MemoryToolsLive = Layer.effect(
       access: ToolAccess,
       input: MemorySaveInput,
       scope: Exclude<MemoryScope, { readonly _tag: "Hob" }>,
+      read: WebReadMark | null,
     ) =>
       Effect.gen(function* () {
         if (Option.isNone(shares)) return yield* new HubRefusal({ message: NO_SHARES });
@@ -282,7 +297,7 @@ export const MemoryToolsLive = Layer.effect(
         return yield* shares.value.share({
           actor,
           scope,
-          draft: draftOf(redactor, input),
+          draft: draftOf(redactor, input, read),
           key: identity.key,
           input: identity.input,
           preset: access.policy.preset,
@@ -292,9 +307,11 @@ export const MemoryToolsLive = Layer.effect(
 
     /** A save, planned: where it goes, decided under that scope, and the save or share as `send`. */
     const planSave =
-      (redactor: Redactor) =>
+      (redactor: Redactor, mark: WebMark | undefined) =>
       (input: MemorySaveInput, { turn, access }: HubPlanContext) =>
         Effect.gen(function* () {
+          // What the session read of the web, which the page names as its source (ADR 036).
+          const read = mark === undefined ? null : yield* mark.current;
           const { key: _key, markdown: _markdown, ...shown } = input;
           // The card shows where the page goes and how long it is; its words are on the step once it runs.
           const card = { arguments: { ...shown, characters: input.markdown.length } };
@@ -302,19 +319,19 @@ export const MemoryToolsLive = Layer.effect(
             return {
               request: memoryRequest("save-memory", { _tag: "Hob", agentId: turn.agentId }),
               card,
-              send: saveOwn(redactor, turn, access, input),
+              send: saveOwn(redactor, turn, access, input, read),
             };
           }
           const scope = yield* shareScope(access, input);
           return {
             request: memoryRequest("save-memory", scope),
             card,
-            send: share(redactor, turn, access, input, scope),
+            send: share(redactor, turn, access, input, scope, read),
           };
         });
 
     /** The two tools as hub actions, for a turn whose redactor redacts what a save records. */
-    const actions = (redactor: Redactor) => [
+    const actions = (redactor: Redactor, mark: WebMark | undefined) => [
       hubAction({
         tool: SEARCH_TOOL,
         input: MemorySearchInput,
@@ -336,7 +353,7 @@ export const MemoryToolsLive = Layer.effect(
         operation: "save-memory",
         otherwise: "memory is closed",
         unreadable: (error) => `Hobbots could not read this save: ${error.message.split("\n").slice(0, 4).join(" ")}`,
-        plan: planSave(redactor),
+        plan: planSave(redactor, mark),
       }),
     ];
 
@@ -345,7 +362,7 @@ export const MemoryToolsLive = Layer.effect(
       forTurn: (turn) =>
         offerHubActions({
           owner: { _tag: "BuiltIn" },
-          actions: actions(turn.redactor),
+          actions: actions(turn.redactor, turn.approvals?.webMark),
           // Under the hob's Memory group, with its live grants, as every hub tool's call is.
           decide: (approvals, base, request: PolicyRequest) => decideHubCall(engine, approvals, base, request),
         })(turn).pipe(

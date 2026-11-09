@@ -437,6 +437,8 @@ export class TaskTools extends Context.Service<
               scope: source.scope,
               recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
               attempt: Effect.sync(() => attemptId),
+              readWeb: (mark) =>
+                Effect.suspend(() => (attemptId === null ? Effect.void : tasks.markAttemptReadWeb(attemptId, mark))),
               quiet: Effect.suspend(() =>
                 turn.promptId != null || known === null
                   ? Effect.succeed(false)

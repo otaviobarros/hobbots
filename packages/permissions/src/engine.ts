@@ -77,6 +77,15 @@ export interface PolicyContext {
    * file tools. They name the session, not the policy, so they are left out of the policy version.
    */
   readonly runtimeOutputs?: ReadonlyArray<RuntimeOutput>;
+  /**
+   * Whether the session the call is made in has read the web (ADR 036): it searched or read a page,
+   * so the text it took in stays in its context. While it holds, what could send data out asks even
+   * where it would be allowed: a new host a command reaches, a push, a Charm write and a memory save
+   * shared beyond the hob. A found URL, local work and Never are as they were. The hub sets it from
+   * its own record of what the session read, never from the model. It names the session, not the
+   * policy, so it is left out of the policy version.
+   */
+  readonly readWeb?: boolean;
 }
 
 /**
@@ -154,13 +163,20 @@ export const PolicyRequest = Schema.TaggedUnion({
     folder: Schema.optionalKey(Schema.String),
     site: Schema.Record(Schema.String, Schema.String),
     targets: Schema.optionalKey(Schema.Array(Schema.String)),
+    /** A Charm write, which the hub action pipeline marks: it can send data out, so it asks while the session has read the web. */
+    sends: Schema.optionalKey(Schema.Boolean),
   },
   /**
    * A memory tool call (ADR 028), which the hub serves outside the sandbox on scopes it worked out
    * itself, so it is decided on the hob's answers alone. `scope` names the memory it reaches, for the
    * approval card. No grant answers an Ask: a rule could name nothing narrower than the tool.
    */
-  Memory: { operation: MemoryOperation, scope: Schema.String },
+  Memory: {
+    operation: MemoryOperation,
+    scope: Schema.String,
+    /** A save shared beyond the hob's own memory, with a project or everyone: it asks while the session has read the web. */
+    shared: Schema.optionalKey(Schema.Boolean),
+  },
   /**
    * A skill tool call (ADR 029), served on the hub over the skills library, never inside the
    * sandbox, so it is decided on the hob's answers alone. `skill` names the skill it is about, or
@@ -216,6 +232,8 @@ export const ReasonCode = Schema.Literals([
   "private-address",
   /** A page at a URL the hob wrote itself asks under every preset, once only: it could carry your data (ADR 036). */
   "written-url",
+  /** The session read the web, so what could send data out asks, even where it would be allowed (ADR 036). */
+  "read-the-web",
 ]);
 export type ReasonCode = typeof ReasonCode.Type;
 
@@ -288,10 +306,10 @@ export type ResolvedRequest =
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
  * Grants are left out: they are read again for every call and never pin a version (ADR 015). The
- * hub's tailnet hosts are left out too: they follow Tailscale, not the policy, and so is the
- * runtime's saved output, which follows the session.
+ * hub's tailnet hosts are left out too: they follow Tailscale, not the policy, and so are the
+ * runtime's saved output and the read-the-web mark, which follow the session.
  */
-export const policyVersion = ({ grants, hubHosts, runtimeOutputs, ...inputs }: PolicyContext): string =>
+export const policyVersion = ({ grants, hubHosts, runtimeOutputs, readWeb, ...inputs }: PolicyContext): string =>
   `r${RULES_VERSION}-${createHash("sha256").update(stableJson(inputs)).digest("hex").slice(0, 16)}`;
 
 interface Layered {
@@ -799,9 +817,71 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
   }
 };
 
+/** What the read-the-web mark asks for (ADR 036): each is a way the session's data could leave. */
+const sendsOut = (request: ResolvedRequest): "host" | "push" | "charm" | "share" | null => {
+  switch (request._tag) {
+    case "Web":
+      // A page the hub reads is decided by where its URL came from: a found one by the site rules.
+      return request.page === undefined ? "host" : null;
+    case "Push":
+      return "push";
+    case "Charm":
+      return request.sends === true ? "charm" : null;
+    case "Memory":
+      return request.shared === true ? "share" : null;
+    default:
+      return null;
+  }
+};
+
+const MARK_WORDS: Record<NonNullable<ReturnType<typeof sendsOut>>, string> = {
+  host: "a command reaching a new host",
+  push: "a push",
+  charm: "a Charm write",
+  share: "a memory save shared beyond this hob",
+};
+
+/**
+ * The answer while the session has read the web (ADR 036): an Allow of what could send data out
+ * asks, since a page may have told the hob to send your data. A saved Always for a command's host
+ * still answers, as the model's own API does; a push, a Charm write or a share asks even where a
+ * grant would answer, once, since a grant says the place is fine, not what the hob sends there.
+ * Never and an Ask stay as they are: the mark only adds asks.
+ */
+const whileMarked = (
+  context: PolicyContext,
+  request: ResolvedRequest,
+  answer: Answer,
+  targets: ReadonlyArray<string>,
+): Answer => {
+  const kind = context.readWeb === true ? sendsOut(request) : null;
+  if (kind === null || answer.decision !== "allow") return answer;
+  const message = `This session read the web, so ${MARK_WORDS[kind]} waits for you: a page it read could have told it to send your data out.`;
+  if (kind !== "host") return { decision: "ask", operation: answer.operation, code: "read-the-web", message };
+  if (answer.code === "grant" || answer.code === "model-host") return answer;
+  const host = targets[0] ?? "";
+  // Where the preset allows the web, a saved Always for the host is read only now.
+  const grant = context.grants?.find(
+    (each) => each.operation === "use-web" && each.rule._tag === "Host" && normalizeHost(each.rule.host) === host,
+  );
+  if (grant !== undefined) {
+    const message = `Your saved rule allows reaching ${host}.`;
+    return { decision: "allow", operation: answer.operation, code: "grant", message, grantId: grant.id };
+  }
+  return {
+    decision: "ask",
+    operation: answer.operation,
+    code: "read-the-web",
+    message: `This session read the web, so reaching ${host}, a new host for its commands, waits for you: a page it read could have told it to send your data there.`,
+    rule: { _tag: "Host", host },
+  };
+};
+
 /** Decides a request whose paths are already canonical. Pure: the same inputs give the same verdict. */
 export const evaluate = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): PolicyVerdict => {
-  const { answers, targets, onceOnly = false } = evaluateParts(context, scope, request);
+  const parts = evaluateParts(context, scope, request);
+  const { targets, onceOnly = false } = parts;
+  const answers = parts.answers.map((answer) => whileMarked(context, request, answer, targets));
   const answer = pickNarrowest(answers) as Answer;
   // Ask offers a lifetime only when every part that asks could be answered by a rule.
   const asking = answer.decision === "ask" ? answers.filter((a) => a.decision === "ask") : [];

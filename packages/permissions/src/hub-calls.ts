@@ -14,15 +14,26 @@ export interface HubCallAccess {
  * for the turn's own, `base`.
  */
 export const decideHubCall =
-  (
-    engine: PolicyEngine["Service"],
-    approvals: { readonly grants: Effect.Effect<ReadonlyArray<Grant>> } | null,
-    base: HubCallAccess,
-    request: PolicyRequest,
-  ) =>
+  (engine: PolicyEngine["Service"], approvals: TurnState | null, base: HubCallAccess, request: PolicyRequest) =>
   (fresh: HubCallAccess | null): Effect.Effect<PolicyVerdict> =>
     Effect.gen(function* () {
       const access = fresh ?? base;
       const grants = approvals ? yield* approvals.grants : [];
-      return yield* engine.decide({ ...access.policy, sandbox: "on", modelHosts: [], grants }, request);
+      const readWeb = yield* sessionReadWeb(approvals);
+      return yield* engine.decide({ ...access.policy, sandbox: "on", modelHosts: [], grants, readWeb }, request);
     });
+
+/**
+ * What a turn's calls are decided with besides the policy, read again for every call: the hob's live
+ * grants, and the read-the-web mark of its session (ADR 036), which the hub keeps.
+ */
+export interface TurnState {
+  readonly grants: Effect.Effect<ReadonlyArray<Grant>>;
+  readonly webMark?: { readonly current: Effect.Effect<unknown> } | undefined;
+}
+
+/** Whether the turn's session has read the web now: its mark, read for this call. */
+export const sessionReadWeb = (state: TurnState | null | undefined): Effect.Effect<boolean> =>
+  state?.webMark === undefined
+    ? Effect.succeed(false)
+    : Effect.map(state.webMark.current, (mark) => mark !== null && mark !== undefined);

@@ -32,7 +32,7 @@ const useSandbox = (runtime: Attempt["runtime"], read: ActivityRead): Sandbox | 
 
 /**
  * The Workbench header (ADR 023), one compact row over the panels: the owner's tile, the Task's
- * title, cut to a line with the whole of it on hover, with who owns it, who asked, the brain it thinks with and where it runs, then an Attempt switcher once it was
+ * title, cut to a line with the whole of it on hover, with who owns it, who asked, the brain it thinks with, where it runs and whether its session read the web, then an Attempt switcher once it was
  * retried, one Live or History tag for the Attempt shown.
  */
 export function WorkbenchHeader({
@@ -79,7 +79,7 @@ export function WorkbenchHeader({
   );
 }
 
-/** "<owner> · asked by You → <lead> · <brain> · in the sandbox · Works in <folders>". */
+/** "<owner> · asked by You → <lead> · <brain> · in the sandbox · Read the web · Works in <folders>". */
 function Byline({
   tree,
   task,
@@ -106,6 +106,7 @@ function Byline({
       <span>{messages.askedBy({ chain })}</span>
       {runtime !== null && <Brain runtime={runtime} model={model} />}
       {runtime !== null && <Where runtime={runtime} read={read} />}
+      <ReadWeb attempt={attempt} />
       <Folders folders={memberFolders(tree, task)} />
     </span>
   );
@@ -182,6 +183,26 @@ function Where({ runtime, read }: { runtime: Attempt["runtime"]; read: ActivityR
         )}
       >
         {sandbox === "on" ? messages.inSandboxLower : sandboxWords[sandbox]}
+      </span>
+    </>
+  );
+}
+
+/**
+ * The Read the web tag, once the Attempt's session searched or read a page (ADR 036): until it ends,
+ * what could send data out asks. The hint names what it read last.
+ */
+function ReadWeb({ attempt }: { attempt: Attempt | null }) {
+  const mark = attempt?.readWeb;
+  if (mark == null) return null;
+  return (
+    <>
+      <Dot />
+      <span
+        title={messages.readWebHint({ source: mark.source })}
+        className="rounded-tag bg-lantern/15 px-1.5 text-meta font-bold text-text-strong"
+      >
+        {messages.readWeb}
       </span>
     </>
   );

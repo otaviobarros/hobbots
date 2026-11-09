@@ -1139,6 +1139,9 @@ export const TaskRepositoryLive = Layer.effect(
             started_at: turn.startedAt,
           })} ON CONFLICT (attempt_id, started_at) DO NOTHING`,
         ]).pipe(sql.withTransaction, Effect.asVoid, Effect.orDie),
+      markAttemptReadWeb: (attemptId, mark) =>
+        sql`UPDATE attempts SET read_web_since = COALESCE(read_web_since, ${mark.since}),
+          read_web_source = ${mark.source} WHERE id = ${attemptId}`.pipe(Effect.asVoid, Effect.orDie),
       endTurn: (turn, usage, endedAt) =>
         sql`UPDATE attempt_turns SET ended_at = ${endedAt}, input_tokens = ${usage?.inputTokens ?? null},
           output_tokens = ${usage?.outputTokens ?? null}, cache_read_tokens = ${usage?.cacheReadTokens ?? null},

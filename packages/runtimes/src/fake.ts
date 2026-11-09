@@ -26,7 +26,7 @@ import {
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { type Cause, Clock, Duration, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
-import { decideCall, startCall } from "./approval.ts";
+import { decideCall, grantedHosts, startCall } from "./approval.ts";
 import { backgroundFinished } from "./background-commands.ts";
 import { sessionPolicy, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
@@ -269,6 +269,12 @@ interface ScriptedEffect {
    * fake follows up with a line on how it ended. Without `runsFor` it runs until you stop waiting.
    */
   readonly outlives?: boolean;
+  /**
+   * The hosts the command connects to, each asked of the sandbox proxy as a real command's
+   * connection would be (`grantedHosts`, ADR 014): a host the proxy refuses fails the command, and
+   * it prints why, without its writes.
+   */
+  readonly reaches?: ReadonlyArray<string>;
 }
 
 interface ScriptedCall {
@@ -508,6 +514,26 @@ const ranScripted = (
   });
 
 /**
+ * The call as it runs past the sandbox proxy: unchanged when the proxy lets every host it reaches
+ * through, as it decides a command's connections; otherwise failed, printing why the first host was refused.
+ */
+const throughProxy = <C extends { readonly effect?: ScriptedEffect }>(
+  engine: PolicyEngine["Service"],
+  context: Parameters<typeof grantedHosts>[1],
+  approvals: PromptRequest["approvals"],
+  call: C,
+) =>
+  Effect.gen(function* () {
+    for (const host of call.effect?.reaches ?? []) {
+      const answer = yield* Effect.promise(() => grantedHosts(engine, context, approvals)(host));
+      if (answer === true) continue;
+      const output = `The sandbox refused ${host}: ${answer}\n`;
+      return { ...call, effect: { output, exitCode: 1, ...(call.effect?.live ? { live: true } : {}) } };
+    }
+    return call;
+  });
+
+/**
  * The tool calls a prompt scripts, decided as Claude Code's would be: by the policy engine, and for
  * Ask by the user through the turn's approvals. Each is reported as started and finished, or denied.
  * Only `fake:run` and `fake:write` change files, and only in the hob's first folder; nothing is run.
@@ -561,7 +587,8 @@ export const scriptedToolEvents = (
               ...(command === undefined ? {} : { command }),
             }));
           if (ran) {
-            yield* ranScripted(call, turn.folders, background, queue);
+            const reached = yield* throughProxy(engine, turn.context, request.approvals, call);
+            yield* ranScripted(reached, turn.folders, background, queue);
           } else {
             yield* Queue.offer(queue, {
               _tag: "ToolDenied",
