@@ -476,11 +476,6 @@ export const makeHubActions =
       });
 
     /**
-     * A write whose Ask is a proposal (ADR 034), once the policy asked: the call is recorded on its
-     * step, the proposal is written under its key, and the step waits on it. A proposal you denied
-     * row by row is a refused answer that names each row; one you allowed any of answers what was made.
-     */
-    /**
      * A keyed write with a proposal that asks becomes the proposal (ADR 034, Asking is a proposal):
      * its step waits on it, and the write's send is the proposal settling. Null when it does not ask.
      */
