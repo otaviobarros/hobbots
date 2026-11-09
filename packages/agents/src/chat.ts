@@ -50,7 +50,7 @@ import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Re
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing, contextBlock } from "./briefing.ts";
-import { type CharmTurn, hubToolOffer, joinHubTools } from "./charms.ts";
+import { type CharmTurn, hubToolOffer, joinHubTools, type WebRecordPlace } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { deliveredRoster, rosterAtStart, sameRoster, turnRoster } from "./hob-directory.ts";
@@ -211,13 +211,22 @@ const chatWebTurn = (
 ) =>
   webSearchTurn({
     agentId,
-    threadId,
     messageId,
     runtime,
     work: webWorkOf({ threadId }),
-    taskId: workingOn,
-    attemptId: taskTurn === null ? Effect.succeed(null) : taskTurn.attempt,
+    ...chatWebPlace(threadId, taskTurn, workingOn),
   });
+
+/** Where a chat turn's web records belong: its chat, and the Task and Attempt it works on once known. */
+const chatWebPlace = (
+  threadId: ThreadId,
+  taskTurn: ChatTaskTurn | null,
+  workingOn: Effect.Effect<TaskId | null>,
+): WebRecordPlace => ({
+  threadId,
+  taskId: workingOn,
+  attemptId: taskTurn === null ? Effect.succeed(null) : taskTurn.attempt,
+});
 
 /**
  * The messages a runtime's session missed (ADR 017): everything after the last one it saw, and that
@@ -1021,6 +1030,7 @@ export class ChatService extends Context.Service<
                     agentId: agent.id,
                     threadId: thread.id,
                     messageId,
+                    webPlace: chatWebPlace(thread.id, taskTurn, workingOn),
                     scope: taskTurn?.scope ?? (() => callScope.reply(messageId)),
                     also: callScope.reply(messageId),
                     currentAccess: currentAccess(agent.id),

@@ -5,6 +5,8 @@ import {
   DEFAULT_WEB_SETTINGS,
   MessageId,
   NO_HOB_WEB_LIMITS,
+  QuestId,
+  TaskId,
   ThreadId,
   WebFetchRecord,
   WebRecordId,
@@ -143,5 +145,56 @@ describe("web records and Settings › Web", () => {
     });
     expect(read.hob).toEqual({ searchesPerTurn: 1, pagesPerTurn: null, searchesPerDay: null });
     expect(read.held).toEqual(["The last turn ran 2 web searches.", null]);
+  });
+
+  // covers ADR 036 (Usage and limits: Quest counts), OR-002
+  it("[TC-PE-1269-07] counts a Quest's records over its own Task and every Task under it, a nested Quest's too", async () => {
+    const read = await Effect.gen(function* () {
+      yield* storedHob("ada");
+      const sql = yield* SqlClient.SqlClient;
+      // An outer Quest on k-outer, and a Quest nested in it on k-mid; every Task keeps the outermost root.
+      for (const [id, parent] of [
+        ["k-outer", null],
+        ["k-mid", "k-outer"],
+        ["k-leaf", "k-mid"],
+        ["k-side", "k-outer"],
+      ] as const) {
+        const fields = { owner_id: "ada", parent_id: parent, root_id: "k-outer", brief: id, state: "active" };
+        yield* sql`INSERT INTO tasks ${sql.insert({ id, ...fields, created_at: now, updated_at: now })}`;
+      }
+      for (const [id, task, parent] of [
+        ["q-outer", "k-outer", null],
+        ["q-nested", "k-mid", "q-outer"],
+      ] as const) {
+        const fields = { lead_id: "ada", parent_quest_id: parent, goal: id, limits: "{}", state: "active" };
+        yield* sql`INSERT INTO quests ${sql.insert({ id, task_id: task, ...fields, depth: parent === null ? 0 : 1, created_at: now })}`;
+      }
+      const records = yield* WebRecords;
+      for (const [id, task] of [
+        ["s-outer", "k-outer"],
+        ["s-leaf", "k-leaf"],
+        ["s-side", "k-side"],
+      ] as const) {
+        yield* records.recordSearch(new WebSearchRecord({ ...search(id, "m1", now, null), taskId: TaskId.make(task) }));
+      }
+      yield* records.recordFetch(new WebFetchRecord({ ...page("p-mid", "m1", now), taskId: TaskId.make("k-mid") }));
+      const counted = (quest: string) =>
+        records.usage({ questId: QuestId.make(quest) }, 10).pipe(
+          Effect.map(({ count, searches }) => ({
+            count: [count.searches, count.pages],
+            searches: searches.map((each) => each.id).sort(),
+          })),
+        );
+      return { outer: yield* counted("q-outer"), nested: yield* counted("q-nested") };
+    }).pipe(
+      Effect.provide(WebRecordsLive),
+      Effect.provide(EventJournal.layer),
+      Effect.provide(TestDatabase),
+      Effect.runPromise,
+    );
+
+    expect(read.outer).toEqual({ count: [3, 1], searches: ["s-leaf", "s-outer", "s-side"] });
+    // The nested Quest counts its own Task and those under it, not the sibling or the outer Task.
+    expect(read.nested).toEqual({ count: [1, 1], searches: ["s-leaf"] });
   });
 });

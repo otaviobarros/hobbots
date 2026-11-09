@@ -674,4 +674,35 @@ describe("the hub records what hobs search and read, and holds them to their lim
       });
     }
   }, 30_000);
+
+  // covers ADR 036 (Usage and limits: where a record belongs)
+  it("[TC-PE-1269-08] a chat's page names the Task the chat works on, and a step's page names its parent's chat, Task and Attempt", async () => {
+    await preset("balanced");
+    const briar = await summon("Briar", 1293);
+    const thread = (await request<Thread>("POST", `/api/agents/${briar.id}/threads`)).body;
+    const plan = hub("plan_steps", { key: "plan", steps: [{ brief: fetchOf(url("lamps.test", "/step-page")) }] });
+    await request("POST", `/api/threads/${thread.id}/messages`, {
+      content: [
+        `Read ${url("lamps.test", "/step-page")} in a step, then ${url("lamps.test", "/lamp")} yourself`,
+        plan,
+        fetchOf(url("lamps.test", "/lamp")),
+      ].join("\n"),
+    });
+    const read = await eventually(async () => {
+      const hob = await usage(`agentId=${briar.id}`);
+      return hob.totals.pages === 2 ? hob.pages : undefined;
+    });
+    const chat = read.find((page) => page.messageId !== null);
+    const step = read.find((page) => page.messageId === null);
+    // The chat holds the plan's Task once it planned, so its page counts for that Task too.
+    expect(chat).toMatchObject({ threadId: thread.id, finalUrl: url("lamps.test", "/lamp") });
+    expect(chat?.taskId).not.toBeNull();
+    expect(step).toMatchObject({ threadId: thread.id, finalUrl: url("lamps.test", "/step-page") });
+    expect(step?.taskId).not.toBeNull();
+    expect(step?.attemptId).not.toBeNull();
+    expect(step?.turn).toBe(`attempt:${step?.attemptId}`);
+    // Each shows where it belongs: the step's Task and the chat's thread.
+    expect((await usage(`taskId=${step?.taskId}`)).pages.map((page) => page.id)).toContain(step?.id);
+    expect((await usage(`threadId=${thread.id}`)).totals.pages).toBe(2);
+  }, 30_000);
 });

@@ -415,14 +415,15 @@ export const makeWebTools = <V extends WebVerdict>(
         onSome: (store) =>
           Effect.gen(function* () {
             const messageId = turn.messageId;
-            const attemptId = turn.attemptId ?? null;
+            const place = turn.webPlace;
+            const attemptId = place === undefined ? (turn.attemptId ?? null) : yield* place.attemptId;
             const entries = yield* store.recordFetch(
               new WebFetchRecord({
                 id: WebRecordId.make(crypto.randomUUID()),
                 agentId: turn.agentId,
-                threadId: turn.threadId,
+                threadId: place === undefined ? turn.threadId : place.threadId,
                 messageId,
-                taskId: turn.taskId ?? null,
+                taskId: place === undefined ? (turn.taskId ?? null) : yield* place.taskId,
                 attemptId,
                 turn: webTurnKey({ messageId, attemptId }),
                 at: DateTime.formatIso(yield* DateTime.now),

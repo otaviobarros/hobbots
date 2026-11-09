@@ -1,4 +1,4 @@
-import { WebRecords, type WebUsageCount } from "@hobbots/agents";
+import { makeSearchAllowance, WebRecords, type WebUsageCount } from "@hobbots/agents";
 import {
   type AgentId,
   DEFAULT_WEB_SETTINGS,
@@ -90,12 +90,15 @@ export const WebRecordsLive = Layer.effect(
         ...(filter.messageId === undefined ? [] : [sql`message_id = ${filter.messageId}`]),
         ...(filter.taskId === undefined ? [] : [sql`task_id = ${filter.taskId}`]),
         ...(filter.attemptId === undefined ? [] : [sql`attempt_id = ${filter.attemptId}`]),
-        // A Quest's records are those of every Task in its tree: the Tasks under the one that holds it.
+        // A Quest's records are those of the Task that holds it and every Task under that one, which a
+        // nested Quest's own subtree is: its Tasks share the outermost root with the Quest around it.
         ...(filter.questId === undefined
           ? []
           : [
-              sql`task_id IN (SELECT t.id FROM tasks t JOIN quests q ON q.task_id = t.root_id
-                WHERE q.id = ${filter.questId})`,
+              sql`task_id IN (WITH RECURSIVE tree (id) AS (
+                  SELECT task_id FROM quests WHERE id = ${filter.questId}
+                  UNION ALL SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
+                ) SELECT id FROM tree)`,
             ]),
         ...(filter.since === undefined ? [] : [sql`${sql(at)} >= ${filter.since}`]),
       ]);
@@ -144,6 +147,12 @@ export const WebRecordsLive = Layer.effect(
     });
 
     const die = <A>(effect: Effect.Effect<A, SqlError.SqlError>) => Effect.orDie(effect);
+
+    const searchesSince = (agentId: AgentId, since: string) =>
+      die(
+        sql<{ readonly count: unknown }>`SELECT COUNT(*) AS count FROM web_searches
+          WHERE agent_id = ${agentId} AND searched_at >= ${since}`.pipe(Effect.map(([row]) => Number(row?.count ?? 0))),
+      );
 
     return WebRecords.of({
       recordSearch: (search) =>
@@ -194,13 +203,9 @@ export const WebRecordsLive = Layer.effect(
             return { count, searches, pages };
           }).pipe(sql.withTransaction),
         ),
-      searchesSince: (agentId, since) =>
-        die(
-          sql<{ readonly count: unknown }>`SELECT COUNT(*) AS count FROM web_searches
-            WHERE agent_id = ${agentId} AND searched_at >= ${since}`.pipe(
-            Effect.map(([row]) => Number(row?.count ?? 0)),
-          ),
-        ),
+      searchesSince,
+      // The daily allowance is kept in the hub's memory, as its turns are (ADR 036, Usage and limits).
+      ...makeSearchAllowance(searchesSince),
       holdSearch: (work, reason) =>
         die(
           Effect.gen(function* () {

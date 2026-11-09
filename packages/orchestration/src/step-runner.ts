@@ -213,7 +213,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             recordToolStart: recordToolStart(step),
             offer: tools.forSession(
               { agentId: agent.id, taskId: step.id, carried },
-              { attemptId, currentAccess: currentAccessOf(run), redactor, approvals },
+              { attemptId, threadId: step.threadId, currentAccess: currentAccessOf(run), redactor, approvals },
               STEP_TOOLS,
             ),
             started: (session) =>

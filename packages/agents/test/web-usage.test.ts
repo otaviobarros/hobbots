@@ -129,4 +129,33 @@ describe("web limits and records", () => {
       },
     ]);
   });
+
+  // covers ADR 036 (Usage and limits: the daily limit holds across a hob's turns)
+  it("[TC-AG-1269-03] two turns of one hob running at once share its daily allowance, and a search admitted but never run gives its place back", async () => {
+    const answers = await run(
+      Effect.gen(function* () {
+        const records = yield* WebRecords;
+        yield* records.setHobLimits(ada, { searchesPerTurn: 5, pagesPerTurn: null, searchesPerDay: 2 });
+        yield* webSearchTurn(place("m0")).pipe(Effect.tap((turn) => turn.see(searched("before"))));
+        // A chat turn and a step of the same hob, both started with one search left today.
+        const chat = yield* webSearchTurn(place("m1"));
+        const step = yield* webSearchTurn({ ...place("m2"), work: "task:k1" });
+        const [first, second] = yield* Effect.all([chat.check("lamps"), step.check("oil")], {
+          concurrency: "unbounded",
+        });
+        const [winner, other] = first === null ? [chat, step] : [step, chat];
+        // The admitted search never ran, so its place goes back when that turn ends.
+        yield* winner.end;
+        const retried = yield* other.check("wicks");
+        yield* other.see(searched("wicks"));
+        const fresh = yield* webSearchTurn(place("m3"));
+        return { first, second, retried, after: yield* fresh.check("glass"), on: fresh.on };
+      }),
+    );
+    const daily = "This hob reached its limit of 2 web searches a day, set in Settings › Web.";
+    expect([answers.first, answers.second].filter((answer) => answer === null)).toHaveLength(1);
+    expect([answers.first, answers.second]).toContain(daily);
+    expect(answers.retried).toBeNull();
+    expect({ on: answers.on, after: answers.after }).toEqual({ on: false, after: daily });
+  });
 });

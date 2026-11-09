@@ -20,7 +20,7 @@ import {
   webSearchBilledPerSearch,
   webTurnKey,
 } from "@hobbots/domain";
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { announcer, EventPublisher } from "./ports.ts";
 import type { RuntimeEvent } from "./runtime.ts";
 
@@ -62,6 +62,13 @@ export class WebRecords extends Context.Service<
     readonly usage: (filter: WebUsageFilter, limit: number) => Effect.Effect<WebUsageRead>;
     /** How many searches a hob ran at or after `since`. */
     readonly searchesSince: (agentId: AgentId, since: string) => Effect.Effect<number>;
+    /**
+     * Admits one more search for a hob under its daily `limit`, counting the searches it ran at or
+     * after `since` and those its turns admitted and have not recorded yet, in every turn of the hub.
+     */
+    readonly admitSearch: (agentId: AgentId, since: string, limit: number) => Effect.Effect<boolean>;
+    /** Gives back a search `admitSearch` admitted, once the turn recorded it or ended without it. */
+    readonly releaseSearch: (agentId: AgentId) => Effect.Effect<void>;
     /** Keeps search off for the next turn of `work`, saying why (Codex's soft per-turn limit). */
     readonly holdSearch: (work: string, reason: string) => Effect.Effect<void>;
     /** Takes the hold on `work`'s search, if any: the reason it holds, once. */
@@ -87,6 +94,8 @@ export class WebRecords extends Context.Service<
       (filter.attemptId === undefined || record.attemptId === filter.attemptId) &&
       (filter.since === undefined || record.at >= filter.since);
     const newest = <A extends { readonly at: string }>(a: A, b: A) => b.at.localeCompare(a.at);
+    const searchesSince = (agentId: AgentId, since: string) =>
+      Effect.sync(() => searches.filter((s) => s.agentId === agentId && s.at >= since).length);
     return WebRecords.of({
       recordSearch: (search) => Effect.sync(() => (searches.push(search), NONE)),
       recordFetch: (fetch) => Effect.sync(() => (pages.push(fetch), NONE)),
@@ -100,8 +109,8 @@ export class WebRecords extends Context.Service<
             pages: read.slice(0, limit),
           };
         }),
-      searchesSince: (agentId, since) =>
-        Effect.sync(() => searches.filter((s) => s.agentId === agentId && s.at >= since).length),
+      searchesSince,
+      ...makeSearchAllowance(searchesSince),
       holdSearch: (work, reason) => Effect.sync(() => void holds.set(work, reason)),
       takeSearchHold: (work) =>
         Effect.sync(() => {
@@ -120,6 +129,40 @@ export class WebRecords extends Context.Service<
     });
   });
 }
+
+/**
+ * The daily allowance every turn of a hub shares (ADR 036, Usage and limits): a search is admitted
+ * only while the hob's recorded searches and those its turns admitted and have not recorded yet stay
+ * under the limit, so two turns of one hob cannot each take the last search of its day. One permit
+ * orders every admission and release, so a search recorded and released while another turn is being
+ * admitted is counted once, never missed.
+ */
+export const makeSearchAllowance = (searchesSince: (agentId: AgentId, since: string) => Effect.Effect<number>) => {
+  const lock = Semaphore.makeUnsafe(1);
+  const open = new Map<AgentId, number>();
+  return {
+    admitSearch: (agentId: AgentId, since: string, limit: number) =>
+      Semaphore.withPermit(
+        lock,
+        Effect.gen(function* () {
+          const ran = yield* searchesSince(agentId, since);
+          const admitted = open.get(agentId) ?? 0;
+          if (ran + admitted >= limit) return false;
+          open.set(agentId, admitted + 1);
+          return true;
+        }),
+      ),
+    releaseSearch: (agentId: AgentId) =>
+      Semaphore.withPermit(
+        lock,
+        Effect.sync(() => {
+          const left = (open.get(agentId) ?? 0) - 1;
+          if (left > 0) open.set(agentId, left);
+          else open.delete(agentId);
+        }),
+      ),
+  };
+};
 
 /**
  * A blocked-sites entry as it is kept: lowercase, without a scheme, path, port or leading `*.`, and
@@ -254,16 +297,29 @@ export const webSearchTurn = (place: WebTurnPlace): Effect.Effect<WebSearchTurn>
           ? webLimitReason.searchesPerTurn(limits)
           : held;
     let allowed = 0;
+    // Searches this turn was admitted to the hob's daily allowance for and has not recorded yet.
+    let admitted = 0;
     let searched = 0;
     let billing: string | null = null;
+    const release = Effect.suspend(() => {
+      if (admitted === 0) return Effect.void;
+      admitted -= 1;
+      return records.releaseSearch(place.agentId);
+    });
     return {
       on: off === null,
       note: off === null ? null : `Web search is off for this turn. ${off}`,
       check: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (allowed >= limits.searchesPerTurn) return webLimitReason.searchesPerTurn(limits);
-          if (today + allowed >= limits.searchesPerDay) return webLimitReason.searchesPerDay(limits);
+          // Taken before the daily check, so concurrent calls in one turn cannot pass the turn's limit.
           allowed += 1;
+          const since = DateTime.formatIso(DateTime.subtract(yield* DateTime.now, { days: 1 }));
+          if (!(yield* records.admitSearch(place.agentId, since, limits.searchesPerDay))) {
+            allowed -= 1;
+            return webLimitReason.searchesPerDay(limits);
+          }
+          admitted += 1;
           return null;
         }),
       see: (event) =>
@@ -291,14 +347,20 @@ export const webSearchTurn = (place: WebTurnPlace): Effect.Effect<WebSearchTurn>
             }),
           );
           yield* announce(entries);
+          // Recorded first, so the allowance never counts the search less than once.
+          yield* release;
         }),
       end: Effect.suspend(() =>
-        place.work !== null && searched > limits.searchesPerTurn
-          ? records.holdSearch(
-              place.work,
-              `The last turn ran ${searched} web searches, past its limit of ${limits.searchesPerTurn} set in Settings › Web.`,
-            )
-          : Effect.void,
+        Effect.andThen(
+          // An admitted search the runtime never reported gives its place back.
+          Effect.whileLoop({ while: () => admitted > 0, body: () => release, step: () => undefined }),
+          place.work !== null && searched > limits.searchesPerTurn
+            ? records.holdSearch(
+                place.work,
+                `The last turn ran ${searched} web searches, past its limit of ${limits.searchesPerTurn} set in Settings › Web.`,
+              )
+            : Effect.void,
+        ),
       ),
     };
   });
