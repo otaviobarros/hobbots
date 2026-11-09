@@ -1,7 +1,8 @@
 import type { HobProposalView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type Ref, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import {
   type HobProposalDecision,
@@ -9,6 +10,8 @@ import {
   hobProposalQuery,
   useDecideHobProposal,
 } from "../../api/hob-proposals.ts";
+import type { FocusTargets } from "../move-on/follow-focus.ts";
+import { useMoveOn } from "../move-on/move-on.tsx";
 import { allowableRows, hobProposalWhat } from "./hob-proposal-model.ts";
 import { messages } from "./messages.ts";
 import { AlwaysAllow, CreatedHobs } from "./proposal-extras.tsx";
@@ -43,6 +46,7 @@ export function HobProposalCard({
   who,
   heading = false,
   bare = false,
+  targets,
 }: {
   view: HobProposalView;
   /** The manager's name. */
@@ -51,23 +55,38 @@ export function HobProposalCard({
   heading?: boolean;
   /** In the Needs-you tray: no edge or label of its own, since the tray gives both. */
   bare?: boolean;
+  /**
+   * Where focus goes when a decision takes away the control that had it, as the tray's other items
+   * do (#995): its next item, else the composer. Without it, as in the Inbox, the page's own.
+   */
+  targets?: FocusTargets;
 }) {
   const { proposal, changedSince } = view;
   const decide = useDecideHobProposal(proposal.id);
   const [confirmed, setConfirmed] = useState(false);
   const open = proposal.state === "open";
   const busy = decide.isPending;
-  const send = (decision: HobProposalDecision) => decide.mutate(decision);
+  const frame = useRef<HTMLDivElement>(null);
+  const moveOn = useMoveOn();
+  const send = (decision: HobProposalDecision) => {
+    if (targets === undefined) decide.mutate(decision);
+    else moveOn({ from: frame.current, targets, sent: decide.mutateAsync(decision) });
+  };
   const allowable = allowableRows(proposal, changedSince);
   const pending = proposal.rows.filter((row) => row.state === "pending");
   const what = hobProposalWhat(proposal, who);
   return (
-    <ProposalFrame label={copy.cardLabel({ what })} state={proposal.state} bare={bare}>
+    <ProposalFrame frameRef={frame} label={copy.cardLabel({ what })} state={proposal.state} bare={bare}>
       {heading && <h3 className="m-0 text-ui font-semibold text-text-strong">{what}</h3>}
       {proposal.safety !== null && open && (
         <p className="m-0 text-detail text-lantern">{copy.safety({ reason: proposal.safety })}</p>
       )}
-      <ul aria-label={copy.rows} className="m-0 flex list-none flex-col gap-2 p-0">
+      {/* In the tray the rows scroll in a bounded box, so a tall proposal never pushes the composer
+          or its own decisions out of the window. */}
+      <ul
+        aria-label={copy.rows}
+        className={cn("m-0 flex list-none flex-col gap-2 p-0", bare && "max-h-[40vh] min-h-24 overflow-y-auto")}
+      >
         {proposal.rows.map((row) => (
           <li key={row.id}>
             <ProposalRow
@@ -114,11 +133,13 @@ export function HobProposalCard({
 
 /** The card's own edge and name, or, in the tray, only its column. */
 function ProposalFrame({
+  frameRef,
   label,
   state,
   bare,
   children,
 }: {
+  frameRef: Ref<HTMLDivElement>;
   label: string;
   state: string;
   bare: boolean;
@@ -126,13 +147,14 @@ function ProposalFrame({
 }) {
   if (bare) {
     return (
-      <div data-testid="hob-proposal" data-state={state} className="flex flex-col gap-3">
+      <div ref={frameRef} data-testid="hob-proposal" data-state={state} className="flex min-h-0 flex-col gap-3">
         {children}
       </div>
     );
   }
   return (
     <section
+      ref={frameRef}
       aria-label={label}
       data-testid="hob-proposal"
       data-state={state}

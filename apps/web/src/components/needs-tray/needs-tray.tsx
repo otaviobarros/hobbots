@@ -172,7 +172,8 @@ function TrayBody({
   if (entry.kind === "stuck") return <StuckBody entry={entry} asker={hobs(entry.item.recipientId)} />;
   if (entry.kind === "hub-question") return <HubQuestionBody question={entry.question} via={via} />;
   // The same card as in the Inbox, its title the tray's (ADR 034, Asking is a proposal).
-  if (entry.kind === "hob-proposal") return <HobProposalCard view={entry.hobs} who={asker.name} bare />;
+  if (entry.kind === "hob-proposal")
+    return <HobProposalCard view={entry.hobs} who={asker.name} bare targets={trayTargets} />;
   const { question, task } = entry.waiting;
   return (
     <>

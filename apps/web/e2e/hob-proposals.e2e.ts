@@ -206,7 +206,7 @@ test("[TC-UX-409-03] a summon proposal is decided by keyboard alone: open it fro
 });
 
 // covers ADR 034 ("Always allow" for every field that asked), the design system (one place asks for you)
-test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields on one line each, and Always allow all sets every field that asked", async ({
+test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields on one line each, Always allow all sets every field that asked, and focus moves to the composer once it is decided", async ({
   page,
 }) => {
   const { url, api, bram } = await managerHub();
@@ -232,8 +232,38 @@ test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields 
   await card.getByRole("button", { name: "Always allow all of these" }).click();
   await expect(card.getByRole("status")).toContainText("to Allow for Bram");
   await expect(card.getByRole("button", { name: /^Always allow/ })).toHaveCount(0);
-  await card.getByRole("button", { name: "Allow", exact: true }).click();
+  // Deciding the last row takes the card, and its focused button, out of the tray: focus moves on to
+  // the composer, never to the page (#995).
+  await card.getByRole("button", { name: "Allow", exact: true }).focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator("[data-tray]")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByRole("textbox", { name: /^Message Bram/ })).toBeFocused();
   const settled = page.getByRole("region", { name: "Bram proposes changes to itself" });
   await expect(settled.getByRole("article", { name: "Bram" })).toHaveAttribute("data-state", "allowed");
+});
+
+// covers STD-TEST-010, the design system (one place asks for you), ADR 034
+test("[TC-UX-409-05] a tall proposal scrolls inside the tray at the smallest window, keeping the composer and Allow all in view", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 640 });
+  const { url, api, bram } = await managerHub();
+  const thread = await api("POST", `/agents/${bram.id}/threads`);
+  const names = ["Abe", "Bea", "Cal", "Dee", "Eli", "Fen", "Gil", "Hal", "Ike", "Jo"];
+  await api("POST", `/threads/${thread.id}/messages`, { content: summon("hire-ten", names) });
+  await page.goto(`${url}/#/hobs/${bram.id}/threads/${thread.id}`);
+
+  const card = page.locator("[data-tray]").getByRole("region", { name: "Bram proposes 10 new hobs" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  const rows = card.getByRole("list", { name: "Hobs" });
+  await expect(rows.getByRole("article")).toHaveCount(10);
+  expect(await rows.evaluate((list) => list.scrollHeight > list.clientHeight)).toBe(true);
+  await expect(card.getByRole("button", { name: "Allow all" })).toBeInViewport();
+  await expect(page.getByRole("textbox", { name: /^Message Bram/ })).toBeInViewport();
+  // The last row is reached by scrolling the rows, not the window.
+  await rows.getByRole("article", { name: "Jo" }).getByRole("button", { name: "Deny" }).click();
+  await expect(rows.getByRole("article", { name: "Jo" })).toHaveAttribute("data-state", "denied");
+  await expectAccessible(page, card);
+  await card.getByRole("button", { name: "Deny all" }).click();
+  await expect(page.locator("[data-tray]")).toHaveCount(0, { timeout: 20_000 });
 });
