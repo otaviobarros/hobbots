@@ -25,6 +25,7 @@ import type { ThreadTasksRead } from "@hobbots/api";
 import {
   type Agent,
   type ApprovalRequest,
+  type Attempt,
   isInProgress,
   type Message,
   roleFields,
@@ -54,7 +55,7 @@ import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { WebAccessWith } from "@hobbots/web-access";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
-import { Effect, Layer, Schedule } from "effect";
+import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { Dns } from "effect/net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -123,6 +124,8 @@ const built = (host: string, path: string) => url(host, path).replaceAll("/", "\
 
 /** Every request the runtime was sent, in order. */
 const requests: Array<PromptRequest> = [];
+/** Runs as the runtime takes each prompt, before it starts the turn, when a test sets it. */
+let beforeTurn: ((request: PromptRequest) => Promise<void>) | undefined;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
@@ -133,7 +136,10 @@ beforeAll(async () => {
     ...fake,
     sendPrompt: (request) => {
       requests.push(request);
-      return fake.sendPrompt(request);
+      const hook = beforeTurn;
+      return hook === undefined
+        ? fake.sendPrompt(request)
+        : Stream.unwrap(Effect.promise(() => hook(request)).pipe(Effect.as(fake.sendPrompt(request))));
     },
   });
   const runtime = Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(
@@ -631,6 +637,41 @@ describe("a session that read the web asks before data leaves it, end to end", (
     const fresh = await send(other, "Check the collector", curl("collector.test"));
     expect(fresh.pending).toBeUndefined();
     expect(fresh.reply?.content).not.toContain("The sandbox refused");
+  }, 30_000);
+
+  // covers ADR 036 (The read-the-web mark), ADR 023
+  it("[TC-PE-1268-10] a chat's new Attempt in a session that read the web records the mark before its turn runs", async () => {
+    await preset("balanced");
+    const sedge = await summon("Sedge", 1268_10);
+    const thread = (await request<Thread>("POST", `/api/agents/${sedge.id}/threads`)).body;
+    const attempts = async () => {
+      const { trees } = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body;
+      return trees.flatMap((tree) => tree.attempts);
+    };
+    await send(
+      thread,
+      "Look into lamp oil",
+      "fake:search lamp oil",
+      hub("start_quest", { key: "quest", goal: "Look into lamp oil" }),
+    );
+    const [first] = await attempts();
+    expect(first?.readWeb).toMatchObject({ source: 'the web search "lamp oil"' });
+
+    // Sedge's instructions change, so the next turn starts a new Attempt in the same session; it
+    // only works locally, yet its Attempt holds the mark before the runtime runs anything.
+    expect((await request("PATCH", `/api/agents/${sedge.id}`, { instructions: "Keep notes short." })).status).toBe(200);
+    let seen: ReadonlyArray<Attempt> = [];
+    beforeTurn = async () => {
+      seen = await attempts();
+    };
+    try {
+      await send(thread, "Write it down", `fake:write notes/oil.md ${JSON.stringify("Oil notes")}`);
+    } finally {
+      beforeTurn = undefined;
+    }
+    const second = seen.find((attempt) => attempt.number === 2);
+    expect(second?.sessionId ?? first?.sessionId).toBe(first?.sessionId);
+    expect(second?.readWeb).toEqual(first?.readWeb);
   }, 30_000);
 
   // covers ADR 036 (The read-the-web mark), ADR 023

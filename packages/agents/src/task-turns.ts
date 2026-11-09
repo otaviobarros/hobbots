@@ -40,6 +40,11 @@ export interface ChatTurn {
    * briefing says only what changed since. Absent or null for a session that needs the whole.
    */
   readonly told?: TaskBriefMark | null;
+  /**
+   * The read-the-web mark of the turn's session as it stands (ADR 036): each Attempt the turn
+   * starts, from the start or partway through, records it as soon as the Attempt exists.
+   */
+  readonly webMark?: Effect.Effect<WebReadMark | null>;
 }
 
 /** What a chat turn gets for the Task its hob works on in the thread. */

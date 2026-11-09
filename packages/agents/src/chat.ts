@@ -1000,6 +1000,7 @@ export class ChatService extends Context.Service<
                   configVersion: config.version,
                   holding: carry.holding,
                   told: taskBriefIn(thread, brain.runtime),
+                  webMark: webMark.current,
                 }),
                 (turn) =>
                   // An Attempt the turn started after its session read the web carries the mark too.
