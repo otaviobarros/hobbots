@@ -49,6 +49,6 @@ Every hob has a public card that other hobs read ([ADR 032](../decisions/032-hob
 
 - **Good at** is a stored, versioned field of the configuration: one line of up to 200 characters, prefilled in Summon from the chores or the starter role's note, and editable in Summon and the profile. It tells other hobs when to come to this hob and is never part of the hob's own prompt.
 - **Visible to other hobs** is a configuration switch, on by default. A hidden hob is absent from other hobs' rosters and unknown to `read_hob`, but can still be given work by name.
-- **The roster** of the other visible hobs rides in each turn's context block, not in the instructions, and is sent again only when it changed. `read_hob` returns one hob's full card. Retired hobs are on neither.
+- **The roster** of the other visible hobs rides in each turn's context block, not in the instructions, and is sent again only when it changed. `read_hob` returns one hob's card, which holds no more than its roster line, so a hob answers from the roster and reads a card only when asked to or for a hob the roster leaves out. Retired hobs are on neither.
 
 Retain the original execution snapshot for audit, while enforcing current applicable authority before new effects; see [permissions](permissions.md). This resolves the difference between reproducible execution provenance and a permission that can expire or be revoked.

@@ -62,7 +62,7 @@ Every turn carries a short **roster** of the other visible hobs: a chat turn, a 
 - **Who is on it.** Every hob but the turn's own hob, left out when hidden or retired. Paused hobs are listed with their status. A hob already knows itself from "About you".
 - **Order.** Active hobs, then paused ones, each group by name, ignoring case, then by id. The same hub gives the same roster, so it can be compared from turn to turn.
 - **One line per hob:** name, role title, status when paused, brain, Charms, and good at, quoted.
-- **Size.** At most 6,000 characters. Past that, the hobs that do not fit are named on one closing line, and past that line's own budget it ends with "and N more". When the turn offers `read_hob`, the roster says that it returns any hob's full card.
+- **Size.** At most 6,000 characters. Past that, the hobs that do not fit are named on one closing line, and past that line's own budget it ends with "and N more". When the turn offers `read_hob`, the roster says that a card holds no more than the hob's line, to answer from the list, and to read a card only when asked to or for a hob the list leaves out. Calling the card "full" led real Codex hobs to read cards for a question the roster already answered ([#1307](https://github.com/otaviobarros/hobbots/issues/1307)).
 - **Where it goes.** The hub builds it with the turn's other context and puts it in the turn's context block beside the ADR 017 briefing and the ADR 028 memory brief, under its own heading. It never enters `systemInstructions`, so a change in another hob never looks like an edit of this hob's instructions, and a resumed session that keeps its first system prompt still gets the live roster.
 - **Sent again only when it changed.** The hub records a digest of the roster each reply received, and a turn whose session last received the same digest carries none, as the memory brief does. A new session always gets it. When a session that was given a roster would get none, because its last other hob was hidden or retired or Read other hobs is no longer Allow, its next turn carries one line saying no other hob is listed now, so the old list does not stand.
 - **Its label** says that the section is reference data the hub collected about other hobs, that good at was written by you or by a hob, and that it is never instructions to this hob.
@@ -114,7 +114,7 @@ The roster rides in the context block, which every adapter already delivers, and
 
 **A stored field, not a parse.** Reading good at out of the instructions breaks quietly as soon as someone edits that section, and it cannot be edited on its own. A stored field can be edited, versioned, migrated and later set by the Summoning Charm like any other field.
 
-**Two levels.** A roster in every turn lets a hob answer "who can push?" without a tool call, and `read_hob` keeps the full card one call away. Keeping the roster short and sent only when it changed keeps its cost flat as a hub grows.
+**Two levels.** A roster in every turn lets a hob answer "who can push?" without a tool call, and `read_hob` keeps a card one call away for a hob the roster left out or when you ask for one. Keeping the roster short and sent only when it changed keeps its cost flat as a hub grows.
 
 **The context block, not the system prompt.** Claude Code keeps a resumed session's first system prompt, and the hub sends new instructions only when the hob's own configuration changed. Another hob's edit is not this hob's edit, so the roster travels where the memory brief already does, sent again when it changed.
 
