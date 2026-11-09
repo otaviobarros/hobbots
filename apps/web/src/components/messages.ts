@@ -806,6 +806,8 @@ export const messages = {
         linkNote: ({ name }: { name: string }) =>
           `In the app's settings on GitHub, copy its Client ID and generate a private key. The key stays in this computer's keychain, never with ${name}, and the app keeps its installations.`,
         openApps: "Open your apps on GitHub",
+        linkOnHub: ({ name }: { name: string }) =>
+          `To give ${name} an app you already have, open this page on the hub's computer, so the app's private key never leaves it.`,
         appIdLabel: "Client ID",
         appIdHint: "Or its App ID. GitHub shows both in the app's settings.",
         keyLabel: "Private key",

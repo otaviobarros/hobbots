@@ -11,6 +11,7 @@ import {
   type DeviceId,
   type HobGitHubApp,
   type HobGitHubAppInstallation,
+  type HobGitHubAppMissingPermission,
   hobAppBot,
 } from "@hobbots/domain";
 import { Clock, Context, DateTime, Effect, Layer, Option, Redacted, Schema, Semaphore } from "effect";
@@ -122,17 +123,11 @@ export interface HobAppLinkRequest {
   readonly privateKey: Redacted.Redacted<string>;
 }
 
-/** A permission the hob's actions ask for that a linked app was not given, by GitHub's name. */
-export interface HobAppMissingPermission {
-  readonly name: keyof typeof HOB_APP_PERMISSIONS;
-  readonly access: "read" | "write";
-}
-
 export interface HobAppLinked {
   readonly app: HobGitHubApp;
   readonly bot: string;
   /** The permissions of `HOB_APP_PERMISSIONS` the app lacks, so the user can add them on GitHub. */
-  readonly missingPermissions: ReadonlyArray<HobAppMissingPermission>;
+  readonly missingPermissions: ReadonlyArray<HobGitHubAppMissingPermission>;
 }
 
 /** Why the redirect from GitHub did not give the hob its app. */
@@ -243,7 +238,7 @@ const AppJson = Schema.Struct({
 const APP_ID = /^(?:[0-9]{1,12}|Iv[0-9A-Za-z.]{1,40})$/;
 
 /** The permissions the hob's actions ask for that `granted`, as GitHub lists an app's, does not give. */
-export const missingPermissions = (granted: Readonly<Record<string, string>>): Array<HobAppMissingPermission> =>
+export const missingPermissions = (granted: Readonly<Record<string, string>>): Array<HobGitHubAppMissingPermission> =>
   Object.entries(HOB_APP_PERMISSIONS).flatMap(([name, access]) => {
     const has = granted[name];
     const enough = has === "write" || has === "admin" || (has === "read" && access === "read");
@@ -255,6 +250,7 @@ const InstallationJson = Schema.Struct({
   repository_selection: Schema.Literals(["all", "selected"]),
   html_url: Schema.String,
   suspended_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  permissions: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 
 const AccessTokenJson = Schema.Struct({ token: Schema.String, expires_at: Schema.String });
@@ -744,6 +740,9 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
                 htmlUrl: installation.html_url,
                 suspended,
                 repositories: suspended ? null : yield* reached(agentId, app, installation.id, jwt),
+                // GitHub lists what an installation grants; one that lists nothing is not judged.
+                missingPermissions:
+                  installation.permissions === undefined ? [] : missingPermissions(installation.permissions),
               } satisfies HobGitHubAppInstallation;
             }),
           { concurrency: 4 },

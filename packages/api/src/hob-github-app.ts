@@ -1,4 +1,4 @@
-import { AgentId, HobGitHubApp, HobGitHubAppInstallation } from "@hobbots/domain";
+import { AgentId, HobGitHubApp, HobGitHubAppInstallation, HobGitHubAppMissingPermission } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound } from "./errors.ts";
@@ -13,6 +13,11 @@ export const HobGitHubAppStatus = Schema.Union([
   Schema.TaggedStruct("None", {
     /** Why this hub cannot make a hob's app: no keychain to keep its key in. Null when it can. */
     cannotCreate: Schema.NullOr(Schema.Literal("no-keychain")),
+    /**
+     * Why an app the user already has cannot be linked from here, or null when it can: no keychain, or
+     * `not-local`, a browser that is not on the hub's own computer, which must never send the key.
+     */
+    cannotLink: Schema.NullOr(Schema.Literals(["no-keychain", "not-local"])),
   }),
   Schema.TaggedStruct("Connected", {
     app: HobGitHubApp,
@@ -96,22 +101,6 @@ export const HobGitHubAppLink = Schema.Struct({
   privateKey: Schema.RedactedFromValue(Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(KEY_LIMIT))),
 });
 export type HobGitHubAppLink = typeof HobGitHubAppLink.Type;
-
-/** A permission the hob's actions ask for that the linked app was not given, by GitHub's name. */
-export const HobGitHubAppMissingPermission = Schema.Struct({
-  name: Schema.Literals([
-    "metadata",
-    "contents",
-    "issues",
-    "pull_requests",
-    "checks",
-    "actions",
-    "statuses",
-    "workflows",
-  ]),
-  access: Schema.Literals(["read", "write"]),
-});
-export type HobGitHubAppMissingPermission = typeof HobGitHubAppMissingPermission.Type;
 
 export const HobGitHubAppLinked = Schema.Struct({
   app: HobGitHubApp,

@@ -23,7 +23,7 @@ import { isLoopbackHost } from "./web.ts";
  */
 
 /** What a hub without the GitHub Charm, as in tests, answers. */
-const NONE: HobGitHubAppStatus = { _tag: "None", cannotCreate: "no-keychain" };
+const NONE: HobGitHubAppStatus = { _tag: "None", cannotCreate: "no-keychain", cannotLink: "no-keychain" };
 
 const notLocal = new HobGitHubAppRefused({
   reason: "not-local",
@@ -49,6 +49,15 @@ const hubUrlOf = (request: HttpServerRequest.HttpServerRequest) => {
   return `http://127.0.0.1${port === "" ? "" : `:${port}`}`;
 };
 
+/**
+ * Whether a request comes from a browser on the hub's own computer, at its loopback address: a request
+ * through `tailscale serve` reaches the hub locally, but by its tailnet name, from another computer.
+ */
+const fromHubComputer = (gate: DeviceGate["Service"], request: HttpServerRequest.HttpServerRequest) =>
+  gate
+    .placeOf(request)
+    .pipe(Effect.map((place) => Option.exists(place, (where) => where._tag === "Local") && hubUrlOf(request) !== null));
+
 export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubApp", (handlers) =>
   Effect.gen(function* () {
     const found = yield* Effect.serviceOption(HobGitHubAppService);
@@ -66,7 +75,15 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
     const service = found.value;
     return handlers.handleAll({
       status: ({ params }) =>
-        service.status(params.agentId).pipe(Effect.mapError(() => new AgentNotFound({ agentId: params.agentId }))),
+        Effect.gen(function* () {
+          const status = yield* service
+            .status(params.agentId)
+            .pipe(Effect.mapError(() => new AgentNotFound({ agentId: params.agentId })));
+          if (status._tag !== "None") return status;
+          // The page offers linking only where the key would not cross the network (#1321).
+          const local = yield* fromHubComputer(gate, yield* HttpServerRequest.HttpServerRequest);
+          return { ...status, cannotLink: status.cannotCreate ?? (local ? null : "not-local") };
+        }),
       start: ({ params }) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
@@ -82,12 +99,8 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
         }),
       link: ({ params, payload }) =>
         Effect.gen(function* () {
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          const place = yield* gate.placeOf(request);
-          // As for making an app: a request through `tailscale serve` reaches the hub locally, by its tailnet name.
-          if (!Option.exists(place, (where) => where._tag === "Local") || hubUrlOf(request) === null) {
-            return yield* linkNotLocal;
-          }
+          // The page does not offer linking elsewhere; this refuses a request that sent the key anyway.
+          if (!(yield* fromHubComputer(gate, yield* HttpServerRequest.HttpServerRequest))) return yield* linkNotLocal;
           const linked = yield* service.link(params.agentId, payload).pipe(Effect.mapError(refusal(params.agentId)));
           // The hob commits as its own app now, so its coding setup card is no longer needed (#1241).
           const codingSetup = yield* Effect.serviceOption(CommitIdentityQuestions);

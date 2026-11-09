@@ -808,6 +808,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     repository_selection: installation.selection,
     html_url: `https://github.com/settings/installations/${installation.id}`,
     suspended_at: null,
+    permissions: app.manifest.default_permissions ?? {},
   });
 
   /** The endpoints an app reaches with its JWT. */

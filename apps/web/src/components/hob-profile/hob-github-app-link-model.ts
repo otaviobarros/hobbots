@@ -1,4 +1,5 @@
-import type { HobGitHubAppLink, HobGitHubAppMissingPermission, HobGitHubAppRefused } from "@hobbots/api";
+import type { HobGitHubAppLink, HobGitHubAppRefused } from "@hobbots/api";
+import type { HobGitHubAppMissingPermission } from "@hobbots/domain";
 import { Redacted, Schema } from "effect";
 import { formatList } from "../../lib/format.ts";
 import { messages } from "../messages.ts";
@@ -66,3 +67,14 @@ export const missingText = (name: string, missing: ReadonlyArray<HobGitHubAppMis
       missing.map((each) => copy.permissionAccess({ name: copy.permissionNames[each.name], access: each.access })),
     ),
   });
+
+/** What the app's installations lack between them, once each, with write where any lacks write. */
+export const missingAcross = (
+  installations: ReadonlyArray<{ readonly missingPermissions: ReadonlyArray<HobGitHubAppMissingPermission> }>,
+): Array<HobGitHubAppMissingPermission> => {
+  const lacking = new Map<HobGitHubAppMissingPermission["name"], HobGitHubAppMissingPermission>();
+  for (const each of installations.flatMap((installation) => installation.missingPermissions)) {
+    if (lacking.get(each.name)?.access !== "write") lacking.set(each.name, each);
+  }
+  return [...lacking.values()];
+};

@@ -692,6 +692,7 @@ describe("Linking a GitHub App the user already has", () => {
     const mine = github.makeAppByHand("Frodo's bot");
     const lean = github.makeAppByHand("Sam's helper", { metadata: "read", contents: "read", issues: "write" });
     github.installApp(mine.app.slug, "all");
+    github.installApp(lean.app.slug, "all");
     const outcome = await run(
       w,
       Effect.gen(function* () {
@@ -701,8 +702,9 @@ describe("Linking a GitHub App the user already has", () => {
         const status = yield* service.status(FRODO);
         const installations = yield* service.installations(FRODO);
         const byClientId = yield* linkBy(SAM, lean.app.clientId, lean.pem);
+        const leanInstallations = yield* service.installations(SAM);
         const key = yield* (yield* HobAppKeys).read(FRODO);
-        return { linked, status, installations, byClientId, key };
+        return { linked, status, installations, byClientId, leanInstallations, key };
       }),
     );
     expect(outcome.linked).toEqual({
@@ -721,7 +723,12 @@ describe("Linking a GitHub App the user already has", () => {
     });
     expect(outcome.status).toMatchObject({ _tag: "Connected", bot: `${mine.app.slug}[bot]`, needsReconnect: null });
     expect(outcome.installations).toEqual([
-      expect.objectContaining({ account: "otaviobarros", repositorySelection: "all", suspended: false }),
+      expect.objectContaining({
+        account: "otaviobarros",
+        repositorySelection: "all",
+        suspended: false,
+        missingPermissions: [],
+      }),
     ]);
     // The permissions the hob's actions need that the app was not given, so the user can add them.
     expect(outcome.byClientId.app).toMatchObject({ appId: lean.app.id, origin: "linked" });
@@ -732,6 +739,10 @@ describe("Linking a GitHub App the user already has", () => {
       { name: "actions", access: "read" },
       { name: "statuses", access: "read" },
       { name: "workflows", access: "write" },
+    ]);
+    // Its installation says the same whenever it is read again, as when the profile is opened again.
+    expect(outcome.leanInstallations.map((each) => each.missingPermissions)).toEqual([
+      outcome.byClientId.missingPermissions,
     ]);
     // The key is in the keychain as GitHub gave it, and nowhere in what the hub keeps of the app.
     expect(Option.map(outcome.key, Redacted.value)).toEqual(Option.some(mine.pem));

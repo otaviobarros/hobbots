@@ -258,7 +258,7 @@ describe("A hob's own GitHub App on a hub", () => {
   // covers ADR 022
   it("[TC-GEN-053] is made from the hub's page and GitHub's redirect, and the Charms tab sees it and its installations", async () => {
     const before = await api("GET", `/api/agents/${FRODO}/github-app`);
-    expect(before).toEqual({ status: 200, body: { _tag: "None", cannotCreate: null } });
+    expect(before).toEqual({ status: 200, body: { _tag: "None", cannotCreate: null, cannotLink: null } });
 
     const started = await api<Started>("POST", `/api/agents/${FRODO}/github-app/start`);
     expect(started.status).toBe(200);
@@ -353,7 +353,11 @@ describe("A hob's own GitHub App on a hub", () => {
     });
     expect(github.apps.find((app) => app.slug === "frodo-hobbots")?.installations).toEqual([]);
     expect(await readKey(FRODO)).toBeNull();
-    expect((await api("GET", `/api/agents/${FRODO}/github-app`)).body).toEqual({ _tag: "None", cannotCreate: null });
+    expect((await api("GET", `/api/agents/${FRODO}/github-app`)).body).toEqual({
+      _tag: "None",
+      cannotCreate: null,
+      cannotLink: null,
+    });
 
     // Merry gets an app, then retires: its installations and key go with it.
     const started = await api<Started>("POST", `/api/agents/${MERRY}/github-app/start`);
@@ -365,7 +369,11 @@ describe("A hob's own GitHub App on a hub", () => {
     expect(retired.status).toBe(200);
     expect(github.apps.find((app) => app.slug === "merry-hobbots")?.installations).toEqual([]);
     expect(await readKey(MERRY)).toBeNull();
-    expect((await api("GET", `/api/agents/${MERRY}/github-app`)).body).toEqual({ _tag: "None", cannotCreate: null });
+    expect((await api("GET", `/api/agents/${MERRY}/github-app`)).body).toEqual({
+      _tag: "None",
+      cannotCreate: null,
+      cannotLink: null,
+    });
   });
 
   // covers ADR 022
@@ -400,7 +408,11 @@ describe("A hob's own GitHub App on a hub", () => {
       deleteUrl,
       problem: null,
     });
-    expect((await api("GET", `/api/agents/${PIPPIN}/github-app`)).body).toEqual({ _tag: "None", cannotCreate: null });
+    expect((await api("GET", `/api/agents/${PIPPIN}/github-app`)).body).toEqual({
+      _tag: "None",
+      cannotCreate: null,
+      cannotLink: null,
+    });
   });
 
   // covers ADR 022, PE-007
@@ -518,7 +530,17 @@ describe("A hob's own GitHub App on a hub", () => {
     const path = `/api/agents/${ROSIE}/github-app/link`;
     const body = { appId: String(mine.app.id), privateKey: mine.pem };
 
-    // From another computer the key would cross the network, so the hub refuses it.
+    // A browser on another computer is told it cannot link, so its page never offers to send a key.
+    const remoteStatus = await handler(
+      new Request(`http://hub.example.ts.net/api/agents/${ROSIE}/github-app`, {
+        headers: { host: "hub.example.ts.net", ...AS_WINDOW },
+      }),
+    );
+    expect(await remoteStatus.json()).toEqual({ _tag: "None", cannotCreate: null, cannotLink: "not-local" });
+    const localStatus = await api("GET", `/api/agents/${ROSIE}/github-app`, AS_WINDOW);
+    expect(localStatus.body).toEqual({ _tag: "None", cannotCreate: null, cannotLink: null });
+
+    // From another computer the key would cross the network, so the hub refuses one sent anyway.
     const named = await handler(
       new Request(`http://hub.example.ts.net${path}`, {
         method: "POST",

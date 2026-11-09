@@ -47,11 +47,39 @@ export const useHobGitHubAppInstallations = (agentId: AgentId, appId: number, wa
 export const useStartHobGitHubApp = (agentId: AgentId) =>
   useMutation({ mutationFn: () => call((c) => c.hobGitHubApp.start({ params: { agentId } })) });
 
+/**
+ * An app's ID and private key, handed over once. TanStack Query keeps a mutation's variables after it
+ * settles, so the mutation gets this instead of the key: sending takes the key out, and what stays
+ * holds nothing, whether the link succeeded or failed (#1321).
+ */
+export interface LinkOnce {
+  readonly take: () => HobGitHubAppLink | null;
+}
+
+export const linkOnce = (link: HobGitHubAppLink): LinkOnce => {
+  let held: HobGitHubAppLink | null = link;
+  return {
+    take: () => {
+      const taken = held;
+      held = null;
+      return taken;
+    },
+  };
+};
+
+/** Sends the key a `LinkOnce` still holds; one already sent is never sent again. */
+export const sendLinkOnce =
+  <A>(send: (link: HobGitHubAppLink) => Promise<A>) =>
+  (once: LinkOnce): Promise<A> => {
+    const link = once.take();
+    return link === null ? Promise.reject(new Error("This app's key was already sent.")) : send(link);
+  };
+
 /** Links an app the user already has to the hob (#1321), then reads its status again. */
 export const useLinkHobGitHubApp = (agentId: AgentId) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (link: HobGitHubAppLink) => call((c) => c.hobGitHubApp.link({ params: { agentId }, payload: link })),
+    mutationFn: sendLinkOnce((link) => call((c) => c.hobGitHubApp.link({ params: { agentId }, payload: link }))),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: hobGitHubAppKey(agentId) }),
   });
 };

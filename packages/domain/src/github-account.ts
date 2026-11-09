@@ -158,6 +158,22 @@ export const settleCommitsAs = (
   return { _tag: "UserGiven", config, identity: { name: config.name ?? given.name, email: given.email } };
 };
 
+/** A permission the hob's actions ask for that its app or an installation lacks, by GitHub's name (#1321). */
+export const HobGitHubAppMissingPermission = Schema.Struct({
+  name: Schema.Literals([
+    "metadata",
+    "contents",
+    "issues",
+    "pull_requests",
+    "checks",
+    "actions",
+    "statuses",
+    "workflows",
+  ]),
+  access: Schema.Literals(["read", "write"]),
+});
+export type HobGitHubAppMissingPermission = typeof HobGitHubAppMissingPermission.Type;
+
 /** Where a hob's app is installed: the account, whether it reaches all of its repositories or some, and which. */
 export const HobGitHubAppInstallation = Schema.Struct({
   id: Schema.Number,
@@ -168,5 +184,10 @@ export const HobGitHubAppInstallation = Schema.Struct({
   suspended: Schema.Boolean,
   /** The repositories it reaches, as `owner/name`; null while it is suspended, as GitHub then says none. */
   repositories: Schema.NullOr(Schema.Array(Schema.String)),
+  /**
+   * The permissions the hob's actions use that this installation does not give, as GitHub lists its
+   * granted ones: an app linked without them, or new ones its owner has not accepted yet.
+   */
+  missingPermissions: Schema.Array(HobGitHubAppMissingPermission),
 });
 export type HobGitHubAppInstallation = typeof HobGitHubAppInstallation.Type;

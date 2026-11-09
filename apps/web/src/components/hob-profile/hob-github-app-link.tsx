@@ -1,11 +1,10 @@
-import type { HobGitHubAppMissingPermission } from "@hobbots/api";
-import type { Agent } from "@hobbots/domain";
+import type { Agent, HobGitHubAppMissingPermission } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Input } from "@hobbots/ui/components/input";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { type ReactNode, useId, useState } from "react";
 import { ApiError } from "../../api/client.ts";
-import type { useLinkHobGitHubApp } from "../../api/hob-github-app.ts";
+import { linkOnce, type useLinkHobGitHubApp } from "../../api/hob-github-app.ts";
 import { messages } from "../messages.ts";
 import {
   EMPTY_LINK,
@@ -61,7 +60,7 @@ export function LinkExistingApp({ hob, link, onClose }: { hob: Agent; link: Link
     setShown({ appId: true, privateKey: true });
     if (Object.keys(errors).length > 0 || link.isPending) return;
     // The key is not kept here once the hub has it.
-    link.mutate(linkOf(draft), {
+    link.mutate(linkOnce(linkOf(draft)), {
       onSuccess: () => {
         setDraft(EMPTY_LINK);
         onClose();

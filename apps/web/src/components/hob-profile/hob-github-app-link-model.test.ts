@@ -6,6 +6,7 @@ import {
   KEY_FILE_MAX,
   linkErrors,
   linkOf,
+  missingAcross,
   missingText,
   refusalField,
 } from "./hob-github-app-link-model.ts";
@@ -47,5 +48,26 @@ describe("the link form's rules", () => {
         { name: "statuses", access: "read" },
       ]),
     ).toContain("Contents (read and write) and Commit statuses (read)");
+  });
+});
+
+describe("what the app's installations lack", () => {
+  it("names each missing permission once, with write where any installation lacks write", () => {
+    expect(missingAcross([])).toEqual([]);
+    expect(
+      missingAcross([
+        { missingPermissions: [{ name: "issues", access: "read" }] },
+        {
+          missingPermissions: [
+            { name: "issues", access: "write" },
+            { name: "checks", access: "read" },
+          ],
+        },
+        { missingPermissions: [{ name: "issues", access: "read" }] },
+      ]),
+    ).toEqual([
+      { name: "issues", access: "write" },
+      { name: "checks", access: "read" },
+    ]);
   });
 });

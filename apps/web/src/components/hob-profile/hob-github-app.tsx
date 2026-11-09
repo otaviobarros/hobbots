@@ -25,6 +25,7 @@ import { formatDay } from "../../lib/format.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
 import { LinkExistingApp, MissingPermissions } from "./hob-github-app-link.tsx";
+import { missingAcross } from "./hob-github-app-link-model.ts";
 
 const copy = messages.charms.github.app;
 
@@ -135,6 +136,7 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
         <NoApp
           hob={hob}
           cannotCreate={status.data.cannotCreate}
+          cannotLink={status.data.cannotLink}
           started={started}
           expired={expired}
           pending={start.isPending}
@@ -165,7 +167,7 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
             disconnect.mutate(undefined, { onSuccess: (gone) => setDisconnected({ ...gone, linked }) })
           }
         >
-          <MissingPermissions hob={hob} missing={missingAfterLink(link.data, status.data.app)} />
+          <MissingNow hob={hob} status={status.data} linked={link.data} watching={watching} />
         </ConnectedApp>
       )}
       {status.data?._tag === "LeftOver" && (
@@ -314,6 +316,7 @@ const WhoWaiting = () => (
 function NoApp({
   hob,
   cannotCreate,
+  cannotLink,
   started,
   expired,
   pending,
@@ -326,6 +329,8 @@ function NoApp({
 }: {
   hob: Agent;
   cannotCreate: "no-keychain" | null;
+  /** `not-local`: this browser is not on the hub's computer, so it never offers to send a key. */
+  cannotLink: "no-keychain" | "not-local" | null;
   started: Started | null;
   expired: boolean;
   pending: boolean;
@@ -338,32 +343,53 @@ function NoApp({
   onLink: () => void;
 }) {
   const offering = cannotCreate === null && hob.status !== "retired" && started === null;
+  const formOpen = offering && linking && cannotLink === null;
   return (
     <>
       {started === null && <You hob={hob} />}
       {cannotCreate === "no-keychain" && <span className="text-detail text-label">{copy.noKeychain}</span>}
-      {offering && linking && <LinkExistingApp hob={hob} link={link} onClose={onCloseLink} />}
-      {offering && !linking && (
-        <div className={OFFER}>
-          <span className="flex min-w-[220px] flex-1 flex-col">
-            <strong className="text-ui text-text-strong">{copy.give({ name: hob.name })}</strong>
-            <span className="text-detail text-text-secondary">{copy.giveNote({ name: hob.name })}</span>
-            {expired && <span className="text-detail text-label">{copy.expired}</span>}
-          </span>
-          <Button disabled={pending} onClick={onGive}>
-            {copy.makeApp}
-          </Button>
-        </div>
+      {formOpen ? (
+        <LinkExistingApp hob={hob} link={link} onClose={onCloseLink} />
+      ) : (
+        offering && (
+          <div className={OFFER}>
+            <span className="flex min-w-[220px] flex-1 flex-col">
+              <strong className="text-ui text-text-strong">{copy.give({ name: hob.name })}</strong>
+              <span className="text-detail text-text-secondary">{copy.giveNote({ name: hob.name })}</span>
+              {expired && <span className="text-detail text-label">{copy.expired}</span>}
+            </span>
+            <Button disabled={pending} onClick={onGive}>
+              {copy.makeApp}
+            </Button>
+          </div>
+        )
       )}
-      {offering && !linking && (
-        <Button variant="ghost" size="sm" className="self-start" onClick={onLink}>
-          {copy.useExisting}
-        </Button>
-      )}
+      {offering && !formOpen && <LinkOffer hob={hob} cannotLink={cannotLink} onLink={onLink} />}
       {started !== null && (
         <Finishing hob={hob} started={started} pending={pending} onRestart={onGive} onCancel={onCancel} />
       )}
     </>
+  );
+}
+
+/** The way to link an app the user already has, or, in a browser off the hub's computer, where to do it. */
+function LinkOffer({
+  hob,
+  cannotLink,
+  onLink,
+}: {
+  hob: Agent;
+  cannotLink: "no-keychain" | "not-local" | null;
+  onLink: () => void;
+}) {
+  if (cannotLink === "not-local") {
+    return <span className="text-detail text-text-secondary">{copy.linkOnHub({ name: hob.name })}</span>;
+  }
+  if (cannotLink !== null) return null;
+  return (
+    <Button variant="ghost" size="sm" className="self-start" onClick={onLink}>
+      {copy.useExisting}
+    </Button>
   );
 }
 
@@ -384,7 +410,7 @@ function ConnectedApp({
   onWatch: () => void;
   onNewApp: () => void;
   onDisconnect: (linked: boolean) => void;
-  /** What to say about the app just after it was linked, under who the hob acts as. */
+  /** What to say about the app, such as permissions it lacks, under who the hob acts as. */
   children?: ReactNode;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -468,9 +494,38 @@ function ConnectedApp({
   );
 }
 
-/** The permissions the app the user just linked lacks, while it is still the hob's app; none otherwise. */
-const missingAfterLink = (linked: HobGitHubAppLinked | undefined, app: Connected["app"]) =>
-  linked?.app.appId === app.appId ? linked.missingPermissions : [];
+/**
+ * The permissions the hob's actions use that its app's installations lack, as GitHub lists them now,
+ * so the note stays after the profile is opened again. An app installed nowhere yet has only what
+ * linking it found, while it is still the hob's app.
+ */
+function MissingNow(props: {
+  hob: Agent;
+  status: Connected;
+  linked: HobGitHubAppLinked | undefined;
+  watching: boolean;
+}) {
+  // An app whose key GitHub refuses lists no installations, and needs a new key first.
+  return props.status.needsReconnect?.reason === "key" ? null : <MissingListed {...props} />;
+}
+
+function MissingListed({
+  hob,
+  status,
+  linked,
+  watching,
+}: {
+  hob: Agent;
+  status: Connected;
+  linked: HobGitHubAppLinked | undefined;
+  watching: boolean;
+}) {
+  const installations = useHobGitHubAppInstallations(hob.id, status.app.appId, watching);
+  const listed = installations.data?.installations ?? [];
+  const justLinked = linked?.app.appId === status.app.appId ? linked.missingPermissions : [];
+  const missing = listed.length > 0 ? missingAcross(listed) : justLinked;
+  return <MissingPermissions hob={hob} missing={missing} />;
+}
 
 /** Why the hob's app cannot act: a key GitHub refuses, which a linked app fixes with a new key, or its installation. */
 const reconnectText = (reason: "key" | "installation", linked: boolean, name: string) => {
