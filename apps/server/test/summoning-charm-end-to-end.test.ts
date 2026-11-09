@@ -1060,8 +1060,8 @@ describe("the Summoning Charm, end to end", () => {
     const asked = await turn(boss, hub("summoning_summon", { key: "hire-lark", hobs: [draft("Lark")] }));
     const view = asked.proposal as HobProposalView;
     // Only an operation that asked is offered.
-    expect((await onProposal(view, "always-allow", { operation: "summoning.instructions" })).status).toBe(409);
-    const always = await onProposal(view, "always-allow", { operation: "summoning.summon" });
+    expect((await onProposal(view, "always-allow", { operations: ["summoning.instructions"] })).status).toBe(409);
+    const always = await onProposal(view, "always-allow", { operations: ["summoning.summon"] });
     expect(always.status).toBe(200);
     expect(always.body.proposal.alwaysAllowed).toEqual(["summoning.summon"]);
     const after = await hob(boss.id);
@@ -1085,7 +1085,7 @@ describe("the Summoning Charm, end to end", () => {
     try {
       const asked = await turn(wren, hub("summoning_summon", { key: "hire-iona", hobs: [draft("Iona")] }));
       const view = asked.proposal as HobProposalView;
-      expect((await onProposal(view, "always-allow", { operation: "summoning.summon" })).status).toBe(200);
+      expect((await onProposal(view, "always-allow", { operations: ["summoning.summon"] })).status).toBe(200);
       const after = await hob(wren.id);
       expect(after.policy.charms?.granted).toContain("summoning");
       expect(after.policy.charms?.summoning).toEqual(scope);
@@ -1196,7 +1196,7 @@ describe("the Summoning Charm, end to end", () => {
     const asked = await change("calmer", "Be calm.");
     const view = asked.proposal as HobProposalView;
     expect(view.proposal.asks).toEqual(["summoning.self-instructions"]);
-    const always = await onProposal(view, "always-allow", { operation: "summoning.self-instructions" });
+    const always = await onProposal(view, "always-allow", { operations: ["summoning.self-instructions"] });
     expect(always.status).toBe(200);
     // The change "Always allow" made to Sage is the proposal's own, so the row is not stale.
     expect(always.body.changedSince).toEqual([]);
@@ -1214,6 +1214,45 @@ describe("the Summoning Charm, end to end", () => {
     const stale = await proposalOf(laterView.proposal.id);
     expect(stale.changedSince).toEqual([laterView.proposal.rows[0]?.id]);
     await decideProposal(later, "deny-all");
+  });
+  // covers ADR 034 ("Always allow" for every field that asked, as one change)
+  it("[TC-AG-409-13] Always allow for several fields sets each to Allow in one change of yours, and refuses one that did not ask", async () => {
+    const tess = await create("Tess", 4013);
+    await permissions(tess, {
+      ownFolders: [team],
+      charms: {
+        granted: ["summoning"],
+        overrides: { ...SUMMONING_DEFAULTS, ...SUMMONING_SELF_DEFAULTS },
+        summoning: { summoned: true, hobs: [], self: true },
+      },
+    });
+    const asked = await turn(
+      tess,
+      hub("summoning_change", {
+        key: "tidier",
+        changes: [{ hob: "Tess", good_at: "Tidy notes.", instructions: "Be tidy." }],
+      }),
+    );
+    const view = asked.proposal as HobProposalView;
+    expect([...view.proposal.asks].sort()).toEqual(["summoning.self-good-at", "summoning.self-instructions"]);
+    const both = ["summoning.self-good-at", "summoning.self-instructions"];
+    // One that did not ask refuses the whole call, and nothing changes.
+    const before = await hob(tess.id);
+    expect((await onProposal(view, "always-allow", { operations: [...both, "summoning.self-name"] })).status).toBe(409);
+    expect((await hob(tess.id)).configVersion).toBe(before.configVersion);
+
+    const always = await onProposal(view, "always-allow", { operations: both });
+    expect(always.status).toBe(200);
+    expect([...always.body.proposal.alwaysAllowed].sort()).toEqual(both);
+    expect(always.body.changedSince).toEqual([]);
+    const after = await hob(tess.id);
+    expect(after.configVersion).toBe(before.configVersion + 1);
+    expect(after.policy.charms?.overrides).toMatchObject({
+      "summoning.self-good-at": "allow",
+      "summoning.self-instructions": "allow",
+    });
+    await decideProposal(asked, "allow-all");
+    expect(await hob(tess.id)).toMatchObject({ goodAt: "Tidy notes.", instructions: "Be tidy." });
   });
   // covers STD-DATA-001, ADR 034 (A decision is yours while your device is)
   it("[TC-AG-409-11] a row the hub stopped before it saved what it made is settled from the hob's history when the card is read, even after a later edit", async () => {

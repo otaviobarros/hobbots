@@ -96,7 +96,8 @@ export const AllowAllHobProposalPayload = Schema.Struct({ confirmed: Schema.opti
 export type AllowAllHobProposalPayload = typeof AllowAllHobProposalPayload.Type;
 
 /** Setting an operation that asked to Allow on the manager's Summoning Charm. */
-export const AlwaysAllowHobProposalPayload = Schema.Struct({ operation: CharmOperationId });
+/** The operations to set to Allow, one or several, in one change made by you. */
+export const AlwaysAllowHobProposalPayload = Schema.Struct({ operations: Schema.NonEmptyArray(CharmOperationId) });
 export type AlwaysAllowHobProposalPayload = typeof AlwaysAllowHobProposalPayload.Type;
 
 const params = { proposalId: Schema.String };
@@ -150,7 +151,7 @@ export class HobProposalsGroup extends HttpApiGroup.make("hobProposals")
     }),
   )
   .add(
-    // Sets the operation to Allow on the manager's Summoning Charm, as a change made by you.
+    // Sets the operations to Allow on the manager's Summoning Charm, as one change made by you.
     HttpApiEndpoint.post("alwaysAllow", "/hob-proposals/:proposalId/always-allow", {
       params,
       payload: AlwaysAllowHobProposalPayload,

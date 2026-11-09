@@ -82,7 +82,7 @@ const skillEntry = (view: SkillProposalView): InboxEntry => ({
   view,
 });
 
-const hobProposalEntry = (hobs: HobProposalView): InboxEntry => ({
+export const hobProposalEntry = (hobs: HobProposalView): InboxEntry => ({
   kind: "hob-proposal",
   key: `hob-proposal:${hobs.proposal.id}`,
   hobs,

@@ -29,6 +29,7 @@ export const messages = {
   denyAll: "Deny all",
   /** "Always allow summoning new hobs". */
   alwaysAllow: ({ words }: { words: string }) => `Always allow ${words}`,
+  alwaysAllowAll: "Always allow all of these",
   alwaysHint: ({ who }: { who: string }) =>
     `Sets that answer to Allow on ${who}'s Summoning Charm, as a change made by you. It shows in ${who}'s History.`,
   alwaysSet: ({ who, words }: { who: string; words: ReadonlyArray<string> }) =>
@@ -88,7 +89,7 @@ export const messages = {
   pause: ({ hob }: { hob: string }) => `${hob} stops taking new work until you or a manager wakes it.`,
   wake: ({ hob }: { hob: string }) => `${hob} takes new work again.`,
   created: "Created",
-  createdOpen: ({ name }: { name: string }) => `Open ${name}`,
+  createdOpen: "Open",
   settled: ({ who }: { who: string }) => `Decided. ${who} heard what was made and what was denied.`,
   failed: "Hobbots could not save that decision. Try again.",
   closed: "This was decided elsewhere.",
@@ -96,6 +97,7 @@ export const messages = {
   notConfirmed: "Tick the check box first: retiring a hob cannot be undone.",
   refused: ({ message }: { message: string }) => `It cannot be made like that: ${message}`,
   loading: "Reading the proposal…",
+  inTray: "Decide it in Needs you, above the reply box.",
   loadFailed: "Hobbots could not read this proposal.",
   editing: {
     heading: ({ who }: { who: string }) => `Your version of ${who}'s proposal`,

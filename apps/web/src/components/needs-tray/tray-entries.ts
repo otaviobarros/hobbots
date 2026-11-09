@@ -1,8 +1,16 @@
-import type { WaitingQuestion } from "@hobbots/api";
-import { type ApprovalRequest, type BackpackItem, type HubQuestion, openBlocker, type ThreadId } from "@hobbots/domain";
+import type { HobProposalView, WaitingQuestion } from "@hobbots/api";
+import {
+  type ApprovalRequest,
+  type BackpackItem,
+  type HubQuestion,
+  hobProposalOpen,
+  openBlocker,
+  type ThreadId,
+} from "@hobbots/domain";
 import {
   approvalEntry,
   entryThread,
+  hobProposalEntry,
   hubQuestionEntry,
   type InboxEntry,
   questionEntry,
@@ -10,17 +18,17 @@ import {
 } from "../inbox/inbox-entries.ts";
 
 /**
- * One thing the tray asks about: a request to approve, work that is stuck, or a question for you, a
- * hob's or the hub's. A hob asking to share what it learned, or proposing a skill, waits in the
- * Inbox, never in the way of a chat. A hob proposal shows as its card on the call's step instead.
+ * One thing the tray asks about: a request to approve, a hob proposal (ADR 034), work that is stuck,
+ * or a question for you, a hob's or the hub's. A hob asking to share what it learned, or proposing a
+ * skill, waits in the Inbox, never in the way of a chat.
  */
 export type TrayEntry = Exclude<
   InboxEntry,
-  { kind: "device" } | { kind: "failed" } | { kind: "memory" } | { kind: "skill" } | { kind: "hob-proposal" }
+  { kind: "device" } | { kind: "failed" } | { kind: "memory" } | { kind: "skill" }
 >;
 
 /**
- * What the tray holds, in the order it asks: pending approvals, then stuck work, then questions,
+ * What the tray holds, in the order it asks: pending approvals and hob proposals, then stuck work, then questions,
  * hobs' then the hub's own (#976), each oldest first. With `threadId`, only what is about that
  * thread: a hub question shows in the tray of the chat it concerns, and on Home.
  */
@@ -29,16 +37,19 @@ export const trayEntries = ({
   blockers,
   questions,
   hubQuestions = [],
+  hobProposals = [],
   threadId,
 }: {
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly blockers: ReadonlyArray<BackpackItem>;
   readonly questions: ReadonlyArray<WaitingQuestion>;
   readonly hubQuestions?: ReadonlyArray<HubQuestion>;
+  readonly hobProposals?: ReadonlyArray<HobProposalView>;
   readonly threadId?: ThreadId | undefined;
 }): ReadonlyArray<TrayEntry> => {
   const entries = [
     ...requests.filter((request) => request.state === "pending").map(approvalEntry),
+    ...hobProposals.filter((view) => hobProposalOpen(view.proposal)).map(hobProposalEntry),
     ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
     ...questions.filter(({ question }) => question.state === "open").map(questionEntry),
     ...hubQuestions.filter((question) => question.state === "open").map(hubQuestionEntry),

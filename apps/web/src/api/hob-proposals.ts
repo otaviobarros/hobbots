@@ -56,7 +56,10 @@ export type HobProposalDecision =
   | { readonly _tag: "deny"; readonly rowId: string }
   | { readonly _tag: "allowAll"; readonly confirmed?: boolean }
   | { readonly _tag: "denyAll" }
-  | { readonly _tag: "alwaysAllow"; readonly operation: CharmOperationId };
+  | {
+      readonly _tag: "alwaysAllow";
+      readonly operations: readonly [CharmOperationId, ...ReadonlyArray<CharmOperationId>];
+    };
 
 const decisionCall = (proposalId: string, decision: HobProposalDecision) => {
   const params = { proposalId };
@@ -83,7 +86,7 @@ const decisionCall = (proposalId: string, decision: HobProposalDecision) => {
     case "denyAll":
       return call((c) => c.hobProposals.denyAll({ params }));
     default:
-      return call((c) => c.hobProposals.alwaysAllow({ params, payload: { operation: decision.operation } }));
+      return call((c) => c.hobProposals.alwaysAllow({ params, payload: { operations: decision.operations } }));
   }
 };
 

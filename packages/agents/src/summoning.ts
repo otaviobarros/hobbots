@@ -172,8 +172,8 @@ export class SummoningHub extends Context.Service<
       yield* proposals.bindApplier({
         apply: (proposal, row, edited) => Effect.flatMap(hub.applier, (made) => made.apply(proposal, row, edited)),
         changedSince: (row) => Effect.flatMap(hub.applier, (made) => made.changedSince(row)),
-        alwaysAllow: (proposal, operation) =>
-          Effect.flatMap(hub.applier, (made) => made.alwaysAllow(proposal, operation)),
+        alwaysAllow: (proposal, operations) =>
+          Effect.flatMap(hub.applier, (made) => made.alwaysAllow(proposal, operations)),
         reconcile: (proposal, row) => Effect.flatMap(hub.applier, (made) => made.reconcile(proposal, row)),
       });
       yield* hub.bind({
@@ -1375,7 +1375,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           if (Option.isNone(agent)) return true;
           return agent.value.configVersion !== row.configVersion || agent.value.status !== row.status;
         }),
-      alwaysAllow: (proposal, operation) =>
+      alwaysAllow: (proposal, operations) =>
         Effect.gen(function* () {
           const services = yield* hub.services;
           const found = yield* services.repo.findAgent(proposal.agentId);
@@ -1383,7 +1383,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             return yield* new HobProposalRefused({ proposalId: proposal.id, message: "That hob is not on this hub." });
           }
           const manager = found.value;
-          const allowed = { [operation]: "allow" } as CharmOverrides;
+          const allowed = Object.fromEntries(operations.map((operation) => [operation, "allow"])) as CharmOverrides;
           const own = holdsCharm(manager.policy, SUMMONING_CHARM_ID);
           const everyHob = own ? null : (yield* services.setup.get).summoningForEveryHob;
           // A change made by you: the manager's own answer for the operation becomes Allow (ADR 034).
