@@ -89,7 +89,7 @@ export const messages = {
   pause: ({ hob }: { hob: string }) => `${hob} stops taking new work until you or a manager wakes it.`,
   wake: ({ hob }: { hob: string }) => `${hob} takes new work again.`,
   created: "Created",
-  createdOpen: ({ name }: { name: string }) => `Open ${name}`,
+  createdOpen: "Open",
   settled: ({ who }: { who: string }) => `Decided. ${who} heard what was made and what was denied.`,
   failed: "Hobbots could not save that decision. Try again.",
   closed: "This was decided elsewhere.",

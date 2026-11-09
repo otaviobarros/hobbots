@@ -91,13 +91,16 @@ function CreatedHob({ hobId, name, row }: { hobId: AgentId; name: string; row: H
     <Link
       to="/hobs/$hobId/profile"
       params={{ hobId }}
-      aria-label={copy.createdOpen({ name })}
       data-testid="created-hob"
       className="hop-on-hover flex items-center gap-2.5 rounded-card border border-line-2 bg-deep px-3 py-2 text-text-strong no-underline hover:border-mint focus-visible:outline-2 focus-visible:outline-focus-ring"
     >
       <HobSprite hob={rowLook(draft)} size={28} badge />
       <span className="flex flex-col">
-        <b className="font-heading text-ui">{name}</b>
+        {/* Read out as "Open Flo Writer": the visible name and role stay in its name (label-content-name). */}
+        <b className="font-heading text-ui">
+          <span className="sr-only">{copy.createdOpen} </span>
+          {name}
+        </b>
         <span className="text-meta text-text-secondary">{summonFacts(draft)[0]?.[1]}</span>
       </span>
     </Link>

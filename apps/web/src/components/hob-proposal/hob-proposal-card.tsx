@@ -1,6 +1,5 @@
 import type { HobProposalView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
-import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, type Ref, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
@@ -81,26 +80,26 @@ export function HobProposalCard({
       {proposal.safety !== null && open && (
         <p className="m-0 text-detail text-lantern">{copy.safety({ reason: proposal.safety })}</p>
       )}
-      {/* In the tray the rows scroll in a bounded box, so a tall proposal never pushes the composer
-          or its own decisions out of the window. */}
-      <ul
-        aria-label={copy.rows}
-        className={cn("m-0 flex list-none flex-col gap-2 p-0", bare && "max-h-[40vh] min-h-24 overflow-y-auto")}
-      >
-        {proposal.rows.map((row) => (
-          <li key={row.id}>
-            <ProposalRow
-              proposal={proposal}
-              row={row}
-              changed={changedSince.includes(row.id)}
-              busy={busy}
-              confirmed={confirmed}
-              onConfirm={setConfirmed}
-              onDecide={send}
-            />
-          </li>
-        ))}
-      </ul>
+      <Grows bare={bare}>
+        <ul aria-label={copy.rows} className="m-0 flex list-none flex-col gap-2 p-0">
+          {proposal.rows.map((row) => (
+            <li key={row.id}>
+              <ProposalRow
+                proposal={proposal}
+                row={row}
+                changed={changedSince.includes(row.id)}
+                busy={busy}
+                confirmed={confirmed}
+                onConfirm={setConfirmed}
+                onDecide={send}
+              />
+            </li>
+          ))}
+        </ul>
+        {/* In the tray, Always allow and the hobs made sit with the rows, so they scroll with them. */}
+        {bare && <AlwaysAllow proposal={proposal} who={who} busy={busy} onDecide={send} />}
+        {bare && <CreatedHobs proposal={proposal} />}
+      </Grows>
       {open && pending.length > 1 && (
         <div className="flex flex-wrap gap-2">
           <Button
@@ -115,8 +114,8 @@ export function HobProposalCard({
           </Button>
         </div>
       )}
-      <AlwaysAllow proposal={proposal} who={who} busy={busy} onDecide={send} />
-      <CreatedHobs proposal={proposal} />
+      {!bare && <AlwaysAllow proposal={proposal} who={who} busy={busy} onDecide={send} />}
+      {!bare && <CreatedHobs proposal={proposal} />}
       {!open && (
         <p role="status" className="m-0 text-detail text-text-secondary">
           {copy.settled({ who })}
@@ -129,6 +128,16 @@ export function HobProposalCard({
       )}
     </ProposalFrame>
   );
+}
+
+/**
+ * What grows with the proposal: its rows, Always allow and the hobs it made. In the tray they scroll
+ * together in one bounded box, so however many rows or created hobs there are, the composer and Allow
+ * all and Deny all stay in the window (STD-TEST-010).
+ */
+function Grows({ bare, children }: { bare: boolean; children: ReactNode }) {
+  if (!bare) return children;
+  return <div className="flex max-h-[40vh] min-h-24 flex-col gap-3 overflow-y-auto">{children}</div>;
 }
 
 /** The card's own edge and name, or, in the tray, only its column. */

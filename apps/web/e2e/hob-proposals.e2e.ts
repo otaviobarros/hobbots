@@ -243,7 +243,7 @@ test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields 
 });
 
 // covers STD-TEST-010, the design system (one place asks for you), ADR 034
-test("[TC-UX-409-05] a tall proposal scrolls inside the tray at the smallest window, keeping the composer and Allow all in view", async ({
+test("[TC-UX-409-05] a tall proposal scrolls inside the tray at the smallest window, with the hobs it made, keeping the composer and Allow all in view", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 960, height: 640 });
@@ -257,13 +257,25 @@ test("[TC-UX-409-05] a tall proposal scrolls inside the tray at the smallest win
   await expect(card).toBeVisible({ timeout: 20_000 });
   const rows = card.getByRole("list", { name: "Hobs" });
   await expect(rows.getByRole("article")).toHaveCount(10);
-  expect(await rows.evaluate((list) => list.scrollHeight > list.clientHeight)).toBe(true);
-  await expect(card.getByRole("button", { name: "Allow all" })).toBeInViewport();
-  await expect(page.getByRole("textbox", { name: /^Message Bram/ })).toBeInViewport();
-  // The last row is reached by scrolling the rows, not the window.
-  await rows.getByRole("article", { name: "Jo" }).getByRole("button", { name: "Deny" }).click();
-  await expect(rows.getByRole("article", { name: "Jo" })).toHaveAttribute("data-state", "denied");
+  const box = rows.locator("xpath=..");
+  const composer = page.getByRole("textbox", { name: /^Message Bram/ });
+  const inView = async () => {
+    expect(await box.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    await expect(card.getByRole("button", { name: "Allow all" })).toBeInViewport();
+    await expect(composer).toBeInViewport();
+  };
+  await inView();
+
+  // Allowing eight rows, with two still waiting, adds a card per hob made; they scroll with the rows.
+  for (const name of names.slice(0, 8)) {
+    await rows.getByRole("article", { name }).getByRole("button", { name: "Allow" }).click();
+    await expect(rows.getByRole("article", { name })).toHaveAttribute("data-state", "allowed", { timeout: 20_000 });
+  }
+  const created = card.getByRole("region", { name: "Created" });
+  await expect(created.getByRole("link")).toHaveCount(8);
+  await inView();
   await expectAccessible(page, card);
+
   await card.getByRole("button", { name: "Deny all" }).click();
   await expect(page.locator("[data-tray]")).toHaveCount(0, { timeout: 20_000 });
 });
