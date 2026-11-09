@@ -8,6 +8,7 @@ import {
   WebFetchRecord,
   WebSearchRecord,
   WebSettings,
+  type WebTurnCount,
   type WebUsageFilter,
   webSearchBilledPerSearch,
 } from "@hobbots/domain";
@@ -51,6 +52,7 @@ const fetchOf = (row: Row) =>
     taskId: row.taskId,
     attemptId: row.attemptId,
     turn: row.turn,
+    stepId: row.stepId ?? null,
     at: row.fetchedAt,
     url: row.url,
     finalUrl: row.finalUrl,
@@ -178,6 +180,7 @@ export const WebRecordsLive = Layer.effect(
             Effect.gen(function* () {
               yield* sql`INSERT INTO web_fetches ${sql.insert({
                 ...place(fetch),
+                step_id: fetch.stepId,
                 url: fetch.url,
                 final_url: fetch.finalUrl,
                 status: fetch.status,
@@ -201,6 +204,44 @@ export const WebRecordsLive = Layer.effect(
             const pages = yield* sql<Row>`SELECT * FROM web_fetches WHERE ${where(filter, "fetched_at")}
               ORDER BY fetched_at DESC, id DESC LIMIT ${limit}`.pipe(Effect.flatMap(Effect.forEach(fetchOf)));
             return { count, searches, pages };
+          }).pipe(sql.withTransaction),
+        ),
+      // Counted per hob and per turn in the database, in one transaction so the counts agree.
+      usageSince: (since) =>
+        die(
+          Effect.gen(function* () {
+            const count = yield* totals({ since });
+            const hobs = yield* sql<{ readonly agentId: AgentId; readonly searches: unknown; readonly pages: unknown }>`
+              SELECT agent_id, SUM(searches) AS searches, SUM(pages) AS pages FROM (
+                SELECT agent_id, 1 AS searches, 0 AS pages FROM web_searches WHERE searched_at >= ${since}
+                UNION ALL SELECT agent_id, 0 AS searches, 1 AS pages FROM web_fetches WHERE fetched_at >= ${since}
+              ) used GROUP BY agent_id`;
+            const turns = yield* sql<Row>`
+              SELECT turn, agent_id, MAX(thread_id) AS thread_id, MAX(message_id) AS message_id,
+                MAX(task_id) AS task_id, MAX(at) AS at, SUM(searches) AS searches, SUM(pages) AS pages FROM (
+                SELECT turn, agent_id, thread_id, message_id, task_id, searched_at AS at, 1 AS searches, 0 AS pages
+                  FROM web_searches WHERE turn IS NOT NULL AND searched_at >= ${since}
+                UNION ALL SELECT turn, agent_id, thread_id, message_id, task_id, fetched_at AS at, 0 AS searches,
+                  1 AS pages FROM web_fetches WHERE turn IS NOT NULL AND fetched_at >= ${since}
+              ) used GROUP BY turn, agent_id`;
+            return {
+              count,
+              hobs: hobs.map((row) => ({
+                agentId: row.agentId,
+                searches: Number(row.searches),
+                pages: Number(row.pages),
+              })),
+              turns: turns.map((row) => ({
+                turn: String(row.turn),
+                agentId: row.agentId as AgentId,
+                threadId: (row.threadId ?? null) as WebTurnCount["threadId"],
+                messageId: (row.messageId ?? null) as WebTurnCount["messageId"],
+                taskId: (row.taskId ?? null) as WebTurnCount["taskId"],
+                at: String(row.at),
+                searches: Number(row.searches),
+                pages: Number(row.pages),
+              })),
+            };
           }).pipe(sql.withTransaction),
         ),
       searchesSince,

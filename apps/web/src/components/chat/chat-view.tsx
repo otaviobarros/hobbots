@@ -38,6 +38,7 @@ import {
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
 import { useReadThread } from "../../api/thread-reads.ts";
+import { threadWebQuery } from "../../api/web.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
 import { minutesSince, type ReplyWait, replyWait } from "../../lib/reply-wait.ts";
@@ -63,6 +64,7 @@ import { skillPicking } from "../skill-line/skill-picker-model.ts";
 import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
 import { TrialNotice } from "../skills/trial-notice.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
+import { repliesWeb, replyWebOf } from "../web/web-model.ts";
 import { BackIcon } from "./chat-icons.tsx";
 import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
@@ -545,6 +547,9 @@ function Transcript({
   const receipts = useSteerReceipts(hob.id, threadId, transcript);
   // Under a reply, what it saved to the hob's memory (ADR 028).
   const saves = useQuery({ ...threadMemorySavesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
+  // A reply's searches and pages, as step lines and sources (ADR 036).
+  const webUsage = useQuery({ ...threadWebQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
+  const web = repliesWeb(webUsage.data, transcript);
   return (
     <>
       {work.before}
@@ -560,6 +565,7 @@ function Transcript({
               hob={hob}
               focused={message.id === focusMessageId}
               resume={resume(message)}
+              web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
               after={
                 <>
                   <SkillUsedLines message={message} hob={hob} />

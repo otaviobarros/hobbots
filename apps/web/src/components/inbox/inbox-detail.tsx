@@ -48,6 +48,7 @@ import { roomSearch } from "../quest-room/room-search.ts";
 import { messages as skillCopy } from "../skill-review/messages.ts";
 import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.tsx";
 import { proposalFoot } from "../skill-review/proposal-model.ts";
+import { webAskOf } from "../web/web-ask.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import { entryRow, entryThread, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
@@ -125,7 +126,7 @@ function ApprovalDetail({
       label={copy.detail.label({ name: hob.name, action: row.what })}
       portrait={<EntryPortrait hob={hob} device={false} waiting={pending} large />}
       row={row}
-      why={request.reason}
+      why={webAskOf(request, hob.name)?.why ?? request.reason}
       foot={footText(request, hob.name)}
       chat={
         hob.status === "retired"

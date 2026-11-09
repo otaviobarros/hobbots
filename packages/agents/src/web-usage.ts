@@ -16,6 +16,7 @@ import {
   WebRecordId,
   WebSearchRecord,
   type WebSettings,
+  type WebTurnCount,
   type WebUsageFilter,
   webSearchBilledPerSearch,
   webTurnKey,
@@ -49,6 +50,13 @@ export interface WebUsageRead {
   readonly pages: ReadonlyArray<WebFetchRecord>;
 }
 
+/** What every hob searched and read since a time: the totals, each hob's counts and each turn's. */
+export interface WebUsageSince {
+  readonly count: WebUsageCount;
+  readonly hobs: ReadonlyArray<{ readonly agentId: AgentId; readonly searches: number; readonly pages: number }>;
+  readonly turns: ReadonlyArray<WebTurnCount>;
+}
+
 /**
  * The web's records and settings, each change journaled in its transaction (`WebSearched`,
  * `WebFetched`, `WebSettingsChanged`, `HobWebLimitsChanged`), which answers the entries it committed.
@@ -60,6 +68,8 @@ export class WebRecords extends Context.Service<
     readonly recordFetch: (fetch: WebFetchRecord) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
     /** The records `filter` matches, at most `limit` of each kind, and their totals over all of them. */
     readonly usage: (filter: WebUsageFilter, limit: number) => Effect.Effect<WebUsageRead>;
+    /** Every record at or after `since`, counted per hob and per turn, for Usage. */
+    readonly usageSince: (since: string) => Effect.Effect<WebUsageSince>;
     /** How many searches a hob ran at or after `since`. */
     readonly searchesSince: (agentId: AgentId, since: string) => Effect.Effect<number>;
     /**
@@ -109,6 +119,12 @@ export class WebRecords extends Context.Service<
             pages: read.slice(0, limit),
           };
         }),
+      usageSince: (since) =>
+        Effect.sync(() => {
+          const found = searches.filter((search) => search.at >= since);
+          const read = pages.filter((page) => page.at >= since);
+          return { count: countOf(found, read), ...countsByHobAndTurn(found, read) };
+        }),
       searchesSince,
       ...makeSearchAllowance(searchesSince),
       holdSearch: (work, reason) => Effect.sync(() => void holds.set(work, reason)),
@@ -129,6 +145,38 @@ export class WebRecords extends Context.Service<
     });
   });
 }
+
+/** Records counted per hob and per turn, as `usageSince` answers them. */
+export const countsByHobAndTurn = (
+  searches: ReadonlyArray<WebSearchRecord>,
+  pages: ReadonlyArray<WebFetchRecord>,
+): Pick<WebUsageSince, "hobs" | "turns"> => {
+  const hobs = new Map<AgentId, { agentId: AgentId; searches: number; pages: number }>();
+  const turns = new Map<string, { -readonly [K in keyof WebTurnCount]: WebTurnCount[K] }>();
+  const add = (record: WebSearchRecord | WebFetchRecord, kind: "searches" | "pages") => {
+    const hob = hobs.get(record.agentId) ?? { agentId: record.agentId, searches: 0, pages: 0 };
+    hob[kind] += 1;
+    hobs.set(record.agentId, hob);
+    if (record.turn === null) return;
+    const key = `${record.agentId} ${record.turn}`;
+    const turn = turns.get(key) ?? {
+      turn: record.turn,
+      agentId: record.agentId,
+      threadId: record.threadId,
+      messageId: record.messageId,
+      taskId: record.taskId,
+      at: record.at,
+      searches: 0,
+      pages: 0,
+    };
+    turn[kind] += 1;
+    if (record.at > turn.at) turn.at = record.at;
+    turns.set(key, turn);
+  };
+  for (const search of searches) add(search, "searches");
+  for (const page of pages) add(page, "pages");
+  return { hobs: [...hobs.values()], turns: [...turns.values()] };
+};
 
 /**
  * The daily allowance every turn of a hub shares (ADR 036, Usage and limits): a search is admitted

@@ -599,6 +599,7 @@ export const messages = {
       branch: "Always for this branch",
       repository: "Always for this repository",
       site: "Always for this site",
+      host: "Always for this host",
       mixed: "Always",
     },
     alwaysIntro: ({ name }: { name: string }) =>

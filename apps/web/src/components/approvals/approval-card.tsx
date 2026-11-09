@@ -12,6 +12,8 @@ import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
 import { messages as plainCopy } from "../plain-words/messages.ts";
 import { approvalAction, capitalized } from "../plain-words/plain-words.ts";
+import { webAskOf } from "../web/web-ask.ts";
+import { WebAskNotes } from "../web/web-ask-parts.tsx";
 import { ApprovalActions } from "./approval-actions.tsx";
 import { riskOf } from "./approval-rules.ts";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
@@ -129,12 +131,19 @@ export function ApprovalDecision({
 
 function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Agent }) {
   const action = exactAction(approval);
+  // A web ask names what it is about the web, and says why a page like it asks (ADR 036).
+  const web = webAskOf(approval, hob.name);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui">
       <dt className="text-label">{copy.action}</dt>
-      <dd className="m-0 flex flex-col gap-0.5">
-        <span className="font-bold">{plainCopy.question({ what: capitalized(approvalAction(approval)) })}</span>
-        <code className="bg-deep px-2 py-1 font-mono text-code break-all whitespace-pre-wrap">{action}</code>
+      <dd className="m-0 flex flex-col gap-1">
+        <span className="font-bold">
+          {web?.title ?? plainCopy.question({ what: capitalized(approvalAction(approval)) })}
+        </span>
+        <code className="bg-deep px-2 py-1 font-mono text-code break-all whitespace-pre-wrap">
+          {web?.kind != null && web.url !== null ? web.url : action}
+        </code>
+        {web !== null && <WebAskNotes ask={web} name={hob.name} />}
       </dd>
       <dt className="text-label">{copy.target}</dt>
       <dd className="m-0 break-all">{approval.targets.length === 0 ? copy.noTarget : approval.targets.join(", ")}</dd>

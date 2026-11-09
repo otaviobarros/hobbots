@@ -1,4 +1,4 @@
-import { type ApprovalSurface, exactAction } from "@hobbots/domain";
+import type { ApprovalRequest, ApprovalSurface } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -23,6 +23,8 @@ import { AnswerForm } from "../quest/answer-form.tsx";
 import { messages as questMessages } from "../quest/messages.ts";
 import { type HobLookup, useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
+import { webAskOf } from "../web/web-ask.ts";
+import { TrayAction } from "../web/web-ask-parts.tsx";
 import { Details } from "./details.tsx";
 import { HubQuestionBody } from "./hub-question-body.tsx";
 import { messages } from "./messages.ts";
@@ -151,8 +153,12 @@ const itemLabel = (entry: TrayEntry, asker: Pick<Hob, "name">): string => {
   return questionCopy.asks({ name: asker.name });
 };
 
+/** An approval's title: its web card's when it asks about the web (ADR 036), else what it asks to do. */
+const approvalTitle = (request: ApprovalRequest, name: string): string =>
+  webAskOf(request, name)?.title ?? copy.approvalTitle({ name, action: approvalAction(request) });
+
 const titleOf = (entry: TrayEntry, asker: Pick<Hob, "name">): string => {
-  if (entry.kind === "approval") return copy.approvalTitle({ name: asker.name, action: approvalAction(entry.request) });
+  if (entry.kind === "approval") return approvalTitle(entry.request, asker.name);
   if (entry.kind === "hob-proposal") return hobProposalWhat(entry.hobs.proposal, asker.name);
   return entry.kind === "stuck" ? copy.stuckTitle({ name: asker.name }) : copy.questionTitle({ name: asker.name });
 };
@@ -205,13 +211,7 @@ function ApprovalBody({
   const moveOn = useMoveOn();
   return (
     <div ref={area} className="contents">
-      <p className="m-0 text-text">{request.reason}</p>
-      <div className="flex gap-2 rounded-tag bg-deep px-3 py-2 font-mono text-code">
-        <span aria-hidden className="text-label">
-          $
-        </span>
-        <code className="break-all whitespace-pre-wrap text-text-strong">{exactAction(request)}</code>
-      </div>
+      <TrayAction request={request} name={asker.name} />
       <ApprovalActions
         approval={request}
         hob={asker}

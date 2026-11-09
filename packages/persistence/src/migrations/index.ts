@@ -91,6 +91,7 @@ import hobRetiring from "./0088_hob_retiring.ts";
 import hobProposals from "./0089_hob_proposals.ts";
 import webUsage from "./0090_web_usage.ts";
 import attemptReadWeb from "./0091_attempt_read_web.ts";
+import webScreens from "./0092_web_screens.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -189,4 +190,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0089_hob_proposals": hobProposals,
   "0090_web_usage": webUsage,
   "0091_attempt_read_web": attemptReadWeb,
+  "0092_web_screens": webScreens,
 };

@@ -2,10 +2,12 @@ import {
   AgentId,
   HobWebLimits,
   HobWebLimitsView,
+  WebPageCache,
   WebSettings,
   WebSettingsInput,
   WebUsage,
   WebUsageFilter,
+  WebUsageSummary,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -61,6 +63,14 @@ export class WebGroup extends HttpApiGroup.make("web")
       },
       success: WebUsage,
     }),
+    // What every hob searched and read since a time, per hob and with the busiest turns, for Usage.
+    HttpApiEndpoint.get("usageSummary", "/web/usage/summary", {
+      query: { since: Schema.String },
+      success: WebUsageSummary,
+    }),
+    // The pages the hub holds for 15 minutes, shared by every hob, and clearing them.
+    HttpApiEndpoint.get("pageCache", "/web/cache", { success: WebPageCache }),
+    HttpApiEndpoint.delete("clearPageCache", "/web/cache", { success: WebPageCache }),
   )
   .middleware(DeviceSession)
   .prefix("/api") {}

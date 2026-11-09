@@ -70,6 +70,14 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   label: Schema.String,
   /** Why the policy asks, in words for the person. */
   reason: Schema.String,
+  /**
+   * The policy's code for why it asks, such as `private-address` or `read-the-web` (ADR 036), which
+   * picks the card's words. Null for requests from before codes were recorded.
+   */
+  reasonCode: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** Identifies the exact action: tool, operation, targets and arguments. */
   actionDigest: Schema.String,
   /** Identifies the rules and policy inputs the call was decided under. */

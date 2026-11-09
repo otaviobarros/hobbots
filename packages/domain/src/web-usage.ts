@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { RuntimeKind } from "./agent.ts";
 import { AgentId, MessageId, TaskId, ThreadId } from "./ids.ts";
 import { QuestId } from "./quest.ts";
@@ -126,6 +126,14 @@ export class WebSearchRecord extends Schema.Class<WebSearchRecord>("WebSearchRec
  */
 export class WebFetchRecord extends Schema.Class<WebFetchRecord>("WebFetchRecord")({
   ...WebRecordPlace,
+  /**
+   * The runtime's id for the `web_fetch` call's step in its reply, which keeps the page's text, so
+   * each read is found by its call (#1271). Null for pages read before steps were recorded.
+   */
+  stepId: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   url: Schema.String,
   finalUrl: Schema.String,
   status: Schema.Int,
@@ -187,3 +195,75 @@ export const HobWebLimitsView = Schema.Struct({
   effective: WebLimits,
 });
 export type HobWebLimitsView = typeof HobWebLimitsView.Type;
+
+/** A turn's searches and pages, as Usage's Busiest turns lists them (ADR 036, Usage and limits). */
+export const WebTurnUsage = Schema.Struct({
+  /** The turn, as `webTurnKey` names it. */
+  turn: Schema.String,
+  agentId: AgentId,
+  threadId: Schema.NullOr(ThreadId),
+  messageId: Schema.NullOr(MessageId),
+  taskId: Schema.NullOr(TaskId),
+  /** The title of the chat it belongs to, when it has one. */
+  threadTitle: Schema.NullOr(Schema.String),
+  /** When its last search or page was recorded. */
+  at: Schema.String,
+  searches: Schema.Int,
+  pages: Schema.Int,
+  /** The per-turn limit it reached, searches first, as the hob's limits are now; null within both. */
+  reachedLimit: Schema.NullOr(Schema.Literals(["searches", "pages"])),
+});
+export type WebTurnUsage = typeof WebTurnUsage.Type;
+
+/** A hob's searches and pages, as Usage's By hob lists them. */
+export const WebHobUsage = Schema.Struct({
+  agentId: AgentId,
+  searches: Schema.Int,
+  pages: Schema.Int,
+  /** How many of its turns reached a per-turn limit, as its limits are now. */
+  turnsAtLimit: Schema.Int,
+});
+export type WebHobUsage = typeof WebHobUsage.Type;
+
+/** How many turns Busiest turns lists. */
+export const BUSIEST_WEB_TURNS = 5;
+
+/**
+ * What every hob searched and read since a time, for Usage: the totals, each hob that searched or
+ * read (most searches first), the busiest turns and how many turns used the web at all.
+ */
+export const WebUsageSummary = Schema.Struct({
+  since: Schema.String,
+  totals: WebUsageTotals,
+  hobs: Schema.Array(WebHobUsage),
+  busiestTurns: Schema.Array(WebTurnUsage),
+  turns: Schema.Int,
+});
+export type WebUsageSummary = typeof WebUsageSummary.Type;
+
+/** A turn's counts as the records group them, before limits and titles. */
+export interface WebTurnCount {
+  readonly turn: string;
+  readonly agentId: AgentId;
+  readonly threadId: ThreadId | null;
+  readonly messageId: MessageId | null;
+  readonly taskId: TaskId | null;
+  readonly at: string;
+  readonly searches: number;
+  readonly pages: number;
+}
+
+/** The per-turn limit a turn reached, searches first, or null within both. */
+export const reachedTurnLimit = (
+  turn: Pick<WebTurnCount, "searches" | "pages">,
+  limits: WebLimits,
+): "searches" | "pages" | null =>
+  turn.searches >= limits.searchesPerTurn && turn.searches > 0
+    ? "searches"
+    : turn.pages >= limits.pagesPerTurn && turn.pages > 0
+      ? "pages"
+      : null;
+
+/** The hub's page cache (ADR 036): the pages it holds for 15 minutes and the bytes the sites sent for them. */
+export const WebPageCache = Schema.Struct({ pages: Schema.Int, bytes: Schema.Int });
+export type WebPageCache = typeof WebPageCache.Type;

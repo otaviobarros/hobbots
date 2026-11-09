@@ -129,6 +129,7 @@ import { ExportFoldersLive } from "./exports.ts";
 import { FakeHubQuestionsLive } from "./fake-hub-questions.ts";
 import { FakeMemoryLive } from "./fake-memory.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
+import { WebFetcherFake } from "./fake-web.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
 import { ApiRoutes } from "./http.ts";
@@ -162,7 +163,7 @@ import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
-import { WebToolsLive } from "./web-access.ts";
+import { WebToolsLive, WebToolsWith } from "./web-access.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
@@ -458,7 +459,9 @@ const ServerLive = Layer.unwrap(
     // hobs propose with them, which wait for you under every preset.
     const SkillTooling = SkillToolsLive.pipe(Layer.provideMerge(SkillReviewsLive), Layer.provide(PolicyEngine.node));
     // `web_fetch` (ADR 036) on every runtime, refusing the hub's own tailnet addresses as the sandbox does.
-    const WebTooling = WebToolsLive(config.version).pipe(Layer.provide(Remote));
+    const WebTooling = (config.fakeWeb === "on" ? WebToolsWith(WebFetcherFake) : WebToolsLive(config.version)).pipe(
+      Layer.provide(Remote),
+    );
     // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
     // two keys stay in the data folder and reach only the engine's environment. Without an engine,
     // or one that fails its checksum, memory is off and everything else works.
