@@ -3,7 +3,7 @@
 - **Date:** 2026-11-08
 - **Issue:** [#1235](https://github.com/otaviobarros/hobbots/issues/1235), the last task of [#1230](https://github.com/otaviobarros/hobbots/issues/1230)
 - **Pull request:** opened from `claude/project-thread-3hay5g`
-- **Commit:** on top of `ad8f03c` on `main`, with a clean tree
+- **Commit:** `5dfc969` on the pull request branch, on top of `ad8f03c` on `main`, with a clean tree. The hub-level, clean-runtime and browser suites ran again on `788f2c5`, the branch merged with `0694c8f` on `main`, with the same results
 - **Setup:** Linux x86_64 container, Node 22.23.4. The hub-level suites ran the hub as the server composes it, with the fake runtime, the real policy engine, a fake GitHub Charm and the hub's redactor, on SQLite through `node:sqlite` and on PostgreSQL 16 (the environment `pnpm test:pg` sets, on a local server instead of Docker). Their turns also ran on an installed Claude Code 2.1.319 (`HOBBOTS_CLAUDE_CODE`) and an installed Codex 0.167.0 from npm (`HOBBOTS_CODEX`), each with its stand-in model, and so did the clean-runtime contract suites. No account and no real model was used. The browser cases ran in Chromium 1243 under Playwright 1.64.1, against a hub with the fake runtime.
 - **Result:** Passed with gaps: on all three runtimes and both databases, a hob's model was told who holds the GitHub Charm in its roster alone, read another hob's card with `read_hob` with the step in its reply, was told an edited good at on its next turn, lost and regained a hidden hob, and never got another hob's instructions, threads, memory or Tasks; good at that says to ignore your instructions reached it quoted under the data label. What a real model says, and that it does not follow that good at, needs a real model and is left to [#1273](https://github.com/otaviobarros/hobbots/issues/1273).
 
@@ -22,7 +22,7 @@
 | `[TC-RT-1235-01]` | On a clean Claude Code, a turn whose briefing carries the roster sends the model the whole roster ahead of the prompt in a user message, on every request, and never in the system prompt | ✅ |
 | `[TC-RT-1235-02]` | On a clean Codex, the same: the roster is in the turn's input on every request and never in the model's instructions | ✅ |
 | `[TC-RT-1235-03]` | The fake runtime is handed the same roster as its briefing, apart from its instructions | ✅ |
-| `[TC-UX-1235-01]` | In the browser, editing Quill's good at in its profile, then turning Visible to other hobs off and on, each reach Pip's next chat turn | ✅ |
+| `[TC-UX-1235-01]` | In the browser, editing Quill's good at in its profile, then turning Visible to other hobs off and on, each reach Pip's next chat turn, with the accessibility scan on Pip's chat, Quill's profile, the saved good at and the hidden state | ✅ |
 | Slice cases | The #1231 to #1234 cases ADR 032 names, in `packages/agents`, `packages/permissions`, `packages/persistence` and `apps/server`, the server ones on SQLite and PostgreSQL; `[TC-PE-1234-01]` and the other clean-runtime cases on the installed Claude Code and Codex; `[TC-UX-1234-01]` and `[TC-UX-1234-02]` in the browser | ✅ |
 
 ## How the runtimes were driven
