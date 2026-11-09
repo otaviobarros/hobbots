@@ -749,6 +749,93 @@ describe("the Summoning Charm, end to end", () => {
     }
   });
 
+  // covers EX-004, ADR 034 (Tools; Every runtime), #412 (every runtime: Claude Code, Codex, fake)
+  it("[TC-AG-412-07] each runtime checks, summons, changes, pauses and wakes hobs through the Charm, each call recorded before it acts", {
+    timeout: 240_000,
+  }, async () => {
+    const lead = await manager("Rune", 4100);
+    await permissions(lead, {
+      charms: {
+        granted: ["summoning"],
+        overrides: { ...SUMMONING_DEFAULTS, "summoning.summon": "allow", "summoning.instructions": "allow" },
+      },
+    });
+    const runtimes = await hubCallRuntimes();
+    try {
+      expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
+      for (const runtime of runtimes.runtimes) {
+        const by = await hob(lead.id);
+        const scope = `reply:${runtime.name}-every-tool`;
+        const charmOperations = declaredOperations(
+          await hobs.runPromise(
+            Effect.gen(function* () {
+              return yield* CharmDeclarations;
+            }),
+          ),
+        );
+        const charmTurn: CharmTurn = {
+          agentId: by.id,
+          threadId: null,
+          messageId: null,
+          scope: () => scope,
+          also: scope,
+          currentAccess: Effect.succeed({
+            policy: {
+              preset: "balanced",
+              sharedFolders: [shared],
+              hob: by.policy,
+              dataFolder: dataDir,
+              restrictions: [],
+              charmOperations,
+            },
+            folders: [team],
+            runtimeFolder: join(temp, "runtimes", runtime.name),
+            commitsAs: { _tag: "UserConfig", config: { name: "Rune", email: "rune@example.com" } },
+          }),
+          redactor: makeRedactor([]),
+          approvals: null,
+        };
+        const hubTools = joinHubTools(await hobs.runPromise(Charms.use((charms) => charms.forTurn(charmTurn))));
+        if (hubTools === null) throw new Error("No Summoning tools");
+        const name = `Rune-${runtime.name}`;
+        const recorded: Array<string> = [];
+        const { exit } = await runtime.turn({
+          hubTools,
+          recordToolStart: (event) =>
+            Effect.promise(async () => {
+              const made = (await allHobs()).find((agent) => agent.name === name);
+              recorded.push(
+                `${event.tool} while ${made === undefined ? "absent" : `${made.status}, ${made.instructions || "no instructions"}`}`,
+              );
+              return true;
+            }),
+          calls: [
+            { tool: "summoning_check", input: { summon: [draft(name)] } },
+            { tool: "summoning_summon", input: { key: `summon-${runtime.name}`, hobs: [draft(name)] } },
+            {
+              tool: "summoning_change",
+              input: { key: `change-${runtime.name}`, changes: [{ hob: name, instructions: "Be brief." }] },
+            },
+            { tool: "summoning_pause", input: { key: `pause-${runtime.name}`, hob: name } },
+            { tool: "summoning_wake", input: { key: `wake-${runtime.name}`, hob: name } },
+          ],
+        });
+        expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+        // The check writes nothing, so nothing records it; each write is recorded before it acts.
+        expect(recorded, runtime.name).toEqual([
+          "summoning_summon while absent",
+          "summoning_change while active, no instructions",
+          "summoning_pause while active, Be brief.",
+          "summoning_wake while paused, Be brief.",
+        ]);
+        const made = (await allHobs()).find((agent) => agent.name === name);
+        expect(made, runtime.name).toMatchObject({ status: "active", instructions: "Be brief.", summonedBy: lead.id });
+      }
+    } finally {
+      runtimes.close();
+    }
+  });
+
   // covers ADR 034 (The Charm: Every hob), #406 (granted per hob or to every hob)
   it("[TC-AG-406-09] Summoning for every hob reaches the hobs you made, never a hob a hob summoned, and a hob's own tab can take it away", async () => {
     const plain = await create("Plain", 4003);
@@ -1052,7 +1139,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 ("Always allow"), #409 done when 3, #410 (the Charms tab reads it as Allow)
-  it("[TC-AG-409-03] Always allow on a summon card sets summoning.summon to Allow as your change, and the next summon runs without a card", async () => {
+  it("[TC-AG-409-03] Always allow on a summon card sets summoning.summon to Allow as your change, and the next summons run without a card until the cap", async () => {
     // A manager of its own, so the caps the chief reached above leave its next summon free.
     const boss = await create("Bram", 4009);
     await permissions(boss, { ownFolders: [team], charms: { granted: ["summoning"], overrides: SUMMONING_DEFAULTS } });
@@ -1075,6 +1162,17 @@ describe("the Summoning Charm, end to end", () => {
     const next = await turn(boss, hub("summoning_summon", { key: "hire-mabel", hobs: [draft("Mabel")] }));
     expect(next.proposal).toBeUndefined();
     expect(next.reply?.content).toContain("Summoned 1 hob:");
+    // Until the cap (#412): three more run without a card, and the next asks with the cap's reason.
+    const more = await turn(
+      boss,
+      hub("summoning_summon", { key: "hire-more", hobs: [draft("Nan"), draft("Oak"), draft("Pru")] }),
+    );
+    expect(more.proposal).toBeUndefined();
+    expect(more.reply?.content).toContain("Summoned 3 hobs:");
+    const capped = await turn(boss, hub("summoning_summon", { key: "hire-quip", hobs: [draft("Quip")] }));
+    expect(capped.proposal?.proposal.safety).toContain("You have 4 live hobs summoned without asking the user");
+    expect(capped.proposal?.proposal.asks).toEqual([]);
+    await decideProposal(capped, "deny-all");
   });
 
   // covers ADR 034 (Asking is a proposal: Always allow; The Charm: Every hob), #409, #410
