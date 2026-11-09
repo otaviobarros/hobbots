@@ -29,6 +29,7 @@ import {
   SkillTrialsLive,
   SummoningHub,
   TaskFiles,
+  UnattendedSummonLimits,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -148,6 +149,7 @@ import {
 import { QuietRoutineReads } from "./request-log.ts";
 import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
+import { RetireWhenDone } from "./retire.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { SkillUpdateChecks } from "./skill-updates.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
@@ -459,8 +461,9 @@ const ServerLive = Layer.unwrap(
     const Memory = memoryEngineLayer(config, dataDir, memoryKeys);
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
-    // The Summoning Charm's calls reach the hob use cases once they are built (ADR 034).
-    const App = SummoningHub.bound
+    // The Summoning Charm's calls reach the hob use cases once they are built (ADR 034), and a hob
+    // finishing its open Tasks first retires once the last one ends (#408).
+    const App = Layer.mergeAll(SummoningHub.bound, RetireWhenDone)
       .pipe(Layer.provideMerge(HobLifecycle.layer))
       .pipe(
         Layer.provideMerge(
@@ -599,6 +602,8 @@ const ServerLive = Layer.unwrap(
             EventBus.layer,
             HobAdmission.layer,
             SummoningHub.layer,
+            // The caps on summons that run without asking you (ADR 034).
+            Layer.succeed(UnattendedSummonLimits, config.summonLimits),
             NodeFolderChecks,
             HeldRuntime,
             identity,

@@ -1,12 +1,12 @@
 import {
   AgentId,
-  AgentStatus,
   AnyOperation,
   ApprovalId,
   ApprovalLifetime,
   ApprovalState,
   CharmCallState,
   GrantId,
+  HobStanding,
   HubQuestionId,
   MessageId,
   QuestId,
@@ -25,11 +25,12 @@ export class AgentNotFound extends Schema.TaggedError<AgentNotFound>()(
 
 /**
  * A hob that is not active refuses new work: a paused hob until it is woken, a retired hob for
- * good. Also returned when pausing or waking a retired hob.
+ * good, and a hob finishing its open Tasks before it retires (`retiring`). Also returned when
+ * pausing or waking a retired hob.
  */
 export class HobUnavailable extends Schema.TaggedError<HobUnavailable>()(
   "HobUnavailable",
-  { agentId: AgentId, status: AgentStatus },
+  { agentId: AgentId, status: HobStanding },
   { httpApiStatus: 409 },
 ) {}
 

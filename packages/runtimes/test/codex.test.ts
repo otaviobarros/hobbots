@@ -178,6 +178,41 @@ describe("the App Server client", () => {
     });
   }, 30_000);
 
+  // covers ADR 036
+  it("[TC-RT-1289-03] handles a request Codex sent after a notification only once the work on that notification ended", async () => {
+    const dir = folder();
+    const binary = fakeCodex(dir, { behavior: "search" });
+    const order: Array<string> = [];
+    await run(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* startAppServer(
+            { command: binary, args: ["app-server"], env: { PATH: process.env.PATH ?? "" } },
+            {
+              clientVersion: "test",
+              // Slow on purpose, as a found set written to a busy database would be.
+              beforeNotification: (notification) =>
+                Effect.sleep("150 millis").pipe(Effect.andThen(Effect.sync(() => order.push(notification.method)))),
+              handlers: {
+                "item/tool/call": () =>
+                  Effect.sync(() => {
+                    order.push("item/tool/call");
+                    return { success: true, contentItems: [] };
+                  }),
+              },
+            },
+          );
+          yield* waitUntil(
+            Effect.sync(() => fakeCodexLog(dir).map((message) => message.id)),
+            (ids) => ids.includes("ask-1"),
+            { what: "the stand-in to read the answer to ask-1" },
+          );
+        }),
+      ),
+    );
+    expect(order).toEqual(["item/completed", "item/tool/call"]);
+  }, 30_000);
+
   it("[TC-RT-014] fails what is waiting and ends notifications when Codex exits", async () => {
     const binary = fakeCodex(folder(), { behavior: "exit" });
     const result = await run(

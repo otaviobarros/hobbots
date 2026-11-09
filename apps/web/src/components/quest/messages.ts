@@ -158,6 +158,7 @@ export const messages = {
       "quest-exists": "This task leads a quest of its own, so it stays with its hob.",
       "same-owner": ({ name }: { name: string }) => `${name} already has this task.`,
       "lineage-owner": ({ name }: { name: string }) => `${name} works on a task above this one, so it cannot take it.`,
+      "owner-unavailable": ({ name }: { name: string }) => `${name} is retiring, so it takes no new work.`,
       retired: ({ name }: { name: string }) => `${name} is retired, so it cannot take this work.`,
       gone: "That hob is no longer on this hub.",
       other: ({ message }: { message: string }) => `The hub refused this: ${message}`,

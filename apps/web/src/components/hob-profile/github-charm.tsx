@@ -190,8 +190,8 @@ function CharmWaitNote({ wait, onRetry }: { wait: Wait; onRetry: () => void }) {
   );
 }
 
-/** The Charm's mark before its name, faded while the Charm is off. */
-const CharmMark = ({ off }: { off: boolean }) => (
+/** A Charm's mark before its name, faded while the Charm is off: GitHub's monogram unless another is given. */
+export const CharmMark = ({ off, mark }: { off: boolean; mark?: string }) => (
   <span
     aria-hidden
     className={cn(
@@ -199,8 +199,7 @@ const CharmMark = ({ off }: { off: boolean }) => (
       off && "opacity-55",
     )}
   >
-    {/* biome-ignore lint/style/noJsxLiterals: a decorative GitHub monogram, hidden from screen readers and never translated. */}
-    G
+    {mark ?? "G"}
   </span>
 );
 
