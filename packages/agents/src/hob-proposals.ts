@@ -86,6 +86,9 @@ export interface HobProposalInput {
   readonly highRisk: boolean;
 }
 
+/** Runs a write in one transaction that first checks your device is still approved (PE-006). */
+type WhileApproved = <A, E, R>(write: Effect.Effect<A, E, R>) => Effect.Effect<A, E | DeviceRevoked, R>;
+
 /** A proposal's next state as written, and what waits for it to commit: its events and the call that waits. */
 interface Stored {
   readonly saved: HobProposal;
@@ -244,11 +247,8 @@ export class HobProposals extends Context.Service<
         Effect.flatMap(store(proposal, rows), announce);
 
       /** Saves your decision, in one transaction that first checks your device is still approved (PE-006). */
-      const saveDecision = (
-        session: UserSession["Service"],
-        proposal: HobProposal,
-        rows: ReadonlyArray<HobProposalRow>,
-      ) => Effect.flatMap(session.whileApproved(store(proposal, rows)), announce);
+      const saveDecision = (approved: WhileApproved, proposal: HobProposal, rows: ReadonlyArray<HobProposalRow>) =>
+        Effect.flatMap(approved(store(proposal, rows)), announce);
 
       /**
        * A row the hub stopped while making is checked against its hob before anything else decides
@@ -298,7 +298,7 @@ export class HobProposals extends Context.Service<
        * Allow all, ends as failed with why, so the others still go ahead.
        */
       const allowRow = (
-        session: UserSession["Service"],
+        approved: WhileApproved,
         proposal: HobProposal,
         row: HobProposalRow,
         options: { readonly edited: SummoningDraft | null; readonly at: string; readonly refusedFails: boolean },
@@ -309,7 +309,7 @@ export class HobProposals extends Context.Service<
             return yield* new HobProposalChangedSince({ proposalId: proposal.id, rowId: row.id });
           }
           const applying: HobProposalRow = { ...row, edited: options.edited, state: "applying", decidedAt: options.at };
-          const marked = yield* saveDecision(session, proposal, withRow(proposal.rows, applying));
+          const marked = yield* saveDecision(approved, proposal, withRow(proposal.rows, applying));
           const made = yield* apply
             .apply(marked, row, options.edited)
             .pipe(
@@ -339,10 +339,10 @@ export class HobProposals extends Context.Service<
        * A decision of yours: one at a time, so two decisions on one row never both make it, and whole
        * once started, so a request that goes away leaves no row half decided.
        */
-      const decide = <E>(decision: (session: UserSession["Service"]) => Effect.Effect<HobProposal, E>) =>
+      const decide = <E>(decision: (approved: WhileApproved) => Effect.Effect<HobProposal, E>) =>
         Effect.gen(function* () {
           const session = yield* UserSession;
-          const saved = yield* Semaphore.withPermit(lock, Effect.uninterruptible(decision(session)));
+          const saved = yield* Semaphore.withPermit(lock, Effect.uninterruptible(decision(session.whileApproved)));
           return yield* viewOf(saved);
         });
 
@@ -370,7 +370,7 @@ export class HobProposals extends Context.Service<
         list: Effect.flatMap(log.list(INBOX_HISTORY), (proposals) => Effect.forEach(proposals, viewOf)),
         get: (id) => Effect.flatMap(find(id), viewOf),
         allow: (id, rowId, options) =>
-          decide((session) =>
+          decide((approved) =>
             Effect.gen(function* () {
               const proposal = yield* open(id);
               const row = yield* pendingRowOf(proposal, rowId);
@@ -379,19 +379,19 @@ export class HobProposals extends Context.Service<
               if (edited !== null && proposal.kind !== "summon") {
                 return yield* new HobProposalMissing({ proposalId: id, rowId });
               }
-              return yield* allowRow(session, proposal, row, { edited, at: yield* nowIso, refusedFails: false });
+              return yield* allowRow(approved, proposal, row, { edited, at: yield* nowIso, refusedFails: false });
             }),
           ),
         deny: (id, rowId) =>
-          decide((session) =>
+          decide((approved) =>
             Effect.gen(function* () {
               const proposal = yield* open(id);
               const row = yield* pendingRowOf(proposal, rowId);
-              return yield* saveDecision(session, proposal, withRow(proposal.rows, denied(row, yield* nowIso)));
+              return yield* saveDecision(approved, proposal, withRow(proposal.rows, denied(row, yield* nowIso)));
             }),
           ),
         allowAll: (id, options) =>
-          decide((session) =>
+          decide((approved) =>
             Effect.gen(function* () {
               let proposal = yield* open(id);
               yield* confirmedFor(proposal, options.confirmed);
@@ -400,25 +400,25 @@ export class HobProposals extends Context.Service<
               // A row whose hob changed since is never applied: Allow all leaves it for you to deny.
               for (const row of proposal.rows) {
                 if (row.state !== "pending" || (yield* apply.changedSince(row))) continue;
-                proposal = yield* allowRow(session, proposal, row, { edited: null, at, refusedFails: true });
+                proposal = yield* allowRow(approved, proposal, row, { edited: null, at, refusedFails: true });
               }
               return proposal;
             }),
           ),
         denyAll: (id) =>
-          decide((session) =>
+          decide((approved) =>
             Effect.gen(function* () {
               const proposal = yield* open(id);
               const at = yield* nowIso;
               return yield* saveDecision(
-                session,
+                approved,
                 proposal,
                 proposal.rows.map((row) => (row.state === "pending" ? denied(row, at) : row)),
               );
             }),
           ),
         alwaysAllow: (id, operation) =>
-          decide((session) =>
+          decide((approved) =>
             Effect.gen(function* () {
               const proposal = yield* open(id);
               if (!proposal.asks.includes(operation) || proposal.alwaysAllowed.includes(operation)) {
@@ -426,7 +426,7 @@ export class HobProposals extends Context.Service<
               }
               const apply = yield* Deferred.await(applier);
               // The policy change and the proposal that says so commit together, under your device's check.
-              const stored = yield* session.whileApproved(
+              const stored = yield* approved(
                 Effect.gen(function* () {
                   const version = yield* apply.alwaysAllow(proposal, operation);
                   // A row on the manager itself made before this change is still yours to allow: the

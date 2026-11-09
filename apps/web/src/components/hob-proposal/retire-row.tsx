@@ -37,40 +37,42 @@ export type RetireReview = ReturnType<typeof useRetireReview>;
  * stays, and what the manager chose for its running replies.
  */
 export function RetireRow({ row, review }: { row: HobProposalRow; review: RetireReview }) {
-  const waiting = row.state === "pending";
-  const nothingOpen =
-    review.running.length === 0 &&
-    (review.work?.tasks.length ?? 0) === 0 &&
-    (review.work?.approvals.length ?? 0) === 0 &&
-    (review.work?.backpackItems.length ?? 0) === 0;
   return (
     <div className="flex flex-col gap-1.5">
       <b className="text-ui text-text-strong">{row.label}</b>
-      {waiting && review.state === "reading" && (
-        <span role="status" className="text-detail text-text-secondary">
-          {copy.reading({ hob: row.label })}
-        </span>
-      )}
-      {waiting && review.state === "failed" && (
-        <span className="flex flex-wrap items-center gap-2">
-          <span role="alert" className="text-detail text-rose">
-            {copy.unread({ hob: row.label })}
-          </span>
-          <Button size="sm" variant="outline" onClick={review.retry}>
-            {copy.tryAgain}
-          </Button>
-        </span>
-      )}
-      {waiting && review.state === "read" && (
-        <>
-          <OpenWorkList running={review.running} work={review.work} blockedTaker={null} />
-          {nothingOpen && (
-            <span className="text-detail text-text-secondary">{copy.nothingOpen({ hob: row.label })}</span>
-          )}
-        </>
-      )}
+      {row.state === "pending" && <WhatIsOpen hob={row.label} review={review} />}
       <span className="text-detail text-text-secondary">{copy.owns({ hob: row.label })}</span>
       <span className="text-detail text-text-secondary">{row.runningReplies === "stop" ? copy.stop : copy.finish}</span>
     </div>
+  );
+}
+
+/** What the hob has running and open, once read; while it is read, or why it could not be, with Try again. */
+function WhatIsOpen({ hob, review }: { hob: string; review: RetireReview }) {
+  if (review.state === "reading") {
+    return (
+      <span role="status" className="text-detail text-text-secondary">
+        {copy.reading({ hob })}
+      </span>
+    );
+  }
+  if (review.state === "failed") {
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <span role="alert" className="text-detail text-rose">
+          {copy.unread({ hob })}
+        </span>
+        <Button size="sm" variant="outline" onClick={review.retry}>
+          {copy.tryAgain}
+        </Button>
+      </span>
+    );
+  }
+  const work = review.work;
+  const open = (work?.tasks.length ?? 0) + (work?.approvals.length ?? 0) + (work?.backpackItems.length ?? 0);
+  return review.running.length === 0 && open === 0 ? (
+    <span className="text-detail text-text-secondary">{copy.nothingOpen({ hob })}</span>
+  ) : (
+    <OpenWorkList running={review.running} work={work} blockedTaker={null} />
   );
 }
