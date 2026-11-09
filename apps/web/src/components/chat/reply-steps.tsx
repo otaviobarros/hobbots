@@ -52,7 +52,7 @@ export function ReplySteps({
   logUrl: LogUrl;
   /** What an uncertain tool step offers to settle it, such as a Charm call's (ADR 020). */
   settle?: (stepId: string) => ReactNode;
-  /** The card of the hob proposal a Summoning call made (ADR 034), under its step. */
+  /** What came of the hob proposal a Summoning call made (ADR 034), inside its step. */
   proposal?: (proposalId: string) => ReactNode;
 }) {
   const shown = shownSteps(steps, inProgress);
@@ -177,8 +177,9 @@ function ToolStep({
         </span>
       )}
       {settle}
-      {proposal}
       <CollapsibleContent>
+        {/* What came of a hob proposal stays in the step, open on demand: the tray asks for it. */}
+        {proposal}
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-meta text-text-secondary">
           <dt className="text-label">{copy.tool}</dt>
           <dd className="m-0">{call.tool}</dd>

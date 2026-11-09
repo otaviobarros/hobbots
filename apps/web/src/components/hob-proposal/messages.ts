@@ -98,6 +98,8 @@ export const messages = {
   refused: ({ message }: { message: string }) => `It cannot be made like that: ${message}`,
   loading: "Reading the proposal…",
   inTray: "Decide it in Needs you, above the reply box.",
+  /** "Frodo: " before what came of its row, on a decided step. */
+  rowLine: ({ hob }: { hob: string }) => `${hob}: `,
   loadFailed: "Hobbots could not read this proposal.",
   editing: {
     heading: ({ who }: { who: string }) => `Your version of ${who}'s proposal`,
