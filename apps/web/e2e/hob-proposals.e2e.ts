@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Locator, Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
@@ -147,4 +148,58 @@ test("[TC-UX-409-02] a retire card reads what the hob has open first, says so wh
   await row.getByRole("button", { name: "Allow" }).click();
   await expect(row).toHaveAttribute("data-state", "allowed");
   await expect(row).toContainText("Wren is retired now.");
+});
+
+/** Presses Tab until `target` has focus, as a keyboard user reaches it, or fails after `limit` presses. */
+const tabTo = async (page: Page, target: Locator, limit = 80) => {
+  await expect(target).toBeVisible({ timeout: 20_000 });
+  for (let presses = 0; presses < limit; presses++) {
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+    await page.keyboard.press("Tab");
+  }
+  throw new Error(`Tab never reached ${target}`);
+};
+
+// covers STD-TEST-008, ADR 034 (Asking is a proposal), #409
+test("[TC-UX-409-03] a summon proposal is decided by keyboard alone: open it from the Inbox, Allow one row, Edit the other in Summon, and open a created hob", async ({
+  page,
+}) => {
+  const { url, api, bram } = await managerHub();
+  const thread = await api("POST", `/agents/${bram.id}/threads`);
+  await api("POST", `/threads/${thread.id}/messages`, { content: summon("hire-pair", ["Ivo", "Jun"]) });
+  await page.goto(`${url}/#/inbox`);
+
+  const entry = page.getByRole("link", { name: /Bram proposes 2 new hobs/ });
+  await tabTo(page, entry);
+  await page.keyboard.press("Enter");
+  const card = page.getByRole("region", { name: "Bram proposes 2 new hobs" });
+  const rows = card.getByRole("list", { name: "Hobs" });
+
+  await tabTo(page, rows.getByRole("article", { name: "Ivo" }).getByRole("button", { name: "Allow" }));
+  await page.keyboard.press("Enter");
+  await expect(rows.getByRole("article", { name: "Ivo" })).toHaveAttribute("data-state", "allowed");
+
+  await tabTo(page, rows.getByRole("article", { name: "Jun" }).getByRole("link", { name: "Edit in Summon" }));
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Your version of Bram's proposal" })).toBeVisible();
+  await tabTo(page, page.getByRole("button", { name: "Next: name and look" }));
+  await page.keyboard.press("Enter");
+  const name = page.getByRole("textbox", { name: "Hob name" });
+  await tabTo(page, name);
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Juno");
+  await tabTo(page, page.getByRole("button", { name: "Next: check and summon" }));
+  await page.keyboard.press("Enter");
+  await tabTo(page, page.getByRole("button", { name: "Allow Juno as edited" }));
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main", { name: "Juno's profile" })).toBeVisible({ timeout: 20_000 });
+
+  // The same card on the call's step in Bram's chat, settled, opens a created hob.
+  await page.goto(`${url}/#/hobs/${bram.id}/threads/${thread.id}`);
+  await expect(card.getByRole("status")).toHaveText("Decided. Bram heard what was made and what was denied.", {
+    timeout: 20_000,
+  });
+  await tabTo(page, card.getByRole("region", { name: "Created" }).getByRole("link", { name: "Open Ivo" }), 200);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main", { name: "Ivo's profile" })).toBeVisible();
 });
