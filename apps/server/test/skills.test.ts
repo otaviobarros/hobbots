@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
@@ -120,7 +120,7 @@ describe("skills routes", () => {
     const listed = await request("GET", "/api/skills");
     expect(listed.status).toBe(200);
     expect(listed.body.skills.map((skill: { name: string }) => skill.name)).toEqual(["shared"]);
-    expect(listed.body.agentsFolder).toEqual({ path: agentsFolder, problems: [] });
+    expect(listed.body.agentsFolder).toEqual({ path: agentsFolder, home: homedir(), problems: [] });
     const shared = await request("GET", `/api/skills/${listed.body.skills[0].id}`);
     expect(shared.body.assignments.map((one: { scope: unknown }) => one.scope)).toEqual([{ _tag: "Everyone" }]);
 
@@ -323,7 +323,7 @@ describe("skills routes", () => {
     expect(await place()).toMatchObject({ pin: r2.body.revision.hash, held: false });
   });
 
-  // covers ADR 029 (The Skills page, Journal events), #1062
+  // covers ADR 029 (The Skills page, Journal events), #1062, #1220
   it("[TC-AG-151] What changed lists each save with what its rollout moved and held, rollbacks, and skills given or removed", async () => {
     const folder = await folderWith({ "SKILL.md": skillMd("release") });
     const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
@@ -366,13 +366,9 @@ describe("skills routes", () => {
       { kind: "assigned", number: 1, scopes: [everyoneScope], held: [] },
       { kind: "saved", number: 1, scopes: [], held: [] },
     ]);
-    // A save's Roll back goes to the revision before it, for the places its rollout moved.
-    expect(release[2]).toMatchObject({
-      moved: [{ assignmentId: everyone.body.id, from: revision.hash }],
-      previous: revision.hash,
-      previousNumber: 1,
-      by: { _tag: "You" },
-    });
+    // The r2 save still reads as moving Everyone from r1, but Everyone was rolled back to r1 since,
+    // so it has nothing left to roll back (#1220).
+    expect(release[2]).toMatchObject({ moved: [], previous: revision.hash, previousNumber: 1, by: { _tag: "You" } });
     expect(release[0]).toMatchObject({
       moved: [{ assignmentId: everyone.body.id, from: r2.body.revision.hash }],
       previous: r2.body.revision.hash,

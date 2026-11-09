@@ -142,7 +142,7 @@ function SetAside({
       <SkillFollow skill={detail.skill} list={list} say={say} />
       <OriginCard>
         <OriginRow label={copy.skill.sourceLabel}>
-          {originText(originOf(detail.skill.sourceId, list.sources))}
+          {originText(originOf(detail.skill.sourceId, list.sources), list.agentsFolder.home)}
         </OriginRow>
         {version !== "" && <OriginRow label={copy.skill.version}>{version}</OriginRow>}
         <OriginRow label={copy.skill.leftOut}>{dropped ?? copy.set.leftOutNothing}</OriginRow>

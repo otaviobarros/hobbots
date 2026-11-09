@@ -81,7 +81,7 @@ const library: SkillsList = {
     assignment("a3", "release", { _tag: "Hob", agentId: AgentId.make("gone") }, true),
   ],
   projects: [],
-  agentsFolder: { path: null, problems: [] },
+  agentsFolder: { path: null, home: null, problems: [] },
   usesThisWeek: [],
   sets: [],
 };

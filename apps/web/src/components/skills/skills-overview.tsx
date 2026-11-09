@@ -11,9 +11,9 @@ import { RepositoryOffers } from "./skill-repository-offer.tsx";
 import type { Say } from "./skills-flash.ts";
 import { SkillHealthCards } from "./skills-health.tsx";
 import {
+  agentsFolderLabel,
   type HobDirectory,
   libraryGroups,
-  originText,
   type SkillGroup,
   type SkillRow,
   scopeName,
@@ -44,12 +44,12 @@ function UpdateChips({ row }: { row: SkillRow }) {
 }
 
 function RowChips({ row }: { row: SkillRow }) {
-  const { assignment, origin } = row;
+  const { assignment, origin, where } = row;
   return (
     <>
       <UpdateChips row={row} />
       {row.set !== null && <SkillChip tone="set">{copy.chips.set({ count: row.set.length })}</SkillChip>}
-      {origin?._tag === "AgentsFolder" && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
+      {origin?._tag === "AgentsFolder" && <SkillChip tone="later">{copy.chips.agents({ folder: where })}</SkillChip>}
       {assignment?.held === true && (
         <SkillChip tone="waiting">
           {row.number === null ? copy.chips.heldOld : copy.chips.held({ rev: copy.revision({ number: row.number }) })}
@@ -77,7 +77,7 @@ export function SkillRowLink({ row, now }: { row: SkillRow; now: Date }) {
         </span>
         <span className="flex flex-none flex-col items-end gap-1 pt-0.5 text-meta whitespace-nowrap text-label">
           <span>{copy.overview.updated({ when: formatAgo(skill.updatedAt, now) })}</span>
-          <span className="max-w-[220px] truncate">{originText(row.origin)}</span>
+          <span className="max-w-[220px] truncate">{row.where}</span>
         </span>
       </Link>
     </li>
@@ -136,7 +136,9 @@ export function SkillsOverview({
           <span className="mt-0.5">
             <SkillsIcon name="notice" />
           </span>
-          <p className="m-0 flex-1">{copy.overview.note}</p>
+          <p className="m-0 flex-1">
+            {copy.overview.note({ folder: agentsFolderLabel(list.agentsFolder.path, list.agentsFolder.home) })}
+          </p>
           <Button asChild variant="quiet" size="sm" className="flex-none">
             <Link to="/skills" search={skillsSearchOf({ _tag: "Export" })}>
               {copy.overview.export}
