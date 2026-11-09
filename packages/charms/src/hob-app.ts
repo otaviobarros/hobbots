@@ -752,37 +752,45 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           { concurrency: 4 },
         );
 
-      const installations = (agentId: AgentId) =>
+      /** Reads the hob's app as itself with `use`, or answers nothing when it has none. */
+      const asHobApp = <A, E, R>(
+        agentId: AgentId,
+        use: (app: HobGitHubApp, jwt: Redacted.Redacted<string>) => Effect.Effect<ReadonlyArray<A>, E, R>,
+      ) =>
         Effect.gen(function* () {
           yield* agentOf(agentId);
           const app = yield* apps.get(agentId);
           if (app === null) return [];
-          const jwt = yield* jwtFor(agentId, app);
-          const listed = yield* listInstallations(agentId, app, jwt);
-          yield* tokens.settled(
-            agentId,
-            app,
-            listed.some((installation) => installation.suspended_at == null),
-          );
-          return yield* named(agentId, app, jwt, listed);
+          return yield* use(app, yield* jwtFor(agentId, app));
         });
+
+      const installations = (agentId: AgentId) =>
+        asHobApp(agentId, (app, jwt) =>
+          Effect.gen(function* () {
+            const listed = yield* listInstallations(agentId, app, jwt);
+            yield* tokens.settled(
+              agentId,
+              app,
+              listed.some((installation) => installation.suspended_at == null),
+            );
+            return yield* named(agentId, app, jwt, listed);
+          }),
+        );
 
       /**
        * The permissions the hob's actions use that the app itself lacks, from `GET /app`: what an app
        * installed nowhere yet still needs, which no installation can say (#1321).
        */
       const appMissing = (agentId: AgentId) =>
-        Effect.gen(function* () {
-          yield* agentOf(agentId);
-          const app = yield* apps.get(agentId);
-          if (app === null) return [];
-          const jwt = yield* jwtFor(agentId, app);
-          const response = yield* send(asApp("/app", jwt), "the app");
-          if (response.status === 401) return yield* Effect.flip(tokens.keyRefused(agentId, app));
-          if (response.status !== 200) return yield* answered(response.status, "the app");
-          const found = yield* read(response, AppJson, "the app");
-          return missingPermissions(found.permissions);
-        });
+        asHobApp(agentId, (app, jwt) =>
+          Effect.gen(function* () {
+            const response = yield* send(asApp("/app", jwt), "the app");
+            if (response.status === 401) return yield* Effect.flip(tokens.keyRefused(agentId, app));
+            if (response.status !== 200) return yield* answered(response.status, "the app");
+            const found = yield* read(response, AppJson, "the app");
+            return missingPermissions(found.permissions);
+          }),
+        );
 
       /** Removes every installation of the app, so it reaches no repository even with a leaked key. */
       const uninstall = (agentId: AgentId, app: HobGitHubApp) =>
