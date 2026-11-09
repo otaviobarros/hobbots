@@ -11,6 +11,8 @@ const inputVariants = cva(
       variant: {
         default: "h-8 text-body",
         title: "h-11 font-heading text-[20px]",
+        // A number at the end of a settings row, such as a limit.
+        number: "h-8 text-end font-mono text-body",
       },
     },
     defaultVariants: {

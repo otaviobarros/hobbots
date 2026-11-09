@@ -8,8 +8,8 @@ import { useState } from "react";
 import { webSummaryQuery } from "../../api/web.ts";
 import { formatWeekday } from "../../lib/format.ts";
 import { periodStart } from "../../lib/usage.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
+import { SearchesBar, UsageTable, WhoCell } from "./usage-web-table.tsx";
 import { WebIcon } from "./web-icon.tsx";
 
 const copy = messages.usage;
@@ -102,45 +102,6 @@ function Totals({ summary, period }: { summary: WebUsageSummary; period: string 
   );
 }
 
-/** A hob's tile, or a plain square for a hob no longer listed. */
-function Tile({ look }: { look: Agent | undefined }) {
-  return look === undefined ? (
-    <span aria-hidden className="size-7 flex-none rounded-tile bg-line-2" />
-  ) : (
-    <HobSprite hob={look} size={28} />
-  );
-}
-
-const headClass = "px-3 py-2 text-start text-meta font-normal text-label";
-
-/** By hob's and Busiest turns' table: its head, then the rows it is given. */
-function UsageTable({
-  first,
-  searchesEnd,
-  children,
-}: {
-  first: string;
-  /** Whether the searches column is a number at its end rather than a bar. */
-  searchesEnd: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="overflow-x-auto rounded-card bg-card">
-      <table className="w-full border-collapse text-ui">
-        <thead>
-          <tr>
-            <th className={headClass}>{first}</th>
-            <th className={searchesEnd ? `${headClass} text-end` : headClass}>{copy.columns.searches}</th>
-            <th className={`${headClass} text-end`}>{copy.columns.pages}</th>
-            <th className={headClass}>{copy.columns.limits}</th>
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
-  );
-}
-
 function ByHob({ hobs, looks }: { hobs: ReadonlyArray<WebHobUsage>; looks: ReadonlyMap<AgentId, Agent> }) {
   const [all, setAll] = useState(false);
   const most = Math.max(1, ...hobs.map((hob) => hob.searches));
@@ -152,26 +113,12 @@ function ByHob({ hobs, looks }: { hobs: ReadonlyArray<WebHobUsage>; looks: Reado
           const look = looks.get(hob.agentId);
           return (
             <tr key={hob.agentId} className="shadow-[inset_0_1px_0_var(--color-line)]">
-              <td className="px-3 py-2.5">
-                <span className="flex items-center gap-2.5">
-                  <Tile look={look} />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="font-semibold text-text-strong">{look?.name ?? copy.untitled}</span>
-                    <span className="text-meta text-label">{look === undefined ? "" : copy.runtime[look.runtime]}</span>
-                  </span>
-                </span>
-              </td>
-              <td className="w-[40%] px-3 py-2.5">
-                <span className="flex items-center gap-3">
-                  <span aria-hidden className="h-2 min-w-[60px] flex-1 overflow-hidden rounded-dot bg-line-2">
-                    <span
-                      className="block h-full rounded-dot bg-moonlight"
-                      style={{ width: `${(hob.searches / most) * 100}%` }}
-                    />
-                  </span>
-                  <span className="w-8 text-end font-mono font-bold text-text-strong tabular-nums">{hob.searches}</span>
-                </span>
-              </td>
+              <WhoCell
+                look={look}
+                title={<span className="font-semibold text-text-strong">{look?.name ?? copy.untitled}</span>}
+                sub={look === undefined ? "" : copy.runtime[look.runtime]}
+              />
+              <SearchesBar searches={hob.searches} most={most} />
               <td className="px-3 py-2.5 text-end font-mono tabular-nums">{hob.pages}</td>
               <td className="px-3 py-2.5">
                 {hob.turnsAtLimit > 0 ? (
@@ -213,28 +160,24 @@ function BusiestTurns({
           const title = turn.threadId === null ? copy.taskTurn : (turn.threadTitle ?? copy.untitled);
           return (
             <tr key={turn.turn} className="shadow-[inset_0_1px_0_var(--color-line)]">
-              <td className="px-3 py-2.5">
-                <span className="flex items-center gap-2.5">
-                  <Tile look={look} />
-                  <span className="flex min-w-0 flex-col">
-                    {turn.threadId === null ? (
-                      <span className="text-text-strong">{title}</span>
-                    ) : (
-                      <Link
-                        to="/hobs/$hobId/threads/$threadId"
-                        params={{ hobId: turn.agentId, threadId: turn.threadId }}
-                        search={turn.messageId === null ? {} : { message: turn.messageId }}
-                        className="text-text-strong underline-offset-2 hover:underline"
-                      >
-                        {title}
-                      </Link>
-                    )}
-                    <span className="text-meta text-label">
-                      {copy.turnBy({ name: look?.name ?? "", when: formatWeekday(turn.at) })}
-                    </span>
-                  </span>
-                </span>
-              </td>
+              <WhoCell
+                look={look}
+                title={
+                  turn.threadId === null ? (
+                    <span className="text-text-strong">{title}</span>
+                  ) : (
+                    <Link
+                      to="/hobs/$hobId/threads/$threadId"
+                      params={{ hobId: turn.agentId, threadId: turn.threadId }}
+                      search={turn.messageId === null ? {} : { message: turn.messageId }}
+                      className="text-text-strong underline-offset-2 hover:underline"
+                    >
+                      {title}
+                    </Link>
+                  )
+                }
+                sub={copy.turnBy({ name: look?.name ?? "", when: formatWeekday(turn.at) })}
+              />
               <td className="px-3 py-2.5 text-end font-mono tabular-nums">{turn.searches}</td>
               <td className="px-3 py-2.5 text-end font-mono tabular-nums">{turn.pages}</td>
               <td className="px-3 py-2.5">

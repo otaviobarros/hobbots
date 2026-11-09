@@ -3,9 +3,10 @@ import { Button } from "@hobbots/ui/components/button";
 import { Sheet, SheetContent } from "@hobbots/ui/components/sheet";
 import { type ReactNode, useState } from "react";
 import { messages } from "./messages.ts";
+import { SearchSheet } from "./search-sheet.tsx";
 import { WebIcon } from "./web-icon.tsx";
 import { hostOf, type ReplyWeb, shownAsWebLine, type WebStep } from "./web-model.ts";
-import { PageSheet, SearchSheet } from "./web-sheets.tsx";
+import { PageSheet } from "./web-sheets.tsx";
 
 const copy = messages;
 

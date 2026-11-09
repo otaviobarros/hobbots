@@ -106,7 +106,8 @@ function LimitsGroup({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") commit(key);
                 }}
-                className="w-[88px] text-end font-mono"
+                variant="number"
+                className="w-[88px]"
               />
             </div>
           );
