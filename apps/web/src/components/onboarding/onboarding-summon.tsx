@@ -143,7 +143,9 @@ const readyRows = (
   return [
     {
       label: ai ?? "",
-      value: [PROVIDER_NAMES[draft.runtime], model].filter(Boolean).join(" · "),
+      value: [PROVIDER_NAMES[draft.runtime], model, draft.effort === null ? null : copy.effort[draft.effort]]
+        .filter(Boolean)
+        .join(" · "),
       to: "/setup/providers",
     },
     { label: hob ?? "", value: title ? `${name}, ${title.toLowerCase()}` : name, to: "/setup/hob" },

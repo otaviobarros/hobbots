@@ -11,8 +11,10 @@ import {
   missingRuntimeModels,
   readToolLog,
   runtimeAdapters,
+  summonCapsOf,
   type TaskRepository,
   ToolLogs,
+  UnattendedSummonLimits,
 } from "@hobbots/agents";
 import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import type { ThreadId } from "@hobbots/domain";
@@ -63,6 +65,7 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
     const chat = yield* ChatService;
     const hobs = yield* HobService;
     const lifecycle = yield* HobLifecycle;
+    const summonLimits = yield* UnattendedSummonLimits;
     const context = yield* Effect.context<HobbotsRepository | TaskRepository | ApprovalService | Backpack>();
     return handlers.handleAll({
       list: ({ query }) => repo.listAgentsWithStatus(query.status ? [query.status] : ["active", "paused"]),
@@ -82,6 +85,12 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
           ),
         ),
       createThread: ({ params }) => chat.createThread(params.agentId),
+      summonCaps: ({ params }) =>
+        repo.findAgent(params.agentId).pipe(
+          Effect.flatMap(foundAgent(params.agentId)),
+          Effect.andThen(repo.listAgents),
+          Effect.map((agents) => summonCapsOf(agents, params.agentId, summonLimits)),
+        ),
     });
   }),
 ).pipe(Layer.provide(HobInputErrorsLayer));

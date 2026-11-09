@@ -1,6 +1,7 @@
 import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { HOBBOTS_GITHUB_APP } from "@hobbots/charms";
+import { DEFAULT_SUMMON_LIMITS } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS } from "@hobbots/inbox";
 import { DEFAULT_STEP_LIMITS, DEFAULT_TASK_TOOL_LIMITS } from "@hobbots/orchestration";
 import { Config, Option } from "effect";
@@ -79,6 +80,16 @@ export const ServerConfig = Config.all({
     // How long a session asked to stop for a cancel has to end before the cancel is left unresolved.
     cancelTimeoutMs: Config.Int("HOBBOTS_CANCEL_TIMEOUT_MS").pipe(
       Config.withDefault(DEFAULT_STEP_LIMITS.cancelTimeoutMs),
+    ),
+  }),
+  // The caps on summons that run without asking you (ADR 034): live hobs one manager summoned
+  // without a card, and live hobs summoned without a card for one Task tree. At a cap a summon asks.
+  summonLimits: Config.all({
+    maxUnattendedPerHob: Config.Int("HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_HOB").pipe(
+      Config.withDefault(DEFAULT_SUMMON_LIMITS.maxUnattendedPerHob),
+    ),
+    maxUnattendedPerTree: Config.Int("HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_TREE").pipe(
+      Config.withDefault(DEFAULT_SUMMON_LIMITS.maxUnattendedPerTree),
     ),
   }),
   // How many times a backpack item is put into a turn before it fails as a blocker (ADR 019); at least once.

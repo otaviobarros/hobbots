@@ -97,8 +97,8 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Skip for now" }).click();
-  // The last step names the provider and model the hob thinks with.
-  await expect(page.getByText("Codex · GPT-5.5", { exact: true })).toBeVisible();
+  // The last step names the provider, model and effort the hob thinks with (#1220).
+  await expect(page.getByText("Codex · GPT-5.5 · Medium effort", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Light the circle" }).click();
   await expect(page.getByRole("heading", { name: "Tinker is here!" })).toBeVisible();
 

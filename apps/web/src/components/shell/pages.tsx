@@ -30,6 +30,25 @@ export function Page({
   );
 }
 
+/** A section's 20 × 20 line icon at 18px, in the color of its tile. */
+function SectionLine({ path }: { path: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      width={18}
+      height={18}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
 /** A page header's icon: the section's line icon on a mint tile, or its pixel icon when it has no line icon. */
 function PageIcon({ icon }: { icon: IconName }) {
   const line = icon in LINE_ICONS ? LINE_ICONS[icon as keyof typeof LINE_ICONS] : undefined;
@@ -39,19 +58,27 @@ function PageIcon({ icon }: { icon: IconName }) {
       aria-hidden
       className="grid size-[38px] shrink-0 place-items-center rounded-tile bg-[color-mix(in_srgb,var(--color-mint)_16%,transparent)] text-mint"
     >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 20 20"
-        width={18}
-        height={18}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d={line} />
-      </svg>
+      <SectionLine path={line} />
+    </span>
+  );
+}
+
+/**
+ * A bar header's icon: the section's line icon in lantern on a lantern tile, in every theme, so it
+ * keeps its contrast on the light ones (#1220); the pixel icon only where a section has no line icon.
+ */
+function BarIcon({ icon }: { icon: IconName }) {
+  const line = icon in LINE_ICONS ? LINE_ICONS[icon as keyof typeof LINE_ICONS] : undefined;
+  return (
+    <span
+      aria-hidden
+      className="grid size-9.5 flex-none place-items-center rounded-tile bg-[color-mix(in_srgb,var(--color-lantern)_16%,transparent)] text-lantern"
+    >
+      {line === undefined ? (
+        <PixelArt rows={ICONS[icon]} palette={{ "#": "currentColor", o: "currentColor" }} size={24} />
+      ) : (
+        <SectionLine path={line} />
+      )}
     </span>
   );
 }
@@ -85,13 +112,7 @@ export function PageHeader({
         bar ? "flex-none gap-3.5 border-b border-line px-6 py-3.5" : "gap-3.5",
       )}
     >
-      {bar ? (
-        <span aria-hidden className="grid size-9.5 flex-none place-items-center rounded-tile bg-lantern/15">
-          <PixelArt rows={ICONS[icon]} palette={iconPalette(true)} size={24} />
-        </span>
-      ) : (
-        <PageIcon icon={icon} />
-      )}
+      {bar ? <BarIcon icon={icon} /> : <PageIcon icon={icon} />}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <h1 className={cn("m-0 font-heading text-heading font-bold", bar ? "text-text-strong" : "text-moonlight")}>
           {title}

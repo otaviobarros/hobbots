@@ -1,4 +1,4 @@
-import type { SkillsList } from "@hobbots/api";
+import type { SkillDetail, SkillsList } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -219,17 +219,53 @@ export const originOf = (sourceId: Skill["sourceId"], sources: ReadonlyArray<Ski
   sourceId === null ? null : (sources.find((source) => source.id === sourceId)?.origin ?? null);
 
 /**
- * A skill from `~/.agents/skills` (ADR 029): read-only in Hobbots, and out of backups and exports.
- * Its folder there, as `~/.agents/skills/pdf-forms`, or null for any other skill.
+ * The `~/.agents/skills` folder a skill comes from (ADR 029), or the one `HOBBOTS_AGENTS_SKILLS`
+ * names instead, or null for any other skill. Such a skill is read-only in Hobbots, and out of
+ * backups and exports.
  */
+export const agentsRootOf = (skill: Pick<Skill, "sourceId">, list: AgentsFolderList): string | null => {
+  const origin = originOf(skill.sourceId, list.sources);
+  return origin?._tag === "AgentsFolder" ? agentsFolderLabel(origin.path, list.agentsFolder.home) : null;
+};
+
+/** What naming a `~/.agents/skills` folder needs from the list: its sources, and the hub user's home folder. */
+type AgentsFolderList = Pick<SkillsList, "sources"> & {
+  readonly agentsFolder: Pick<SkillsList["agentsFolder"], "home">;
+};
+
+/** The folder a skill from `~/.agents/skills` lives in, as `~/.agents/skills/pdf-forms`, or null for any other skill. */
 export const agentsFolderOf = (
   skill: Pick<Skill, "sourceId" | "name">,
-  sources: ReadonlyArray<SkillSource>,
+  list: AgentsFolderList,
   revisions: ReadonlyArray<Pick<SkillRevision, "path">> = [],
 ): string | null => {
-  const origin = originOf(skill.sourceId, sources);
-  if (origin?._tag !== "AgentsFolder") return null;
-  return `${copy.source.agents}/${revisions[0]?.path ?? skill.name}`;
+  const root = agentsRootOf(skill, list);
+  return root === null ? null : `${root}/${revisions[0]?.path ?? skill.name}`;
+};
+
+/**
+ * The `~/.agents/skills` folder as the Skills page names it, or the folder `HOBBOTS_AGENTS_SKILLS`
+ * set instead. Only a folder inside `home`, the hub user's own home folder as the hub reports it,
+ * is shortened to `~`; any other, such as `/Users/Shared/skills`, keeps its whole path. Null, when
+ * the hub reads none, names the usual one.
+ */
+export const agentsFolderLabel = (path: string | null, home: string | null): string => {
+  if (path === null) return copy.source.agents;
+  const folder = path.length > 1 ? path.replace(/\/+$/, "") : path;
+  const root = home === null ? null : home.replace(/\/+$/, "");
+  if (root === null || root === "") return folder;
+  if (folder === root) return "~";
+  return folder.startsWith(`${root}/`) ? `~${folder.slice(root.length)}` : folder;
+};
+
+/**
+ * The revision a skill's use line names (ADR 029, The use line): the newest one a place is pinned
+ * to, so a rollback names the revision hobs use now; the newest revision when no place has it.
+ */
+export const usedRevision = (detail: Pick<SkillDetail, "skill" | "revisions" | "assignments">): number => {
+  const pinned = new Set(detail.assignments.map((one) => one.pin));
+  const used = detail.revisions.filter((one) => pinned.has(one.hash)).map((one) => one.number);
+  return used.length === 0 ? detail.skill.revisions : Math.max(...used);
 };
 
 /** A Git address without its scheme and `.git`, as `github.com/acme/skills`. */
@@ -240,7 +276,7 @@ const shortGit = (url: string) =>
     .replace(/\.git$/, "");
 
 /** Where a skill comes from, in a few words. */
-export const originText = (origin: SkillOrigin | null): string => {
+export const originText = (origin: SkillOrigin | null, home: string | null = null): string => {
   if (origin === null) return copy.source.written;
   switch (origin._tag) {
     case "Written":
@@ -252,7 +288,7 @@ export const originText = (origin: SkillOrigin | null): string => {
     case "Git":
       return origin.ref === null ? shortGit(origin.url) : `${shortGit(origin.url)} · ${origin.ref}`;
     case "AgentsFolder":
-      return copy.source.agents;
+      return agentsFolderLabel(origin.path, home);
   }
 };
 
@@ -263,6 +299,8 @@ export interface SkillRow {
   /** The revision number the row shows, or null when its pin is an older revision than the newest. */
   readonly number: number | null;
   readonly origin: SkillOrigin | null;
+  /** Where it comes from, in a few words, as `originText` says it. */
+  readonly where: string;
   /** For a set (ADR 029, Skill sets), the names of the skills its newest revision holds; null for a skill. */
   readonly set: ReadonlyArray<string> | null;
 }
@@ -284,6 +322,10 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
   const skills = new Map(list.skills.map((skill) => [skill.id, skill]));
   const sets = new Map(list.sets.map((set) => [set.skillId, set.skills.map((one) => one.name)]));
   const numberOf = (skill: Skill, pin: SkillRevisionHash) => (pin === skill.latest ? skill.revisions : null);
+  const originsOf = (skill: Skill) => {
+    const origin = originOf(skill.sourceId, list.sources);
+    return { origin, where: originText(origin, list.agentsFolder.home) };
+  };
   const groups = new Map<string, { scope: SkillScope; rows: Array<SkillRow> }>();
   for (const assignment of list.assignments) {
     const skill = skills.get(assignment.skillId);
@@ -294,7 +336,7 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
       skill,
       assignment,
       number: numberOf(skill, assignment.pin),
-      origin: originOf(skill.sourceId, list.sources),
+      ...originsOf(skill),
       set: sets.get(skill.id) ?? null,
     });
     groups.set(key, group);
@@ -312,7 +354,7 @@ export const libraryGroups = (list: SkillsList, hobs: HobDirectory): ReadonlyArr
       skill,
       assignment: null,
       number: skill.revisions,
-      origin: originOf(skill.sourceId, list.sources),
+      ...originsOf(skill),
       set: sets.get(skill.id) ?? null,
     }));
   return loose.length === 0 ? sorted : [...sorted, { key: "none", scope: null, rows: sortRows(loose) }];

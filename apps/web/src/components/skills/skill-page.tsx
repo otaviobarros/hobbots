@@ -14,7 +14,7 @@ import { SkillInstructions } from "./skill-instructions.tsx";
 import { SkillHeader, SkillLayout } from "./skill-layout.tsx";
 import { addedByOf, ReadOnlyNote, SkillTabs, type SkillViewOf } from "./skill-tabs.tsx";
 import type { Say } from "./skills-flash.ts";
-import { agentsFolderOf, type HobDirectory, skillTitle } from "./skills-model.ts";
+import { agentsFolderOf, agentsRootOf, type HobDirectory, skillTitle } from "./skills-model.ts";
 import { RevTag, SkillChip } from "./skills-parts.tsx";
 
 const copy = messages;
@@ -48,7 +48,8 @@ export function SkillPage({
   }
   const { skill } = detail;
   const title = skillTitle(skill.name);
-  const folder = agentsFolderOf(skill, list.sources, detail.revisions);
+  const folder = agentsFolderOf(skill, list, detail.revisions);
+  const root = agentsRootOf(skill, list);
   return (
     <SkillLayout
       trail={[{ key: "skill", step: <span>{title}</span> }]}
@@ -58,7 +59,7 @@ export function SkillPage({
         tags={
           <>
             <RevTag label={skillRevisionLabel({ number: skill.revisions })} />
-            {folder !== null && <SkillChip tone="later">{copy.chips.agents}</SkillChip>}
+            {root !== null && <SkillChip tone="later">{copy.chips.agents({ folder: root })}</SkillChip>}
           </>
         }
         title={title}
@@ -69,7 +70,7 @@ export function SkillPage({
             {` · ${
               folder === null
                 ? copy.skill.byline({ who: addedByOf(detail), when: formatDay(skill.createdAt) })
-                : copy.agents.byline({ when: formatDay(skill.createdAt) })
+                : copy.agents.byline({ folder: root ?? "", when: formatDay(skill.createdAt) })
             }`}
           </>
         }
@@ -82,7 +83,7 @@ export function SkillPage({
         first={{
           label: copy.skill.instructions,
           count: null,
-          body: <SkillInstructions view={view} detail={detail} fromFolder={folder !== null} />,
+          body: <SkillInstructions view={view} detail={detail} fromFolder={root} />,
         }}
         say={say}
       />

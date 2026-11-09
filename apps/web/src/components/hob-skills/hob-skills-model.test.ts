@@ -82,7 +82,7 @@ const list: SkillsList = {
   sources: [],
   assignments,
   projects: [site, docs],
-  agentsFolder: { path: null, problems: [] },
+  agentsFolder: { path: null, home: null, problems: [] },
   usesThisWeek: [],
   sets: [],
 };

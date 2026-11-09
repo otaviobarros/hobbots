@@ -250,6 +250,8 @@ export const messages = {
       `Backed up ${when} to ${path}. You can restore it from the welcome screen.`,
     backupNone: ({ folder }: { folder: string }) =>
       `Saves to ${folder}, the folder chosen under Backups. You can restore it from the welcome screen.`,
+    backupDefault: ({ folder }: { folder: string }) =>
+      `Saves to ${folder}. To save it somewhere else, choose a folder under Backups. You can restore it from the welcome screen.`,
     backupNoFolder: "Choose where backups go under Backups first.",
     backupRunning: "Backing up…",
     backupFailed: ({ reason }: { reason: string }) => `The backup did not finish: ${reason}`,

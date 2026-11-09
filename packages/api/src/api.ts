@@ -17,6 +17,7 @@ import {
   RuntimeKind,
   RuntimeModels,
   SkillName,
+  SummonCaps,
   THREAD_TITLE_MAX,
   Thread,
   ThreadId,
@@ -278,6 +279,12 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       params: { agentId: AgentId },
       success: Thread,
       error: [AgentNotFound, HobUnavailable],
+    }),
+    // The hob's live hobs summoned without asking you, and the caps on them (ADR 034).
+    HttpApiEndpoint.get("summonCaps", "/agents/:agentId/summon-caps", {
+      params: { agentId: AgentId },
+      success: SummonCaps,
+      error: AgentNotFound,
     }),
   )
   .middleware(DeviceSession)

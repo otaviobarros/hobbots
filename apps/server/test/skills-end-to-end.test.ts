@@ -299,7 +299,7 @@ describe("the skills library end to end", () => {
       _tag: "AgentsFolder",
       path: join(home, ".agents", "skills"),
     });
-    expect(library.agentsFolder).toEqual({ path: join(home, ".agents", "skills"), problems: [] });
+    expect(library.agentsFolder).toEqual({ path: join(home, ".agents", "skills"), home, problems: [] });
     expect(
       library.assignments
         .filter((one: { skillId: string }) => one.skillId === houseStyle.id)
