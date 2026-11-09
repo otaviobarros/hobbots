@@ -71,10 +71,17 @@ test("[TC-UX-412-01] once you allow a summon in the chat, each hob it made opens
   await page.keyboard.press("Enter");
   await expect(tray).toBeHidden({ timeout: 20_000 });
 
-  // The step now shows the decided card, with a card for each hob it made.
+  // Decided, the card folds into the call's step, which opens to a line per hob and a card for each hob it made.
   const decided = page.getByRole("main").getByRole("region", { name: "Bram proposes 2 new hobs" });
   const created = decided.getByRole("region", { name: "Created" });
-  await expect(created.getByRole("link")).toHaveCount(2, { timeout: 20_000 });
+  const opened = async () => {
+    await expect(decided).toHaveCount(0, { timeout: 20_000 });
+    await page.getByRole("list", { name: "Reply steps" }).getByRole("button").first().click();
+    await expect(created.getByRole("link")).toHaveCount(2, { timeout: 20_000 });
+  };
+  await opened();
+  await expect(decided.getByRole("status")).toContainText("Ines: Allowed");
+  await expect(decided.getByRole("status")).toContainText("Jory: Allowed");
   await expectAccessible(page, decided);
 
   for (const name of ["Ines", "Jory"]) {
@@ -84,6 +91,6 @@ test("[TC-UX-412-01] once you allow a summon in the chat, each hob it made opens
     await expect(profile.getByText("Summoned by Bram").first()).toBeVisible();
     await expectAccessible(page);
     await page.goBack();
-    await expect(created.getByRole("link", { name: `Open ${name}` })).toBeVisible({ timeout: 20_000 });
+    await opened();
   }
 });

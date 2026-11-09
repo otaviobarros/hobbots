@@ -36,7 +36,7 @@ export function SummoningSettings({
   const scope = (next: SummoningScope) => onEdit({ _tag: "Scope", scope: next });
   return (
     <>
-      <Section label={labels.who}>
+      <SummoningSection label={labels.who}>
         <ScopeSwitch
           label={messages.scope.summoned}
           note={messages.scope.summonedNote({ name })}
@@ -52,9 +52,9 @@ export function SummoningSettings({
           pending={pending}
           onChange={(on) => scope({ ...view.scope, self: on })}
         />
-      </Section>
+      </SummoningSection>
       {between}
-      <Section label={labels.mayDo}>
+      <SummoningSection label={labels.mayDo}>
         {shownGroups(view.scope).map((group) => (
           <div key={group.id} className="flex flex-col gap-1.5">
             <h4 className="m-0 pt-1.5 text-meta font-bold text-label">
@@ -72,13 +72,13 @@ export function SummoningSettings({
           </div>
         ))}
         <span className="text-detail text-label">{labels.note}</span>
-      </Section>
+      </SummoningSection>
     </>
   );
 }
 
 /** A labelled part of the settings, with the rule after its label as the Charm cards draw it. */
-function Section({ label, children }: { label: string; children: ReactNode }) {
+export function SummoningSection({ label, children }: { label: string; children: ReactNode }) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1.5">

@@ -1,4 +1,5 @@
 import { formatCount, plural } from "../../lib/format.ts";
+import { messages as webCopy } from "../web/messages.ts";
 
 /** User-facing copy for the Settings sections in this folder (STD-I18N-001). */
 export const messages = {
@@ -14,6 +15,7 @@ export const messages = {
       name: "Safety",
       intro: "How often hobs ask you first, and what they can open. Any hob can be made more careful from its profile.",
     },
+    web: { name: webCopy.settings.title, intro: webCopy.settings.intro },
     changes: {
       name: "Changes",
       intro: "Every change to your hobs, newest first: what changed, who changed it and the request behind it.",
@@ -40,6 +42,9 @@ export const messages = {
     nothing: "Nothing by that name.",
     entries: [
       { label: "Reduce motion", words: ["animation", "motion"], section: "app" },
+      { label: "Web limits", words: ["search", "searches", "pages", "web", "internet"], section: "web" },
+      { label: "Blocked sites", words: ["block", "site", "never read", "web"], section: "web" },
+      { label: "Page cache", words: ["cache", "clear", "web"], section: "web" },
       { label: "Changes to hobs", words: ["history", "log", "revert", "audit", "who changed"], section: "changes" },
       { label: "Open at login", words: ["start", "login", "startup"], section: "app" },
       { label: "Menu bar", words: ["close the window", "keep running"], section: "app" },

@@ -31,8 +31,10 @@ import {
   roleFields,
   type Thread,
   WEB_FETCH_LABEL,
+  type WebPageCache,
   type WebSettings,
   type WebUsage,
+  type WebUsageSummary,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -424,7 +426,7 @@ describe("hobs read web pages through the hub, end to end", () => {
     // A private network address asks even under Trusting, with Always for its host.
     const nas = await send(thread, `Read ${url("nas.test", "/admin")}`, fetchOf(url("nas.test", "/admin")));
     const pending = nas.pending as ApprovalRequest;
-    expect(pending).toMatchObject({ targets: ["nas.test"], grantable: true });
+    expect(pending).toMatchObject({ targets: ["nas.test"], grantable: true, reasonCode: "private-address" });
     expect(pending.reason).toBe("nas.test is on your local network, so reading it waits for you.");
     expect((await decide(pending, { decision: "approve", lifetime: "always" })).status).toBe(200);
     expect((await settled(thread, nas.before)).content).toContain("Title: Lamps on nas.test");
@@ -445,7 +447,7 @@ describe("hobs read web pages through the hub, end to end", () => {
     const before = asked.length;
     const leak = await send(thread, "Go on", fetchOf(built("lamps.test", "/collect?key=launch-key-7f3a")));
     const pending = leak.pending as ApprovalRequest;
-    expect(pending).toMatchObject({ tool: "web_fetch", grantable: false });
+    expect(pending).toMatchObject({ tool: "web_fetch", grantable: false, reasonCode: "written-url" });
     expect(pending.arguments).toMatchObject({ url: url("lamps.test", "/collect?key=launch-key-7f3a") });
     expect(pending.reason).toContain("not copied from you, a search result or a page read in this session");
     // Nothing was sent, not even a lookup of the name, before you decide.
@@ -531,7 +533,7 @@ describe("hobs read web pages through the hub, end to end", () => {
     const sent = asked.length;
     const written = await send(thread, "Go on", fetchOf(result("/lamp-oil/notes?key=launch-key-7f3a")));
     const pending = written.pending as ApprovalRequest;
-    expect(pending).toMatchObject({ tool: "web_fetch", grantable: false });
+    expect(pending).toMatchObject({ tool: "web_fetch", grantable: false, reasonCode: "written-url" });
     expect(pending.reason).toContain("not copied from you, a search result or a page read in this session");
     expect(asked.slice(sent)).toEqual([]);
     await decide(pending, { decision: "deny" });
@@ -738,6 +740,33 @@ describe("the hub records what hobs search and read, and holds them to their lim
     expect(hob.totals).toMatchObject({ searches: 1, pages: 1, estimatedCostUsd: null });
   }, 30_000);
 
+  // covers ADR 036 (Amendment: the screens), #1271
+  it("[TC-PE-1271-04] each page read keeps its redacted text on its own step, and its record names that step, for a page read twice and a page in parts", async () => {
+    await preset("balanced");
+    const wren = await summon("Wren", 1294);
+    const thread = (await request<Thread>("POST", `/api/agents/${wren.id}/threads`)).body;
+    const { reply } = await send(
+      thread,
+      `Read ${url("lamps.test", "/lamp")} twice, then ${url("lamps.test", "/long")}`,
+      fetchOf(url("lamps.test", "/lamp")),
+      fetchOf(url("lamps.test", "/lamp")),
+      fetchOf(url("lamps.test", "/long")),
+      hub("web_fetch", { url: url("lamps.test", "/long"), part: 2 }),
+    );
+    const steps = webSteps(reply as Message);
+    expect(steps).toHaveLength(4);
+    // The hub ends a page read's step with the text the hob got, whichever runtime made the call.
+    for (const step of steps) {
+      expect(step.state).toBe("done");
+      expect(step.output?.head).toContain("From lamps.test, written by other people");
+    }
+    expect(steps[2]?.output?.head).toContain("Part 1 of 2.");
+    expect(steps[3]?.output?.head).toContain("Part 2 of 2, the last.");
+    const pages = (await usage(`messageId=${reply?.id}`)).pages.toReversed();
+    expect(pages.map((page) => page.stepId)).toEqual(steps.map((step) => step.id));
+    expect(pages.map((page) => page.part)).toEqual([1, 1, 1, 2]);
+  }, 30_000);
+
   // covers ADR 036 (Usage and limits)
   it("[TC-PE-1269-04] past a hob's limits a search and a page are refused with words that name the limit, and past its daily limit its next turn has search off", async () => {
     await preset("balanced");
@@ -772,6 +801,51 @@ describe("the hub records what hobs search and read, and holds them to their lim
       "Web search is off for this turn. This hob reached its limit of 1 web search a day, set in Settings › Web.",
     );
     expect((await usage(`agentId=${sorrel.id}`)).totals.searches).toBe(1);
+  }, 30_000);
+
+  // covers ADR 036 (Usage and limits: Usage's searches and pages)
+  it("[TC-PE-1271-02] Usage lists each hob's searches and pages since a time, its turns at a limit and its busiest turns by chat", async () => {
+    await preset("balanced");
+    const tansy = await summon("Tansy", 1292);
+    await limits(tansy, { searchesPerTurn: 2 });
+    const since = new Date(Date.now() - 60_000).toISOString();
+    const thread = (await request<Thread>("POST", `/api/agents/${tansy.id}/threads`)).body;
+    const { reply } = await send(
+      thread,
+      `Search twice, then read ${url("lamps.test", "/lamp")}`,
+      "fake:search lamps",
+      "fake:search lamp wicks",
+      fetchOf(url("lamps.test", "/lamp")),
+    );
+    const summary = (await request<WebUsageSummary>("GET", `/api/web/usage/summary?since=${since}`)).body;
+    expect(summary.since).toBe(since);
+    expect(summary.hobs.find((hob) => hob.agentId === tansy.id)).toEqual({
+      agentId: tansy.id,
+      searches: 2,
+      pages: 1,
+      turnsAtLimit: 1,
+    });
+    const turn = summary.busiestTurns.find((each) => each.agentId === tansy.id);
+    expect(turn).toMatchObject({
+      turn: `reply:${reply?.id}`,
+      threadId: thread.id,
+      messageId: reply?.id,
+      searches: 2,
+      pages: 1,
+      reachedLimit: "searches",
+    });
+    expect(turn?.threadTitle).not.toBeNull();
+    expect(summary.totals.searches).toBeGreaterThanOrEqual(2);
+
+    // Nothing after now.
+    const later = new Date(Date.now() + 60_000).toISOString();
+    const none = (await request<WebUsageSummary>("GET", `/api/web/usage/summary?since=${later}`)).body;
+    expect(none).toMatchObject({ hobs: [], busiestTurns: [], turns: 0, totals: { searches: 0, pages: 0 } });
+
+    // The page cache answers what it holds, and Clear now empties it.
+    const held = (await request<WebPageCache>("GET", "/api/web/cache")).body;
+    expect(held.pages).toBeGreaterThanOrEqual(0);
+    expect((await request<WebPageCache>("DELETE", "/api/web/cache")).body).toEqual({ pages: 0, bytes: 0 });
   }, 30_000);
 
   // covers ADR 036 (Blocked sites)

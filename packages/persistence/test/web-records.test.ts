@@ -74,7 +74,10 @@ describe("web records and Settings › Web", () => {
         ...(yield* records.recordSearch(search("s1", "m1", "2026-11-07T10:00:00.000Z", "subscription (Max)"))),
         ...(yield* records.recordSearch(search("s2", "m1", "2026-11-08T10:00:00.000Z", "api-key (ANTHROPIC_API_KEY)"))),
         ...(yield* records.recordSearch(search("s3", null, "2026-11-08T11:00:00.000Z", null))),
-        ...(yield* records.recordFetch(page("p1", "m1", "2026-11-08T10:30:00.000Z"))),
+        ...(yield* records.recordFetch(
+          new WebFetchRecord({ ...page("p1", "m1", "2026-11-08T10:30:00.000Z"), stepId: "toolu_1" }),
+        )),
+        ...(yield* records.recordFetch(page("p0", "m0", "2026-11-08T09:00:00.000Z"))),
       ];
       const journal = yield* EventJournal;
       return {
@@ -83,6 +86,7 @@ describe("web records and Settings › Web", () => {
         turn: yield* records.usage({ messageId: MessageId.make("m1") }, 1),
         attempt: yield* records.usage({ attemptId: AttemptId.make("a1") }, 10),
         hob: yield* records.usage({ agentId: ada }, 10),
+        pages: (yield* records.usage({ agentId: ada }, 10)).pages,
         today: yield* records.searchesSince(ada, "2026-11-08T00:00:00.000Z"),
       };
     }).pipe(
@@ -97,8 +101,15 @@ describe("web records and Settings › Web", () => {
       "WebSearched",
       "WebSearched",
       "WebFetched",
+      "WebFetched",
     ]);
-    expect(read.journaled).toEqual(["WebSearched", "WebSearched", "WebSearched", "WebFetched"]);
+    expect(read.journaled).toEqual(["WebSearched", "WebSearched", "WebSearched", "WebFetched", "WebFetched"]);
+    // A page keeps the step of the call that read it (#1271); one recorded without a step has none.
+    expect(read.turn.pages.map((each) => [each.id, each.stepId])).toEqual([["p1", "toolu_1"]]);
+    expect(read.pages.map((each) => [each.id, each.stepId])).toEqual([
+      ["p1", "toolu_1"],
+      ["p0", null],
+    ]);
     expect(read.turn.count).toEqual({
       searches: 2,
       pages: 1,
@@ -108,7 +119,9 @@ describe("web records and Settings › Web", () => {
     });
     // The newest first, at most the limit, while the totals count them all.
     expect(read.turn.searches.map((each) => each.id)).toEqual(["s2"]);
-    expect(read.turn.pages[0]).toEqual(page("p1", "m1", "2026-11-08T10:30:00.000Z"));
+    expect(read.turn.pages[0]).toEqual(
+      new WebFetchRecord({ ...page("p1", "m1", "2026-11-08T10:30:00.000Z"), stepId: "toolu_1" }),
+    );
     expect(read.attempt.searches.map((each) => each.id)).toEqual(["s3"]);
     expect(read.hob.count.searches).toBe(3);
     expect(read.hob.searches[2]).toEqual(search("s1", "m1", "2026-11-07T10:00:00.000Z", "subscription (Max)"));
@@ -196,5 +209,56 @@ describe("web records and Settings › Web", () => {
     expect(read.outer).toEqual({ count: [3, 1], searches: ["s-leaf", "s-outer", "s-side"] });
     // The nested Quest counts its own Task and those under it, not the sibling or the outer Task.
     expect(read.nested).toEqual({ count: [1, 1], searches: ["s-leaf"] });
+  });
+
+  // covers ADR 036 (Usage and limits: Usage's searches and pages)
+  it("[TC-PE-1271-01] counts what every hob searched and read since a time, per hob and per turn, as the memory records do", async () => {
+    const recorded = Effect.gen(function* () {
+      const records = yield* WebRecords;
+      yield* records.recordSearch(search("s0", "m0", "2026-11-01T10:00:00.000Z", null));
+      yield* records.recordSearch(search("s1", "m1", "2026-11-07T10:00:00.000Z", null));
+      yield* records.recordSearch(search("s2", "m1", "2026-11-08T10:00:00.000Z", "api-key (ANTHROPIC_API_KEY)"));
+      yield* records.recordSearch(search("s3", null, "2026-11-08T11:00:00.000Z", null));
+      yield* records.recordFetch(page("p1", "m1", "2026-11-08T10:30:00.000Z"));
+      const used = yield* records.usageSince("2026-11-05T00:00:00.000Z");
+      return { ...used, turns: [...used.turns].sort((a, b) => a.turn.localeCompare(b.turn)) };
+    });
+    const stored = await Effect.gen(function* () {
+      yield* storedHob("ada");
+      return yield* recorded;
+    }).pipe(
+      Effect.provide(WebRecordsLive),
+      Effect.provide(EventJournal.layer),
+      Effect.provide(TestDatabase),
+      Effect.runPromise,
+    );
+    const inMemory = await recorded.pipe(Effect.provide(WebRecords.memory), Effect.runPromise);
+
+    expect(stored.count.searches).toBe(3);
+    expect(stored.count.pages).toBe(1);
+    expect(stored.hobs).toEqual([{ agentId: ada, searches: 3, pages: 1 }]);
+    expect(stored.turns).toEqual([
+      {
+        turn: "attempt:a1",
+        agentId: ada,
+        threadId: ThreadId.make("t1"),
+        messageId: null,
+        taskId: null,
+        at: "2026-11-08T11:00:00.000Z",
+        searches: 1,
+        pages: 0,
+      },
+      {
+        turn: "reply:m1",
+        agentId: ada,
+        threadId: ThreadId.make("t1"),
+        messageId: MessageId.make("m1"),
+        taskId: null,
+        at: "2026-11-08T10:30:00.000Z",
+        searches: 2,
+        pages: 1,
+      },
+    ]);
+    expect(inMemory).toEqual(stored);
   });
 });

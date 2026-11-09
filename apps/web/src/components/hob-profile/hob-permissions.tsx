@@ -34,6 +34,7 @@ import {
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { messages } from "../messages.ts";
 import { FolderList, LockedSwitch } from "../safety/safety-and-folders.tsx";
+import { HobWebLimitsRow, SiteRules } from "../web/hob-web.tsx";
 import { CheckedTag, EnforcementList, NeedsSandbox } from "./enforcement.tsx";
 
 /**
@@ -145,6 +146,9 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
               : copy.saveFailed({ name: hob.name })}
         </p>
       )}
+
+      <SiteRules hob={hob} permissions={data} />
+      <HobWebLimitsRow hob={hob} />
 
       <section aria-label={copy.folders({ name: hob.name })} className="flex flex-col gap-1.5">
         <h2 className="lbl m-0 text-label">{copy.folders({ name: hob.name })}</h2>

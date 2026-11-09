@@ -118,6 +118,8 @@ interface Scenario {
   readonly records?: Effect.Effect<boolean> | null;
   /** The user's answer when asked; null for a turn with nobody to ask. */
   readonly answer?: "approve" | "deny" | null;
+  /** Whether the call's step keeps the answer as its output. */
+  readonly keepsAnswer?: boolean;
 }
 
 /** Runs one call to `pip_read` and says what happened, in order. */
@@ -165,6 +167,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
         input: Schema.Struct({ shelf: Schema.String }),
         effect: scenario.effect ?? "read",
         otherwise: "Pip cannot be read",
+        ...(scenario.keepsAnswer === undefined ? {} : { keepsAnswer: scenario.keepsAnswer }),
         plan: (decoded, context) =>
           Effect.gen(function* () {
             happened.push(`planned ${decoded.shelf} for ${context.turn.agentId}`);
@@ -387,8 +390,44 @@ describe("the hub action pipeline (ADR 031)", () => {
     const { contexts } = await callPip({ shelf: "top" });
     expect(contexts).toHaveLength(1);
     const [context] = contexts as Array<Record<string, Record<string, unknown>>>;
-    expect(Object.keys(context ?? {}).sort()).toEqual(["access", "turn"]);
+    expect(Object.keys(context ?? {}).sort()).toEqual(["access", "stepId", "turn"]);
+    expect(context?.stepId).toBe("toolu_1");
     expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "messageId", "scope", "threadId"]);
+  });
+
+  // covers ADR 036 (Amendment: the screens), #1271
+  it("[TC-PE-1271-05] ends the step of an action that keeps its answer with the redacted answer, whichever runtime called it, and a refusal with nothing", async () => {
+    const kept = await callPip({ shelf: "top" }, { keepsAnswer: true });
+    expect(kept.answer.refused).toBe(false);
+    const finished = kept.events.filter((event) => event._tag === "ToolFinished");
+    expect(finished).toEqual([{ _tag: "ToolFinished", id: "toolu_1", failed: false, output: kept.answer.text }]);
+    expect(JSON.stringify(finished)).not.toContain(SECRET);
+    // The runtime's own end comes after the hub's (Claude Code's PostToolUse, Codex's item completed)
+    // and finds the step ended, so the step keeps the answer.
+    const started = {
+      _tag: "ToolStarted",
+      id: "toolu_1",
+      tool: "web_fetch",
+      operation: "use-web",
+      targets: [],
+      label: "Reading a page",
+    } as const;
+    const output = {
+      head: kept.answer.text,
+      tail: "",
+      omittedBytes: 0,
+      totalBytes: kept.answer.text.length,
+      logged: false,
+    };
+    const ended = nextSteps(nextSteps([], 0, started) ?? [], 0, finished[0] as RuntimeEvent, undefined, output) ?? [];
+    expect(nextSteps(ended, 0, { _tag: "StepEnded", id: "toolu_1" })).toBeNull();
+    expect(nextSteps(ended, 0, { _tag: "ToolFinished", id: "toolu_1", failed: false })).toBeNull();
+    expect(ended[0]).toMatchObject({ state: "done", output });
+
+    const refused = await callPip({ shelf: "locked" }, { keepsAnswer: true });
+    expect(refused.events.filter((event) => event._tag === "ToolFinished")).toEqual([]);
+    const plain = await callPip({ shelf: "top" });
+    expect(plain.events.filter((event) => event._tag === "ToolFinished")).toEqual([]);
   });
 });
 

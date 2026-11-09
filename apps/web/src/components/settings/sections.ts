@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { messages } from "./messages.ts";
 
 /** The sections of Settings after the overview, in the order the section list shows them. */
-export const SETTINGS_SECTIONS = ["app", "safety", "changes", "connections", "devices", "data", "help"] as const;
+export const SETTINGS_SECTIONS = ["app", "safety", "web", "changes", "connections", "devices", "data", "help"] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 

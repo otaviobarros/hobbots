@@ -10,6 +10,7 @@ import {
   WEB_PAGE_PART_CHARS,
   WebFetchInput,
   WebFetchRecord,
+  type WebPageCache,
   WebRecordId,
   webFetchJsonSchema,
   webTurnKey,
@@ -101,6 +102,11 @@ export class WebFetcher extends Context.Service<
   {
     readonly resolve: (url: URL) => Effect.Effect<WebTarget, WebFetchFailed>;
     readonly fetch: (url: URL, target: WebTarget) => Effect.Effect<WebFetched, WebFetchFailed>;
+    /** The pages the hub holds for a while, which Settings › Web counts and clears; absent where none are kept. */
+    readonly cache?: {
+      readonly held: Effect.Effect<WebPageCache>;
+      readonly clear: Effect.Effect<void>;
+    };
   }
 >()("@hobbots/agents/WebFetcher") {}
 
@@ -414,7 +420,14 @@ export const makeWebTools = <V extends WebVerdict>(
     };
 
     /** Records a page the turn read, with the answer's estimated tokens (ADR 036, Usage and limits). */
-    const recordPage = (turn: CharmTurn, asked: URL, page: WebPage, part: number, answer: string) =>
+    const recordPage = (
+      turn: CharmTurn,
+      stepId: string | null,
+      asked: URL,
+      page: WebPage,
+      part: number,
+      answer: string,
+    ) =>
       Option.match(records, {
         onNone: () => Effect.void,
         onSome: (store) =>
@@ -431,6 +444,7 @@ export const makeWebTools = <V extends WebVerdict>(
                 taskId: place === undefined ? (turn.taskId ?? null) : yield* place.taskId,
                 attemptId,
                 turn: webTurnKey({ messageId, attemptId }),
+                stepId,
                 at: DateTime.formatIso(yield* DateTime.now),
                 url: asked.href,
                 finalUrl: page.url,
@@ -468,6 +482,7 @@ export const makeWebTools = <V extends WebVerdict>(
     /** Reads `url` from `target`, following the redirects the policy allows, and the page's part. */
     const read = (
       turn: CharmTurn,
+      stepId: string | null,
       session: WebSession,
       access: ToolAccess,
       first: { readonly url: URL; readonly target: WebTarget },
@@ -498,7 +513,7 @@ export const makeWebTools = <V extends WebVerdict>(
               });
             }
             const answer = pageAnswer(page, part, hops, firstRead);
-            yield* recordPage(turn, first.url, page, part, answer);
+            yield* recordPage(turn, stepId, first.url, page, part, answer);
             return answer;
           }
           hops.push(url.href);
@@ -553,8 +568,10 @@ export const makeWebTools = <V extends WebVerdict>(
           effect: "read",
           operation: "use-web",
           otherwise: "no web page can be read",
+          // The step keeps the page's text, so Open on the page shows what the hob got (ADR 036).
+          keepsAnswer: true,
           unreadable: () => "Give the page's full URL as `url`, and a part number from 1 as `part` if you want one.",
-          plan: (input, { turn, access }: HubPlanContext) =>
+          plan: (input, { turn, access, stepId }: HubPlanContext) =>
             Effect.gen(function* () {
               const url = yield* pageUrl(input.url);
               const { limits, blockedSites } = yield* webLimitsOf(turn.agentId);
@@ -582,7 +599,7 @@ export const makeWebTools = <V extends WebVerdict>(
                   }
                   pages += 1;
                   const pinned = target ?? (yield* approvedTarget(session, approvals, access, url));
-                  return yield* read(charmTurn, session, access, { url, target: pinned }, part, blockedSites);
+                  return yield* read(charmTurn, stepId, session, access, { url, target: pinned }, part, blockedSites);
                 }),
               };
             }),
@@ -593,5 +610,6 @@ export const makeWebTools = <V extends WebVerdict>(
     return WebTools.of({
       forTurn: (turn: CharmTurn) =>
         offerHubActions({ owner: { _tag: "BuiltIn" }, actions: actionsFor(turn), decide })(turn),
+      ...(fetcher.cache === undefined ? {} : { cache: fetcher.cache }),
     });
   });

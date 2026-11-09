@@ -13,7 +13,7 @@ import type { HubCallStep, RuntimeEvent, ToolAccess, TurnApprovals } from "./run
 export interface AskableVerdict {
   readonly decision: PolicyDecision;
   readonly operation: AnyOperation;
-  readonly reason: { readonly message: string };
+  readonly reason: { readonly message: string; readonly code?: string };
   readonly targets: ReadonlyArray<string>;
   readonly onceOnly: boolean;
   readonly grantable: boolean;
@@ -145,6 +145,7 @@ export const askUntilDecided = <V extends AskableVerdict>(options: AskOptions<V>
         arguments: call.arguments,
         label: call.label,
         reason: asked.reason.message,
+        ...(asked.reason.code === undefined ? {} : { reasonCode: asked.reason.code }),
         policyVersion: asked.policyVersion,
         onceOnly: asked.onceOnly,
         grantable: asked.grantable,

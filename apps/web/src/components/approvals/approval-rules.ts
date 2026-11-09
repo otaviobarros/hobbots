@@ -33,10 +33,15 @@ const covers = (rule: GrantRule): "folder" | "file" | "command" | "branch" | "re
 /**
  * Always's label (ADR 015), named for what the request's rules cover: "Always for this folder" for a
  * file action, "Always for this branch" for a push, "Always for this site" for a web host. Rules that
- * cover different kinds of thing read plain "Always".
+ * cover different kinds of thing read plain "Always". A page on your local network reads "Always for this host".
  */
-export const alwaysLabel = (approval: Pick<ApprovalRequest, "rules">): string => {
+export const alwaysLabel = (
+  approval: Pick<ApprovalRequest, "rules"> & Partial<Pick<ApprovalRequest, "reasonCode">>,
+): string => {
   const words = messages.approval.always;
+  // A page on your local network is answered for its host, which may be an address rather than a site (ADR 036).
+  if (approval.reasonCode === "private-address" && approval.rules.every((rule) => rule._tag === "Host"))
+    return words.host;
   const kinds = new Set(approval.rules.map(covers));
   const [kind] = kinds;
   if (kind === undefined || kinds.size > 1) return words.mixed;

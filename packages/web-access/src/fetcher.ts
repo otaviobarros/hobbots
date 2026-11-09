@@ -233,6 +233,20 @@ export const WebAccessWith = (options: WebAccessOptions) =>
             return { host, addresses: found.map((address) => normalizeHost(NetAddress.formatIp(address)) ?? "") };
           }),
         fetch: (url, target) => Cache.get(pages, url.href).pipe(Effect.provideService(Pinned, target)),
+        cache: {
+          // Only pages count: a redirect or robots.txt kept beside them is not a page a hob read.
+          held: Effect.map(Cache.values(pages), (values) => {
+            let count = 0;
+            let bytes = 0;
+            for (const value of values) {
+              if (value._tag !== "Page") continue;
+              count += 1;
+              bytes += value.page.bytes;
+            }
+            return { pages: count, bytes };
+          }),
+          clear: Effect.andThen(Cache.invalidateAll(pages), Cache.invalidateAll(robots)),
+        },
       });
     }),
   );

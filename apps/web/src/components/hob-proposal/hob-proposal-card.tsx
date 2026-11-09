@@ -1,4 +1,5 @@
 import type { HobProposalView } from "@hobbots/api";
+import type { HobProposal } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, type Ref, useRef, useState } from "react";
@@ -14,7 +15,7 @@ import { useMoveOn } from "../move-on/move-on.tsx";
 import { allowableRows, hobProposalWhat } from "./hob-proposal-model.ts";
 import { messages } from "./messages.ts";
 import { AlwaysAllow, CreatedHobs } from "./proposal-extras.tsx";
-import { ProposalRow } from "./proposal-row.tsx";
+import { ProposalRow, RowState } from "./proposal-row.tsx";
 
 const copy = messages;
 
@@ -35,23 +36,20 @@ const errorText = (error: unknown) => {
 };
 
 /**
- * A hob proposal as one card (ADR 034, Asking is a proposal), the same in the Inbox and on the call's
- * step in the chat: a row per hob, each with Allow and Deny, and Edit in Summon for a new hob; Allow
+ * A hob proposal as one card (ADR 034, Asking is a proposal), the same in the Inbox and in the chat's
+ * Needs-you tray: a row per hob, each with Allow and Deny, and Edit in Summon for a new hob; Allow
  * all and Deny all; "Always allow" for each field that asked; and once a summon row is allowed, a
  * card for the hob it made, which opens its profile.
  */
 export function HobProposalCard({
   view,
   who,
-  heading = false,
   bare = false,
   targets,
 }: {
   view: HobProposalView;
   /** The manager's name. */
   who: string;
-  /** Shows what the proposal asks above it, as the chat does; the Inbox has it as its title. */
-  heading?: boolean;
   /** In the Needs-you tray: no edge or label of its own, since the tray gives both. */
   bare?: boolean;
   /**
@@ -76,7 +74,6 @@ export function HobProposalCard({
   const what = hobProposalWhat(proposal, who);
   return (
     <ProposalFrame frameRef={frame} label={copy.cardLabel({ what })} state={proposal.state} bare={bare}>
-      {heading && <h3 className="m-0 text-ui font-semibold text-text-strong">{what}</h3>}
       {proposal.safety !== null && open && (
         <p className="m-0 text-detail text-lantern">{copy.safety({ reason: proposal.safety })}</p>
       )}
@@ -186,9 +183,34 @@ export function HobProposalStep({ proposalId, who }: { proposalId: string; who: 
   if (view.data.proposal.state === "open") {
     return <p className="m-0 ps-5.5 text-meta text-lantern">{copy.inTray}</p>;
   }
+  return <DecidedStep proposal={view.data.proposal} who={who} />;
+}
+
+/**
+ * A decided proposal on its step: one quiet line per hob with what came of it, as a decided approval
+ * leaves one line, and a card per hob it made, which opens its profile. The full card stays in the
+ * Inbox.
+ */
+function DecidedStep({ proposal, who }: { proposal: HobProposal; who: string }) {
   return (
-    <div className="ps-5.5 pt-1">
-      <HobProposalCard view={view.data} who={who} heading />
-    </div>
+    <section
+      aria-label={copy.cardLabel({ what: hobProposalWhat(proposal, who) })}
+      data-testid="hob-proposal"
+      data-state={proposal.state}
+      className="flex flex-col gap-2 ps-5.5 pt-1"
+    >
+      {/* The status sits on a wrapper, so the rows keep their list (STD-UI-003). */}
+      <div role="status">
+        <ul aria-label={copy.rows} className="m-0 flex list-none flex-col gap-0.5 p-0">
+          {proposal.rows.map((row) => (
+            <li key={row.id} className="text-meta">
+              <span className="text-text-strong">{copy.rowLine({ hob: row.label })}</span>
+              <RowState row={row} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <CreatedHobs proposal={proposal} />
+    </section>
   );
 }

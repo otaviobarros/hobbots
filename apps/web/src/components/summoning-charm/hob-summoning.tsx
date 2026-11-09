@@ -11,6 +11,7 @@ import { useUpdatePermissions } from "../../api/queries.ts";
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { CharmMark } from "../hob-profile/github-charm.tsx";
 import { messages } from "./messages.ts";
+import { SummonCapsSection } from "./summon-caps.tsx";
 import { hobEditPayload, hobSummoning, hobSwitchPayload, type SummoningHeld } from "./summoning-model.ts";
 import { SummoningSettings } from "./summoning-settings.tsx";
 
@@ -96,6 +97,7 @@ export function HobSummoning({
               note: copy.note({ name: hob.name }),
             }}
             onEdit={(edit) => update.mutate(hobEditPayload(stored.policy, current, edit))}
+            between={<SummonCapsSection hob={hob} />}
           />
         </div>
       ) : (

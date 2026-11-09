@@ -121,6 +121,9 @@ export const ServerConfig = Config.all({
   fakeMemory: Config.Literals(["off", "empty", "seeded", "down"], "HOBBOTS_FAKE_MEMORY").pipe(
     Config.withDefault("off" as const),
   ),
+  // A stand-in for the web (ADR 036): pages under hobbots.test, read with no network, as the fake
+  // runtime's search results link to.
+  fakeWeb: Config.Literals(["off", "on"], "HOBBOTS_FAKE_WEB").pipe(Config.withDefault("off" as const)),
   // How often, in seconds, the hub asks memory what changed for Memory › What changed.
   memoryLookSeconds: Config.Int("HOBBOTS_MEMORY_LOOK_SECONDS").pipe(Config.withDefault(60)),
 });

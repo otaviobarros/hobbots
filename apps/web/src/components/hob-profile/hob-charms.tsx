@@ -3,12 +3,14 @@ import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { messages } from "../messages.ts";
 import { HobSummoning } from "../summoning-charm/hob-summoning.tsx";
+import { BuiltInCharms } from "../web/built-in-charms.tsx";
 import { GitHubCharm } from "./github-charm.tsx";
 import { LoadFailed, useHobPermissions } from "./hob-permissions.tsx";
 
 /**
  * The hob's Charms (ADR 014): one card for each app connected in Settings, each with who the hob
- * acts as there and what it may do, then the Summoning Charm (ADR 034).
+ * acts as there and what it may do, then the Summoning Charm (ADR 034), and the web tools every hob
+ * has built in (ADR 036).
  */
 export function CharmsTab({ hob }: { hob: Agent }) {
   const copy = messages.charms;
@@ -26,6 +28,7 @@ export function CharmsTab({ hob }: { hob: Agent }) {
         retry={() => void permissions.refetch()}
       />
       <HobSummoning hob={hob} permissions={permissions.data} outdated={permissions.outdated} />
+      <BuiltInCharms hob={hob} permissions={permissions.data} />
       <div className="flex items-center gap-3 rounded-card border-(length:--edge) border-dashed border-line-2 px-4 py-3.5">
         <span className="flex-1 text-ui text-text-secondary">{copy.more}</span>
         <Button asChild variant="outline">

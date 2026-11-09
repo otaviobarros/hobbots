@@ -6,7 +6,17 @@ import type {
   UpdateAgentPayload,
   UpdateHobPermissionsPayload,
 } from "@hobbots/api";
-import type { Agent, AgentId, Brain, Message, MessageId, RuntimeKind, ThreadId, UsagePeriod } from "@hobbots/domain";
+import type {
+  Agent,
+  AgentId,
+  Brain,
+  Message,
+  MessageId,
+  RuntimeKind,
+  SummonCaps,
+  ThreadId,
+  UsagePeriod,
+} from "@hobbots/domain";
 import { messagePreview, Thread } from "@hobbots/domain";
 import { keepPreviousData, type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { periodStart } from "../lib/usage.ts";
@@ -197,6 +207,18 @@ export const useRetireAgain = () =>
   useHobChange((agentId: AgentId) =>
     call((c) => c.agents.retire({ params: { agentId }, payload: { activeWork: "finish" } })),
   );
+
+/**
+ * A hob's live hobs summoned without asking you, against the caps on them (ADR 034). The count
+ * changes as the hob summons or retires hobs, so `basis` names the hobs it summoned, from the hob
+ * list the hub's events keep current, and a change to them reads it again.
+ */
+export const summonCapsQuery = (agentId: AgentId, basis: ReadonlyArray<unknown>) =>
+  queryOptions({
+    queryKey: ["summon-caps", agentId, ...basis],
+    queryFn: () => call((c) => c.agents.summonCaps({ params: { agentId } })),
+    placeholderData: (previous: SummonCaps | undefined) => previous,
+  });
 
 /**
  * What a hob may touch. The answer depends on the hob's configuration version and on the setup's

@@ -11,6 +11,7 @@ import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "../messages.ts";
 import { limitRefill, planOf, usePlans } from "../usage/plan-summary.ts";
+import { type ReplyWebParts, useReplyRowWeb } from "../web/reply-web.tsx";
 import { ReplySteps } from "./reply-steps.tsx";
 import { SettleCharmCall } from "./settle-charm-call.tsx";
 
@@ -58,6 +59,7 @@ export function MessageRow({
   focused = false,
   resume,
   after,
+  web,
   children,
 }: {
   message: Message;
@@ -65,6 +67,7 @@ export function MessageRow({
   focused?: boolean;
   resume?: ContinueReply | undefined;
   after?: ReactNode;
+  web?: ReplyWebParts | undefined;
   children?: ReactNode;
 }) {
   const id = messageElementId(message.id);
@@ -78,7 +81,7 @@ export function MessageRow({
   }
 
   return (
-    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} after={after}>
+    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} after={after} web={web}>
       {children}
     </ReplyRow>
   );
@@ -91,6 +94,7 @@ function ReplyRow({
   focused,
   resume,
   after,
+  web,
   children,
 }: {
   message: Message;
@@ -99,10 +103,12 @@ function ReplyRow({
   focused: boolean;
   resume: ContinueReply | undefined;
   after: ReactNode;
+  web: ReplyWebParts | undefined;
   children: ReactNode;
 }) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
+  const { steps, ...searched } = useReplyRowWeb(web, message, hob);
   return (
     <article
       id={id}
@@ -119,8 +125,9 @@ function ReplyRow({
         <span className="text-meta text-label">{writing ? copy.writing : formatTime(message.createdAt)}</span>
       </span>
       <div className="ms-10 flex min-w-0 flex-col gap-[3px]">
+        {searched.lines}
         <ReplySteps
-          steps={message.steps}
+          steps={steps}
           inProgress={streaming}
           logUrl={(stepId) => toolLogUrl(message.threadId, message.id, stepId)}
           settle={(stepId) => <SettleCharmCall threadId={message.threadId} messageId={message.id} stepId={stepId} />}
@@ -132,6 +139,8 @@ function ReplyRow({
         ) : (
           <ReplyMarkdown content={message.content} streaming={streaming} caret={writing} />
         )}
+        {searched.sources}
+        {searched.sheet}
         {after}
         {message.status === "stopping" && (
           <span role="status" className="flex items-center gap-2 text-detail text-lantern">

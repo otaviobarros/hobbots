@@ -26,5 +26,4 @@
 ## Gaps
 
 - No real model was run. Whether real Claude Code and Codex models hand summoning work over, ask who should be responsible, and use the Summoning tools well is tracked in [#1314](https://github.com/otaviobarros/hobbots/issues/1314), with the steps in the [hob management checklist](checklists/hob-management.md).
-- The Charms tab does not show the live counts against the caps yet ([#410](https://github.com/otaviobarros/hobbots/issues/410)).
 - The packaged Mac app was not run.

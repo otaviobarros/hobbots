@@ -1324,6 +1324,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             ...(proposal.taskId === null ? {} : { taskId: proposal.taskId }),
           },
           access,
+          stepId: proposal.stepId,
           key: proposal.call.key,
         };
         const prepared = yield* prepare(context).pipe(
