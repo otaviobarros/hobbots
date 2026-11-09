@@ -14,6 +14,7 @@ const copy = messages;
 
 const STATE_TONE: Record<HobProposalRow["state"], string> = {
   pending: "text-lantern",
+  applying: "text-label",
   allowed: "text-mint",
   denied: "text-label",
   failed: "text-rose",

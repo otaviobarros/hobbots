@@ -171,6 +171,7 @@ export class SummoningHub extends Context.Service<
         changedSince: (row) => Effect.flatMap(hub.applier, (made) => made.changedSince(row)),
         alwaysAllow: (proposal, operation) =>
           Effect.flatMap(hub.applier, (made) => made.alwaysAllow(proposal, operation)),
+        reconcile: (proposal, row) => Effect.flatMap(hub.applier, (made) => made.reconcile(proposal, row)),
       });
       yield* hub.bind({
         hobs: yield* HobService,
@@ -1378,9 +1379,34 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
                   overrides: { ...everyHob.overrides, ...manager.policy.charms?.overrides, ...allowed },
                   summoning: everyHob.scope,
                 };
-          yield* services.hobs
+          const changed = yield* services.hobs
             .change(manager.id, { permissions: { charms } }, YOU)
             .pipe(Effect.mapError((error) => proposalRefused(proposal, null, failure(error))));
+          return { before: manager.configVersion, after: changed.configVersion };
+        }),
+      reconcile: (proposal, row) =>
+        Effect.gen(function* () {
+          const services = yield* hub.services;
+          const found = yield* services.repo.findAgent(row.hobId);
+          if (Option.isNone(found)) return null;
+          const agent = found.value;
+          switch (proposal.kind) {
+            case "summon":
+              return `Summoned ${describeHob(agent).slice(2)}`;
+            case "change": {
+              // Made by this proposal when its hob's latest version says so.
+              if (row.change === null || agent.configVersion === row.configVersion) return null;
+              const latest = yield* services.repo.findAgentConfig(agent.id, agent.configVersion);
+              const actor = Option.isSome(latest) ? latest.value.actor : null;
+              return actor?._tag === "YouApplyingProposal" && actor.proposalId === proposal.id
+                ? `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`
+                : null;
+            }
+            default: {
+              const { status } = LIFECYCLE[LIFECYCLE_TOOL[proposal.kind]];
+              return agent.status === status && agent.status !== row.status ? `${agent.name} is ${status} now.` : null;
+            }
+          }
         }),
     };
     yield* hub.bindApplier(applier);

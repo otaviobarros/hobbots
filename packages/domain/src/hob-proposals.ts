@@ -22,10 +22,13 @@ export const HobProposalKind = Schema.Literals(["summon", "change", "pause", "wa
 export type HobProposalKind = typeof HobProposalKind.Type;
 
 /**
- * Where one row stands: `pending` until you decide it; `allowed` once what it proposes was made;
- * `denied` when you said no; `failed` when you allowed it and the hub could not make it, with why.
+ * Where one row stands: `pending` until you decide it; `applying` once you allowed it, while the hub
+ * makes it; `allowed` once what it proposes was made; `denied` when you said no; `failed` when you
+ * allowed it and the hub could not make it, with why. `applying` is saved before the hub makes
+ * anything, so a row the hub stopped in the middle of is checked against the hob before anything else
+ * decides it.
  */
-export const HobProposalRowState = Schema.Literals(["pending", "allowed", "denied", "failed"]);
+export const HobProposalRowState = Schema.Literals(["pending", "applying", "allowed", "denied", "failed"]);
 export type HobProposalRowState = typeof HobProposalRowState.Type;
 
 /**
@@ -100,7 +103,7 @@ export const hobProposalOpen = (proposal: Pick<HobProposal, "state">): boolean =
 
 /** Whether every row of a proposal is decided, so it settles. */
 export const everyRowDecided = (rows: ReadonlyArray<HobProposalRow>): boolean =>
-  rows.every((row) => row.state !== "pending");
+  rows.every((row) => row.state !== "pending" && row.state !== "applying");
 
 /**
  * What the manager is told once a proposal settles: row by row, what was created, changed or denied.
@@ -109,6 +112,8 @@ export const everyRowDecided = (rows: ReadonlyArray<HobProposalRow>): boolean =>
 export const hobProposalOutcomeText = (proposal: Pick<HobProposal, "rows" | "alwaysAllowed">): string => {
   const lines = proposal.rows.map((row) => {
     switch (row.state) {
+      case "applying":
+        return `- ${row.label}: the user allowed it, and Hobbots is making it.`;
       case "allowed":
         return `- ${row.label}: the user allowed it. ${row.outcome ?? ""}`.trimEnd();
       case "denied":

@@ -37,6 +37,7 @@ export const messages = {
   editedNote: "Your version",
   state: {
     pending: "Waiting for you",
+    applying: "Being made",
     allowed: "Allowed",
     denied: "Denied",
     failed: "Could not be done",

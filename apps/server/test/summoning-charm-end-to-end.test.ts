@@ -1127,7 +1127,8 @@ describe("the Summoning Charm, end to end", () => {
     await chiefAnswers({});
     const hire = await turn(chief, hub("summoning_summon", { key: "hire-pair", hobs: [draft("Opal"), draft("Pim")] }));
     await decideProposal(hire, "allow-all");
-    const [opal, pim] = ["Opal", "Pim"].map((name) => summonedNamed(name));
+    const opal = await summonedNamed("Opal");
+    const pim = await summonedNamed("Pim");
     await chiefAnswers({ "summoning.pause": "ask" });
 
     // The answer went to Never while the proposal waited.
@@ -1137,7 +1138,7 @@ describe("the Summoning Charm, end to end", () => {
     const never = await onProposal(opalView, `rows/${opalView.proposal.rows[0]?.id}/allow`);
     expect(never.status).toBe(422);
     expect(JSON.stringify(never.body)).toContain("is at Never for you");
-    expect((await hob((await opal).id)).status).toBe("active");
+    expect((await hob(opal.id)).status).toBe("active");
     await decideProposal(pauseOpal, "deny-all");
 
     // The hob left the chief's scope while the proposal waited.
@@ -1155,7 +1156,7 @@ describe("the Summoning Charm, end to end", () => {
       const outside = await onProposal(pimView, `rows/${pimView.proposal.rows[0]?.id}/allow`);
       expect(outside.status).toBe(422);
       expect(JSON.stringify(outside.body)).toContain("is outside your Summoning scope");
-      expect((await hob((await pim).id)).status).toBe("active");
+      expect((await hob(pim.id)).status).toBe("active");
     } finally {
       await permissions(chief, {
         charms: {
@@ -1177,5 +1178,36 @@ describe("the Summoning Charm, end to end", () => {
     expect((await allHobs()).some((agent) => agent.name === "Quill")).toBe(false);
     await chiefAnswers({});
     await decideProposal(hireQuill, "deny-all");
+  });
+  // covers ADR 034 ("Always allow" for a hob managing itself; Changed since)
+  it("[TC-AG-409-10] Always allow on a hob's change to itself leaves that change yours to allow, and an edit of yours since still makes it stale", async () => {
+    const sage = await create("Sage", 4010);
+    await permissions(sage, {
+      ownFolders: [team],
+      charms: { granted: ["summoning"], summoning: { summoned: true, hobs: [], self: true } },
+    });
+    const change = (key: string, instructions: string) =>
+      turn(sage, hub("summoning_change", { key, changes: [{ hob: "Sage", instructions }] }));
+    const asked = await change("calmer", "Be calm.");
+    const view = asked.proposal as HobProposalView;
+    expect(view.proposal.asks).toEqual(["summoning.self-instructions"]);
+    const always = await onProposal(view, "always-allow", { operation: "summoning.self-instructions" });
+    expect(always.status).toBe(200);
+    // The change "Always allow" made to Sage is the proposal's own, so the row is not stale.
+    expect(always.body.changedSince).toEqual([]);
+    await decideProposal(asked, "allow-all");
+    expect((await hob(sage.id)).instructions).toBe("Be calm.");
+
+    // With self-instructions at Ask again, an edit of yours after a proposal was made still leaves
+    // its row to deny.
+    await permissions(sage, {
+      charms: { granted: ["summoning"], overrides: { ...SUMMONING_DEFAULTS, ...SUMMONING_SELF_DEFAULTS } },
+    });
+    const later = await change("terser", "Be terse.");
+    const laterView = later.proposal as HobProposalView;
+    expect((await request("PATCH", `/api/agents/${sage.id}`, { goodAt: "Calm answers." })).status).toBe(200);
+    const stale = await proposalOf(laterView.proposal.id);
+    expect(stale.changedSince).toEqual([laterView.proposal.rows[0]?.id]);
+    await decideProposal(later, "deny-all");
   });
 });
