@@ -1,4 +1,5 @@
 import type { CharmOperationId } from "@hobbots/domain";
+import { formatCount } from "../../lib/format.ts";
 import type { SummoningGroupId } from "./summoning-model.ts";
 
 /** The copy of the Summoning Charm on a hob's Charms tab and of "Summoning for every hob" in Settings (ADR 034). */
@@ -30,6 +31,15 @@ export const messages = {
     note: "A hob's own Charms tab can take Summoning away from that hob, or give it its own scope and answers.",
     saveFailed: "Hobbots could not save that change. Try again.",
     readFailed: "Hobbots could not read Summoning for every hob.",
+  },
+  caps: {
+    heading: "Summoned without asking you",
+    live: ({ name }: { name: string }) => `Live hobs ${name} summoned without asking`,
+    count: ({ live, cap }: { live: number; cap: number }) => `${formatCount(live)} of ${formatCount(cap)}`,
+    tree: ({ cap }: { cap: number }) =>
+      `Up to ${formatCount(cap)} in each Task tree, counting every hob that summons for it.`,
+    note: "At a limit, the next summon asks you first. Hobs you approve never count, and retiring one frees its place.",
+    failed: ({ name }: { name: string }) => `Hobbots could not read how many hobs ${name} summoned without asking.`,
   },
   scope: {
     summoned: "Hobs it summoned",
