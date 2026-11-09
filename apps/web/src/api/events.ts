@@ -25,6 +25,7 @@ import { failedTaskChanged } from "./failed-tasks.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import { applyHobChanges } from "./hob-changes.ts";
+import { hobProposalsChanged } from "./hob-proposals.ts";
 import { hobSkillsChanged } from "./hob-skills.ts";
 import { hubQuestionChanged } from "./hub-questions.ts";
 import type { ConnectionState } from "./live.ts";
@@ -229,7 +230,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     void refreshSkillUses(queryClient);
     return;
   }
-  if (applySkillEvent(queryClient, event)) return;
+  if (applyReviewEvent(queryClient, event)) return;
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);
     return;
@@ -302,6 +303,21 @@ const isProposalEvent = (event: HobbotsEvent): event is ProposalEvent => PROPOSA
  * skills, which the composer's `/` list shows (ADR 029). A note on a skill shows in its Activity.
  * Whether the event was one of these.
  */
+type HobProposalEvent = Extract<HobbotsEvent, { readonly _tag: "HobProposalRequested" | "HobProposalChanged" }>;
+
+/** What waits for your review: a hob proposal (ADR 034), or a skill's proposal, update or change. */
+const applyReviewEvent = (
+  queryClient: QueryClient,
+  event: HobbotsEvent,
+): event is HobProposalEvent | ProposalEvent | SkillLibraryChange | SkillUpdateEvent => {
+  // A hob proposal was made or moved: the Inbox and the reply step that shows it read it again.
+  if (event._tag === "HobProposalRequested" || event._tag === "HobProposalChanged") {
+    void hobProposalsChanged(queryClient);
+    return true;
+  }
+  return applySkillEvent(queryClient, event);
+};
+
 const applySkillEvent = (
   queryClient: QueryClient,
   event: HobbotsEvent,

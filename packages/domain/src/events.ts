@@ -6,6 +6,7 @@ import { BackpackItem } from "./backpack.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
+import { HobProposal } from "./hob-proposals.ts";
 import { HubQuestion } from "./hub-question.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
@@ -200,6 +201,13 @@ const SkillRemoved = Schema.TaggedStruct("SkillRemoved", { skill: Skill });
 const SkillProposalRequested = Schema.TaggedStruct("SkillProposalRequested", { proposal: SkillProposal });
 /** A proposal moved: you accepted it and the hub is writing it, it was added, or you said Not now. */
 const SkillProposalChanged = Schema.TaggedStruct("SkillProposalChanged", { proposal: SkillProposal });
+/**
+ * A Summoning Charm call that asks became a proposal (ADR 034), recorded on the manager's call before
+ * you see it. It waits for you in the Inbox and on the call's step.
+ */
+const HobProposalRequested = Schema.TaggedStruct("HobProposalRequested", { proposal: HobProposal });
+/** You decided a row of a proposal, edited one, pressed "Always allow" on it, or it settled. */
+const HobProposalChanged = Schema.TaggedStruct("HobProposalChanged", { proposal: HobProposal });
 /** A hob noted that a skill is wrong, outdated or unclear. */
 const SkillFeedbackLeft = Schema.TaggedStruct("SkillFeedbackLeft", { feedback: SkillFeedback });
 /**
@@ -317,6 +325,8 @@ export const JournaledEvent = Schema.Union([
   SkillRemoved,
   SkillProposalRequested,
   SkillProposalChanged,
+  HobProposalRequested,
+  HobProposalChanged,
   SkillFeedbackLeft,
   SkillUsed,
   SkillUpdateFound,
@@ -405,6 +415,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillRemoved: 1,
   SkillProposalRequested: 1,
   SkillProposalChanged: 1,
+  HobProposalRequested: 1,
+  HobProposalChanged: 1,
   SkillFeedbackLeft: 1,
   SkillUsed: 1,
   SkillUpdateFound: 1,

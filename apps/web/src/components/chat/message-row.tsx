@@ -6,6 +6,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { type CSSProperties, type ReactNode, useEffect } from "react";
 import { toolLogUrl } from "../../api/client.ts";
 import { formatTime } from "../../lib/time.ts";
+import { HobProposalStep } from "../hob-proposal/hob-proposal-card.tsx";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "../messages.ts";
@@ -123,6 +124,7 @@ function ReplyRow({
           inProgress={streaming}
           logUrl={(stepId) => toolLogUrl(message.threadId, message.id, stepId)}
           settle={(stepId) => <SettleCharmCall threadId={message.threadId} messageId={message.id} stepId={stepId} />}
+          proposal={(proposalId) => <HobProposalStep proposalId={proposalId} who={hob.name} />}
         />
         {children}
         {writing && message.content.length === 0 ? (

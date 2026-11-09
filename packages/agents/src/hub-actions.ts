@@ -1,6 +1,6 @@
 import { type AnyOperation, type CharmDeclaration, CharmWriteKey, toolInputJsonSchema } from "@hobbots/domain";
 import { Effect, Option, Schema, type Scope } from "effect";
-import { type AskableVerdict, approvalNote, askOnStep } from "./asking.ts";
+import { type AskableVerdict, approvalNote, askOnStep, showStarted } from "./asking.ts";
 import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import type { CharmTurn } from "./charms.ts";
 import {
@@ -122,6 +122,17 @@ export interface HubWritePlan<R extends HubRequest> extends HubPlanBase<R> {
     /** What the hob is also told once the call ran or was not sent, such as what was redacted. */
     readonly note?: string;
     readonly send: Effect.Effect<WriteOutcome>;
+    /**
+     * For an action whose Ask is a proposal (ADR 034): when the policy asks, the pipeline runs this
+     * instead of asking on an approval card and sending. It records the proposal on the call, reports
+     * it with `waiting` so the call's step (`stepId`) shows its card, waits for you to decide its
+     * rows, and says how it ended. It never runs `send`, since what you allow is made by your own use
+     * cases.
+     */
+    readonly proposal?: (asked: {
+      readonly stepId: string | null;
+      readonly waiting: (proposalId: string) => void;
+    }) => Effect.Effect<WriteOutcome>;
   };
 }
 
@@ -464,6 +475,43 @@ export const makeHubActions =
         return yield* refuse(`${outcome.text}${note}${approved}`);
       });
 
+    /**
+     * A keyed write with a proposal that asks becomes the proposal (ADR 034, Asking is a proposal):
+     * its step waits on it, and the write's send is the proposal settling. Null when it does not ask.
+     */
+    const proposeWhenAsked = (
+      action: HubAction<R>,
+      plan: HubPlan<R>,
+      access: ToolAccess,
+      keyed: { readonly key: string; readonly input: unknown } | null,
+      step: HubCallStep | undefined,
+      tool: HubTool & { readonly label: string },
+    ) =>
+      Effect.gen(function* () {
+        if (!("write" in plan) || plan.write.proposal === undefined || keyed === null) return null;
+        // A turn with no way to ask you makes no proposal: the call is refused as any Ask would be.
+        if (step === undefined || !turn.approvals?.request) return null;
+        const { write } = plan;
+        const proposal = plan.write.proposal;
+        const verdict = yield* options.decide(turn.approvals, access, plan.request)(null);
+        if (verdict.decision !== "ask") return null;
+        yield* record(step, tool, verdict);
+        const waiting = (proposalId: string) =>
+          step?.report({
+            _tag: "ToolAwaitingProposal",
+            id: step.id,
+            proposalId,
+            tool: tool.name,
+            operation: verdict.operation,
+            targets: verdict.targets,
+            label: tool.label,
+          });
+        const decided = proposal({ stepId: step?.id ?? null, waiting }).pipe(
+          Effect.tap(() => Effect.sync(() => showStarted(step, tool.name, tool.label, verdict))),
+        );
+        return yield* sendWrite(action, { ...write, send: decided }, keyed, step, "");
+      });
+
     /** Decides, asks, records and sends a planned call. */
     const decideAndSend = (
       action: HubAction<R>,
@@ -475,6 +523,8 @@ export const makeHubActions =
       Effect.gen(function* () {
         const { summary } = plan.card;
         const tool = { ...action.tool, label: plan.card.label ?? action.tool.label };
+        const proposed = yield* proposeWhenAsked(action, plan, access, keyed, step, tool);
+        if (proposed !== null) return proposed;
         const decision = yield* askOnStep({
           call: {
             id: step?.id ?? tool.name,

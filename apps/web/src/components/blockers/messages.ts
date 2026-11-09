@@ -17,6 +17,7 @@ export const messages = {
     "approval-outcome": "Hearing how an approval ended",
     deadline: "A deadline that passed",
     "skill-proposal": "Hearing how a skill it suggested ended",
+    "hob-proposal": "Hearing how you decided its proposal",
     progress: "Reading progress",
   },
   why: {

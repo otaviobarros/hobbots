@@ -18,6 +18,8 @@ export * from "./grants.ts";
 export * from "./hob-changes.ts";
 export * from "./hob-directory.ts";
 export * from "./hob-memory.ts";
+export * from "./hob-proposal-log.ts";
+export * from "./hob-proposals.ts";
 export * from "./hobs.ts";
 export * from "./hub-actions.ts";
 export * from "./hub-questions.ts";

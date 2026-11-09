@@ -17,6 +17,7 @@ export const messages = {
     "approval-outcome": "How an approval ended",
     deadline: "A deadline that passed",
     "skill-proposal": "How a skill it suggested ended",
+    "hob-proposal": "How you decided its proposal",
   },
   /** Who owes a response, and since when. */
   awaiting: ({ name }: { name: string }) => `awaiting ${name}`,

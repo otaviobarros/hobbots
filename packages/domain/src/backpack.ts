@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
+import { HobProposal } from "./hob-proposals.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteId, QuestId, Question } from "./quest.ts";
 import { Revision } from "./revision.ts";
@@ -22,7 +23,8 @@ export const BackpackItemId = Schema.String.pipe(Schema.brand("BackpackItemId"))
 export type BackpackItemId = typeof BackpackItemId.Type;
 
 /**
- * The kinds of ADR 019, and how a skill proposal ended (ADR 029). Every kind but `progress` and
+ * The kinds of ADR 019, how a skill proposal ended (ADR 029), and how a hob proposal no call waited for
+ * settled (ADR 034). Every kind but `progress` and
  * `skill-proposal` is actionable and can wake its hob (IN-005): the hob hears how its proposal ended
  * in its next turn, never in a turn of its own.
  */
@@ -39,6 +41,7 @@ export const BackpackItemKind = Schema.Literals([
   "deadline",
   "progress",
   "skill-proposal",
+  "hob-proposal",
 ]);
 export type BackpackItemKind = typeof BackpackItemKind.Type;
 
@@ -49,7 +52,7 @@ export const isActionableKind = (kind: BackpackItemKind): boolean => kind !== "p
  * approval outcome unblocks work that waits for it, routine progress waits for the next turn.
  */
 export const backpackPriority = (kind: BackpackItemKind): number =>
-  kind === "answer" || kind === "approval-outcome" ? 2 : isActionableKind(kind) ? 1 : 0;
+  kind === "answer" || kind === "approval-outcome" || kind === "hob-proposal" ? 2 : isActionableKind(kind) ? 1 : 0;
 
 /** What the item carries, by kind: the records its hob reads to act on it. */
 export const BackpackPayload = Schema.Union([
@@ -84,6 +87,11 @@ export const BackpackPayload = Schema.Union([
   Schema.TaggedStruct("progress", { checkpoint: Checkpoint }),
   /** You added a hob's skill proposal, or said Not now (ADR 029). Routine: it rides along the hob's next turn. */
   Schema.TaggedStruct("skill-proposal", { proposal: SkillProposal }),
+  /**
+   * You decided every row of a hob's Summoning proposal after the call that made it stopped waiting
+   * (ADR 034). Actionable, like an approval's outcome: the manager hears what was made or denied.
+   */
+  Schema.TaggedStruct("hob-proposal", { proposal: HobProposal }),
 ]);
 export type BackpackPayload = typeof BackpackPayload.Type;
 

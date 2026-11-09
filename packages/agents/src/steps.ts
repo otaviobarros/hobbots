@@ -69,6 +69,27 @@ const awaiting = (steps: ReadonlyArray<ReplyStep>, ids: ReadonlyArray<string>): 
 export const replyStepId = (steps: ReadonlyArray<ReplyStep>, from: number, id: string): string =>
   steps.slice(0, from).some((step) => step.id === id) ? `${id}@${from}` : id;
 
+type ToolStepEvent = Extract<
+  RuntimeEvent,
+  { readonly _tag: "ToolAwaitingApproval" | "ToolAwaitingProposal" | "ToolStarted" | "ToolDenied" }
+>;
+
+/** A tool step as a call's start, wait or refusal shows it. */
+const toolStep = (id: string, event: ToolStepEvent, now: string | undefined): ReplyStep => {
+  const call = { tool: event.tool, operation: event.operation, targets: event.targets };
+  const step: ReplyStep = { id, kind: "tool", label: event.label, state: "running", call };
+  switch (event._tag) {
+    case "ToolAwaitingApproval":
+      return { ...step, state: "awaiting", approvalId: event.approvalId };
+    case "ToolAwaitingProposal":
+      return { ...step, state: "awaiting", proposalId: event.proposalId };
+    case "ToolStarted":
+      return now === undefined ? step : { ...step, startedAt: now };
+    default:
+      return { ...step, state: "denied", reason: event.reason, decidedBy: event.decidedBy };
+  }
+};
+
 /**
  * The steps a reply has after a runtime event, or null when the event changes none. `now` is when a
  * tool call that starts is recorded (ISO 8601), and `output` what a finished tool call printed, as
@@ -91,16 +112,10 @@ export const nextSteps = (
     case "StepEnded":
       return end(steps, own(event.id), "done");
     case "ToolAwaitingApproval":
+    case "ToolAwaitingProposal":
     case "ToolStarted":
-    case "ToolDenied": {
-      const call = { tool: event.tool, operation: event.operation, targets: event.targets };
-      const step: ReplyStep = { id: own(event.id), kind: "tool", label: event.label, state: "running", call };
-      if (event._tag === "ToolAwaitingApproval") {
-        return upsert(steps, { ...step, state: "awaiting", approvalId: event.approvalId });
-      }
-      if (event._tag === "ToolStarted") return upsert(steps, now === undefined ? step : { ...step, startedAt: now });
-      return upsert(steps, { ...step, state: "denied", reason: event.reason, decidedBy: event.decidedBy });
-    }
+    case "ToolDenied":
+      return upsert(steps, toolStep(own(event.id), event, now));
     case "ToolFinished":
       return end(steps, own(event.id), event.failed ? "failed" : "done", output);
     case "AwaitingCommands":

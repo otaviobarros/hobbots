@@ -46,6 +46,7 @@ import { SkillsPage } from "./components/skills/skills-page.tsx";
 import { ArrivedPage, ArrivedWaiting } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { SummonStep } from "./components/summon/summon-model.ts";
+import { SummonProposalRow } from "./components/summon/summon-proposal-row.tsx";
 import { UsagePage } from "./components/usage/usage-page.tsx";
 import { SearchText, searchParam } from "./lib/search-params.ts";
 import { UsageDays, UsageSplit } from "./lib/usage.ts";
@@ -309,17 +310,31 @@ const summonRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "summon",
-  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ step: searchParam(SummonStep) })),
+  // `?proposal=&row=` opens a summon row of a hob proposal to edit, and allows your version (ADR 034).
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      step: searchParam(SummonStep),
+      proposal: searchParam(Schema.String),
+      row: searchParam(Schema.String),
+    }),
+  ),
   beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
   component: function SummonRoute() {
-    const { step } = summonRoute.useSearch();
+    const { step, proposal, row } = summonRoute.useSearch();
     const navigate = summonRoute.useNavigate();
-    return (
-      <Summon
-        step={step ?? "role"}
-        onStep={(next) => void navigate({ search: { step: next === "role" ? undefined : next } })}
-      />
-    );
+    const onStep = (next: SummonStep) =>
+      void navigate({ search: (prev) => ({ ...prev, step: next === "role" ? undefined : next }) });
+    if (proposal !== undefined && row !== undefined)
+      return (
+        <SummonProposalRow
+          key={`${proposal}:${row}`}
+          proposalId={proposal}
+          rowId={row}
+          step={step ?? "role"}
+          onStep={onStep}
+        />
+      );
+    return <Summon step={step ?? "role"} onStep={onStep} />;
   },
 });
 

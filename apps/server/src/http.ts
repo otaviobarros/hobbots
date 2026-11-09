@@ -37,6 +37,7 @@ import { HobChangesHandlers } from "./hob-changes.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { HobMemoryHandlers } from "./hob-memory.ts";
+import { HobProposalsHandlers } from "./hob-proposals.ts";
 import { Installation } from "./installation.ts";
 import { MemoryPagesHandlers } from "./memory.ts";
 import { MemoryHandlers } from "./memory-settings.ts";
@@ -257,6 +258,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobMemoryHandlers,
     SkillsHandlers,
     SkillProposalsHandlers,
+    HobProposalsHandlers,
     SkillUpdatesHandlers,
     SkillRepositoriesHandlers,
     SkillTrialsHandlers,

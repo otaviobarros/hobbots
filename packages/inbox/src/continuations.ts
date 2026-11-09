@@ -4,6 +4,7 @@ import {
   CONTINUATION_HEADER,
   checkpointText,
   choicesText,
+  hobProposalOutcomeText,
   type Question,
   skillProposalText,
   type Task,
@@ -151,6 +152,8 @@ const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
       return describeMessage(item, payload);
     case "approval-outcome":
       return describeApproval(payload.approval);
+    case "hob-proposal":
+      return hobProposalOutcomeText(payload.proposal);
     case "deadline":
       return `The deadline on Task ${payload.taskId} passed at ${payload.dueAt}.`;
     case "task":

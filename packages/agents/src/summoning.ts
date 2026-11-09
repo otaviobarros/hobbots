@@ -1,4 +1,9 @@
-import type { CreateAgentPayload, UpdateAgentPayload, UpdateHobPermissionsPayload } from "@hobbots/api";
+import {
+  type CreateAgentPayload,
+  HobProposalRefused,
+  type UpdateAgentPayload,
+  type UpdateHobPermissionsPayload,
+} from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -16,8 +21,12 @@ import {
   HOB_LABEL_MAX,
   HobColor,
   type HobPolicy,
+  type HobProposal,
+  type HobProposalKind,
+  type HobProposalRow,
   heldCharms,
   hobProfilePath,
+  hobProposalOutcomeText,
   holdsCharm,
   isCharmOperation,
   isNarrowerOrEqual,
@@ -30,10 +39,12 @@ import {
   RETIRE_OPERATION,
   SELF_FIELD_OF,
   SUMMON_OPERATION,
+  SUMMONING_CHANGE_TOOL,
   SUMMONING_CHARM,
   SUMMONING_CHARM_ID,
   SUMMONING_CHECK_TOOL,
   SUMMONING_FIELD_WORDS,
+  SUMMONING_SUMMON_TOOL,
   SUMMONING_TOOLS,
   type SummonCaps,
   type SummoningChange,
@@ -51,6 +62,7 @@ import {
   unattendedSummonsBy,
   unattendedSummonsIn,
   withSummoningForEveryHob,
+  YOU,
 } from "@hobbots/domain";
 import { Context, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import type { AskableVerdict } from "./asking.ts";
@@ -58,6 +70,8 @@ import { type Charm, defineCharm } from "./charms.ts";
 import { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, GrantService } from "./grants.ts";
+import { HobChanges } from "./hob-changes.ts";
+import { type HobProposalApplier, HobProposals, pendingRow } from "./hob-proposals.ts";
 import { changedPolicy, checkGoodAt, checkRole, checkRuntimeBrain, HobService } from "./hobs.ts";
 import { type HubAction, type HubPlanContext, HubRefusal, hubAction } from "./hub-actions.ts";
 import { HobLifecycle } from "./lifecycle.ts";
@@ -72,7 +86,7 @@ import {
   type TurnApprovals,
 } from "./runtime.ts";
 import { TaskRepository } from "./tasks.ts";
-import { operationDecision } from "./tools.ts";
+import { accessNow, HobTools, operationDecision } from "./tools.ts";
 
 /**
  * The Summoning Charm's actions (ADR 034): a hob summons, changes, pauses, wakes and retires hobs
@@ -95,6 +109,12 @@ export interface SummoningServices {
   /** The Task trees a summon's tree cap counts in. */
   readonly tasks: TaskRepository["Service"];
   readonly limits: SummonLimits;
+  /** Where a call that asks records its proposal and waits for you (ADR 034). */
+  readonly proposals: HobProposals["Service"];
+  /** Each hob's versions and status changes with who made them, for settling a row a stopped hub left. */
+  readonly changes: HobChanges["Service"];
+  /** A hob's tool access as its next turn would read it, for applying a proposal outside any turn. */
+  readonly access: (agentId: AgentId) => Effect.Effect<ToolAccess | null>;
 }
 
 /**
@@ -122,15 +142,21 @@ export class SummoningHub extends Context.Service<
   {
     readonly services: Effect.Effect<SummoningServices>;
     readonly bind: (services: SummoningServices) => Effect.Effect<void>;
+    /** How a proposal's rows are made, which the Charm binds once it is built. */
+    readonly applier: Effect.Effect<HobProposalApplier>;
+    readonly bindApplier: (applier: HobProposalApplier) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/SummoningHub") {
   static readonly layer = Layer.effect(
     SummoningHub,
     Effect.gen(function* () {
       const bound = yield* Deferred.make<SummoningServices>();
+      const applier = yield* Deferred.make<HobProposalApplier>();
       return SummoningHub.of({
         services: Deferred.await(bound),
         bind: (services) => Deferred.succeed(bound, services).pipe(Effect.asVoid),
+        applier: Deferred.await(applier),
+        bindApplier: (made) => Deferred.succeed(applier, made).pipe(Effect.asVoid),
       });
     }),
   );
@@ -139,6 +165,17 @@ export class SummoningHub extends Context.Service<
   static readonly bound = Layer.effectDiscard(
     Effect.gen(function* () {
       const hub = yield* SummoningHub;
+      const proposals = yield* HobProposals;
+      const repo = yield* HobbotsRepository;
+      const hobTools = yield* HobTools;
+      // The proposals reach the Charm's way of making a row once the Charm is built.
+      yield* proposals.bindApplier({
+        apply: (proposal, row, edited) => Effect.flatMap(hub.applier, (made) => made.apply(proposal, row, edited)),
+        changedSince: (row) => Effect.flatMap(hub.applier, (made) => made.changedSince(row)),
+        alwaysAllow: (proposal, operation) =>
+          Effect.flatMap(hub.applier, (made) => made.alwaysAllow(proposal, operation)),
+        reconcile: (proposal, row) => Effect.flatMap(hub.applier, (made) => made.reconcile(proposal, row)),
+      });
       yield* hub.bind({
         hobs: yield* HobService,
         lifecycle: yield* HobLifecycle,
@@ -155,6 +192,9 @@ export class SummoningHub extends Context.Service<
         }),
         tasks: yield* TaskRepository,
         limits: yield* UnattendedSummonLimits,
+        proposals,
+        changes: yield* HobChanges,
+        access: (agentId) => accessNow(repo, hobTools, agentId),
       });
     }),
   );
@@ -688,6 +728,17 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
 
     const colors = HobColor.literals;
 
+    /** A draft with its look drawn, when it leaves the look to Summon. */
+    const pinnedLook = (draft: SummoningDraft): SummoningDraft => {
+      if (draft.look_seed !== undefined && draft.look_color !== undefined) return draft;
+      const lookSeed = draft.look_seed ?? Math.floor(Math.random() * 2 ** 32);
+      return {
+        ...draft,
+        look_seed: lookSeed,
+        look_color: draft.look_color ?? (colors[lookSeed % colors.length] as HobColor),
+      };
+    };
+
     /** The fields given a value, so one left out stays out of the request. */
     const defined = (fields: Record<string, unknown>) =>
       Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
@@ -803,6 +854,144 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         }),
     });
 
+    /** Who made a change you applied from a proposal: you, on the manager's proposal and its call (ADR 034). */
+    const appliedActor = (proposal: HobProposal): ChangeActor => ({
+      _tag: "YouApplyingProposal",
+      hobId: proposal.agentId,
+      proposalId: proposal.id,
+      call: proposal.call,
+    });
+
+    /** Summons one hob from a draft, as `actor`, never wider than the manager. */
+    const summonOne = (
+      draft: SummoningDraft,
+      id: AgentId,
+      manager: Authority & { readonly agent: Agent },
+      context: HubPlanContext,
+      services: SummoningServices,
+      made: { readonly actor: ChangeActor; readonly unattended: boolean },
+    ) =>
+      Effect.gen(function* () {
+        const shared = context.access.policy.sharedFolders;
+        const hiddenShared = shared.filter((folder) => !manager.shared.includes(folder));
+        const charms = (draft.charms ?? []).filter((charm) => charm !== SUMMONING_CHARM_ID);
+        const answers = summonedAnswers(draft, manager, charms, operationsOf(context));
+        const ownFolders = yield* Effect.forEach(draft.own_folders ?? [], (folder) =>
+          services.folders.check(folder),
+        ).pipe(Effect.orDie);
+        const hidden = yield* Effect.forEach(
+          [...(draft.hidden_shared_folders ?? []), ...hiddenShared],
+          services.folders.identity,
+        );
+        const policy: HobPolicy = {
+          ownFolders: [...new Set(ownFolders)],
+          hiddenSharedFolders: [...new Set(hidden)],
+          overrides: answers.builtIn,
+          charms: {
+            granted: charms,
+            ...(Object.keys(answers.charm).length === 0 ? {} : { overrides: answers.charm }),
+          },
+        };
+        const seed = Math.floor(Math.random() * 2 ** 32);
+        const payload = createPayload(draft, id, manager.agent, seed);
+        return yield* services.hobs
+          .create(payload, { actor: made.actor, taskId: taskOf(context), unattended: made.unattended, policy })
+          .pipe(Effect.mapError((error) => `- ${payload.name}: ${failure(error)}`));
+      });
+
+    /** Changes one hob as `actor`: its profile and permissions as one version (ADR 034). */
+    const changeOne = (agent: Agent, each: SummoningChange, services: SummoningServices, actor: ChangeActor) => {
+      const profile = updatePayload(each);
+      const permissions = permissionsPayload(each, agent.policy);
+      // Profile and permissions are one version, so a change either part refuses stores nothing.
+      const write = services.hobs.change(
+        agent.id,
+        {
+          ...(Object.keys(profile).length === 0 ? {} : { profile }),
+          ...(permissions === null ? {} : { permissions }),
+        },
+        actor,
+      );
+      return (permissions === null ? write : services.changePermissions(agent.id, write)).pipe(
+        Effect.mapError((error) => `- ${agent.name}: ${failure(error)}`),
+      );
+    };
+
+    /**
+     * Records a call that asked as a proposal and waits for you to decide it (ADR 034). What you
+     * allowed is the call's answer, row by row; a proposal you denied whole is refused.
+     */
+    const proposing =
+      (
+        context: HubPlanContext,
+        kind: HobProposalKind,
+        tool: SummoningToolName,
+        made: {
+          readonly rows: ReadonlyArray<HobProposalRow>;
+          readonly asks: ReadonlyArray<CharmOperationId>;
+          readonly safety: string | null;
+        },
+      ) =>
+      (asked: { readonly stepId: string | null; readonly waiting: (proposalId: string) => void }) =>
+        Effect.gen(function* () {
+          const services = yield* hub.services;
+          const { proposal, settled } = yield* services.proposals.propose({
+            agentId: context.turn.agentId,
+            kind,
+            tool,
+            call: { scope: context.turn.scope(), key: context.key ?? "" },
+            threadId: context.turn.threadId,
+            messageId: context.turn.messageId,
+            taskId: taskOf(context),
+            stepId: asked.stepId,
+            rows: made.rows,
+            // "Always allow" never covers a safety Ask or a high-risk operation.
+            asks: made.safety === null ? made.asks.filter((operation) => operation !== RETIRE_OPERATION) : [],
+            safety: made.safety,
+            highRisk: kind === "retire",
+          });
+          asked.waiting(proposal.id);
+          const outcome = yield* settled;
+          const text = hobProposalOutcomeText(outcome);
+          return outcome.rows.some((row) => row.state === "allowed")
+            ? ({ _tag: "Applied", text } as const)
+            : ({ _tag: "Refused", text } as const);
+        });
+
+    /** The operations among `operations` that ask the manager. */
+    const askingOf = (manager: Authority, operations: ReadonlyArray<CharmOperationId>) =>
+      operations.filter((operation) => manager.answer(operation) === "ask");
+
+    /** A target's value of each field a change gives, by the change's own field name, as its card shows before. */
+    const beforeOf = (agent: Agent, change: SummoningChange): Record<string, unknown> => {
+      const current: Record<string, unknown> = {
+        name: agent.name,
+        role: agent.role,
+        role_title: agent.roleTitle,
+        good_at: agent.goodAt,
+        sigil: agent.sigil,
+        hat: agent.hat,
+        tool: agent.tool,
+        look_seed: agent.lookSeed,
+        look_color: agent.lookColor,
+        voice: agent.voice,
+        length: agent.length,
+        instructions: agent.instructions,
+        runtime: agent.runtime,
+        model: agent.model,
+        effort: agent.effort,
+        own_folders: agent.policy.ownFolders,
+        hidden_shared_folders: agent.policy.hiddenSharedFolders,
+        charms: heldCharms(agent.policy),
+        answers: { ...agent.policy.overrides, ...agent.policy.charms?.overrides },
+      };
+      return Object.fromEntries(
+        Object.keys(change)
+          .filter((key) => key !== "hob" && change[key as keyof SummoningChange] !== undefined)
+          .map((key) => [key, current[key] ?? null]),
+      );
+    };
+
     const summon = hubAction({
       tool: tool("summoning_summon"),
       input: SummoningInputs.summoning_summon,
@@ -834,7 +1023,6 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           const unattended = withoutCard && cap === null;
           const actor = actorOf(context);
           const names = input.hobs.map((draft) => (draft.name ?? "").trim());
-          const hiddenShared = shared.filter((folder) => !manager.shared.includes(folder));
           const create = Effect.gen(function* () {
             // Counted again under the manager's and the tree's locks: another summon may have taken the last place.
             const taken = unattended ? yield* capReached(services, managerId, root, input.hobs.length) : null;
@@ -845,31 +1033,12 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             const created: Array<Agent> = [];
             const failed: Array<string> = [];
             for (const [index, draft] of input.hobs.entries()) {
-              const charms = (draft.charms ?? []).filter((charm) => charm !== SUMMONING_CHARM_ID);
-              const answers = summonedAnswers(draft, manager, charms, operationsOf(context));
-              const ownFolders = yield* Effect.forEach(draft.own_folders ?? [], (folder) =>
-                services.folders.check(folder),
-              ).pipe(Effect.orDie);
-              const hidden = yield* Effect.forEach(
-                [...(draft.hidden_shared_folders ?? []), ...hiddenShared],
-                services.folders.identity,
-              );
-              const policy: HobPolicy = {
-                ownFolders: [...new Set(ownFolders)],
-                hiddenSharedFolders: [...new Set(hidden)],
-                overrides: answers.builtIn,
-                charms: {
-                  granted: charms,
-                  ...(Object.keys(answers.charm).length === 0 ? {} : { overrides: answers.charm }),
-                },
-              };
-              const seed = Math.floor(Math.random() * 2 ** 32);
-              const payload = createPayload(draft, ids[index] as AgentId, manager.agent, seed);
-              const hob = yield* services.hobs
-                .create(payload, { actor, taskId, unattended, policy })
-                .pipe(Effect.result);
+              const hob = yield* summonOne(draft, ids[index] as AgentId, manager, context, services, {
+                actor,
+                unattended,
+              }).pipe(Effect.result);
               if (hob._tag === "Success") created.push(hob.success);
-              else failed.push(`- ${payload.name}: ${failure(hob.failure)}`);
+              else failed.push(hob.failure);
             }
             if (created.length === 0)
               return { _tag: "Refused", text: `No hob was summoned.\n${failed.join("\n")}` } as const;
@@ -881,6 +1050,20 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             return { _tag: "Applied", text } as const;
           });
           const send = underCapLocks(managerId, root, create);
+          const proposalRows = input.hobs.map((draft, index) =>
+            pendingRow({
+              id: String(index + 1),
+              hobId: ids[index] as AgentId,
+              label: names[index] ?? "",
+              // The look is drawn now, so the card shows the hob that allowing it makes.
+              draft: pinnedLook(draft),
+              change: null,
+              before: null,
+              configVersion: null,
+              status: null,
+              runningReplies: null,
+            }),
+          );
           return {
             request: request(SUMMON_OPERATION, [part(SUMMON_OPERATION, names)], cap),
             card: card(input, `Summon ${names.join(", ")}`),
@@ -889,6 +1072,11 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               recorded: { ids, names },
               appliedText: `Summoned ${names.join(", ")}.`,
               send,
+              proposal: proposing(context, "summon", SUMMONING_SUMMON_TOOL, {
+                rows: proposalRows,
+                asks: askingOf(manager, [SUMMON_OPERATION]),
+                safety: cap,
+              }),
             },
           };
         }),
@@ -924,22 +1112,9 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             const failed: Array<string> = [];
             for (const [index, row] of rows.entries()) {
               const each = input.changes[index] as SummoningChange;
-              const profile = updatePayload(each);
-              const permissions = permissionsPayload(each, row.agent.policy);
-              // Profile and permissions are one version, so a change either part refuses stores nothing.
-              const write = services.hobs.change(
-                row.agent.id,
-                {
-                  ...(Object.keys(profile).length === 0 ? {} : { profile }),
-                  ...(permissions === null ? {} : { permissions }),
-                },
-                actor,
-              );
-              const applied = yield* (
-                permissions === null ? write : services.changePermissions(row.agent.id, write)
-              ).pipe(Effect.result);
+              const applied = yield* changeOne(row.agent, each, services, actor).pipe(Effect.result);
               if (applied._tag === "Success") done.push(`- ${row.agent.name}: changed ${fieldsSet(each).join(", ")}.`);
-              else failed.push(`- ${row.agent.name}: ${failure(applied.failure)}`);
+              else failed.push(applied.failure);
             }
             if (done.length === 0)
               return { _tag: "Refused", text: `No hob was changed.\n${failed.join("\n")}` } as const;
@@ -950,6 +1125,21 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             ].join("\n");
             return { _tag: "Applied", text } as const;
           });
+          const proposalRows = rows.map((row, index) => {
+            const each = input.changes[index] as SummoningChange;
+            return pendingRow({
+              id: String(index + 1),
+              hobId: row.agent.id,
+              label: row.agent.name,
+              draft: null,
+              // The row names its hob by id, so a rename meanwhile never sends it to another.
+              change: { ...each, hob: row.agent.id },
+              before: beforeOf(row.agent, each),
+              configVersion: row.agent.configVersion,
+              status: row.agent.status,
+              runningReplies: null,
+            });
+          });
           return {
             request: request(parts[0]?.operation ?? summoningFieldOperation("name"), parts, safety),
             card: card(input, `Change ${rows.map((row) => row.agent.name).join(", ")}`),
@@ -958,24 +1148,68 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               recorded: { ids },
               appliedText: `Changed ${rows.map((row) => row.agent.name).join(", ")}.`,
               send,
+              proposal: proposing(context, "change", SUMMONING_CHANGE_TOOL, {
+                rows: proposalRows,
+                asks: [...new Set(rows.flatMap((row) => askingOf(manager, row.operations)))],
+                safety,
+              }),
             },
           };
         }),
     });
 
+    /** What a pause, wake or retire does to its hob, as `actor`. */
+    const lifecycleRun = (
+      name: LifecycleTool,
+      services: SummoningServices,
+      agent: Agent,
+      runningReplies: "finish" | "stop",
+      actor: ChangeActor,
+    ) => {
+      switch (name) {
+        case "summoning_pause":
+          return services.lifecycle.pause(agent.id, actor);
+        case "summoning_wake":
+          return services.lifecycle.wake(agent.id, actor);
+        default:
+          return services.lifecycle.retire(agent.id, runningReplies, actor);
+      }
+    };
+
+    /**
+     * The hob a pause, wake or retire names, within the manager's scope as it is now, never itself,
+     * and with the operation not at Never; or why not. The plan and the applier both read it, so a
+     * proposal you allow after its scope or answer narrowed is refused (ADR 034, Applying re-checks).
+     */
+    const lifecycleTarget = (
+      name: LifecycleTool,
+      agents: ReadonlyArray<Agent>,
+      manager: Authority & { readonly agent: Agent; readonly policy: HobPolicy },
+      named: string,
+    ) => {
+      const found = target(agents, { id: manager.agent.id, policy: manager.policy }, named);
+      if (typeof found === "string") {
+        const code = found.startsWith("There is no") || found.startsWith("Several") ? "unknown-hob" : "outside-scope";
+        return { _tag: "Refused", code, text: found } as const;
+      }
+      if (found.self) {
+        return {
+          _tag: "Refused",
+          code: "outside-scope",
+          text: `You never ${LIFECYCLE[name].verb.replace(/d$/, "")} yourself.`,
+        } as const;
+      }
+      const operation = name === "summoning_retire" ? RETIRE_OPERATION : PAUSE_OPERATION;
+      if (manager.answer(operation) === "deny") {
+        return { _tag: "Refused", code: "never", text: `${wordsOf(operation)} is at Never for you.` } as const;
+      }
+      return { _tag: "Found", agent: found.agent, operation } as const;
+    };
+
     /** Pause, wake or retire one hob within the scope, never the manager itself. */
-    const lifecycleAction = (
-      name: "summoning_pause" | "summoning_wake" | "summoning_retire",
-      verb: string,
-      run: (
-        services: SummoningServices,
-        agent: Agent,
-        input: { readonly hob: string; readonly running_replies?: "finish" | "stop" },
-        actor: ChangeActor,
-      ) => Effect.Effect<Agent, { readonly message: string }>,
-      status: Agent["status"],
-    ) =>
-      hubAction({
+    const lifecycleAction = (name: LifecycleTool) => {
+      const { verb, status, kind } = LIFECYCLE[name];
+      return hubAction({
         tool: tool(name),
         input: SummoningInputs[name] as typeof SummoningInputs.summoning_pause,
         effect: "write",
@@ -987,20 +1221,12 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             const agent = yield* services.repo.findAgent(id);
             return Option.isSome(agent) && agent.value.status === status;
           }),
-        plan: (input, context) =>
+        plan: (input: { readonly hob: string; readonly running_replies?: "finish" | "stop" }, context) =>
           Effect.gen(function* () {
             const { services, agents, manager } = yield* prepare(context);
-            const found = target(agents, { id: manager.agent.id, policy: manager.policy }, input.hob);
-            if (typeof found === "string") {
-              const code =
-                found.startsWith("There is no") || found.startsWith("Several") ? "unknown-hob" : "outside-scope";
-              return yield* refused(code, found);
-            }
-            if (found.self) return yield* refused("outside-scope", `You never ${verb.replace(/d$/, "")} yourself.`);
-            const operation = name === "summoning_retire" ? RETIRE_OPERATION : PAUSE_OPERATION;
-            if (manager.answer(operation) === "deny") {
-              return yield* refused("never", `${wordsOf(operation)} is at Never for you.`);
-            }
+            const found = lifecycleTarget(name, agents, manager, input.hob);
+            if (found._tag === "Refused") return yield* refused(found.code, found.text);
+            const { operation } = found;
             const policy = yield* effectivePolicy(found.agent, services);
             const authority = yield* authorityOf(found.agent.id, policy, context.access.policy, services);
             const wider = widerFields(authority, manager, operationsOf(context));
@@ -1010,6 +1236,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
                 : `${found.agent.name} can do more than you (${wider.join(", ")}), so this asks the user.`;
             const actor = actorOf(context);
             const agent = found.agent;
+            const runningReplies = input.running_replies ?? "finish";
             return {
               request: request(operation, [part(operation, [agent.name])], safety),
               card: card(input, `${verb.charAt(0).toUpperCase()}${verb.slice(1, -1)} ${agent.name}`),
@@ -1017,37 +1244,191 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
                 site: `hob:${agent.id}`,
                 recorded: { id: agent.id, status },
                 appliedText: `${agent.name} is ${status} now.`,
-                send: run(services, agent, input, actor).pipe(
+                send: lifecycleRun(name, services, agent, runningReplies, actor).pipe(
                   Effect.map((after) => ({ _tag: "Applied", text: `${after.name} is ${after.status} now.` }) as const),
                   Effect.catch((error) => Effect.succeed({ _tag: "Refused", text: failure(error) } as const)),
                 ),
+                proposal: proposing(context, kind, name, {
+                  rows: [
+                    pendingRow({
+                      id: "1",
+                      hobId: agent.id,
+                      label: agent.name,
+                      draft: null,
+                      change: null,
+                      before: null,
+                      configVersion: agent.configVersion,
+                      status: agent.status,
+                      runningReplies: name === "summoning_retire" ? runningReplies : null,
+                    }),
+                  ],
+                  asks: askingOf(manager, [operation]),
+                  safety,
+                }),
               },
             };
           }),
       });
+    };
+
+    /** The context a proposal is applied in: the manager's call, under its access as it is now. */
+    const applyContext = (proposal: HobProposal) =>
+      Effect.gen(function* () {
+        const services = yield* hub.services;
+        const access = yield* services.access(proposal.agentId);
+        if (access === null || !holdsCharm(access.policy.hob, SUMMONING_CHARM_ID)) {
+          return yield* new HobProposalRefused({
+            proposalId: proposal.id,
+            message: "The hob that proposed this no longer holds the Summoning Charm, so nothing was made.",
+          });
+        }
+        const context: HubPlanContext = {
+          turn: {
+            agentId: proposal.agentId,
+            threadId: proposal.threadId,
+            messageId: proposal.messageId,
+            scope: () => proposal.call.scope,
+            ...(proposal.taskId === null ? {} : { taskId: proposal.taskId }),
+          },
+          access,
+          key: proposal.call.key,
+        };
+        const prepared = yield* prepare(context).pipe(
+          Effect.mapError((error) => proposalRefused(proposal, null, error.message)),
+        );
+        return { ...prepared, context };
+      });
+
+    /** Pauses, wakes or retires a row's hob as you, checked again as the call was (ADR 034, Applying re-checks). */
+    const applyLifecycle = (
+      proposal: HobProposal,
+      row: HobProposalRow,
+      made: {
+        readonly services: SummoningServices;
+        readonly agents: ReadonlyArray<Agent>;
+        readonly manager: Authority & { readonly agent: Agent; readonly policy: HobPolicy };
+        readonly actor: ChangeActor;
+      },
+    ) =>
+      Effect.gen(function* () {
+        const refuse = (text: string) => Effect.fail(proposalRefused(proposal, row.id, text));
+        if (!made.agents.some((each) => each.id === row.hobId)) {
+          return yield* refuse(`There is no hob ${row.label} on this hub any more.`);
+        }
+        const name = LIFECYCLE_TOOL[proposal.kind as Exclude<HobProposalKind, "summon" | "change">];
+        // The scope, and the operation's answer, as they are now.
+        const found = lifecycleTarget(name, made.agents, made.manager, row.hobId);
+        if (found._tag === "Refused") return yield* refuse(found.text);
+        const run = lifecycleRun(name, made.services, found.agent, row.runningReplies ?? "finish", made.actor);
+        const done = yield* Effect.result(run);
+        return done._tag === "Success"
+          ? ({ _tag: "Applied", text: `${done.success.name} is ${done.success.status} now.` } as const)
+          : ({ _tag: "Failed", text: failure(done.failure) } as const);
+      });
+
+    const applier: HobProposalApplier = {
+      apply: (proposal, row, edited) =>
+        Effect.gen(function* () {
+          const { services, agents, manager, context } = yield* applyContext(proposal);
+          const actor = appliedActor(proposal);
+          const refuse = (problems: ReadonlyArray<string>) =>
+            Effect.fail(proposalRefused(proposal, row.id, problems.join(" ")));
+          switch (proposal.kind) {
+            case "summon": {
+              const draft = edited ?? row.draft;
+              if (draft === null) return yield* refuse(["This row has no draft."]);
+              if (manager.answer(SUMMON_OPERATION) === "deny") {
+                return yield* refuse([`${wordsOf(SUMMON_OPERATION)} is at Never for you.`]);
+              }
+              // Your version is checked as the manager's was: never wider than the manager.
+              const checked = yield* checkDraft(draft, manager, services, context.access.policy.sharedFolders);
+              if (checked.problems.length > 0) return yield* refuse(checked.problems);
+              const made = yield* summonOne(draft, row.hobId, manager, context, services, {
+                actor,
+                unattended: false,
+              }).pipe(Effect.result);
+              return made._tag === "Success"
+                ? ({ _tag: "Applied", text: `Summoned ${describeHob(made.success).slice(2)}` } as const)
+                : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
+            }
+            case "change": {
+              if (row.change === null) return yield* refuse(["This row has no change."]);
+              const checked = yield* checkChange(row.change, manager, agents, context, services);
+              if (checked.row.problems.length > 0 || checked.found === null) return yield* refuse(checked.row.problems);
+              const made = yield* changeOne(checked.found.agent, row.change, services, actor).pipe(Effect.result);
+              return made._tag === "Success"
+                ? ({
+                    _tag: "Applied",
+                    text: `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`,
+                  } as const)
+                : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
+            }
+            default:
+              return yield* applyLifecycle(proposal, row, { services, agents, manager, actor });
+          }
+        }),
+      changedSince: (row) =>
+        Effect.gen(function* () {
+          if (row.configVersion === null && row.status === null) return false;
+          const services = yield* hub.services;
+          const agent = yield* services.repo.findAgent(row.hobId);
+          if (Option.isNone(agent)) return true;
+          return agent.value.configVersion !== row.configVersion || agent.value.status !== row.status;
+        }),
+      alwaysAllow: (proposal, operation) =>
+        Effect.gen(function* () {
+          const services = yield* hub.services;
+          const found = yield* services.repo.findAgent(proposal.agentId);
+          if (Option.isNone(found)) {
+            return yield* new HobProposalRefused({ proposalId: proposal.id, message: "That hob is not on this hub." });
+          }
+          const manager = found.value;
+          const allowed = { [operation]: "allow" } as CharmOverrides;
+          const own = holdsCharm(manager.policy, SUMMONING_CHARM_ID);
+          const everyHob = own ? null : (yield* services.setup.get).summoningForEveryHob;
+          // A change made by you: the manager's own answer for the operation becomes Allow (ADR 034).
+          // A manager with the Charm from "Summoning for every hob" gets its own grant from that
+          // setting's scope and answers first, as a change on its Charms tab gives it.
+          const charms =
+            everyHob === null
+              ? { overrides: { ...manager.policy.charms?.overrides, ...allowed } }
+              : {
+                  granted: [...heldCharms(manager.policy), SUMMONING_CHARM_ID],
+                  overrides: { ...everyHob.overrides, ...manager.policy.charms?.overrides, ...allowed },
+                  summoning: everyHob.scope,
+                };
+          const changed = yield* services.hobs
+            .change(manager.id, { permissions: { charms } }, YOU)
+            .pipe(Effect.mapError((error) => proposalRefused(proposal, null, failure(error))));
+          return { before: manager.configVersion, after: changed.configVersion };
+        }),
+      reconcile: (proposal, row) =>
+        Effect.gen(function* () {
+          const services = yield* hub.services;
+          const found = yield* services.repo.findAgent(row.hobId);
+          if (Option.isNone(found)) return null;
+          const agent = found.value;
+          // The hub mints a summon row's hob id, so a hob with it was made by that row.
+          if (proposal.kind === "summon") return `Summoned ${describeHob(agent).slice(2)}`;
+          // What this proposal made stays in the hob's history with the proposal as its actor,
+          // whatever was changed after it.
+          const made = (yield* services.changes.forHob(agent.id)).find(
+            (change) => change.actor._tag === "YouApplyingProposal" && change.actor.proposalId === proposal.id,
+          );
+          if (made === undefined) return null;
+          if (made._tag === "Status") return `${agent.name} is ${made.status} now.`;
+          return row.change === null ? null : `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`;
+        }),
+    };
+    yield* hub.bindApplier(applier);
 
     const actions: ReadonlyArray<HubAction<SummoningRequest>> = [
       check,
       summon,
       change,
-      lifecycleAction(
-        "summoning_pause",
-        "paused",
-        (s, agent, _input, actor) => s.lifecycle.pause(agent.id, actor),
-        "paused",
-      ),
-      lifecycleAction(
-        "summoning_wake",
-        "woken",
-        (s, agent, _input, actor) => s.lifecycle.wake(agent.id, actor),
-        "active",
-      ),
-      lifecycleAction(
-        "summoning_retire",
-        "retired",
-        (s, agent, input, actor) => s.lifecycle.retire(agent.id, input.running_replies ?? "finish", actor),
-        "retired",
-      ),
+      lifecycleAction("summoning_pause"),
+      lifecycleAction("summoning_wake"),
+      lifecycleAction("summoning_retire"),
     ];
 
     return defineCharm({
@@ -1070,6 +1451,28 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
       connected: () => Effect.succeed(true),
     }) satisfies Charm;
   });
+
+type LifecycleTool = "summoning_pause" | "summoning_wake" | "summoning_retire";
+
+/** How each lifecycle tool words its effect, the status it leaves, and the kind of proposal it makes. */
+const LIFECYCLE: Readonly<
+  Record<LifecycleTool, { readonly verb: string; readonly status: Agent["status"]; readonly kind: HobProposalKind }>
+> = {
+  summoning_pause: { verb: "paused", status: "paused", kind: "pause" },
+  summoning_wake: { verb: "woken", status: "active", kind: "wake" },
+  summoning_retire: { verb: "retired", status: "retired", kind: "retire" },
+};
+
+/** The lifecycle tool behind a pause, wake or retire proposal. */
+const LIFECYCLE_TOOL: Readonly<Record<"pause" | "wake" | "retire", LifecycleTool>> = {
+  pause: "summoning_pause",
+  wake: "summoning_wake",
+  retire: "summoning_retire",
+};
+
+/** What a row cannot be made as, nothing made, in the words the hob use cases use. */
+const proposalRefused = (proposal: HobProposal, rowId: string | null, message: string) =>
+  new HobProposalRefused({ proposalId: proposal.id, ...(rowId === null ? {} : { rowId }), message });
 
 /** A Summoning tool as a hob is offered it. */
 const tool = (name: SummoningToolName) => {

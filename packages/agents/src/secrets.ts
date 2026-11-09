@@ -53,6 +53,7 @@ export const redactEvent = (event: RuntimeEvent, redactor: Redactor): RuntimeEve
           : { command: { ...event.command, line: redactor.text(event.command.line) } }),
       };
     case "ToolAwaitingApproval":
+    case "ToolAwaitingProposal":
       return { ...event, label: redactor.text(event.label), targets: redactor.value(event.targets) };
     case "ToolOutput":
       return { ...event, text: redactor.text(event.text) };

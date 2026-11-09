@@ -10,6 +10,7 @@ export * from "./github-account.ts";
 export * from "./grants.ts";
 export * from "./hob-changes.ts";
 export * from "./hob-github-apps.ts";
+export * from "./hob-proposals.ts";
 export * from "./hub-questions.ts";
 export * from "./journal.ts";
 export * from "./memory-capture.ts";
