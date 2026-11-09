@@ -209,6 +209,11 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
 export interface MemoryProjectsShape {
   /** Who `folder` is across clones: its Git `origin` remote, or its name when it has none. */
   readonly of: (folder: string) => Effect.Effect<MemoryProjectIdentity>;
+  /**
+   * The `origin` remote of the repository whose top is `folder`, as its config writes it, or null when
+   * it has none or it cannot be read: where an import reads the repository's own skills (ADR 029).
+   */
+  readonly origin: (folder: string) => Effect.Effect<string | null>;
 }
 
 /**

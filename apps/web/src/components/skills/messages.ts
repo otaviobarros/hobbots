@@ -44,6 +44,67 @@ export const messages = {
     updated: ({ when }: { when: string }) => `Changed ${when}`,
     export: "Export…",
   },
+  trial: {
+    button: "Try in a chat",
+    starting: "Opening a chat…",
+    menu: "Try it with",
+    hint: "Opens a new chat where only this draft is loaded. Nothing reaches the library.",
+    noHobs: "No hob is awake to try it with.",
+    loadingHobs: "Reading your hobs…",
+    hobsFailed: "Hobbots could not read your hobs.",
+    tryAgain: "Try again",
+    refused: ({ message }: { message: string }) => `This draft cannot load as it is: ${message}`,
+    gone: "That proposal or revision is no longer here.",
+    hobGone: "That hob cannot take a new chat now.",
+    failed: "Hobbots could not open the chat. Try again.",
+    notice: ({ name }: { name: string }) => `Trying the draft of ${name}.`,
+    noticeHint: "Only this draft is loaded in this chat, and nothing here reaches the library or counts as a use.",
+    backToDraft: "Back to the draft",
+    draftGone:
+      "The draft this chat tries is no longer on this hub, as after a restore, so nothing runs here. Try in a chat again from where you wrote it.",
+    editorGone: "The draft you tried is no longer on this hub, as after a restore, so this opens without it.",
+    loadingDraft: "Opening the draft you tried…",
+    draftFailed: "Hobbots could not open the draft you tried.",
+  },
+  health: {
+    aHob: "A hob",
+    unused: ({ name, days }: { name: string; days: number }) => `${name} was not used in ${formatCount(days)} days`,
+    neverUsed: ({ name }: { name: string }) => `${name} was never used`,
+    unusedHint: ({ count }: { count: number }) =>
+      `${formatCount(count)} ${plural(count, { one: "place gets", other: "places get" })} it, so those hobs read its description before each chat. Take it off where nobody needs it.`,
+    behind: ({ who, name, rev }: { who: string; name: string; rev: string }) => `${who} is on ${name} ${rev}`,
+    behindHint: ({ latest, held }: { latest: string; held: boolean }) =>
+      held
+        ? `Kept there while ${latest} is the newest. Move it when you are ready.`
+        : `${latest} is the newest. Move it there.`,
+    behindLost: ({ who, name }: { who: string; name: string }) => `${who} is on a revision of ${name} the library lost`,
+    clashProjects: ({ hob, name }: { hob: string; name: string }) => `Two of ${hob}'s projects have a “${name}”`,
+    clashProjectsHint: "Neither loads for it until you keep one.",
+    clashReplaced: ({ hob, name }: { hob: string; name: string }) => `${hob} gets two skills named “${name}”`,
+    clashReplacedHint: "The narrower one replaces the other for it. Keep both, or remove one.",
+    clashSame: ({ hob, name }: { hob: string; name: string }) => `${hob} loads two skills named “${name}”`,
+    clashSameHint: "Both load, so /name picks neither. Rename one, or give only one.",
+    vague: ({ name }: { name: string }) => `${name}'s description may not trigger`,
+    vagueHint: "Say which requests it is for, such as “Use when…”, so a hob picks it on its own.",
+    long: ({ name, length }: { name: string; length: number }) =>
+      `${name}'s description is long (${formatCount(length)} characters)`,
+    longHint: "Every hob that has it reads it before each chat. Keep it to when to use it.",
+    allGood: "Nothing needs a look.",
+    loading: "Checking your skills…",
+    failed: "Hobbots could not check your skills.",
+    retry: "Try again",
+    carries: "What each hob carries",
+    load: ({ count, percent }: { count: number; percent: number }) =>
+      `${formatCount(count)} · ${formatCount(percent)}%`,
+    /** Read after the hob's name, in place of the bar and the figures. */
+    loadLabel: ({ count, percent }: { count: number; percent: number }) =>
+      ` carries ${skills(count)}, ${formatCount(percent)}% of its listing`,
+    loadHint:
+      "A hob reads every skill's name and description before each chat, within about 8,000 characters. Past that, or past about 30 skills, it picks the right one less often.",
+    noHobs: "No hob has skills yet.",
+    more: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
+    fewer: "Show fewer",
+  },
   export: {
     title: "Export skills",
     intro:
@@ -245,6 +306,40 @@ export const messages = {
     failed: "Its uses could not be read.",
     retry: "Try again",
   },
+  repository: {
+    offer: "Found in a repository",
+    offerTitle: ({ count, name }: { count: number; name: string }) => `${skills(count)} in the ${name} repository`,
+    offerLine: ({ roots, hob, folder }: { roots: ReadonlyArray<string>; hob: string; folder: string }) =>
+      `Found in ${formatList(roots)} while ${hob} worked in ${folder}. Hobs do not load them until you import them.`,
+    see: "See them",
+    notNow: "Not now",
+    dismissed: "Hobbots will not offer these again until the repository holds a skill it does not hold now.",
+    dismissFailed: "That did not save. Try again in a moment.",
+    pick: "Which project",
+    pickLine: ({ hob, folder }: { hob: string; folder: string }) => `${hob} works in ${folder}`,
+    none: "No repository a hob works in holds skills in .claude/skills or .agents/skills.",
+    reading: "Reading the repository's default branch…",
+    unreadable:
+      "Hobbots could not read the repository's default branch from its origin. Check that this computer can fetch it, then try again.",
+    retry: "Try again",
+    listFailed: "Hobbots could not check the folders your hobs work in for a repository's skills.",
+    found: ({ folders, commit, name }: { folders: ReadonlyArray<string>; commit: string | null; name: string }) =>
+      commit === null
+        ? `Found in ${formatList(folders)}, on its default branch. They become the ${name} project's skills, with revisions like any other. When the default branch changes them, you see an update.`
+        : `Found in ${formatList(folders)}, on its default branch at ${commit.slice(0, 7)}. They become the ${name} project's skills, with revisions like any other. When the default branch changes them, you see an update.`,
+    nothing: "The repository's default branch holds no skills in .claude/skills or .agents/skills.",
+    sameName: ({ name }: { name: string }) => `Another ${name} is picked; only one of a name can be imported.`,
+    importN: ({ count, name }: { count: number; name: string }) =>
+      count === 0 ? "Pick a skill to import" : `Import ${skills(count)} for the ${name} project`,
+    imported: ({ names, name, hob }: { names: ReadonlyArray<string>; name: string; hob: string }) =>
+      `Imported ${formatList(names)} for the ${name} project. ${hob} uses them from its next chat.`,
+    moved: "The default branch changed since you looked. Look again to see what it holds now.",
+    failed: "Nothing was imported. Try again in a moment.",
+    elsewhere:
+      "Your library already has this skill from another source, so its updates would not come from this repository. Nothing was imported.",
+    leftOut: ({ names }: { names: ReadonlyArray<string> }) =>
+      `${formatList(names)} came into your library from another source while this ran, so the project did not get ${names.length === 1 ? "it" : "them"}.`,
+  },
   scope: {
     title: ({ name }: { name: string }) => `${name}'s skills`,
     everyoneTitle: "Everyone's skills",
@@ -254,6 +349,8 @@ export const messages = {
     hobLine: "Only this hob has them. A hob's own skill replaces Everyone's or a project's of the same name.",
     empty: "No skill is given here yet. Open a skill and use Also give it to.",
     foot: "Open a hob in the list to turn an Everyone or project skill off for that hob alone.",
+    projectFoot:
+      "Skills checked into the repository itself are not loaded from the clone. Hobbots offers to import them here, where they get revisions.",
     openPage: ({ name }: { name: string }) => `Open ${name}'s page`,
   },
   loading: "Opening your skills…",
@@ -593,8 +690,10 @@ export const messages = {
     tabs: {
       git: { label: "From Git", sub: "A repository, pinned to a commit" },
       file: { label: "Folder or .zip", sub: "From this computer" },
+      repo: { label: "From a project", sub: "None found yet" },
       write: { label: "Write one", sub: "Here, or with a hob" },
     },
+    repoFound: ({ count, name }: { count: number; name: string }) => `${formatCount(count)} found in ${name}`,
     repository: "Repository",
     ref: "Branch, tag or commit",
     refHint: "The default branch when empty",

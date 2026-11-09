@@ -15,8 +15,12 @@ Skills for hobs, as [ADR 029](../../docs/decisions/029-skills.md) decides it. Th
 - **Checks**, before anything is written, each in one pass over the text so crafted input cannot stall the hub: front matter between `---` lines that is YAML, with a `name` of lower-case letters, digits and single hyphens and a `description` of at most 1,024 characters; no link, no special file, and no path or Markdown link (outside code blocks) that reaches outside the skill; at most 200 files and 5 MB. A refusal names the file and the rule. No script ever runs.
 - **What is dropped**, with a note on the revision: a Claude Code plugin's `hooks`, `commands`, `agents` and `.mcp.json` (only its `skills` are read), `allowed-tools` in the front matter, and `dependencies` in Codex's `agents/openai.yaml`. The MCP tools those dependencies name join `metadata.hobbots.charms` as Charm hints.
 - **Flags** for a careful look: a script (an executable file, a script's extension or a `#!` line), each URL in a text file, and the first hidden character in it (zero-width, direction overrides, tag characters).
-- **`skills-lock.json`.** When the source has the `skills` CLI's lock file at its top, a skill it names is followed at the Git source the lock gives, and a scan says whether the copy matches the lock's `computedHash` (`skillsCliHash` repeats the CLI's own hash).
+- **`skills-lock.json`.** When the source has the `skills` CLI's lock file at its top, a skill it names is followed at the Git source the lock gives, and a scan says whether the copy matches the lock's `computedHash` (`skillsCliHash` repeats the CLI's own hash). An import with `followSource` follows the source itself instead, as a repository's own skills are.
 - **Labels.** A plugin's `version`, or `metadata.version` in the front matter, is kept as a label only.
+
+## A repository's own skills
+
+`SkillRepositoriesLive` offers the skills a repository a hob works in holds in `.claude/skills` and `.agents/skills`, once per project (ADR 029, Scopes). `RepositorySkillFinderLive` lists a clone's skill folders with no link followed anywhere on the way, only to offer them. An import reads them from the repository's default branch through its `origin`, never from the clone, follows that branch for updates even where `skills-lock.json` names another source, and gives each one to the project. Importing or Not now closes the offer until the repository holds a skill folder it did not hold then.
 
 ## `~/.agents/skills`
 
@@ -25,5 +29,6 @@ Skills for hobs, as [ADR 029](../../docs/decisions/029-skills.md) decides it. Th
 ## Tests
 
 - `test/import.test.ts` imports from folders, archives, a local Git repository and text written in Hobbots: one revision per content, every refusal with nothing written, a plugin with only its skills, Codex's dependencies, flags, a pick from a repository's skills, and `skills-lock.json`.
+- `test/repositories.test.ts` lists a clone's skill folders and follows no link.
 - `test/agents-folder.test.ts` reads a stand-in `~/.agents/skills`, a change rolled out, and a skill taken out.
 - `@hobbots/skills/testing` exports `SkillLibraryFake`, the library in memory.

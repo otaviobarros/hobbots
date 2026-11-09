@@ -12,6 +12,8 @@ import {
   type HookJSONOutput,
   type ModelInfo,
   type Options,
+  type PostToolUseFailureHookInput,
+  type PostToolUseHookInput,
   query,
   type SDKMessage,
   type SDKRateLimitInfo,
@@ -31,6 +33,7 @@ import {
   type ToolAccess,
   type TurnApprovals,
   UNRECORDED_TOOL_CALL,
+  WEB_RESULTS_LINE,
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
@@ -87,8 +90,9 @@ import {
   withCommitIdentity,
 } from "./sandbox.ts";
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
-import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
+import { commandOf, offeredTools, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
 import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
+import { claudeWebSearched, recordSearched } from "./web-search.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -737,7 +741,18 @@ export const wholeTurn = (asked: string | null = null, askedSet: string | null =
       completed = usage === undefined ? { ...event, text } : { ...event, text, usage };
       return [];
     },
-    end: (): ReadonlyArray<RuntimeEvent> => (completed === null ? [] : [completed]),
+    /**
+     * The turn's completion, with the web searches it ran counted in its usage when it could search
+     * (ADR 036): one per `WebSearch` call, since the turn's own usage counts none.
+     */
+    end: (webSearches?: number): ReadonlyArray<RuntimeEvent> =>
+      completed === null
+        ? []
+        : [
+            webSearches === undefined || completed.usage === undefined
+              ? completed
+              : { ...completed, usage: { ...completed.usage, webSearches } },
+          ],
   };
 };
 
@@ -796,6 +811,11 @@ export interface ToolTurn extends CallSteers {
   /** Canonical and existing; the first is where Claude Code starts. */
   readonly folders: ReadonlyArray<string>;
   readonly tools: ReadonlyArray<string>;
+  /**
+   * Whether the turn may use the runtime's own web search (ADR 036): the hub settled it, and Search
+   * the web answers Allow under the turn's context. Claude Code's `WebSearch` is then in `tools`.
+   */
+  readonly webSearch: boolean;
   /** Claude Code's configuration folder for this hob. */
   readonly runtimeFolder: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
@@ -836,7 +856,7 @@ const hubSteers = (hub: Pick<PromptRequest, "hubTools" | "steering"> | null | un
 export const toolTurn = (
   access: ToolAccess | null | undefined,
   sandbox: SandboxState,
-  hub?: Pick<PromptRequest, "hubTools" | "steering"> | null,
+  hub?: Pick<PromptRequest, "hubTools" | "steering" | "webSearch"> | null,
   modelHosts: ReadonlyArray<string> = CLAUDE_CODE_MODEL_HOSTS,
 ): ToolTurn | null => {
   if (!access) return null;
@@ -856,14 +876,44 @@ export const toolTurn = (
   if (operationDecision(context, "read-files") === "deny") return null;
   const tools = offeredTools(context);
   if (tools.length === 0) return null;
+  // Checked again under the context the calls are decided in: it takes Allow or Never only.
+  const webSearch = hub?.webSearch === true && operationDecision(context, "search-web") === "allow";
   return {
     context,
     folders,
-    tools,
+    tools: webSearch ? [...tools, WEB_SEARCH_TOOL] : tools,
+    webSearch,
     runtimeFolder: access.runtimeFolder,
     ...hubSteers(hub),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
     commitsAs: access.commitsAs,
+  };
+};
+
+/**
+ * What a finished call of the turn's started ones says as a web search (ADR 036): the search, read
+ * from its structured result and never the model's text, and the note that marks its results as
+ * other people's text. Any other call says nothing.
+ */
+const searchReport = (
+  input: PostToolUseHookInput | PostToolUseFailureHookInput,
+  started: ReadonlySet<string>,
+): { readonly event?: RuntimeEvent; readonly note?: string } =>
+  input.hook_event_name === "PostToolUse" && input.tool_name === WEB_SEARCH_TOOL && started.has(input.tool_use_id)
+    ? { event: claudeWebSearched(input.tool_use_id, input.tool_input, input.tool_response), note: WEB_RESULTS_LINE }
+    : {};
+
+/**
+ * The searches a turn ran, counted as they are reported, for its usage when it could search (ADR 036):
+ * Claude Code counts a search only in a side model's usage, so the turn's own counts none.
+ */
+export const searchCount = (tools: ToolTurn | null) => {
+  let count = 0;
+  return {
+    see: (event: RuntimeEvent) => {
+      if (event._tag === "WebSearched") count += 1;
+    },
+    total: (): number | undefined => (tools?.webSearch ? count : undefined),
   };
 };
 
@@ -883,6 +933,7 @@ export const policyHooks = (
   record?: PromptRequest["recordToolStart"],
   background?: BackgroundCommands | null,
   skillFolder?: string | null,
+  recordSearch?: PromptRequest["recordSearch"],
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
@@ -993,6 +1044,7 @@ export const policyHooks = (
   const finished: HookCallback = async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
     let output: string | undefined;
+    const search = searchReport(input, started);
     if (started.delete(input.tool_use_id)) {
       // Claude Code keeps an output too large to return inline in its configuration folder.
       output =
@@ -1001,11 +1053,19 @@ export const policyHooks = (
           : input.error;
       // A command that went on in the background has not finished: its task's end reports it (#1018).
       if (!(await background?.moved(input.tool_use_id, input))) report(toolFinished(input.tool_use_id, input, output));
+      // A search reports what it found from its structured result, never the model's text (ADR 036).
+      // Its results are found before the hook returns, so the model's next call can rely on them.
+      if (search.event?._tag === "WebSearched") {
+        await Effect.runPromise(recordSearched(recordSearch, search.event));
+        report(search.event);
+      }
     }
     // The notes go with the result, so the hob knows it asked as it would know of a refusal, and
-    // what to do with a .git its sandbox kept from a delete (#663).
+    // what to do with a .git its sandbox kept from a delete (#663). A search's results are marked as
+    // other people's text (ADR 036).
     const kept = keptGitHint(input.tool_name, output, turn.initTool);
-    const note = [notes.get(input.tool_use_id), kept].filter((part) => part !== undefined).join(" ") || undefined;
+    const note =
+      [notes.get(input.tool_use_id), kept, search.note].filter((part) => part !== undefined).join(" ") || undefined;
     notes.delete(input.tool_use_id);
     // A command prints in color for the Workbench; the hob reads its output plain (#902).
     const plain =
@@ -1158,6 +1218,12 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
         status: "verified",
         evidence: "Cancelling the turn aborts Claude Code and waits for it to exit.",
       },
+      // Offered only under Search the web, and decided by the hook like any tool (ADR 036).
+      webSearch: {
+        status: "verified",
+        evidence:
+          "WebSearch runs on Anthropic's servers and passes the PreToolUse hook as Search the web; WebFetch stays closed.",
+      },
     };
 
     const sendPrompt = (request: PromptRequest) =>
@@ -1229,7 +1295,12 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             stderr = stderrTail(spawned.stderr);
             return spawned;
           };
-          const report = (event: RuntimeEvent) => Queue.offerUnsafe(queue, event);
+          // The searches the turn ran, which its usage counts (ADR 036).
+          const searches = searchCount(tools);
+          const report = (event: RuntimeEvent) => {
+            searches.see(event);
+            Queue.offerUnsafe(queue, event);
+          };
           // A call that goes on in the background is reported finished when its task ends.
           const background = backgroundCommands(report);
           const turn = yield* Effect.acquireRelease(
@@ -1252,6 +1323,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                               request.recordToolStart,
                               background,
                               skills?.folder ?? null,
+                              request.recordSearch,
                             ),
                             // Only Hobbots' script: one the hub was started with never reaches the commands.
                             { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
@@ -1315,7 +1387,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             ),
             Stream.runForEach((event) => Queue.offer(queue, event)),
           );
-          yield* Queue.offerAll(queue, whole.end());
+          yield* Queue.offerAll(queue, whole.end(searches.total()));
           yield* Queue.end(queue);
         }),
       );

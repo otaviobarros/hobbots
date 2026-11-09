@@ -254,11 +254,28 @@ export const messages = {
       retireLine: ({ name }: { name: string }) =>
         `Retiring puts ${name} to sleep for good. Its threads stay readable in the Archive.`,
       retire: ({ name }: { name: string }) => `Retire ${name}…`,
+      retiringLine: ({ name }: { name: string }) =>
+        `${name} is finishing its open Tasks, then retires. It takes no new work meanwhile.`,
+      retireNow: ({ name }: { name: string }) => `Retire ${name} now…`,
     },
     retire: {
       title: ({ name }: { name: string }) => `Retire ${name}?`,
       busy: ({ name }: { name: string }) => `${name} is writing a reply right now. What should happen to it?`,
       idle: ({ name }: { name: string }) => `${name} stops working and goes to sleep. Nothing is deleted.`,
+      open: ({ name }: { name: string }) => `${name} still has work open. What should happen to it?`,
+      unread: ({ name }: { name: string }) => `Hobbots could not read ${name}'s open work. Close and try again.`,
+      runningHeading: "Writing now",
+      tasksHeading: ({ count }: { count: number }) => (count === 1 ? "1 open Task" : `${count} open Tasks`),
+      waitingOn: ({ approvals, items }: { approvals: number; items: number }) =>
+        [
+          ...(approvals > 0 ? [approvals === 1 ? "1 approval waits" : `${approvals} approvals wait`] : []),
+          ...(items > 0 ? [items === 1 ? "1 item in its backpack" : `${items} items in its backpack`] : []),
+        ].join(" · "),
+      handTo: "Hand them to",
+      pickTaker: "Pick a hob",
+      noTaker: "No other hob takes new work right now, so there is nobody to hand the Tasks to.",
+      cannotTake: ({ taker, count }: { taker: string; count: number }) =>
+        `${taker} cannot take ${count === 1 ? "one of these Tasks" : `${count} of these Tasks`}. Pick another hob, or let it finish first.`,
       choices: ({ name }: { name: string }) => `What happens to ${name}'s work`,
       kept: "Its threads are kept and stay readable. Retiring can't be undone, but you can summon a new hob any time.",
       failed: ({ name }: { name: string }) => `Hobbots could not retire ${name}. Try again.`,
@@ -266,6 +283,9 @@ export const messages = {
       confirm: ({ name }: { name: string }) => `Retire ${name}`,
       retiring: "Retiring…",
       done: ({ name }: { name: string }) => `${name} is asleep`,
+      waiting: ({ name }: { name: string }) => `${name} retires when done`,
+      whenDone: ({ name }: { name: string }) => `${name} then goes to the Archive, under Retired hobs.`,
+      close: "Close",
       find: ({ name }: { name: string }) => `You find ${name} in the Archive, under Retired hobs.`,
       archived: "Open the Archive",
       home: "Go to Home",
@@ -665,6 +685,7 @@ export const messages = {
       "propose-skill": "Drafts a skill. Nothing changes until you add it.",
       "skill-feedback": "Leaves a note on a skill. Nothing changes.",
       "read-hobs": "Reads only. Nothing changes.",
+      "search-web": "Sends the search to its AI's provider. Nothing changes.",
     },
   },
   charms: {
@@ -1064,7 +1085,7 @@ export const messages = {
       skills: "Skills",
       hobs: "Other hobs",
       commands: "Commands",
-      internet: "Internet",
+      web: "Web",
       outside: "Outside its folders",
     },
     checked: "Checked",
@@ -1082,7 +1103,16 @@ export const messages = {
     sandbox: "Sandbox",
     details: "Details: how these rules are kept",
     detailsNote: ({ name }: { name: string }) =>
-      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory. Skill rules work the same way: a skill itself grants nothing, and its scripts run under the rules above.`,
+      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way. Memory rules are decided by Hobbots each time ${name} uses its memory tools: on Never, it cannot search its memory or save to it. Even then, each new session still starts with a short brief from the memory ${name} reads, and Hobbots still keeps a summary of each chat in ${name}'s own memory. Skill rules work the same way: a skill itself grants nothing, and its scripts run under the rules above. Search the web is Allow or Never only, because Codex runs its search inside the AI's turn and cannot pause for you.`,
+    /** Search the web's note, by the runtime the hob thinks with (ADR 036). */
+    searchWeb: {
+      "claude-code": "Look things up with Claude Code's search. The query goes to Anthropic, who runs the search.",
+      codex:
+        "Look things up with Codex's search, from OpenAI's cached index. The query goes to OpenAI, who runs the search.",
+      notOffered:
+        "Look things up and bring back links. The AI this hob thinks with has no search Hobbots can check, so it is off.",
+    },
+    notOffered: "Not offered on this AI",
   },
   signing: {
     label: "Sign commits with my 1Password key",
@@ -1103,6 +1133,7 @@ export const messages = {
       hubTools: "Charms and coordination tools",
       toolEvents: "Tool steps reported",
       toolInterruption: "Running tools can be stopped",
+      webSearch: "Its own web search",
     },
     status: { verified: "Verified", unverified: "Not verified", unsupported: "Unsupported" },
     needsSandbox: "Needs the sandbox",

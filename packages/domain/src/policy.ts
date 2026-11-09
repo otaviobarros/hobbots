@@ -27,6 +27,7 @@ export const PolicyOperation = Schema.Literals([
   "propose-skill",
   "skill-feedback",
   "read-hobs",
+  "search-web",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
 
@@ -51,6 +52,21 @@ export type SkillOperation = typeof SkillOperation.Type;
  */
 export const DirectoryOperation = Schema.Literals(["read-hobs"]);
 export type DirectoryOperation = typeof DirectoryOperation.Type;
+
+/**
+ * Search the web (ADR 036), in the Web group beside Use the web: the runtime's own search, run on its
+ * provider's servers. Allow offers it for the turn; Never offers none. It has no Ask, since Codex's
+ * search runs inside the model's turn and cannot pause, and the answer must act the same on every
+ * runtime.
+ */
+export const SearchOperation = Schema.Literals(["search-web"]);
+export type SearchOperation = typeof SearchOperation.Type;
+
+/**
+ * The built-in operations that take Allow or Never only (ADR 036). An override of Ask for one is
+ * refused when saved, and a turn is offered the operation only when its answer is Allow.
+ */
+export const ALLOW_OR_NEVER_OPERATIONS: ReadonlyArray<PolicyOperation> = ["search-web"];
 
 /** Allow proceeds, Ask pauses the turn for an approval, Deny refuses (the UI says Never). */
 export const PolicyDecision = Schema.Literals(["allow", "ask", "deny"]);
@@ -84,6 +100,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "propose-skill": "allow",
     "skill-feedback": "allow",
     "read-hobs": "allow",
+    "search-web": "allow",
   },
   balanced: {
     "read-files": "allow",
@@ -101,6 +118,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "propose-skill": "allow",
     "skill-feedback": "allow",
     "read-hobs": "allow",
+    "search-web": "allow",
   },
   trusting: {
     "read-files": "allow",
@@ -118,6 +136,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "propose-skill": "allow",
     "skill-feedback": "allow",
     "read-hobs": "allow",
+    "search-web": "allow",
   },
 };
 
@@ -265,6 +284,7 @@ export const PolicyOverrides = Schema.Struct({
   "propose-skill": Schema.optionalKey(PolicyDecision),
   "skill-feedback": Schema.optionalKey(PolicyDecision),
   "read-hobs": Schema.optionalKey(PolicyDecision),
+  "search-web": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 
@@ -296,13 +316,32 @@ export const StoredPolicyLayer = Schema.Record(Schema.String, PolicyDecision).pi
 );
 
 /**
+ * Which hobs a hob holding the Summoning Charm may manage (ADR 034): the hobs it summoned, on by
+ * default; a list of hobs you pick, empty by default; and itself, off by default. A retired hob is
+ * outside every scope. Only you change it.
+ */
+export const SummoningScope = Schema.Struct({
+  summoned: Schema.Boolean,
+  /** The ids of the hobs you picked. */
+  hobs: Schema.Array(Schema.String),
+  self: Schema.Boolean,
+});
+export type SummoningScope = typeof SummoningScope.Type;
+
+/** The scope the Summoning Charm's grant holds until you change it (ADR 034). */
+export const DEFAULT_SUMMONING_SCOPE: SummoningScope = { summoned: true, hobs: [], self: false };
+
+/**
  * What a hob holds of the Charms (ADR 031): `granted`, the ids of the Charms you gave it, and its
  * overrides for their operations, keyed by id. Without `granted`, the hob holds the Charms every hob
- * starts with (`DEFAULT_HOB_CHARMS`).
+ * starts with (`DEFAULT_HOB_CHARMS`). `summoning` is the Summoning Charm's scope, beside its
+ * overrides, and `withheld` the Charms you gave every hob that you took away from this one (ADR 034).
  */
 export const HobCharms = Schema.Struct({
   granted: Schema.optionalKey(Schema.Array(CharmId)),
   overrides: Schema.optionalKey(CharmOverrides),
+  summoning: Schema.optionalKey(SummoningScope),
+  withheld: Schema.optionalKey(Schema.Array(CharmId)),
 });
 export type HobCharms = typeof HobCharms.Type;
 
@@ -343,6 +382,8 @@ const currentPolicy = (stored: StoredHobPolicy): CurrentHobPolicy => {
   const held: HobCharms = {
     ...(granted === undefined ? {} : { granted }),
     ...(Object.keys(charm).length === 0 ? {} : { overrides: charm as CharmOverrides }),
+    ...(charms?.summoning === undefined ? {} : { summoning: charms.summoning }),
+    ...(charms?.withheld === undefined || charms.withheld.length === 0 ? {} : { withheld: charms.withheld }),
   };
   return { ...rest, overrides: builtIn, ...(Object.keys(held).length === 0 ? {} : { charms: held }) };
 };

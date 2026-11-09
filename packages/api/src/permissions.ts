@@ -11,7 +11,14 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation, UnknownCharm } from "./errors.ts";
+import {
+  AgentNotFound,
+  InvalidFolder,
+  OverrideWidens,
+  UndeclaredOperation,
+  UnknownCharm,
+  UnofferedAnswer,
+} from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -81,7 +88,7 @@ export class PermissionsGroup extends HttpApiGroup.make("permissions")
       params: { agentId: AgentId },
       payload: UpdateHobPermissionsPayload,
       success: HobPermissions,
-      error: [AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation, UnknownCharm],
+      error: [AgentNotFound, InvalidFolder, OverrideWidens, UndeclaredOperation, UnknownCharm, UnofferedAnswer],
     }),
   )
   .middleware(DeviceSession)

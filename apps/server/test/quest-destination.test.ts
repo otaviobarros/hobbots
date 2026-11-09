@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ApprovalService, QuestionService } from "@hobbots/agents";
 import type { RuntimeKind } from "@hobbots/domain";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { firstPending, hub, partyHub, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1215: you asked for a summary at a path its member could not write. The member asked its
@@ -385,5 +385,148 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(answers.get("wrap")).toContain(source);
     expect(answers.get("wrap")).not.toContain(copy);
     expect(refused.quests[0]?.state).toBe("active");
+  }, 30_000);
+
+  // covers OR-004, OR-002, IN-004 (#1219)
+  it("[TC-OR-1219-02] refuses a first question about the place you asked for whose choices none worded to let it go", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true });
+    dispose = party.dispose;
+    const { run, answers, project, temp, requests } = party;
+    const wanted = join(temp, "System", "skills-check.html");
+    const saved = join(project, "skills-check.html");
+    writeFileSync(saved, "<!doctype html>\n");
+    // The lead's member asks with choices that leave the delivery to you, as the lead in #1219 did.
+    const byHand = [
+      { label: "Move it yourself", consequence: `Copy ${saved} to ${wanted} by hand.` },
+      { label: "Keep the place I asked for", consequence: "The Quest waits until it can go there." },
+    ];
+    await run(
+      quest(
+        `Have Rook save a short summary as ${wanted}`,
+        [
+          // A question about the page itself, naming it while it is not written yet, is asked as it is.
+          hub("ask", {
+            key: "language",
+            question: `Should ${wanted} be in English or Portuguese?`,
+            options: [
+              { label: "English", consequence: `${wanted} is written in English.` },
+              { label: "Portuguese", consequence: `${wanted} is written in Portuguese.` },
+            ],
+          }),
+          // Words such as "instead", "skip" and "copy" in a choice about the content leave it a content question.
+          hub("ask", {
+            key: "contents",
+            question: `How should ${wanted} read?`,
+            options: [
+              {
+                label: "Use Portuguese instead",
+                consequence: `${wanted} is written in Portuguese instead of English.`,
+              },
+              { label: "Skip the table of contents", consequence: `${wanted} has no table of contents.` },
+              { label: "Copy edit it lightly", consequence: `${wanted} keeps its wording, with typos fixed.` },
+            ],
+          }),
+          hub("ask", {
+            key: "by-hand",
+            question: `I can't write ${wanted}. What now?`,
+            options: byHand,
+            recommended: 1,
+          }),
+          hub("ask", {
+            key: "worded",
+            question: `I can't write ${wanted}. What now?`,
+            options: insteadOrKeep(saved, wanted),
+            recommended: 2,
+          }),
+        ],
+        { key: "wrap", delivered: true, summary: "Saved", artifacts: [file(saved)] },
+      ),
+    );
+    const asked = await run(treeWhen((tree) => tree.questions.length > 2));
+    expect(answers.get("language")).not.toContain("Refused");
+    expect(answers.get("contents")).not.toContain("Refused");
+    expect(answers.get("by-hand")).toContain("Refused (destination-unworded)");
+    expect(answers.get("by-hand")).toContain(`The user asked for ${wanted}, and nothing is there yet`);
+    expect(answers.get("by-hand")).toContain("Never recommend a choice that leaves the delivery to the user");
+    expect(answers.get("worded")).not.toContain("Refused");
+    // The question about its content, and the one worded to let the place go, are asked.
+    expect(asked.questions.map((each) => each.options.map((option) => option.label))).toEqual([
+      ["English", "Portuguese"],
+      ["Use Portuguese instead", "Skip the table of contents", "Copy edit it lightly"],
+      ["Save it there instead", "Keep the place I asked for"],
+    ]);
+    // The question reaches the lead as a turn whose briefing says how such a question is worded.
+    const lead = await vi.waitFor(() => {
+      const found = requests.find((each) => each.prompt.includes("asks, as question"));
+      if (found === undefined) throw new Error("the question has not reached the lead yet");
+      return found;
+    });
+    expect(lead.briefing).toContain(
+      `"Not delivered at <the path they asked for>: delivered at <new absolute path> instead."`,
+    );
+    expect(lead.briefing).toContain("pass their answer on to a member in their own words");
+  }, 30_000);
+
+  // covers OR-004, OR-002 (#1219)
+  it("[TC-OR-1219-03] refuses a lead's answer that puts the work at a place of its own after you redirected it, whatever it quotes, and passes your words on", async () => {
+    const party = partyHub({ lead: runtime, members: runtime, files: true });
+    dispose = party.dispose;
+    const { run, answers, project, temp, reactions } = party;
+    const wanted = join(temp, "System", "skills-check.html");
+    const saved = join(project, "skills-check.html");
+    const redirect = "Save it in ~/Documents/Hobbots instead";
+    const escalates = (asked: string) => ({
+      on: "asks, as question",
+      lines: [hub("escalate", { key: `up-${asked}`, question_id: `$${asked}.question_id` })],
+    });
+    reactions.push(escalates("style"), escalates("where"), {
+      on: "asks, as question",
+      lines: [
+        hub("answer", { key: "mine", question_id: "$again.question_id", answer: `Save it at ${saved}` }),
+        // "Yes" is your answer to another question: quoting it lets no place of the lead's own through.
+        hub("answer", {
+          key: "unrelated",
+          question_id: "$again.question_id",
+          answer: `Yes, save it at ${saved} instead`,
+        }),
+        hub("answer", {
+          key: "quoted",
+          question_id: "$again.question_id",
+          answer: `The user said: "${redirect}". Save it at ${saved}`,
+        }),
+        hub("answer", { key: "theirs", question_id: "$again.question_id", answer: `The user said: "${redirect}"` }),
+      ],
+    });
+    await run(
+      quest(
+        `Have Rook save a short summary as ${wanted}`,
+        [
+          hub("ask", { key: "style", question: "Should it have a table of contents?" }),
+          `fake:then ${hub("ask", { key: "where", question: `I can't write ${wanted}. Where should I save it instead?` })}`,
+          `fake:then fake:then ${hub("ask", { key: "again", question: `${wanted} is still out of reach. Where exactly?` })}`,
+          `fake:then fake:then fake:then ${hub("complete_task", { key: "rook", summary: "Saved where the user said" })}`,
+        ],
+        { key: "wrap", delivered: true, summary: "Saved" },
+        2,
+      ),
+    );
+    const youAnswer = async (index: number, answer: string) => {
+      const escalated = await run(treeWhen((tree) => tree.questions[index]?.recipientId === null));
+      const question = escalated.questions[index];
+      if (question === undefined) throw new Error("no question for you");
+      await run(QuestionService.use((questions) => questions.answer(question.id, answer)));
+    };
+    await youAnswer(0, "Yes");
+    await youAnswer(1, redirect);
+    const answered = await run(
+      treeWhen((tree) => tree.questions[2] !== undefined && tree.questions[2].answer !== null),
+    );
+    expect(answers.get("mine")).toContain("Refused (destination-theirs)");
+    expect(answers.get("mine")).toContain(`your answer puts the work at ${saved} instead`);
+    expect(answers.get("mine")).toContain(`"${redirect}"`);
+    expect(answers.get("unrelated")).toContain("Refused (destination-theirs)");
+    expect(answers.get("quoted")).toContain("Refused (destination-theirs)");
+    expect(answers.get("theirs")).not.toContain("Refused");
+    expect(answered.questions[2]?.answer).toBe(`The user said: "${redirect}"`);
   }, 30_000);
 });

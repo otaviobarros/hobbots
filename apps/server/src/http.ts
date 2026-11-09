@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import {
+  type ApprovalService,
   ChatService,
   DeviceService,
   everyRuntimeHealth,
@@ -10,10 +11,12 @@ import {
   missingRuntimeModels,
   readToolLog,
   runtimeAdapters,
+  type TaskRepository,
   ToolLogs,
 } from "@hobbots/agents";
 import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import type { ThreadId } from "@hobbots/domain";
+import type { Backpack } from "@hobbots/inbox";
 import { Effect, Layer, Option } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
@@ -28,6 +31,7 @@ import { DiagnosticsHandlers } from "./diagnostics.ts";
 import { ExportsHandlers } from "./exports.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
+import { HobChangesHandlers } from "./hob-changes.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { HobMemoryHandlers } from "./hob-memory.ts";
@@ -38,9 +42,12 @@ import { MemorySharesHandlers } from "./memory-shares.ts";
 import { PairingHandlers, PairingRequestsHandlers, withRetryAfter } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
+import { openWork, retireAs } from "./retire.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { SkillProposalsHandlers } from "./skill-proposals.ts";
+import { SkillRepositoriesHandlers } from "./skill-repositories.ts";
+import { SkillHealthHandlers, SkillTrialsHandlers } from "./skill-trials.ts";
 import { SkillUpdatesHandlers } from "./skill-updates.ts";
 import { SkillsHandlers } from "./skills.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
@@ -55,13 +62,16 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
     const chat = yield* ChatService;
     const hobs = yield* HobService;
     const lifecycle = yield* HobLifecycle;
+    const context = yield* Effect.context<HobbotsRepository | TaskRepository | ApprovalService | Backpack>();
     return handlers.handleAll({
       list: ({ query }) => repo.listAgentsWithStatus(query.status ? [query.status] : ["active", "paused"]),
       create: ({ payload }) => hobs.create(payload),
       update: ({ params, payload }) => hobs.update(params.agentId, payload),
       pause: ({ params }) => lifecycle.pause(params.agentId),
       wake: ({ params }) => lifecycle.wake(params.agentId),
-      retire: ({ params, payload }) => lifecycle.retire(params.agentId, payload.activeWork),
+      retire: ({ params, payload }) =>
+        retireAs(params.agentId, payload).pipe(Effect.provideService(HobLifecycle, lifecycle)),
+      openWork: ({ params, query }) => openWork(params.agentId, query.handOverTo).pipe(Effect.provide(context)),
       bringBack: ({ params }) => lifecycle.bringBack(params.agentId),
       threads: ({ params, query }) =>
         repo.findAgent(params.agentId).pipe(
@@ -209,6 +219,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     PairingRequestsHandlers,
     DevicesHandlers,
     AgentsHandlers,
+    HobChangesHandlers,
     ThreadsHandlers,
     SystemHandlers,
     SetupHandlers,
@@ -238,6 +249,9 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     SkillsHandlers,
     SkillProposalsHandlers,
     SkillUpdatesHandlers,
+    SkillRepositoriesHandlers,
+    SkillTrialsHandlers,
+    SkillHealthHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

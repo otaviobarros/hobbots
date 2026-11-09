@@ -1,6 +1,6 @@
 # ADR 024 — The Codex adapter
 
-Status: **Accepted.** Fills the Codex column of the [runtime adapters contract](../architecture/runtime-adapters.md) for Slice 11, applies [ADR 014](014-tool-policy-and-enforcement.md) to Codex, and follows [ADR 002](002-existing-runtimes.md), which chose Codex App Server.
+Status: **Accepted.** Fills the Codex column of the [runtime adapters contract](../architecture/runtime-adapters.md) for Slice 11, applies [ADR 014](014-tool-policy-and-enforcement.md) to Codex, and follows [ADR 002](002-existing-runtimes.md), which chose Codex App Server. Amended by [ADR 036](036-web-search-and-pages.md): cached web search is on for a turn that may search; live and indexed search stay off.
 
 ## Context
 

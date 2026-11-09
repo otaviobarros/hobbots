@@ -1,5 +1,5 @@
 import type { HobSkills } from "@hobbots/api";
-import { skillTitle } from "@hobbots/domain";
+import { type SkillTrial, skillTitle } from "@hobbots/domain";
 import { messages } from "./messages.ts";
 
 const copy = messages.picker;
@@ -81,9 +81,19 @@ export const dismissedDraft = (draft: string, slash: SlashQuery): string =>
 export const skillPicking = (
   query: { readonly data: HobSkills | undefined; readonly isError: boolean; readonly refetch: () => unknown },
   hobName: string,
-): SkillPicking => ({
-  hobName,
-  skills: pickerSkills(query.data, hobName),
-  status: query.data !== undefined ? "ready" : query.isError ? "failed" : "loading",
-  onRetry: () => void query.refetch(),
-});
+  trial: SkillTrial | null = null,
+): SkillPicking =>
+  // A chat that tries a draft loads the draft alone, so `/` offers only it (ADR 029, Try in a chat).
+  trial !== null
+    ? {
+        hobName,
+        skills: [{ name: trial.name, title: skillTitle(trial.name), sub: copy.draft }],
+        status: "ready",
+        onRetry: () => undefined,
+      }
+    : {
+        hobName,
+        skills: pickerSkills(query.data, hobName),
+        status: query.data !== undefined ? "ready" : query.isError ? "failed" : "loading",
+        onRetry: () => void query.refetch(),
+      };

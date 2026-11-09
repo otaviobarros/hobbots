@@ -37,7 +37,9 @@ export const announcer =
 /** The installation's setup as the user last saved it: its safety preset and the folders shared with every hob. */
 export class InstallationSettings extends Context.Service<
   InstallationSettings,
-  { readonly get: Effect.Effect<Pick<InstallationSetup, "safetyPreset" | "approvedFolders">> }
+  {
+    readonly get: Effect.Effect<Pick<InstallationSetup, "safetyPreset" | "approvedFolders" | "summoningForEveryHob">>;
+  }
 >()("@hobbots/agents/InstallationSettings") {}
 
 export interface FolderChecksShape {

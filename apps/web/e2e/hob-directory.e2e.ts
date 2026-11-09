@@ -130,14 +130,19 @@ const pipsRoster = async (page: Page, url: string, pip: Hob) => {
 // covers ADR 032 (Good at, Visible to other hobs, It applies at once), AG-002
 test("[TC-UX-1235-01] good at edited and Visible to other hobs turned off and on in a profile reach another hob's next turn", async ({
   page,
+  scan,
 }) => {
   const { url, pip, quill } = await hubWithTeam();
   await expect(await pipsRoster(page, url, pip)).toContainText('good at "Release notes, short and plain."');
+  await scan();
 
   await page.goto(`${url}/#/hobs/${quill.id}/profile`);
   const profile = page.getByRole("main", { name: "Quill's profile" });
+  await expect(profile.getByRole("textbox", { name: "Good at" })).toHaveValue("Release notes, short and plain.");
+  await scan();
   await profile.getByRole("textbox", { name: "Good at" }).fill("Changelogs and release notes.");
   await saveQuill(page);
+  await scan(profile);
   const edited = await pipsRoster(page, url, pip);
   await expect(edited).toContainText('good at "Changelogs and release notes."');
   await expect(edited).not.toContainText("short and plain");
@@ -148,6 +153,7 @@ test("[TC-UX-1235-01] good at edited and Visible to other hobs turned off and on
     .getByRole("switch", { name: "Visible to other hobs" })
     .click();
   await saveQuill(page);
+  await scan(profile.getByRole("region", { name: "Other hobs" }));
   await expect(await pipsRoster(page, url, pip)).not.toContainText("Quill");
 
   await page.goto(`${url}/#/hobs/${quill.id}/profile`);

@@ -108,6 +108,13 @@ export const RULES: ReadonlyArray<RuleInfo> = [
   { operation: "push", label: "Push your work", note: "Sending commits to a remote." },
   { operation: "use-web", label: "Use the web", note: "Fetching pages, package installs and downloads." },
   {
+    operation: "search-web",
+    label: "Search the web",
+    note: "Look things up with the search of the AI it thinks with. The query goes to that AI's provider, who runs the search.",
+    // Codex's search runs inside the AI's turn and cannot pause, so the hub offers no Ask (ADR 036).
+    answers: ["allow", "deny"],
+  },
+  {
     operation: "github.read",
     label: "Read GitHub",
     note: "Repository details, issues and pull requests of its folders, read on the hub.",

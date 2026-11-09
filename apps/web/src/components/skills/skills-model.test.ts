@@ -92,6 +92,7 @@ describe("the Skills page's address", () => {
       { _tag: "Overview" },
       { _tag: "Scope", scope: { _tag: "Hob", agentId: pip.id } },
       { _tag: "Add", from: "file" },
+      { _tag: "Add", from: "repo", project: "github.com/me/support" },
       { _tag: "New" },
       { _tag: "Skill", skillId: SkillId.make("s1"), member: null, tab: "history", file: null, diff: hash(2) },
       {

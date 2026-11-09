@@ -473,6 +473,52 @@ describe("HobbotsRepository", () => {
     expect(Option.isNone(result.v3)).toBe(true);
   });
 
+  // covers ADR 034 (Scope, The Charm), DP-003
+  it("[TC-DP-406-02] keeps a hob's Summoning scope and its withheld Charms with each configuration version", async () => {
+    const first = new Agent({
+      id: agentId,
+      name: "Aldric",
+      roleTitle: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "moss",
+      configVersion: 1,
+      createdAt: now,
+    });
+    const policy = {
+      ...first.policy,
+      charms: {
+        granted: ["github", "summoning"],
+        overrides: { "summoning.summon": "ask" as const },
+        summoning: { summoned: false, hobs: ["pip"], self: true },
+      },
+    };
+    const second = new Agent({ ...first, policy, configVersion: 2 });
+    const third = new Agent({
+      ...first,
+      policy: { ...first.policy, charms: { granted: ["github"], withheld: ["summoning"] } },
+      configVersion: 3,
+    });
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(first);
+      yield* repo.updateAgentConfig(second);
+      yield* repo.updateAgentConfig(third);
+      return {
+        v1: yield* repo.findAgentConfig(agentId, 1),
+        v2: yield* repo.findAgentConfig(agentId, 2),
+        agent: yield* repo.findAgent(agentId),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(Option.getOrThrow(result.v1).policy.charms).toEqual({ granted: ["github"] });
+    expect(Option.getOrThrow(result.v2).policy.charms).toEqual(policy.charms);
+    expect(Option.getOrThrow(result.agent).policy.charms).toEqual({ granted: ["github"], withheld: ["summoning"] });
+  });
+
   // covers AG-002, AG-006, DP-003
   it("[TC-AG-405-01] stores who made each version and who summoned the hob, and journals each change with its actor", async () => {
     const chief = AgentId.make("chief");
@@ -576,6 +622,52 @@ describe("HobbotsRepository", () => {
     expect(result.archived).toEqual([["c", "retired"]]);
     expect([result.retiredAt, result.activeRetiredAt]).toEqual(["2026-10-30T12:00:00.000Z", null]);
     expect(result.none).toEqual([]);
+  });
+
+  // covers AG-006, DP-003
+  it("[TC-AG-1246] stores a hob's wait to retire, keeps it through a pause and ends it when the hob retires", async () => {
+    const hob = new Agent({
+      id: AgentId.make("wren"),
+      name: "Wren",
+      roleTitle: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "violet",
+      configVersion: 1,
+      createdAt: now,
+    });
+    const retiring = { since: "2026-11-08T12:00:00.000Z", by: YOU };
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(hob);
+      const started = yield* repo.setAgentRetiring(hob.id, retiring, YOU);
+      const again = yield* repo.setAgentRetiring(hob.id, { ...retiring, since: "2026-11-09T12:00:00.000Z" }, YOU);
+      // A pause computed from a read made before the wait began does not undo it.
+      const paused = yield* repo.setAgentStatus(new Agent({ ...hob, status: "paused" }), "active");
+      const retired = yield* repo.setAgentStatus(
+        new Agent({ ...hob, status: "retired", retiredAt: "2026-11-08T13:00:00.000Z" }),
+        "paused",
+      );
+      const afterRetired = yield* repo.setAgentRetiring(hob.id, retiring, YOU);
+      return {
+        started: Option.map(started, (each) => each.value.retiring),
+        again: Option.isSome(again),
+        paused: Option.map(paused, (each) => [each.value.status, each.value.retiring]),
+        retired: Option.map(retired, (each) => [each.value.status, each.value.retiring]),
+        afterRetired: Option.isSome(afterRetired),
+        stored: (yield* repo.findAgent(hob.id)).pipe(Option.map((each) => each.retiring)),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.started).toEqual(Option.some(retiring));
+    expect(result.again).toBe(false);
+    expect(result.paused).toEqual(Option.some(["paused", retiring]));
+    expect(result.retired).toEqual(Option.some(["retired", null]));
+    expect(result.afterRetired).toBe(false);
+    expect(result.stored).toEqual(Option.some(null));
   });
 
   // covers DP-003, CH-008

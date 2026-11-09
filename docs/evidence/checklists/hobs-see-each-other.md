@@ -16,7 +16,7 @@ The Hobs see each other slice's checks ([ADR 032](../../decisions/032-hob-direct
 
 ## Checks
 
-Run D1 to D6 in a new chat with Ada, then again in a new chat with Bea.
+Run D1 to D6 in a new chat with Ada, then again in a new chat with Bea. D7 and D8 check a resumed Codex thread, so they run with Bea alone.
 
 | Step | Do | Expect |
 |---|---|---|
@@ -26,8 +26,9 @@ Run D1 to D6 in a new chat with Ada, then again in a new chat with Bea.
 | D4 | In Pip's profile, change Good at to "Release notes." and save. In the same chat, ask "Who writes our release notes?" | The reply names Pip. |
 | D5 | Ask "Is Wren on the team? Read Wren's card." | The hob says it knows no hob named Wren. |
 | D6 | In Wren's profile, turn Visible to other hobs on and save. Ask "Who is on the team now?" | The reply lists Wren beside the others. Turn it off again. |
-| D7 | In Bea's Permissions, set Read other hobs to Never, send Bea a message in D1's chat, then set it back to Allow and ask D1 again in that same chat. | With Never, Bea gets no roster. Back on Allow, the resumed Codex thread answers D1 from the roster. If it was offered no `read_hob`, it does not try to call it. |
-| D8 | Read the server log. | It shows no error. List any warning in the record. |
+| D7 | Codex only. In Bea's Permissions, set Read other hobs to Never. Start a new chat with Bea and send "Hello." Set Read other hobs back to Allow, then ask D1 in that same chat. | Under Never, Bea's first turn gets no roster and no `read_hob`. Back on Allow, the resumed Codex thread, which started without `read_hob`, answers D1 from the roster and does not try to call `read_hob`. |
+| D8 | Codex only. In D1's chat with Bea, which started under Allow, set Read other hobs to Never and send "Who is here?", then set it back to Allow and ask D1 again. | Under Never, Bea gets no roster, and a `read_hob` call it still tries is refused. Back on Allow, it answers D1 from the roster again. |
+| D9 | Read the server log. | It shows no error. List any warning in the record. |
 
 ## Record the run
 

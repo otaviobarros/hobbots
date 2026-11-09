@@ -26,6 +26,8 @@ import {
   RosterReceipts,
   SecretRedaction,
   SkillReviewsLive,
+  SkillTrialsLive,
+  SummoningHub,
   TaskFiles,
 } from "@hobbots/agents";
 import {
@@ -78,6 +80,7 @@ import {
   GitHubAccountRepository,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  HobChangesLive,
   HobGitHubAppRepository,
   HubCommitIdentityRepository,
   HubQuestionRepositoryLive,
@@ -92,6 +95,7 @@ import {
   SqliteLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  WebFoundUrlsLive,
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
@@ -101,7 +105,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
-import { SkillToolsLive } from "@hobbots/skills";
+import { RepositorySkillFinderLive, SkillRepositoriesLive, SkillToolsLive } from "@hobbots/skills";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
 import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
@@ -144,14 +148,17 @@ import {
 import { QuietRoutineReads } from "./request-log.ts";
 import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
+import { RetireWhenDone } from "./retire.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { SkillUpdateChecks } from "./skill-updates.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
+import { SummoningCharm } from "./summoning.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
+import { WebToolsLive } from "./web-access.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
@@ -302,6 +309,7 @@ const ServerLive = Layer.unwrap(
       TaskRepositoryLive,
       TaskToolCallsLive,
       CharmCallsLive,
+      HobChangesLive,
       MemorySavesLive,
       MemoryShareLogLive,
       SkillLibraryLive,
@@ -313,6 +321,7 @@ const ServerLive = Layer.unwrap(
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
+      WebFoundUrlsLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
@@ -404,8 +413,11 @@ const ServerLive = Layer.unwrap(
     const charmFolder = join(dataDir, "charms", "github");
     // The Charm registry (ADR 031): every Charm the hub holds, registered once, with one never-twice
     // runner for all of them. It declares them to the policy too, so registering a Charm here is all
-    // it takes for a hob to be granted it. The GitHub Charm is the only one yet.
-    const HubCharms = Charms.layer([GitHubCharm]).pipe(
+    // it takes for a hob to be granted it: the GitHub Charm, and the Summoning Charm (ADR 034).
+    const HubCharms = Charms.layer<Effect.Services<typeof GitHubCharm | typeof SummoningCharm>>([
+      GitHubCharm,
+      SummoningCharm,
+    ]).pipe(
       Layer.provide(
         Layer.mergeAll(
           GitRemotes.layer,
@@ -439,6 +451,8 @@ const ServerLive = Layer.unwrap(
     // The skill tools (ADR 029), beside the memory tools on every runtime, and your reviews of what
     // hobs propose with them, which wait for you under every preset.
     const SkillTooling = SkillToolsLive.pipe(Layer.provideMerge(SkillReviewsLive), Layer.provide(PolicyEngine.node));
+    // `web_fetch` (ADR 036) on every runtime, refusing the hub's own tailnet addresses as the sandbox does.
+    const WebTooling = WebToolsLive(config.version).pipe(Layer.provide(Remote));
     // The memory engine (ADR 028): the bundled ai-memory, run beside the hub and stopped with it. Its
     // two keys stay in the data folder and reach only the engine's environment. Without an engine,
     // or one that fails its checksum, memory is off and everything else works.
@@ -446,7 +460,10 @@ const ServerLive = Layer.unwrap(
     const Memory = memoryEngineLayer(config, dataDir, memoryKeys);
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
-    const App = HobLifecycle.layer
+    // The Summoning Charm's calls reach the hob use cases once they are built (ADR 034), and a hob
+    // finishing its open Tasks first retires once the last one ends (#408).
+    const App = Layer.mergeAll(SummoningHub.bound, RetireWhenDone)
+      .pipe(Layer.provideMerge(HobLifecycle.layer))
       .pipe(
         Layer.provideMerge(
           Layer.mergeAll(
@@ -456,6 +473,12 @@ const ServerLive = Layer.unwrap(
             JournalCompaction,
             // Skills from Git are checked for updates once a day (ADR 029).
             SkillUpdateChecks,
+            // Try in a chat: a draft loaded alone in a new chat, outside the library (ADR 029).
+            SkillTrialsLive,
+            // A repository's own skills, offered once and imported from its default branch (ADR 029).
+            SkillRepositoriesLive.pipe(
+              Layer.provide(Layer.mergeAll(RepositorySkillFinderLive, PermissionSummary.layer)),
+            ),
             // What happens in each thread goes to its hob's memory (ADR 028).
             memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).
@@ -554,7 +577,9 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(DirectoryToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
-        Layer.provideMerge(Layer.mergeAll(HubCharms, LocalGit, MemoryTooling, SkillTooling, CharmCallService.layer)),
+        Layer.provideMerge(
+          Layer.mergeAll(HubCharms, LocalGit, MemoryTooling, SkillTooling, WebTooling, CharmCallService.layer),
+        ),
       )
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
@@ -575,6 +600,7 @@ const ServerLive = Layer.unwrap(
             WorkHoldLive.pipe(Layer.provideMerge(Persistence)),
             EventBus.layer,
             HobAdmission.layer,
+            SummoningHub.layer,
             NodeFolderChecks,
             HeldRuntime,
             identity,

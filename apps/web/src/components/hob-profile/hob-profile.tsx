@@ -1,14 +1,13 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import { type Agent, type AgentId, GOOD_AT_MAX, type RetireWork, starterRole } from "@hobbots/domain";
+import { type Agent, type AgentId, GOOD_AT_MAX, starterRole } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
-import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Switch } from "@hobbots/ui/components/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
@@ -22,9 +21,7 @@ import {
   pickRole,
   profileDraft,
   profileEdit,
-  RETIRE_OPTIONS,
   rebaseDraft,
-  retiredSummary,
   type Summoner,
   summonerOf,
 } from "../../api/profile.ts";
@@ -35,13 +32,15 @@ import {
   runtimesQuery,
   threadsQuery,
   usePauseHob,
-  useRetireHob,
   useUpdateHob,
 } from "../../api/queries.ts";
 import { formatMonthDay } from "../../lib/format.ts";
 import { type HobState, hobState } from "../../lib/hob-state.ts";
 import { ExportDialog } from "../export/export-dialog.tsx";
 import { messages as exportCopy } from "../export/messages.ts";
+import { HistoryTab, useSeeChanges } from "../hob-changes/hob-history.tsx";
+import { NamingHob, useHobsNamed } from "../hob-changes/hob-names.tsx";
+import { messages as changesCopy } from "../hob-changes/messages.ts";
 import { ModelsBrain, ModelsWaiting } from "../hob-form/hob-form.tsx";
 import { stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSkillsManage } from "../hob-skills/profile-skills.tsx";
@@ -53,16 +52,18 @@ import { RoleSigil } from "../roles/role-sigil.tsx";
 import { CharmsTab } from "./hob-charms.tsx";
 import { NameAndLook } from "./hob-name-look.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
+import { RetireDialog, type Retired } from "./retire-dialog.tsx";
 import { TonePicker } from "./tone-picker.tsx";
 
 /** The profile's tabs; a link may open one other than Profile with `?tab=`. */
-export const ProfileTabName = Schema.Literals(["profile", "charms", "skills", "permissions"]);
+export const ProfileTabName = Schema.Literals(["profile", "charms", "skills", "permissions", "history"]);
 type Tab = typeof ProfileTabName.Type;
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["profile", "Profile"],
   ["charms", "Charms"],
   ["skills", "Skills"],
   ["permissions", "Permissions"],
+  ["history", "History"],
 ];
 
 /**
@@ -151,13 +152,6 @@ const ProfileTabs = ({ disabled }: { disabled: boolean }) => (
   </TabsList>
 );
 
-/** A hob the profile retired, with the choice made and whether it had replies running. */
-interface Retired {
-  readonly hob: Agent;
-  readonly work: RetireWork;
-  readonly busy: boolean;
-}
-
 function Profile({
   hob,
   opened,
@@ -180,6 +174,7 @@ function Profile({
   const [retireOpen, setRetireOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [hops, setHops] = useState(0);
+  useSeeChanges(hob);
 
   return (
     <main
@@ -225,6 +220,9 @@ function Profile({
           </TabsContent>
           <TabsContent value="permissions">
             <PermissionsTab hob={hob} />
+          </TabsContent>
+          <TabsContent value="history">
+            <HistoryTab hob={hob} />
           </TabsContent>
         </Tabs>
       </div>
@@ -292,6 +290,7 @@ function ProfileHero({
           </Badge>
           {good && <span className="truncate">{good}</span>}
         </span>
+        {hob.summonedBy !== null && <SummonedBy summoner={hob.summonedBy} />}
       </span>
       <span className="flex flex-none items-center gap-2">
         <Button asChild>
@@ -302,6 +301,18 @@ function ProfileHero({
         <MoreActions name={hob.name} disabled={disabled} onExport={onExport} />
       </span>
     </header>
+  );
+}
+
+/** "Summoned by Ada" under the name of a hob another hob summoned, with Ada linked to her profile (ADR 034). */
+function SummonedBy({ summoner }: { summoner: AgentId }) {
+  const hobs = useHobsNamed([summoner]);
+  // Until the summoner is read, the line under the profile says who summoned it as far as it knows.
+  if (!hobs.has(summoner)) return null;
+  return (
+    <span className="text-meta text-text-secondary">
+      <NamingHob hobId={summoner} hobs={hobs} line={(name) => changesCopy.profile.summonedBy({ hob: name })} />
+    </span>
   );
 }
 
@@ -398,9 +409,11 @@ function TakeABreak({
         </span>
       )}
       <span className="flex items-center gap-3 border-t border-line pt-2">
-        <span className="flex-1 text-ui text-text-secondary">{copy.retireLine({ name })}</span>
+        <span className="flex-1 text-ui text-text-secondary">
+          {hob.retiring === null ? copy.retireLine({ name }) : copy.retiringLine({ name })}
+        </span>
         <Button type="button" variant="deny" disabled={disabled} onClick={onRetire}>
-          {copy.retire({ name })}
+          {hob.retiring === null ? copy.retire({ name }) : copy.retireNow({ name })}
         </Button>
       </span>
     </section>
@@ -804,139 +817,5 @@ function MoreActions({ name, disabled, onExport }: { name: string; disabled: boo
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Asks what happens to the hob's running replies, then retires it. Nothing is deleted; the hob
- * goes to Archived hobs. Once retired it says the hob is asleep, and closing goes Home.
- */
-function RetireDialog({
-  hob,
-  running,
-  retired,
-  onRetiring,
-  onRetired,
-  onClose,
-}: {
-  hob: Agent;
-  running: ReadonlyArray<string>;
-  retired: Retired | null;
-  onRetiring: (hob: Agent) => void;
-  onRetired: (retired: Retired) => void;
-  onClose: () => void;
-}) {
-  const navigate = useNavigate();
-  const retire = useRetireHob(hob.id);
-  const [work, setWork] = useState<RetireWork>("finish");
-  const busy = running.length > 0;
-  const copy = messages.profile.retire;
-  const name = hob.name;
-
-  // Once retired the profile has nothing left to show, so closing goes Home.
-  const close = () => {
-    if (retired) void navigate({ to: "/" });
-    else if (!retire.isPending) onClose();
-  };
-
-  const confirm = () => {
-    onRetiring(hob);
-    retire.mutate(work, {
-      onSuccess: (next) => onRetired({ hob: next, work, busy }),
-    });
-  };
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent
-        aria-describedby={undefined}
-        className="max-w-bubble-max animate-hb-in gap-3 rounded-card border-0 bg-ground p-5 shadow-sheet"
-      >
-        {retired ? (
-          <>
-            <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.done({ name })}</DialogTitle>
-            <p role="status" className="m-0 text-ui text-text-secondary">
-              {retiredSummary(name, retired.work, retired.busy)} {copy.find({ name })}
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button asChild variant="outline">
-                <Link to="/archive" search={{ tab: "hobs" }}>
-                  {copy.archived}
-                </Link>
-              </Button>
-              <Button onClick={close}>{copy.home}</Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <DialogTitle className="m-0 font-heading text-heading font-bold">{copy.title({ name })}</DialogTitle>
-            <span className="text-ui text-text-secondary">{busy ? copy.busy({ name }) : copy.idle({ name })}</span>
-            {busy && (
-              <ul className="m-0 flex list-none flex-col gap-1 rounded-control bg-deep px-3 py-2 text-ui">
-                {running.map((title, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: two running threads may share a title.
-                  <li key={i} className="truncate">
-                    {title}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <fieldset disabled={retire.isPending} className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="sr-only">{copy.choices({ name })}</legend>
-              {RETIRE_OPTIONS.map((option) => (
-                <RetireChoice
-                  key={option.work}
-                  checked={work === option.work}
-                  title={option.title(name)}
-                  note={option.note(name)}
-                  onPick={() => setWork(option.work)}
-                />
-              ))}
-            </fieldset>
-            <span className="text-detail text-label">{copy.kept}</span>
-            {retire.isError && (
-              <span role="alert" className="text-ui text-rose">
-                {copy.failed({ name })}
-              </span>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={close} disabled={retire.isPending}>
-                {copy.keep({ name })}
-              </Button>
-              <Button variant="deny" onClick={confirm} disabled={retire.isPending}>
-                {retire.isPending ? copy.retiring : copy.confirm({ name })}
-              </Button>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** One way to retire, as a row; the picked one is filled. */
-function RetireChoice({
-  checked,
-  title,
-  note,
-  onPick,
-}: {
-  checked: boolean;
-  title: string;
-  note: string;
-  onPick: () => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer flex-col gap-0.5 rounded-control px-3 py-2 transition-colors duration-(--dur-fade) ease-(--ease-ui)",
-        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-focus-ring",
-        checked ? "bg-line text-text-strong" : "bg-card text-text hover:bg-hover",
-      )}
-    >
-      <input type="radio" name="retire-work" checked={checked} onChange={onPick} className="sr-only" />
-      <strong className="text-ui">{title}</strong>
-      <span className="text-detail text-text-secondary">{note}</span>
-    </label>
   );
 }

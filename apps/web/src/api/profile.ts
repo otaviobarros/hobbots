@@ -1,10 +1,12 @@
-import type { UpdateAgentPayload } from "@hobbots/api";
+import type { HandOverBlock, RetireAgentPayload, UpdateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
+  type AgentId,
   GOOD_AT_MAX,
   type HobColor,
   normalizeGoodAt,
   type ReplyLength,
+  type RetireOpenWork,
   type RetireWork,
   type RoleHat,
   type RoleId,
@@ -234,28 +236,90 @@ export const summonerOf = (
   return complete ? { kind: "gone" } : { kind: "unknown" };
 };
 
-/** The choices Retire offers for the hob's running replies, in the order shown. */
-export const RETIRE_OPTIONS: ReadonlyArray<{
-  readonly work: RetireWork;
-  readonly title: (name: string) => string;
-  readonly note: (name: string) => string;
-}> = [
-  {
-    work: "finish",
-    title: (name) => `Let ${name} finish what it is doing`,
-    note: (name) => `Replies already running finish. ${name} starts nothing new.`,
-  },
-  {
-    work: "stop",
-    title: (name) => `Stop ${name}'s work now`,
-    note: () => "Running replies stop where they are. What they wrote so far is kept.",
-  },
-];
+/**
+ * A way to retire (#408): at once, letting running replies finish or stopping them, or, for a hob
+ * with open Tasks, stopping and handing them over, or finishing them first.
+ */
+export type RetireChoice = RetireWork | RetireOpenWork;
 
-/** What Retire does, said once it is done. */
-export const retiredSummary = (name: string, work: RetireWork, busy: boolean): string => {
+/**
+ * The ways Retire offers, in the order shown. With no open Task, only what happens to running
+ * replies; with open Tasks, finishing them first (unless the hob already is), handing them over,
+ * or stopping, which fails them.
+ */
+export const retireChoices = (openTasks: number, retiring: boolean): ReadonlyArray<RetireChoice> => {
+  if (openTasks === 0) return ["finish", "stop"];
+  return retiring ? ["hand-over", "stop"] : ["finish-first", "hand-over", "stop"];
+};
+
+/** What Retire sends for the choice, or null for a hand-over with no hob picked yet. */
+export const retirePayload = (choice: RetireChoice, handOverTo: AgentId | null): RetireAgentPayload | null => {
+  if (choice === "hand-over") return handOverTo === null ? null : { openWork: "hand-over", handOverTo };
+  return choice === "finish-first" ? { openWork: "finish-first" } : { activeWork: choice };
+};
+
+/** Each way to retire as a row: what it is, and what it does with the hob's work. */
+export const retireChoiceCopy = (
+  choice: RetireChoice,
+  name: string,
+  hasOpenTasks: boolean,
+): { readonly title: string; readonly note: string } => {
+  switch (choice) {
+    case "finish":
+      return {
+        title: `Let ${name} finish what it is doing`,
+        note: `Replies already running finish. ${name} starts nothing new.`,
+      };
+    case "finish-first":
+      return {
+        title: `Let ${name} finish its Tasks first`,
+        note: `${name} takes no new work, keeps working its open Tasks, and retires when the last one ends.`,
+      };
+    case "hand-over":
+      return {
+        title: `Stop ${name} and hand its Tasks over`,
+        note: "Running replies stop. Each open Task goes to the hob you pick and starts afresh there, its history kept.",
+      };
+    case "stop":
+      return {
+        title: `Stop ${name}'s work now`,
+        note: hasOpenTasks
+          ? "Running replies stop and its open Tasks fail. Their leads hear of it."
+          : "Running replies stop where they are. What they wrote so far is kept.",
+      };
+  }
+};
+
+/** Why a Task cannot go to `taker`, in words, from Reassign's reason. */
+export const handOverBlockText = (block: HandOverBlock, taker: string): string => {
+  switch (block.reason) {
+    case "lineage-owner":
+      return `${taker} already works on the Task above this one.`;
+    case "owner-unavailable":
+      return `${taker} is retiring, so it takes no new work.`;
+    case "not-delegated":
+      return "You asked for this Task in its chat, so it stays with its hob.";
+    case "children-open":
+      return "Work is still open under it.";
+    case "quest-exists":
+      return "It leads a Quest of its own.";
+    default:
+      return block.message;
+  }
+};
+
+/** What Retire did, said once it is done. `taker` is the hob that took the open Tasks, for a hand-over. */
+export const retiredSummary = (
+  name: string,
+  choice: RetireChoice,
+  busy: boolean,
+  taker: string | null = null,
+): string => {
+  if (choice === "finish-first")
+    return `${name} finishes its open Tasks, then retires. It takes no new work meanwhile.`;
+  if (choice === "hand-over") return `${name}'s open Tasks went to ${taker ?? "another hob"}. Its threads are kept.`;
   if (!busy) return `${name} is asleep. Its threads are kept and stay readable.`;
-  return work === "finish"
+  return choice === "finish"
     ? `${name} finishes the replies it was writing, then sleeps. Its threads are kept.`
     : `${name}'s running replies were stopped. Its threads are kept.`;
 };

@@ -1,12 +1,12 @@
 import {
   AgentId,
-  AgentStatus,
   AnyOperation,
   ApprovalId,
   ApprovalLifetime,
   ApprovalState,
   CharmCallState,
   GrantId,
+  HobStanding,
   HubQuestionId,
   MessageId,
   QuestId,
@@ -25,11 +25,12 @@ export class AgentNotFound extends Schema.TaggedError<AgentNotFound>()(
 
 /**
  * A hob that is not active refuses new work: a paused hob until it is woken, a retired hob for
- * good. Also returned when pausing or waking a retired hob.
+ * good, and a hob finishing its open Tasks before it retires (`retiring`). Also returned when
+ * pausing or waking a retired hob.
  */
 export class HobUnavailable extends Schema.TaggedError<HobUnavailable>()(
   "HobUnavailable",
-  { agentId: AgentId, status: AgentStatus },
+  { agentId: AgentId, status: HobStanding },
   { httpApiStatus: 409 },
 ) {}
 
@@ -95,6 +96,20 @@ export class InvalidHob extends Schema.TaggedError<InvalidHob>()(
   { httpApiStatus: 400 },
 ) {}
 
+/**
+ * Revert undoes only the hob's latest change (ADR 034): refused as `not-latest` once another version
+ * followed it, and as `first-version` for the version the hob was summoned with.
+ */
+export class RevertRefused extends Schema.TaggedError<RevertRefused>()(
+  "RevertRefused",
+  {
+    agentId: AgentId,
+    version: Schema.Int,
+    reason: Schema.Literals(["not-latest", "first-version"]),
+  },
+  { httpApiStatus: 409 },
+) {}
+
 /** A folder the hub will not let hobs work in: not an absolute path, or not a folder on the hub. */
 export class InvalidFolder extends Schema.TaggedError<InvalidFolder>()(
   "InvalidFolder",
@@ -109,6 +124,16 @@ export class InvalidFolder extends Schema.TaggedError<InvalidFolder>()(
 export class OverrideWidens extends Schema.TaggedError<OverrideWidens>()(
   "OverrideWidens",
   { preset: SafetyPreset, operations: Schema.Array(AnyOperation), message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
+/**
+ * A per-hob override of Ask for an operation that takes Allow or Never only, such as Search the web
+ * (ADR 036), which is never stored.
+ */
+export class UnofferedAnswer extends Schema.TaggedError<UnofferedAnswer>()(
+  "UnofferedAnswer",
+  { operations: Schema.Array(AnyOperation), message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
 

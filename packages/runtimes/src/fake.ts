@@ -9,6 +9,8 @@ import {
   RuntimeLimitReached,
   splitRoster,
   UNRECORDED_TOOL_CALL,
+  WEB_RESULTS_LINE,
+  type WebSearchResult,
 } from "@hobbots/agents";
 import {
   CONTINUATION_HEADER,
@@ -30,7 +32,8 @@ import { sessionPolicy, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { mountName } from "./skills.ts";
-import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
+import { commandOf, toolLabel, toolRequests, WEB_SEARCH_TOOL } from "./tool-calls.ts";
+import { recordSearched } from "./web-search.ts";
 
 /**
  * The fake runtime's models: a main one with every effort level, and one behind "More models"
@@ -110,6 +113,10 @@ export const fakeEnforcement = (sandbox: "on" | "unavailable"): RuntimeEnforceme
   },
   toolEvents: { status: "verified", evidence: "The fake reports each scripted call's start, finish or denial." },
   toolInterruption: { status: "verified", evidence: "Cancelling the turn ends the fake's stream." },
+  webSearch: {
+    status: "verified",
+    evidence: "The fake runs a scripted search with fixed results, decided as Search the web, on no network.",
+  },
 });
 
 /**
@@ -314,8 +321,32 @@ const scriptedWrite = (text: string, cwd: string): ScriptedCall => {
   };
 };
 
+/**
+ * A prompt line `fake:search <query>` asks the fake runtime to search the web with its own search
+ * (ADR 036), as Claude Code's `WebSearch`: offered only when the turn may search, decided as Search
+ * the web, and answered with fixed results on no network.
+ */
+export const FAKE_SEARCH_DIRECTIVE = "fake:search";
+
+/** The results the fake's search finds for a query: two pages of a test site that never resolves. */
+export const fakeSearchResults = (query: string): ReadonlyArray<WebSearchResult> => {
+  const slug = encodeURIComponent(query.trim().toLowerCase().replace(/\s+/g, "-"));
+  return [
+    { title: `${query} — overview`, url: `https://search.hobbots.test/${slug}`, snippet: `What ${query} is.` },
+    { title: `${query} — release notes`, url: `https://search.hobbots.test/${slug}/releases` },
+  ];
+};
+
+/** What the fake's search returns to the hob: its results as a list, marked as other people's text. */
+const fakeSearchOutput = (query: string): string =>
+  [WEB_RESULTS_LINE, ...fakeSearchResults(query).map((result) => `- ${result.title}: ${result.url}`)].join("\n");
+
 /** The tool call a prompt line scripts, or undefined when it scripts none. */
 const scriptedCall = (line: string, cwd: string): ScriptedCall | undefined => {
+  const search = afterDirective(line, FAKE_SEARCH_DIRECTIVE);
+  if (search !== undefined) {
+    return { tool: WEB_SEARCH_TOOL, input: { query: search }, effect: { output: fakeSearchOutput(search) } };
+  }
   const tool = afterDirective(line, FAKE_TOOL_DIRECTIVE);
   if (tool !== undefined) {
     const [name = "", ...rest] = tool.split(" ");
@@ -343,7 +374,11 @@ const finishScripted = (
   const folder = folders[0];
   if (call.effect?.writes !== undefined && folder !== undefined) applyScriptedWrites(call.effect.writes, folder);
   const output = call.effect?.output ?? scriptedOutput(call.tool, call.input);
-  return [...liveScripted(call), toolFinished(call.id, ...hookEnd(call.tool, output, call.effect?.exitCode))];
+  const finished = [...liveScripted(call), toolFinished(call.id, ...hookEnd(call.tool, output, call.effect?.exitCode))];
+  if (call.tool !== WEB_SEARCH_TOOL) return finished;
+  // A search reports what it found, as Claude Code's structured result does (ADR 036).
+  const query = String(call.input.query);
+  return [...finished, { _tag: "WebSearched", id: call.id, query, results: fakeSearchResults(query) }];
 };
 
 /** A scripted command running in the background, and when it ends (null: not before its turn does). */
@@ -701,7 +736,7 @@ const fakePlanUsage: Effect.Effect<PlanUsage> = Effect.gen(function* () {
  * What a fake turn took and used, the same for every turn so tests can assert it: a session's first
  * turn writes its prompt to the cache and later ones read it, as a model API's prompt cache would.
  */
-const fakeUsage = (prompt: string, reply: string, resumed: boolean): ReplyUsage => {
+const fakeUsage = (prompt: string, reply: string, resumed: boolean, webSearches?: number): ReplyUsage => {
   const tokens = (text: string) => Math.ceil(text.length / 4);
   return {
     timeToRequestMs: 5,
@@ -711,6 +746,8 @@ const fakeUsage = (prompt: string, reply: string, resumed: boolean): ReplyUsage 
     outputTokens: tokens(reply),
     cacheReadTokens: resumed ? 1000 : 0,
     cacheWriteTokens: resumed ? 0 : 1000,
+    // A turn that could search counts its searches, as the real runtimes do (ADR 036).
+    ...(webSearches === undefined ? {} : { webSearches }),
   };
 };
 
@@ -772,6 +809,9 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const own = fakeEnding(request.prompt);
     const ending = own === "complete" ? fakeEnding(scripted) : own;
     const answers: Array<string> = [];
+    // The searches the turn ran, counted in its usage when it could search (ADR 036).
+    const searchTurn = toolTurn(request.tools, sandbox, request);
+    let webSearches = 0;
     // The reply ends with what the hub answered its scripted calls, known once they are made.
     const written = Stream.suspend(() => {
       const reply = quiet ? "" : answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
@@ -788,7 +828,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         _tag: "Completed",
         sessionId,
         text: waited.text,
-        usage: fakeUsage(told, waited.text, known !== undefined),
+        usage: fakeUsage(told, waited.text, known !== undefined, searchTurn?.webSearch ? webSearches : undefined),
       };
       return deltas.pipe(Stream.concat(waited.events), Stream.concat(Stream.fromIterable([completed])));
     });
@@ -800,7 +840,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         _tag: "SessionStarted",
         sessionId,
         billing: "fake",
-        ...sessionPolicy(toolTurn(request.tools, sandbox, request)),
+        ...sessionPolicy(searchTurn),
       },
       ...(scripted.split("\n").some((line) => line.trim() === FAKE_COMPACT_DIRECTIVE)
         ? [{ _tag: "SessionCompacted" } as const]
@@ -810,7 +850,16 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },
     ]).pipe(
-      Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox, background)),
+      Stream.concat(
+        scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox, background).pipe(
+          // A search's results are found before its event goes on, and so before the hub calls after it (ADR 036).
+          Stream.tap((event) => {
+            if (event._tag !== "WebSearched") return Effect.void;
+            webSearches += 1;
+            return recordSearched(request.recordSearch, event);
+          }),
+        ),
+      ),
       Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
       // Like Claude Code, the turn completes once its background commands that end have ended.
       Stream.concat(Stream.suspend(() => backgroundEnds(background.filter((run) => !run.outlives)))),

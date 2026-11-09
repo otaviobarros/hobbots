@@ -1,6 +1,7 @@
 import { RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "@hobbots/agents";
 import type { ReplyUsage } from "@hobbots/domain";
 import { Deferred, type Duration, Effect, Option } from "effect";
+import { codexWebSearched } from "../web-search.ts";
 import type { AppServerNotification } from "./app-server.ts";
 import { shellScript } from "./policy.ts";
 import type {
@@ -31,6 +32,8 @@ export interface TurnStep {
   readonly events: ReadonlyArray<RuntimeEvent>;
   readonly end?: TurnEnd;
   readonly commandEnded?: true;
+  /** A web search ended, whose results the model now holds: the hub marks them as other people's text. */
+  readonly searched?: true;
 }
 
 /** A command that outlived the Codex turn it ran in, as it ended. */
@@ -87,7 +90,7 @@ export const LOST_CALL = "Codex stopped while this ran, so it may or may not hav
  * Codex counts cached input inside its input tokens, as OpenAI's API does; Hobbots counts input that
  * was neither read from nor written to the cache, as Claude Code reports it.
  */
-const toUsage = (used: TokenUsageBreakdown): ReplyUsage => ({
+const toUsage = (used: TokenUsageBreakdown, webSearches: number | undefined): ReplyUsage => ({
   // Codex reports no timings for a turn.
   timeToRequestMs: null,
   timeToFirstStreamMs: null,
@@ -96,6 +99,8 @@ const toUsage = (used: TokenUsageBreakdown): ReplyUsage => ({
   outputTokens: used.outputTokens,
   cacheReadTokens: used.cachedInputTokens,
   cacheWriteTokens: used.cacheWriteInputTokens,
+  // Its token usage counts no searches, so they are its completed `webSearch` items (ADR 036).
+  ...(webSearches === undefined ? {} : { webSearches }),
 });
 
 const minus = (a: TokenUsageBreakdown, b: TokenUsageBreakdown): TokenUsageBreakdown => ({
@@ -130,6 +135,8 @@ export const codexTurnEvents = (
   skillRoots: ReadonlyArray<string> = [],
   skillFiles: ReadonlyArray<SkillFile> = [],
   setFiles: ReadonlyArray<SetSkillFile> = [],
+  /** Whether the turn could search the web (ADR 036), so its usage counts searches. */
+  searchOffered = false,
 ) => {
   // The Codex turns of this Hobbots turn: its first, and any that follow up on a command (#1048).
   const turns = new Set<string>();
@@ -138,6 +145,9 @@ export const codexTurnEvents = (
   // The text of each agent message, in order, so the reply's text matches what was streamed.
   const messages = new Map<string, string>();
   const thinking = new Set<string>();
+  // Searches Codex started, shown as steps until they complete (ADR 036), and how many it ran.
+  const searching = new Set<string>();
+  let webSearches = 0;
   const running = new Set<string>();
   // Each command's script, from its `item/started`, so a command that outlives its turn can be named.
   const commands = new Map<string, string>();
@@ -182,9 +192,22 @@ export const codexTurnEvents = (
       case "commandExecution":
         commands.set(item.id, shellScript(item.command));
         return NOTHING;
+      case "webSearch":
+        // Its query comes with the completed item, so the step names the search only once it ends.
+        searching.add(item.id);
+        return { events: [{ _tag: "StepStarted", id: item.id, kind: "tool", label: "Searching the web" }] };
       default:
         return NOTHING;
     }
+  };
+
+  /** A search that ended: its step, and the search with its results when it was one (ADR 036). */
+  const searchCompleted = (item: Extract<ThreadItem, { readonly type: "webSearch" }>): TurnStep => {
+    const ended: ReadonlyArray<RuntimeEvent> = searching.delete(item.id) ? [{ _tag: "StepEnded", id: item.id }] : [];
+    const searched = codexWebSearched(item);
+    if (searched === undefined) return { events: ended };
+    webSearches += 1;
+    return { events: [...ended, searched], searched: true };
   };
 
   const toolFinished = (item: Extract<ThreadItem, { readonly status: string }>): TurnStep => {
@@ -230,6 +253,7 @@ export const codexTurnEvents = (
     }
     // Codex compacted the thread: it now holds a summary of what came before (#1027).
     if (item.type === "contextCompaction") return { events: [{ _tag: "SessionCompacted" }] };
+    if (item.type === "webSearch") return searchCompleted(item);
     if (!("status" in item)) return NOTHING;
     // A command that read a mounted skill's `SKILL.md` is the model using that skill (ADR 029).
     const used = skillReadsOf(item, skillRoots, skillFiles, setFiles).map(
@@ -247,8 +271,9 @@ export const codexTurnEvents = (
   };
 
   const endAll = (): ReadonlyArray<RuntimeEvent> => {
-    const ended = [...thinking].map((id): RuntimeEvent => ({ _tag: "StepEnded", id }));
+    const ended = [...thinking, ...searching].map((id): RuntimeEvent => ({ _tag: "StepEnded", id }));
     thinking.clear();
+    searching.clear();
     return ended;
   };
 
@@ -336,7 +361,9 @@ export const codexTurnEvents = (
       _tag: "Completed",
       sessionId: threadId,
       text: text(),
-      ...(latest === null || baseline === null ? {} : { usage: toUsage(minus(latest, baseline)) }),
+      ...(latest === null || baseline === null
+        ? {}
+        : { usage: toUsage(minus(latest, baseline), searchOffered ? webSearches : undefined) }),
     }),
     /**
      * The files a file change touches, once its `item/started` has been read, or none when it does not

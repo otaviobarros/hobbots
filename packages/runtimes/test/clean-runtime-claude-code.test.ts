@@ -29,6 +29,7 @@ import {
   SET_SKIPPED,
   stepRecordingContract,
   TEAM_SET,
+  WEB_FETCH_CONTRACT_TOOL,
 } from "./clean-runtime.ts";
 
 /**
@@ -250,6 +251,30 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     ]);
   });
 
+  // covers RT-001, PE-001, ADR 036
+  it("[TC-RT-1266-11] a hob allowed to search is offered WebSearch, a hob set to Never is not, and none WebFetch", {
+    timeout: 120_000,
+  }, async () => {
+    const never = {
+      ...access,
+      policy: { ...access.policy, hob: { ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } } },
+    } as const;
+    const allowed = await turn({ tools: access, webSearch: true });
+    expect(Exit.isSuccess(allowed.exit), String(allowed.exit)).toBe(true);
+    expect(toolsOf(allowed.requests)).toContain("WebSearch");
+    // The user's own settings allow WebSearch and WebFetch; no turn reads them.
+    for (const { exit, requests } of [
+      allowed,
+      await turn({ tools: never, webSearch: true }),
+      await turn({ tools: access }),
+      await turn({ webSearch: true }),
+    ]) {
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(toolsOf(requests)).not.toContain("WebFetch");
+      if (requests !== allowed.requests) expect(toolsOf(requests)).not.toContain("WebSearch");
+    }
+  });
+
   // covers RT-001, ADR 029
   it("[TC-RT-518] a turn without skills is offered no skill and no Skill tool", { timeout: 120_000 }, async () => {
     const { exit, requests, offered } = await turn({ skills: null });
@@ -273,6 +298,24 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
       expect(Exit.isSuccess(exit), String(exit)).toBe(true);
       expect(contract.order).toEqual([
         expect.stringMatching(new RegExp(`^recorded ${CONTRACT_HUB_TOOL} as `)),
+        records ? "ran" : "not run",
+      ]);
+    }
+  });
+
+  // covers ADR 036 (On every runtime)
+  it("[TC-PE-1267-16] records a web_fetch call's step before the hub reads the page", {
+    timeout: 120_000,
+  }, async () => {
+    for (const records of [true, false]) {
+      const contract = stepRecordingContract(records, WEB_FETCH_CONTRACT_TOOL);
+      const { exit } = await turn({ hubTools: contract.hubTools, recordToolStart: contract.recordToolStart }, [
+        { tool: `mcp__hobbots__${WEB_FETCH_CONTRACT_TOOL.name}`, input: { url: "https://example.test/lamp" } },
+        { say: "Done." },
+      ]);
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      expect(contract.order).toEqual([
+        expect.stringMatching(new RegExp(`^recorded ${WEB_FETCH_CONTRACT_TOOL.name} as `)),
         records ? "ran" : "not run",
       ]);
     }

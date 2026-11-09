@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { type PromptRequest, RuntimeError, type RuntimeEvent, type RuntimeLimitReached } from "@hobbots/agents";
+import {
+  type PromptRequest,
+  RuntimeError,
+  type RuntimeEvent,
+  type RuntimeLimitReached,
+  WEB_RESULTS_LINE,
+} from "@hobbots/agents";
 import type { AnyOperation, SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
@@ -24,10 +30,12 @@ import {
 } from "../sandbox.ts";
 import { askedMount, holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
 import { offeredTools, toolLabel } from "../tool-calls.ts";
+import { codexWebSearched, recordSearched } from "../web-search.ts";
 import {
   type AppServer,
   type AppServerCommand,
   AppServerError,
+  type AppServerNotification,
   type AppServerOptions,
   type ServerRequestHandlers,
 } from "./app-server.ts";
@@ -36,7 +44,7 @@ import { type CodexTurnEvents, codexTurnEvents, type TurnEnd } from "./events.ts
 import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
-import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
+import { type ThreadItem, TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
 import {
   admitSkills,
   askedSkillInput,
@@ -158,6 +166,8 @@ const codexConfig = (state: string, settings: CodexSettings) => {
   return [
     `sqlite_home = ${JSON.stringify(state)}`,
     `log_dir = ${JSON.stringify(join(state, "log"))}`,
+    // Search is off in the home every turn of the hob shares; a turn that may search turns it on for
+    // its own process alone (ADR 036). Live and indexed search are never written.
     `web_search = "disabled"`,
     "",
     "[features]",
@@ -242,6 +252,11 @@ export interface CodexTurnConfig {
   readonly userHome?: string;
   /** More `codex app-server` arguments, such as `-c` settings for a stand-in model. */
   readonly extraArgs?: ReadonlyArray<string>;
+  /**
+   * Whether the Codex a turn runs offers cached web search as the contract test held it (ADR 036):
+   * its version is one the test passed on. Absent, no turn searches.
+   */
+  readonly cachedSearch?: Effect.Effect<boolean>;
 }
 
 /** How a turn with tools is decided and confined. */
@@ -354,24 +369,48 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
 };
 
 /**
+ * Records a search of the turn's thread as Codex's notification is read (ADR 036), before any
+ * request Codex sent after it, so a hub call that follows the search finds its results however
+ * long the turn's events take to be read. The turn's events report the search as well.
+ */
+const searchFirst = (
+  record: PromptRequest["recordSearch"],
+  thread: string | undefined,
+  notification: AppServerNotification,
+): Effect.Effect<void> => {
+  if (!record || thread === undefined || notification.method !== "item/completed") return Effect.void;
+  const params = notification.params as { readonly threadId?: string; readonly item?: ThreadItem } | null;
+  if (params?.threadId !== thread || params.item?.type !== "webSearch") return Effect.void;
+  const searched = codexWebSearched(params.item);
+  return searched === undefined ? Effect.void : recordSearched(record, searched);
+};
+
+/**
  * What the turn's notifications signal: a Codex turn's end, the App Server's exit, or the end of a
  * command that outlived its Codex turn (#1048).
  */
 type TurnSignal = TurnEnd | "lost" | "commandEnded";
 
-/** Reads the turn's notifications into events and signals, until the App Server exits. */
+/**
+ * Reads the turn's notifications into events and signals, until the App Server exits. Once a search
+ * ends, the running turn is told its results are other people's text (ADR 036), as Claude Code's
+ * hook says with them, since they reach the model inside Codex's turn.
+ */
 const follow = (
   notifications: Stream.Stream<{ readonly method: string; readonly params: unknown }>,
   mapper: CodexTurnEvents,
   report: (event: RuntimeEvent) => void,
   signals: Queue.Queue<TurnSignal>,
   now: CodexTurnNow,
+  tell: (turnId: string, text: string) => Effect.Effect<void>,
 ) =>
   notifications.pipe(
     Stream.runForEach((notification) =>
       Effect.gen(function* () {
         const step = mapper.map(notification);
         for (const event of step.events) report(event);
+        // Told aside, so the notifications read on while Codex takes it.
+        if (step.searched && now.turnId !== null) yield* Effect.forkScoped(tell(now.turnId, WEB_RESULTS_LINE));
         if (step.end) {
           yield* Deferred.succeed(now.ended, undefined);
           yield* Queue.offer(signals, step.end);
@@ -552,6 +591,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
   Effect.gen(function* () {
     const governed = governedTurn(config, request);
     const runtimeFolder = request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat");
+    const webSearch = governed?.tools.webSearch === true && (yield* config.cachedSearch ?? Effect.succeed(false));
     const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed));
     const cwd = governed?.tools.folders[0] ?? config.workspaceDir;
     // The turn's skills, in a folder of their own for as long as it runs, and every other skill Codex
@@ -561,7 +601,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
       try: () => skillSettings(unusedSkillRoots(home, cwd, repositoryRoot(cwd), config.userHome)),
       catch: (error) => new RuntimeError({ message: `Could not read the skills Codex would load: ${String(error)}` }),
     });
-    const command = appServerCommand(config, binary, home, cwd, skillArgs);
+    const command = appServerCommand(config, binary, home, cwd, [...skillArgs, ...searchArgs(webSearch)]);
     if (governed === null) {
       return {
         command,
@@ -571,6 +611,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         commits: "",
         gate: refuseTools,
         session: {},
+        webSearch,
       };
     }
     const { tools, sandbox, policy, commits } = governed;
@@ -591,6 +632,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
       commits: commits.now,
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
       session: sessionPolicy(tools),
+      webSearch,
     };
   });
 
@@ -599,6 +641,13 @@ const codexSettings = (governed: ReturnType<typeof governedTurn>): CodexSettings
   folders: governed?.tools.folders ?? [],
   shell: governed !== null && offeredTools(governed.tools.context).includes("Bash"),
 });
+
+/**
+ * The setting that turns on Codex's cached search for one App Server, when its turn may search
+ * (ADR 036). It goes on that process's command line, never into the home other turns of the hob
+ * share at the same time, so a turn under Never cannot start with a sibling's search on.
+ */
+const searchArgs = (webSearch: boolean): ReadonlyArray<string> => (webSearch ? ["-c", 'web_search="cached"'] : []);
 
 /**
  * The sandbox prepared for the turn, released when the turn ends, or null when none started on this
@@ -690,9 +739,12 @@ const turnEvents = (
       const launch = yield* prepareLaunch(config, request, binary);
       // A tool gate needs the turn's events, which need its thread, which only Codex names.
       let turn: CodexToolTurn | undefined;
+      // The turn's thread once Codex names it, whose searches are found as they are read.
+      let thread: string | undefined;
       const server = yield* config
         .start(launch.command, {
           handlers: requestHandlers(config, binary, request.hubTools, () => turn),
+          beforeNotification: (notification) => searchFirst(request.recordSearch, thread, notification),
           clientVersion: config.clientVersion,
         })
         .pipe(Effect.mapError(failed));
@@ -707,11 +759,13 @@ const turnEvents = (
       }
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
+      thread = threadId;
       const mapper = codexTurnEvents(
         threadId,
         skillRootsOf(launch.skills),
         admitted.organizationFiles,
         setSkillFilesOf(launch.skills, request.skills),
+        launch.webSearch,
       );
       // The skill you picked loads with the turn's first input, as Codex's own skill item (ADR 029).
       const askedOne = askedMount(request.askedSkill, request.skills);
@@ -737,7 +791,7 @@ const turnEvents = (
       const notifications = yield* server.subscribe;
       const signals = yield* Queue.unbounded<TurnSignal>();
       const now: CodexTurnNow = { turnId: null, ended: yield* Deferred.make<void>() };
-      yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now));
+      yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now, tellTurn(server, threadId)));
 
       // A follow-up turn about a command that outlived its turn carries text only.
       const startTurn = (text: string, skill: typeof asked = null) =>

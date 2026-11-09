@@ -64,6 +64,7 @@ describe("per-hob rules", () => {
       "save-memory",
       "search-memory",
       "search-skills",
+      "search-web",
       "skill-feedback",
       "use-web",
     ]);
@@ -71,6 +72,9 @@ describe("per-hob rules", () => {
 
   it("shows an Ask that Read GitHub cannot give as the Never it acts as", () => {
     expect(offeredAnswer("github.read", "ask")).toBe("deny");
+    // Search the web takes Allow or Never only (ADR 036).
+    expect(offeredAnswer("search-web", "ask")).toBe("deny");
+    expect(offeredAnswer("search-web", "allow")).toBe("allow");
     expect(offeredAnswer("github.read", "allow")).toBe("allow");
     expect(offeredAnswer("push", "ask")).toBe("ask");
   });
@@ -127,6 +131,7 @@ describe("per-hob rules", () => {
       "propose-skill": "allow",
       "skill-feedback": "allow",
       "read-hobs": "allow",
+      "search-web": "allow",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
     expect(enforcement("push", balanced)).toBe("checked");
@@ -155,6 +160,7 @@ describe("per-hob rules", () => {
       "propose-skill": "allow",
       "skill-feedback": "allow",
       "read-hobs": "allow",
+      "search-web": "allow",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");
     expect(enforcement("local-git", { ...balanced, "local-git": "deny" })).toBe("checked");

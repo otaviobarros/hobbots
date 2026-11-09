@@ -4,12 +4,12 @@ import {
   AgentStatus,
   Brain,
   Effort,
+  HOB_LABEL_MAX,
   HobColor,
   LookSeed,
   Message,
   MessageId,
   ReplyLength,
-  RetireWork,
   RoleHat,
   RoleId,
   RoleTool,
@@ -43,6 +43,7 @@ import {
 } from "./errors.ts";
 import { ExportsGroup } from "./export.ts";
 import { GitHubGroup } from "./github.ts";
+import { HobChangesGroup } from "./hob-changes.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
 import { HobMemoryGroup } from "./hob-memory.ts";
 import { MemoryGroup } from "./memory.ts";
@@ -50,9 +51,13 @@ import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
+import { HandOverRefused, OpenWork, RetireAgentPayload } from "./retire.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
+import { SkillHealthGroup } from "./skill-health.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
+import { SkillRepositoriesGroup } from "./skill-repositories.ts";
+import { SkillTrialsGroup } from "./skill-trials.ts";
 import { SkillUpdatesGroup } from "./skill-updates.ts";
 import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
@@ -61,7 +66,7 @@ import { DeviceSession } from "./user-session.ts";
 import { WorkbenchGroup } from "./workbench.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
-const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
+const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(HOB_LABEL_MAX));
 
 /** A new hob: who it is, how it looks and what it thinks with. */
 export const CreateAgentPayload = Schema.Struct({
@@ -134,12 +139,6 @@ export type UpdateAgentPayload = typeof UpdateAgentPayload.Type;
 export class HobInputErrors extends HttpApiMiddleware.Service<HobInputErrors>()("@hobbots/api/HobInputErrors", {
   error: InvalidHob,
 }) {}
-
-/** Retiring asks what happens to the hob's running replies; handing them to another hob comes later. */
-export const RetireAgentPayload = Schema.Struct({
-  activeWork: RetireWork,
-});
-export type RetireAgentPayload = typeof RetireAgentPayload.Type;
 
 export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
@@ -252,6 +251,13 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       params: { agentId: AgentId },
       payload: RetireAgentPayload,
       success: Agent,
+      error: [AgentNotFound, HobUnavailable, HandOverRefused],
+    }),
+    // What the hob still has open, for Retire to list; `?handOverTo=` checks each Task against that hob.
+    HttpApiEndpoint.get("openWork", "/agents/:agentId/open-work", {
+      params: { agentId: AgentId },
+      query: { handOverTo: Schema.optionalKey(AgentId) },
+      success: OpenWork,
       error: AgentNotFound,
     }),
     // Brings a retired hob back, active with all its threads; refused for a paused hob.
@@ -402,6 +408,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(PairingRequestsGroup)
   .add(DevicesGroup)
   .add(AgentsGroup)
+  .add(HobChangesGroup)
   .add(ThreadsGroup)
   .add(SystemGroup)
   .add(SetupGroup)
@@ -430,4 +437,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HobMemoryGroup)
   .add(SkillsGroup)
   .add(SkillProposalsGroup)
-  .add(SkillUpdatesGroup) {}
+  .add(SkillUpdatesGroup)
+  .add(SkillTrialsGroup)
+  .add(SkillHealthGroup)
+  .add(SkillRepositoriesGroup) {}

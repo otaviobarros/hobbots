@@ -378,7 +378,7 @@ const memoryRoute = createRoute({
 });
 // Skills (ADR 029): `?scope=` opens a scope, `?skill=` a skill with `&tab=` its tab, `&file=` a file and
 // `&diff=` what a revision changed; `&member=` a skill of a set, by its name in the set; `&edit=skill` opens its editor and `?edit=new` a new skill; `?add=`
-// opens Add a skill from Git, a folder or written here; `?export=skills` opens Export skills; `?view=changes`
+// opens Add a skill from Git, a folder, a repository a hob works in (`&item=` its project) or written here; `?export=skills` opens Export skills; `?view=changes`
 // What changed and `?view=updates` Updates, with `&item=` the skill whose update is open; `?q=` searches.
 const skillsRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -398,6 +398,7 @@ const skillsRoute = createRoute({
       q: searchParam(SearchText),
       view: searchParam(Schema.Literals(["changes", "review", "updates"])),
       item: searchParam(Schema.String),
+      trial: searchParam(Schema.String),
     }),
   ),
   component: function Skills() {
@@ -419,12 +420,25 @@ const settingsSectionRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
   },
-  // `?tab=charms` opens Connections on its Charms tab.
-  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ tab: searchParam(ConnectionsTab) })),
+  // `?tab=charms` opens Connections on its Charms tab, and `?hob=`, `?by=` and `?charm=` filter Changes.
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({
+      tab: searchParam(ConnectionsTab),
+      hob: searchParam(SearchText),
+      by: searchParam(SearchText),
+      charm: searchParam(SearchText),
+    }),
+  ),
   component: function SettingsSectionPage() {
     const { section } = settingsSectionRoute.useParams();
-    const { tab } = settingsSectionRoute.useSearch();
-    return <SettingsPage section={isSettingsSection(section) ? section : null} tab={tab ?? "ai"} />;
+    const { tab, hob, by, charm } = settingsSectionRoute.useSearch();
+    return (
+      <SettingsPage
+        section={isSettingsSection(section) ? section : null}
+        tab={tab ?? "ai"}
+        changes={{ hob, by, charm }}
+      />
+    );
   },
 });
 // The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). Its pages share

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+  type HubTool,
   type HubTools,
   hobCard,
   renderRoster,
@@ -8,7 +9,15 @@ import {
   type ToolStartedEvent,
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
-import { Agent, AgentId, roleFields } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  roleFields,
+  WEB_FETCH_DESCRIPTION,
+  WEB_FETCH_LABEL,
+  WEB_FETCH_TOOL,
+  webFetchJsonSchema,
+} from "@hobbots/domain";
 import { Effect } from "effect";
 
 // The clean-runtime fixture (ADR 029): a fake home folder and a repository that hold a skill, an MCP
@@ -97,7 +106,12 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   write(join(home, ".claude", "CLAUDE.md"), "Marker home-claude-instructions.\n");
   write(
     join(home, ".claude", "settings.json"),
-    JSON.stringify({ ...hookSettings(marker("home-claude-hook")), enabledPlugins: { "home-plugin@local": true } }),
+    JSON.stringify({
+      ...hookSettings(marker("home-claude-hook")),
+      enabledPlugins: { "home-plugin@local": true },
+      // A web setting of the user's own, which no hob's turn reads (ADR 036).
+      permissions: { allow: ["WebFetch", "WebSearch"] },
+    }),
   );
   write(
     join(home, ".claude.json"),
@@ -126,7 +140,8 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   write(join(home, ".codex", "AGENTS.md"), "Marker home-codex-instructions.\n");
   write(
     join(home, ".codex", "config.toml"),
-    `[mcp_servers.home-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("home-codex-mcp")}'"]\n`,
+    // Live search reaches any page, which no hob's turn reads from here (ADR 036).
+    `web_search = "live"\n\n[mcp_servers.home-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("home-codex-mcp")}'"]\n`,
   );
 
   // The shared folder, which Hobbots serves under Everyone.
@@ -141,7 +156,7 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
   write(join(repo, ".mcp.json"), JSON.stringify({ mcpServers: { "repo-mcp-tool": mcpServer(marker("repo-mcp")) } }));
   write(
     join(repo, ".codex", "config.toml"),
-    `[mcp_servers.repo-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("repo-codex-mcp")}'"]\n`,
+    `web_search = "live"\n\n[mcp_servers.repo-mcp-tool]\ncommand = "sh"\nargs = ["-c", "touch '${marker("repo-codex-mcp")}'"]\n`,
   );
 
   // The library's revisions, as the hub keeps them, and the `~/.agents` skill as the hub serves it.
@@ -195,23 +210,32 @@ export const cleanRuntimeFixture = (root: string): CleanRuntimeFixture => {
 /** The hub tool the step-recording contract calls. */
 export const CONTRACT_HUB_TOOL = "pip_note";
 
+const NOTE_TOOL: HubTool = {
+  name: CONTRACT_HUB_TOOL,
+  description: "Reads the hub's note.",
+  inputSchema: { type: "object", properties: {} },
+  label: "Reading the note",
+};
+
+/** `web_fetch` as the hub offers it (ADR 036), for the step-recording contract on every runtime. */
+export const WEB_FETCH_CONTRACT_TOOL: HubTool = {
+  name: WEB_FETCH_TOOL,
+  description: WEB_FETCH_DESCRIPTION,
+  inputSchema: webFetchJsonSchema(),
+  label: WEB_FETCH_LABEL,
+};
+
 /**
  * The step-recording contract (ADR 031): a hub tool call reaches the hub with a step whose `record`
  * is the turn's `recordToolStart`, so a hub call is recorded durably before it runs, as the runtime's
  * own calls are. The hub tool records its step as the hub action pipeline does and runs only once it
  * is recorded; `order` says what happened. With `records` false, the turn refuses to record it.
+ * `tool` is the hub tool offered, the note by default or `web_fetch`.
  */
-export const stepRecordingContract = (records = true) => {
+export const stepRecordingContract = (records = true, tool: HubTool = NOTE_TOOL) => {
   const order: Array<string> = [];
   const hubTools: HubTools = {
-    tools: [
-      {
-        name: CONTRACT_HUB_TOOL,
-        description: "Reads the hub's note.",
-        inputSchema: { type: "object", properties: {} },
-        label: "Reading the note",
-      },
-    ],
+    tools: [tool],
     call: (name, _input, step) =>
       step === undefined
         ? Effect.sync(() => {
@@ -223,9 +247,9 @@ export const stepRecordingContract = (records = true) => {
               _tag: "ToolStarted",
               id: step.id,
               tool: name,
-              operation: "pip.read",
-              targets: ["note"],
-              label: "Reading the note",
+              operation: tool === NOTE_TOOL ? "pip.read" : "use-web",
+              targets: [tool === NOTE_TOOL ? "note" : "web"],
+              label: tool.label,
             })
             .pipe(
               Effect.map((recorded) => {

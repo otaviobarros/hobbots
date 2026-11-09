@@ -71,7 +71,10 @@ const memoryHub = () => {
         Layer.succeed(MemorySaves, saves.service),
         Layer.succeed(
           MemoryProjects,
-          MemoryProjects.of({ of: () => Effect.succeed(memoryProjectIdentity(null, "app")) }),
+          MemoryProjects.of({
+            of: () => Effect.succeed(memoryProjectIdentity(null, "app")),
+            origin: () => Effect.succeed(null),
+          }),
         ),
         PolicyEngine.node,
       ),

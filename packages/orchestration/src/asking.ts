@@ -1,19 +1,24 @@
 import type { HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   AgentId,
+  ancestorsOf,
   CheckpointId,
   MilestoneId,
   type Question,
   QuestionId,
+  type Task,
   type TaskToolInput,
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import { type CallScope, fromRecords, journalOf, newId, ownTask, refuse, taskIn } from "./call-scope.ts";
+import { type DestinationDeps, destinationAnswerProblem, destinationQuestionProblem } from "./destinations.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
   readonly hobs: HobbotsRepository["Service"];
+  /** What a question or an answer about the files the user named is checked against (#1219). */
+  readonly destinations: DestinationDeps;
 }
 
 /** A question asked on a Task the turn reaches. */
@@ -27,13 +32,16 @@ const questionIn = (scope: CallScope, id: string): Effect.Effect<Question, TaskT
 const recipient = (question: Question) => (question.recipientId === null ? "the user" : `hob ${question.recipientId}`);
 
 /**
- * The hob a milestone report names as having done the work (#743), by id or name: one that owns a Task
- * in this work, so a report never credits a hob outside it. Null when the report names none, or the
- * caller itself.
+ * The hob a milestone report names as having done the work (#743), by id or name: one that leads the
+ * Task from above, such as a lead that made the commit its member could not. A member's work on a
+ * Task under the reporter's is the reporter's own, since its Task gave it that work, so naming a
+ * member is refused (#1219): a nested lead credited its own milestones to the member it led. Null
+ * when the report names none, or the caller itself.
  */
 const reacherOf = (
   hobs: Deps["hobs"],
   scope: CallScope,
+  task: Task,
   input: Omit<TaskToolInput<"report_checkpoint">, "key">,
 ): Effect.Effect<AgentId | null, TaskToolRefused> =>
   Effect.gen(function* () {
@@ -42,7 +50,7 @@ const reacherOf = (
     if (input.kind !== "milestone") {
       return yield* refuse("milestone-mismatch", "Only a milestone checkpoint names the hob that reached it.");
     }
-    const owners = new Set<string>(scope.tree.tasks.map((task) => task.ownerId));
+    const owners = new Set<string>(scope.tree.tasks.map((each) => each.ownerId));
     const wanted = named.trim().toLowerCase();
     const hob = owners.has(named)
       ? named
@@ -54,15 +62,23 @@ const reacherOf = (
         `No hob named ${named} has a Task in this work. Name the hob whose work reached the milestone, or leave reached_by out when your own work did.`,
       );
     }
-    return hob === scope.caller.agentId ? null : AgentId.make(hob);
+    if (hob === scope.caller.agentId) return null;
+    const leads = new Set<string>(ancestorsOf(task, scope.tree.tasks).map((above) => above.ownerId));
+    if (!leads.has(hob)) {
+      return yield* refuse(
+        "milestone-mismatch",
+        `Hob ${named} does not lead Task ${task.id}, so it cannot have reached this milestone for you. Work a member did on a Task you gave it is your Task's own: leave reached_by out. Name only a lead above you whose own work reached it, such as a commit you could not make.`,
+      );
+    }
+    return AgentId.make(hob);
   });
 
 /** Tools that report where a Task stands and move questions up the chain of leads. */
-export const makeAsking = ({ tasks, hobs }: Deps) => ({
+export const makeAsking = ({ tasks, hobs, destinations }: Deps) => ({
   report_checkpoint: (scope: CallScope, input: Omit<TaskToolInput<"report_checkpoint">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
-      const reachedBy = yield* reacherOf(hobs, scope, input);
+      const reachedBy = yield* reacherOf(hobs, scope, task, input);
       const journal = journalOf();
       const checkpoint = journal.keep(
         yield* fromRecords(
@@ -91,6 +107,8 @@ export const makeAsking = ({ tasks, hobs }: Deps) => ({
   ask: (scope: CallScope, input: Omit<TaskToolInput<"ask">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
+      const unworded = yield* destinationQuestionProblem(destinations, scope, input);
+      if (unworded !== null) return yield* refuse("destination-unworded", unworded);
       const journal = journalOf();
       const question = journal.keep(
         yield* fromRecords(
@@ -118,6 +136,8 @@ export const makeAsking = ({ tasks, hobs }: Deps) => ({
   answer: (scope: CallScope, input: Omit<TaskToolInput<"answer">, "key">) =>
     Effect.gen(function* () {
       const asked = yield* questionIn(scope, input.question_id);
+      const elsewhere = destinationAnswerProblem(scope, asked, input.answer, destinations.separator);
+      if (elsewhere !== null) return yield* refuse("destination-theirs", elsewhere);
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(

@@ -21,7 +21,9 @@ import {
   rolloutTargets,
   type SkillDelivery,
   SkillFiles,
+  type SkillFilesShape,
   SkillLibrary,
+  type SkillLibraryShape,
   type SkillRevisionAdded,
   SkillWriter,
   type WrittenFile,
@@ -52,10 +54,47 @@ const now = Effect.map(DateTime.now, DateTime.formatIso);
 const decoder = new TextDecoder();
 
 /** The files a proposal would add, and the newest revision a change keeps the other files of. */
-interface ProposalFiles {
+export interface ProposalFiles {
   readonly files: ReadonlyArray<WrittenFile>;
   readonly after: SkillRevisionHash | null;
 }
+
+/**
+ * The files of the revision a proposal makes with `instructions` as its `SKILL.md`: for a change,
+ * every other file of the skill's newest revision too, as it is now, so a script it refers to keeps
+ * its contents and its mode. A proposal changes only `SKILL.md`, and its review shows it against
+ * the newest revision, so a script fixed or a file added since the hob read the skill stays as it
+ * is. Files the hub cannot find are not files the skill lacks: the add is refused, never made without
+ * them. Trying a proposal in a chat loads the same files (ADR 029, Try in a chat).
+ */
+export const proposalFiles =
+  (library: SkillLibraryShape, files: SkillFilesShape) => (proposal: SkillProposal, instructions: string) =>
+    Effect.gen(function* (): Effect.fn.Return<ProposalFiles, SkillSourceUnreadable> {
+      const skillMd: WrittenFile = { path: "SKILL.md", text: instructions };
+      if (proposal.skillId === null || proposal.base === null) return { files: [skillMd], after: null };
+      const skill = yield* library.get(proposal.skillId);
+      const newest = skill?.latest ?? proposal.base.hash;
+      const revision = yield* library.revision(proposal.skillId, newest);
+      if (revision === null) {
+        return yield* new SkillSourceUnreadable({
+          message: `The files of ${proposal.name}'s newest revision are not on this hub, so the change cannot keep them.`,
+        });
+      }
+      const kept = yield* Effect.forEach(
+        revision.files.filter((file) => file.path !== "SKILL.md"),
+        (file) =>
+          files.read(newest, file.path).pipe(
+            Effect.mapError(
+              () =>
+                new SkillSourceUnreadable({
+                  message: `${file.path} of ${proposal.name}'s newest revision could not be read, so the change cannot keep it.`,
+                }),
+            ),
+            Effect.map((bytes): WrittenFile => ({ path: file.path, bytes, executable: file.mode === "executable" })),
+          ),
+      );
+      return { files: [skillMd, ...kept], after: newest };
+    });
 
 export const SkillReviewsLive = Layer.effect(
   SkillReviews,
@@ -103,40 +142,7 @@ export const SkillReviewsLive = Layer.effect(
         ),
       );
 
-    /**
-     * The files of the revision a proposal makes with `instructions` as its `SKILL.md`: for a change,
-     * every other file of the skill's newest revision too, as it is now, so a script it refers to keeps
-     * its contents and its mode. A proposal changes only `SKILL.md`, and its review shows it against
-     * the newest revision, so a script fixed or a file added since the hob read the skill stays as it
-     * is. Files the hub cannot find are not files the skill lacks: the add is refused, never made without them.
-     */
-    const filesOf = (proposal: SkillProposal, instructions: string) =>
-      Effect.gen(function* (): Effect.fn.Return<ProposalFiles, SkillSourceUnreadable> {
-        const skillMd: WrittenFile = { path: "SKILL.md", text: instructions };
-        if (proposal.skillId === null || proposal.base === null) return { files: [skillMd], after: null };
-        const skill = yield* library.get(proposal.skillId);
-        const newest = skill?.latest ?? proposal.base.hash;
-        const revision = yield* library.revision(proposal.skillId, newest);
-        if (revision === null) {
-          return yield* new SkillSourceUnreadable({
-            message: `The files of ${proposal.name}'s newest revision are not on this hub, so the change cannot keep them.`,
-          });
-        }
-        const kept = yield* Effect.forEach(
-          revision.files.filter((file) => file.path !== "SKILL.md"),
-          (file) =>
-            files.read(newest, file.path).pipe(
-              Effect.mapError(
-                () =>
-                  new SkillSourceUnreadable({
-                    message: `${file.path} of ${proposal.name}'s newest revision could not be read, so the change cannot keep it.`,
-                  }),
-              ),
-              Effect.map((bytes): WrittenFile => ({ path: file.path, bytes, executable: file.mode === "executable" })),
-            ),
-        );
-        return { files: [skillMd, ...kept], after: newest };
-      });
+    const filesOf = proposalFiles(library, files);
 
     /** What the checks find in a proposal with `instructions`, as adding it now would find it. */
     const checkOf = (proposal: SkillProposal, instructions: string) =>

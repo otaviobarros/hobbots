@@ -9,10 +9,17 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { type Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { binaryLocator } from "../src/binary.ts";
-import { codexEnforcement, makeCodex } from "../src/codex/adapter.ts";
+import { codexEnforcement, codexWebSearch, makeCodex } from "../src/codex/adapter.ts";
 import { startAppServer } from "../src/codex/app-server.ts";
 import { billingOf, chatGptTokens, signInOf } from "../src/codex/auth.ts";
-import { codexCandidates, codexPath, findCodex, minimumCodexVersion, parseCodexVersion } from "../src/codex/locate.ts";
+import {
+  CACHED_SEARCH_CODEX_VERSIONS,
+  codexCandidates,
+  codexPath,
+  findCodex,
+  minimumCodexVersion,
+  parseCodexVersion,
+} from "../src/codex/locate.ts";
 import { listModels, toCodexModels } from "../src/codex/models.ts";
 import { planFromRateLimits } from "../src/codex/plan.ts";
 import type { Model, RateLimitSnapshot } from "../src/codex/protocol.ts";
@@ -171,6 +178,41 @@ describe("the App Server client", () => {
     });
   }, 30_000);
 
+  // covers ADR 036
+  it("[TC-RT-1289-03] handles a request Codex sent after a notification only once the work on that notification ended", async () => {
+    const dir = folder();
+    const binary = fakeCodex(dir, { behavior: "search" });
+    const order: Array<string> = [];
+    await run(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* startAppServer(
+            { command: binary, args: ["app-server"], env: { PATH: process.env.PATH ?? "" } },
+            {
+              clientVersion: "test",
+              // Slow on purpose, as a found set written to a busy database would be.
+              beforeNotification: (notification) =>
+                Effect.sleep("150 millis").pipe(Effect.andThen(Effect.sync(() => order.push(notification.method)))),
+              handlers: {
+                "item/tool/call": () =>
+                  Effect.sync(() => {
+                    order.push("item/tool/call");
+                    return { success: true, contentItems: [] };
+                  }),
+              },
+            },
+          );
+          yield* waitUntil(
+            Effect.sync(() => fakeCodexLog(dir).map((message) => message.id)),
+            (ids) => ids.includes("ask-1"),
+            { what: "the stand-in to read the answer to ask-1" },
+          );
+        }),
+      ),
+    );
+    expect(order).toEqual(["item/completed", "item/tool/call"]);
+  }, 30_000);
+
   it("[TC-RT-014] fails what is waiting and ends notifications when Codex exits", async () => {
     const binary = fakeCodex(folder(), { behavior: "exit" });
     const result = await run(
@@ -276,6 +318,18 @@ describe("Codex's provider health", () => {
     expect(policySandbox(off)).toBe("unavailable");
     const on = codexEnforcement({ state: "on", evidence: "sandbox-runtime on linux" });
     expect(on.processSandbox.status).toBe(process.platform === "darwin" ? "verified" : "unverified");
+  });
+
+  // covers ADR 036 (Search the web on Codex)
+  it("[TC-RT-1266-01] offers Codex's cached search only on a release the contract test held, and reports it with health", async () => {
+    const codex = await codexWith({}).adapter;
+    // The fake Codex is 0.166.0, a release the contract test held to the cached index.
+    expect((await Effect.runPromise(codex.enforcement)).webSearch.status).toBe("verified");
+    expect((await Effect.runPromise(codex.health)).enforcement.webSearch.status).toBe("verified");
+    for (const version of CACHED_SEARCH_CODEX_VERSIONS) expect(codexWebSearch(version).status).toBe("verified");
+    // A newer release, or none at all, is not offered until the test passes on it.
+    expect(codexWebSearch("99.0.0")).toMatchObject({ status: "unverified" });
+    expect(codexWebSearch(null)).toMatchObject({ status: "unverified" });
   });
 });
 

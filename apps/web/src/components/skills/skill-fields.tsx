@@ -2,7 +2,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { useId } from "react";
+import { type ReactNode, useId } from "react";
 import { messages } from "./messages.ts";
 import { descriptionState, type SkillsView, skillsSearchOf } from "./skills-model.ts";
 
@@ -65,6 +65,7 @@ export function EditorFooter({
   disabled,
   back,
   hint = copy.editor.checked,
+  children,
 }: {
   failure: string | null;
   saveLabel: string;
@@ -72,6 +73,8 @@ export function EditorFooter({
   back: SkillsView;
   /** Said beside Save: what is checked, or why there is nothing to save yet. */
   hint?: string | undefined;
+  /** More you can do with the draft beside Save, such as Try in a chat. */
+  children?: ReactNode;
 }) {
   return (
     <>
@@ -84,6 +87,7 @@ export function EditorFooter({
         <Button type="submit" disabled={disabled}>
           {saveLabel}
         </Button>
+        {children}
         <Button asChild variant="quiet">
           <Link to="/skills" search={skillsSearchOf(back)}>
             {copy.editor.cancel}

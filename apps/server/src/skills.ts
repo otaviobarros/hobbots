@@ -45,7 +45,7 @@ import {
   type SkillRevisionHash,
   skillUseWeekStart,
 } from "@hobbots/domain";
-import { EventJournal, RestoreRepository, SkillUpdateLogLive } from "@hobbots/persistence";
+import { EventJournal, RestoreRepository, SkillRepositoryOffersLive, SkillUpdateLogLive } from "@hobbots/persistence";
 import {
   AgentsFolder,
   AgentsFolderLive,
@@ -226,6 +226,12 @@ const rollOutAll = (
     Effect.map((committed) => committed.value),
   );
 
+/** The folders a hob works in now, as its permissions give them, or its own folders on a hub without them. */
+const hobFolders = (permissions: Option.Option<PermissionSummary["Service"]>, agent: Agent) =>
+  Option.isSome(permissions)
+    ? Effect.map(permissions.value.of(agent), (summary) => summary.folders)
+    : Effect.succeed(agent.policy.ownFolders);
+
 export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handlers) =>
   Effect.gen(function* () {
     const services = Option.all([
@@ -253,11 +259,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
           Effect.map((committed) => committed.value),
         ),
       );
-    /** The folders a hob works in now. */
-    const foldersOf = (agent: Agent) =>
-      Option.isSome(permissions)
-        ? Effect.map(permissions.value.of(agent), (summary) => summary.folders)
-        : Effect.succeed(agent.policy.ownFolders);
+    const foldersOf = (agent: Agent) => hobFolders(permissions, agent);
     // A hob's skills as its next turn would get them, in the folders it works in now.
     const hobView = (agentId: AgentId) =>
       Effect.gen(function* () {
@@ -642,24 +644,46 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
 );
 
 /**
- * Each hob's skills as its next turn would get them, in the folders it works in now, by name and
- * revision only, for Diagnostics (ADR 029): the same on every runtime. Empty on a hub without skills.
+ * Each hob that works, active or paused, with its skills as its next turn would get them in the
+ * folders it works in now: what Diagnostics and the Overview's health checks read (ADR 029). Empty on
+ * a hub without skills.
  */
-export const hobSkillLines = Effect.gen(function* () {
+export const workingHobSkills = Effect.gen(function* () {
   const library = yield* Effect.serviceOption(SkillLibrary);
   const repo = yield* Effect.serviceOption(HobbotsRepository);
   const permissions = yield* Effect.serviceOption(PermissionSummary);
   const projects = yield* Effect.serviceOption(MemoryProjects);
   return Effect.gen(function* () {
     if (Option.isNone(library) || Option.isNone(repo)) return [];
-    const skills = library.value;
     const hobs = yield* repo.value.listAgentsWithStatus(["active", "paused"]);
     return yield* Effect.forEach(hobs, (agent) =>
       Effect.gen(function* () {
         const folders = Option.isSome(permissions)
           ? (yield* permissions.value.of(agent)).folders
           : agent.policy.ownFolders;
-        const resolved = yield* hobSkills(skills, projects, { agentId: agent.id, policy: agent.policy, folders });
+        const resolved = yield* hobSkills(library.value, projects, {
+          agentId: agent.id,
+          policy: agent.policy,
+          folders,
+        });
+        return { agent, resolved };
+      }),
+    );
+  });
+});
+
+/**
+ * Each hob's skills as its next turn would get them, in the folders it works in now, by name and
+ * revision only, for Diagnostics (ADR 029): the same on every runtime. Empty on a hub without skills.
+ */
+export const hobSkillLines = Effect.gen(function* () {
+  const library = yield* Effect.serviceOption(SkillLibrary);
+  const working = yield* workingHobSkills;
+  return Effect.gen(function* () {
+    if (Option.isNone(library)) return [];
+    const skills = library.value;
+    return yield* Effect.forEach(yield* working, ({ agent, resolved }) =>
+      Effect.gen(function* () {
         return {
           agentId: agent.id,
           runtime: agent.runtime,
@@ -687,13 +711,13 @@ export const agentsSkillsFolder = (setting: Option.Option<string>, runtime: "cla
 
 /**
  * Skills on the hub (ADR 029): each revision's files under `skills/objects` in the data folder,
- * import into the library, updates from Git sources, and `~/.agents/skills` read into it when there
- * is one to read.
+ * import into the library, updates from Git sources, the offers of repositories' own skills, and
+ * `~/.agents/skills` read into it when there is one to read.
  */
 export const SkillsLive = (dataDir: string, agentsFolder: string | null) => {
   const services = Layer.mergeAll(SkillWriterLive, SkillUpdatesLive).pipe(
     Layer.provideMerge(SkillImporterLive),
-    Layer.provideMerge(Layer.mergeAll(SkillObjectsLive(dataDir), SkillUpdateLogLive)),
+    Layer.provideMerge(Layer.mergeAll(SkillObjectsLive(dataDir), SkillUpdateLogLive, SkillRepositoryOffersLive)),
   );
   return agentsFolder === null
     ? services

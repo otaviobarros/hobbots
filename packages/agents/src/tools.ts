@@ -4,12 +4,15 @@ import {
   type AnyOperation,
   heldCharms,
   hobAnswers,
+  holdsCharm,
   isNarrowerOrEqual,
   narrowest,
   POLICY_OPERATIONS,
   type PolicyDecision,
   type PolicyOperation,
   presetDecision,
+  SUMMONING_CHARM_ID,
+  summoningScopeOf,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import type { TurnStart } from "./commit-identity.ts";
@@ -28,6 +31,13 @@ export const operationDecision = (
     presetDecision(context.preset, operation, context.charmOperations ?? []),
     ...[hobAnswers(context.hob), ...context.restrictions].flatMap((layer) => layer[operation] ?? []),
   );
+
+/**
+ * Whether a turn may search the web with its runtime's own search (ADR 036): only with tool access
+ * and where Search the web answers Allow. It takes no Ask, so anything else offers no search.
+ */
+export const turnWebSearch = (access: ToolAccess | null | undefined): boolean =>
+  access != null && operationDecision(access.policy, "search-web") === "allow";
 
 /**
  * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,
@@ -64,6 +74,14 @@ const answeredOperations = (policy: ToolPolicy): ReadonlyArray<AnyOperation> => 
   ...(policy.charmOperations ?? []).map((operation) => operation.id),
 ];
 
+/** Whether the Summoning Charm's scope reaches fewer hobs after than before (ADR 034). */
+const summoningScopeNarrows = (before: ToolPolicy["hob"], after: ToolPolicy["hob"]): boolean => {
+  if (!holdsCharm(before, SUMMONING_CHARM_ID)) return false;
+  const was = summoningScopeOf(before);
+  const is = summoningScopeOf(after);
+  return (was.summoned && !is.summoned) || (was.self && !is.self) || was.hobs.some((hob) => !is.hobs.includes(hob));
+};
+
 /**
  * Whether `after` takes away anything `before` gave: a folder, the tools altogether, the user's
  * signing agent (`signCommits`), a Charm the hob held (ADR 031), or an operation whose answer gets
@@ -77,6 +95,7 @@ export const narrows = (before: ToolAccess | null, after: ToolAccess | null): bo
   if (before.policy.hob.signCommits === true && after.policy.hob.signCommits !== true) return true;
   const held = heldCharms(after.policy.hob);
   if (heldCharms(before.policy.hob).some((charm) => !held.includes(charm))) return true;
+  if (summoningScopeNarrows(before.policy.hob, after.policy.hob)) return true;
   // A Charm operation no longer declared answers Never, so losing a Charm narrows too.
   return answeredOperations(before.policy).some((operation) => {
     const was = operationDecision(before.policy, operation);

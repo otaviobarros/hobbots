@@ -2,6 +2,7 @@ import { SearchField } from "@hobbots/ui/components/search-field";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
+import type { ChangesSearch } from "../hob-changes/hob-changes-model.ts";
 import { messages } from "./messages.ts";
 import { SettingsOverview, useOverview } from "./overview.tsx";
 import { SectionContent } from "./section-content.tsx";
@@ -14,7 +15,16 @@ const copy = messages;
  * Settings: a list of its sections beside the open one, Overview first. The section lives in the
  * address, so a link, Back or a reload opens the same one.
  */
-export function SettingsPage({ section, tab = "ai" }: { section: SettingsSection | null; tab?: ConnectionsTab }) {
+export function SettingsPage({
+  section,
+  tab = "ai",
+  changes = {},
+}: {
+  section: SettingsSection | null;
+  tab?: ConnectionsTab;
+  /** The Changes log's filters, from the address. */
+  changes?: ChangesSearch;
+}) {
   const titleId = useId();
 
   return (
@@ -28,7 +38,7 @@ export function SettingsPage({ section, tab = "ai" }: { section: SettingsSection
           ) : (
             <>
               <SectionHeader section={section} titleId={titleId} />
-              <SectionContent section={section} tab={tab} />
+              <SectionContent section={section} tab={tab} changes={changes} />
             </>
           )}
         </section>
