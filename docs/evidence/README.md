@@ -83,3 +83,5 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-07 The hub action pipeline and the Charm registry, end to end, with a fake second Charm beside GitHub](2026-11-07-charm-actions-end-to-end.md)
 - [2026-11-08 macOS asks about a protected folder when it is added, and hobs on both runtimes then write there](2026-11-08-protected-folders-mac.md)
 - [2026-11-08 Hobs see each other end to end, on the fake runtime, an installed Claude Code and an installed Codex](2026-11-08-hobs-see-each-other.md)
+- [2026-11-09 Hobs see each other with real models on Claude Code and Codex](2026-11-09-hobs-see-each-other-real-models.md)
+- [2026-11-09 A hob's first commit runs without a refused step, on real Claude Code and Codex](2026-11-09-first-commit-identity.md)
