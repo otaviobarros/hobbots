@@ -115,6 +115,21 @@ describe("hob proposal card", () => {
     ]);
   });
 
+  it("shows a change of answers as the operations it changes, each with its answer before and after", () => {
+    const changed = row({
+      change: { hob: "Ada", answers: { "github.read": "allow", "github.push": "deny", "web.fetch": "ask" } },
+      before: { answers: { "github.read": "deny", "github.push": "deny" } },
+    });
+    const [line] = changeLines(changed);
+    expect(line?.label).toBe("Answers");
+    expect(line?.before).not.toContain("Push");
+    expect(line?.before).toMatch(/: Never/);
+    expect(line?.before).toMatch(/: not set/);
+    expect(line?.after).toMatch(/: Allow/);
+    expect(line?.after).toMatch(/: Ask/);
+    expect(summonFacts({ ...draft, answers: { "github.push": "deny" } }).at(-1)?.[1]).toMatch(/: Never$/);
+  });
+
   it("offers Allow only for pending rows whose hob did not change since", () => {
     const rows = [row(), row({ id: "2" }), row({ id: "3", state: "denied" })];
     expect(allowableRows(proposal({ rows }), ["2"]).map((r) => r.id)).toEqual(["1"]);

@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  type AnyOperation,
   type CharmOperationId,
   DEFAULT_SIGIL,
   HobColor,
@@ -11,6 +12,7 @@ import {
   starterRole,
 } from "@hobbots/domain";
 import { type FirstHobDraft, newDraft } from "../../api/first-hob.ts";
+import { operationLabel } from "../../lib/reply-steps.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -90,6 +92,25 @@ export const rowLook = (draft: SummoningDraft) => {
   };
 };
 
+/** Answers, one per operation, by its name: "Read GitHub: Allow, Push: Never". */
+const answersWords = (answers: Readonly<Record<string, unknown>>, operations = Object.keys(answers)): string =>
+  operations.length === 0
+    ? copy.noValue
+    : [...operations]
+        .sort((a, b) => operationLabel(a as AnyOperation).localeCompare(operationLabel(b as AnyOperation)))
+        .map((operation) =>
+          copy.answer({
+            operation: operationLabel(operation as AnyOperation),
+            answer: answerWord(answers[operation]),
+          }),
+        )
+        .join(", ");
+
+const answerWord = (answer: unknown): string =>
+  typeof answer === "string" && answer in copy.answers
+    ? copy.answers[answer as keyof typeof copy.answers]
+    : copy.notSet;
+
 const list = (items: ReadonlyArray<string> | undefined) =>
   items === undefined ? undefined : items.length === 0 ? copy.noValue : items.join(", ");
 
@@ -105,10 +126,7 @@ export const summonFacts = (draft: SummoningDraft): ReadonlyArray<readonly [stri
     [copy.fields.folders, list(draft.own_folders)],
     [copy.fields.hidden, list(draft.hidden_shared_folders)],
     [copy.fields.charms, list(draft.charms)],
-    [
-      copy.fields.answers,
-      draft.answers === undefined ? copy.yourAnswers : copy.answerCount({ count: Object.keys(draft.answers).length }),
-    ],
+    [copy.fields.answers, draft.answers === undefined ? copy.yourAnswers : answersWords(draft.answers)],
   ];
   return facts.filter((fact): fact is readonly [string, string] => fact[1] !== undefined);
 };
@@ -140,7 +158,7 @@ const CHANGE_LABELS: Readonly<Record<string, string>> = {
 const valueWords = (value: unknown): string => {
   if (value === undefined || value === null || value === "") return copy.noValue;
   if (Array.isArray(value)) return value.length === 0 ? copy.noValue : value.map(String).join(", ");
-  if (typeof value === "object") return copy.answerCount({ count: Object.keys(value).length });
+  if (typeof value === "object") return answersWords(value as Record<string, unknown>);
   if (typeof value === "string" && value in RUNTIME_NAMES) return RUNTIME_NAMES[value as keyof typeof RUNTIME_NAMES];
   return String(value);
 };
@@ -161,13 +179,30 @@ export const changeLines = (row: HobProposalRow): ReadonlyArray<ChangeLine> => {
   const before = row.before ?? {};
   return Object.entries(row.change)
     .filter(([key, value]) => key !== "hob" && value !== undefined)
-    .map(([key, value]) => ({
-      key,
-      label: CHANGE_LABELS[key] ?? key,
-      before: valueWords(before[key]),
-      after: valueWords(value),
-      long: key === "instructions",
-    }));
+    .map(([key, value]) => {
+      if (key === "answers") return answersLine(before[key], value);
+      return {
+        key,
+        label: CHANGE_LABELS[key] ?? key,
+        before: valueWords(before[key]),
+        after: valueWords(value),
+        long: key === "instructions",
+      };
+    });
+};
+
+/** A change's answers as the operations it changes, each with its answer before and after. */
+const answersLine = (before: unknown, after: unknown): ChangeLine => {
+  const was = (typeof before === "object" && before !== null ? before : {}) as Record<string, unknown>;
+  const now = (typeof after === "object" && after !== null ? after : {}) as Record<string, unknown>;
+  const changed = [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((each) => was[each] !== now[each]);
+  return {
+    key: "answers",
+    label: copy.fields.answers,
+    before: answersWords(was, changed),
+    after: answersWords(now, changed),
+    long: false,
+  };
 };
 
 /**

@@ -69,8 +69,10 @@ export const messages = {
   noInstructions: "No instructions: Summon's defaults.",
   before: "Before",
   after: "After",
-  answerCount: ({ count }: { count: number }) =>
-    plural(count, { one: `${formatCount(count)} answer`, other: `${formatCount(count)} answers` }),
+  /** "Read GitHub: Never". */
+  answer: ({ operation, answer }: { operation: string; answer: string }) => `${operation}: ${answer}`,
+  answers: { allow: "Allow", ask: "Ask", deny: "Never" },
+  notSet: "not set",
   retire: {
     owns: ({ hob }: { hob: string }) =>
       `${hob}'s chats, memory and History stay, read-only. Hobs it summoned stay too, and only you can manage them.`,
