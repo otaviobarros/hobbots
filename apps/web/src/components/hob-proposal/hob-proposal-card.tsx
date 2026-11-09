@@ -199,14 +199,17 @@ function DecidedStep({ proposal, who }: { proposal: HobProposal; who: string }) 
       data-state={proposal.state}
       className="flex flex-col gap-2 ps-5.5 pt-1"
     >
-      <ul role="status" aria-label={copy.rows} className="m-0 flex list-none flex-col gap-0.5 p-0">
-        {proposal.rows.map((row) => (
-          <li key={row.id} className="text-meta">
-            <span className="text-text-strong">{copy.rowLine({ hob: row.label })}</span>
-            <RowState row={row} />
-          </li>
-        ))}
-      </ul>
+      {/* The status sits on a wrapper, so the rows keep their list (STD-UI-003). */}
+      <div role="status">
+        <ul aria-label={copy.rows} className="m-0 flex list-none flex-col gap-0.5 p-0">
+          {proposal.rows.map((row) => (
+            <li key={row.id} className="text-meta">
+              <span className="text-text-strong">{copy.rowLine({ hob: row.label })}</span>
+              <RowState row={row} />
+            </li>
+          ))}
+        </ul>
+      </div>
       <CreatedHobs proposal={proposal} />
     </section>
   );

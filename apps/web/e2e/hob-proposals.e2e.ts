@@ -205,6 +205,7 @@ test("[TC-UX-409-03] a summon proposal is decided by keyboard alone: open it fro
   await expect(card.getByRole("status")).toContainText("Ivo: Allowed", { timeout: 20_000 });
   await expect(card.getByRole("status")).toContainText("Jun: Allowed");
   await expect(card.getByRole("button", { name: /^(Allow|Deny)/ })).toHaveCount(0);
+  await expectAccessible(page, card);
   await tabTo(page, card.getByRole("region", { name: "Created" }).getByRole("link", { name: "Open Ivo" }), 200);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main", { name: "Ivo's profile" })).toBeVisible();
@@ -249,6 +250,7 @@ test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields 
   await page.getByRole("list", { name: "Reply steps" }).getByRole("button").first().click();
   await expect(settled.getByRole("status")).toContainText("Bram: Allowed");
   await expect(settled.getByRole("article")).toHaveCount(0);
+  await expectAccessible(page, settled);
 });
 
 // covers STD-TEST-010, the design system (one place asks for you), ADR 034
