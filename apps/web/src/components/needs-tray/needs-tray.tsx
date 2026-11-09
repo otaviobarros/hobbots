@@ -8,10 +8,11 @@ import { formatWhen } from "../../lib/time.ts";
 import { ApprovalActions } from "../approvals/approval-actions.tsx";
 import { riskOf } from "../approvals/approval-rules.ts";
 import { decisionErrorText, expiryText } from "../approvals/approval-text.ts";
-import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
-import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
+import { blockerWhat } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
+import { HobProposalCard } from "../hob-proposal/hob-proposal-card.tsx";
+import { hobProposalWhat } from "../hob-proposal/hob-proposal-model.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as inboxCopy } from "../inbox/messages.ts";
 import { messages as appCopy } from "../messages.ts";
@@ -25,6 +26,7 @@ import { taskTitle } from "../quest/work-model.ts";
 import { Details } from "./details.tsx";
 import { HubQuestionBody } from "./hub-question-body.tsx";
 import { messages } from "./messages.ts";
+import { StuckBody } from "./stuck-body.tsx";
 import { shownEntry, type TrayEntry } from "./tray-entries.ts";
 import { trayTargets } from "./tray-focus.ts";
 
@@ -35,8 +37,8 @@ const questionCopy = questMessages.question;
 type Hob = ReturnType<HobLookup>;
 
 /**
- * Everything waiting on you, one item at a time, right above the composer: approvals, then stuck
- * work, then questions. "1 of 2" and Next step through them; deciding one shows the next. The
+ * Everything waiting on you, one item at a time, right above the composer: approvals and hob
+ * proposals, then stuck work, then questions. "1 of 2" and Next step through them; deciding one shows the next. The
  * high-risk variant has a rose edge and its confirm box. Gone when nothing waits. The chat and Home
  * pass the entries they hold, and `via` names the surface a decision made here records. Focus that
  * was on a decided item moves to the next one, or out of the tray once nothing waits (#995).
@@ -56,7 +58,9 @@ export function NeedsTray({
   if (shown === undefined) return null;
   const { entry, index } = shown;
   const count = entries.length;
-  const risky = entry.kind === "approval" && entry.request.onceOnly;
+  const risky =
+    (entry.kind === "approval" && entry.request.onceOnly) ||
+    (entry.kind === "hob-proposal" && entry.hobs.proposal.highRisk);
   const stuck = entry.kind === "stuck";
   const next = () => {
     const after = entries[(index + 1) % count];
@@ -132,6 +136,8 @@ const askerOf = (entry: TrayEntry, hobs: HobLookup): Hob | typeof HUB => {
       return hobs(entry.item.recipientId);
     case "question":
       return hobs(entry.waiting.question.askerId);
+    case "hob-proposal":
+      return hobs(entry.hobs.proposal.agentId);
     default:
       return HUB;
   }
@@ -140,12 +146,14 @@ const askerOf = (entry: TrayEntry, hobs: HobLookup): Hob | typeof HUB => {
 /** What the item is called, the same as its card elsewhere. */
 const itemLabel = (entry: TrayEntry, asker: Pick<Hob, "name">): string => {
   if (entry.kind === "approval") return approvalCopy.asks({ name: asker.name });
+  if (entry.kind === "hob-proposal") return hobProposalWhat(entry.hobs.proposal, asker.name);
   if (entry.kind === "stuck") return blockerCopy.label({ name: asker.name, what: blockerWhat(entry.item) });
   return questionCopy.asks({ name: asker.name });
 };
 
 const titleOf = (entry: TrayEntry, asker: Pick<Hob, "name">): string => {
   if (entry.kind === "approval") return copy.approvalTitle({ name: asker.name, action: approvalAction(entry.request) });
+  if (entry.kind === "hob-proposal") return hobProposalWhat(entry.hobs.proposal, asker.name);
   return entry.kind === "stuck" ? copy.stuckTitle({ name: asker.name }) : copy.questionTitle({ name: asker.name });
 };
 
@@ -163,6 +171,9 @@ function TrayBody({
   if (entry.kind === "approval") return <ApprovalBody entry={entry} asker={hobs(entry.request.agentId)} via={via} />;
   if (entry.kind === "stuck") return <StuckBody entry={entry} asker={hobs(entry.item.recipientId)} />;
   if (entry.kind === "hub-question") return <HubQuestionBody question={entry.question} via={via} />;
+  // The same card as in the Inbox, its title the tray's (ADR 034, Asking is a proposal).
+  if (entry.kind === "hob-proposal")
+    return <HobProposalCard view={entry.hobs} who={asker.name} bare targets={trayTargets} />;
   const { question, task } = entry.waiting;
   return (
     <>
@@ -229,22 +240,5 @@ function ApprovalBody({
         </span>
       </Details>
     </div>
-  );
-}
-
-function StuckBody({ entry, asker }: { entry: Extract<TrayEntry, { kind: "stuck" }>; asker: Hob }) {
-  const choice = blockerChoice(entry.item, asker);
-  if (choice === null) return null;
-  return (
-    <>
-      <p className="m-0 text-text">{blockerWhat(entry.item)}</p>
-      <BlockerChoices item={entry.item} hob={asker} reassign={false} targets={trayTargets} />
-      <Details summary={copy.details.stuck}>
-        {blockerWhy(entry.item, choice.blocker, asker.name)}
-        {choice.blocker.diagnostic !== null && (
-          <span className="mt-1 block font-mono break-words">{choice.blocker.diagnostic}</span>
-        )}
-      </Details>
-    </>
   );
 }

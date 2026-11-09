@@ -163,7 +163,7 @@ function SummonRow({ row }: { row: HobProposalRow }) {
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-meta text-text-secondary">
           {rest.map(([label, value]) => (
             <div key={label} className="contents">
-              <dt className="text-label">{label}</dt>
+              <dt className="whitespace-nowrap text-label wrap-normal">{label}</dt>
               <dd className="m-0 break-words">{value}</dd>
             </div>
           ))}
@@ -190,7 +190,7 @@ function ChangeRow({ row }: { row: HobProposalRow }) {
         <tbody>
           {changeLines(row).map((line) => (
             <tr key={line.key} className="align-top">
-              <th scope="row" className="py-0.5 pe-3 text-start font-normal text-label">
+              <th scope="row" className="py-0.5 pe-3 text-start font-normal whitespace-nowrap text-label wrap-normal">
                 {line.label}
               </th>
               {line.long ? (
