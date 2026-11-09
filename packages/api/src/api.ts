@@ -10,7 +10,6 @@ import {
   Message,
   MessageId,
   ReplyLength,
-  RetireWork,
   RoleHat,
   RoleId,
   RoleTool,
@@ -53,6 +52,7 @@ import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
+import { HandOverRefused, OpenWork, RetireAgentPayload } from "./retire.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { SkillHealthGroup } from "./skill-health.ts";
@@ -140,12 +140,6 @@ export type UpdateAgentPayload = typeof UpdateAgentPayload.Type;
 export class HobInputErrors extends HttpApiMiddleware.Service<HobInputErrors>()("@hobbots/api/HobInputErrors", {
   error: InvalidHob,
 }) {}
-
-/** Retiring asks what happens to the hob's running replies; handing them to another hob comes later. */
-export const RetireAgentPayload = Schema.Struct({
-  activeWork: RetireWork,
-});
-export type RetireAgentPayload = typeof RetireAgentPayload.Type;
 
 export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
@@ -258,6 +252,13 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       params: { agentId: AgentId },
       payload: RetireAgentPayload,
       success: Agent,
+      error: [AgentNotFound, HobUnavailable, HandOverRefused],
+    }),
+    // What the hob still has open, for Retire to list; `?handOverTo=` checks each Task against that hob.
+    HttpApiEndpoint.get("openWork", "/agents/:agentId/open-work", {
+      params: { agentId: AgentId },
+      query: { handOverTo: Schema.optionalKey(AgentId) },
+      success: OpenWork,
       error: AgentNotFound,
     }),
     // Brings a retired hob back, active with all its threads; refused for a paused hob.

@@ -17,10 +17,12 @@ import {
   ASKED_SKILL,
   type CleanRuntimeFixture,
   CONTRACT_HUB_TOOL,
+  CONTRACT_ROSTER,
   cleanRuntimeFixture,
   FOREIGN_MARKERS,
   FOREIGN_SKILLS,
   LIBRARY_SKILL,
+  ROSTER_INJECTION,
   SET_RULES,
   SET_SIBLING,
   SET_SKILL,
@@ -316,6 +318,22 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
         expect.stringMatching(new RegExp(`^recorded ${WEB_FETCH_CONTRACT_TOOL.name} as `)),
         records ? "ran" : "not run",
       ]);
+    }
+  });
+
+  // covers ADR 032 (The roster, Every runtime)
+  it("[TC-RT-1235-01] the roster of other hobs reaches the model with the turn's prompt, never in its system prompt", {
+    timeout: 120_000,
+  }, async () => {
+    const { exit, requests } = await turn({ briefing: CONTRACT_ROSTER, prompt: "Who can push to GitHub?" });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      expect(JSON.stringify(request.system ?? "")).not.toContain(ROSTER_INJECTION);
+      // The whole roster, label and lines, ahead of the prompt in one user message.
+      expect(JSON.stringify(request.messages)).toContain(
+        JSON.stringify(`${CONTRACT_ROSTER}\n\nWho can push to GitHub?`).slice(1, -1),
+      );
     }
   });
 });

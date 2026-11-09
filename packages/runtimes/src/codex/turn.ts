@@ -30,10 +30,12 @@ import {
 } from "../sandbox.ts";
 import { askedMount, holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
 import { offeredTools, toolLabel } from "../tool-calls.ts";
+import { codexWebSearched, recordSearched } from "../web-search.ts";
 import {
   type AppServer,
   type AppServerCommand,
   AppServerError,
+  type AppServerNotification,
   type AppServerOptions,
   type ServerRequestHandlers,
 } from "./app-server.ts";
@@ -42,7 +44,7 @@ import { type CodexTurnEvents, codexTurnEvents, type TurnEnd } from "./events.ts
 import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
-import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
+import { type ThreadItem, TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
 import {
   admitSkills,
   askedSkillInput,
@@ -364,6 +366,23 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
         // A turn of no hob's keeps no thread on disk.
         ...(request.ephemeral ? { ephemeral: true } : {}),
       });
+};
+
+/**
+ * Records a search of the turn's thread as Codex's notification is read (ADR 036), before any
+ * request Codex sent after it, so a hub call that follows the search finds its results however
+ * long the turn's events take to be read. The turn's events report the search as well.
+ */
+const searchFirst = (
+  record: PromptRequest["recordSearch"],
+  thread: string | undefined,
+  notification: AppServerNotification,
+): Effect.Effect<void> => {
+  if (!record || thread === undefined || notification.method !== "item/completed") return Effect.void;
+  const params = notification.params as { readonly threadId?: string; readonly item?: ThreadItem } | null;
+  if (params?.threadId !== thread || params.item?.type !== "webSearch") return Effect.void;
+  const searched = codexWebSearched(params.item);
+  return searched === undefined ? Effect.void : recordSearched(record, searched);
 };
 
 /**
@@ -720,9 +739,12 @@ const turnEvents = (
       const launch = yield* prepareLaunch(config, request, binary);
       // A tool gate needs the turn's events, which need its thread, which only Codex names.
       let turn: CodexToolTurn | undefined;
+      // The turn's thread once Codex names it, whose searches are found as they are read.
+      let thread: string | undefined;
       const server = yield* config
         .start(launch.command, {
           handlers: requestHandlers(config, binary, request.hubTools, () => turn),
+          beforeNotification: (notification) => searchFirst(request.recordSearch, thread, notification),
           clientVersion: config.clientVersion,
         })
         .pipe(Effect.mapError(failed));
@@ -737,6 +759,7 @@ const turnEvents = (
       }
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
+      thread = threadId;
       const mapper = codexTurnEvents(
         threadId,
         skillRootsOf(launch.skills),

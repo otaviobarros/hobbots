@@ -9,6 +9,7 @@ import { setupQuery } from "../../api/setup.ts";
 import { PROVIDERS } from "../../lib/providers.ts";
 import { CodingSetupSetting } from "../coding-setup/coding-setup.tsx";
 import { messages as sharedMessages } from "../messages.ts";
+import { EveryHobSummoning } from "../summoning-charm/every-hob-summoning.tsx";
 import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
 import { providerState } from "./overview-model.ts";
@@ -87,6 +88,7 @@ export function ConnectionsSection({ tab }: { tab: ConnectionsTab }) {
           <GitHubSettings />
           <CodingSetupSetting />
         </section>
+        <EveryHobSummoning />
       </TabsContent>
     </Tabs>
   );

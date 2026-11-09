@@ -201,6 +201,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             agent,
             config,
             prompt: stepPrompt(step, tree),
+            taskId: step.id,
             attemptId,
             // A fresh session: nothing of the hob's chat or of other steps.
             sessionId: null,

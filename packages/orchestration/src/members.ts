@@ -342,6 +342,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             {
               agent,
               config,
+              taskId: task.id,
               attemptId,
               prompt,
               sessionId,

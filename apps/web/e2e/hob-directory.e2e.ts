@@ -50,9 +50,9 @@ const hubWithTeam = async () => {
       ...fields,
     });
   const pip = await summon("Pip", 1234);
-  await summon("Quill", 1235, { goodAt: "Release notes, short and plain." });
+  const quill = await summon("Quill", 1235, { goodAt: "Release notes, short and plain." });
   await summon("Wren", 1236, { visibleToHobs: false });
-  return { url: started.url, pip, api };
+  return { url: started.url, pip, quill, api };
 };
 
 /** Sends `lines` to Pip as one message and waits for the reply to end. */
@@ -110,4 +110,57 @@ test("[TC-UX-1234-02] Permissions sets Read other hobs, which is Allow under Bal
         ],
     )
     .toBe("deny");
+});
+
+/** Saves the one change on Quill's profile. */
+const saveQuill = async (page: Page) => {
+  const profile = page.getByRole("main", { name: "Quill's profile" });
+  await expect(page.getByText("1 change not saved yet")).toBeVisible();
+  await profile.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText(/^Saved\. Quill's next reply uses the new settings/)).toBeVisible();
+};
+
+/** Asks Pip, in its chat, for the roster its turn was told, and reads the reply. */
+const pipsRoster = async (page: Page, url: string, pip: Hob) => {
+  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await send(page, ["/roster"]);
+  return page.getByRole("article").last();
+};
+
+// covers ADR 032 (Good at, Visible to other hobs, It applies at once), AG-002
+test("[TC-UX-1235-01] good at edited and Visible to other hobs turned off and on in a profile reach another hob's next turn", async ({
+  page,
+  scan,
+}) => {
+  const { url, pip, quill } = await hubWithTeam();
+  await expect(await pipsRoster(page, url, pip)).toContainText('good at "Release notes, short and plain."');
+  await scan();
+
+  await page.goto(`${url}/#/hobs/${quill.id}/profile`);
+  const profile = page.getByRole("main", { name: "Quill's profile" });
+  await expect(profile.getByRole("textbox", { name: "Good at" })).toHaveValue("Release notes, short and plain.");
+  await scan();
+  await profile.getByRole("textbox", { name: "Good at" }).fill("Changelogs and release notes.");
+  await saveQuill(page);
+  await scan(profile);
+  const edited = await pipsRoster(page, url, pip);
+  await expect(edited).toContainText('good at "Changelogs and release notes."');
+  await expect(edited).not.toContainText("short and plain");
+
+  await page.goto(`${url}/#/hobs/${quill.id}/profile`);
+  await profile
+    .getByRole("region", { name: "Other hobs" })
+    .getByRole("switch", { name: "Visible to other hobs" })
+    .click();
+  await saveQuill(page);
+  await scan(profile.getByRole("region", { name: "Other hobs" }));
+  await expect(await pipsRoster(page, url, pip)).not.toContainText("Quill");
+
+  await page.goto(`${url}/#/hobs/${quill.id}/profile`);
+  await profile
+    .getByRole("region", { name: "Other hobs" })
+    .getByRole("switch", { name: "Visible to other hobs" })
+    .click();
+  await saveQuill(page);
+  await expect(await pipsRoster(page, url, pip)).toContainText('"Quill": "Writer"');
 });

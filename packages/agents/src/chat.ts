@@ -17,12 +17,14 @@ import {
   type Brain,
   type Committed,
   DEFAULT_THREAD_TITLE,
+  hobStanding,
   isInProgress,
   isResumable,
   Message,
   MessageId,
   type MessageStatus,
   MessageTransitions,
+  openThreadTask,
   QueuedMessageTransitions,
   RUNTIME_NAMES,
   type RuntimeKind,
@@ -39,6 +41,7 @@ import {
   ThreadCheckpoint,
   ThreadId,
   type TurnEnding,
+  takesNewWork,
   titleFromPrompt,
   toolsSucceeded,
   waitedSteps,
@@ -78,10 +81,11 @@ import {
 } from "./skill-turn.ts";
 import { nextSteps, replyStepId, stoppedCommands, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
-import { callScope } from "./tasks.ts";
+import { callScope, TaskRepository } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows, turnWebSearch } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
+import { makeWebProvenance } from "./web-fetch.ts";
 import { workHeld } from "./work-hold.ts";
 
 interface Reply {
@@ -346,6 +350,8 @@ export class ChatService extends Context.Service<
       const toolLogs = yield* Effect.serviceOption(ToolLogs);
       // Records what each turn runs and changes for the Workbench (ADR 023); absent, nothing is recorded.
       const recorder = yield* Effect.serviceOption(ActivityRecorder);
+      // Each chat's found URLs (ADR 036), which a search's results join.
+      const web = yield* makeWebProvenance;
       const activityOf = (tools: ToolAccess | null, taskTurn: ChatTaskTurn | null) =>
         trackTurn(recorder, {
           folders: tools?.folders ?? [],
@@ -355,6 +361,7 @@ export class ChatService extends Context.Service<
         });
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
+      const taskRecords = yield* Effect.serviceOption(TaskRepository);
       // Without Charms or local Git tools, turns offer only the Task tools.
       const charmsFor = yield* hubToolOffer;
       // Without memory, turns are told nothing from it (ADR 028).
@@ -451,11 +458,30 @@ export class ChatService extends Context.Service<
           ),
         );
 
-      // Only an active hob takes new work; a paused or retired hob's threads stay readable.
+      // Only an active hob takes new work; a paused or retired hob's threads stay readable, and so do
+      // those of a hob finishing its open Tasks before it retires.
       const requireActive = (agent: Agent) =>
+        takesNewWork(agent)
+          ? Effect.void
+          : Effect.fail(new HobUnavailable({ agentId: agent.id, status: hobStanding(agent) }));
+
+      // A hob that is awake: it may go on with work it already has, even while it finishes its open
+      // Tasks before it retires (#408); `requireActive` also turns away new work.
+      const requireAwake = (agent: Agent) =>
         agent.status === "active"
           ? Effect.void
-          : Effect.fail(new HobUnavailable({ agentId: agent.id, status: agent.status }));
+          : Effect.fail(new HobUnavailable({ agentId: agent.id, status: hobStanding(agent) }));
+
+      // A hob finishing its open Tasks before it retires takes messages only in a thread where one
+      // of them is open, since they go on with it; anywhere else a message would be new work (#408).
+      const requireOpenTaskWhileRetiring = (agent: Agent, threadId: ThreadId) =>
+        Effect.gen(function* () {
+          if (agent.retiring === null || agent.status === "retired") return;
+          const trees = Option.isSome(taskRecords) ? yield* taskRecords.value.readThreadTrees(threadId) : [];
+          if (openThreadTask(trees, agent.id) === undefined) {
+            return yield* new HobUnavailable({ agentId: agent.id, status: "retiring" });
+          }
+        });
 
       // An archived thread is read-only until it is restored.
       const requireLive = (thread: Thread) =>
@@ -954,6 +980,8 @@ export class ChatService extends Context.Service<
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
+                // A search's results are found URLs in the chat before the hob can act on them (ADR 036).
+                recordSearch: web.searched({ threadId: thread.id }, redactor),
                 // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
                 ...(yield* Effect.gen(function* () {
                   const messageId = (yield* Ref.get(reply.current)).id;
@@ -1359,6 +1387,7 @@ export class ChatService extends Context.Service<
           Effect.gen(function* () {
             // A retired hob takes nothing; a paused one keeps messages queued until it wakes.
             if (agent.status === "retired") yield* requireActive(agent);
+            yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
             // A message waits while its hob is paused, while a reply runs, and behind any message
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
@@ -1466,7 +1495,9 @@ export class ChatService extends Context.Service<
       ) {
         return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
-            yield* requireActive(agent);
+            // Continuing a reply goes on with work the hob has; while it retires, only that of an open Task.
+            yield* requireAwake(agent);
+            yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
             const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
             const message = transcript.at(-1);

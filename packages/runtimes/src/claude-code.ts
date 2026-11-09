@@ -92,7 +92,7 @@ import {
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
 import { commandOf, offeredTools, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
 import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
-import { claudeWebSearched } from "./web-search.ts";
+import { claudeWebSearched, recordSearched } from "./web-search.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -933,6 +933,7 @@ export const policyHooks = (
   record?: PromptRequest["recordToolStart"],
   background?: BackgroundCommands | null,
   skillFolder?: string | null,
+  recordSearch?: PromptRequest["recordSearch"],
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
@@ -1053,7 +1054,11 @@ export const policyHooks = (
       // A command that went on in the background has not finished: its task's end reports it (#1018).
       if (!(await background?.moved(input.tool_use_id, input))) report(toolFinished(input.tool_use_id, input, output));
       // A search reports what it found from its structured result, never the model's text (ADR 036).
-      if (search.event) report(search.event);
+      // Its results are found before the hook returns, so the model's next call can rely on them.
+      if (search.event?._tag === "WebSearched") {
+        await Effect.runPromise(recordSearched(recordSearch, search.event));
+        report(search.event);
+      }
     }
     // The notes go with the result, so the hob knows it asked as it would know of a refusal, and
     // what to do with a .git its sandbox kept from a delete (#663). A search's results are marked as
@@ -1318,6 +1323,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                               request.recordToolStart,
                               background,
                               skills?.folder ?? null,
+                              request.recordSearch,
                             ),
                             // Only Hobbots' script: one the hub was started with never reaches the commands.
                             { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },

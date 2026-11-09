@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type PromptRequest, type RuntimeEvent, WEB_RESULTS_LINE } from "@hobbots/agents";
+import { type HubTools, type PromptRequest, type RuntimeEvent, WEB_RESULTS_LINE } from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Exit, Stream } from "effect";
@@ -206,6 +206,59 @@ describe("a Codex turn that may search the web", () => {
       },
     ]);
     expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", usage: { webSearches: 1 } });
+  });
+
+  // covers ADR 036
+  it("[TC-RT-1289-04] records a search's results with the turn's recorder before a hub call Codex sent after it runs", async () => {
+    const order: Array<string> = [];
+    const server = fakeServer({
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/completed", search("s1", { type: "search", query: "hobbots releases" }, HITS.slice(0, 1))),
+        // Another thread's search is not this turn's.
+        {
+          method: "item/completed",
+          params: { threadId: "other", turnId: TURN, item: search("s2", { type: "search" }) },
+        },
+        item("item/completed", { type: "agentMessage", id: "m1", text: "Read it." }),
+        completed("completed"),
+      ],
+      asksAfter: 3,
+      asks: [
+        {
+          method: "item/tool/call",
+          params: {
+            threadId: THREAD,
+            turnId: TURN,
+            callId: "c1",
+            namespace: null,
+            tool: "web_fetch",
+            arguments: { url: "https://example.com/releases" },
+          },
+        },
+      ],
+    });
+    const { turnConfig, request } = await setup(server);
+    const hubTools: HubTools = {
+      tools: [{ name: "web_fetch", description: "Reads a page.", inputSchema: { type: "object" }, label: "Reading" }],
+      call: () =>
+        Effect.sync(() => {
+          order.push("web_fetch");
+          return { text: "A page.", refused: false };
+        }),
+    };
+    const exit = await run(
+      { ...turnConfig, cachedSearch: Effect.succeed(true) },
+      {
+        ...request,
+        hubTools,
+        // Slow on purpose, as a found set written to a busy database would be.
+        recordSearch: (event) =>
+          Effect.sleep("100 millis").pipe(Effect.andThen(Effect.sync(() => order.push(`found ${event.id}`)))),
+      },
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(order).toEqual(["found s1", "web_fetch"]);
   });
 
   // covers ADR 036

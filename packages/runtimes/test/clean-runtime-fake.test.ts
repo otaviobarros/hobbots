@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { FAKE_HUB_DIRECTIVE, fakeSkillsPrompt, makeFakeRuntime } from "../src/fake.ts";
+import { FAKE_HUB_DIRECTIVE, fakeRosterPrompt, fakeSkillsPrompt, makeFakeRuntime } from "../src/fake.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
   CONTRACT_HUB_TOOL,
+  CONTRACT_ROSTER,
   cleanRuntimeFixture,
   LIBRARY_SKILL,
   SET_SIBLING,
@@ -92,5 +93,22 @@ describe("a clean fake runtime (ADR 029)", () => {
     const tool = WEB_FETCH_CONTRACT_TOOL.name;
     expect(await hubCall(true, tool)).toEqual([`recorded ${tool} as fake-hub-1`, "ran"]);
     expect(await hubCall(false, tool)).toEqual([`recorded ${tool} as fake-hub-1`, "not run"]);
+  });
+
+  // covers ADR 032 (The roster, Every runtime)
+  it("[TC-RT-1235-03] the roster of other hobs reaches the turn as its briefing, apart from its instructions", async () => {
+    const told = await makeFakeRuntime()
+      .sendPrompt({
+        prompt: fakeRosterPrompt,
+        briefing: CONTRACT_ROSTER,
+        sessionId: null,
+        instructions: "",
+        instructionsChanged: false,
+        model: null,
+        effort: null,
+      })
+      .pipe(Stream.runCollect, Effect.runPromise)
+      .then((events) => Array.from(events).flatMap((event) => (event._tag === "Completed" ? [event.text] : [])));
+    expect(told).toEqual([CONTRACT_ROSTER]);
   });
 });

@@ -42,7 +42,8 @@ export interface HobCard {
   readonly role: { readonly title: string; readonly sigil: string };
   /** What it is good at, the one public line about when to come to it, or null for none. */
   readonly goodAt: string | null;
-  readonly status: "active" | "paused";
+  /** `retiring` while it finishes its open Tasks before it retires, taking no new work (#408). */
+  readonly status: "active" | "paused" | "retiring";
   /** The runtime's name, and the model and effort, "default" when they are left to the runtime. */
   readonly brain: { readonly runtime: string; readonly model: string; readonly effort: string };
   /** The display names of the Charms it holds that are connected now. */
@@ -55,7 +56,7 @@ export const hobCard = (agent: Agent, charms: ReadonlyArray<string>): HobCard =>
   name: agent.name,
   role: { title: agent.roleTitle, sigil: starterRole(agent.sigil).title },
   goodAt: agent.goodAt,
-  status: agent.status === "paused" ? "paused" : "active",
+  status: agent.retiring !== null ? "retiring" : agent.status === "paused" ? "paused" : "active",
   brain: {
     runtime: RUNTIME_NAMES[agent.runtime],
     model: agent.model ?? "default",
@@ -108,7 +109,7 @@ export const sharedNames = (cards: ReadonlyArray<Pick<HobCard, "name">>): Readon
 export const rosterLine = (card: HobCard, shared: ReadonlySet<string>): string =>
   [
     `- ${shownName(card, shared)}: ${roleWords(card)}`,
-    ...(card.status === "paused" ? ["paused"] : []),
+    ...(card.status === "paused" ? ["paused"] : card.status === "retiring" ? ["retiring, takes no new work"] : []),
     brainWords(card),
     charmWords(card),
     ...(card.goodAt === null ? [] : [`good at ${quoted(card.goodAt, 200)}`]),
@@ -120,7 +121,7 @@ export const cardText = (card: HobCard, shared: ReadonlySet<string>): string =>
     `### ${shownName(card, shared)}`,
     `- Role: ${roleWords(card)}`,
     `- Good at: ${card.goodAt === null ? "(not set)" : quoted(card.goodAt, 200)}`,
-    `- Status: ${card.status === "paused" ? "paused" : "active"}`,
+    `- Status: ${card.status === "retiring" ? "retiring, takes no new work" : card.status}`,
     `- Brain: ${brainWords(card)}`,
     `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}`,
   ].join("\n");

@@ -252,6 +252,7 @@ const REFUSALS: Readonly<Record<string, (names: Names) => string>> = {
   "attempt-live": ({ owner }) => refused["attempt-live"]({ name: owner }),
   "same-owner": ({ target }) => refused["same-owner"]({ name: target }),
   "lineage-owner": ({ target }) => refused["lineage-owner"]({ name: target }),
+  "owner-unavailable": ({ target }) => refused["owner-unavailable"]({ name: target }),
   "task-ended": () => refused["task-ended"],
   "task-state": () => refused["task-state"],
   "task-cancelling": () => refused["task-cancelling"],

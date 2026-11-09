@@ -21,7 +21,8 @@ import {
   outsideDataLine,
 } from "./hub-actions.ts";
 import { HobbotsRepository } from "./repository.ts";
-import type { HubTool, ToolAccess, TurnApprovals } from "./runtime.ts";
+import type { HubTool, ToolAccess, TurnApprovals, WebSearchedEvent } from "./runtime.ts";
+import type { Redactor } from "./secrets.ts";
 
 /**
  * Reading a web page for a hob on the hub (ADR 036): `web_fetch`, the ports the hub reads pages and
@@ -186,6 +187,23 @@ export const urlsIn = (text: string): ReadonlyArray<string> => [
   ),
 ];
 
+/** The longest query a search's source quotes, so a long query keeps the source short. */
+const SOURCE_QUERY_CHARS = 200;
+
+/**
+ * The URLs a search the runtime reported makes found (ADR 036): only the hits of its own structured
+ * result, never the model's text or the query, so a search that reported none adds nothing.
+ */
+export const searchFound = (searched: Pick<WebSearchedEvent, "query" | "results">): ReadonlyArray<FoundUrl> => {
+  const query =
+    searched.query.length > SOURCE_QUERY_CHARS ? `${searched.query.slice(0, SOURCE_QUERY_CHARS)}…` : searched.query;
+  const source = `a result of the search "${query}"`;
+  return (searched.results ?? []).flatMap((result) => {
+    const url = foundUrlKey(result.url);
+    return url === null ? [] : [{ url, source }];
+  });
+};
+
 /** The session a call belongs to, as found sets are kept. */
 export interface WebSession {
   readonly threadId: ThreadId | null;
@@ -262,7 +280,15 @@ export const makeWebProvenance = Effect.gen(function* () {
       );
     });
 
-  return { sources, add, passOn };
+  /**
+   * The session's `recordSearch` (ADR 036): adds the results of each search its runtime reports to
+   * its found set, with the query redacted in their source. It is the same for every runtime, which
+   * only waits for it, so no adapter writes to the found set.
+   */
+  const searched = (session: WebSession, redactor: Redactor) => (event: WebSearchedEvent) =>
+    add(session, searchFound({ results: event.results, query: redactor.text(event.query) }));
+
+  return { sources, add, passOn, searched };
 });
 
 export type WebProvenance = Effect.Success<typeof makeWebProvenance>;

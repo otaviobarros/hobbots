@@ -7,6 +7,7 @@ import type {
   Committed,
   Message,
   MessageId,
+  Retiring,
   SkillUse,
   Thread,
   ThreadCheckpoint,
@@ -24,13 +25,22 @@ export class HobbotsRepository extends Context.Service<
     readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
     /**
      * Saves the hob's lifecycle fields (status and retirement time) from `next`, journaled as made by
-     * `actor`, you when left out (ADR 034). None, and nothing changed, when its stored status is no
-     * longer `from` (another change landed first).
+     * `actor`, you when left out (ADR 034); a retirement also ends its wait to retire. None, and
+     * nothing changed, when its stored status is no longer `from` (another change landed first).
      */
     readonly setAgentStatus: (
       next: Agent,
       from: AgentStatus,
       actor?: ChangeActor,
+    ) => Effect.Effect<Option.Option<Committed<Agent>>>;
+    /**
+     * Has the hob wait to retire until its open Tasks have ended (#408), journaled as made by
+     * `actor`. None, and nothing changed, when it is retired or already waiting.
+     */
+    readonly setAgentRetiring: (
+      agentId: AgentId,
+      retiring: Retiring,
+      actor: ChangeActor,
     ) => Effect.Effect<Option.Option<Committed<Agent>>>;
     /**
      * Inserts the hob and its first configuration, made by `actor` (you when left out), unless one
