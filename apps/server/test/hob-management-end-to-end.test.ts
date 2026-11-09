@@ -516,7 +516,7 @@ describe("hob management, end to end", () => {
     expect(finish.card.proposal.rows[0]).toMatchObject({ label: "Rex", runningReplies: "finish" });
     // Never without the check box, and never "Always allow".
     expect((await onProposal(finish.card, "allow-all")).status).toBe(422);
-    expect((await onProposal(finish.card, "always-allow", { operation: "summoning.retire" })).status).toBe(409);
+    expect((await onProposal(finish.card, "always-allow", { operations: ["summoning.retire"] })).status).toBe(409);
     expect((await onProposal(finish.card, "allow-all", { confirmed: true })).status).toBe(200);
     expect((await ended(finish.thread)).content).toContain("Rex is retired now.");
     expect((await stored(rex.made)).status).toBe("retired");

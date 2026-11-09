@@ -32,7 +32,7 @@ export const HobProposalsHandlers = HttpApiBuilder.group(HobbotsApi, "hobProposa
       deny: ({ params }) => proposals.deny(params.proposalId, params.rowId),
       allowAll: ({ params, payload }) => proposals.allowAll(params.proposalId, { confirmed: payload.confirmed }),
       denyAll: ({ params }) => proposals.denyAll(params.proposalId),
-      alwaysAllow: ({ params, payload }) => proposals.alwaysAllow(params.proposalId, payload.operation),
+      alwaysAllow: ({ params, payload }) => proposals.alwaysAllow(params.proposalId, payload.operations),
     });
   }),
 );
