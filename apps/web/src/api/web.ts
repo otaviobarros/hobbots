@@ -1,4 +1,4 @@
-import type { AgentId, HobWebLimits, ThreadId, WebLimits, WebSettings, WebUsageSummary } from "@hobbots/domain";
+import type { AgentId, HobWebLimits, ThreadId, WebSettings, WebUsageSummary } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 
@@ -63,11 +63,22 @@ export const webChanged = async (queryClient: QueryClient) => {
 };
 
 /** Saves Settings › Web; a blocked site that names no host is refused with why. */
+/**
+ * Saves a change to Settings › Web over what was last saved. Saves run one after another, each from
+ * the one before, so a change made while another saves never overwrites it.
+ */
 export const useSetWebSettings = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (settings: { readonly limits: WebLimits; readonly blockedSites: ReadonlyArray<string> }) =>
-      call((c) => c.web.setSettings({ payload: settings })),
+    scope: { id: "web-settings" },
+    mutationFn: async (change: Partial<WebSettings>) => {
+      const saved = await queryClient.ensureQueryData(webSettingsQuery);
+      const payload = {
+        limits: change.limits ?? saved.limits,
+        blockedSites: change.blockedSites ?? saved.blockedSites,
+      };
+      return call((c) => c.web.setSettings({ payload }));
+    },
     onSuccess: (saved: WebSettings) => {
       queryClient.setQueryData(webKeys.settings, saved);
       return webChanged(queryClient);

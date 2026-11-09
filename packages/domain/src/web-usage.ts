@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { RuntimeKind } from "./agent.ts";
 import { AgentId, MessageId, TaskId, ThreadId } from "./ids.ts";
 import { QuestId } from "./quest.ts";
@@ -126,6 +126,14 @@ export class WebSearchRecord extends Schema.Class<WebSearchRecord>("WebSearchRec
  */
 export class WebFetchRecord extends Schema.Class<WebFetchRecord>("WebFetchRecord")({
   ...WebRecordPlace,
+  /**
+   * The runtime's id for the `web_fetch` call's step in its reply, which keeps the page's text, so
+   * each read is found by its call (#1271). Null for pages read before steps were recorded.
+   */
+  stepId: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   url: Schema.String,
   finalUrl: Schema.String,
   status: Schema.Int,

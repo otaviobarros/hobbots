@@ -10,6 +10,7 @@ import {
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Input } from "@hobbots/ui/components/input";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { grantsQuery, useRevokeGrant } from "../../api/grants.ts";
@@ -17,6 +18,7 @@ import { offeredAnswer, presetInfo } from "../../api/safety.ts";
 import { hobWebLimitsQuery, useSetHobWebLimits } from "../../api/web.ts";
 import { formatDay } from "../../lib/time.ts";
 import { messages } from "./messages.ts";
+import { ReadFailed } from "./read-failed.tsx";
 
 const NEW_SITE = { allow: "allow", ask: "ask", deny: "never" } as const;
 
@@ -49,8 +51,10 @@ export function SiteRules({ hob, permissions }: { hob: Agent; permissions: HobPe
       <p className="m-0 text-detail text-text-secondary">
         {copy.intro({ preset: presetInfo(permissions.preset).label, newSite })}
       </p>
+      {grants.isPending && <Reading />}
+      {grants.isError && <ReadFailed text={copy.readFailed} onRetry={() => void grants.refetch()} />}
       {grants.isSuccess && rules.length === 0 && <p className="m-0 text-ui text-text-secondary">{copy.none}</p>}
-      {rules.length > 0 && (
+      {grants.isSuccess && rules.length > 0 && (
         <ul aria-label={copy.heading} className="m-0 flex list-none flex-col gap-0.5 p-0">
           {rules.map((grant) => {
             const host = grant.rule._tag === "Host" ? grant.rule.host : "";
@@ -89,6 +93,16 @@ export function SiteRules({ hob, permissions }: { hob: Agent; permissions: HobPe
 
 const LIMIT_KEYS = ["searchesPerTurn", "pagesPerTurn", "searchesPerDay"] as const;
 
+/** A web read on its way. */
+function Reading() {
+  return (
+    <div role="status">
+      <span className="sr-only">{messages.reading}</span>
+      <Skeleton surface="card" width="60%" />
+    </div>
+  );
+}
+
 /**
  * Web limits (ADR 036): the searches and pages a turn and the searches a day that hold for the hob,
  * from Settings › Web or its own, with Set for the hob and Use Settings › Web.
@@ -103,6 +117,8 @@ export function HobWebLimitsRow({ hob }: { hob: Agent }) {
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-1.5">
       <h2 className="lbl m-0 text-label">{copy.heading}</h2>
+      {view.isPending && <Reading />}
+      {view.isError && <ReadFailed text={copy.readFailed} onRetry={() => void view.refetch()} />}
       {data !== undefined && !editing && (
         <div className="flex flex-wrap items-center gap-3 rounded-control bg-card px-3.5 py-2.5">
           <span className="flex min-w-0 flex-1 flex-col">

@@ -57,14 +57,24 @@ const headLine = (head: string, name: string): string | null => {
   return line === undefined ? null : line.slice(prefix.length).trim();
 };
 
-/** The `web_fetch` step whose answer is the page read from `url`, with the page's title. */
-const pageStep = (steps: ReadonlyArray<ReplyStep>, url: string, taken: ReadonlySet<string>) => {
+/**
+ * Whether reply step `id` is the call `stepId` names: the runtime's id, or that id with the suffix a
+ * reply gives an id an earlier turn already used (after Continue).
+ */
+const isCall = (id: string, stepId: string): boolean => id === stepId || id.startsWith(`${stepId}@`);
+
+/**
+ * The `web_fetch` step whose answer is `page`, with the page's title: the step of its call, or for a
+ * page recorded without one, the first step not yet taken whose answer read its URL.
+ */
+const pageStep = (steps: ReadonlyArray<ReplyStep>, page: WebFetchRecord, taken: ReadonlySet<string>) => {
+  const { stepId } = page;
   const step = steps.find(
     (each) =>
       isWebFetchStep(each) &&
       !taken.has(each.id) &&
       each.output !== undefined &&
-      headLine(each.output.head, "URL") === url,
+      (stepId === null ? headLine(each.output.head, "URL") === page.finalUrl : isCall(each.id, stepId)),
   );
   if (step?.output === undefined) return null;
   const title = headLine(step.output.head, "Title");
@@ -82,13 +92,18 @@ export const repliesWeb = (
   if (usage === undefined) return byReply;
   for (const reply of replies) {
     const searches = usage.searches.filter((search) => search.messageId === reply.id);
-    const pages = usage.pages.filter((page) => page.messageId === reply.id);
+    // Matched oldest first, so a page read twice finds each read's own step. The records come newest
+    // first, so reversing them keeps reads made in the same millisecond in order.
+    const pages = usage.pages
+      .filter((page) => page.messageId === reply.id)
+      .toReversed()
+      .toSorted(oldestFirst);
     if (searches.length === 0 && pages.length === 0) continue;
     const taken = new Set<string>();
     const steps = [
       ...searches.map((search) => ({ _tag: "Search" as const, at: search.at, search })),
       ...pages.map((page) => {
-        const found = pageStep(reply.steps, page.finalUrl, taken);
+        const found = pageStep(reply.steps, page, taken);
         if (found !== null) taken.add(found.stepId);
         return { _tag: "Page" as const, at: page.at, page, title: found?.title ?? null, stepId: found?.stepId ?? null };
       }),
@@ -191,16 +206,19 @@ export const parsePageAnswer = (answer: string): PageAnswer => {
   };
 };
 
-/** How far apart a page's read and its record may be and still count as read fresh from the site. */
-const FRESH_MS = 60_000;
+/**
+ * How long before its record a page must have been read from its site to have surely come from the
+ * hub's cache. A page read more recently may have come from either, so the sheet says only when.
+ */
+const CACHED_MS = 60_000;
 
-/** Whether the page came from the hub's cache: read from its site well before the hob was answered. */
-export const fromCache = (answer: Pick<PageAnswer, "fetchedAt">, recordedAt: string): boolean | null => {
-  if (answer.fetchedAt === null) return null;
+/** Whether the page surely came from the hub's cache: read from its site well before the hob was answered. */
+export const fromCache = (answer: Pick<PageAnswer, "fetchedAt">, recordedAt: string): boolean => {
+  if (answer.fetchedAt === null) return false;
   const read = Date.parse(answer.fetchedAt);
   const recorded = Date.parse(recordedAt);
-  if (Number.isNaN(read) || Number.isNaN(recorded)) return null;
-  return recorded - read > FRESH_MS;
+  if (Number.isNaN(read) || Number.isNaN(recorded)) return false;
+  return recorded - read > CACHED_MS;
 };
 
 /** Where a page's link came from, as far as the chat's records tell: the search that found it. */

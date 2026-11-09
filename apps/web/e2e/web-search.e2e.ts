@@ -226,3 +226,101 @@ test("[TC-UX-1271-03] Permissions, Charms, Settings › Web and Usage show the w
   await expect(page.getByRole("region", { name: "Searches and pages" })).toContainText("Read the NAS docs");
   await shot(page, "usage-web-turns");
 });
+
+/**
+ * Fails every `method` request to `path` until the returned function is called, so a read stays
+ * failed however often the app tries it again on its own.
+ */
+const failing = async (page: Page, method: string, path: RegExp) => {
+  let on = true;
+  await page.route(path, (route) =>
+    on && route.request().method() === method ? route.fulfill({ status: 500, body: "" }) : route.fallback(),
+  );
+  return () => {
+    on = false;
+  };
+};
+
+// covers ADR 036 (Amendment: the screens), STD-REACT-015, STD-REACT-016, STD-UI-009
+test("[TC-UX-1271-04] a web read that fails says so with Try again, and a save that fails keeps what you typed", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
+  const settingsBack = await failing(page, "GET", /\/api\/web\/settings$/);
+  const cacheBack = await failing(page, "GET", /\/api\/web\/cache$/);
+  await page.goto(`${url}/#/settings/web`);
+  const settingsFailed = page.getByRole("alert").filter({ hasText: "Hobbots could not read Settings › Web." });
+  await expect(settingsFailed).toBeVisible({ timeout: 30_000 });
+  settingsBack();
+  await page.getByRole("button", { name: "Try again" }).click();
+  const cache = page.getByRole("region", { name: "Page cache" });
+  await expect(cache.getByRole("alert")).toHaveText("Hobbots could not read the page cache.", { timeout: 30_000 });
+  cacheBack();
+  await cache.getByRole("button", { name: "Try again" }).click();
+  await expect(cache).toContainText("No pages cached");
+
+  // A limit and a site whose save fails stay as typed, and save on the next try.
+  const savesBack = await failing(page, "PUT", /\/api\/web\/settings$/);
+  const pagesField = page.getByLabel("Pages read in one turn");
+  await pagesField.fill("12");
+  await pagesField.press("Enter");
+  await expect(page.getByRole("alert")).toContainText("Hobbots could not save Settings › Web.");
+  await expect(pagesField).toHaveValue("12");
+  const site = page.getByLabel("A site to block");
+  await site.fill("pastebin.com");
+  await page.getByRole("button", { name: "Block" }).click();
+  await expect(page.getByRole("alert")).toContainText("Your changes are still here");
+  await expect(site).toHaveValue("pastebin.com");
+  savesBack();
+  await page.getByRole("button", { name: "Block" }).click();
+  await expect(page.getByRole("list", { name: "Sites hobs never read" })).toContainText("pastebin.com");
+  await expect(site).toHaveValue("");
+  // Two limits changed one after the other are both saved, the second with the first.
+  const searchesField = page.getByLabel("Searches in one turn");
+  await searchesField.fill("5");
+  // Leaving the first field saves it; the second waits for that save, then saves both.
+  await pagesField.fill("14");
+  const both = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith("/api/web/settings") &&
+      (response.request().postData() ?? "").includes('"pagesPerTurn":14'),
+  );
+  await pagesField.press("Enter");
+  expect((await both).ok()).toBe(true);
+  await page.reload();
+  await expect(page.getByLabel("Searches in one turn")).toHaveValue("5");
+  await expect(page.getByLabel("Pages read in one turn")).toHaveValue("14");
+  await expect(page.getByRole("list", { name: "Sites hobs never read" })).toContainText("pastebin.com");
+
+  // Permissions: the site rules and the hob's limits each say they could not be read.
+  const grantsBack = await failing(page, "GET", /\/api\/grants$/);
+  const limitsBack = await failing(page, "GET", /\/api\/agents\/[^/]+\/web-limits$/);
+  await page.goto(`${url}/#/hobs/${aldric}/profile?tab=permissions`);
+  const rules = page.getByRole("region", { name: "Site rules" });
+  await expect(rules.getByRole("alert")).toHaveText("Hobbots could not read this hob's site rules.", {
+    timeout: 30_000,
+  });
+  grantsBack();
+  await rules.getByRole("button", { name: "Try again" }).click();
+  await expect(rules).toContainText("No site rules yet.");
+  const limits = page.getByRole("region", { name: "Web limits" });
+  await expect(limits.getByRole("alert")).toHaveText("Hobbots could not read this hob's web limits.", {
+    timeout: 30_000,
+  });
+  limitsBack();
+  await limits.getByRole("button", { name: "Try again" }).click();
+  await expect(limits).toContainText("5 searches and 14 pages a turn");
+
+  // Usage: the summary says it could not be read, and Try again reads it.
+  const usageBack = await failing(page, "GET", /\/api\/web\/usage\/summary/);
+  await page.goto(`${url}/#/usage`);
+  const usage = page.getByRole("region", { name: "Searches and pages" });
+  await expect(usage.getByRole("alert")).toHaveText("Hobbots could not read searches and pages.", {
+    timeout: 30_000,
+  });
+  usageBack();
+  await usage.getByRole("button", { name: "Try again" }).click();
+  await expect(usage).toContainText("No hob searched or read a page in this time.");
+});

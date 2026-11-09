@@ -2,6 +2,7 @@ import type { Agent, AgentId, UsagePeriod, WebHobUsage, WebTurnUsage, WebUsageSu
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -9,6 +10,7 @@ import { webSummaryQuery } from "../../api/web.ts";
 import { formatWeekday } from "../../lib/format.ts";
 import { periodStart } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";
+import { ReadFailed } from "./read-failed.tsx";
 import { SearchesBar, UsageTable, WhoCell } from "./usage-web-table.tsx";
 import { WebIcon } from "./web-icon.tsx";
 
@@ -53,7 +55,13 @@ export function WebUsageSection({
           ))}
         </SegmentedControl>
       </div>
-      {summary.isError && <p className="m-0 text-ui text-rose">{copy.failed}</p>}
+      {summary.isPending && (
+        <div role="status">
+          <span className="sr-only">{messages.reading}</span>
+          <Skeleton surface="card" width="60%" />
+        </div>
+      )}
+      {summary.isError && <ReadFailed text={copy.failed} onRetry={() => void summary.refetch()} />}
       {data !== undefined && (
         <>
           <Totals summary={data} period={period} />
@@ -115,7 +123,19 @@ function ByHob({ hobs, looks }: { hobs: ReadonlyArray<WebHobUsage>; looks: Reado
             <tr key={hob.agentId} className="shadow-[inset_0_1px_0_var(--color-line)]">
               <WhoCell
                 look={look}
-                title={<span className="font-semibold text-text-strong">{look?.name ?? copy.untitled}</span>}
+                title={
+                  look === undefined ? (
+                    <span className="font-semibold text-text-strong">{copy.untitled}</span>
+                  ) : (
+                    <Link
+                      to="/hobs/$hobId"
+                      params={{ hobId: look.id }}
+                      className="font-semibold text-text-strong underline-offset-2 hover:underline"
+                    >
+                      {look.name}
+                    </Link>
+                  )
+                }
                 sub={look === undefined ? "" : copy.runtime[look.runtime]}
               />
               <SearchesBar searches={hob.searches} most={most} />

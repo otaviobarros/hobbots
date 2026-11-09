@@ -740,6 +740,33 @@ describe("the hub records what hobs search and read, and holds them to their lim
     expect(hob.totals).toMatchObject({ searches: 1, pages: 1, estimatedCostUsd: null });
   }, 30_000);
 
+  // covers ADR 036 (Amendment: the screens), #1271
+  it("[TC-PE-1271-04] each page read keeps its redacted text on its own step, and its record names that step, for a page read twice and a page in parts", async () => {
+    await preset("balanced");
+    const wren = await summon("Wren", 1294);
+    const thread = (await request<Thread>("POST", `/api/agents/${wren.id}/threads`)).body;
+    const { reply } = await send(
+      thread,
+      `Read ${url("lamps.test", "/lamp")} twice, then ${url("lamps.test", "/long")}`,
+      fetchOf(url("lamps.test", "/lamp")),
+      fetchOf(url("lamps.test", "/lamp")),
+      fetchOf(url("lamps.test", "/long")),
+      hub("web_fetch", { url: url("lamps.test", "/long"), part: 2 }),
+    );
+    const steps = webSteps(reply as Message);
+    expect(steps).toHaveLength(4);
+    // The hub ends a page read's step with the text the hob got, whichever runtime made the call.
+    for (const step of steps) {
+      expect(step.state).toBe("done");
+      expect(step.output?.head).toContain("From lamps.test, written by other people");
+    }
+    expect(steps[2]?.output?.head).toContain("Part 1 of 2.");
+    expect(steps[3]?.output?.head).toContain("Part 2 of 2, the last.");
+    const pages = (await usage(`messageId=${reply?.id}`)).pages.toReversed();
+    expect(pages.map((page) => page.stepId)).toEqual(steps.map((step) => step.id));
+    expect(pages.map((page) => page.part)).toEqual([1, 1, 1, 2]);
+  }, 30_000);
+
   // covers ADR 036 (Usage and limits)
   it("[TC-PE-1269-04] past a hob's limits a search and a page are refused with words that name the limit, and past its daily limit its next turn has search off", async () => {
     await preset("balanced");

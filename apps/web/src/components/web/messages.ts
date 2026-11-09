@@ -21,6 +21,8 @@ const pages = (count: number) => plural(count, { one: "1 page", other: `${format
 const searches = (count: number) => plural(count, { one: "1 search", other: `${formatCount(count)} searches` });
 
 export const messages = {
+  retry: "Try again",
+  reading: "Reading…",
   lines: {
     list: ({ name }: { name: string }) => `What ${name} looked up`,
     searched: "Searched:",
@@ -39,7 +41,6 @@ export const messages = {
     page: {
       eyebrow: ({ name }: { name: string }) => `A page ${name} read`,
       read: "Read",
-      readAt: ({ when }: { when: string }) => `${when}, fresh from the site`,
       readCached: ({ when, cached }: { when: string; cached: string }) =>
         `${when}, from the cache Hobbots read at ${cached}`,
       readWhen: ({ when }: { when: string }) => when,
@@ -70,6 +71,7 @@ export const messages = {
       part: ({ part, parts }: { part: number; parts: number }) => `Part ${part} of ${parts}`,
       reading: "Reading what it got…",
       noText: "The page had no text to read.",
+      textFailed: "Hobbots could not open the text it kept from this page.",
       unkept: ({ name }: { name: string }) =>
         `Hobbots no longer has the text ${name} got from this page. Open it in your browser to see the page as it is now.`,
       links: "Links on the page",
@@ -132,6 +134,7 @@ export const messages = {
     alwaysAsk: ({ name }: { name: string }) =>
       `Two things always ask, whatever these say: an address ${name} wrote itself, and, once a chat has read the web, anything that could send your data out of that chat.`,
     failed: "Hobbots could not remove the rule. Try again.",
+    readFailed: "Hobbots could not read this hob's site rules.",
   },
   limits: {
     heading: "Web limits",
@@ -152,6 +155,7 @@ export const messages = {
     cancel: "Cancel",
     saving: "Saving…",
     failed: "Hobbots could not save the limits. Try again.",
+    readFailed: "Hobbots could not read this hob's web limits.",
     searchesPerTurn: "Searches in one turn",
     pagesPerTurn: "Pages read in one turn",
     searchesPerDay: "Searches a day",
@@ -194,7 +198,8 @@ export const messages = {
     reset: "Reset to 10, 30 and 200",
     saved: "Saved",
     saving: "Saving…",
-    failed: "Hobbots could not save Settings › Web. Try again.",
+    failed: "Hobbots could not save Settings › Web. Your changes are still here; try again.",
+    readFailed: "Hobbots could not read Settings › Web.",
     invalidLimit: "Enter a whole number from 0.",
     blocked: "Sites hobs never read",
     blockedNone: "No sites are blocked.",
@@ -236,6 +241,7 @@ export const messages = {
     clear: "Clear now",
     clearing: "Clearing…",
     clearFailed: "Hobbots could not clear the cache. Try again.",
+    cacheFailed: "Hobbots could not read the page cache.",
   },
   usage: {
     heading: "Searches and pages",

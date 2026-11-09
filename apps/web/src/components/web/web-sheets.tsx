@@ -8,6 +8,7 @@ import { formatWhen } from "../../lib/time.ts";
 import { useCopy } from "../../lib/use-copy.ts";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "./messages.ts";
+import { ReadFailed } from "./read-failed.tsx";
 import { WebIcon } from "./web-icon.tsx";
 import { foundBy, fromCache, hostOf, type PageAnswer, parsePageAnswer, type WebStep } from "./web-model.ts";
 
@@ -16,7 +17,6 @@ import { foundBy, fromCache, hostOf, type PageAnswer, parsePageAnswer, type WebS
 const copy = messages;
 
 type PageStep = Extract<WebStep, { readonly _tag: "Page" }>;
-type SearchStep = Extract<WebStep, { readonly _tag: "Search" }>;
 
 export function Eyebrow({ kind, children }: { kind: "search" | "page"; children: ReactNode }) {
   return (
@@ -49,10 +49,13 @@ export const Notice = ({ children }: { children: ReactNode }) => (
 );
 
 /** What `web_fetch` answered for a page: its step's whole log when the hub kept one, else what the step shows. */
+/** Where the text the hob got stands: being read, read, not kept, or failed to read. */
+type TextState = "reading" | "got" | "unkept" | "failed";
+
 const usePageAnswer = (message: Message, step: PageStep) => {
   const reply = message.steps.find((each) => each.id === step.stepId);
   const output = reply?.output;
-  return useQuery({
+  const answer = useQuery({
     queryKey: ["web", "page-answer", message.id, step.stepId],
     enabled: output !== undefined,
     staleTime: Number.POSITIVE_INFINITY,
@@ -67,6 +70,9 @@ const usePageAnswer = (message: Message, step: PageStep) => {
       return parsePageAnswer(await response.text());
     },
   });
+  const state: TextState =
+    output === undefined ? "unkept" : answer.isError ? "failed" : answer.isPending ? "reading" : "got";
+  return { got: answer.data, state, retry: () => void answer.refetch() };
 };
 
 export function PageSheet({
@@ -83,7 +89,7 @@ export function PageSheet({
   const { page } = step;
   const answer = usePageAnswer(message, step);
   const [copied, copyLink] = useCopy();
-  const got = answer.data;
+  const { got } = answer;
   const search = foundBy(page.url, usage?.searches ?? []);
   return (
     <>
@@ -104,7 +110,7 @@ export function PageSheet({
         </Button>
       </div>
       <Notice>{copy.sheet.page.others({ name: hob.name })}</Notice>
-      <PageText step={step} got={got} pending={answer.isPending} name={hob.name} />
+      <PageText step={step} got={got} state={answer.state} onRetry={answer.retry} name={hob.name} />
       {got !== undefined && got.links.length > 0 && (
         <section aria-label={copy.sheet.page.links} className="flex flex-col gap-1.5">
           <span className="lbl text-meta text-label">{copy.sheet.page.links}</span>
@@ -141,11 +147,9 @@ function PageFacts({
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-detail">
       <Fact label={copy.sheet.page.read}>
-        {cached === true && got?.fetchedAt
+        {cached && got?.fetchedAt
           ? copy.sheet.page.readCached({ when, cached: formatWhen(got.fetchedAt) })
-          : cached === false
-            ? copy.sheet.page.readAt({ when })
-            : copy.sheet.page.readWhen({ when })}
+          : copy.sheet.page.readWhen({ when })}
       </Fact>
       {search !== null && (
         <Fact label={copy.sheet.page.foundIn}>{copy.sheet.page.foundBy({ query: search.query })}</Fact>
@@ -173,12 +177,14 @@ function PageFacts({
 function PageText({
   step,
   got,
-  pending,
+  state,
+  onRetry,
   name,
 }: {
   step: PageStep;
   got: PageAnswer | undefined;
-  pending: boolean;
+  state: TextState;
+  onRetry: () => void;
   name: string;
 }) {
   const { page } = step;
@@ -189,10 +195,12 @@ function PageText({
         <span>{copy.sheet.page.part({ part: page.part, parts: page.parts })}</span>
       </span>
       <div className="cut flex flex-col gap-2 bg-card px-4 py-3">
-        {pending && step.stepId !== null ? (
+        {state === "reading" ? (
           <span role="status" className="text-detail text-text-secondary">
             {copy.sheet.page.reading}
           </span>
+        ) : state === "failed" ? (
+          <ReadFailed text={copy.sheet.page.textFailed} onRetry={onRetry} />
         ) : got === undefined ? (
           <p className="m-0 text-detail text-text-secondary">{copy.sheet.page.unkept({ name: name })}</p>
         ) : got.text === "" ? (

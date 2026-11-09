@@ -47,6 +47,11 @@ export interface HubPlanContext {
   readonly turn: Pick<CharmTurn, "agentId" | "threadId" | "messageId" | "attemptId" | "taskId" | "scope" | "also">;
   readonly access: ToolAccess;
   /**
+   * The runtime's id for the call's step, when the runtime knows it, so a record the call makes can
+   * name the step it shows as, such as a page `web_fetch` read (ADR 036). Null otherwise.
+   */
+  readonly stepId: string | null;
+  /**
    * For a Charm write, whose input is planned redacted (ADR 031): the fields of the input redaction
    * changed, so the hob can be told what the user approved and the Charm got.
    */
@@ -162,6 +167,11 @@ export interface HubAction<R extends HubRequest> {
   /** For a Charm write, how the Charm is read back for one of its calls that ended uncertain. */
   readonly readBack?: ReadBack;
   /**
+   * Whether the call's step keeps the hob's answer, redacted, as its output, such as the text of a
+   * page `web_fetch` read (ADR 036). The pipeline ends the step with it, whichever runtime made the call.
+   */
+  readonly keepsAnswer?: boolean;
+  /**
    * Plans a call. What it acquires in its scope, such as a branch it staged to show and send, is
    * released once the call has ended, whether it was sent, refused or never decided.
    */
@@ -186,6 +196,7 @@ export const hubAction = <S extends Schema.Top & { readonly DecodingServices: ne
   readonly operation?: AnyOperation;
   readonly unreadable?: (error: Schema.SchemaError) => string;
   readonly readBack?: ReadBack;
+  readonly keepsAnswer?: boolean;
   readonly plan: (
     input: S["Type"],
     context: HubPlanContext,
@@ -205,6 +216,7 @@ export const hubAction = <S extends Schema.Top & { readonly DecodingServices: ne
         ? null
         : { decode: Schema.decodeUnknownEffect(withKey), inputSchema: toolInputJsonSchema(withKey) },
     ...(action.readBack === undefined ? {} : { readBack: action.readBack }),
+    ...(action.keepsAnswer === undefined ? {} : { keepsAnswer: action.keepsAnswer }),
     plan: (input, context) => action.plan(input as S["Type"], context),
   };
 };
@@ -278,6 +290,7 @@ export interface HubActionsOptions<R extends HubRequest, V extends AskableVerdic
 const planContext = (
   turn: CharmTurn,
   access: ToolAccess,
+  stepId: string | null,
   write?: { readonly redacted: ReadonlyArray<string>; readonly key: string },
 ): HubPlanContext => ({
   turn: {
@@ -290,6 +303,7 @@ const planContext = (
     ...(turn.also === undefined ? {} : { also: turn.also }),
   },
   access,
+  stepId,
   ...(write === undefined
     ? {}
     : { redacted: write.redacted, key: write.key, redact: (text: string) => turn.redactor.text(text) }),
@@ -577,8 +591,11 @@ export const makeHubActions =
           action,
           keyed?.input ?? input,
           keyed === null
-            ? planContext(turn, access)
-            : planContext(turn, access, { redacted: changedFields(input, keyed.input), key: keyed.key }),
+            ? planContext(turn, access, step?.id ?? null)
+            : planContext(turn, access, step?.id ?? null, {
+                redacted: changedFields(input, keyed.input),
+                key: keyed.key,
+              }),
         );
         if ("_tag" in plan) return plan.text;
         const rest = decideAndSend(action, plan, access, keyed, step);
@@ -588,10 +605,18 @@ export const makeHubActions =
     const call = (name: string, raw: unknown, step?: HubCallStep): Effect.Effect<HubToolAnswer> => {
       const action = byName.get(name);
       if (action === undefined) return Effect.succeed({ text: `Hobbots has no ${name} tool.`, refused: true });
-      return redactedAnswer(turn.redactor, run(action, raw, step), {
+      const answered = redactedAnswer(turn.redactor, run(action, raw, step), {
         log: `The hub tool ${name} failed`,
         text: `Hobbots could not finish ${name} this time. Try again.`,
       });
+      if (action.keepsAnswer !== true || step === undefined) return answered;
+      // Ended here, before the runtime ends the step, so the step keeps the answer whichever runtime
+      // made the call: the runtime's own end then finds it ended and changes nothing.
+      return Effect.tap(answered, (answer) =>
+        Effect.sync(() => {
+          if (!answer.refused) step.report({ _tag: "ToolFinished", id: step.id, failed: false, output: answer.text });
+        }),
+      );
     };
 
     return { tools: actions.map((action) => action.tool), call };

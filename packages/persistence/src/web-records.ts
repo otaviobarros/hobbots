@@ -52,6 +52,7 @@ const fetchOf = (row: Row) =>
     taskId: row.taskId,
     attemptId: row.attemptId,
     turn: row.turn,
+    stepId: row.stepId ?? null,
     at: row.fetchedAt,
     url: row.url,
     finalUrl: row.finalUrl,
@@ -179,6 +180,7 @@ export const WebRecordsLive = Layer.effect(
             Effect.gen(function* () {
               yield* sql`INSERT INTO web_fetches ${sql.insert({
                 ...place(fetch),
+                step_id: fetch.stepId,
                 url: fetch.url,
                 final_url: fetch.finalUrl,
                 status: fetch.status,
