@@ -162,4 +162,28 @@ describe("deciding a hob proposal", () => {
       }),
     );
   });
+  // covers STD-DATA-001: a stuck row needs no decision to be settled
+  it("[TC-AG-409-12] a row the hub stopped while making is settled by reading the card, as made or as waiting again", async () => {
+    made.length = 0;
+    revoked = false;
+    await run(
+      Effect.gen(function* () {
+        const proposals = yield* HobProposals;
+        const first = yield* proposed;
+        applying = "die";
+        yield* Effect.exit(proposals.allow(first.id, "1", {}));
+        applying = "apply";
+        reconciled = "Summoned Ada";
+        expect((yield* proposals.get(first.id)).proposal.rows[0]).toMatchObject({ state: "allowed" });
+
+        const second = yield* proposed;
+        applying = "die";
+        yield* Effect.exit(proposals.allow(second.id, "1", {}));
+        applying = "apply";
+        reconciled = null;
+        const listed = (yield* proposals.list).find((each) => each.proposal.id === second.id);
+        expect(listed?.proposal.rows[0]).toMatchObject({ state: "pending", edited: null, decidedAt: null });
+      }),
+    );
+  });
 });

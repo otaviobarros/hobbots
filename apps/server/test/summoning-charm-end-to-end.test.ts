@@ -12,6 +12,7 @@ import {
   HobAdmission,
   HobbotsRepository,
   HobLifecycle,
+  HobProposalLog,
   HobProposals,
   HobService,
   hubCallStep,
@@ -32,6 +33,8 @@ import {
   type AgentConfiguration,
   type ApprovalRequest,
   declaredOperations,
+  HobProposal,
+  HobProposalId,
   isInProgress,
   type Message,
   roleFields,
@@ -48,6 +51,7 @@ import {
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  HobChangesLive,
   HobProposalLogLive,
   SearchIndex,
   SetupRepository,
@@ -107,6 +111,7 @@ const Database = Layer.mergeAll(
   TaskToolCallsLive,
   ActivityRepositoryLive,
   BackpackLive,
+  HobChangesLive,
   HobProposalLogLive,
   EventJournal.layer,
   SetupRepository.layer,
@@ -1209,5 +1214,64 @@ describe("the Summoning Charm, end to end", () => {
     const stale = await proposalOf(laterView.proposal.id);
     expect(stale.changedSince).toEqual([laterView.proposal.rows[0]?.id]);
     await decideProposal(later, "deny-all");
+  });
+  // covers STD-DATA-001, ADR 034 (A decision is yours while your device is)
+  it("[TC-AG-409-11] a row the hub stopped before it saved what it made is settled from the hob's history when the card is read, even after a later edit", async () => {
+    await chiefAnswers({});
+    const hire = await turn(chief, hub("summoning_summon", { key: "hire-duo", hobs: [draft("Rook"), draft("Sly")] }));
+    await decideProposal(hire, "allow-all");
+    const rook = await summonedNamed("Rook");
+    const sly = await summonedNamed("Sly");
+    /** As if the hub stopped after making `rowId` and before saving it: the row is applying again. */
+    const stoppedWhileMaking = (proposalId: string, rowId: string) =>
+      hobs.runPromise(
+        Effect.gen(function* () {
+          const log = yield* HobProposalLog;
+          const stored = Option.getOrThrow(yield* log.get(HobProposalId.make(proposalId)));
+          const rows = stored.rows.map((each) =>
+            each.id === rowId ? { ...each, state: "applying" as const, outcome: null } : each,
+          );
+          yield* log.move(new HobProposal({ ...stored, rows, state: "open", settledAt: null }));
+        }),
+      );
+
+    // A change made by the proposal, then an edit of yours: the latest version is yours, not the proposal's.
+    await chiefAnswers({ "summoning.instructions": "ask" });
+    const retone = await turn(
+      chief,
+      hub("summoning_change", {
+        key: "retone-duo",
+        changes: [
+          { hob: "Rook", instructions: "Be brief." },
+          { hob: "Sly", instructions: "Be brief." },
+        ],
+      }),
+    );
+    const view = retone.proposal as HobProposalView;
+    const [rookRow] = view.proposal.rows;
+    expect((await onProposal(view, `rows/${rookRow?.id}/allow`)).status).toBe(200);
+    await stoppedWhileMaking(view.proposal.id, rookRow?.id ?? "");
+    expect((await request("PATCH", `/api/agents/${rook.id}`, { goodAt: "Short notes." })).status).toBe(200);
+    // Reading the card is enough: the row reads as made, and Deny cannot say nothing was done.
+    const read = await proposalOf(view.proposal.id);
+    expect(read.proposal.rows[0]).toMatchObject({
+      state: "allowed",
+      outcome: "Changed instructions, from its next turn.",
+    });
+    expect((await onProposal(view, `rows/${rookRow?.id}/deny`)).status).toBe(409);
+    await decideProposal(retone, "deny-all");
+
+    // A pause made by the proposal, then a wake of yours.
+    await chiefAnswers({ "summoning.pause": "ask" });
+    const pause = await turn(chief, hub("summoning_pause", { key: "pause-sly", hob: "Sly" }));
+    const paused = await decideProposal(pause, "allow-all");
+    expect(paused.content).toContain("Sly is paused now.");
+    const pauseView = pause.proposal as HobProposalView;
+    await stoppedWhileMaking(pauseView.proposal.id, pauseView.proposal.rows[0]?.id ?? "");
+    expect((await request("POST", `/api/agents/${sly.id}/wake`)).status).toBe(200);
+    const after = await proposalOf(pauseView.proposal.id);
+    expect(after.proposal.rows[0]).toMatchObject({ state: "allowed", outcome: "Sly is paused now." });
+    expect(after.proposal.state).toBe("settled");
+    await chiefAnswers({});
   });
 });

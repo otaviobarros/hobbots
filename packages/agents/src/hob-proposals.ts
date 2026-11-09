@@ -272,6 +272,19 @@ export class HobProposals extends Context.Service<
           return yield* save(proposal, rows);
         });
 
+      /**
+       * A proposal as read, with any row the hub stopped while making settled first (STD-DATA-001).
+       * Rows are made only under the lock, so a row still applying once the lock is held was left by
+       * a hub that stopped, and reading the card is enough to settle it: no decision has to be offered.
+       */
+      const recovered = (proposal: HobProposal) =>
+        proposal.rows.some((row) => row.state === "applying")
+          ? // A read never fails for it: what could not be settled now is settled by the next read.
+            Semaphore.withPermit(lock, Effect.flatMap(find(proposal.id), reconciled)).pipe(
+              Effect.orElseSucceed(() => proposal),
+            )
+          : Effect.succeed(proposal);
+
       const open = (id: string) =>
         Effect.gen(function* () {
           const proposal = yield* Effect.flatMap(find(id), reconciled);
@@ -346,6 +359,13 @@ export class HobProposals extends Context.Service<
           return yield* viewOf(saved);
         });
 
+      // At start, once the Charm binds how rows are made, rows a stopped hub left applying are settled.
+      yield* Deferred.await(applier).pipe(
+        Effect.andThen(log.list(INBOX_HISTORY)),
+        Effect.flatMap((proposals) => Effect.forEach(proposals, recovered, { discard: true })),
+        Effect.forkScoped,
+      );
+
       return HobProposals.of({
         propose: (input) =>
           Effect.gen(function* () {
@@ -367,8 +387,10 @@ export class HobProposals extends Context.Service<
             return { proposal: committed.value, settled: yield* waitFor(committed.value) };
           }),
         bindApplier: (bound) => Deferred.succeed(applier, bound).pipe(Effect.asVoid),
-        list: Effect.flatMap(log.list(INBOX_HISTORY), (proposals) => Effect.forEach(proposals, viewOf)),
-        get: (id) => Effect.flatMap(find(id), viewOf),
+        list: Effect.flatMap(log.list(INBOX_HISTORY), (proposals) =>
+          Effect.forEach(proposals, (proposal) => Effect.flatMap(recovered(proposal), viewOf)),
+        ),
+        get: (id) => Effect.flatMap(Effect.flatMap(find(id), recovered), viewOf),
         allow: (id, rowId, options) =>
           decide((approved) =>
             Effect.gen(function* () {

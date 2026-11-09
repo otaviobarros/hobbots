@@ -70,6 +70,7 @@ import { type Charm, defineCharm } from "./charms.ts";
 import { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, GrantService } from "./grants.ts";
+import { HobChanges } from "./hob-changes.ts";
 import { type HobProposalApplier, HobProposals, pendingRow } from "./hob-proposals.ts";
 import { changedPolicy, checkGoodAt, checkRole, checkRuntimeBrain, HobService } from "./hobs.ts";
 import { type HubAction, type HubPlanContext, HubRefusal, hubAction } from "./hub-actions.ts";
@@ -110,6 +111,8 @@ export interface SummoningServices {
   readonly limits: SummonLimits;
   /** Where a call that asks records its proposal and waits for you (ADR 034). */
   readonly proposals: HobProposals["Service"];
+  /** Each hob's versions and status changes with who made them, for settling a row a stopped hub left. */
+  readonly changes: HobChanges["Service"];
   /** A hob's tool access as its next turn would read it, for applying a proposal outside any turn. */
   readonly access: (agentId: AgentId) => Effect.Effect<ToolAccess | null>;
 }
@@ -190,6 +193,7 @@ export class SummoningHub extends Context.Service<
         tasks: yield* TaskRepository,
         limits: yield* UnattendedSummonLimits,
         proposals,
+        changes: yield* HobChanges,
         access: (agentId) => accessNow(repo, hobTools, agentId),
       });
     }),
@@ -1404,23 +1408,16 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           const found = yield* services.repo.findAgent(row.hobId);
           if (Option.isNone(found)) return null;
           const agent = found.value;
-          switch (proposal.kind) {
-            case "summon":
-              return `Summoned ${describeHob(agent).slice(2)}`;
-            case "change": {
-              // Made by this proposal when its hob's latest version says so.
-              if (row.change === null || agent.configVersion === row.configVersion) return null;
-              const latest = yield* services.repo.findAgentConfig(agent.id, agent.configVersion);
-              const actor = Option.isSome(latest) ? latest.value.actor : null;
-              return actor?._tag === "YouApplyingProposal" && actor.proposalId === proposal.id
-                ? `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`
-                : null;
-            }
-            default: {
-              const { status } = LIFECYCLE[LIFECYCLE_TOOL[proposal.kind]];
-              return agent.status === status && agent.status !== row.status ? `${agent.name} is ${status} now.` : null;
-            }
-          }
+          // The hub mints a summon row's hob id, so a hob with it was made by that row.
+          if (proposal.kind === "summon") return `Summoned ${describeHob(agent).slice(2)}`;
+          // What this proposal made stays in the hob's history with the proposal as its actor,
+          // whatever was changed after it.
+          const made = (yield* services.changes.forHob(agent.id)).find(
+            (change) => change.actor._tag === "YouApplyingProposal" && change.actor.proposalId === proposal.id,
+          );
+          if (made === undefined) return null;
+          if (made._tag === "Status") return `${agent.name} is ${made.status} now.`;
+          return row.change === null ? null : `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`;
         }),
     };
     yield* hub.bindApplier(applier);
