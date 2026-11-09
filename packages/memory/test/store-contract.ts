@@ -5,6 +5,7 @@ import {
   MemoryConflict,
   type MemoryDraft,
   MemoryForgetDay,
+  type MemoryPage,
   MemoryPath,
   type MemoryScope,
   type MemoryVersion,
@@ -625,6 +626,41 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           const after = yield* store.page(you, pipsOwn, path);
           expect(after).toMatchObject({ version: pinned, pinned: true, author: you });
           expect(after?.markdown).not.toContain("And the linter?");
+        }),
+      ));
+
+    // covers ADR 028 (Capture and summaries), #1316
+    it("[TC-GEN-1316-01] names a chat's page by its summary's title when it is read, as every list names it", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f3");
+          const path = MemoryPath.make(`sessions/${thread}.md`);
+          const read = Effect.map(store.page(you, pipsOwn, path), (page) => page as MemoryPage);
+          const listedTitle = Effect.map(store.list(you, pipsOwn, 50), (pages) =>
+            pages.filter((each) => each.path === path).map((each) => each.title),
+          );
+          const rewrite = (page: MemoryPage, markdown: string) =>
+            store.write(you, pipsOwn, draft(path, markdown, { pinned: true }), {
+              _tag: "Version",
+              version: page.version,
+            });
+          yield* store.capture(asPip, pipsOwn, thread, [
+            { key: "message:m1", kind: "message", text: "How do the tests run?" },
+          ]);
+          yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
+          const [title] = yield* listedTitle;
+          expect(title).toBeTruthy();
+          expect(title).not.toContain(thread);
+          const note = yield* read;
+          expect(note.title).toBe(title);
+          // Pinning it writes its markdown again, and it keeps its title.
+          yield* rewrite(note, note.markdown);
+          const pinned = yield* read;
+          expect(pinned.title).toBe(title);
+          // Given a heading, as the editor writes a title, it is named by it.
+          yield* rewrite(pinned, `# Test runs\n\n${pinned.markdown}`);
+          expect((yield* read).title).toBe("Test runs");
+          expect(yield* listedTitle).toEqual(["Test runs"]);
         }),
       ));
 

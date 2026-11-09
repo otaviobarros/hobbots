@@ -347,6 +347,24 @@ describe("a page", () => {
     expect(yours[0]?.what).toBe(copy.page.wroteThis);
   });
 
+  // covers ADR 028 (Read), #1317
+  it("[TC-UX-1317-01] names nobody for a version memory does not say who wrote", () => {
+    const rows = historyRows(
+      [
+        { version: version("v3"), supersedes: version("v2"), author: byPip, writtenAt: "c", latest: true },
+        { version: version("v2"), supersedes: version("v1"), author: null, writtenAt: "b", latest: false },
+        { version: version("v1"), supersedes: null, author: null, writtenAt: "a", latest: false },
+      ],
+      hobs,
+    );
+    expect(rows.map((row) => row.what)).toEqual([
+      copy.page.changedThis({ who: "Pip" }),
+      copy.page.changed,
+      copy.page.firstWritten,
+    ]);
+    expect(rows.some((row) => row.what.includes(copy.page.someone))).toBe(false);
+  });
+
   // covers ADR 028 (Read), #958
   it("[TC-UX-949] shows a version's changed lines without the blank ones, so paragraphs read as lines", () => {
     expect(

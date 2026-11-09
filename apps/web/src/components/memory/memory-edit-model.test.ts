@@ -30,6 +30,7 @@ const now = new Date(2026, 10, 5, 15, 0);
 const page: MemoryPage = {
   scope: pipsOwn,
   path: MemoryPath.make("howtos/preview.md"),
+  title: "Publishing a preview link",
   markdown: "# Publishing a preview link\n\nAsk Ada.\n",
   tags: ["site"],
   pinned: true,

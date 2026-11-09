@@ -11,7 +11,7 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { formatDay } from "../../lib/format.ts";
-import { type HobDirectory, pageBody, pageTitle, scopeName } from "./memory-model.ts";
+import { type HobDirectory, pageBody, scopeName } from "./memory-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -43,7 +43,7 @@ export interface EditorDraft {
 
 /** The editor's fields for `page`, as it is now. */
 export const draftOf = (page: MemoryPage, kind: MemoryKind): EditorDraft => ({
-  title: pageTitle(page.markdown, page.path),
+  title: page.title,
   body: pageBody(page.markdown),
   kind,
   pinned: page.pinned,

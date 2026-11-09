@@ -326,19 +326,19 @@ export interface HistoryRow {
   readonly latest: boolean;
 }
 
+/** What a version of a page did, naming who did it only when memory says so. */
+const versionWhat = (author: MemoryPageVersion["author"], first: boolean, hobs: HobDirectory): string => {
+  // Memory names who wrote only a page's latest version, so an older one is not put on anyone.
+  if (author === null) return first ? copy.page.firstWritten : copy.page.changed;
+  if (author._tag === "You") return first ? copy.page.wroteThis : copy.page.youChanged;
+  const who = authorName(author, hobs);
+  return first ? copy.page.learnedThis({ who }) : copy.page.changedThis({ who });
+};
+
 /** A page's History, newest first: who learned it, then who changed it each time after. */
 export const historyRows = (history: ReadonlyArray<MemoryPageVersion>, hobs: HobDirectory): ReadonlyArray<HistoryRow> =>
   history.map((entry, at) => {
-    const first = at === history.length - 1;
-    const you = entry.author?._tag === "You";
-    const who = authorName(entry.author, hobs);
-    const what = first
-      ? you
-        ? copy.page.wroteThis
-        : copy.page.learnedThis({ who })
-      : you
-        ? copy.page.youChanged
-        : copy.page.changedThis({ who });
+    const what = versionWhat(entry.author, at === history.length - 1, hobs);
     return {
       version: entry.version,
       what,
