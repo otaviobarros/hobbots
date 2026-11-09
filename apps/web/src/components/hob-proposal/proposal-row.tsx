@@ -1,14 +1,12 @@
 import type { HobProposal, HobProposalRow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { HobProposalDecision } from "../../api/hob-proposals.ts";
-import { openWorkQuery } from "../../api/queries.ts";
-import { OpenWorkList } from "../hob-profile/retire-parts.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { changeLines, rowDraft, rowLook, summonFacts } from "./hob-proposal-model.ts";
 import { messages } from "./messages.ts";
+import { type RetireReview, RetireRow, useRetireReview } from "./retire-row.tsx";
 
 const copy = messages;
 
@@ -40,33 +38,20 @@ export function ProposalRow({
 }) {
   const waiting = row.state === "pending";
   const retire = proposal.kind === "retire";
+  const review = useRetireReview(row, retire && waiting);
+  // A retire is allowed only once what the hob has running and open was read.
+  const unreviewed = retire && review.state !== "read";
   return (
     <article
       aria-label={row.label}
       data-state={row.state}
       className="flex flex-col gap-2 rounded-control border border-line bg-deep px-3 py-2.5"
     >
-      <RowBody proposal={proposal} row={row} />
-      <span className={cn("text-meta", STATE_TONE[row.state])}>
-        {copy.state[row.state]}
-        {row.outcome !== null && row.state !== "pending" && (
-          <span className="text-text-secondary">{` · ${row.outcome}`}</span>
-        )}
-      </span>
+      <RowBody proposal={proposal} row={row} review={review} />
+      <RowState row={row} />
       {waiting && changed && <p className="m-0 text-meta text-lantern">{copy.changedSince}</p>}
       {waiting && retire && !changed && (
-        <div className="flex flex-col gap-2 rounded-control bg-rose/15 px-3 py-2.5">
-          <span className="text-detail font-bold text-rose">{copy.retire.highRisk}</span>
-          <label className="flex cursor-pointer items-center gap-2 text-ui">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(event) => onConfirm(event.target.checked)}
-              className="size-4 accent-mint"
-            />
-            {copy.retire.confirm({ hob: row.label })}
-          </label>
-        </div>
+        <RetireConfirm hob={row.label} confirmed={confirmed} disabled={unreviewed} onConfirm={onConfirm} />
       )}
       {waiting && (
         <div className="flex flex-wrap gap-2">
@@ -75,7 +60,7 @@ export function ProposalRow({
               size="sm"
               variant="approve"
               onClick={() => onDecide({ _tag: "allow", rowId: row.id, ...(proposal.highRisk ? { confirmed } : {}) })}
-              disabled={busy || (retire && !confirmed)}
+              disabled={busy || unreviewed || (retire && !confirmed)}
             >
               {copy.allow}
             </Button>
@@ -96,15 +81,56 @@ export function ProposalRow({
   );
 }
 
+/** Where the row stands, with what came of it once decided. */
+function RowState({ row }: { row: HobProposalRow }) {
+  return (
+    <span className={cn("text-meta", STATE_TONE[row.state])}>
+      {copy.state[row.state]}
+      {row.outcome !== null && row.state !== "pending" && (
+        <span className="text-text-secondary">{` · ${row.outcome}`}</span>
+      )}
+    </span>
+  );
+}
+
+/** Retiring is high risk: the check box that allowing it needs, on once what the hob has open was read. */
+function RetireConfirm({
+  hob,
+  confirmed,
+  disabled,
+  onConfirm,
+}: {
+  hob: string;
+  confirmed: boolean;
+  disabled: boolean;
+  onConfirm: (confirmed: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-control bg-rose/15 px-3 py-2.5">
+      <span className="text-detail font-bold text-rose">{copy.retire.highRisk}</span>
+      <label className="flex cursor-pointer items-center gap-2 text-ui">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          disabled={disabled}
+          onChange={(event) => onConfirm(event.target.checked)}
+          className="size-4 accent-mint"
+        />
+        {copy.retire.confirm({ hob })}
+      </label>
+    </div>
+  );
+}
+
 /** What one row proposes: a new hob in full, a change as before and after, or a pause, wake or retire. */
-function RowBody({ proposal, row }: { proposal: HobProposal; row: HobProposalRow }) {
+function RowBody({ proposal, row, review }: { proposal: HobProposal; row: HobProposalRow; review: RetireReview }) {
   switch (proposal.kind) {
     case "summon":
       return <SummonRow row={row} />;
     case "change":
       return <ChangeRow row={row} />;
     case "retire":
-      return <RetireRow row={row} />;
+      return <RetireRow row={row} review={review} />;
     default:
       return (
         <div className="flex flex-col gap-1">
@@ -115,24 +141,6 @@ function RowBody({ proposal, row }: { proposal: HobProposal; row: HobProposalRow
         </div>
       );
   }
-}
-
-/**
- * A hob to retire: what it still has open while the row waits, as Retire lists it, what stays, and
- * what the manager chose for its running replies.
- */
-function RetireRow({ row }: { row: HobProposalRow }) {
-  const work = useQuery({ ...openWorkQuery(row.hobId, null), enabled: row.state === "pending" });
-  return (
-    <div className="flex flex-col gap-1.5">
-      <b className="text-ui text-text-strong">{row.label}</b>
-      {row.state === "pending" && <OpenWorkList running={[]} work={work.data} blockedTaker={null} />}
-      <span className="text-detail text-text-secondary">{copy.retire.owns({ hob: row.label })}</span>
-      <span className="text-detail text-text-secondary">
-        {row.runningReplies === "stop" ? copy.retire.stop : copy.retire.finish}
-      </span>
-    </div>
-  );
 }
 
 /** A new hob: its sprite, name and role, its facts, and its instructions folded. */

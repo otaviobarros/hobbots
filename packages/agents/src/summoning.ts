@@ -1295,6 +1295,33 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         return { ...prepared, context };
       });
 
+    /** Pauses, wakes or retires a row's hob as you, checked again as the call was (ADR 034, Applying re-checks). */
+    const applyLifecycle = (
+      proposal: HobProposal,
+      row: HobProposalRow,
+      made: {
+        readonly services: SummoningServices;
+        readonly agents: ReadonlyArray<Agent>;
+        readonly manager: Authority & { readonly agent: Agent; readonly policy: HobPolicy };
+        readonly actor: ChangeActor;
+      },
+    ) =>
+      Effect.gen(function* () {
+        const refuse = (text: string) => Effect.fail(proposalRefused(proposal, row.id, text));
+        if (!made.agents.some((each) => each.id === row.hobId)) {
+          return yield* refuse(`There is no hob ${row.label} on this hub any more.`);
+        }
+        const name = LIFECYCLE_TOOL[proposal.kind as Exclude<HobProposalKind, "summon" | "change">];
+        // The scope, and the operation's answer, as they are now.
+        const found = lifecycleTarget(name, made.agents, made.manager, row.hobId);
+        if (found._tag === "Refused") return yield* refuse(found.text);
+        const run = lifecycleRun(name, made.services, found.agent, row.runningReplies ?? "finish", made.actor);
+        const done = yield* Effect.result(run);
+        return done._tag === "Success"
+          ? ({ _tag: "Applied", text: `${done.success.name} is ${done.success.status} now.` } as const)
+          : ({ _tag: "Failed", text: failure(done.failure) } as const);
+      });
+
     const applier: HobProposalApplier = {
       apply: (proposal, row, edited) =>
         Effect.gen(function* () {
@@ -1332,21 +1359,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
                   } as const)
                 : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
             }
-            default: {
-              if (!agents.some((each) => each.id === row.hobId)) {
-                return yield* refuse([`There is no hob ${row.label} on this hub any more.`]);
-              }
-              const name = LIFECYCLE_TOOL[proposal.kind];
-              // Checked again as the call was: the scope, and the operation's answer, as they are now.
-              const found = lifecycleTarget(name, agents, manager, row.hobId);
-              if (found._tag === "Refused") return yield* refuse([found.text]);
-              const made = yield* lifecycleRun(name, services, found.agent, row.runningReplies ?? "finish", actor).pipe(
-                Effect.result,
-              );
-              return made._tag === "Success"
-                ? ({ _tag: "Applied", text: `${made.success.name} is ${made.success.status} now.` } as const)
-                : ({ _tag: "Failed", text: failure(made.failure) } as const);
-            }
+            default:
+              return yield* applyLifecycle(proposal, row, { services, agents, manager, actor });
           }
         }),
       changedSince: (row) =>
