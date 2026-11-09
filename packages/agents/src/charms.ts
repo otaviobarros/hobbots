@@ -187,6 +187,13 @@ interface CharmIdentity {
   readonly takeovers?: ReadonlyArray<CharmTakeover>;
   /** The hub's services each call runs with, its logger included, since a runtime runs it on its own. */
   readonly context?: Context.Context<never>;
+  /**
+   * Whether a session outside any chat, a party member's or a step's, is offered its writes too. A
+   * write whose answer is lost is settled on the reply step it showed as (ADR 020), which such a
+   * session lacks, so only a Charm whose writes act on the hub's own records, each read back from
+   * them, offers its writes there, as the Summoning Charm does (ADR 034).
+   */
+  readonly writesOutsideChats?: boolean;
 }
 
 /**
@@ -266,6 +273,10 @@ export const charmsProblem = (charms: ReadonlyArray<Charm>): string | null => {
     }
     const problem = takeoverProblem(charm);
     if (problem !== null) return problem;
+    const unread = charm.tools.find((tool) => tool.effect === "write" && !Object.hasOwn(charm.readBacks, tool.name));
+    if (charm.writesOutsideChats === true && unread !== undefined) {
+      return `The ${charm.name} Charm offers its writes outside chats, but its tool ${unread.name} reads nothing back.`;
+    }
   }
   return hubToolNameProblem([
     ...BUILT_IN_HUB_TOOLS,
@@ -273,7 +284,10 @@ export const charmsProblem = (charms: ReadonlyArray<Charm>): string | null => {
   ]);
 };
 
-/** What a turn is offered of the Charms: with `writes` false, none of their writes. */
+/**
+ * What a turn is offered of the Charms: with `writes` false, none of their writes, but for a Charm
+ * that offers them outside chats.
+ */
 export interface CharmOffer {
   readonly writes?: boolean;
 }
@@ -321,7 +335,10 @@ export class Charms extends Context.Service<
           const run = within(charm);
           const hub = serve(turn);
           const writes = new Set(charm.tools.filter((tool) => tool.effect === "write").map((tool) => tool.name));
-          const tools = offer?.writes === false ? hub.tools.filter((tool) => !writes.has(tool.name)) : hub.tools;
+          const tools =
+            offer?.writes === false && charm.writesOutsideChats !== true
+              ? hub.tools.filter((tool) => !writes.has(tool.name))
+              : hub.tools;
           // A Charm steers the requests it takes over while it offers the turn any tool.
           const takeovers = (charm.takeovers ?? []).map(
             (takeover): Takeover => ({

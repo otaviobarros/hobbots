@@ -20,6 +20,7 @@ import {
   ROSTER_WITHDRAWN,
   readHobAnswer,
   renderRoster,
+  SUMMONING_HAND_OFF_LINE,
   splitRoster,
   startedRoster,
   turnRoster,
@@ -123,6 +124,20 @@ describe("the roster", () => {
     // A turn that does not hold read_hob is never pointed at it.
     expect(renderRoster([pip], new Set(), false)).not.toContain("read_hob");
     expect(renderRoster([], new Set(), true)).toBeNull();
+  });
+
+  // covers ADR 034 (Finding who can summon)
+  it("[TC-AG-412-08] tells a hob to hand summoning work to a hob listed with the Summoning Charm, and to ask when several are", () => {
+    const chief = card("chief", "Chief", {}, ["GitHub", "Summoning"]);
+    const text = renderRoster([chief, card("pip", "Pip", {}, ["GitHub"])], new Set(), true) ?? "";
+    expect(text).toContain(SUMMONING_HAND_OFF_LINE);
+    expect(SUMMONING_HAND_OFF_LINE).toContain("hand that work with delegate_task");
+    expect(SUMMONING_HAND_OFF_LINE).toContain("with ask and those hobs as the choices");
+    expect(text).toContain("Charms: GitHub, Summoning");
+    // The rule stays in the roster's label, so the roster still parts from the rest of a briefing.
+    expect(splitRoster(`Before\n\n${text}\n\nAfter`)).toEqual({ roster: text, rest: "Before\n\nAfter" });
+    // With no hob listed that holds it, there is nobody to hand it to, and nothing is said.
+    expect(renderRoster([card("pip", "Pip", {}, ["GitHub"])], new Set(), true)).not.toContain("Summoning");
   });
 
   // covers ADR 032 (The roster)

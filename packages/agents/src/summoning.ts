@@ -42,6 +42,7 @@ import {
   SUMMONING_CHANGE_TOOL,
   SUMMONING_CHARM,
   SUMMONING_CHARM_ID,
+  SUMMONING_CHARM_NAME,
   SUMMONING_CHECK_TOOL,
   SUMMONING_FIELD_WORDS,
   SUMMONING_SUMMON_TOOL,
@@ -992,18 +993,39 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
       );
     };
 
+    /** Whether `holds` for every hob the call's plan recorded, read from the hub's own records. */
+    const everyPlanned = (
+      call: CharmCall,
+      holds: (services: SummoningServices, id: AgentId) => Effect.Effect<boolean>,
+    ) =>
+      Effect.gen(function* () {
+        const services = yield* hub.services;
+        const { ids } = JSON.parse(call.plan) as { readonly ids: ReadonlyArray<AgentId> };
+        for (const id of ids) if (!(yield* holds(services, id))) return false;
+        return true;
+      });
+
+    /** Whether hob `id` has a configuration version that `call` made, since the call began. */
+    const madeByCall = (services: SummoningServices, id: AgentId, call: CharmCall) =>
+      Effect.gen(function* () {
+        const agent = yield* services.repo.findAgent(id);
+        if (Option.isNone(agent)) return false;
+        for (let version = agent.value.configVersion; version >= 1; version--) {
+          const config = yield* services.repo.findAgentConfig(id, version);
+          if (Option.isNone(config) || config.value.createdAt < call.createdAt) return false;
+          const { actor } = config.value;
+          if (actor._tag !== "You" && actor.hobId === call.agentId && actor.call.key === call.key) return true;
+        }
+        return false;
+      });
+
     const summon = hubAction({
       tool: tool("summoning_summon"),
       input: SummoningInputs.summoning_summon,
       effect: "write",
       otherwise: "no hob was summoned",
       readBack: (call: CharmCall) =>
-        Effect.gen(function* () {
-          const services = yield* hub.services;
-          const { ids } = JSON.parse(call.plan) as { readonly ids: ReadonlyArray<AgentId> };
-          for (const id of ids) if (Option.isNone(yield* services.repo.findAgent(id))) return false;
-          return true;
-        }),
+        everyPlanned(call, (services, id) => Effect.map(services.repo.findAgent(id), Option.isSome)),
       plan: (input, context) =>
         Effect.gen(function* () {
           const { services, manager } = yield* prepare(context);
@@ -1087,6 +1109,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
       input: SummoningInputs.summoning_change,
       effect: "write",
       otherwise: "no hob was changed",
+      // Each changed hob holds a version this call made, so the hub's own records say whether it landed.
+      readBack: (call: CharmCall) => everyPlanned(call, (services, id) => madeByCall(services, id, call)),
       plan: (input, context) =>
         Effect.gen(function* () {
           const { services, agents, manager } = yield* prepare(context);
@@ -1433,7 +1457,10 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
 
     return defineCharm({
       declaration: SUMMONING_CHARM,
-      name: "Summoning",
+      name: SUMMONING_CHARM_NAME,
+      // Every write acts on the hub's own records and reads back from them, so a manager working on a
+      // Task it was handed summons and changes hobs there too (ADR 034, Finding who can summon).
+      writesOutsideChats: true,
       actions,
       // Every operation the call names is decided, and the narrowest answer stands; a target wider
       // than the manager asks on every field, whatever the answers say (ADR 034).

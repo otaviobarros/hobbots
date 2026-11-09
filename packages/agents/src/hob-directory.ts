@@ -11,7 +11,10 @@ import {
   type RosterMark,
   RUNTIME_NAMES,
   readHobJsonSchema,
+  SUMMONING_CHARM_NAME,
+  type SummoningForEveryHob,
   starterRole,
+  withSummoningForEveryHob,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import type { AskableVerdict } from "./asking.ts";
@@ -19,6 +22,7 @@ import { clip, oneLine } from "./briefing.ts";
 import { Charms, type CharmTurn, DirectoryTools } from "./charms.ts";
 import { type HubActionsOptions, hubAction, offerHubActions } from "./hub-actions.ts";
 import { memoryBriefDigest } from "./memory-brief.ts";
+import { InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, ToolAccess } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
@@ -144,6 +148,16 @@ const CLOSING_INTRO = "Also on this hub, left out for space: ";
  */
 const READ_HOB_LINE = `${READ_HOB_TOOL} returns a hob's card by its name or id, and a card holds no more than the hob's line below. Answer questions about these hobs from this list. Read a card only when you are asked to, or for a hob this list leaves out.`;
 
+/**
+ * Who summons and changes hobs (ADR 034, Finding who can summon): only a hob that holds the Summoning
+ * Charm, so a hob without it hands that work over, and asks who should be responsible when several
+ * could be. Said only when the roster lists a hob that holds it.
+ */
+export const SUMMONING_HAND_OFF_LINE = `Only a hob that holds the ${SUMMONING_CHARM_NAME} Charm summons, changes, pauses, wakes or retires hobs. When you do not hold it, hand that work with delegate_task to a hob listed below with the ${SUMMONING_CHARM_NAME} Charm. When more than one is listed, first ask who should be responsible, with ask and those hobs as the choices.`;
+
+/** Whether the card's hob holds the Summoning Charm, connected. */
+const summons = (card: HobCard) => card.charms.includes(SUMMONING_CHARM_NAME);
+
 /** The closing line naming the hobs that did not fit, within its own budget, ending "and N more" past it. */
 const closingLine = (left: ReadonlyArray<HobCard>, shared: ReadonlySet<string>) => {
   const intro = CLOSING_INTRO;
@@ -169,7 +183,12 @@ export const renderRoster = (
   readHob: boolean,
 ): string | null => {
   if (cards.length === 0) return null;
-  const head = [ROSTER_HEADING, readHob ? `${DIRECTORY_LABEL} ${READ_HOB_LINE}` : DIRECTORY_LABEL].join("\n\n");
+  const label = [
+    DIRECTORY_LABEL,
+    ...(readHob ? [READ_HOB_LINE] : []),
+    ...(cards.some(summons) ? [SUMMONING_HAND_OFF_LINE] : []),
+  ];
+  const head = [ROSTER_HEADING, label.join(" ")].join("\n\n");
   const lines: Array<string> = [];
   let length = head.length + 1;
   for (const [index, card] of cards.entries()) {
@@ -227,11 +246,16 @@ export class HobDirectory extends Context.Service<
       const repo = yield* HobbotsRepository;
       const charms = yield* Effect.serviceOption(Charms);
       const registered = Option.isSome(charms) ? charms.value.charms : [];
+      // "Summoning for every hob" reaches the hobs you made (ADR 034), so the roster lists it on them.
+      const settings = yield* Effect.serviceOption(InstallationSettings);
+      const everyHob = Option.isSome(settings)
+        ? Effect.map(settings.value.get, (setup) => setup.summoningForEveryHob)
+        : Effect.succeed(null);
 
-      /** The display names of the Charms `agent` holds that are connected for it now. */
-      const charmsOf = (agent: Agent) =>
+      /** The display names of the Charms `agent` holds that are connected for it now, with `setting` applied. */
+      const charmsOf = (agent: Agent, setting: SummoningForEveryHob | null) =>
         Effect.filter(
-          registered.filter((charm) => holdsCharm(agent.policy, charm.declaration.id)),
+          registered.filter((charm) => holdsCharm(withSummoningForEveryHob(agent, setting), charm.declaration.id)),
           (charm) => {
             const connected = charm.connected(agent.id);
             return charm.context === undefined ? connected : Effect.provideContext(connected, charm.context);
@@ -239,9 +263,11 @@ export class HobDirectory extends Context.Service<
         ).pipe(Effect.map((held) => held.map((charm) => charm.name)));
 
       const cardsOf = (agents: ReadonlyArray<Agent>) =>
-        Effect.forEach(agents, (agent) => Effect.map(charmsOf(agent), (held) => hobCard(agent, held)), {
-          concurrency: "unbounded",
-        }).pipe(Effect.map((cards) => [...cards].sort(byRosterOrder)));
+        Effect.flatMap(everyHob, (setting) =>
+          Effect.forEach(agents, (agent) => Effect.map(charmsOf(agent, setting), (held) => hobCard(agent, held)), {
+            concurrency: "unbounded",
+          }),
+        ).pipe(Effect.map((cards) => [...cards].sort(byRosterOrder)));
 
       /** The names the reader's view shares: its own and every hob it sees. */
       const sharedIn = (agents: ReadonlyArray<Agent>, reader: AgentId) =>

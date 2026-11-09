@@ -135,6 +135,19 @@ describe("the Charm registry (ADR 031)", () => {
     expect(await offered(null)).toEqual([]);
     // A session with no reply to settle a write on is offered only the reads.
     expect(await offered(["pip"], false)).toEqual([["the Pip Charm", ["pip_read"]]]);
+    // A Charm whose every write reads back from the hub's own records offers its writes there too (ADR 034).
+    const outside = await Effect.gen(function* () {
+      const sets = yield* (yield* Charms).forTurn(turn(["pip"]), { writes: false });
+      return sets.map((each) => each.tools?.tools.map((t) => t.name) ?? []);
+    }).pipe(
+      Effect.provide(
+        Charms.layer([Effect.map(PIP, (pip) => ({ ...pip, writesOutsideChats: true }))]).pipe(
+          Layer.provide(memoryCharmCalls()),
+        ),
+      ),
+      Effect.runPromise,
+    );
+    expect(outside).toEqual([["pip_read", "pip_write"]]);
 
     // A call reaches the Charm that offers its tool, through the pipeline.
     const answers = await Effect.gen(function* () {
@@ -168,6 +181,13 @@ describe("the Charm registry (ADR 031)", () => {
     // A new Charm's tools are named `<charm>_<action>`.
     const misnamed = await registering([fakeCharm({ id: "rook", name: "Rook", read: "pip_read" })]);
     expect(misnamed).toContain("The Rook Charm's tool pip_read does not start with rook_.");
+    // Writes offered outside chats must each read back, since no reply step can settle them there.
+    const unread = await registering([
+      Effect.map(ROOK, (rook) => ({ ...rook, writesOutsideChats: true, readBacks: {} })),
+    ]);
+    expect(unread).toContain(
+      "The Rook Charm offers its writes outside chats, but its tool rook_write reads nothing back.",
+    );
     // A Charm may not take a built-in hub tool's name.
     const memory = await registering([fakeCharm({ id: "memory", name: "Memories", read: "memory_search" })]);
     expect(memory).toContain("The hub tool memory_search is offered by both Memory and the Memories Charm.");

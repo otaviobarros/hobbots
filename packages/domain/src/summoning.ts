@@ -26,6 +26,9 @@ import { ReplyLength, Voice } from "./tone.ts";
 
 export const SUMMONING_CHARM_ID = "summoning";
 
+/** The Charm's name, as the Charms tab and the roster of other hobs show it. */
+export const SUMMONING_CHARM_NAME = "Summoning";
+
 /** Every answer of the Charm's operations under every preset: Allow, narrowed by the defaults below. */
 const ALLOW = { careful: "allow", balanced: "allow", trusting: "allow" } as const;
 
