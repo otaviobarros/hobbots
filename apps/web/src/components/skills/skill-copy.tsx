@@ -7,7 +7,7 @@ import { useId, useState } from "react";
 import { skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
-import { agentsRootOf, folderName, projectName, skillsSearchOf, skillTitle, skillView } from "./skills-model.ts";
+import { agentsFolderLabel, agentsRootOf, projectName, skillsSearchOf, skillTitle, skillView } from "./skills-model.ts";
 import { useSkillWrites } from "./use-skill-writes.ts";
 
 const copy = messages;
@@ -107,7 +107,7 @@ export function SkillCopy({
                 copied.skill.name,
                 detail,
                 member,
-                agentsRootOf(detail.skill, list.sources) ?? folderName(null),
+                agentsRootOf(detail.skill, list) ?? agentsFolderLabel(null, null),
               ),
             },
             at,

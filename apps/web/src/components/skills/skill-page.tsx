@@ -48,8 +48,8 @@ export function SkillPage({
   }
   const { skill } = detail;
   const title = skillTitle(skill.name);
-  const folder = agentsFolderOf(skill, list.sources, detail.revisions);
-  const root = agentsRootOf(skill, list.sources);
+  const folder = agentsFolderOf(skill, list, detail.revisions);
+  const root = agentsRootOf(skill, list);
   return (
     <SkillLayout
       trail={[{ key: "skill", step: <span>{title}</span> }]}

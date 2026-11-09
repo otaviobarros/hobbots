@@ -357,7 +357,12 @@ export const SkillsList = Schema.Struct({
   assignments: Schema.Array(SkillAssignment),
   /** The projects a skill can be given to: those hobs work in now, and those the library already gives skills to. */
   projects: Schema.Array(MemoryProjectIdentity),
-  agentsFolder: Schema.Struct({ path: Schema.NullOr(Schema.String), problems: Schema.Array(AgentsFolderProblem) }),
+  agentsFolder: Schema.Struct({
+    path: Schema.NullOr(Schema.String),
+    /** The hub user's home folder, so a folder inside it can be shown as `~/…` and any other one in full. */
+    home: Schema.NullOr(Schema.String),
+    problems: Schema.Array(AgentsFolderProblem),
+  }),
   /** How often hobs used each skill in the last seven days; a skill nobody used is left out. */
   usesThisWeek: Schema.Array(Schema.Struct({ skillId: SkillId, count: Schema.Int })),
   /** Each set in the library (ADR 029, Skill sets), with the skills its newest revision holds. */

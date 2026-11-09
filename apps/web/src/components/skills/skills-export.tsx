@@ -8,7 +8,7 @@ import { useId, useState } from "react";
 import { exportSkills, skillsErrorTag } from "../../api/skills.ts";
 import { messages } from "./messages.ts";
 import type { Say } from "./skills-flash.ts";
-import { exportRows, folderName, type HobDirectory, skillTitle } from "./skills-model.ts";
+import { agentsFolderLabel, exportRows, type HobDirectory, skillTitle } from "./skills-model.ts";
 import { RevTag, ScopeTag, SkillsIcon } from "./skills-parts.tsx";
 
 const copy = messages;
@@ -48,7 +48,7 @@ function NotExported({ skills, folder }: { skills: ReadonlyArray<Skill>; folder:
 export function SkillsExport({ list, hobs, say }: { list: SkillsList; hobs: HobDirectory; say: Say }) {
   const navigate = useNavigate();
   const { rows, notExported } = exportRows(list, hobs);
-  const folder = folderName(list.agentsFolder.path);
+  const folder = agentsFolderLabel(list.agentsFolder.path, list.agentsFolder.home);
   const [off, setOff] = useState<ReadonlySet<SkillId>>(() => new Set());
   const [assignments, setAssignments] = useState(true);
   const [failure, setFailure] = useState<string | null>(null);

@@ -111,7 +111,9 @@ function Origin({ detail, list, folder }: { detail: SkillDetail; list: SkillsLis
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-detail">
         <dt className="text-label">{copy.skill.sourceLabel}</dt>
         <dd className="m-0 break-words">
-          {folder === null ? originText(originOf(detail.skill.sourceId, list.sources)) : copy.agents.source({ folder })}
+          {folder === null
+            ? originText(originOf(detail.skill.sourceId, list.sources), list.agentsFolder.home)
+            : copy.agents.source({ folder })}
         </dd>
         {folder !== null && (
           <>
@@ -171,7 +173,7 @@ export function SkillAside({
   active: ReadonlyArray<Agent>;
   say: Say;
 }) {
-  const folder = agentsFolderOf(detail.skill, list.sources, detail.revisions);
+  const folder = agentsFolderOf(detail.skill, list, detail.revisions);
   return (
     <aside aria-label={copy.skill.aside} className="flex w-[280px] flex-none flex-col gap-4">
       <MemoryCard label={copy.skill.actions}>
@@ -190,7 +192,7 @@ export function SkillAside({
           <SkillRemove detail={detail} hobs={hobs} say={say} />
         ) : (
           <span className="text-detail text-text-secondary">
-            {copy.agents.noEdit({ folder: agentsRootOf(detail.skill, list.sources) ?? "" })}
+            {copy.agents.noEdit({ folder: agentsRootOf(detail.skill, list) ?? "" })}
           </span>
         )}
       </MemoryCard>

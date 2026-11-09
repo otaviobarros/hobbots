@@ -16,12 +16,12 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
+  agentsFolderLabel,
   agentsFolderOf,
   descriptionState,
   draftingHobs,
   exportRows,
   fileChanges,
-  folderName,
   importable,
   instructionsOf,
   libraryGroups,
@@ -82,7 +82,7 @@ const list = (overrides: Partial<SkillsList> = {}): SkillsList => ({
   sources: [],
   assignments: [],
   projects: [],
-  agentsFolder: { path: null, problems: [] },
+  agentsFolder: { path: null, home: null, problems: [] },
   usesThisWeek: [],
   sets: [],
   ...overrides,
@@ -160,7 +160,7 @@ describe("the library by scope", () => {
     const [group] = libraryGroups(list({ skills: [skill("s1", "a", "A.", hash(1), 1, "g")], sources }), hobs);
     expect(originText(group?.rows[0]?.origin ?? null)).toBe("github.com/acme/skills · v1.4.0");
     expect(originText(null)).toBe("Written in Hobbots");
-    expect(originText({ _tag: "AgentsFolder", path: "/home/me/.agents/skills" })).toBe("~/.agents/skills");
+    expect(originText({ _tag: "AgentsFolder", path: "/home/me/.agents/skills" }, "/home/me")).toBe("~/.agents/skills");
   });
 
   // covers ADR 029 (Skill sets), #1143
@@ -311,24 +311,28 @@ describe("Export skills", () => {
       addedAt: AT,
     });
     const pdf = skill("s1", "pdf-forms", "Forms", hash(1), 1, "agents");
-    expect(agentsFolderOf(pdf, [agents], [{ path: "pdf" }])).toBe("~/.agents/skills/pdf");
-    expect(agentsFolderOf(pdf, [agents])).toBe("~/.agents/skills/pdf-forms");
-    expect(agentsFolderOf(skill("s2", "mine", "Mine"), [agents])).toBeNull();
+    const listed = { sources: [agents], agentsFolder: { home: "/home/me" } };
+    expect(agentsFolderOf(pdf, listed, [{ path: "pdf" }])).toBe("~/.agents/skills/pdf");
+    expect(agentsFolderOf(pdf, listed)).toBe("~/.agents/skills/pdf-forms");
+    expect(agentsFolderOf(skill("s2", "mine", "Mine"), listed)).toBeNull();
   });
 
   // covers ADR 029 (~/.agents/skills), #1220
-  it("names the folder HOBBOTS_AGENTS_SKILLS set instead of ~/.agents/skills, with the home folder as ~", () => {
-    const shared = new SkillSource({
-      id: SkillSourceId.make("agents"),
-      origin: { _tag: "AgentsFolder", path: "/Users/me/team-skills/" },
-      addedAt: AT,
-    });
+  it("names the folder HOBBOTS_AGENTS_SKILLS set, as ~ only when it is inside the hub user's own home", () => {
+    const at = (path: string) =>
+      new SkillSource({ id: SkillSourceId.make("agents"), origin: { _tag: "AgentsFolder", path }, addedAt: AT });
     const pdf = skill("s1", "pdf-forms", "Forms", hash(1), 1, "agents");
-    expect(agentsFolderOf(pdf, [shared])).toBe("~/team-skills/pdf-forms");
-    expect(originText(shared.origin)).toBe("~/team-skills");
-    expect(folderName("/srv/skills")).toBe("/srv/skills");
-    expect(folderName("/home/me")).toBe("~");
-    expect(folderName(null)).toBe("~/.agents/skills");
+    const listed = (path: string, home: string | null) => ({ sources: [at(path)], agentsFolder: { home } });
+    expect(agentsFolderOf(pdf, listed("/Users/alice/team-skills/", "/Users/alice"))).toBe("~/team-skills/pdf-forms");
+    expect(agentsFolderOf(pdf, listed("/Users/Shared/team-skills", "/Users/alice"))).toBe(
+      "/Users/Shared/team-skills/pdf-forms",
+    );
+    expect(agentsFolderOf(pdf, listed("/Users/bob/skills", "/Users/alice"))).toBe("/Users/bob/skills/pdf-forms");
+    expect(agentsFolderOf(pdf, listed("/Users/alice2/skills", "/Users/alice"))).toBe("/Users/alice2/skills/pdf-forms");
+    expect(agentsFolderOf(pdf, listed("/home/me/skills", null))).toBe("/home/me/skills/pdf-forms");
+    expect(agentsFolderLabel("/Users/alice", "/Users/alice/")).toBe("~");
+    expect(agentsFolderLabel("/srv/skills", "/Users/alice")).toBe("/srv/skills");
+    expect(agentsFolderLabel(null, "/Users/alice")).toBe("~/.agents/skills");
   });
 
   // covers ADR 029 (The use line), #1220

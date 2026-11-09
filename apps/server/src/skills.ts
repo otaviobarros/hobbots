@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import {
   announcer,
@@ -129,7 +130,7 @@ const NO_SKILLS = {
   sources: [],
   assignments: [],
   projects: [],
-  agentsFolder: { path: null, problems: [] },
+  agentsFolder: { path: null, home: null, problems: [] },
   usesThisWeek: [],
   sets: [],
 };
@@ -339,6 +340,7 @@ export const SkillsHandlers = HttpApiBuilder.group(HobbotsApi, "skills", (handle
         projects: yield* projectsNow(assignments),
         agentsFolder: {
           path: Option.isSome(agentsFolder) ? agentsFolder.value.path : null,
+          home: homedir(),
           problems: problems.map((problem) => ({
             folder: problem.folder,
             check: problem.refusal?.check ?? null,

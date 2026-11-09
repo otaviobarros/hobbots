@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
@@ -120,7 +120,7 @@ describe("skills routes", () => {
     const listed = await request("GET", "/api/skills");
     expect(listed.status).toBe(200);
     expect(listed.body.skills.map((skill: { name: string }) => skill.name)).toEqual(["shared"]);
-    expect(listed.body.agentsFolder).toEqual({ path: agentsFolder, problems: [] });
+    expect(listed.body.agentsFolder).toEqual({ path: agentsFolder, home: homedir(), problems: [] });
     const shared = await request("GET", `/api/skills/${listed.body.skills[0].id}`);
     expect(shared.body.assignments.map((one: { scope: unknown }) => one.scope)).toEqual([{ _tag: "Everyone" }]);
 

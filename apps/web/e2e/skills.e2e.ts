@@ -327,8 +327,9 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
   const home = emptyDataDir();
   mkdirSync(join(home, "Downloads"), { recursive: true });
   hub = await startHub(dataDir, { HOME: home, HOBBOTS_AGENTS_SKILLS: agents });
-  // The page names the folder HOBBOTS_AGENTS_SKILLS set, not ~/.agents/skills (#1220).
-  const shown = agents.replace(/^\/(?:Users|home)\/[^/]+/, "~");
+  // The page names the folder HOBBOTS_AGENTS_SKILLS set, not ~/.agents/skills, and in full, since it is
+  // outside the hub user's home (#1220).
+  const shown = agents;
   try {
     await page.goto(`${hub.url}/#/skills`);
     const main = page.getByRole("main", { name: "Skills" });

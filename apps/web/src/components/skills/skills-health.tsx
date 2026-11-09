@@ -8,7 +8,7 @@ import { skillHealthQuery } from "../../api/skill-trials.ts";
 import { MemoryCard } from "../memory/memory-parts.tsx";
 import { messages } from "./messages.ts";
 import { type HealthItem, healthItems, loadRows } from "./skills-health-model.ts";
-import { folderName, type HobDirectory, skillsSearchOf } from "./skills-model.ts";
+import { agentsFolderLabel, type HobDirectory, skillsSearchOf } from "./skills-model.ts";
 
 const copy = messages;
 
@@ -26,7 +26,7 @@ function Dot({ tone }: { tone: "warn" | "info" }) {
 
 /** What `~/.agents/skills` held that was not added, and why. */
 function AgentsProblems({ list }: { list: SkillsList }) {
-  const where = folderName(list.agentsFolder.path);
+  const where = agentsFolderLabel(list.agentsFolder.path, list.agentsFolder.home);
   return list.agentsFolder.problems.map((problem) => (
     <li key={problem.folder} className="flex items-start gap-2.5 px-1 py-1.5">
       <Dot tone="warn" />
