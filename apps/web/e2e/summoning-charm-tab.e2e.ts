@@ -191,3 +191,49 @@ test("[TC-AG-410-03] says when your hobs cannot be read for the hobs you pick, a
   await every.getByRole("button", { name: "Add a hob" }).click();
   await expect(page.getByRole("menuitem", { name: "Pip" })).toBeVisible();
 });
+
+// covers AG-002, ADR 034 (Limits for unattended summons)
+test("[TC-AG-410-04] shows the live hobs a hob summoned without asking against its caps, and frees a place when one retires", async ({
+  page,
+}) => {
+  const current = await startHub(dataDir, {
+    HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_HOB: "2",
+    HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_TREE: "5",
+  });
+  hub = current;
+  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const chief = await summon(current, "Chief");
+  // Chief summons without asking you.
+  await api(current, "PATCH", `/api/agents/${chief.id}/permissions`, {
+    charms: { granted: ["summoning"], overrides: { "summoning.summon": "allow" } },
+  });
+
+  await page.goto(`${current.url}/#/hobs/${chief.id}/profile`);
+  await page.getByRole("tab", { name: "Charms" }).click();
+  const caps = page.getByRole("region", { name: "Summoned without asking you" });
+  await expect(caps).toContainText("0 of 2");
+  await expect(caps).toContainText("Up to 5 in each Task tree");
+
+  // A summon that runs without a card takes a place.
+  await page.goto(`${current.url}/#/hobs/${chief.id}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Chief/ });
+  await composer.fill(
+    `Hire a writer\nfake:hub summoning_summon ${JSON.stringify({ key: "hire-flo", hobs: [{ name: "Flo", role: "writer" }] })}`,
+  );
+  await composer.press("Enter");
+  await expect
+    .poll(async () => (await api<ReadonlyArray<{ id: string; name: string }>>(current, "GET", "/api/agents")).length, {
+      timeout: 20_000,
+    })
+    .toBe(2);
+  await page.goto(`${current.url}/#/hobs/${chief.id}/profile`);
+  await page.getByRole("tab", { name: "Charms" }).click();
+  await expect(caps).toContainText("1 of 2");
+
+  // Retiring it frees its place, and the tab hears of it while it stays open.
+  const hobs = await api<ReadonlyArray<{ id: string; name: string }>>(current, "GET", "/api/agents");
+  const flo = hobs.find((hob) => hob.name === "Flo");
+  if (flo === undefined) throw new Error("Flo was not summoned");
+  await api(current, "POST", `/api/agents/${flo.id}/retire`, { activeWork: "finish" });
+  await expect(caps).toContainText("0 of 2");
+});

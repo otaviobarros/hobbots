@@ -31,6 +31,14 @@ export const messages = {
     saveFailed: "Hobbots could not save that change. Try again.",
     readFailed: "Hobbots could not read Summoning for every hob.",
   },
+  caps: {
+    heading: "Summoned without asking you",
+    live: ({ name }: { name: string }) => `Live hobs ${name} summoned without asking`,
+    count: ({ live, cap }: { live: number; cap: number }) => `${live} of ${cap}`,
+    tree: ({ cap }: { cap: number }) => `Up to ${cap} in each Task tree, counting every hob that summons for it.`,
+    note: "At a limit, the next summon asks you first. Hobs you approve never count, and retiring one frees its place.",
+    failed: ({ name }: { name: string }) => `Hobbots could not read how many hobs ${name} summoned without asking.`,
+  },
   scope: {
     summoned: "Hobs it summoned",
     summonedNote: ({ name }: { name: string }) => `Change, pause and retire the hobs ${name} summoned.`,
