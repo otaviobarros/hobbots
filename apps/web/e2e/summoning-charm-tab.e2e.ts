@@ -237,3 +237,46 @@ test("[TC-AG-410-04] shows the live hobs a hob summoned without asking against i
   await api(current, "POST", `/api/agents/${flo.id}/retire`, { activeWork: "finish" });
   await expect(caps).toContainText("0 of 2");
 });
+
+// covers AG-002, STD-REACT-015
+test("[TC-AG-410-05] says when the caps cannot be read, at first and on a later read, and reads them again on Try again", async ({
+  page,
+}) => {
+  const current = await startHub(dataDir, { HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_HOB: "2" });
+  hub = current;
+  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const chief = await summon(current, "Chief");
+  await api(current, "PATCH", `/api/agents/${chief.id}/permissions`, { charms: { granted: ["summoning"] } });
+
+  // The caps fail until the stand-in is lifted.
+  const capsUrl = (url: URL) => url.pathname === `/api/agents/${chief.id}/summon-caps`;
+  const fail = () => page.route(capsUrl, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.clock.install();
+  await fail();
+  await page.goto(`${current.url}/#/hobs/${chief.id}/profile`);
+  await page.getByRole("tab", { name: "Charms" }).click();
+  const caps = page.getByRole("region", { name: "Summoned without asking you" });
+  const failed = caps.getByRole("alert");
+  // The client asks again a few times before it gives up.
+  await expect(failed).toContainText("Hobbots could not read how many hobs Chief summoned without asking.", {
+    timeout: 20_000,
+  });
+  await expect(caps.getByRole("progressbar")).toBeHidden();
+
+  await page.unroute(capsUrl);
+  await caps.getByRole("button", { name: "Try again" }).click();
+  await expect(caps).toContainText("0 of 2");
+  await expect(failed).toBeHidden();
+
+  // A later read that fails says so under the count it read before, until Try again reads it.
+  await fail();
+  await page.clock.fastForward("01:00");
+  await page.getByRole("tab", { name: "Profile" }).click();
+  await page.getByRole("tab", { name: "Charms" }).click();
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expect(caps).toContainText("0 of 2");
+  await page.unroute(capsUrl);
+  await caps.getByRole("button", { name: "Try again" }).click();
+  await expect(failed).toBeHidden();
+  await expect(caps).toContainText("0 of 2");
+});
