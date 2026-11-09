@@ -145,7 +145,16 @@ function LimitsGroup({
             variant="quiet"
             size="xs"
             aria-disabled={pending}
-            onClick={() => !pending && onSave(DEFAULT_WEB_LIMITS, () => setTyped({}))}
+            onClick={() => {
+              if (pending) return;
+              // Reset drops the fields typed before it; one typed again while it saves stays.
+              const before = typed;
+              onSave(DEFAULT_WEB_LIMITS, () =>
+                setTyped((old) =>
+                  Object.fromEntries(Object.entries(old).filter(([key, value]) => before[key as LimitKey] !== value)),
+                ),
+              );
+            }}
           >
             {copy.reset}
           </Button>
@@ -213,7 +222,8 @@ function BlockedGroup({
           if (trimmed === "" || pending) return;
           // The site stays in the field until it is saved, so a failed save loses nothing.
           if (sites.includes(trimmed)) setSite("");
-          else onChange([...sites, trimmed], () => setSite(""));
+          // Cleared once saved, unless you typed another site while it saved.
+          else onChange([...sites, trimmed], () => setSite((now) => (now.trim() === trimmed ? "" : now)));
         }}
       >
         <Input

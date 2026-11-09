@@ -324,3 +324,46 @@ test("[TC-UX-1271-04] a web read that fails says so with Try again, and a save t
   await usage.getByRole("button", { name: "Try again" }).click();
   await expect(usage).toContainText("No hob searched or read a page in this time.");
 });
+
+/** Holds the next `method` request to `path` until the returned function is called, then lets it and the rest through. */
+const holding = async (page: Page, method: string, path: RegExp) => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(path, async (route) => {
+    if (route.request().method() === method) await gate;
+    return route.fallback();
+  });
+  return release;
+};
+
+// covers ADR 036 (Amendment: the screens), STD-REACT-016
+test("[TC-UX-1271-05] what you type while a save runs stays when that save ends", async ({ page }) => {
+  const { url } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
+  await page.goto(`${url}/#/settings/web`);
+  const pagesField = page.getByLabel("Pages read in one turn");
+  await pagesField.fill("12");
+  await pagesField.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+
+  // A site typed while the one before it saves stays in the field.
+  const siteSaved = await holding(page, "PUT", /\/api\/web\/settings$/);
+  const site = page.getByLabel("A site to block");
+  await site.fill("pastebin.com");
+  await page.getByRole("button", { name: "Block" }).click();
+  await site.fill("example.org");
+  siteSaved();
+  await expect(page.getByRole("list", { name: "Sites hobs never read" })).toContainText("pastebin.com");
+  await expect(site).toHaveValue("example.org");
+  await page.unrouteAll({ behavior: "wait" });
+
+  // A limit typed while Reset saves stays, and the others show the defaults.
+  const resetSaved = await holding(page, "PUT", /\/api\/web\/settings$/);
+  await page.getByRole("button", { name: "Reset to 10, 30 and 200" }).click();
+  const searchesField = page.getByLabel("Searches in one turn");
+  await searchesField.fill("7");
+  resetSaved();
+  await expect(pagesField).toHaveValue("30");
+  await expect(searchesField).toHaveValue("7");
+});
