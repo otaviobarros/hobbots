@@ -7,7 +7,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { dropDeletedPage } from "../../api/memory-pages.ts";
 import { changedPage, forgetDayLabel, localDay, suggestedForgetDay, versionRef } from "./memory-edit-model.ts";
-import { type MemoryView, memorySearchOf, pageTitle } from "./memory-model.ts";
+import { type MemoryView, memorySearchOf } from "./memory-model.ts";
 import { MemoryCard } from "./memory-parts.tsx";
 import { messages } from "./messages.ts";
 import { failureFlash, type MemoryFlash, type MemoryWrites } from "./use-memory-writes.ts";
@@ -71,10 +71,7 @@ export function MemoryActions({ read, writes, say }: { read: MemoryPageRead; wri
     writes.remove.mutate(versionRef(page.scope, page.path, page.version), {
       onSuccess: ({ restoreFrom }) => {
         const undo = restoreFrom === null ? undefined : () => restore(page, restoreFrom, copy.actions.broughtBack);
-        say(
-          { tone: "done", message: copy.actions.deleted({ title: pageTitle(page.markdown, page.path) }), undo },
-          scopeView,
-        );
+        say({ tone: "done", message: copy.actions.deleted({ title: page.title }), undo }, scopeView);
         // Once the page has left the screen, what was read of it goes, so Back finds it gone.
         void navigate({ to: "/memory", search: memorySearchOf(scopeView) }).then(() =>
           dropDeletedPage(queryClient, versionRef(page.scope, page.path, page.version)),

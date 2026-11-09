@@ -77,6 +77,11 @@ export type MemoryForgetDay = typeof MemoryForgetDay.Type;
 export const MemoryPage = Schema.Struct({
   scope: MemoryScope,
   path: MemoryPath,
+  /**
+   * Its title as memory names it in every list: a title memory keeps beside the page, as a chat's
+   * summary has, or else its first `# ` heading, or else its file name.
+   */
+  title: Schema.String,
   markdown: Schema.String,
   tags: Schema.Array(Schema.String),
   pinned: Schema.Boolean,

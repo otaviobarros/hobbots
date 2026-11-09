@@ -23,7 +23,6 @@ import {
   keptInOf,
   memorySearchOf,
   pageBody,
-  pageTitle,
   scopeName,
   shownLines,
 } from "./memory-model.ts";
@@ -88,9 +87,7 @@ export function MemoryRead({
             <KindTag kind={kind} />
             {page.pinned && <PinnedTag />}
           </div>
-          <h2 className="m-0 font-heading text-[28px] leading-[34px] font-bold text-text-strong">
-            {pageTitle(page.markdown, page.path)}
-          </h2>
+          <h2 className="m-0 font-heading text-[28px] leading-[34px] font-bold text-text-strong">{page.title}</h2>
           <p className="m-0 text-ui text-text-secondary">{bylineOf(read, hobs, now)}</p>
           {page.forgetOn !== null && <ForgetNotice read={read} writes={writes} say={say} />}
         </header>

@@ -125,6 +125,8 @@ export const messages = {
     changedThis: ({ who }: { who: string }) => `${who} changed this`,
     wroteThis: "You wrote this",
     youChanged: "You changed this",
+    firstWritten: "First written",
+    changed: "Changed",
     someone: "Someone",
     showChanges: "Show changes",
     hideChanges: "Hide changes",

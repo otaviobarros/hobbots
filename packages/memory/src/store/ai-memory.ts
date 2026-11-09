@@ -18,7 +18,6 @@ import {
   MemoryVersion,
   type MemoryVersionChanges,
   memorySearchTerms,
-  memoryTitleOf,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
@@ -320,6 +319,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       const page: MemoryPage = {
         scope,
         path,
+        title: json.title,
         markdown: json.body_markdown,
         tags: json.frontmatter.tags ?? [],
         pinned: json.pinned,
@@ -544,7 +544,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           summaries.push({
             scope,
             path: page.path,
-            title: memoryTitleOf(page.path, page.markdown),
+            title: page.title,
             pinned: true,
             updatedAt: page.updatedAt,
           });

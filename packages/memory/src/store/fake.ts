@@ -43,6 +43,8 @@ const changedLines = (before: string, after: string): Array<MemoryChangedLine> =
 
 interface StoredVersion {
   readonly version: MemoryVersion;
+  /** The title kept beside the page, as a chat's summary has; null when its markdown names it. */
+  readonly title: string | null;
   readonly markdown: string;
   readonly tags: ReadonlyArray<string>;
   readonly pinned: boolean;
@@ -68,16 +70,23 @@ interface Session {
   readonly seen: Set<string>;
 }
 
-/** The fake's summary of a session: its first message as the title, then each item, as a model-free summary lists them. */
-const summaryOf = (sessionId: MemorySessionId, items: ReadonlyArray<MemoryCaptureItem>) => {
-  const first = items.find((item) => item.kind === "message")?.text.split("\n", 1)[0] ?? `Session ${sessionId}`;
-  return [
-    `# ${first}`,
+/**
+ * The fake's summary of a session, as a model-free summary writes it: its first message as the title,
+ * kept beside the page as the engine keeps it in frontmatter, and a body of each item, with no `# `
+ * heading of its own.
+ */
+const summaryOf = (sessionId: MemorySessionId, items: ReadonlyArray<MemoryCaptureItem>) => ({
+  title: items.find((item) => item.kind === "message")?.text.split("\n", 1)[0] ?? `Session ${sessionId}`,
+  markdown: [
+    "## Summary",
     "",
     ...items.map((item) => `- ${item.kind}: ${item.text.replace(/\s+/g, " ").trim()}`),
     "",
-  ].join("\n");
-};
+  ].join("\n"),
+});
+
+/** A version's title as the engine names it: the title kept beside it, its first `# ` heading, or its file name. */
+const titleOf = (path: MemoryPath, version: StoredVersion) => version.title ?? memoryTitleOf(path, version.markdown);
 
 const scopeKey = (scope: MemoryScope) => {
   switch (scope._tag) {
@@ -171,7 +180,7 @@ export const makeMemoryStoreFake = (): {
         {
           scope,
           path,
-          title: memoryTitleOf(path, latest.markdown),
+          title: titleOf(path, latest),
           pinned: latest.pinned,
           updatedAt: latest.writtenAt,
         },
@@ -182,7 +191,18 @@ export const makeMemoryStoreFake = (): {
     const current = currentOf(scope, path);
     if (current === undefined) return null;
     const { version, markdown, tags, pinned, forgetOn, author, writtenAt } = current;
-    return { scope, path, markdown, tags, pinned, forgetOn, version, author, updatedAt: writtenAt };
+    return {
+      scope,
+      path,
+      title: titleOf(path, current),
+      markdown,
+      tags,
+      pinned,
+      forgetOn,
+      version,
+      author,
+      updatedAt: writtenAt,
+    };
   };
 
   const store: MemoryStoreShape = {
@@ -275,6 +295,8 @@ export const makeMemoryStoreFake = (): {
       Effect.flatMap(up, () =>
         meets(latestOf(scope, draft.path), expected)
           ? append(scope, draft.path, {
+              // As the engine does, a page written again without a `# ` heading keeps the title it had.
+              title: /^# \S/m.test(draft.markdown) ? null : (latestOf(scope, draft.path)?.title ?? null),
               markdown: draft.markdown,
               tags: draft.tags,
               pinned: draft.pinned,
@@ -323,7 +345,7 @@ export const makeMemoryStoreFake = (): {
         if (session.seen.has(key)) return Effect.succeed(true);
         session.seen.add(key);
         return append(scope, path, {
-          markdown: summaryOf(sessionId, session.items),
+          ...summaryOf(sessionId, session.items),
           tags: [],
           pinned: false,
           forgetOn: null,
