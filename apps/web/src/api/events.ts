@@ -22,7 +22,6 @@ import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
-import { webChanged } from "./web.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import { applyHobChanges } from "./hob-changes.ts";
@@ -55,6 +54,7 @@ import {
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
 import { showUnread } from "./thread-reads.ts";
+import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
@@ -206,11 +206,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag:
-      | "TurnStopRequested"
-      | "TurnStopped"
-      | "TurnStarted"
-      | "TurnEnded";
+    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -228,6 +224,24 @@ type WebEvent = Extract<
 >;
 const isWebEvent = (event: HobbotsEvent): event is WebEvent => WEB_EVENTS.has(event._tag);
 
+/** Reads again what an event changed when it patches nothing itself; whether it was such an event. */
+const readAgain = (
+  queryClient: QueryClient,
+  event: HobbotsEvent,
+): event is WebEvent | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" }> => {
+  // A search or a page recorded, or Settings › Web or a hob's limits changed (ADR 036).
+  if (isWebEvent(event)) {
+    void webChanged(queryClient);
+    return true;
+  }
+  // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.
+  if (event._tag === "SkillUsed") {
+    void refreshSkillUses(queryClient);
+    return true;
+  }
+  return false;
+};
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
@@ -243,15 +257,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
-  if (isWebEvent(event)) {
-    void webChanged(queryClient);
-    return;
-  }
-  // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.
-  if (event._tag === "SkillUsed") {
-    void refreshSkillUses(queryClient);
-    return;
-  }
+  if (readAgain(queryClient, event)) return;
   if (applyReviewEvent(queryClient, event)) return;
   if (isMemoryEvent(event)) {
     applyMemoryEvent(queryClient, event);

@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { messages } from "../messages.ts";
 import { HobSummoning } from "../summoning-charm/hob-summoning.tsx";
-import { BuiltInCharms } from "../web/hob-web.tsx";
+import { BuiltInCharms } from "../web/built-in-charms.tsx";
 import { GitHubCharm } from "./github-charm.tsx";
 import { LoadFailed, useHobPermissions } from "./hob-permissions.tsx";
 

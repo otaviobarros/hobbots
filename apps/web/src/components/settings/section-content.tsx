@@ -7,6 +7,7 @@ import { ChangesLog } from "../hob-changes/changes-log.tsx";
 import type { ChangesSearch } from "../hob-changes/hob-changes-model.ts";
 import { WaitingDevices } from "../pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "../remote-access/remote-access-settings.tsx";
+import { WebSection } from "../web/settings-web.tsx";
 import { AboutSettings } from "./about-settings.tsx";
 import { AppearanceGroup } from "./appearance.tsx";
 import { ConnectionsSection } from "./connections-section.tsx";
@@ -35,6 +36,8 @@ export function SectionContent({
       return <ThisApp />;
     case "safety":
       return <SafetySection />;
+    case "web":
+      return <WebSection />;
     case "changes":
       return <ChangesLog search={changes} />;
     case "connections":

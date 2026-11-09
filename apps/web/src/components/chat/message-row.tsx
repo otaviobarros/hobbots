@@ -1,5 +1,5 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import { type Agent, isInProgress, type Message, type WebUsage } from "@hobbots/domain";
+import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -11,8 +11,7 @@ import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "../messages.ts";
 import { limitRefill, planOf, usePlans } from "../usage/plan-summary.ts";
-import { useReplyWeb } from "../web/reply-web.tsx";
-import { type ReplyWeb, shownAsWebLine } from "../web/web-model.ts";
+import { type ReplyWebParts, useReplyRowWeb } from "../web/reply-web.tsx";
 import { ReplySteps } from "./reply-steps.tsx";
 import { SettleCharmCall } from "./settle-charm-call.tsx";
 
@@ -48,12 +47,6 @@ export type ContinueReply = {
   readonly onContinue: () => void;
   readonly alternatives?: ReadonlyArray<{ readonly label: string; readonly onContinue: () => void }>;
 };
-
-/** What a reply searched and read, and every record of its chat, which its sheets read (ADR 036). */
-export interface ReplyWebParts {
-  readonly reply: ReplyWeb;
-  readonly usage: WebUsage | undefined;
-}
 
 /**
  * One message; `focused` marks the one a search result opened. A reply shows `children` under its
@@ -115,14 +108,7 @@ function ReplyRow({
 }) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
-  const searched = useReplyWeb({
-    web: web?.reply ?? { steps: [], sources: [] },
-    usage: web?.usage,
-    message,
-    hob,
-  });
-  // A search or a page that went through shows as its step line instead (ADR 036).
-  const steps = searched.lines === null ? message.steps : message.steps.filter((step) => !shownAsWebLine(step));
+  const { steps, ...searched } = useReplyRowWeb(web, message, hob);
   return (
     <article
       id={id}

@@ -5,7 +5,7 @@ import { hostOf, isWebFetchTool } from "./web-model.ts";
 const copy = messages.ask;
 
 /** Which web card an approval shows (ADR 036): a page on a new site, on your local network, or at an address the hob wrote. */
-export type WebAskKind = "site" | "local" | "written";
+type WebAskKind = "site" | "local" | "written";
 
 /** What an approval's card says when it asks about the web, or when it asks because its chat read the web. */
 export interface WebAsk {

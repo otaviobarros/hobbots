@@ -27,7 +27,7 @@ const words = (path: string) =>
     .trim();
 
 /** The page a fake site answers for `url`: its path as a title, a few paragraphs and two links. */
-export const fakePage = (url: URL, fetchedAt: string): WebPage => {
+const fakePage = (url: URL, fetchedAt: string): WebPage => {
   const topic = words(url.pathname) || url.hostname;
   const title = topic.charAt(0).toUpperCase() + topic.slice(1);
   const links = [

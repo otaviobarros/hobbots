@@ -34,7 +34,7 @@ export interface ReplyWeb {
 const NO_WEB: ReplyWeb = { steps: [], sources: [] };
 
 /** Whether a reply step is a call of `web_fetch`, under any runtime's name for hub tools. */
-export const isWebFetchStep = (step: ReplyStep): boolean => step.call !== undefined && isWebFetchTool(step.call.tool);
+const isWebFetchStep = (step: ReplyStep): boolean => step.call !== undefined && isWebFetchTool(step.call.tool);
 
 /** Whether a runtime's tool name is the hub's page tool, bare or behind its MCP server's prefix. */
 export const isWebFetchTool = (tool: string): boolean =>
@@ -139,6 +139,27 @@ const LINK = /^\d+\. (?:(.*): )?(https?:\/\/\S+)$/;
 const MORE_LINKS = /^… and (\d+) more on the page\.$/;
 
 /**
+ * The links at the end of an answer's body, after its last `Links:` line, and the body before them.
+ * A `Links:` line the page itself wrote, followed by anything but links, stays in the text.
+ */
+const linksOf = (body: ReadonlyArray<string>) => {
+  const at = body.lastIndexOf("Links:");
+  const tail = at === -1 ? [] : body.slice(at + 1);
+  if (at === -1 || !tail.every((line) => LINK.test(line) || MORE_LINKS.test(line))) {
+    return { links: [], moreLinks: 0, before: body };
+  }
+  const links: Array<{ text: string; url: string }> = [];
+  let moreLinks = 0;
+  for (const line of tail) {
+    const link = LINK.exec(line);
+    if (link !== null) links.push({ text: link[1] ?? "", url: link[2] ?? "" });
+    const more = MORE_LINKS.exec(line);
+    if (more !== null) moreLinks = Number(more[1]);
+  }
+  return { links, moreLinks, before: body.slice(0, at) };
+};
+
+/**
  * The parts of a `web_fetch` answer: the head lines (the outside-data line, Title, URL, Redirected
  * from, Fetched, the part and the mark's note), then the text, then the links on a first part.
  */
@@ -146,24 +167,14 @@ export const parsePageAnswer = (answer: string): PageAnswer => {
   const lines = answer.split("\n");
   const blank = lines.indexOf("");
   const head = blank === -1 ? lines : lines.slice(0, blank);
-  let rest = blank === -1 ? [] : lines.slice(blank + 1);
+  let rest: ReadonlyArray<string> = blank === -1 ? [] : lines.slice(blank + 1);
   const value = (name: string) => {
     const line = head.find((each) => each.startsWith(`${name}: `));
     return line === undefined ? null : line.slice(name.length + 2).trim();
   };
   const part = head.map((line) => PART.exec(line)).find((match) => match !== null);
-  const linksAt = rest.lastIndexOf("Links:");
-  let links: Array<{ text: string; url: string }> = [];
-  let moreLinks = 0;
-  if (linksAt !== -1 && rest.slice(linksAt + 1).every((line) => LINK.test(line) || MORE_LINKS.test(line))) {
-    for (const line of rest.slice(linksAt + 1)) {
-      const link = LINK.exec(line);
-      if (link !== null) links.push({ text: link[1] ?? "", url: link[2] ?? "" });
-      const more = MORE_LINKS.exec(line);
-      if (more !== null) moreLinks = Number(more[1]);
-    }
-    rest = rest.slice(0, linksAt);
-  } else links = [];
+  const { links, moreLinks, before } = linksOf(rest);
+  rest = before;
   const title = value("Title");
   const redirected = value("Redirected from");
   const text = rest.join("\n").trim();

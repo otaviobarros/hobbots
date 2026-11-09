@@ -1,4 +1,4 @@
-import { type ApprovalSurface, exactAction } from "@hobbots/domain";
+import type { ApprovalSurface } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -23,7 +23,7 @@ import { messages as questMessages } from "../quest/messages.ts";
 import { type HobLookup, useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { webAskOf } from "../web/web-ask.ts";
-import { WebAskNotes } from "../web/web-ask-parts.tsx";
+import { TrayAction } from "../web/web-ask-parts.tsx";
 import { Details } from "./details.tsx";
 import { HubQuestionBody } from "./hub-question-body.tsx";
 import { messages } from "./messages.ts";
@@ -198,20 +198,9 @@ function ApprovalBody({
   const decide = useDecideApproval(request, via);
   const area = useRef<HTMLDivElement>(null);
   const moveOn = useMoveOn();
-  const web = webAskOf(request, asker.name);
-  const page = web?.kind != null && web.url !== null ? web.url : null;
   return (
     <div ref={area} className="contents">
-      {page === null && <p className="m-0 text-text">{request.reason}</p>}
-      <div className="flex gap-2 rounded-tag bg-deep px-3 py-2 font-mono text-code">
-        {page === null && (
-          <span aria-hidden className="text-label">
-            $
-          </span>
-        )}
-        <code className="break-all whitespace-pre-wrap text-text-strong">{page ?? exactAction(request)}</code>
-      </div>
-      {web !== null && <WebAskNotes ask={web} name={asker.name} />}
+      <TrayAction request={request} name={asker.name} />
       <ApprovalActions
         approval={request}
         hob={asker}

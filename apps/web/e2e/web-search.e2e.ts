@@ -15,7 +15,7 @@ const shot = async (page: Page, name: string) => {
 };
 
 /** Puts the app in `theme`, as Settings › This app would. */
-const useTheme = async (page: Page, theme: string) => {
+const pickTheme = async (page: Page, theme: string) => {
   await page.evaluate((id) => localStorage.setItem("hobbots.theme", JSON.stringify(id)), theme);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -71,7 +71,7 @@ test("[TC-UX-1271-01] a reply that searched and read pages shows its steps, its 
   );
   await scan(pageSheet);
   for (const theme of THEMES) {
-    await useTheme(page, theme);
+    await pickTheme(page, theme);
     await page.getByRole("region", { name: "Sources" }).getByRole("button").first().click();
     await expect(page.getByRole("dialog")).toContainText("A page Aldric read");
     await shot(page, `chat-web-page--${theme}`);
@@ -97,7 +97,9 @@ test("[TC-UX-1271-02] a page on the local network and an address Aldric wrote as
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
-  await composer.fill(["Where are the launch images kept?", fetchPage("http://nas.hobbots.test/docs/shares")].join("\n"));
+  await composer.fill(
+    ["Where are the launch images kept?", fetchPage("http://nas.hobbots.test/docs/shares")].join("\n"),
+  );
   await composer.press("Enter");
 
   const local = page.getByRole("region", { name: "Aldric asks permission" });
@@ -112,7 +114,9 @@ test("[TC-UX-1271-02] a page on the local network and an address Aldric wrote as
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
   // The slashes are escaped, so the address is not in the message: Aldric wrote it.
-  await composer.fill('Check the stats\nfake:hub web_fetch {"url":"https:\\/\\/stats.hobbots.test\\/collect?from=you"}');
+  await composer.fill(
+    'Check the stats\nfake:hub web_fetch {"url":"https:\\/\\/stats.hobbots.test\\/collect?from=you"}',
+  );
   await composer.press("Enter");
   const written = page.getByRole("region", { name: "Aldric asks permission" }).last();
   await expect(written).toContainText("Aldric asks to open an address it wrote itself");
@@ -123,4 +127,102 @@ test("[TC-UX-1271-02] a page on the local network and an address Aldric wrote as
   await written.getByRole("button", { name: "Deny" }).click();
   await written.getByRole("button", { name: "Deny" }).last().click();
   await expect(written).toHaveAttribute("data-state", "denied");
+});
+
+// covers ADR 036 (Settings and Permissions, Usage and limits), UX-006
+test("[TC-UX-1271-03] Permissions, Charms, Settings › Web and Usage show the web in every theme", async ({
+  page,
+  scan,
+}) => {
+  test.setTimeout(180_000);
+  const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    ["Read the NAS docs", "fake:search gmail size limit", fetchPage("http://nas.hobbots.test/docs/shares")].join("\n"),
+  );
+  await composer.press("Enter");
+  // Always for this host saves a site rule for the NAS.
+  const local = page.getByRole("region", { name: "Aldric asks permission" });
+  await local.getByRole("button", { name: "Always for this host" }).click();
+  await local.getByRole("button", { name: "Save the rule and allow" }).click();
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+
+  // Permissions: the site rule and the limits, set for Aldric alone.
+  await page.goto(`${url}/#/hobs/${aldric}/profile?tab=permissions`);
+  const rules = page.getByRole("region", { name: "Site rules" });
+  await expect(rules.getByRole("listitem")).toHaveCount(1);
+  await expect(rules).toContainText("nas.hobbots.test");
+  const limits = page.getByRole("region", { name: "Web limits" });
+  await expect(limits).toContainText("10 searches and 30 pages a turn · 200 searches a day");
+  await expect(limits).toContainText("The same as every hob, from Settings › Web.");
+  await scan();
+  await limits.getByRole("button", { name: "Set for Aldric" }).click();
+  await limits.getByLabel("Searches in one turn").fill("4");
+  await limits.getByRole("button", { name: "Save limits" }).click();
+  await expect(limits).toContainText("4 searches and 30 pages a turn");
+  await expect(limits).toContainText("Only Aldric.");
+  for (const theme of THEMES) {
+    await pickTheme(page, theme);
+    await expect(page.getByRole("region", { name: "Site rules" })).toContainText("nas.hobbots.test");
+    await page.getByRole("region", { name: "Web limits" }).scrollIntoViewIfNeeded();
+    await shot(page, `hob-permissions-web--${theme}`);
+  }
+  await page.getByRole("region", { name: "Web limits" }).getByRole("button", { name: "Use Settings › Web" }).click();
+  await expect(page.getByRole("region", { name: "Web limits" })).toContainText("The same as every hob");
+  await page
+    .getByRole("region", { name: "Site rules" })
+    .getByRole("button", { name: "Remove the rule for nas.hobbots.test" })
+    .click();
+  await expect(page.getByRole("region", { name: "Site rules" })).toContainText("No site rules yet.");
+
+  // Charms: the two built in tools, with Aldric's runtime named.
+  await page.getByRole("tab", { name: "Charms" }).click();
+  const builtIn = page.getByRole("region", { name: "Built in" });
+  await expect(builtIn.getByRole("article")).toHaveCount(2);
+  await expect(builtIn.getByRole("article", { name: "Web search" })).toContainText("Search the web: Allow");
+  await scan(builtIn);
+  for (const theme of THEMES) {
+    await pickTheme(page, theme);
+    await page.getByRole("tab", { name: "Charms" }).click();
+    await page.getByRole("region", { name: "Built in" }).scrollIntoViewIfNeeded();
+    await shot(page, `hob-charms-web--${theme}`);
+  }
+
+  // Settings › Web: a limit, a blocked site and the page cache.
+  await page.goto(`${url}/#/settings/web`);
+  await expect(page.getByRole("heading", { name: "Web", level: 2 })).toBeVisible();
+  const pagesField = page.getByLabel("Pages read in one turn");
+  await pagesField.fill("12");
+  await pagesField.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  await page.getByLabel("A site to block").fill("pastebin.com");
+  await page.getByRole("button", { name: "Block" }).click();
+  await expect(page.getByRole("list", { name: "Sites hobs never read" })).toContainText("pastebin.com");
+  const cache = page.getByRole("region", { name: "Page cache" });
+  await expect(cache).toContainText("1 page cached");
+  await scan();
+  for (const theme of THEMES) {
+    await pickTheme(page, theme);
+    await expect(page.getByLabel("Pages read in one turn")).toHaveValue("12");
+    await shot(page, `settings-web--${theme}`);
+  }
+  await page.getByRole("region", { name: "Page cache" }).getByRole("button", { name: "Clear now" }).click();
+  await expect(page.getByRole("region", { name: "Page cache" })).toContainText("No pages cached");
+
+  // Usage: the period's searches and pages, by hob and by turn.
+  await page.goto(`${url}/#/usage`);
+  const usage = page.getByRole("region", { name: "Searches and pages" });
+  await expect(usage.getByRole("row")).toHaveCount(2);
+  await expect(usage.getByRole("row").nth(1)).toContainText("Aldric");
+  await expect(usage).toContainText("No extra cost");
+  await scan(usage);
+  for (const theme of THEMES) {
+    await pickTheme(page, theme);
+    await page.getByRole("region", { name: "Searches and pages" }).scrollIntoViewIfNeeded();
+    await shot(page, `usage-web--${theme}`);
+  }
+  await page.getByRole("region", { name: "Searches and pages" }).getByRole("radio", { name: "Busiest turns" }).click();
+  await expect(page.getByRole("region", { name: "Searches and pages" })).toContainText("Read the NAS docs");
+  await shot(page, "usage-web-turns");
 });

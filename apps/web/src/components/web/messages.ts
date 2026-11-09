@@ -202,7 +202,7 @@ export const messages = {
     blockLabel: "A site to block",
     block: "Block",
     remove: "Remove",
-    removeLabel: ({ site }: { site: string }) => `Stop blocking ${site}`,
+    removeLabel: ({ site }: { site: string }) => `Remove ${site} from the blocked sites`,
     blockedNote:
       "Blocking covers the site and every subdomain. A search can still list these sites, because the search runs at Anthropic or OpenAI, but a hob can't open them.",
     leaves: "What leaves your computer",
