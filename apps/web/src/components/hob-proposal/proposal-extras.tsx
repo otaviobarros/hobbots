@@ -1,6 +1,7 @@
 import type { AgentId, CharmOperationId, HobProposal, HobProposalRow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
+import { Array as Arr } from "effect";
 import type { HobProposalDecision } from "../../api/hob-proposals.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { alwaysOffers, createdHobs, operationWords, rowDraft, rowLook, summonFacts } from "./hob-proposal-model.ts";
@@ -22,10 +23,10 @@ export function AlwaysAllow({
 }) {
   const offers = alwaysOffers(proposal);
   const set = proposal.alwaysAllowed;
-  if (offers.length === 0 && set.length === 0) return null;
+  if (!Arr.isReadonlyArrayNonEmpty(offers) && set.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      {offers.length > 0 && (
+      {Arr.isReadonlyArrayNonEmpty(offers) && (
         <>
           <div className="flex flex-wrap gap-2">
             {offers.map((operation: CharmOperationId) => (
@@ -33,12 +34,23 @@ export function AlwaysAllow({
                 key={operation}
                 size="sm"
                 variant="outline"
-                onClick={() => onDecide({ _tag: "alwaysAllow", operation })}
+                onClick={() => onDecide({ _tag: "alwaysAllow", operations: [operation] })}
                 disabled={busy}
               >
                 {copy.alwaysAllow({ words: operationWords(operation) })}
               </Button>
             ))}
+            {/* Every field that asked, in one change, when more than one did. */}
+            {offers.length > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onDecide({ _tag: "alwaysAllow", operations: offers })}
+                disabled={busy}
+              >
+                {copy.alwaysAllowAll}
+              </Button>
+            )}
           </div>
           <span className="text-meta text-label">{copy.alwaysHint({ who })}</span>
         </>

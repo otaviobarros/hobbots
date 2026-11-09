@@ -1,7 +1,7 @@
 import type { HobProposalView } from "@hobbots/api";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import {
   type HobProposalDecision,
@@ -42,12 +42,15 @@ export function HobProposalCard({
   view,
   who,
   heading = false,
+  bare = false,
 }: {
   view: HobProposalView;
   /** The manager's name. */
   who: string;
   /** Shows what the proposal asks above it, as the chat does; the Inbox has it as its title. */
   heading?: boolean;
+  /** In the Needs-you tray: no edge or label of its own, since the tray gives both. */
+  bare?: boolean;
 }) {
   const { proposal, changedSince } = view;
   const decide = useDecideHobProposal(proposal.id);
@@ -59,12 +62,7 @@ export function HobProposalCard({
   const pending = proposal.rows.filter((row) => row.state === "pending");
   const what = hobProposalWhat(proposal, who);
   return (
-    <section
-      aria-label={copy.cardLabel({ what })}
-      data-testid="hob-proposal"
-      data-state={proposal.state}
-      className="flex flex-col gap-3 rounded-card border border-line-2 bg-card p-3"
-    >
+    <ProposalFrame label={copy.cardLabel({ what })} state={proposal.state} bare={bare}>
       {heading && <h3 className="m-0 text-ui font-semibold text-text-strong">{what}</h3>}
       {proposal.safety !== null && open && (
         <p className="m-0 text-detail text-lantern">{copy.safety({ reason: proposal.safety })}</p>
@@ -110,15 +108,53 @@ export function HobProposalCard({
           {errorText(decide.error)}
         </p>
       )}
+    </ProposalFrame>
+  );
+}
+
+/** The card's own edge and name, or, in the tray, only its column. */
+function ProposalFrame({
+  label,
+  state,
+  bare,
+  children,
+}: {
+  label: string;
+  state: string;
+  bare: boolean;
+  children: ReactNode;
+}) {
+  if (bare) {
+    return (
+      <div data-testid="hob-proposal" data-state={state} className="flex flex-col gap-3">
+        {children}
+      </div>
+    );
+  }
+  return (
+    <section
+      aria-label={label}
+      data-testid="hob-proposal"
+      data-state={state}
+      className="flex flex-col gap-3 rounded-card border border-line-2 bg-card p-3"
+    >
+      {children}
     </section>
   );
 }
 
-/** The card on a Summoning call's step in the chat, read by its proposal's id. */
+/**
+ * On a Summoning call's step in the chat: while the proposal waits, one line pointing to the Needs-you
+ * tray above the composer, where you decide it (one place asks for you); once decided, the card with
+ * what came of each row and the hobs it made.
+ */
 export function HobProposalStep({ proposalId, who }: { proposalId: string; who: string }) {
   const view = useQuery(hobProposalQuery(proposalId));
   if (view.isPending) return <p className="m-0 ps-5.5 text-meta text-label">{copy.loading}</p>;
   if (view.isError) return <p className="m-0 ps-5.5 text-meta text-rose">{copy.loadFailed}</p>;
+  if (view.data.proposal.state === "open") {
+    return <p className="m-0 ps-5.5 text-meta text-lantern">{copy.inTray}</p>;
+  }
   return (
     <div className="ps-5.5 pt-1">
       <HobProposalCard view={view.data} who={who} heading />

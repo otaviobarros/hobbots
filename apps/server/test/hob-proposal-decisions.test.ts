@@ -117,7 +117,7 @@ describe("deciding a hob proposal", () => {
         revoked = true;
         const allowed = yield* Effect.exit(proposals.allow(proposal.id, "1", {}));
         const all = yield* Effect.exit(proposals.allowAll(proposal.id, {}));
-        const always = yield* Effect.exit(proposals.alwaysAllow(proposal.id, "summoning.summon"));
+        const always = yield* Effect.exit(proposals.alwaysAllow(proposal.id, ["summoning.summon"]));
         const denied = yield* Effect.exit(proposals.denyAll(proposal.id));
         revoked = false;
         for (const exit of [allowed, all, always, denied]) {

@@ -65,9 +65,10 @@ test("[TC-UX-409-01] a summon card in the chat and the Inbox: Deny one row, Edit
   await composer.fill(summon("hire-trio", ["Flo", "Gus", "Hedda"]));
   await composer.press("Enter");
 
-  // The card waits on the call's step in the chat.
-  const inChat = page.getByRole("region", { name: "Bram proposes 3 new hobs" });
+  // The card waits in the Needs-you tray above the composer; the call's step points to it.
+  const inChat = page.locator("[data-tray]").getByRole("region", { name: "Bram proposes 3 new hobs" });
   await expect(inChat).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Decide it in Needs you, above the reply box.")).toBeVisible();
   const rowsInChat = inChat.getByRole("list", { name: "Hobs" });
   await expect(rowsInChat.getByRole("article")).toHaveCount(3);
   await expectAccessible(page, inChat);
@@ -202,4 +203,37 @@ test("[TC-UX-409-03] a summon proposal is decided by keyboard alone: open it fro
   await tabTo(page, card.getByRole("region", { name: "Created" }).getByRole("link", { name: "Open Ivo" }), 200);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main", { name: "Ivo's profile" })).toBeVisible();
+});
+
+// covers ADR 034 ("Always allow" for every field that asked), the design system (one place asks for you)
+test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields on one line each, and Always allow all sets every field that asked", async ({
+  page,
+}) => {
+  const { url, api, bram } = await managerHub();
+  await api("PATCH", `/agents/${bram.id}/permissions`, {
+    charms: { summoning: { summoned: true, hobs: [], self: true } },
+  });
+  const thread = await api("POST", `/agents/${bram.id}/threads`);
+  const call = { key: "tidier", changes: [{ hob: "Bram", good_at: "Tidy notes.", instructions: "Be tidy." }] };
+  await api("POST", `/threads/${thread.id}/messages`, {
+    content: `Tidy up\nfake:hub summoning_change ${JSON.stringify(call)}`,
+  });
+  await page.goto(`${url}/#/hobs/${bram.id}/threads/${thread.id}`);
+
+  const card = page.locator("[data-tray]").getByRole("region", { name: "Bram proposes changes to itself" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  // Each field's name stays on one line, however narrow its column.
+  const label = card.getByRole("rowheader", { name: "Good at" });
+  const box = await label.boundingBox();
+  const lineHeight = await label.evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight));
+  expect(box?.height ?? 0).toBeLessThan(lineHeight * 1.5 + 4);
+  await expectAccessible(page, card);
+
+  await card.getByRole("button", { name: "Always allow all of these" }).click();
+  await expect(card.getByRole("status")).toContainText("to Allow for Bram");
+  await expect(card.getByRole("button", { name: /^Always allow/ })).toHaveCount(0);
+  await card.getByRole("button", { name: "Allow", exact: true }).click();
+  await expect(page.locator("[data-tray]")).toHaveCount(0, { timeout: 20_000 });
+  const settled = page.getByRole("region", { name: "Bram proposes changes to itself" });
+  await expect(settled.getByRole("article", { name: "Bram" })).toHaveAttribute("data-state", "allowed");
 });
