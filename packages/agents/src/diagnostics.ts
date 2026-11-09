@@ -190,6 +190,8 @@ export interface ReportInput {
   readonly skills: ReadonlyArray<DiagnosticsHobSkills>;
   readonly trace: QuestTrace | null;
   readonly includeTitles: boolean;
+  /** Web search's limits and counts (ADR 036), on a hub that records them. */
+  readonly web?: DiagnosticsReport["web"];
 }
 
 /** Whether a runtime is signed in, as far as its health says; null when it cannot tell. */
@@ -294,6 +296,7 @@ export const allowlistedReport = (input: ReportInput): DiagnosticsReport =>
     stalled: input.stalled,
     recovery: input.recovery,
     skills: input.skills,
+    ...(input.web === undefined ? {} : { web: input.web }),
     quest: input.trace === null ? null : reportQuest(input.trace, input.includeTitles),
   }) as DiagnosticsReport;
 

@@ -99,6 +99,7 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
   WebFoundUrlsLive,
+  WebRecordsLive,
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
@@ -326,6 +327,7 @@ const ServerLive = Layer.unwrap(
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
       WebFoundUrlsLive,
+      WebRecordsLive,
       RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,

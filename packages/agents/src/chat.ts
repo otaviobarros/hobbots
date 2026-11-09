@@ -50,7 +50,7 @@ import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Re
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing, contextBlock } from "./briefing.ts";
-import { type CharmTurn, hubToolOffer, joinHubTools } from "./charms.ts";
+import { type CharmTurn, hubToolOffer, joinHubTools, type WebRecordPlace } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { deliveredRoster, rosterAtStart, sameRoster, turnRoster } from "./hob-directory.ts";
@@ -85,7 +85,8 @@ import { callScope, TaskRepository } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows, turnWebSearch } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
-import { makeWebProvenance } from "./web-fetch.ts";
+import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
+import { type WebSearchTurn, webSearchRequest, webSearchTurn } from "./web-usage.ts";
 import { workHeld } from "./work-hold.ts";
 
 interface Reply {
@@ -198,6 +199,34 @@ const brainFor = (thread: Thread, config: AgentConfiguration): Brain =>
   thread.brain ?? { runtime: config.runtime, model: config.model, effort: config.effort };
 
 const sameOwnBrain = (a: Brain | null, b: Brain | null) => (a === null || b === null ? a === b : sameBrain(a, b));
+
+/** A chat turn's web search, recorded for its hob, chat and reply, and the Task and Attempt it works on (ADR 036). */
+const chatWebTurn = (
+  agentId: AgentId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  runtime: RuntimeKind,
+  taskTurn: ChatTaskTurn | null,
+  workingOn: Effect.Effect<TaskId | null>,
+) =>
+  webSearchTurn({
+    agentId,
+    messageId,
+    runtime,
+    work: webWorkOf({ threadId }),
+    ...chatWebPlace(threadId, taskTurn, workingOn),
+  });
+
+/** Where a chat turn's web records belong: its chat, and the Task and Attempt it works on once known. */
+const chatWebPlace = (
+  threadId: ThreadId,
+  taskTurn: ChatTaskTurn | null,
+  workingOn: Effect.Effect<TaskId | null>,
+): WebRecordPlace => ({
+  threadId,
+  taskId: workingOn,
+  attemptId: taskTurn === null ? Effect.succeed(null) : taskTurn.attempt,
+});
 
 /**
  * The messages a runtime's session missed (ADR 017): everything after the last one it saw, and that
@@ -775,8 +804,16 @@ export class ChatService extends Context.Service<
           // that reads the reply later never receives them either.
           const handle = (raw: RuntimeEvent) =>
             raw._tag === "SessionStarted" ? handleEvent(raw) : Effect.andThen(confirmBrief, handleEvent(raw));
+          // What the turn searched is recorded, against the hob's web limits (ADR 036, Usage and limits).
+          let webTurn: WebSearchTurn | null = null;
           const handleEvent = (raw: RuntimeEvent) => {
             const event = redactEvent(raw, redactor);
+            return Effect.andThen(
+              Effect.suspend(() => webTurn?.see(event) ?? Effect.void),
+              handleRedacted(event),
+            );
+          };
+          const handleRedacted = (event: RuntimeEvent) => {
             switch (event._tag) {
               // The session has now seen the thread through this reply.
               case "SessionStarted":
@@ -962,11 +999,14 @@ export class ChatService extends Context.Service<
           // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
           // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
           const activity = yield* activityOf(tools, taskTurn);
+          const webUse = yield* chatWebTurn(agent.id, thread.id, current.id, brain.runtime, taskTurn, workingOn);
+          webTurn = webUse;
+          const search = webSearchRequest(turnWebSearch(tools), webUse);
           yield* activity
             .run(
               {
                 prompt: runtimePrompt(prompt, asked, named),
-                briefing: contextBlock([memory, roster], briefing, taskTurn?.briefing ?? null),
+                briefing: contextBlock([memory, roster], briefing, taskTurn?.briefing ?? null, search.note),
                 sessionId: expected?.sessionId ?? null,
                 instructions: systemInstructions(config.name, config),
                 instructionsChanged: changed,
@@ -974,7 +1014,8 @@ export class ChatService extends Context.Service<
                 effort: brain.effort,
                 tools,
                 // Settled from the policy as the turn starts, as its tools are (ADR 036).
-                webSearch: turnWebSearch(tools),
+                webSearch: search.webSearch,
+                checkWebSearch: search.checkWebSearch,
                 skills: skills.mounts,
                 askedSkill: asked,
                 approvals: turnApprovals?.approvals ?? null,
@@ -989,6 +1030,7 @@ export class ChatService extends Context.Service<
                     agentId: agent.id,
                     threadId: thread.id,
                     messageId,
+                    webPlace: chatWebPlace(thread.id, taskTurn, workingOn),
                     scope: taskTurn?.scope ?? (() => callScope.reply(messageId)),
                     also: callScope.reply(messageId),
                     currentAccess: currentAccess(agent.id),
@@ -1021,6 +1063,7 @@ export class ChatService extends Context.Service<
             )
             .pipe(
               Stream.runForEach(handle),
+              Effect.ensuring(webUse.end),
               Effect.catchTags({
                 // The runtime's error can quote what a tool printed.
                 RuntimeError: (error) => update((m) => MessageTransitions.cutOff(m, redactor.text(error.message))),

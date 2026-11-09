@@ -56,6 +56,7 @@ import { SkillsHandlers } from "./skills.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
 import { UsageHandlers } from "./usage.ts";
 import { DeviceSessionLive } from "./user-session.ts";
+import { WebHandlers } from "./web-usage.ts";
 import { WorkbenchHandlers } from "./workbench.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
@@ -252,6 +253,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     DiagnosticsHandlers,
     ExportsHandlers,
     UsageHandlers,
+    WebHandlers,
     MemoryHandlers,
     MemoryPagesHandlers,
     MemorySharesHandlers,

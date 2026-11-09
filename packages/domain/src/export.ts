@@ -7,6 +7,7 @@ import { MessageRole, MessageStatus, ReplyStepState, ReplyUsage } from "./messag
 import { ArtifactId, ArtifactKind, QuestId, QuestionId, QuestionState, QuestState } from "./quest.ts";
 import { RoleId } from "./roles.ts";
 import { AttemptId, AttemptState, TaskId, TaskState } from "./task.ts";
+import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
 /**
  * An export of ADR 026: your conversations and work history as a folder you can read without
@@ -238,6 +239,18 @@ export const ExportedMemory = Schema.Struct({
 });
 export type ExportedMemory = typeof ExportedMemory.Type;
 
+/**
+ * The scope's web searches and pages read (ADR 036, Usage and limits), and for everything Settings ›
+ * Web and each hob's own limits. Absent from an export made before they were recorded.
+ */
+export const ExportedWeb = Schema.Struct({
+  searches: Schema.Array(WebSearchRecord),
+  pages: Schema.Array(WebFetchRecord),
+  settings: Schema.NullOr(WebSettings),
+  hobLimits: Schema.Array(Schema.Struct({ agentId: AgentId, limits: HobWebLimits })),
+});
+export type ExportedWeb = typeof ExportedWeb.Type;
+
 export const HobbotsExport = Schema.Struct({
   format: Schema.Literal(EXPORT_FORMAT),
   version: Schema.Literal(EXPORT_VERSION),
@@ -248,6 +261,7 @@ export const HobbotsExport = Schema.Struct({
   threads: Schema.Array(ExportedThread),
   quests: Schema.Array(ExportedTree),
   memory: ExportedMemory,
+  web: Schema.optionalKey(ExportedWeb),
 });
 export type HobbotsExport = typeof HobbotsExport.Type;
 

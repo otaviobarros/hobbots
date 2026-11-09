@@ -29,6 +29,8 @@ import {
   roleFields,
   type Thread,
   WEB_FETCH_LABEL,
+  type WebSettings,
+  type WebUsage,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -45,6 +47,7 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
   WebFoundUrlsLive,
+  WebRecordsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -64,7 +67,7 @@ import { HobToolsLive } from "../src/tools.ts";
 import { WebToolsWith } from "../src/web-access.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
-// #1267 at hub level: hobs read pages with `web_fetch` on the hub action pipeline (ADR 036), with the
+// #1267 and #1269 at hub level: hobs read pages with `web_fetch` on the hub action pipeline (ADR 036), with the
 // hub's own composition, the fake runtime making the scripted calls, a local test site and the found
 // URLs on SQLite or PostgreSQL (TestDatabase). Claude Code and Codex serve the same hub tool with no
 // change of their own (clean-runtime contract tests). The site's names resolve to TEST-NET addresses
@@ -205,6 +208,7 @@ beforeAll(async () => {
             TaskRepositoryLive,
             TaskToolCallsLive,
             WebFoundUrlsLive,
+            WebRecordsLive,
             ActivityRepositoryLive,
             EventJournal.layer,
             BackpackLive,
@@ -554,5 +558,151 @@ describe("hobs read web pages through the hub, end to end", () => {
     expect(read).toContain("lamps.test /lamp-glass");
     expect(read.some((line) => line.includes("/lamp-mantle"))).toBe(false);
     expect(await pendingIn(thread)).toEqual([]);
+  }, 30_000);
+});
+
+describe("the hub records what hobs search and read, and holds them to their limits", () => {
+  const usage = async (query: string) => (await request<WebUsage>("GET", `/api/web/usage?${query}`)).body;
+  const limits = (agent: Agent, body: Record<string, number | null>) =>
+    request("PUT", `/api/agents/${agent.id}/web-limits`, {
+      searchesPerTurn: null,
+      pagesPerTurn: null,
+      searchesPerDay: null,
+      ...body,
+    });
+
+  // covers ADR 036 (Usage and limits)
+  it("[TC-PE-1269-03] a turn's searches and pages show for the turn and the hob, with no cost on a sign-in not billed per search", async () => {
+    await preset("balanced");
+    const fern = await summon("Fern", 1290);
+    const thread = (await request<Thread>("POST", `/api/agents/${fern.id}/threads`)).body;
+    const { reply } = await send(
+      thread,
+      `Search, then read ${url("lamps.test", "/moved")}`,
+      "fake:search lamp oil",
+      fetchOf(url("lamps.test", "/moved")),
+    );
+    const turn = await usage(`messageId=${reply?.id}`);
+    expect(turn.totals).toMatchObject({ searches: 1, pages: 1, billedSearches: 0, estimatedCostUsd: null });
+    expect(turn.searches[0]).toMatchObject({
+      agentId: fern.id,
+      threadId: thread.id,
+      messageId: reply?.id,
+      turn: `reply:${reply?.id}`,
+      runtime: "claude-code",
+      query: "lamp oil",
+      resultCount: 2,
+      billing: "fake",
+    });
+    expect(turn.pages[0]).toMatchObject({
+      url: url("lamps.test", "/moved"),
+      finalUrl: url("lamps.test", "/lamp"),
+      status: 200,
+      parts: 1,
+      part: 1,
+    });
+    expect(turn.pages[0]?.bytes).toBeGreaterThan(0);
+    expect(turn.pages[0]?.tokens).toBeGreaterThan(0);
+    const hob = await usage(`agentId=${fern.id}`);
+    expect(hob.totals).toMatchObject({ searches: 1, pages: 1, estimatedCostUsd: null });
+  }, 30_000);
+
+  // covers ADR 036 (Usage and limits)
+  it("[TC-PE-1269-04] past a hob's limits a search and a page are refused with words that name the limit, and past its daily limit its next turn has search off", async () => {
+    await preset("balanced");
+    const sorrel = await summon("Sorrel", 1291);
+    expect((await limits(sorrel, { searchesPerTurn: 1, pagesPerTurn: 1 })).body).toMatchObject({
+      overrides: { searchesPerTurn: 1, pagesPerTurn: 1, searchesPerDay: null },
+      effective: { searchesPerTurn: 1, pagesPerTurn: 1, searchesPerDay: 200 },
+    });
+    const thread = (await request<Thread>("POST", `/api/agents/${sorrel.id}/threads`)).body;
+    const { reply } = await send(
+      thread,
+      `Read ${url("lamps.test", "/lamp")} and ${url("lamps.test", "/oil")}`,
+      "fake:search lamps",
+      "fake:search more lamps",
+      fetchOf(url("lamps.test", "/lamp")),
+      fetchOf(url("lamps.test", "/oil")),
+    );
+    const searches = (reply as Message).steps.filter((step) => step.call?.operation === "search-web");
+    expect(searches.map((step) => step.state)).toEqual(["done", "denied"]);
+    expect(searches[1]?.reason).toBe("This turn reached its limit of 1 web search, set in Settings › Web.");
+    expect(reply?.content).toContain(
+      "This turn reached its limit of 1 web page read with web_fetch, set in Settings › Web.",
+    );
+    expect((await usage(`messageId=${reply?.id}`)).totals).toMatchObject({ searches: 1, pages: 1 });
+
+    // One search today and a daily limit of one: the next turn starts with search off, and says why.
+    await limits(sorrel, { searchesPerDay: 1 });
+    await send(thread, "Search again", "fake:search lamps");
+    const next = requests.at(-1);
+    expect(next?.webSearch).toBe(false);
+    expect(next?.briefing).toContain(
+      "Web search is off for this turn. This hob reached its limit of 1 web search a day, set in Settings › Web.",
+    );
+    expect((await usage(`agentId=${sorrel.id}`)).totals.searches).toBe(1);
+  }, 30_000);
+
+  // covers ADR 036 (Blocked sites)
+  it("[TC-PE-1269-06] a site on the blocked list is refused, and so is a name under it, with the list kept as hosts", async () => {
+    await preset("trusting");
+    const saved = await request<WebSettings>("PUT", "/api/web/settings", {
+      limits: { searchesPerTurn: 10, pagesPerTurn: 30, searchesPerDay: 200 },
+      blockedSites: [" https://Oil.test/any/path ", "oil.test", "*.nas.test"],
+    });
+    expect(saved.body.blockedSites).toEqual(["oil.test", "nas.test"]);
+    const refused = await request("PUT", "/api/web/settings", { ...saved.body, blockedSites: ["not a site"] });
+    expect(refused.status).toBe(400);
+    expect((await request<WebSettings>("GET", "/api/web/settings")).body).toEqual(saved.body);
+    try {
+      const yarrow = await summon("Yarrow", 1292);
+      const thread = (await request<Thread>("POST", `/api/agents/${yarrow.id}/threads`)).body;
+      const before = asked.length;
+      const { reply, pending } = await send(
+        thread,
+        `Read ${url("oil.test", "/lamp")} and ${url("www.oil.test", "/lamp")}`,
+        fetchOf(url("oil.test", "/lamp")),
+        fetchOf(url("www.oil.test", "/lamp")),
+      );
+      expect(pending).toBeUndefined();
+      expect(reply?.content.match(/oil\.test is on the blocked sites in Settings › Web/g)).toHaveLength(2);
+      expect(asked.slice(before)).toEqual([]);
+    } finally {
+      await request("PUT", "/api/web/settings", {
+        limits: { searchesPerTurn: 10, pagesPerTurn: 30, searchesPerDay: 200 },
+        blockedSites: [],
+      });
+    }
+  }, 30_000);
+
+  // covers ADR 036 (Usage and limits: where a record belongs)
+  it("[TC-PE-1269-08] a chat's page names the Task the chat works on, and a step's page names its parent's chat, Task and Attempt", async () => {
+    await preset("balanced");
+    const briar = await summon("Briar", 1293);
+    const thread = (await request<Thread>("POST", `/api/agents/${briar.id}/threads`)).body;
+    const plan = hub("plan_steps", { key: "plan", steps: [{ brief: fetchOf(url("lamps.test", "/step-page")) }] });
+    await request("POST", `/api/threads/${thread.id}/messages`, {
+      content: [
+        `Read ${url("lamps.test", "/step-page")} in a step, then ${url("lamps.test", "/lamp")} yourself`,
+        plan,
+        fetchOf(url("lamps.test", "/lamp")),
+      ].join("\n"),
+    });
+    const read = await eventually(async () => {
+      const hob = await usage(`agentId=${briar.id}`);
+      return hob.totals.pages === 2 ? hob.pages : undefined;
+    });
+    const chat = read.find((page) => page.messageId !== null);
+    const step = read.find((page) => page.messageId === null);
+    // The chat holds the plan's Task once it planned, so its page counts for that Task too.
+    expect(chat).toMatchObject({ threadId: thread.id, finalUrl: url("lamps.test", "/lamp") });
+    expect(chat?.taskId).not.toBeNull();
+    expect(step).toMatchObject({ threadId: thread.id, finalUrl: url("lamps.test", "/step-page") });
+    expect(step?.taskId).not.toBeNull();
+    expect(step?.attemptId).not.toBeNull();
+    expect(step?.turn).toBe(`attempt:${step?.attemptId}`);
+    // Each shows where it belongs: the step's Task and the chat's thread.
+    expect((await usage(`taskId=${step?.taskId}`)).pages.map((page) => page.id)).toContain(step?.id);
+    expect((await usage(`threadId=${thread.id}`)).totals.pages).toBe(2);
   }, 30_000);
 });

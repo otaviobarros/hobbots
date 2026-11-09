@@ -201,11 +201,24 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
+  // No screen shows web records or Settings › Web yet (ADR 036, #1271).
+  "WebSearched",
+  "WebFetched",
+  "WebSettingsChanged",
+  "HobWebLimitsChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag: "TurnStopRequested" | "TurnStopped" | "TurnStarted" | "TurnEnded";
+    readonly _tag:
+      | "TurnStopRequested"
+      | "TurnStopped"
+      | "TurnStarted"
+      | "TurnEnded"
+      | "WebSearched"
+      | "WebFetched"
+      | "WebSettingsChanged"
+      | "HobWebLimitsChanged";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

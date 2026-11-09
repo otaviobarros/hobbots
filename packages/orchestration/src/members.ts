@@ -344,6 +344,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               config,
               taskId: task.id,
               attemptId,
+              threadId: task.threadId,
               prompt,
               sessionId,
               access: run.access,
@@ -353,6 +354,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 { agentId: agent.id, taskId: task.id, carried: work.holding },
                 {
                   attemptId,
+                  threadId: task.threadId,
                   currentAccess: currentAccessOf(run),
                   redactor: deps.redactor,
                   approvals: handle?.approvals ?? null,
