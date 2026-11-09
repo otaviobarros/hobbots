@@ -461,22 +461,32 @@ describe("hob management, end to end", () => {
       // The runtime sends the call again with the same key, now that the reply works on a Task.
       hub("summoning_summon", { key: "hire-uma", hobs: [draft("Uma")] }),
     ]);
-    const [, first, retried] = (await ended(thread)).content.split("summoning_summon: ");
-    const uma = (await allHobs()).filter((agent) => agent.name === "Uma");
-    expect(uma).toHaveLength(1);
-    expect(first).toContain(`id ${uma[0]?.id}`);
+    // The reply to your message, not a turn the started Quest wakes later.
+    const reply = await eventually(async () => {
+      const first = (await messages(thread)).find((message) => message.role === "assistant");
+      return first !== undefined && !isInProgress(first.status) ? first : undefined;
+    });
+    const [, first, retried] = reply.content.split("summoning_summon: ");
+    const id = /id ([0-9a-f-]{36})/.exec(first ?? "")?.[1];
+    expect(id, reply.content).toBeDefined();
     expect(retried).toContain("You made this call before, so it was not sent again.");
-    expect(retried).toContain(`id ${uma[0]?.id}`);
+    expect(retried).toContain(`id ${id}`);
     // The call's record moved into the Task's work with the reply's other calls.
     const [tree] = await hobs.runPromise(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
     expect(tree?.tasks[0]?.ownerId).toBe(chief.id);
 
     const bram = (await named("Bram")) as Agent;
     const other = await send(bram, [hub("summoning_summon", { key: "hire-uma", hobs: [draft("Uma")] })]);
-    await ended(other);
-    const both = (await allHobs()).filter((agent) => agent.name === "Uma");
-    expect(both).toHaveLength(2);
-    expect(both.map((agent) => agent.summonedBy).sort()).toEqual([bram.id, chief.id].sort());
+    const otherId = /id ([0-9a-f-]{36})/.exec((await ended(other)).content)?.[1];
+    expect(otherId).toBeDefined();
+    expect(otherId).not.toBe(id);
+    const made = (await allHobs()).filter((agent) => agent.id === id || agent.id === otherId);
+    expect(made.map((agent) => [agent.name, agent.summonedBy]).sort()).toEqual(
+      [
+        ["Uma", chief.id],
+        ["Uma", bram.id],
+      ].sort(),
+    );
   });
 
   /** `name`, summoned by the chief without a card, with a reply of its own left running. */
