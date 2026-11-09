@@ -19,6 +19,7 @@ import {
   type ToolAccess,
   type TurnApprovals,
   UNRECORDED_TOOL_CALL,
+  type WebMark,
 } from "@hobbots/agents";
 import {
   type AgentId,
@@ -109,6 +110,20 @@ const userApprovals = (
   used: () => Effect.void,
 });
 
+/** `approvals` with the session's read-the-web mark, when it has one. */
+const withMark = (approvals: TurnApprovals | null, webMark: WebMark | undefined): TurnApprovals | null =>
+  webMark === undefined
+    ? approvals
+    : {
+        ...(approvals ?? {
+          request: null,
+          currentAccess: Effect.succeed(null),
+          grants: Effect.succeed([]),
+          used: () => Effect.void,
+        }),
+        webMark,
+      };
+
 /** One hub's memory: its tools, its store and save records, every call that reached the store, and its shares. */
 const makeHub = (options: { readonly shares?: boolean; readonly store?: MemoryStoreShape } = {}) => {
   const memory = makeMemoryStoreFake();
@@ -172,6 +187,8 @@ interface CallOptions {
    * record lands in the hub's `reached`, beside the store's calls. Absent, the step reports its start.
    */
   readonly records?: boolean;
+  /** The read-the-web mark of the turn's session (ADR 036). */
+  readonly webMark?: WebMark;
 }
 
 /** A turn's memory tools, and one call of `name`, with a step the user can be asked on. */
@@ -192,7 +209,10 @@ const callOn = (hub: Hub, name: string, input: unknown, options: CallOptions = {
         return access;
       }),
       redactor: makeRedactor([{ value: SECRET, kind: "TEST_TOKEN" }]),
-      approvals: options.user && access ? userApprovals(access, options.user.asked, options.user.answer) : null,
+      approvals: withMark(
+        options.user && access ? userApprovals(access, options.user.asked, options.user.answer) : null,
+        options.webMark,
+      ),
     };
     const tools = yield* (yield* MemoryTools).forTurn(turn);
     if (tools === null) return { offered: [] as ReadonlyArray<string>, answer: null, events: [] };
@@ -419,6 +439,38 @@ describe("the memory tools", () => {
     expect(approved.answer?.refused).toBe(false);
     expect(approved.answer?.text).toContain("Saved notes/tests.md to your memory.");
     expect(approved.answer?.text).toContain("They approved it just this once");
+  });
+
+  // covers ADR 036 (The read-the-web mark)
+  it("[TC-GEN-1268-01] while the session has read the web, a save names the page as its source and a share asks you first", async () => {
+    const READ = { since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" };
+    const webMark: WebMark = { current: Effect.succeed(READ), read: () => Effect.void };
+    const hub = makeHub({ shares: true });
+    const saved = await callOn(hub, MEMORY_SAVE_TOOL, page("from-the-web"), { webMark });
+    expect(saved.answer?.refused).toBe(false);
+    const [save] = hub.saves.saves();
+    expect(save?.markdown).toBe(
+      `${page("from-the-web").markdown}\n\nSource: https://lamps.test/lamp, read on the web.\n`,
+    );
+    // A save before the session read the web is kept as written.
+    await callOn(hub, MEMORY_SAVE_TOOL, page("before", { path: "notes/before.md" }));
+    expect(hub.saves.saves().find((each) => each.path === "notes/before.md")?.markdown).toBe(page("before").markdown);
+
+    // A share reaches other hobs, so it waits for you, saying why; without the mark it goes to the share rules.
+    const asked: Array<ApprovalAction> = [];
+    const shared = await callOn(hub, MEMORY_SAVE_TOOL, page("about", { scope: "everyone" }), {
+      webMark,
+      user: { asked, answer: "deny" },
+    });
+    expect(shared.answer?.refused).toBe(true);
+    expect(asked).toEqual([expect.objectContaining({ reason: expect.stringContaining("This session read the web") })]);
+    expect(hub.shared).toEqual([]);
+    const plain: Array<ApprovalAction> = [];
+    await callOn(hub, MEMORY_SAVE_TOOL, page("about", { scope: "everyone" }), {
+      user: { asked: plain, answer: "deny" },
+    });
+    expect(plain).toEqual([]);
+    expect(hub.shared).toHaveLength(1);
   });
 
   // covers ADR 028 (The memory tools): search covers the hob's own scope, its projects and everyone's.

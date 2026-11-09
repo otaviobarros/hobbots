@@ -155,6 +155,11 @@ const FileChangesRecorded = Schema.TaggedStruct("FileChangesRecorded", {
   changes: Schema.Array(FileChange),
   removed: Schema.Array(FileChangeId),
 });
+/**
+ * An Attempt's session read the web, or read another page, so its read-the-web mark changed (ADR
+ * 036): the Attempt as it is now, for a Workbench already open on it.
+ */
+const AttemptReadWeb = Schema.TaggedStruct("AttemptReadWeb", { taskId: TaskId, attempt: Attempt });
 /** The steps an Attempt's turn outside any chat has so far, all of them, as they change (#892). */
 const AttemptStepsRecorded = Schema.TaggedStruct("AttemptStepsRecorded", {
   attemptId: AttemptId,
@@ -321,6 +326,7 @@ export const JournaledEvent = Schema.Union([
   FolderScanned,
   ToolCallRefused,
   AttemptStepsRecorded,
+  AttemptReadWeb,
   MemorySaveRecorded,
   MemorySaveChanged,
   MemoryShareRequested,
@@ -415,6 +421,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   FolderScanned: 1,
   ToolCallRefused: 1,
   AttemptStepsRecorded: 1,
+  AttemptReadWeb: 1,
   MemorySaveRecorded: 1,
   MemorySaveChanged: 1,
   MemoryShareRequested: 1,

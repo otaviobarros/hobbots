@@ -55,6 +55,7 @@ import {
   type PolicyVerdict,
   policyVersion,
   type RuntimeOutput,
+  sessionReadWeb,
 } from "@hobbots/permissions";
 import { type Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
@@ -1012,10 +1013,13 @@ export const policyHooks = (
     if (tool === READ_TOOL && readsSkillFile(input.tool_input, skillFolder)) return {};
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
-    // Only the policy decides here; asking the user waits in the permission callback.
-    const decision = await Effect.runPromise(decideCall(engine, context(), null, call, report, turn, redaction)).catch(
-      () => failed(tool),
-    );
+    // Only the policy decides here; asking the user waits in the permission callback. The session's
+    // read-the-web mark counts here too, so a call it asks for reaches the callback (ADR 036).
+    const decision = await Effect.runPromise(
+      Effect.flatMap(sessionReadWeb(approvals), (readWeb) =>
+        decideCall(engine, { ...context(), readWeb }, null, call, report, turn, redaction),
+      ),
+    ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       const over = await limited(tool, toolInput, decision);
       if (over !== null) {

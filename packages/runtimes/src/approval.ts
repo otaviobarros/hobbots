@@ -11,7 +11,13 @@ import {
   type TurnApprovals,
 } from "@hobbots/agents";
 import { type CommitsAs, leftoverGitNote, steerGitInit } from "@hobbots/domain";
-import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
+import {
+  type PolicyContext,
+  type PolicyEngine,
+  type PolicyRequest,
+  type PolicyVerdict,
+  sessionReadWeb,
+} from "@hobbots/permissions";
 import { Effect } from "effect";
 import { COMMIT_IDENTITY_RULE, SETUP_GITHUB } from "./git-config.ts";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
@@ -145,7 +151,9 @@ const decideIn = (
   call: ToolCall,
 ) =>
   Effect.gen(function* () {
-    const context: PolicyContext = approvals ? { ...base, grants: yield* approvals.grants } : base;
+    // The session's read-the-web mark is read for every call, so a page read earlier in the turn counts (ADR 036).
+    const readWeb = yield* sessionReadWeb(approvals);
+    const context: PolicyContext = approvals ? { ...base, grants: yield* approvals.grants, readWeb } : base;
     // Without the sandbox Bash is never offered. A command that reaches the hook anyway is decided
     // as a command, so it is refused with the reason (PE-005); a `git push` alone is never let through.
     const requests: ReadonlyArray<PolicyRequest> | null =
@@ -281,14 +289,18 @@ const withGitHint = (decision: CallDecision, initTool: string | undefined): Call
 
 /**
  * Decides a host a turn's processes reach that its sandbox has no rule for, under the hob's own
- * grants as they are now, which can answer the preset's Ask for it (ADR 015): true, or why not.
+ * grants as they are now, which can answer the preset's Ask for it (ADR 015), and the session's
+ * read-the-web mark, under which a new host asks (ADR 036): true, or why not. The proxy cannot ask,
+ * so an Ask refuses the connection with why.
  */
 export const grantedHosts =
   (engine: PolicyEngine["Service"], context: PolicyContext, approvals: TurnApprovals | null | undefined) =>
   (host: string): Promise<true | string> =>
     Effect.runPromise(
-      (approvals?.grants ?? Effect.succeed([])).pipe(
-        Effect.flatMap((grants) => engine.decide({ ...context, grants }, { _tag: "Web", host, addresses: [] })),
+      Effect.all([approvals?.grants ?? Effect.succeed([]), sessionReadWeb(approvals)]).pipe(
+        Effect.flatMap(([grants, readWeb]) =>
+          engine.decide({ ...context, grants, readWeb }, { _tag: "Web", host, addresses: [] }),
+        ),
         Effect.tap((verdict) =>
           verdict.decision === "allow" && verdict.grantIds.length > 0
             ? (approvals?.used(verdict.grantIds) ?? Effect.void)

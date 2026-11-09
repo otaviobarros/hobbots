@@ -161,6 +161,34 @@ const skillCorrelationOf = (event: SkillEvent): RowCorrelation => {
   return scope._tag === "Hob" ? { ...NONE, agentId: scope.agentId } : NONE;
 };
 
+type WorkbenchRecord = Extract<
+  JournaledEventType,
+  {
+    readonly _tag:
+      | "CommandRecorded"
+      | "FileChangesRecorded"
+      | "FolderScanned"
+      | "AttemptStepsRecorded"
+      | "AttemptReadWeb";
+  }
+>;
+
+const WORKBENCH_RECORDS: ReadonlySet<JournaledEventType["_tag"]> = new Set([
+  "CommandRecorded",
+  "FileChangesRecorded",
+  "FolderScanned",
+  "AttemptStepsRecorded",
+  "AttemptReadWeb",
+]);
+
+const isWorkbenchRecord = (event: JournaledEventType): event is WorkbenchRecord => WORKBENCH_RECORDS.has(event._tag);
+
+/** The Task a Workbench record names (ADR 023). */
+const workbenchTaskOf = (event: WorkbenchRecord): string => {
+  if (event._tag === "CommandRecorded") return event.command.taskId;
+  return event._tag === "FolderScanned" ? event.scan.taskId : event.taskId;
+};
+
 /** Task and Workbench events, and the message events that name their thread and message. */
 const restCorrelationOf = (
   event: Exclude<
@@ -192,15 +220,8 @@ const restCorrelationOf = (
   if (isTaskEvent(event)) return taskCorrelationOf(event);
   if (isSkillEvent(event)) return skillCorrelationOf(event);
   // The Workbench's records name their Task (ADR 023).
+  if (isWorkbenchRecord(event)) return { ...NONE, taskId: workbenchTaskOf(event) };
   switch (event._tag) {
-    case "CommandRecorded":
-      return { ...NONE, taskId: event.command.taskId };
-    case "FileChangesRecorded":
-      return { ...NONE, taskId: event.taskId };
-    case "FolderScanned":
-      return { ...NONE, taskId: event.scan.taskId };
-    case "AttemptStepsRecorded":
-      return { ...NONE, taskId: event.taskId };
     case "ToolCallRefused":
       return { ...NONE, agentId: event.refusal.agentId, taskId: event.refusal.taskId };
     // A hob's save names its hob, and the reply it was made from when it came from a chat turn.

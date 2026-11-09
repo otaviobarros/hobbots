@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { Effort, RUNTIME_NAMES, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { TaskId } from "./task.ts";
+import { WebReadMark } from "./web-mark.ts";
 
 /** What a hob thinks with: a runtime, one of its models (null for its default) and an effort. */
 export const Brain = Schema.Struct({
@@ -66,6 +67,11 @@ export const RuntimeSession = Schema.Struct({
    * known: the next turn sends the roster, and mentions `read_hob` only where the session holds it.
    */
   roster: Schema.optionalKey(Schema.NullOr(RosterMark)),
+  /**
+   * The session's read-the-web mark (ADR 036), once it searched or read a page. Absent or null while
+   * it has read nothing; a new session in its place starts without it.
+   */
+  readWeb: Schema.optionalKey(Schema.NullOr(WebReadMark)),
 });
 export type RuntimeSession = typeof RuntimeSession.Type;
 

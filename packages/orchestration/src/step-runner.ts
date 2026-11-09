@@ -50,6 +50,7 @@ import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED, ty
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
 import { endTurn } from "./turn-end.ts";
+import { attemptMarkKeeper } from "./web-marks.ts";
 
 /**
  * How many steps run at once (orchestration contract): per hob, and per request's tree, which is
@@ -211,11 +212,18 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             // unless a grant answers it: This Task's cover every step of the Task (ADR 018).
             approvals,
             recordToolStart: recordToolStart(step),
-            offer: tools.forSession(
-              { agentId: agent.id, taskId: step.id, carried },
-              { attemptId, threadId: step.threadId, currentAccess: currentAccessOf(run), redactor, approvals },
-              STEP_TOOLS,
-            ),
+            offer: (marked) =>
+              tools.forSession(
+                { agentId: agent.id, taskId: step.id, carried },
+                {
+                  attemptId,
+                  threadId: step.threadId,
+                  currentAccess: currentAccessOf(run),
+                  redactor,
+                  approvals: marked,
+                },
+                STEP_TOOLS,
+              ),
             started: (session) =>
               Effect.asVoid(
                 Effect.flatMap(nowIso, (at) =>
@@ -226,6 +234,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                 ),
               ),
             turns: tasks,
+            keepMark: attemptMarkKeeper(tasks, attemptId, announce),
           },
           recorder,
         );

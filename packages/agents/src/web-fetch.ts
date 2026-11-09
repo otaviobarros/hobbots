@@ -28,6 +28,7 @@ import {
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, ToolAccess, TurnApprovals, WebSearchedEvent } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
+import { WEB_MARK_NOTE } from "./web-mark.ts";
 import { WebRecords, webAnnouncer, webLimitReason, webLimitsOf } from "./web-usage.ts";
 
 /**
@@ -341,8 +342,11 @@ export const pageParts = (text: string, size = WEB_PAGE_PART_CHARS): ReadonlyArr
   return parts;
 };
 
-/** What the hob is told of a page: its part `part`, what comes next, and the links on the first. */
-export const pageAnswer = (page: WebPage, part: number, hops: ReadonlyArray<string>): string => {
+/**
+ * What the hob is told of a page: its part `part`, what comes next, and the links on the first.
+ * `marked` when this read is the session's first of the web, so the hob is told what the mark means.
+ */
+export const pageAnswer = (page: WebPage, part: number, hops: ReadonlyArray<string>, marked = false): string => {
   const parts = pageParts(page.text);
   const host = new URL(page.url).hostname;
   const head = [
@@ -356,6 +360,7 @@ export const pageAnswer = (page: WebPage, part: number, hops: ReadonlyArray<stri
       : part < parts.length
         ? `Part ${part} of ${parts.length}. Read the next with web_fetch, the same url and part ${part + 1}.`
         : `Part ${part} of ${parts.length}, the last.`,
+    marked ? WEB_MARK_NOTE : null,
   ].filter((line) => line !== null);
   const text = parts[part - 1] ?? "";
   if (part !== 1 || page.links.length === 0) return [...head, "", text.trim() || "(no text)"].join("\n");
@@ -477,6 +482,10 @@ export const makeWebTools = <V extends WebVerdict>(
           const fetched = yield* fetcher.fetch(url, target).pipe(Effect.mapError(refused));
           if (fetched._tag === "Page") {
             const { page } = fetched;
+            // The session holds the page's text from here on, so it is marked before the hob reads it (ADR 036).
+            const mark = approvals?.webMark;
+            const firstRead = mark !== undefined && (yield* mark.current) === null;
+            if (mark !== undefined) yield* mark.read({ _tag: "Page", url: page.url });
             const source = `a link on ${page.url}`;
             yield* provenance.add(session, [
               { url: page.url, source: hops.length > 0 ? `a redirect from ${hops[0]}` : source },
@@ -488,7 +497,7 @@ export const makeWebTools = <V extends WebVerdict>(
                 message: `${page.url} has ${parts === 1 ? "1 part" : `${parts} parts`}, so there is no part ${part}.`,
               });
             }
-            const answer = pageAnswer(page, part, hops);
+            const answer = pageAnswer(page, part, hops, firstRead);
             yield* recordPage(turn, first.url, page, part, answer);
             return answer;
           }

@@ -14,6 +14,9 @@ export const messages = {
   inSandboxLower: "in the sandbox",
   unsandboxed: "Unsandboxed",
   sandboxNotReady: "Needs the sandbox",
+  readWeb: "Read the web",
+  readWebHint: ({ source }: { source: string }) =>
+    `This session last read ${source}. Until it ends, anything that could send your data out asks first: new addresses, new hosts for commands, Charm writes, pushes and shared memory.`,
   sandboxHint: {
     on: "Commands run inside Hobbots' sandbox on the hub.",
     off: "Commands ran without Hobbots' sandbox on the hub.",

@@ -4,6 +4,7 @@ import {
   deliveredMemoryBrief,
   deliveredRoster,
   type HubOffer,
+  makeWebMark,
   makeWebProvenance,
   nextSteps,
   type Redactor,
@@ -25,9 +26,11 @@ import {
   TurnSkillsInUse,
   trackTurn,
   turnWebSearch,
+  webMarkBriefing,
   webSearchRequest,
   webSearchTurn,
   webWorkOf,
+  withWebMark,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -44,8 +47,10 @@ import {
   systemInstructions,
   type TaskId,
   type ThreadId,
+  type WebReadMark,
 } from "@hobbots/domain";
 import { DateTime, Effect, Option, Semaphore, Stream } from "effect";
+import { markOfSession } from "./web-marks.ts";
 
 /** How a session's turn ended: with a final reply, or failed with a reason. */
 export type Ending =
@@ -69,13 +74,32 @@ export interface SessionTurn {
   /** Asks you about calls the policy answers Ask for; null, those calls are refused. */
   readonly approvals: TurnApprovals | null;
   readonly recordToolStart: (event: ToolStartedEvent) => Effect.Effect<boolean>;
-  /** The hub tools the turn offers, and how the hub steers its runtime's own calls, read at its start. */
-  readonly offer: Effect.Effect<HubOffer>;
+  /**
+   * The hub tools the turn offers, and how the hub steers its runtime's own calls, read at its start,
+   * for the approvals the turn's calls are decided with: `approvals` with its session's read-the-web
+   * mark (ADR 036).
+   */
+  readonly offer: (approvals: TurnApprovals) => Effect.Effect<HubOffer>;
   /** Records the runtime's evidence that it took the turn: its session, and the policy version its tools run under. */
   readonly started: (session: { readonly sessionId: string; readonly policyVersion?: string }) => Effect.Effect<void>;
-  /** Records the turn under its hob, runtime and model once the runtime takes it, and what it used once it ends (#1011). */
-  readonly turns: Pick<TaskRepository["Service"], "startTurn" | "endTurn">;
+  /**
+   * Records the turn under its hob, runtime and model once the runtime takes it, and what it used once
+   * it ends (#1011), and reads its Task's Attempts for the mark its session holds (ADR 036).
+   */
+  readonly turns: Pick<TaskRepository["Service"], "startTurn" | "endTurn" | "readTree">;
+  /** Keeps its session's read-the-web mark on its Attempt, announced for a Workbench already open (ADR 036). */
+  readonly keepMark: (mark: WebReadMark) => Effect.Effect<void>;
 }
+
+/** The read-the-web mark the session a turn resumes holds (ADR 036). A fresh session holds none. */
+const sessionMark = (turn: SessionTurn) => {
+  const { sessionId } = turn;
+  return sessionId === null
+    ? Effect.succeed(null)
+    : Effect.map(turn.turns.readTree(turn.taskId), (tree) =>
+        Option.match(tree, { onNone: () => null, onSome: ({ attempts }) => markOfSession(attempts, sessionId) }),
+      );
+};
 
 /** Runs one turn of a Task's own session to its end: its final reply, or why it ended without one. */
 export const runSessionTurn = (
@@ -161,6 +185,13 @@ export const runSessionTurn = (
     const skillUses = yield* skillUseRecorder({ agentId: turn.agent.id, threadId: null, messageId: null });
     skillUses.given(given);
     const expected = turn.sessionId === null ? undefined : { sessionId: turn.sessionId };
+    // The session's read-the-web mark (ADR 036): a resumed session holds the one an Attempt of the
+    // Task recorded for it, and the turn keeps every change on its own Attempt.
+    const markedBefore = yield* sessionMark(turn);
+    // A new Attempt that resumes a marked session holds the mark from its start, read again or not.
+    if (markedBefore !== null) yield* turn.keepMark(markedBefore);
+    const webMark = yield* makeWebMark(markedBefore, turn.keepMark);
+    const approvals = withWebMark(turn.approvals, webMark, Effect.succeed(turn.access));
     // Counted as received only once the runtime answers the prompt that carried it.
     let session: string | null = null;
     let delivered = false;
@@ -208,7 +239,7 @@ export const runSessionTurn = (
       .run(
         {
           prompt: turn.prompt,
-          briefing: contextBlock([memory, roster], search.note),
+          briefing: contextBlock([memory, roster], webMarkBriefing(markedBefore), search.note),
           sessionId: turn.sessionId,
           instructions: systemInstructions(turn.config.name, turn.config),
           instructionsChanged: false,
@@ -219,14 +250,19 @@ export const runSessionTurn = (
           webSearch: search.webSearch,
           checkWebSearch: search.checkWebSearch,
           skills,
-          approvals: turn.approvals,
+          approvals,
           redaction: redactor,
           recordToolStart: (event) =>
             turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
-          // A search's results are found URLs in the Task's session before the hob can act on them (ADR 036).
-          recordSearch: web.searched({ threadId: null, taskId: turn.taskId }, redactor),
+          // A search's results are found URLs in the Task's session before the hob can act on them, and
+          // its session is marked as having read the web (ADR 036).
+          recordSearch: (event) =>
+            Effect.andThen(
+              web.searched({ threadId: null, taskId: turn.taskId }, redactor)(event),
+              webMark.read({ _tag: "Search", query: redactor.text(event.query) }),
+            ),
           // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
-          ...(yield* Effect.provideService(turn.offer, TurnSkillsInUse, given)),
+          ...(yield* Effect.provideService(turn.offer(approvals), TurnSkillsInUse, given)),
         },
         adapter.sendPrompt,
       )

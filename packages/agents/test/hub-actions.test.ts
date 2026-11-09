@@ -410,6 +410,7 @@ const SHELVE_INPUT = Schema.Struct({ shelf: Schema.String, note: Schema.optional
 const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCall>()) => {
   const happened: Array<string> = [];
   const planned: Array<{ readonly input: unknown; readonly redacted: unknown }> = [];
+  const decided: Array<unknown> = [];
   const outcomes = [...(scenario.outcomes ?? [])];
   const readBack: ReadBack | undefined =
     scenario.readBack === undefined
@@ -465,7 +466,11 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
       const tools = makeHubActions({
         owner: { _tag: "Charm", declaration: declared, name: "Pip", holds: () => true },
         actions: [action],
-        decide: () => () => Effect.succeed({ ...verdict("ask"), operation: "pip.shelve" }),
+        decide: (_approvals, _base, request) => () =>
+          Effect.sync(() => {
+            decided.push(request);
+            return { ...verdict("ask"), operation: "pip.shelve" };
+          }),
         calls: runner,
       })({
         agentId: AgentId.make("hob"),
@@ -507,7 +512,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
       const result = yield* tools.call("pip_shelve", input, step);
       return { answer: result, asked, events, offered: tools.tools };
     }).pipe(Effect.scoped, Effect.provide(calls), Effect.runPromise);
-  return { call, happened, planned, rows, calls };
+  return { call, happened, planned, decided, rows, calls };
 };
 
 const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state, row.result]);
@@ -533,6 +538,17 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     // A write's answer is the hub's own words, so it carries no outside-data line.
     expect(keyed.answer.text).not.toContain(outsideDataLine("Pip"));
     expect(keyed.asked).toEqual([expect.objectContaining({ tool: "pip_shelve", label: "Shelving on top" })]);
+  });
+
+  // covers ADR 036 (The read-the-web mark)
+  it("[TC-PE-1268-07] decides every Charm write as one that sends, whatever its Charm planned", async () => {
+    const hub = pipWrites();
+    await hub.call({ shelf: "top", key: "s-1" });
+    // Decided as it asks, then again once approved, each time as one that sends.
+    expect(hub.decided.length).toBeGreaterThan(0);
+    for (const request of hub.decided) {
+      expect(request).toMatchObject({ _tag: "Charm", operation: "pip.shelve", sends: true });
+    }
   });
 
   // covers IN-003, EX-003, ADR 020

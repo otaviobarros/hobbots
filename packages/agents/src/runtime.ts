@@ -19,6 +19,7 @@ import {
   RuntimeKind,
   RuntimeModels,
   type SafetyPreset,
+  type WebReadMark,
 } from "@hobbots/domain";
 import { Context, Effect, Option, Schema, type Stream } from "effect";
 import type { Redactor } from "./secrets.ts";
@@ -323,7 +324,29 @@ export interface TurnApprovals {
   readonly grants: Effect.Effect<ReadonlyArray<Grant>>;
   /** Records that these grants answered a call. */
   readonly used: (grantIds: ReadonlyArray<GrantId>) => Effect.Effect<void>;
+  /**
+   * The read-the-web mark of the turn's session (ADR 036), which the hub keeps from its own record
+   * of what the session searched and read, never from the model. Every runtime and hub tool reads
+   * it again for each call, so a page read partway through the turn narrows the calls after it.
+   * Absent, the session is treated as having read nothing.
+   */
+  readonly webMark?: WebMark;
 }
+
+/**
+ * A session's read-the-web mark (ADR 036), as a turn holds it: `current` is null while the session
+ * has read nothing, and `read` marks it with the page or search it took in.
+ */
+export interface WebMark {
+  readonly current: Effect.Effect<WebReadMark | null>;
+  /** Marks the session as having read a page or run a search. */
+  readonly read: (read: WebRead) => Effect.Effect<void>;
+}
+
+/** What a session took in from the web: a page, by its URL, or a search, by its query. */
+export type WebRead =
+  | { readonly _tag: "Page"; readonly url: string }
+  | { readonly _tag: "Search"; readonly query: string };
 
 /** A Hobbots tool a runtime offers over its control channel (ADR 018). The hub checks every call. */
 export interface HubTool {

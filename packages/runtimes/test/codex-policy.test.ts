@@ -38,6 +38,12 @@ const access = (preset: SafetyPreset = "balanced", hob: HobPolicy = EMPTY_HOB_PO
   commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 });
 
+/** The mark of a session that read a page (ADR 036). */
+const READ_MARK = {
+  current: Effect.succeed({ since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" }),
+  read: () => Effect.void,
+};
+
 const approvalsAnswering = (answer: Parameters<typeof answering>[0]) => answering(answer, access("careful"));
 
 const command = (itemId: string, line: string, extra: Record<string, unknown> = {}): PolicyRequest =>
@@ -165,6 +171,30 @@ describe("Codex's tool calls under the hob's policy", () => {
     // With nobody to ask, Ask is refused.
     const alone = await decide(command("c3", "/bin/bash -lc 'pnpm test'"), { preset: "careful" });
     expect(alone.answer).toEqual({ decision: "decline" });
+  });
+
+  // covers ADR 036 (The read-the-web mark)
+  it("[TC-RT-1268-02] asks before a push once the session has read the web, where the policy would allow it", async () => {
+    const push = () => command("c1", "/bin/bash -lc 'git push origin feature'");
+    const unmarked = approvalsAnswering(approve);
+    const before = await decide(push(), { preset: "trusting", request: { approvals: unmarked.approvals } });
+    expect(before.answer).toEqual({ decision: "accept" });
+    expect(unmarked.asked).toEqual([]);
+    const marked = answering(approve, access("trusting"));
+    const read = { ...marked.approvals, webMark: READ_MARK };
+    const after = await decide(push(), { preset: "trusting", request: { approvals: read } });
+    expect(after.answer).toEqual({ decision: "accept" });
+    expect(marked.asked).toEqual([
+      expect.objectContaining({ operation: "push", reason: expect.stringContaining("This session read the web") }),
+    ]);
+    // Local work is asked nothing.
+    const tests = approvalsAnswering(approve);
+    const local = await decide(command("c2", "/bin/bash -lc 'pnpm test'"), {
+      preset: "balanced",
+      request: { approvals: { ...tests.approvals, webMark: READ_MARK } },
+    });
+    expect(local.answer).toEqual({ decision: "accept" });
+    expect(tests.asked).toEqual([]);
   });
 
   // covers PE-001, PE-005

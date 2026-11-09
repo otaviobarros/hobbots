@@ -334,6 +334,114 @@ describe("standing grants", () => {
     }
   });
 
+  // covers ADR 036 (The read-the-web mark)
+  it("[TC-PE-1268-01] asks, while the session has read the web, before each way data could leave, under every preset", async () => {
+    const host = { _tag: "Web", host: "collector.example", addresses: [] } as const;
+    const push = {
+      _tag: "Push",
+      remote: "origin",
+      branch: "feature",
+      force: false,
+      toDefaultBranch: false,
+      cwd: home.project,
+    } as const;
+    const write = { ...comment(home.project), sends: true } as const;
+    const share = {
+      _tag: "Memory",
+      operation: "save-memory",
+      scope: "the project github.com/acme/app",
+      shared: true,
+    } as const;
+    for (const preset of ["careful", "balanced", "trusting"] as const) {
+      const trusting = contextFor(home, preset);
+      const marked = { ...trusting, readWeb: true };
+      for (const request of [host, push, write, share] satisfies ReadonlyArray<PolicyRequest>) {
+        const before = await decide(trusting, request);
+        const after = await decide(marked, request);
+        if (before.decision === "allow") {
+          expect(after).toMatchObject({ decision: "ask", reason: { code: "read-the-web" } });
+          expect(after.reason.message).toContain("read the web");
+        } else expect(after.decision).toBe(before.decision);
+        // The mark names the session, not the policy, so an approval binds to the same version.
+        expect(after.policyVersion).toBe(before.policyVersion);
+      }
+      // A new host asks with Always for that host, and a saved Always for it still answers.
+      expect(await decide(marked, host)).toMatchObject({
+        grantable: true,
+        rules: [{ _tag: "Host", host: "collector.example" }],
+      });
+      const hostGranted = { ...marked, grants: [grantOf({ _tag: "Host", host: "collector.example" })] };
+      expect((await decide(hostGranted, host)).decision).toBe("allow");
+      // A grant for a push or a Charm write says the place is fine, not what the hob sends there.
+      const granted = {
+        ...marked,
+        grants: [
+          grantOf({ _tag: "Push", cwd: home.project, remote: "origin", branch: "feature" }),
+          grantOf({
+            _tag: "CharmSite",
+            charm: "github",
+            operation: "github.comment",
+            cwd: home.project,
+            site: { repository: "otaviobarros/hobbots" },
+          }),
+        ],
+      };
+      expect(await decide(granted, push)).toMatchObject({
+        decision: "ask",
+        grantable: false,
+        reason: { code: "read-the-web" },
+      });
+      expect(await decide(granted, write)).toMatchObject({
+        decision: "ask",
+        grantable: false,
+        reason: { code: "read-the-web" },
+      });
+      // The model's own API stays open.
+      expect((await decide(marked, { _tag: "Web", host: "api.anthropic.com", addresses: [] })).decision).toBe("allow");
+    }
+  });
+
+  // covers ADR 036 (The read-the-web mark)
+  it("[TC-PE-1268-02] leaves found pages, local work, own memory and Never as they were while the session has read the web", async () => {
+    const balanced = contextFor(home, "balanced");
+    const marked = { ...balanced, readWeb: true };
+    const found = {
+      _tag: "Web",
+      host: "example.com",
+      addresses: ["93.184.215.14"],
+      page: { url: "https://example.com/a", found: true },
+    } as const;
+    const written = { ...found, page: { url: "https://example.com/?d=secret", found: false } } as const;
+    for (const request of [
+      found,
+      files("read-files", home.project, "src/index.ts"),
+      files("edit-files", home.project, "src/index.ts"),
+      command("pnpm test", home.project),
+      command("git commit -m wip", home.project, "local-git"),
+      { _tag: "Memory", operation: "save-memory", scope: "your memory" },
+      { _tag: "Memory", operation: "search-memory", scope: "your memory" },
+      githubRead(home.project),
+      // A Charm call the pipeline did not mark as a write is decided as it was.
+      comment(home.project),
+    ] satisfies ReadonlyArray<PolicyRequest>) {
+      expect(await decide(marked, request)).toMatchObject({
+        decision: (await decide(balanced, request)).decision,
+        reason: { code: (await decide(balanced, request)).reason.code },
+      });
+    }
+    expect((await decide(marked, written)).reason.code).toBe("written-url");
+    // Never stays Never: the mark only adds asks.
+    const never = {
+      ...marked,
+      hob: { ...marked.hob, overrides: { "use-web": "deny" as const, push: "deny" as const } },
+    };
+    expect((await decide(never, { _tag: "Web", host: "collector.example", addresses: [] })).decision).toBe("deny");
+    expect(
+      (await decide(never, { _tag: "Push", remote: "origin", branch: "feature", force: false, toDefaultBranch: false }))
+        .decision,
+    ).toBe("deny");
+  });
+
   // covers PE-007
   it("leaves grants out of the policy version, and a This Task grant answers like any grant it is given", async () => {
     const careful = contextFor(home, "careful");

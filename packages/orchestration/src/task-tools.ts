@@ -63,6 +63,7 @@ import { routineReply, waitingForYou } from "./quiet-replies.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
 import { endTurn, type TurnEndDeps } from "./turn-end.ts";
+import { attemptMarkKeeper } from "./web-marks.ts";
 import { makeSettle, makeWrapUp } from "./wrap-up.ts";
 
 type ToolHandler = (scope: CallScope, input: never) => Effect.Effect<TaskToolOutcome, TaskToolRefused>;
@@ -376,10 +377,24 @@ export class TaskTools extends Context.Service<
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
             // The Task the turn's Attempt is on, which it ends on whatever Task a later call names.
             let attemptOn: TaskId | null = null;
+            // An Attempt the turn starts in a session that read the web records the mark at once, not
+            // only when the turn ends or reads again, so the Workbench shows it throughout (ADR 036).
+            let markedOn: AttemptId | null = null;
+            const keepInherited = Effect.suspend(() => {
+              const on = attemptId;
+              if (on === null || on === markedOn || turn.webMark === undefined) return Effect.void;
+              markedOn = on;
+              return turn.webMark.pipe(
+                Effect.flatMap((mark) =>
+                  mark === null ? Effect.void : attemptMarkKeeper(tasks, on, (kept) => announce(kept.entries))(mark),
+                ),
+              );
+            });
             if (begun !== null) {
               attemptId = begun.attemptId;
               attemptOn = known;
               yield* announce(begun.entries);
+              yield* keepInherited;
             }
             // The Task you asked for completes only by complete_task, so it is never blocked here.
             const ended: TurnEndDeps = {
@@ -428,7 +443,7 @@ export class TaskTools extends Context.Service<
                     if (resolved.readOnly !== true) known = resolved.caller.taskId;
                   }),
                   step,
-                ),
+                ).pipe(Effect.ensuring(keepInherited)),
             };
             return {
               hubTools,
@@ -440,6 +455,12 @@ export class TaskTools extends Context.Service<
               scope: source.scope,
               recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
               attempt: Effect.sync(() => attemptId),
+              readWeb: (mark) =>
+                Effect.suspend(() =>
+                  attemptId === null
+                    ? Effect.void
+                    : attemptMarkKeeper(tasks, attemptId, (kept) => announce(kept.entries))(mark),
+                ),
               quiet: Effect.suspend(() =>
                 turn.promptId != null || known === null
                   ? Effect.succeed(false)

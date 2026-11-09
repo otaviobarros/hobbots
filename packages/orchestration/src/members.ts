@@ -41,6 +41,7 @@ import { emptyQuestFinding } from "./empty-quests.ts";
 import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
 import type { TaskTools } from "./task-tools.ts";
 import { endTurn } from "./turn-end.ts";
+import { attemptMarkKeeper } from "./web-marks.ts";
 
 /** What the member runner shares with the step runner it runs beside. */
 export interface MemberDeps {
@@ -350,16 +351,17 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               access: run.access,
               approvals: handle?.approvals ?? null,
               recordToolStart: deps.recordToolStart(task),
-              offer: deps.tools.forSession(
-                { agentId: agent.id, taskId: task.id, carried: work.holding },
-                {
-                  attemptId,
-                  threadId: task.threadId,
-                  currentAccess: currentAccessOf(run),
-                  redactor: deps.redactor,
-                  approvals: handle?.approvals ?? null,
-                },
-              ),
+              offer: (approvals) =>
+                deps.tools.forSession(
+                  { agentId: agent.id, taskId: task.id, carried: work.holding },
+                  {
+                    attemptId,
+                    threadId: task.threadId,
+                    currentAccess: currentAccessOf(run),
+                    redactor: deps.redactor,
+                    approvals,
+                  },
+                ),
               started: (started) => {
                 session = started.sessionId;
                 return (accepts ? work.accepted(started.sessionId) : Effect.void).pipe(
@@ -374,6 +376,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 );
               },
               turns: tasks,
+              keepMark: attemptMarkKeeper(tasks, attemptId, deps.announce),
             },
             deps.recorder,
           );
