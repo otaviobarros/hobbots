@@ -70,7 +70,7 @@ You never create an app by hand or handle a key file, unless you link an app you
 Making an app from a manifest stays the default. Someone who already has a GitHub App, such as one they made by hand for a bot or one an organization made, can give it to a hob instead ([#1321](https://github.com/otaviobarros/hobbots/issues/1321)):
 
 1. In the hob's Charms tab, **Use an app you already have** opens a form.
-2. You give the app's ID, or its client ID, and its private key. You paste the key, or pick the `.pem` file GitHub downloaded. The browser reads the file; it is never uploaded anywhere but the hub.
+2. You give the app's client ID, which GitHub recommends for signing, or its app ID, and its private key. You paste the key, or pick the `.pem` file GitHub downloaded. The browser reads the file; it is never uploaded anywhere but the hub.
 3. The hub signs a JWT with that key, with the ID as `iss`, and reads `GET /app`. GitHub answers only for the key's own app, so this proves the key and gives the app's ID, client ID, slug, owner and permissions. The hub then looks up the bot's user ID, as above.
 4. The hub writes the key to the keychain, then gives the hob the app, exactly as for a made app. The hub keeps it as `linked`.
 5. The Charms tab lists where the app is installed. You never type an installation ID.

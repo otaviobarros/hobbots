@@ -360,11 +360,11 @@ test("[TC-GEN-408] links a GitHub app the user already has, and unlinking leaves
   );
   // The form says what is wrong before anything is sent.
   await form.getByRole("button", { name: "Link the app" }).click();
-  await expect(form.getByText("Give the App ID or Client ID", { exact: false })).toBeVisible();
+  await expect(form.getByText("Give the Client ID or App ID", { exact: false })).toBeVisible();
   await expect(form.getByText("Paste the private key GitHub gave you", { exact: false })).toBeVisible();
   expect(sent).toEqual([]);
 
-  const appId = form.getByRole("textbox", { name: "App ID" });
+  const appId = form.getByRole("textbox", { name: "Client ID" });
   const key = form.getByRole("textbox", { name: "Private key" });
   await appId.fill("3141592");
   await form.getByLabel("Choose the .pem file").setInputFiles({
