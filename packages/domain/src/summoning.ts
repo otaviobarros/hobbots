@@ -165,6 +165,48 @@ export const withSummoningForEveryHob = (
   return { ...policy, charms: { ...policy.charms, granted, overrides, summoning: everyHob.scope } };
 };
 
+/**
+ * The caps on summons that run without asking you (ADR 034): live hobs one manager summoned
+ * without a card, and live hobs summoned without a card for one Task tree. A summon you approve on
+ * a card is never counted, and the hub has no cap on its number of hobs.
+ */
+export interface SummonLimits {
+  readonly maxUnattendedPerHob: number;
+  readonly maxUnattendedPerTree: number;
+}
+
+export const DEFAULT_SUMMON_LIMITS: SummonLimits = { maxUnattendedPerHob: 4, maxUnattendedPerTree: 3 };
+
+/** What the caps count of a hob: who summoned it, for which Task, without a card or not, and its status. */
+type CountedHob = {
+  readonly status: string;
+  readonly summonedBy: string | null;
+  readonly summonedFor: string | null;
+  readonly summonedUnattended: boolean;
+};
+
+/** Whether a hob takes a place under the caps: summoned without a card and not retired, so retiring frees it. */
+const holdsUnattendedPlace = (hob: CountedHob) => hob.summonedUnattended && hob.status !== "retired";
+
+/** Live hobs `managerId` summoned without a card. */
+export const unattendedSummonsBy = (hobs: ReadonlyArray<CountedHob>, managerId: string): number =>
+  hobs.filter((hob) => holdsUnattendedPlace(hob) && hob.summonedBy === managerId).length;
+
+/** Live hobs summoned without a card for any of a Task tree's Tasks. */
+export const unattendedSummonsIn = (hobs: ReadonlyArray<CountedHob>, taskIds: ReadonlySet<string>): number =>
+  hobs.filter((hob) => holdsUnattendedPlace(hob) && hob.summonedFor !== null && taskIds.has(hob.summonedFor)).length;
+
+/**
+ * A hob's unattended summons against the caps, for the Charms tab: the live hobs it summoned
+ * without a card, and the two caps the hub holds them to.
+ */
+export const SummonCaps = Schema.Struct({
+  live: Schema.Int,
+  perHob: Schema.Int,
+  perTree: Schema.Int,
+});
+export type SummonCaps = typeof SummonCaps.Type;
+
 /** The Summoning Charm's tools (ADR 034), named `summoning_<action>` as every built-in Charm's are (ADR 031). */
 export const SUMMONING_CHECK_TOOL = "summoning_check";
 export const SUMMONING_SUMMON_TOOL = "summoning_summon";
