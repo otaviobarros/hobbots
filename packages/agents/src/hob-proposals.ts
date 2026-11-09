@@ -56,12 +56,12 @@ export interface HobProposalApplier {
   /** Whether the row's hob changed since the row was made, so it is never applied. */
   readonly changedSince: (row: HobProposalRow) => Effect.Effect<boolean>;
   /**
-   * Sets `operation` to Allow on the manager's Summoning Charm, as a change made by you, and gives the
-   * manager's configuration version before and after it.
+   * Sets each of `operations` to Allow on the manager's Summoning Charm, as one change made by you, and
+   * gives the manager's configuration version before and after it.
    */
   readonly alwaysAllow: (
     proposal: HobProposal,
-    operation: CharmOperationId,
+    operations: readonly [CharmOperationId, ...ReadonlyArray<CharmOperationId>],
   ) => Effect.Effect<{ readonly before: number; readonly after: number }, HobProposalRefused>;
   /**
    * For a row left `applying` when the hub stopped: what it made, read from the hob, or null when the
@@ -132,7 +132,7 @@ export class HobProposals extends Context.Service<
     readonly denyAll: (id: string) => Effect.Effect<HobProposalView, HobProposalError | DeviceRevoked, UserSession>;
     readonly alwaysAllow: (
       id: string,
-      operation: CharmOperationId,
+      operations: readonly [CharmOperationId, ...ReadonlyArray<CharmOperationId>],
     ) => Effect.Effect<HobProposalView, HobProposalError | DeviceRevoked, UserSession>;
   }
 >()("@hobbots/agents/HobProposals") {
@@ -439,18 +439,22 @@ export class HobProposals extends Context.Service<
               );
             }),
           ),
-        alwaysAllow: (id, operation) =>
+        alwaysAllow: (id, operations) =>
           decide((approved) =>
             Effect.gen(function* () {
               const proposal = yield* open(id);
-              if (!proposal.asks.includes(operation) || proposal.alwaysAllowed.includes(operation)) {
-                return yield* new HobProposalNotAlwaysAllowable({ proposalId: id, operation });
+              // Each operation must be one that asked here and is not Allow already.
+              const refused = operations.find(
+                (operation) => !proposal.asks.includes(operation) || proposal.alwaysAllowed.includes(operation),
+              );
+              if (refused !== undefined) {
+                return yield* new HobProposalNotAlwaysAllowable({ proposalId: id, operation: refused });
               }
               const apply = yield* Deferred.await(applier);
               // The policy change and the proposal that says so commit together, under your device's check.
               const stored = yield* approved(
                 Effect.gen(function* () {
-                  const version = yield* apply.alwaysAllow(proposal, operation);
+                  const version = yield* apply.alwaysAllow(proposal, operations);
                   // A row on the manager itself made before this change is still yours to allow: the
                   // change it would otherwise read as "changed since" is this one.
                   const rows = proposal.rows.map(
@@ -459,7 +463,7 @@ export class HobProposals extends Context.Service<
                         ? { ...row, configVersion: ConfigVersion.make(version.after) }
                         : row,
                   );
-                  return yield* store(proposal, rows, [...proposal.alwaysAllowed, operation]);
+                  return yield* store(proposal, rows, [...proposal.alwaysAllowed, ...new Set(operations)]);
                 }),
               );
               return yield* announce(stored);

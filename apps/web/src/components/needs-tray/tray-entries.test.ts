@@ -1,4 +1,13 @@
-import { AgentId, ApprovalRequest, HubQuestion, HubQuestionId, ThreadId } from "@hobbots/domain";
+import {
+  AgentId,
+  ApprovalRequest,
+  HobProposal,
+  HobProposalId,
+  HubQuestion,
+  HubQuestionId,
+  Revision,
+  ThreadId,
+} from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ADA, ALDRIC, COPY, memberApproval, QUILL, question, stuckItem, THREAD, task } from "../../test/quests.ts";
 import { shownEntry, trayEntries } from "./tray-entries.ts";
@@ -44,6 +53,48 @@ describe("trayEntries", () => {
       threadId: THREAD,
     });
     expect(entries.map((entry) => entry.kind)).toEqual(["approval", "question"]);
+  });
+});
+
+/** A hob proposal (ADR 034) made in the chat `threadId`, open or settled. */
+const proposalIn = (id: string, threadId: ThreadId | null, state: "open" | "settled" = "open") => ({
+  proposal: new HobProposal({
+    id: HobProposalId.make(id),
+    agentId: AgentId.make("aldric"),
+    kind: "summon",
+    tool: "summoning_summon",
+    call: { scope: "reply:m1", key: id },
+    threadId,
+    messageId: null,
+    taskId: null,
+    stepId: null,
+    rows: [],
+    asks: ["summoning.summon"],
+    safety: null,
+    highRisk: false,
+    alwaysAllowed: [],
+    state,
+    createdAt: "2026-11-01T00:00:00.000Z",
+    updatedAt: "2026-11-01T00:00:00.000Z",
+    settledAt: null,
+    revision: Revision.make(1),
+  }),
+  changedSince: [],
+});
+
+describe("trayEntries with hob proposals", () => {
+  // covers ADR 034 (Asking is a proposal), the design system's "one place asks for you"
+  it("asks an open proposal of the chat's thread with the approvals, before stuck work, and leaves out a settled one", () => {
+    const other = ThreadId.make("other");
+    const entries = trayEntries({
+      requests: [pending],
+      blockers: [stuckItem(THREAD)],
+      questions: [],
+      hobProposals: [proposalIn("open", THREAD), proposalIn("elsewhere", other), proposalIn("done", THREAD, "settled")],
+      threadId: THREAD,
+    });
+    expect(entries.slice(0, 2).map((entry) => entry.key)).toEqual([pending.id, "hob-proposal:open"]);
+    expect(entries.map((entry) => entry.kind)).toEqual(["approval", "hob-proposal", "stuck"]);
   });
 });
 
