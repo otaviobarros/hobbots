@@ -65,10 +65,10 @@ test("[TC-UX-409-01] a summon card in the chat and the Inbox: Deny one row, Edit
   await composer.fill(summon("hire-trio", ["Flo", "Gus", "Hedda"]));
   await composer.press("Enter");
 
-  // The card waits in the Needs-you tray above the composer; the call's step points to it.
+  // The card waits in the Needs-you tray above the composer, not in the call's step.
   const inChat = page.locator("[data-tray]").getByRole("region", { name: "Bram proposes 3 new hobs" });
   await expect(inChat).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("Decide it in Needs you, above the reply box.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Reply steps" }).getByRole("region")).toHaveCount(0);
   const rowsInChat = inChat.getByRole("list", { name: "Hobs" });
   await expect(rowsInChat.getByRole("article")).toHaveCount(3);
   await expectAccessible(page, inChat);
@@ -197,9 +197,14 @@ test("[TC-UX-409-03] a summon proposal is decided by keyboard alone: open it fro
 
   // The same card on the call's step in Bram's chat, settled, opens a created hob.
   await page.goto(`${url}/#/hobs/${bram.id}/threads/${thread.id}`);
-  await expect(card.getByRole("status")).toHaveText("Decided. Bram heard what was made and what was denied.", {
-    timeout: 20_000,
-  });
+  // Decided, the step keeps one line per hob and the hobs it made, folded inside the step until opened.
+  const step = page.getByRole("list", { name: "Reply steps" }).getByRole("button").first();
+  await tabTo(page, step, 200);
+  await expect(card).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await expect(card.getByRole("status")).toContainText("Ivo: Allowed", { timeout: 20_000 });
+  await expect(card.getByRole("status")).toContainText("Jun: Allowed");
+  await expect(card.getByRole("button", { name: /^(Allow|Deny)/ })).toHaveCount(0);
   await tabTo(page, card.getByRole("region", { name: "Created" }).getByRole("link", { name: "Open Ivo" }), 200);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main", { name: "Ivo's profile" })).toBeVisible();
@@ -238,8 +243,12 @@ test("[TC-UX-409-04] a hob's change to itself waits in the tray with its fields 
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-tray]")).toHaveCount(0, { timeout: 20_000 });
   await expect(page.getByRole("textbox", { name: /^Message Bram/ })).toBeFocused();
+  // Decided, nothing of it shows in the transcript until its step is opened, and then one line.
   const settled = page.getByRole("region", { name: "Bram proposes changes to itself" });
-  await expect(settled.getByRole("article", { name: "Bram" })).toHaveAttribute("data-state", "allowed");
+  await expect(settled).toHaveCount(0);
+  await page.getByRole("list", { name: "Reply steps" }).getByRole("button").first().click();
+  await expect(settled.getByRole("status")).toContainText("Bram: Allowed");
+  await expect(settled.getByRole("article")).toHaveCount(0);
 });
 
 // covers STD-TEST-010, the design system (one place asks for you), ADR 034

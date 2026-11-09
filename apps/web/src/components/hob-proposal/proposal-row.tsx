@@ -82,7 +82,7 @@ export function ProposalRow({
 }
 
 /** Where the row stands, with what came of it once decided. */
-function RowState({ row }: { row: HobProposalRow }) {
+export function RowState({ row }: { row: HobProposalRow }) {
   return (
     <span className={cn("text-meta", STATE_TONE[row.state])}>
       {copy.state[row.state]}
