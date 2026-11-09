@@ -22,6 +22,7 @@ import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
+import { webChanged } from "./web.ts";
 import { grantsChanged } from "./grants.ts";
 import { applyHistory } from "./history.ts";
 import { applyHobChanges } from "./hob-changes.ts";
@@ -201,11 +202,6 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // No screen shows web records or Settings › Web yet (ADR 036, #1271).
-  "WebSearched",
-  "WebFetched",
-  "WebSettingsChanged",
-  "HobWebLimitsChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -214,14 +210,23 @@ type UnappliedEvent = Extract<
       | "TurnStopRequested"
       | "TurnStopped"
       | "TurnStarted"
-      | "TurnEnded"
-      | "WebSearched"
-      | "WebFetched"
-      | "WebSettingsChanged"
-      | "HobWebLimitsChanged";
+      | "TurnEnded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
+
+/** What hobs searched and read, and the limits on it: a chat's step lines, Usage and Settings › Web read them (ADR 036). */
+const WEB_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "WebSearched",
+  "WebFetched",
+  "WebSettingsChanged",
+  "HobWebLimitsChanged",
+]);
+type WebEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "WebSearched" | "WebFetched" | "WebSettingsChanged" | "HobWebLimitsChanged" }
+>;
+const isWebEvent = (event: HobbotsEvent): event is WebEvent => WEB_EVENTS.has(event._tag);
 
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
@@ -238,6 +243,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     return;
   }
   if (isUnapplied(event)) return;
+  if (isWebEvent(event)) {
+    void webChanged(queryClient);
+    return;
+  }
   // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.
   if (event._tag === "SkillUsed") {
     void refreshSkillUses(queryClient);
@@ -482,6 +491,8 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         void refreshMemorySaves(queryClient);
         // What changed while the stream was down is not replayed into the Skills page's reads.
         void refreshSkills(queryClient);
+        // Nor what hobs searched and read.
+        void webChanged(queryClient);
         setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {

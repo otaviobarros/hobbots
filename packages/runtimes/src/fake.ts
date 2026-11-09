@@ -23,6 +23,7 @@ import {
   type RuntimeKind,
   RuntimeModel,
   RuntimeModels,
+  WEB_FETCH_TOOL,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { type Cause, Clock, Duration, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
@@ -709,7 +710,14 @@ export const scriptedHubEvents = (
           answers.push(`${call.name}: ${answer.text}`);
           const key = (call.input as { readonly key?: unknown } | null)?.key;
           if (typeof key === "string" && !answer.refused) details.set(key, answerDetails(answer.text));
-          yield* Queue.offer(queue, { _tag: "StepEnded", id: call.id });
+          // A page read ends with what the hub answered, as Claude Code and Codex report a hub tool's
+          // result, so its step keeps the text the hob got (ADR 036).
+          yield* Queue.offer(
+            queue,
+            call.name === WEB_FETCH_TOOL
+              ? { _tag: "ToolFinished", id: call.id, failed: false, output: answer.text }
+              : { _tag: "StepEnded", id: call.id },
+          );
           yield* Queue.end(queue);
         }),
       ),

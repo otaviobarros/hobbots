@@ -22,6 +22,8 @@ import { AnswerForm } from "../quest/answer-form.tsx";
 import { messages as questMessages } from "../quest/messages.ts";
 import { type HobLookup, useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
+import { webAskOf } from "../web/web-ask.ts";
+import { WebAskNotes } from "../web/web-ask-parts.tsx";
 import { Details } from "./details.tsx";
 import { HubQuestionBody } from "./hub-question-body.tsx";
 import { messages } from "./messages.ts";
@@ -145,7 +147,11 @@ const itemLabel = (entry: TrayEntry, asker: Pick<Hob, "name">): string => {
 };
 
 const titleOf = (entry: TrayEntry, asker: Pick<Hob, "name">): string => {
-  if (entry.kind === "approval") return copy.approvalTitle({ name: asker.name, action: approvalAction(entry.request) });
+  if (entry.kind === "approval")
+    return (
+      webAskOf(entry.request, asker.name)?.title ??
+      copy.approvalTitle({ name: asker.name, action: approvalAction(entry.request) })
+    );
   return entry.kind === "stuck" ? copy.stuckTitle({ name: asker.name }) : copy.questionTitle({ name: asker.name });
 };
 
@@ -192,15 +198,20 @@ function ApprovalBody({
   const decide = useDecideApproval(request, via);
   const area = useRef<HTMLDivElement>(null);
   const moveOn = useMoveOn();
+  const web = webAskOf(request, asker.name);
+  const page = web?.kind != null && web.url !== null ? web.url : null;
   return (
     <div ref={area} className="contents">
-      <p className="m-0 text-text">{request.reason}</p>
+      {page === null && <p className="m-0 text-text">{request.reason}</p>}
       <div className="flex gap-2 rounded-tag bg-deep px-3 py-2 font-mono text-code">
-        <span aria-hidden className="text-label">
-          $
-        </span>
-        <code className="break-all whitespace-pre-wrap text-text-strong">{exactAction(request)}</code>
+        {page === null && (
+          <span aria-hidden className="text-label">
+            $
+          </span>
+        )}
+        <code className="break-all whitespace-pre-wrap text-text-strong">{page ?? exactAction(request)}</code>
       </div>
+      {web !== null && <WebAskNotes ask={web} name={asker.name} />}
       <ApprovalActions
         approval={request}
         hob={asker}

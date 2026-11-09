@@ -388,6 +388,7 @@ export class ApprovalService extends Context.Service<
                       arguments: redactor.value(action.arguments),
                       label: redactor.text(action.label),
                       reason: redactor.text(action.reason),
+                      reasonCode: action.reasonCode ?? null,
                       actionDigest: yield* actionDigest(action),
                       policyVersion: action.policyVersion,
                       onceOnly: action.onceOnly,

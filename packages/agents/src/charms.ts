@@ -13,6 +13,7 @@ import {
   type TaskId,
   type ThreadId,
   WEB_FETCH_TOOL,
+  type WebPageCache,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Schema, type Scope } from "effect";
 import type { AskableVerdict } from "./asking.ts";
@@ -403,6 +404,11 @@ export class WebTools extends Context.Service<
   {
     /** The tools the turn offers, read at its start: none (null) when its Use the web answer is Never. */
     readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+    /** The pages the hub holds for a while (ADR 036), which Settings › Web counts and clears. */
+    readonly cache?: {
+      readonly held: Effect.Effect<WebPageCache>;
+      readonly clear: Effect.Effect<void>;
+    };
   }
 >()("@hobbots/agents/WebTools") {}
 

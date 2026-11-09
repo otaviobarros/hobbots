@@ -275,6 +275,8 @@ export interface ApprovalAction {
   readonly label: string;
   /** Why the policy asks. */
   readonly reason: string;
+  /** The policy's code for why it asks, such as `private-address`. */
+  readonly reasonCode?: string;
   /** The policy version the call was decided under. */
   readonly policyVersion: string;
   /** A high-risk action, approved once only and with the user's confirmation. */

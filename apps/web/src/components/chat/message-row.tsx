@@ -1,5 +1,5 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import { type Agent, isInProgress, type Message } from "@hobbots/domain";
+import { type Agent, isInProgress, type Message, type WebUsage } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -11,6 +11,8 @@ import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "../messages.ts";
 import { limitRefill, planOf, usePlans } from "../usage/plan-summary.ts";
+import { useReplyWeb } from "../web/reply-web.tsx";
+import { type ReplyWeb, shownAsWebLine } from "../web/web-model.ts";
 import { ReplySteps } from "./reply-steps.tsx";
 import { SettleCharmCall } from "./settle-charm-call.tsx";
 
@@ -47,6 +49,12 @@ export type ContinueReply = {
   readonly alternatives?: ReadonlyArray<{ readonly label: string; readonly onContinue: () => void }>;
 };
 
+/** What a reply searched and read, and every record of its chat, which its sheets read (ADR 036). */
+export interface ReplyWebParts {
+  readonly reply: ReplyWeb;
+  readonly usage: WebUsage | undefined;
+}
+
 /**
  * One message; `focused` marks the one a search result opened. A reply shows `children` under its
  * steps, such as the approval cards its tool calls are waiting on, and `after` under its text, such
@@ -58,6 +66,7 @@ export function MessageRow({
   focused = false,
   resume,
   after,
+  web,
   children,
 }: {
   message: Message;
@@ -65,6 +74,7 @@ export function MessageRow({
   focused?: boolean;
   resume?: ContinueReply | undefined;
   after?: ReactNode;
+  web?: ReplyWebParts | undefined;
   children?: ReactNode;
 }) {
   const id = messageElementId(message.id);
@@ -78,7 +88,7 @@ export function MessageRow({
   }
 
   return (
-    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} after={after}>
+    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} after={after} web={web}>
       {children}
     </ReplyRow>
   );
@@ -91,6 +101,7 @@ function ReplyRow({
   focused,
   resume,
   after,
+  web,
   children,
 }: {
   message: Message;
@@ -99,10 +110,19 @@ function ReplyRow({
   focused: boolean;
   resume: ContinueReply | undefined;
   after: ReactNode;
+  web: ReplyWebParts | undefined;
   children: ReactNode;
 }) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
+  const searched = useReplyWeb({
+    web: web?.reply ?? { steps: [], sources: [] },
+    usage: web?.usage,
+    message,
+    hob,
+  });
+  // A search or a page that went through shows as its step line instead (ADR 036).
+  const steps = searched.lines === null ? message.steps : message.steps.filter((step) => !shownAsWebLine(step));
   return (
     <article
       id={id}
@@ -119,8 +139,9 @@ function ReplyRow({
         <span className="text-meta text-label">{writing ? copy.writing : formatTime(message.createdAt)}</span>
       </span>
       <div className="ms-10 flex min-w-0 flex-col gap-[3px]">
+        {searched.lines}
         <ReplySteps
-          steps={message.steps}
+          steps={steps}
           inProgress={streaming}
           logUrl={(stepId) => toolLogUrl(message.threadId, message.id, stepId)}
           settle={(stepId) => <SettleCharmCall threadId={message.threadId} messageId={message.id} stepId={stepId} />}
@@ -132,6 +153,8 @@ function ReplyRow({
         ) : (
           <ReplyMarkdown content={message.content} streaming={streaming} caret={writing} />
         )}
+        {searched.sources}
+        {searched.sheet}
         {after}
         {message.status === "stopping" && (
           <span role="status" className="flex items-center gap-2 text-detail text-lantern">

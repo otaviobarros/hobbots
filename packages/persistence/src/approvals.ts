@@ -96,6 +96,7 @@ export const ApprovalRepositoryLive = Layer.effect(
             arguments: JSON.stringify(approval.arguments),
             label: approval.label,
             reason: approval.reason,
+            reason_code: approval.reasonCode,
             action_digest: approval.actionDigest,
             policy_version: approval.policyVersion,
             once_only: approval.onceOnly ? 1 : 0,

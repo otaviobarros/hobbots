@@ -10,6 +10,7 @@ import {
   WEB_PAGE_PART_CHARS,
   WebFetchInput,
   WebFetchRecord,
+  type WebPageCache,
   WebRecordId,
   webFetchJsonSchema,
   webTurnKey,
@@ -101,6 +102,11 @@ export class WebFetcher extends Context.Service<
   {
     readonly resolve: (url: URL) => Effect.Effect<WebTarget, WebFetchFailed>;
     readonly fetch: (url: URL, target: WebTarget) => Effect.Effect<WebFetched, WebFetchFailed>;
+    /** The pages the hub holds for a while, which Settings › Web counts and clears; absent where none are kept. */
+    readonly cache?: {
+      readonly held: Effect.Effect<WebPageCache>;
+      readonly clear: Effect.Effect<void>;
+    };
   }
 >()("@hobbots/agents/WebFetcher") {}
 
@@ -593,5 +599,6 @@ export const makeWebTools = <V extends WebVerdict>(
     return WebTools.of({
       forTurn: (turn: CharmTurn) =>
         offerHubActions({ owner: { _tag: "BuiltIn" }, actions: actionsFor(turn), decide })(turn),
+      ...(fetcher.cache === undefined ? {} : { cache: fetcher.cache }),
     });
   });
