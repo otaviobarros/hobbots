@@ -1005,16 +1005,22 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         return true;
       });
 
-    /** Whether hob `id` has a configuration version that `call` made, since the call began. */
+    /**
+     * Whether hob `id` has a configuration version that `call` made, since the call began: one whose
+     * actor carries the attempt the call's plan minted. The key alone is not enough, since another
+     * Task of the same manager may use it again once the call left its site (ADR 034, Never twice).
+     */
     const madeByCall = (services: SummoningServices, id: AgentId, call: CharmCall) =>
       Effect.gen(function* () {
+        const { attempt } = JSON.parse(call.plan) as { readonly attempt?: string };
+        if (attempt === undefined) return false;
         const agent = yield* services.repo.findAgent(id);
         if (Option.isNone(agent)) return false;
         for (let version = agent.value.configVersion; version >= 1; version--) {
           const config = yield* services.repo.findAgentConfig(id, version);
           if (Option.isNone(config) || config.value.createdAt < call.createdAt) return false;
           const { actor } = config.value;
-          if (actor._tag !== "You" && actor.hobId === call.agentId && actor.call.key === call.key) return true;
+          if (actor._tag === "Hob" && actor.hobId === call.agentId && actor.call.attempt === attempt) return true;
         }
         return false;
       });
@@ -1130,7 +1136,10 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           }
           const parts = rows.flatMap((row) => row.operations.map((operation) => part(operation, [row.agent.name])));
           const safety = rows.flatMap((row) => (row.safety === null ? [] : [row.safety])).join(" ") || null;
-          const actor = actorOf(context);
+          // Each version this call makes carries its attempt, which the plan keeps for reading it back.
+          const attempt = crypto.randomUUID();
+          const made = actorOf(context);
+          const actor: ChangeActor = made._tag === "You" ? made : { ...made, call: { ...made.call, attempt } };
           const send = Effect.gen(function* () {
             const done: Array<string> = [];
             const failed: Array<string> = [];
@@ -1169,7 +1178,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             card: card(input, `Change ${rows.map((row) => row.agent.name).join(", ")}`),
             write: {
               site: `change:${[...ids].sort().join(",")}`,
-              recorded: { ids },
+              recorded: { ids, attempt },
               appliedText: `Changed ${rows.map((row) => row.agent.name).join(", ")}.`,
               send,
               proposal: proposing(context, "change", SUMMONING_CHANGE_TOOL, {

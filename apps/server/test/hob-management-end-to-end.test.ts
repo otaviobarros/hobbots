@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  CharmCalls,
   Charms,
   ChatService,
   GrantService,
@@ -27,6 +28,8 @@ import { fakeCharm } from "@hobbots/agents/testing";
 import type { HobPermissions, HobProposalView } from "@hobbots/api";
 import {
   type Agent,
+  type ChangeActor,
+  CharmCall,
   isInProgress,
   type Message,
   type Question,
@@ -536,5 +539,71 @@ describe("hob management, end to end", () => {
     expect((await ended(sid.running)).status).not.toBe("complete");
     expect((await stored(sid.made)).status).toBe("retired");
     await Effect.runPromise(Deferred.succeed(gate, undefined));
+  });
+
+  /** What reading `call` back finds, through the Summoning Charm's own read-back for its tool. */
+  const readBack = (call: CharmCall) =>
+    hobs.runPromise(
+      Charms.use(({ charms }) => {
+        const summoning = charms.find((charm) => charm.readBacks[call.tool] !== undefined) as (typeof charms)[number];
+        const read = (summoning.readBacks[call.tool] as (call: CharmCall) => Effect.Effect<boolean | string, unknown>)(
+          call,
+        );
+        return summoning.context === undefined ? read : Effect.provideContext(read, summoning.context);
+      }),
+    );
+
+  /** Changes `hob`'s instructions as `actor`, as a Summoning call does. */
+  const changedAs = (hob: Agent, instructions: string, actor: ChangeActor) =>
+    hobs.runPromise(HobService.use((service) => service.change(hob.id, { profile: { instructions } }, actor)));
+
+  // covers ADR 034 (Never twice), ADR 031 (A Charm's writes), #412
+  it("[TC-AG-412-09] reading a change call back finds only the versions that call made, never another Task's call with the same key", async () => {
+    await manages(chief, { "summoning.summon": "allow", "summoning.instructions": "allow" });
+    // A change the chief made in a chat to hobs it summoned reads back from the versions it made.
+    const thread = await send(chief, [
+      hub("summoning_summon", { key: "hire-pair", hobs: [draft("Xan"), draft("Yul")] }),
+      hub("summoning_change", {
+        key: "update",
+        changes: [
+          { hob: "Xan", instructions: "Write short." },
+          { hob: "Yul", instructions: "Write short." },
+        ],
+      }),
+    ]);
+    await ended(thread);
+    const [xan, yul] = [(await named("Xan")) as Agent, (await named("Yul")) as Agent];
+    const calls = await hobs.runPromise(CharmCalls.use((records) => records.listForThread(thread.id)));
+    const made = calls.find((call) => call.tool === "summoning_change") as CharmCall;
+    expect(made.state).toBe("applied");
+    expect(await readBack(made)).toBe(true);
+
+    // Task A's "update" changed Xan, and the hub stopped before Yul. Task B then used "update" again to
+    // change Yul alone, on a site of its own. B's version of Yul does not settle A as applied.
+    const started = new Date().toISOString();
+    const inTask = (task: string, attempt: string): ChangeActor => ({
+      _tag: "Hob",
+      hobId: chief.id,
+      call: { scope: `task:${task}`, key: "update", attempt },
+    });
+    await changedAs(xan, "Task A's brief.", inTask("a", "attempt-a"));
+    await changedAs(yul, "Task B's brief.", inTask("b", "attempt-b"));
+    const lost = CharmCall.make({
+      ...made,
+      scope: "task:a",
+      attempt: "attempt-a",
+      site: `change:${[xan.id, yul.id].sort().join(",")}`,
+      plan: JSON.stringify({ ids: [xan.id, yul.id], attempt: "attempt-a" }),
+      state: "uncertain",
+      result: null,
+      createdAt: started,
+      updatedAt: started,
+    });
+    expect(await readBack(lost)).toBe(false);
+    // Once Yul holds a version from A's own call, it reads back as applied.
+    await changedAs(yul, "Task A's brief.", inTask("a", "attempt-a"));
+    expect(await readBack(lost)).toBe(true);
+    // A call recorded before calls carried their attempt never reads back from a key alone.
+    expect(await readBack(CharmCall.make({ ...lost, plan: JSON.stringify({ ids: [xan.id, yul.id] }) }))).toBe(false);
   });
 });

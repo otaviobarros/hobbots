@@ -3,9 +3,15 @@ import { AgentId } from "./ids.ts";
 
 /**
  * The hub tool call behind a change a hob made or proposed, by the key it sent in its work (ADR 031):
- * `scope` is the work the key belongs to, such as `task:<Task id>`.
+ * `scope` is the work the key belongs to, such as `task:<Task id>`. `attempt` names the one call that
+ * made a change, minted when the hub decided it, so reading the call back finds only what that call
+ * did, never another call that used the same key in other work (ADR 034, Never twice).
  */
-export const ChangeCall = Schema.Struct({ scope: Schema.String, key: Schema.String });
+export const ChangeCall = Schema.Struct({
+  scope: Schema.String,
+  key: Schema.String,
+  attempt: Schema.optionalKey(Schema.String),
+});
 export type ChangeCall = typeof ChangeCall.Type;
 
 /** You made the change, in the app or through the API. */

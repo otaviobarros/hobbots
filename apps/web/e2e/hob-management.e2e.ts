@@ -66,6 +66,7 @@ test("[TC-UX-412-01] once you allow a summon in the chat, each hob it made opens
   // You decide it in the tray, from the keyboard.
   const tray = page.locator("[data-tray]").getByRole("region", { name: "Bram proposes 2 new hobs" });
   await expect(tray).toBeVisible({ timeout: 20_000 });
+  await expectAccessible(page);
   await tray.getByRole("button", { name: "Allow all" }).focus();
   await page.keyboard.press("Enter");
   await expect(tray).toBeHidden({ timeout: 20_000 });
@@ -81,6 +82,7 @@ test("[TC-UX-412-01] once you allow a summon in the chat, each hob it made opens
     const profile = page.getByRole("main", { name: `${name}'s profile` });
     await expect(profile).toBeVisible();
     await expect(profile.getByText("Summoned by Bram").first()).toBeVisible();
+    await expectAccessible(page);
     await page.goBack();
     await expect(created.getByRole("link", { name: `Open ${name}` })).toBeVisible({ timeout: 20_000 });
   }
