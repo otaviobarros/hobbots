@@ -489,6 +489,8 @@ export const makeHubActions =
     ) =>
       Effect.gen(function* () {
         if (!("write" in plan) || plan.write.proposal === undefined || keyed === null) return null;
+        // A turn with no way to ask you makes no proposal: the call is refused as any Ask would be.
+        if (step === undefined || !turn.approvals?.request) return null;
         const { write } = plan;
         const proposal = plan.write.proposal;
         const verdict = yield* options.decide(turn.approvals, access, plan.request)(null);

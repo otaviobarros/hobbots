@@ -1070,7 +1070,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               proposal: proposing(context, "summon", SUMMONING_SUMMON_TOOL, {
                 rows: proposalRows,
                 asks: askingOf(manager, [SUMMON_OPERATION]),
-                safety: null,
+                safety: cap,
               }),
             },
           };

@@ -20,7 +20,7 @@ export const messages = {
   label: ({ who }: { who: string }) => `Proposal from ${who}`,
   cardLabel: ({ what }: { what: string }) => what,
   why: "Nothing is made or changed until you allow it. What you allow is made by you, on the manager's proposal.",
-  safety: ({ reason }: { reason: string }) => `This asks whatever the answers say: ${reason}`,
+  safety: ({ reason }: { reason: string }) => `Why this asks you: ${reason}`,
   rows: "Hobs",
   allow: "Allow",
   deny: "Deny",

@@ -776,9 +776,10 @@ describe("the Summoning Charm, end to end", () => {
     const checked = await turn(chief, hub("summoning_check", { summon: [draft("Hal")] }));
     expect(checked.reply?.content).toContain("the cap is 4, so this summon asks the user.");
     const hal = await turn(chief, hub("summoning_summon", { key: "hire-hal", hobs: [draft("Hal")] }));
-    expect(hal.pending).toMatchObject({ operation: "summoning.summon", onceOnly: true, grantable: false });
-    expect(hal.pending?.reason).toContain("You have 4 live hobs summoned without asking the user");
-    expect((await decide(hal, "approve")).content).toContain("Summoned 1 hob:");
+    // The ask is a proposal (ADR 034): the cap's reason is on its card, which offers no "Always allow".
+    expect(hal.proposal?.proposal.safety).toContain("You have 4 live hobs summoned without asking the user");
+    expect(hal.proposal?.proposal.asks).toEqual([]);
+    expect((await decideProposal(hal, "allow-all")).content).toContain("- Hal: the user allowed it. Summoned Hal");
     const hired = (await allHobs()).find((agent) => agent.name === "Hal") as Agent;
     expect(hired).toMatchObject({ summonedBy: chief.id, summonedUnattended: false });
     expect(await caps()).toMatchObject({ live: 4 });
@@ -950,14 +951,14 @@ describe("the Summoning Charm, end to end", () => {
       chief,
       hub("summoning_summon", {
         key: "hire-trio",
-        hobs: [draft("Flo"), draft("Gus", { instructions: "Write tests." }), draft("Hal")],
+        hobs: [draft("Flo"), draft("Gus", { instructions: "Write tests." }), draft("Hedda")],
       }),
     );
     const view = asked.proposal as HobProposalView;
     expect(view.proposal.rows.map((row) => [row.label, row.state])).toEqual([
       ["Flo", "pending"],
       ["Gus", "pending"],
-      ["Hal", "pending"],
+      ["Hedda", "pending"],
     ]);
     const gus = view.proposal.rows[1] as HobProposalView["proposal"]["rows"][number];
     // Your version is checked as the manager's was: never wider than the manager.
@@ -974,8 +975,8 @@ describe("the Summoning Charm, end to end", () => {
     expect(edited.body.proposal.state).toBe("open");
     const reply = await decideProposal(asked, "allow-all");
     expect(reply.content).toContain("- Gus: the user allowed it. Summoned Gussie (Writer)");
-    const made = (await allHobs()).filter((agent) => ["Flo", "Gussie", "Hal"].includes(agent.name));
-    expect(made.map((agent) => agent.name).sort()).toEqual(["Flo", "Gussie", "Hal"]);
+    const made = (await allHobs()).filter((agent) => ["Flo", "Gussie", "Hedda"].includes(agent.name));
+    expect(made.map((agent) => agent.name).sort()).toEqual(["Flo", "Gussie", "Hedda"]);
     const gussie = made.find((agent) => agent.name === "Gussie") as Agent;
     expect(gussie).toMatchObject({
       id: gus.hobId,
@@ -997,65 +998,70 @@ describe("the Summoning Charm, end to end", () => {
 
   // covers ADR 034 (A decision per row, the manager hears row by row, Changed since), #409 done when 2
   it("[TC-AG-409-02] a change to three hobs is allowed for two and denied for one, and the chief hears which", async () => {
-    await chiefAnswers({ "summoning.summon": "allow" });
-    await turn(chief, hub("summoning_summon", { key: "hire-crew", hobs: [draft("Ivy"), draft("Jo"), draft("Kit")] }));
     await chiefAnswers({});
+    const hire = await turn(
+      chief,
+      hub("summoning_summon", { key: "hire-crew", hobs: [draft("Iris"), draft("Jules"), draft("Kai")] }),
+    );
+    await decideProposal(hire, "allow-all");
     const asked = await turn(
       chief,
       hub("summoning_change", {
         key: "retone-crew",
         changes: [
-          { hob: "Ivy", instructions: "Be brief." },
-          { hob: "Jo", instructions: "Be brief." },
-          { hob: "Kit", instructions: "Be brief." },
+          { hob: "Iris", instructions: "Be brief." },
+          { hob: "Jules", instructions: "Be brief." },
+          { hob: "Kai", instructions: "Be brief." },
         ],
       }),
     );
     const view = asked.proposal as HobProposalView;
     expect(view.proposal.asks).toEqual(["summoning.instructions"]);
-    const [ivy, jo, kit] = view.proposal.rows as ReadonlyArray<HobProposalView["proposal"]["rows"][number]>;
-    expect(ivy?.before).toEqual({ instructions: "" });
-    expect(ivy?.change).toMatchObject({ hob: ivy?.hobId, instructions: "Be brief." });
-    expect((await onProposal(view, `rows/${ivy?.id}/allow`)).status).toBe(200);
-    // Kit is changed from its profile meanwhile: its row shows as changed since, and only Deny is left.
-    expect((await request("PATCH", `/api/agents/${kit?.hobId}`, { name: "Kitty" })).status).toBe(200);
+    const [iris, jules, kai] = view.proposal.rows as ReadonlyArray<HobProposalView["proposal"]["rows"][number]>;
+    expect(iris?.before).toEqual({ instructions: "" });
+    expect(iris?.change).toMatchObject({ hob: iris?.hobId, instructions: "Be brief." });
+    expect((await onProposal(view, `rows/${iris?.id}/allow`)).status).toBe(200);
+    // Kai is changed from its profile meanwhile: its row shows as changed since, and only Deny is left.
+    expect((await request("PATCH", `/api/agents/${kai?.hobId}`, { name: "Kitty" })).status).toBe(200);
     const read = await proposalOf(view.proposal.id);
-    expect(read.changedSince).toEqual([kit?.id]);
-    const stale = await onProposal(view, `rows/${kit?.id}/allow`);
+    expect(read.changedSince).toEqual([kai?.id]);
+    const stale = await onProposal(view, `rows/${kai?.id}/allow`);
     expect(stale.status).toBe(409);
     expect(stale.body).toMatchObject({ _tag: "HobProposalChangedSince" });
-    expect((await onProposal(view, `rows/${jo?.id}/allow`)).status).toBe(200);
-    expect((await onProposal(view, `rows/${kit?.id}/deny`)).status).toBe(200);
+    expect((await onProposal(view, `rows/${jules?.id}/allow`)).status).toBe(200);
+    expect((await onProposal(view, `rows/${kai?.id}/deny`)).status).toBe(200);
     const reply = await settled(asked.thread);
-    expect(reply.content).toContain("- Ivy: the user allowed it. Changed instructions, from its next turn.");
-    expect(reply.content).toContain("- Jo: the user allowed it.");
+    expect(reply.content).toContain("- Iris: the user allowed it. Changed instructions, from its next turn.");
+    expect(reply.content).toContain("- Jules: the user allowed it.");
     // A row keeps the name its hob had when the row was made.
-    expect(reply.content).toContain("- Kit: the user denied it, so nothing was done.");
-    expect((await hob(ivy?.hobId as string)).instructions).toBe("Be brief.");
-    expect((await hob(jo?.hobId as string)).instructions).toBe("Be brief.");
-    expect((await hob(kit?.hobId as string)).instructions).toBe("");
+    expect(reply.content).toContain("- Kai: the user denied it, so nothing was done.");
+    expect((await hob(iris?.hobId as string)).instructions).toBe("Be brief.");
+    expect((await hob(jules?.hobId as string)).instructions).toBe("Be brief.");
+    expect((await hob(kai?.hobId as string)).instructions).toBe("");
   });
 
   // covers ADR 034 ("Always allow"), #409 done when 3, #410 (the Charms tab reads it as Allow)
   it("[TC-AG-409-03] Always allow on a summon card sets summoning.summon to Allow as your change, and the next summon runs without a card", async () => {
-    await chiefAnswers({});
-    const before = await hob(chief.id);
-    const asked = await turn(chief, hub("summoning_summon", { key: "hire-lu", hobs: [draft("Lu")] }));
+    // A manager of its own, so the caps the chief reached above leave its next summon free.
+    const boss = await create("Bram", 4009);
+    await permissions(boss, { ownFolders: [team], charms: { granted: ["summoning"], overrides: SUMMONING_DEFAULTS } });
+    const before = await hob(boss.id);
+    const asked = await turn(boss, hub("summoning_summon", { key: "hire-lark", hobs: [draft("Lark")] }));
     const view = asked.proposal as HobProposalView;
     // Only an operation that asked is offered.
     expect((await onProposal(view, "always-allow", { operation: "summoning.instructions" })).status).toBe(409);
     const always = await onProposal(view, "always-allow", { operation: "summoning.summon" });
     expect(always.status).toBe(200);
     expect(always.body.proposal.alwaysAllowed).toEqual(["summoning.summon"]);
-    const after = await hob(chief.id);
+    const after = await hob(boss.id);
     expect(after.configVersion).toBe(before.configVersion + 1);
     expect(after.policy.charms?.overrides?.["summoning.summon"]).toBe("allow");
-    expect((await versions(chief.id)).at(-1)?.actor).toEqual({ _tag: "You" });
-    const tab = await request<HobPermissions>("GET", `/api/agents/${chief.id}/permissions`);
+    expect((await versions(boss.id)).at(-1)?.actor).toEqual({ _tag: "You" });
+    const tab = await request<HobPermissions>("GET", `/api/agents/${boss.id}/permissions`);
     expect(tab.body.decisions["summoning.summon"]).toBe("allow");
     const reply = await decideProposal(asked, "allow-all");
     expect(reply.content).toContain("The user set summoning.summon to Allow for you");
-    const next = await turn(chief, hub("summoning_summon", { key: "hire-mo", hobs: [draft("Mo")] }));
+    const next = await turn(boss, hub("summoning_summon", { key: "hire-mabel", hobs: [draft("Mabel")] }));
     expect(next.proposal).toBeUndefined();
     expect(next.reply?.content).toContain("Summoned 1 hob:");
   });
@@ -1066,7 +1072,7 @@ describe("the Summoning Charm, end to end", () => {
     const scope = { summoned: true, hobs: [], self: false };
     expect((await request("PATCH", "/api/setup", { summoningForEveryHob: { scope, overrides: {} } })).status).toBe(200);
     try {
-      const asked = await turn(wren, hub("summoning_summon", { key: "hire-ivy", hobs: [draft("Ivy")] }));
+      const asked = await turn(wren, hub("summoning_summon", { key: "hire-iona", hobs: [draft("Iona")] }));
       const view = asked.proposal as HobProposalView;
       expect((await onProposal(view, "always-allow", { operation: "summoning.summon" })).status).toBe(200);
       const after = await hob(wren.id);
@@ -1083,7 +1089,7 @@ describe("the Summoning Charm, end to end", () => {
   // covers ADR 034 (The call waits on its step; outcome as a backpack item), PE-006
   it("[TC-AG-409-04] only a user session decides a proposal, and one decided after its turn stopped reaches the chief's backpack", async () => {
     await chiefAnswers({});
-    const asked = await turn(chief, hub("summoning_summon", { key: "hire-ned", hobs: [draft("Ned")] }));
+    const asked = await turn(chief, hub("summoning_summon", { key: "hire-nell", hobs: [draft("Nell")] }));
     const view = asked.proposal as HobProposalView;
     const anonymous = await handler(
       new Request(`http://localhost:4578/api/hob-proposals/${view.proposal.id}/allow-all`, {
@@ -1100,7 +1106,7 @@ describe("the Summoning Charm, end to end", () => {
     const listed = await request<{ proposals: ReadonlyArray<HobProposalView> }>("GET", "/api/hob-proposals");
     expect(listed.body.proposals.some((each) => each.proposal.id === view.proposal.id)).toBe(true);
     expect((await onProposal(view, "allow-all")).status).toBe(200);
-    expect((await allHobs()).some((agent) => agent.name === "Ned")).toBe(true);
+    expect((await allHobs()).some((agent) => agent.name === "Nell")).toBe(true);
     const backpack = await eventually(async () => {
       const read = await request<{ items: ReadonlyArray<{ payload: { _tag: string } }> }>(
         "GET",
