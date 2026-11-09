@@ -22,6 +22,7 @@ import {
   type RuntimeAdapterShape,
   SecretRedaction,
   SummoningHub,
+  TaskRepository,
 } from "@hobbots/agents";
 import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
 import type { HobPermissions } from "@hobbots/api";
@@ -35,6 +36,7 @@ import {
   roleFields,
   SUMMONING_DEFAULTS,
   SUMMONING_SELF_DEFAULTS,
+  TaskId,
   type Thread,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -752,14 +754,39 @@ describe("the Summoning Charm, end to end", () => {
     expect((await allHobs()).find((agent) => agent.name === "Ivy")).toMatchObject({ summonedUnattended: true });
   });
 
-  // covers ADR 034 (Limits for unattended summons), #407 (3 per Task tree)
-  it("[TC-AG-407-02] summons without a card for one Task tree stop at its cap and ask, and a summon that would pass a cap asks for all its hobs", async () => {
-    const lead = await create("Lead", 4004);
-    await permissions(lead, {
+  /** A hob you made with summon at Allow, within the team folder. */
+  const manager = async (name: string, lookSeed: number) => {
+    const made = await create(name, lookSeed);
+    await permissions(made, {
       ownFolders: [team],
       charms: { granted: ["summoning"], overrides: { ...SUMMONING_DEFAULTS, "summoning.summon": "allow" } },
     });
-    const manager = await hob(lead.id);
+    return hob(made.id);
+  };
+
+  /** A Task tree on the hub's records: a root owned by `owner`, and children directly under it. */
+  const tree = (owner: Agent, root: string, children: ReadonlyArray<string>) =>
+    hobs.runPromise(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const task = (id: string, parentId: string | null) => ({
+          id: TaskId.make(id),
+          ownerId: owner.id,
+          parentId: parentId === null ? null : TaskId.make(parentId),
+          threadId: null,
+          brief: `Brief for ${id}`,
+          dependsOn: [],
+          createdAt: new Date().toISOString(),
+        });
+        yield* tasks.createTask({ task: task(root, null), delegation: null, milestones: [] });
+        for (const child of children) {
+          yield* tasks.createTask({ task: task(child, root), delegation: null, milestones: [] });
+        }
+      }),
+    );
+
+  /** A turn of `by` on Task `task`: every hob summoned in it is summoned for that Task. */
+  const taskTurn = async (by: Agent, task: string): Promise<CharmTurn> => {
     const charmOperations = declaredOperations(
       await hobs.runPromise(
         Effect.gen(function* () {
@@ -767,9 +794,8 @@ describe("the Summoning Charm, end to end", () => {
         }),
       ),
     );
-    // A turn on a Task: every hob summoned in it is summoned for that Task's tree.
-    const taskTurn = (task: string): CharmTurn => ({
-      agentId: manager.id,
+    return {
+      agentId: by.id,
       threadId: null,
       messageId: null,
       scope: () => `task:${task}`,
@@ -778,55 +804,104 @@ describe("the Summoning Charm, end to end", () => {
         policy: {
           preset: "balanced",
           sharedFolders: [shared],
-          hob: manager.policy,
+          hob: by.policy,
           dataFolder: dataDir,
           restrictions: [],
           charmOperations,
         },
         folders: [team],
         runtimeFolder: join(temp, "runtimes", "tree"),
-        commitsAs: { _tag: "UserConfig", config: { name: "Lead", email: "lead@example.com" } },
+        commitsAs: { _tag: "UserConfig", config: { name: by.name, email: "manager@example.com" } },
       }),
       redactor: makeRedactor([]),
       approvals: null,
-    });
-    const summonIn = async (task: string, key: string, names: ReadonlyArray<string>) => {
-      const tools = joinHubTools(await hobs.runPromise(Charms.use((charms) => charms.forTurn(taskTurn(task)))));
-      if (tools === null) throw new Error("No Summoning tools");
-      const input = { key, hobs: names.map((name) => draft(name)) };
-      return hobs.runPromise(
-        tools.call(
-          "summoning_summon",
-          input,
-          hubCallStep(key, () => {}),
-        ),
-      );
     };
-    const named = async (name: string) => (await allHobs()).find((agent) => agent.name === name);
+  };
 
-    const two = await summonIn("tree-one", "tree-two", ["Jo", "Kit"]);
+  /** `by` summons `names` on Task `task`; with no way to ask here, a call that asks is refused. */
+  const summonIn = async (
+    by: Agent,
+    task: string,
+    key: string,
+    names: ReadonlyArray<string>,
+    recorded: () => Promise<void> = async () => {},
+  ) => {
+    const turnOn = await taskTurn(by, task);
+    const tools = joinHubTools(await hobs.runPromise(Charms.use((charms) => charms.forTurn(turnOn))));
+    if (tools === null) throw new Error("No Summoning tools");
+    const input = { key, hobs: names.map((name) => draft(name)) };
+    return hobs.runPromise(
+      tools.call(
+        "summoning_summon",
+        input,
+        hubCallStep(
+          key,
+          () => {},
+          () => Effect.promise(recorded).pipe(Effect.as(true)),
+        ),
+      ),
+    );
+  };
+  const named = async (name: string) => (await allHobs()).find((agent) => agent.name === name);
+
+  // covers ADR 034 (Limits for unattended summons), #407 (3 per Task tree)
+  it("[TC-AG-407-02] summons without a card for one Task tree count across its root, children and siblings, stop at its cap and ask, and a summon that would pass a cap asks for all its hobs", async () => {
+    const lead = await manager("Lead", 4004);
+    await tree(lead, "launch", ["launch-site", "launch-mail"]);
+    await tree(lead, "sale", []);
+
+    const two = await summonIn(lead, "launch", "on-root", ["Jo", "Kit"]);
     expect(two.refused, two.text).toBe(false);
-    expect(await named("Kit")).toMatchObject({
-      summonedBy: lead.id,
-      summonedFor: "tree-one",
-      summonedUnattended: true,
-    });
-    // Two more would make four in the tree, past its cap of 3: the call asks for both, and with no
-    // way to ask here it is refused, creating neither.
-    const past = await summonIn("tree-one", "tree-past", ["Lu", "Max"]);
+    expect(await named("Kit")).toMatchObject({ summonedBy: lead.id, summonedFor: "launch", summonedUnattended: true });
+    // From a child, the two summoned for the root count: two more would pass the cap of 3, so the
+    // call asks for both, and creates neither.
+    const past = await summonIn(lead, "launch-site", "past-cap", ["Lu", "Max"]);
     expect(past.refused).toBe(true);
     expect(past.text).toContain("This work has 2 live hobs summoned without asking the user, and the cap is 3");
     expect(await named("Lu")).toBeUndefined();
     expect(await named("Max")).toBeUndefined();
-    const third = await summonIn("tree-one", "tree-third", ["Lu"]);
-    expect(third.refused).toBe(false);
-    const fourth = await summonIn("tree-one", "tree-fourth", ["Max"]);
+    const third = await summonIn(lead, "launch-site", "on-child", ["Lu"]);
+    expect(third.refused, third.text).toBe(false);
+    expect(await named("Lu")).toMatchObject({ summonedFor: "launch-site" });
+    // A sibling sees the root's and the other child's.
+    const fourth = await summonIn(lead, "launch-mail", "on-sibling", ["Max"]);
     expect(fourth.refused).toBe(true);
+    expect(fourth.text).toContain("This work has 3 live hobs summoned without asking the user, and the cap is 3");
     expect(await named("Max")).toBeUndefined();
     // Another tree has room of its own, up to the manager's cap of 4.
-    expect((await summonIn("tree-two", "other-tree", ["Max"])).refused).toBe(false);
-    const pastManager = await summonIn("tree-two", "past-manager", ["Ned"]);
+    expect((await summonIn(lead, "sale", "other-tree", ["Max"])).refused).toBe(false);
+    const pastManager = await summonIn(lead, "sale", "past-manager", ["Ned"]);
     expect(pastManager.refused).toBe(true);
     expect(pastManager.text).toContain("You have 4 live hobs summoned without asking the user, and the cap is 4");
+  });
+
+  // covers ADR 034 (Limits for unattended summons), #407 (counted under a lock)
+  it("[TC-AG-407-03] two managers summoning at once in one Task tree never both take its last place", async () => {
+    const first = await manager("Ora", 4005);
+    const second = await manager("Pax", 4006);
+    await tree(first, "fair", ["fair-stalls", "fair-music"]);
+    expect((await summonIn(first, "fair", "fair-first", ["Quin", "Rue"])).refused).toBe(false);
+    // Both calls are decided, seeing two of three places taken, before either is sent.
+    let arrived = 0;
+    let release: () => void = () => {};
+    const bothDecided = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const recorded = () => {
+      arrived += 1;
+      if (arrived === 2) release();
+      return bothDecided;
+    };
+    const both = await Promise.all([
+      summonIn(first, "fair-stalls", "fair-last-ora", ["Sol"], recorded),
+      summonIn(second, "fair-music", "fair-last-pax", ["Tam"], recorded),
+    ]);
+    expect(both.filter((answer) => !answer.refused)).toHaveLength(1);
+    const lost = both.find((answer) => answer.refused);
+    expect(lost?.text).toMatch(/cap is 3/);
+    const inFair = (await allHobs()).filter(
+      (agent) => agent.summonedUnattended && ["fair", "fair-stalls", "fair-music"].includes(agent.summonedFor ?? ""),
+    );
+    expect(inFair).toHaveLength(3);
   });
 });

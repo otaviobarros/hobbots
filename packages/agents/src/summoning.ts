@@ -297,32 +297,43 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
     const { decide, separator } = options;
     const declared = SUMMONING_CHARM.operations;
 
-    // One lock per manager, held while its unattended summons are counted and stored, so two
-    // summons at once never both take the last place under a cap (ADR 034).
-    const managerLocks = new Map<AgentId, Semaphore.Semaphore>();
-    const underManagerLock = <A, E, R>(managerId: AgentId, effect: Effect.Effect<A, E, R>) => {
-      let lock = managerLocks.get(managerId);
+    // One lock per manager and one per Task tree, held while unattended summons are counted and
+    // stored, so two summons at once, by one manager or by two in one tree, never both take the last
+    // place under a cap (ADR 034). A manager's lock is always taken before its tree's, so they never
+    // wait on each other in a cycle.
+    const capLocks = new Map<string, Semaphore.Semaphore>();
+    const underLock = <A, E, R>(key: string, effect: Effect.Effect<A, E, R>) => {
+      let lock = capLocks.get(key);
       if (lock === undefined) {
         lock = Semaphore.makeUnsafe(1);
-        managerLocks.set(managerId, lock);
+        capLocks.set(key, lock);
       }
       return Semaphore.withPermit(lock, effect);
     };
+    const underCapLocks = <A, E, R>(managerId: AgentId, root: TaskId | null, effect: Effect.Effect<A, E, R>) =>
+      underLock(`hob:${managerId}`, root === null ? effect : underLock(`tree:${root}`, effect));
 
-    /** Every Task of the tree `taskId` is in, or none for a summon outside any Task. */
-    const treeTasks = (services: SummoningServices, taskId: TaskId | null) =>
+    /** The top Task of the tree `taskId` is in, or the Task itself when the hub has no record of it. */
+    const rootOf = (services: SummoningServices, taskId: TaskId | null) =>
       taskId === null
-        ? Effect.succeed(new Set<string>())
-        : Effect.map(
-            services.tasks.readTree(taskId),
-            (tree) => new Set<string>(Option.isSome(tree) ? tree.value.tasks.map((task) => task.id) : [taskId]),
+        ? Effect.succeed(null)
+        : Effect.map(services.tasks.readTree(taskId), (tree) =>
+            Option.isSome(tree) ? (tree.value.tasks.find((task) => task.id === taskId)?.rootId ?? taskId) : taskId,
           );
+
+    /** Every Task of the tree under `root`, its root and every sibling included. */
+    const treeTasks = (services: SummoningServices, root: TaskId) =>
+      Effect.map(
+        services.tasks.readTree(root),
+        (tree) => new Set<string>(Option.isSome(tree) ? tree.value.tasks.map((task) => task.id) : [root]),
+      );
 
     /**
      * Why `adding` more unattended summons would pass a cap, read now: the manager's live hobs summoned
-     * without a card, and the tree's, against the limits; null while there is room (ADR 034).
+     * without a card, and those of the whole tree under `root`, against the limits; null while there
+     * is room (ADR 034).
      */
-    const capReached = (services: SummoningServices, managerId: AgentId, taskId: TaskId | null, adding: number) =>
+    const capReached = (services: SummoningServices, managerId: AgentId, root: TaskId | null, adding: number) =>
       Effect.gen(function* () {
         const agents = yield* services.repo.listAgents;
         const { maxUnattendedPerHob, maxUnattendedPerTree } = services.limits;
@@ -330,8 +341,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         if (byManager + adding > maxUnattendedPerHob) {
           return `You have ${byManager} live ${byManager === 1 ? "hob" : "hobs"} summoned without asking the user, and the cap is ${maxUnattendedPerHob}, so this summon asks the user.`;
         }
-        if (taskId === null) return null;
-        const inTree = unattendedSummonsIn(agents, yield* treeTasks(services, taskId));
+        if (root === null) return null;
+        const inTree = unattendedSummonsIn(agents, yield* treeTasks(services, root));
         if (inTree + adding > maxUnattendedPerTree) {
           return `This work has ${inTree} live ${inTree === 1 ? "hob" : "hobs"} summoned without asking the user, and the cap is ${maxUnattendedPerTree}, so this summon asks the user.`;
         }
@@ -780,7 +791,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           }
           const drafts = input.summon?.length ?? 0;
           if (drafts > 0 && manager.answer(SUMMON_OPERATION) === "allow") {
-            const cap = yield* capReached(services, manager.agent.id, taskOf(context), drafts);
+            const root = yield* rootOf(services, taskOf(context));
+            const cap = yield* capReached(services, manager.agent.id, root, drafts);
             if (cap !== null) rows.push(`- Summoning them: ${cap}`);
           }
           const text =
@@ -815,16 +827,17 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           const ids = input.hobs.map(() => AgentId.make(crypto.randomUUID()));
           const managerId = manager.agent.id;
           const taskId = taskOf(context);
+          const root = yield* rootOf(services, taskId);
           const withoutCard = manager.answer(SUMMON_OPERATION) === "allow";
           // At a cap the summon asks instead of being refused, and one you approve is never counted.
-          const cap = withoutCard ? yield* capReached(services, managerId, taskId, input.hobs.length) : null;
+          const cap = withoutCard ? yield* capReached(services, managerId, root, input.hobs.length) : null;
           const unattended = withoutCard && cap === null;
           const actor = actorOf(context);
           const names = input.hobs.map((draft) => (draft.name ?? "").trim());
           const hiddenShared = shared.filter((folder) => !manager.shared.includes(folder));
           const create = Effect.gen(function* () {
-            // Counted again under the manager's lock: another summon may have taken the last place.
-            const taken = unattended ? yield* capReached(services, managerId, taskId, input.hobs.length) : null;
+            // Counted again under the manager's and the tree's locks: another summon may have taken the last place.
+            const taken = unattended ? yield* capReached(services, managerId, root, input.hobs.length) : null;
             if (taken !== null) {
               const text = `No hob was summoned: another summon reached the cap meanwhile. Call again and it will ask the user. ${taken}`;
               return { _tag: "Refused", text } as const;
@@ -867,7 +880,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             ].join("\n");
             return { _tag: "Applied", text } as const;
           });
-          const send = underManagerLock(managerId, create);
+          const send = underCapLocks(managerId, root, create);
           return {
             request: request(SUMMON_OPERATION, [part(SUMMON_OPERATION, names)], cap),
             card: card(input, `Summon ${names.join(", ")}`),
