@@ -11,6 +11,24 @@ import { ApprovalId } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { Account, Model } from "../src/codex/protocol.ts";
 
+/**
+ * The Codex features a hob's Codex must have off: the account's apps and connectors, plugins and the
+ * tools that suggest or fetch them, the browser, computer use, image generation and memories. Each
+ * would act with no call the policy decides (ADR 024).
+ */
+export const CLOSED_CODEX_FEATURES = [
+  "apps",
+  "plugins",
+  "remote_plugin",
+  "tool_suggest",
+  "browser_use",
+  "browser_use_external",
+  "in_app_browser",
+  "computer_use",
+  "image_generation",
+  "memories",
+];
+
 /** What the stand-in Codex answers, playing `codex --version` and `codex app-server`. */
 export interface FakeCodexOptions {
   /** What `codex --version` prints; empty prints nothing. */

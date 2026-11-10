@@ -34,6 +34,7 @@ import {
 import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 import { CONTRACT_HUB_TOOL, stepRecordingContract } from "./clean-runtime.ts";
 import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
+import { CLOSED_CODEX_FEATURES } from "./codex-fixture.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
 
@@ -369,7 +370,7 @@ describe("a Codex turn", () => {
   });
 
   // covers ADR 024
-  it("[TC-RT-028] writes the hob's Codex settings: no image viewer, no sub-agents, no web search", async () => {
+  it("[TC-RT-028] writes the hob's Codex settings: no image viewer, sub-agents, web search, apps or plugins", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     const runtimeFolder = mkdtempSync(join(temp, "hob-"));
     await run(config(server.start), prompt({ tools: { runtimeFolder } as NonNullable<PromptRequest["tools"]> }));
@@ -379,6 +380,9 @@ describe("a Codex turn", () => {
     expect(settings).toContain(`sqlite_home = ${JSON.stringify(state)}`);
     expect(settings).toContain('web_search = "disabled"');
     expect(settings).toMatch(/\[features\][^[]*view_image = false[^[]*multi_agent = false/);
+    for (const feature of CLOSED_CODEX_FEATURES) {
+      expect(settings).toMatch(new RegExp(`\\[features\\][^[]*\\n${feature} = false\\n`));
+    }
   });
 
   // Hub tools (#440): served as Codex dynamic tools on the App Server's channel (ADR 024).
