@@ -1,5 +1,6 @@
 import {
   ChatService,
+  Continuations,
   HobAdmission,
   HobbotsRepository,
   HobLifecycle,
@@ -9,7 +10,7 @@ import {
   TaskRepository,
 } from "@hobbots/agents";
 import { Agent, AgentId, TaskId, Thread, ThreadId } from "@hobbots/domain";
-import { DEFAULT_DISPATCH_LIMITS, Dispatcher, DispatcherHost, type DispatchLimits } from "@hobbots/inbox";
+import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, DispatcherHost, type DispatchLimits } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   BackpackLive,
@@ -53,7 +54,28 @@ interface Start {
 interface Runtime {
   readonly starts: Array<Start>;
   readonly gates: Array<Deferred.Deferred<void>>;
+  /** How many turns the runtime is running now: asked for, not yet finished, stopped or cut off. */
+  live: number;
+  /** How many deliveries of backpack work the dispatcher has under way, each until its turn ended. */
+  delivering: number;
 }
+
+/** The hub's continuations, counting the deliveries under way. */
+const counted = (runtime: Runtime) =>
+  Layer.effect(
+    Continuations,
+    Effect.gen(function* () {
+      const live = yield* Continuations;
+      return Continuations.of({
+        ...live,
+        deliver: (threadId, agentId, turn) =>
+          Effect.suspend(() => {
+            runtime.delivering += 1;
+            return live.deliver(threadId, agentId, turn);
+          }).pipe(Effect.ensuring(Effect.sync(() => (runtime.delivering -= 1)))),
+      });
+    }),
+  ).pipe(Layer.provide(ContinuationsLive));
 
 const gated = (runtime: Runtime) =>
   Layer.effect(
@@ -71,7 +93,10 @@ const gated = (runtime: Runtime) =>
           });
           const gate = Deferred.makeUnsafe<void>();
           runtime.gates.push(gate);
-          return Stream.unwrap(Effect.as(Deferred.await(gate), fake.sendPrompt(request)));
+          runtime.live += 1;
+          return Stream.unwrap(Effect.as(Deferred.await(gate), fake.sendPrompt(request))).pipe(
+            Stream.ensuring(Effect.sync(() => (runtime.live -= 1))),
+          );
         },
       });
     }),
@@ -93,7 +118,7 @@ const hubLayer = (database: Database, runtime: Runtime) =>
   Layer.mergeAll(WakeOnArrival, HobLifecycle.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(
-      ContinuationsLive.pipe(Layer.provideMerge(Dispatcher.layer(LIMITS)), Layer.provideMerge(DispatcherHostLive)),
+      counted(runtime).pipe(Layer.provideMerge(Dispatcher.layer(LIMITS)), Layer.provideMerge(DispatcherHostLive)),
     ),
     Layer.provideMerge(
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
@@ -286,25 +311,62 @@ const outcomes = (models: ReadonlyArray<Model>, op: Op): ReadonlyArray<Model> =>
   return [...new Map(all.map((m) => [JSON.stringify(m), m])).values()];
 };
 
-const queuedNow = HobbotsRepository.use((repo) => repo.listMessages(THREAD_ID)).pipe(
-  Effect.map((all) => all.filter((m) => m.status === "queued").map((m) => m.content)),
-);
+/**
+ * What the hub shows of the run: its queue, the chat's turns, replies still stopping, and the Failures still open,
+ * waiting or in a turn. Read under Frodo's lock, so no step of the run is half done.
+ */
+const recordsNow = HobAdmission.use((admission) => admission.withHob(FRODO, records));
+const records = Effect.gen(function* () {
+  const messages = yield* HobbotsRepository.use((repo) => repo.listMessages(THREAD_ID));
+  // The Failures that arrived; each Task's own item starts it elsewhere, not in this thread.
+  const open = (yield* Backpack.use((b) => b.listOpen({ _tag: "Hob", agentId: FRODO }))).filter(
+    (item) => item.kind === "failure",
+  );
+  return {
+    queue: messages.filter((m) => m.status === "queued").map((m) => m.content),
+    turns: (yield* ChatService.use((chat) => chat.activeThreads)).length,
+    stopping: messages.filter((m) => m.status === "stopping").length,
+    waiting: open.filter((item) => item.state === "pending").length,
+    carried: open.filter((item) => item.state !== "pending").length,
+  };
+});
 
 /**
- * Waits until the chat has asked for the turns of one of the model's outcomes and holds its queue,
- * then a little longer, and returns every outcome that agrees with what it did. A race whose two
- * orders look alike so far keeps both, until a later step tells them apart.
+ * The same, as the model says once the hub is at rest: a turn runs while the runtime runs one, only a
+ * turn that carries work holds a delivery and its items, and no reply is left stopping.
+ */
+const shown = (m: Model) =>
+  JSON.stringify({
+    starts: m.starts,
+    live: m.running === null ? 0 : 1,
+    delivering: m.running?.carries === true ? 1 : 0,
+    queue: m.queue,
+    turns: m.running === null ? 0 : 1,
+    stopping: 0,
+    waiting: m.waiting,
+    carried: m.carried,
+  });
+
+/**
+ * Waits, up to a time limit, until the runtime, the queue and the backpack show one of the model's
+ * outcomes, and returns every outcome that agrees with what the hub did. Each state the hub passes
+ * through on the way, such as a turn that has ended before its work is resolved, matches no outcome,
+ * so the step is over only once the hub is at rest. A race whose two orders look alike so far keeps
+ * both, until a later step tells them apart.
  */
 const agree = async (hub: Hub, runtime: Runtime, models: ReadonlyArray<Model>, script: ReadonlyArray<Op>) => {
-  const observed = async () => JSON.stringify({ starts: runtime.starts, queue: await hub.runPromise(queuedNow) });
-  const expected = models.map((model) => JSON.stringify({ starts: model.starts, queue: model.queue }));
-  const deadline = Date.now() + 3000;
-  while (Date.now() < deadline && !expected.includes(await observed())) {
+  const observed = async () => {
+    const { queue, turns, stopping, waiting, carried } = await hub.runPromise(recordsNow);
+    const { starts, live, delivering } = runtime;
+    return JSON.stringify({ starts, live, delivering, queue, turns, stopping, waiting, carried });
+  };
+  const expected = models.map(shown);
+  const deadline = Date.now() + 10_000;
+  let seen = await observed();
+  while (!expected.includes(seen) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 10));
+    seen = await observed();
   }
-  // Nothing more starts on its own once the model's turns have.
-  await new Promise((resolve) => setTimeout(resolve, 40));
-  const seen = await observed();
   const matched = models.filter((_, index) => expected[index] === seen);
   if (matched.length === 0)
     expect.fail(`after ${JSON.stringify(script)}: saw ${seen}, expected one of ${[...new Set(expected)].join(" or ")}`);
@@ -314,7 +376,7 @@ const agree = async (hub: Hub, runtime: Runtime, models: ReadonlyArray<Model>, s
 const play = async (script: ReadonlyArray<Op>) => {
   const scope = await Effect.runPromise(Scope.make());
   const database = await openDatabase(scope);
-  const runtime: Runtime = { starts: [], gates: [] };
+  const runtime: Runtime = { starts: [], gates: [], live: 0, delivering: 0 };
   let hub: Hub = ManagedRuntime.make(hubLayer(database, runtime));
   let models: ReadonlyArray<Model> = [empty];
   // What every outcome agrees on: the messages sent and the turns started.
@@ -372,10 +434,24 @@ const play = async (script: ReadonlyArray<Op>) => {
   try {
     await hub.runPromise(Effect.void);
     for (const [index, op] of script.entries()) await apply(op, script.slice(0, index + 1));
-    // Finishing every turn leaves nothing waiting and the thread free.
+    // Finishing every turn, and writing once more for work you stopped, leaves nothing waiting.
     const finish: Op = { _tag: "Finish" };
-    for (let left = 20; running() && left > 0; left--) await apply(finish, [...script, finish]);
+    const finishAll = async () => {
+      for (let left = 20; running() && left > 0; left--) await apply(finish, [...script, finish]);
+    };
+    await finishAll();
+    if (models.some((each) => each.waiting > 0)) {
+      await apply({ _tag: "Send" }, [...script, { _tag: "Send" }]);
+      await finishAll();
+    }
     expect(running()).toBe(false);
+    // Every Failure that arrived was taken in by a turn.
+    const failures = await hub.runPromise(
+      Backpack.use((b) => b.listOpen({ _tag: "Hob", agentId: FRODO })).pipe(
+        Effect.map((open) => open.filter((item) => item.kind === "failure")),
+      ),
+    );
+    expect(failures).toEqual([]);
     return model();
   } finally {
     await hub.dispose();
