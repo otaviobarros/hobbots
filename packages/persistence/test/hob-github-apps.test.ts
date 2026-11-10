@@ -36,6 +36,7 @@ const app = (overrides: Partial<HobGitHubApp> = {}): HobGitHubApp => ({
   clientId: "Iv23liFrodoClient",
   slug: "frodo-hobbots",
   owner: "otaviobarros",
+  origin: "made",
   botUserId: 4_000_000_002,
   htmlUrl: "https://github.com/apps/frodo-hobbots",
   connectedAt: now,
@@ -81,5 +82,32 @@ describe("HobGitHubApps", () => {
     });
     expect(result.samAgain).toBeNull();
     expect(result.after).toBeNull();
+  });
+});
+
+describe("HobGitHubApps for a linked app", () => {
+  // covers #1321, ADR 022
+  it("[TC-GEN-407] keeps whether the hub made a hob's app or the user linked it, and finds the hob that has an app", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed("frodo");
+        yield* seed("sam");
+        const apps = yield* HobGitHubApps;
+        yield* apps.save(AgentId.make("frodo"), app({ origin: "linked", owner: "the-fellowship" }));
+        yield* apps.save(AgentId.make("sam"), app({ appId: 9, slug: "sam-hobbots" }));
+        yield* apps.leave(AgentId.make("sam"), "The keychain kept the key.");
+        return {
+          frodo: yield* apps.get(AgentId.make("frodo")),
+          frodoHolds: yield* apps.holder(3_000_000_001),
+          // A left-over app is still the hob's, so no other hob takes it.
+          samHolds: yield* apps.holder(9),
+          nobody: yield* apps.holder(10),
+        };
+      }),
+    );
+    expect(result.frodo).toEqual(app({ origin: "linked", owner: "the-fellowship" }));
+    expect(result.frodoHolds).toBe("frodo");
+    expect(result.samHolds).toBe("sam");
+    expect(result.nobody).toBeNull();
   });
 });

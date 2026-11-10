@@ -800,6 +800,64 @@ export const messages = {
         leftOver: "It no longer acts.",
         dismiss: "Dismiss",
         changeFailed: "Hobbots could not change the app. Try again.",
+        // An app the user already has, linked by its ID and private key (#1321).
+        useExisting: "Use an app you already have…",
+        linkTitle: "Link an app you already have",
+        linkNote: ({ name }: { name: string }) =>
+          `In the app's settings on GitHub, copy its Client ID and generate a private key. The key stays in this computer's keychain, never with ${name}, and the app keeps its installations.`,
+        openApps: "Open your apps on GitHub",
+        linkOnHub: ({ name }: { name: string }) =>
+          `To give ${name} an app you already have, open this page on the hub's computer, so the app's private key never leaves it.`,
+        appIdLabel: "Client ID",
+        appIdHint: "Or its App ID. GitHub shows both in the app's settings.",
+        keyLabel: "Private key",
+        keyHint: "Paste the whole .pem file GitHub downloaded, or choose it.",
+        chooseKey: "Choose the .pem file",
+        linkApp: "Link the app",
+        linking: "Checking with GitHub…",
+        appIdMissing: "Give the Client ID or App ID from the app's settings on GitHub.",
+        keyMissing: "Paste the private key GitHub gave you, from -----BEGIN to the end.",
+        keyTooLarge: "That file is too large to be a GitHub app private key.",
+        linkRefused: {
+          retired: ({ name }: { name: string }) => `${name} is retired, so it cannot get an app.`,
+          connected: ({ name }: { name: string }) => `${name} already has its own app. Disconnect it first.`,
+          "left-over": ({ name }: { name: string }) =>
+            `${name}'s old app was not fully removed. Delete it on GitHub or dismiss it first.`,
+          "no-keychain": () => "This hub has no keychain Hobbots can use, so it cannot keep the app's key.",
+          "not-local": () => "Link the app from the hub's own computer, so its private key never leaves it.",
+          "bad-id": () => "That is not a Client ID or App ID. Copy it from the app's settings on GitHub.",
+          "not-a-key": () => "That is not a GitHub app private key. Paste the whole .pem file.",
+          "key-refused": () =>
+            "GitHub did not accept this key for that app. Check the App ID, or generate a new private key on GitHub.",
+          taken: () => "That app is already another hob's. One app is one hob's name.",
+          unreachable: () => "Hobbots could not check the app with GitHub. Try again.",
+          "keychain-failed": () => "The keychain did not keep the app's key. Unlock it, then try again.",
+        },
+        linkFailed: "Hobbots could not link the app. Try again.",
+        linked: ({ since }: { since: string }) => `Linked ${since}. Its work never runs as you.`,
+        missingPermissions: ({ name, list }: { name: string; list: string }) =>
+          `The app lacks permissions ${name}'s GitHub actions use: ${list}. Add them in the app's settings on GitHub, then accept them on its installation. Until then those actions fail.`,
+        permissionNames: {
+          metadata: "Metadata",
+          contents: "Contents",
+          issues: "Issues",
+          pull_requests: "Pull requests",
+          checks: "Checks",
+          actions: "Actions",
+          statuses: "Commit statuses",
+          workflows: "Workflows",
+        },
+        permissionAccess: ({ name, access }: { name: string; access: "read" | "write" }) =>
+          access === "read" ? `${name} (read)` : `${name} (read and write)`,
+        reconnectLinkedKey: ({ name }: { name: string }) =>
+          `GitHub no longer accepts the app's key: it was revoked, or the app was deleted. ${name}'s GitHub actions fail until you link the app again with a new key. They never run as you instead.`,
+        linkAgain: "Link it again",
+        unlink: "Unlink",
+        unlinkAsk: "Unlink its app…",
+        confirmUnlink: ({ name }: { name: string }) =>
+          `Unlink ${name}'s app? The hub deletes its key here. The app and its installations stay on GitHub as they are. ${name} then acts as you again.`,
+        unlinked: ({ name }: { name: string }) =>
+          `Unlinked. ${name} acts as you again. The app stays on GitHub as it was.`,
       },
     },
   },

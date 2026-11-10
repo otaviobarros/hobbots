@@ -404,6 +404,7 @@ test("[TC-UX-1272-01] under Careful, Aldric searches, asks once for the new site
   await expect(lines.getByRole("listitem").nth(0)).toContainText("Searched: gmail size limit · 2 results");
   const sources = page.getByRole("region", { name: "Sources" });
   await expect(sources.getByRole("button")).toHaveCount(2);
+  await scan();
   await shot(page, "chat-web-careful");
 
   // Open on the second page shows the text Aldric got from it.
@@ -411,6 +412,7 @@ test("[TC-UX-1272-01] under Careful, Aldric searches, asks once for the new site
   const sheet = page.getByRole("dialog");
   await expect(sheet).toContainText("A page Aldric read");
   await expect(sheet).toContainText("This test page on search.hobbots.test is about gmail size limit releases.");
+  await scan(sheet);
   await page.keyboard.press("Escape");
 
   // An address Aldric wrote on the site you allowed, with your notes in it: the site's rule does not answer it.
@@ -430,4 +432,5 @@ test("[TC-UX-1272-01] under Careful, Aldric searches, asks once for the new site
   // The site rule Always saved shows in Aldric's Permissions.
   await page.goto(`${url}/#/hobs/${aldric}/profile?tab=permissions`);
   await expect(page.getByRole("region", { name: "Site rules" })).toContainText("search.hobbots.test");
+  await scan();
 });

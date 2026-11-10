@@ -1,3 +1,4 @@
+import type { HobGitHubAppLink } from "@hobbots/api";
 import type { AgentId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
@@ -45,6 +46,43 @@ export const useHobGitHubAppInstallations = (agentId: AgentId, appId: number, wa
 /** Opens the hub page that takes the user to GitHub to make the hob's app. */
 export const useStartHobGitHubApp = (agentId: AgentId) =>
   useMutation({ mutationFn: () => call((c) => c.hobGitHubApp.start({ params: { agentId } })) });
+
+/**
+ * An app's ID and private key, handed over once. TanStack Query keeps a mutation's variables after it
+ * settles, so the mutation gets this instead of the key: sending takes the key out, and what stays
+ * holds nothing, whether the link succeeded or failed (#1321).
+ */
+export interface LinkOnce {
+  readonly take: () => HobGitHubAppLink | null;
+}
+
+export const linkOnce = (link: HobGitHubAppLink): LinkOnce => {
+  let held: HobGitHubAppLink | null = link;
+  return {
+    take: () => {
+      const taken = held;
+      held = null;
+      return taken;
+    },
+  };
+};
+
+/** Sends the key a `LinkOnce` still holds; one already sent is never sent again. */
+export const sendLinkOnce =
+  <A>(send: (link: HobGitHubAppLink) => Promise<A>) =>
+  (once: LinkOnce): Promise<A> => {
+    const link = once.take();
+    return link === null ? Promise.reject(new Error("This app's key was already sent.")) : send(link);
+  };
+
+/** Links an app the user already has to the hob (#1321), then reads its status again. */
+export const useLinkHobGitHubApp = (agentId: AgentId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: sendLinkOnce((link) => call((c) => c.hobGitHubApp.link({ params: { agentId }, payload: link }))),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: hobGitHubAppKey(agentId) }),
+  });
+};
 
 /** Removes the hob's app from the hub, or dismisses an old one left over; then reads its status again. */
 export const useDisconnectHobGitHubApp = (agentId: AgentId) => {

@@ -88,4 +88,5 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-09 A hob's first commit runs without a refused step, on real Claude Code and Codex](2026-11-09-first-commit-identity.md)
 - [2026-11-09 Real Claude Code and Codex hobs answer a team question from the roster without reading cards](2026-11-09-roster-answers-without-card-reads.md)
 - [2026-11-09 Hobs manage hobs end to end: hand-off, proposals, caps and retire](2026-11-09-hob-management.md)
+- [2026-11-09 The v0.0.4 changes on a packaged Mac build, on Claude Code and Codex](2026-11-09-v0-0-4-mac-smoke.md)
 - [2026-11-09 Hobs search and read the web end to end: sources, site rules, data going out and robots.txt](2026-11-09-web-end-to-end.md)

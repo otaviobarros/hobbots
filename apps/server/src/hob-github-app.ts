@@ -23,11 +23,17 @@ import { isLoopbackHost } from "./web.ts";
  */
 
 /** What a hub without the GitHub Charm, as in tests, answers. */
-const NONE: HobGitHubAppStatus = { _tag: "None", cannotCreate: "no-keychain" };
+const NONE: HobGitHubAppStatus = { _tag: "None", cannotCreate: "no-keychain", cannotLink: "no-keychain" };
 
 const notLocal = new HobGitHubAppRefused({
   reason: "not-local",
   message: "Give a hob its own GitHub app from the hub's computer, where GitHub can send you back to the hub.",
+});
+
+// An app's private key never crosses the network to the hub (#1321).
+const linkNotLocal = new HobGitHubAppRefused({
+  reason: "not-local",
+  message: "Link a hob's GitHub app from the hub's computer, so its private key never leaves it.",
 });
 
 const refusal = (agentId: AgentId) => (refused: HobAppRefused) =>
@@ -43,6 +49,15 @@ const hubUrlOf = (request: HttpServerRequest.HttpServerRequest) => {
   return `http://127.0.0.1${port === "" ? "" : `:${port}`}`;
 };
 
+/**
+ * Whether a request comes from a browser on the hub's own computer, at its loopback address: a request
+ * through `tailscale serve` reaches the hub locally, but by its tailnet name, from another computer.
+ */
+const fromHubComputer = (gate: DeviceGate["Service"], request: HttpServerRequest.HttpServerRequest) =>
+  gate
+    .placeOf(request)
+    .pipe(Effect.map((place) => Option.exists(place, (where) => where._tag === "Local") && hubUrlOf(request) !== null));
+
 export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubApp", (handlers) =>
   Effect.gen(function* () {
     const found = yield* Effect.serviceOption(HobGitHubAppService);
@@ -52,14 +67,23 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
       return handlers.handleAll({
         status: () => Effect.succeed(NONE),
         start: () => Effect.fail(absent),
-        installations: () => Effect.succeed({ installations: [] }),
+        link: () => Effect.fail(absent),
+        installations: () => Effect.succeed({ installations: [], missingPermissions: [] }),
         disconnect: () => Effect.succeed({ deleteUrl: null, problem: null }),
       });
     }
     const service = found.value;
     return handlers.handleAll({
       status: ({ params }) =>
-        service.status(params.agentId).pipe(Effect.mapError(() => new AgentNotFound({ agentId: params.agentId }))),
+        Effect.gen(function* () {
+          const status = yield* service
+            .status(params.agentId)
+            .pipe(Effect.mapError(() => new AgentNotFound({ agentId: params.agentId })));
+          if (status._tag !== "None") return status;
+          // The page offers linking only where the key would not cross the network (#1321).
+          const local = yield* fromHubComputer(gate, yield* HttpServerRequest.HttpServerRequest);
+          return { ...status, cannotLink: status.cannotCreate ?? (local ? null : "not-local") };
+        }),
       start: ({ params }) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
@@ -73,9 +97,25 @@ export const HobGitHubAppHandlers = HttpApiBuilder.group(HobbotsApi, "hobGitHubA
           const device = yield* gate.admit(request);
           return yield* service.start(params.agentId, device.id, hubUrl).pipe(Effect.mapError(refusal(params.agentId)));
         }),
+      link: ({ params, payload }) =>
+        Effect.gen(function* () {
+          // The page does not offer linking elsewhere; this refuses a request that sent the key anyway.
+          if (!(yield* fromHubComputer(gate, yield* HttpServerRequest.HttpServerRequest))) return yield* linkNotLocal;
+          const linked = yield* service.link(params.agentId, payload).pipe(Effect.mapError(refusal(params.agentId)));
+          // The hob commits as its own app now, so its coding setup card is no longer needed (#1241).
+          const codingSetup = yield* Effect.serviceOption(CommitIdentityQuestions);
+          if (Option.isSome(codingSetup)) yield* codingSetup.value.settled(params.agentId);
+          return linked;
+        }),
       installations: ({ params }) =>
         service.installations(params.agentId).pipe(
-          Effect.map((installations) => ({ installations })),
+          Effect.flatMap((installations) =>
+            installations.length > 0
+              ? Effect.succeed({ installations, missingPermissions: [] })
+              : service
+                  .appMissing(params.agentId)
+                  .pipe(Effect.map((missingPermissions) => ({ installations, missingPermissions }))),
+          ),
           Effect.mapError((error) =>
             error._tag === "HobAppRefused"
               ? new AgentNotFound({ agentId: params.agentId })

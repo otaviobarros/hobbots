@@ -29,6 +29,6 @@
 
 ## Gaps
 
-- No real model and no real site. A Claude Code hob and a Codex hob searching, reading two pages and answering with sources on the packaged Mac app is section 3 of the v0.0.4 smoke test, [#1314](https://github.com/otaviobarros/hobbots/issues/1314).
-- A stand-in model's Codex search reports no results: Codex gets them from OpenAI's search out of band, so the stand-in cannot hand them over. That a real Codex search's results count as found, so its links read without asking, is left to [#1314](https://github.com/otaviobarros/hobbots/issues/1314).
-- An installed Codex starting its next turn with search off after going over its per-turn limit, and Codex inside Hobbots' sandbox with a real search, are left to [#1314](https://github.com/otaviobarros/hobbots/issues/1314).
+- No real model and no real site ran here. The v0.0.4 smoke test ran the search-and-read flow with real models on a packaged Mac build, on Claude Code and Codex, and found that Never for Search the web and for Use the web does not hold on Codex, reported privately ([#1314](https://github.com/otaviobarros/hobbots/issues/1314), [evidence](2026-11-09-v0-0-4-mac-smoke.md)).
+- A stand-in model's Codex search reports no results: Codex gets them from OpenAI's search out of band, so the stand-in cannot hand them over. The smoke test above shows a real Codex search's links read without asking.
+- An installed Codex starting its next turn with search off after going over its per-turn limit is shown only by the smoke test above, and two pages read at once passing a one-page limit on Claude Code is [#1335](https://github.com/otaviobarros/hobbots/issues/1335).

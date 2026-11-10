@@ -154,6 +154,23 @@ interface CodexSettings {
 }
 
 /**
+ * Codex features that reach beyond the hob's folders, or act for the user's account, with no call
+ * Hobbots decides or records. Each is turned off in the hob's Codex home (ADR 024).
+ */
+const CLOSED_FEATURES: ReadonlyArray<string> = [
+  "apps",
+  "plugins",
+  "remote_plugin",
+  "tool_suggest",
+  "browser_use",
+  "browser_use_external",
+  "in_app_browser",
+  "computer_use",
+  "image_generation",
+  "memories",
+];
+
+/**
  * Codex's settings for a hob, written into its own `CODEX_HOME` before every turn (ADR 024): tools that
  * read or reach beyond the folders without asking are off, and so are Codex's own sub-agents. The
  * databases and logs live in a state folder of their own. Each folder, and the repository it is in,
@@ -173,6 +190,7 @@ const codexConfig = (state: string, settings: CodexSettings) => {
     "[features]",
     "view_image = false",
     "multi_agent = false",
+    ...CLOSED_FEATURES.map((feature) => `${feature} = false`),
     `shell_tool = ${settings.shell}`,
     "",
     ...untrusted,

@@ -62,7 +62,7 @@ Codex starts each turn with `approvalPolicy: "untrusted"`, `sandbox: "danger-ful
 
 - `view_image`, which read an image outside the thread's folder without asking. Hobbots turns it off (`features.view_image = false`), since it reads files with no call to decide or record. Reads stay possible through commands, which are decided.
 - Codex's own sub-agents (`collaboration.spawn_agent` and the rest), which run work Hobbots would not see as delegation. Turned off (`features.multi_agent = false`).
-- Tools that reach beyond the folders without a decision: web search, image generation, apps, plugins, the browser, computer use and memories. Turned off in the hob's Codex configuration.
+- Tools that reach beyond the folders without a decision: web search, image generation, apps and connectors, plugins, the browser, computer use and memories. Turned off in the hob's Codex configuration (`web_search = "disabled"`, and `false` for the features `apps`, `plugins`, `remote_plugin`, `tool_suggest`, `browser_use`, `browser_use_external`, `in_app_browser`, `computer_use`, `image_generation` and `memories`). Codex 0.166.0 and 0.167.0 report each of them off in the hob's home (`[TC-RT-743]`). Claude Code's counterparts, claude.ai connectors and plugins, are off through its settings.
 - Code mode's `exec`, the JavaScript tool that calls the others. It runs in an isolate with no files, network or console, and each tool it calls is still asked about. It stays.
 
 That these features are off is checked in #439 from the tools the first model request offers. A tool Codex adds in a later version is offered to the model only if the hob's configuration allows it, so the adapter lists the tools it allows and the contract test fails on any other.

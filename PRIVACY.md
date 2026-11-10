@@ -13,7 +13,7 @@ A hob searches with its runtime's own search, never with a provider of Hobbots' 
 - **Claude Code** runs the search on Anthropic's servers, which search with their partners. The query goes to Anthropic.
 - **Codex** is held to cached search: OpenAI answers from its own index and never opens a page for the hob. The query goes to OpenAI.
 
-Search the web can be set to Never for a hob in its Permissions, and then its runtime is offered no search.
+Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting does not hold yet; they were reported under the [security policy](SECURITY.md).
 
 ## Pages a hob reads
 
@@ -24,11 +24,17 @@ Search the web can be set to Never for a hob in its Permissions, and then its ru
 - It never reaches `localhost`, link-local or cloud metadata addresses. A page on your local network asks you first.
 - A page you have not allowed asks you first under Careful. An address a hob wrote itself, which could carry your data in it, asks under every preset.
 
-Use the web can be set to Never for a hob in its Permissions, and then it is offered no `web_fetch`.
+Use the web can be set to Never for a hob in its Permissions, and then it is meant to be offered no `web_fetch`. The same Codex finding applies here.
 
 ## After a hob reads the web
 
-A page can try to make a hob send your data somewhere. Once a chat or a Task searched or read a page, anything that could send data out asks you first until that session ends, even where a saved rule would answer: an address the hob wrote, a command reaching a new host, a Charm write such as a GitHub comment, a push and a memory share.
+A page can try to make a hob send your data somewhere. Once a chat or a Task searched or read a page, these ask you first until that session ends:
+
+- An address the hob wrote itself, under every preset.
+- A command reaching a host it has no saved rule for. Inside the sandbox, which cannot ask, it is refused instead. A host you saved Always for stays allowed, so a command can still send data there without asking.
+- A push, a Charm write such as a GitHub comment, and a memory share, even where a saved rule would answer them.
+
+Never stays Never, and reading your own files, editing and running tests are as before. The [permissions contract](docs/architecture/permissions.md) has the full rules.
 
 ## What Hobbots keeps of the web
 
