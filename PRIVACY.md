@@ -13,7 +13,7 @@ A hob searches with its runtime's own search, never with a provider of Hobbots' 
 - **Claude Code** runs the search on Anthropic's servers, which search with their partners. The query goes to Anthropic.
 - **Codex** is held to cached search: OpenAI answers from its own index and never opens a page for the hob. The query goes to OpenAI.
 
-Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting does not hold yet; they were reported under the [security policy](SECURITY.md).
+Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting does not hold yet ([evidence](docs/evidence/2026-11-09-v0-0-4-mac-smoke.md)); they were reported under the [security policy](SECURITY.md).
 
 ## Pages a hob reads
 
@@ -22,7 +22,7 @@ Search the web can be set to Never for a hob in its Permissions, and then its ru
 - It sends a plain `GET` with the user agent `Hobbots/<version> (+https://hobbots.ai)`. It sends no cookie, password, sign-in or body, and nothing else of yours.
 - It honors robots.txt rules that name Hobbots. It does not read a site you blocked in Settings › Web.
 - It never reaches `localhost`, link-local or cloud metadata addresses. A page on your local network asks you first.
-- A page you have not allowed asks you first under Careful. An address a hob wrote itself, which could carry your data in it, asks under every preset.
+- A page on a site you have not allowed asks you first under Careful. The same real-model run found Codex reading such a page without asking; it was reported under the [security policy](SECURITY.md). An address a hob wrote itself, which could carry your data in it, asks under every preset.
 
 Use the web can be set to Never for a hob in its Permissions, and then it is meant to be offered no `web_fetch`. The same Codex finding applies here.
 

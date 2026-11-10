@@ -29,6 +29,6 @@
 
 ## Gaps
 
-- No real model and no real site ran here. The v0.0.4 smoke test ran the search-and-read flow with real models on a packaged Mac build, on Claude Code and Codex, and found that Never for Search the web and for Use the web does not hold on Codex, reported privately ([#1314](https://github.com/otaviobarros/hobbots/issues/1314), [evidence](2026-11-09-v0-0-4-mac-smoke.md)).
+- No real model and no real site ran here. The v0.0.4 smoke test ran the search-and-read flow with real models on a packaged Mac build, on Claude Code and Codex, and found that on Codex the first page on a new site under Careful does not ask and Never for Search the web and for Use the web does not hold, reported privately ([#1314](https://github.com/otaviobarros/hobbots/issues/1314), [evidence](2026-11-09-v0-0-4-mac-smoke.md)).
 - A stand-in model's Codex search reports no results: Codex gets them from OpenAI's search out of band, so the stand-in cannot hand them over. The smoke test above shows a real Codex search's links read without asking.
 - An installed Codex starting its next turn with search off after going over its per-turn limit is shown only by the smoke test above, and two pages read at once passing a one-page limit on Claude Code is [#1335](https://github.com/otaviobarros/hobbots/issues/1335).
