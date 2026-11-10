@@ -6,6 +6,10 @@ A thread stores title, owning agent, timestamps, messages, links to Quests and t
 
 The UI restores an agent's last selected thread and keeps relevant side-panel state. A pinned Quest may remain visible while the user discusses another topic. The server owns durable work regardless of client focus. Search titles and persisted messages with links to the correct thread.
 
+## Chat and camps
+
+**Decided, not built** ([ADR 037](../decisions/037-chat-and-camps.md), slices [#1362](https://github.com/otaviobarros/hobbots/issues/1362) to [#1365](https://github.com/otaviobarros/hobbots/issues/1365)). A thread gets a `kind`: each hob has one open *chat* and any number of *camps*, each with a goal. A thread's messages are split into *chapters*, with one live at a time, and a runtime session belongs to one chapter. A turn starts from a context pack built from records (briefs, decisions, artifacts, the live chapter) instead of the transcript, which is replayed only for a brain switch inside a live chapter. Until those slices land, the rules above describe what runs.
+
 ## Session mapping
 
 Adapters create or resume sessions using supported vendor mechanisms. Record runtime/executor/session binding and capability evidence. A resumed native session and a reconstructed context are different recovery modes; show that distinction. Never claim exact resumption when only message replay is available.

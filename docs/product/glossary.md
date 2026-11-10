@@ -7,7 +7,14 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Agent / hob | A persistent identity with versioned configuration, runtime preference, instructions and policy. The domain model says *agent*; the UI says *hob*. | [Agent model](../architecture/agent-model.md), [ADR 008](../decisions/008-design.md) |
 | Retire | Archiving a hob. New dispatch stops and history stays inspectable. Bring back makes it active again. | [MVP requirements](mvp-requirements.md) (AG-006) |
 | Orchestrator | A role an agent plays when it coordinates others, not a privileged runtime type. | [ADR 005](../decisions/005-agent-parity.md) |
-| Thread | A durable user conversation that belongs to one agent. | [Conversations](../architecture/conversations.md) |
+| Thread | A durable conversation that belongs to one agent. Its `kind` is *chat* or *camp*; the UI never says thread. | [Conversations](../architecture/conversations.md), [ADR 037](../decisions/037-chat-and-camps.md) |
+| Chat | A hob's one open thread, always there, for quick questions and small jobs on any topic. Start fresh replaces it and carries its open items over. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Camp | A thread with a goal of its own, made when a topic grows. Quests started there belong to it. A private camp is never captured into memory. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Chapter | One topic's run of messages in a chat or camp. Exactly one is live; a new chapter starts a new runtime session. A chapter can move into a camp and leave a stub. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Decision | A choice recorded once in a chat or camp, with who made it. A changed decision is kept, crossed out. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Artifact | What a hob makes or changes: a doc, page, email, image, code file, PR or link. The registry indexes what Attempts and Quests record and copies nothing. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Brief | A chat's or camp's "Where we are" text, written by the hub. Not the memory brief. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Context pack | What a turn reads: briefs, active decisions, the artifacts index, the live chapter and one line per resting chapter, within a budget. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Session | The binding to an underlying runtime conversation or connection. It may change during recovery and never replaces domain identity. | [Conversations](../architecture/conversations.md) |
 | Runtime / adapter | An existing agent engine (Claude Code, Codex, ACP-compatible) and the capability-aware adapter that hosts it. | [Runtime adapters](../architecture/runtime-adapters.md), [ADR 002](../decisions/002-existing-runtimes.md) |
 | Task | One hob's piece of work, end to end: one owner, one result, even when it takes hours. | [ADR 018](../decisions/018-tasks-and-quests.md), [Agent model](../architecture/agent-model.md) |
@@ -18,7 +25,7 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Checkpoint | A short record of where a Task stands: a planned milestone, a finding, blocker or question, or an automatic state. | [ADR 018](../decisions/018-tasks-and-quests.md) |
 | Hand-off | A lead giving one Task's result to another Task as context. The only way results move between party members. | [ADR 018](../decisions/018-tasks-and-quests.md) |
 | Delegation | An explicit request/result relationship from a lead to a party member, with a brief and narrowed authority. | [Orchestration](../architecture/orchestration.md) |
-| Execution / attempt | One attempt to perform task work; retries create new attempts, not new tasks. | [Execution lifecycle](../architecture/execution-lifecycle.md) |
+| Attempt | One attempt to perform task work; retries create new attempts, not new tasks. The docs no longer say *execution* ([ADR 037](../decisions/037-chat-and-camps.md)). | [Execution lifecycle](../architecture/execution-lifecycle.md) |
 | Backpack / backpack item | A hob's durable queue of what it still has to deal with: Tasks, results, failures, questions, answers, hand-offs, messages, approval outcomes and deadlines, with separate delivery and processing states. Not your Inbox. | [Backpack contract](../architecture/inbox.md), [ADR 019](../decisions/019-hob-backpack-and-continuations.md) |
 | Inbox | Your page for what needs you: approval requests and questions no lead could answer. | [Screen inventory](../design/screens-and-flows.md), [ADR 015](../decisions/015-approval-lifetimes-and-grants.md) |
 | Continuation | A turn the dispatcher starts for a hob when an actionable backpack item arrives, without a prompt from you. | [ADR 019](../decisions/019-hob-backpack-and-continuations.md) |

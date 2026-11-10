@@ -61,7 +61,10 @@ Records are written once, in the same transaction and journal as the message tha
 ### The context pack
 
 - `ContextPack` is a service, not a table. `buildPack(records, budget)` is pure and deterministic. It reads the memory brief, the camp brief, active decisions, the artifacts index, the live chapter's transcript, one line per resting chapter and carried items.
-- Over budget, it drops resting chapter lines first, then old artifacts. It never drops the memory brief or active decisions.
+- **Every part has a share of the budget**, and the shares add up to the budget. The memory brief keeps its own budget (ADR 028), and the camp brief is cut at its share by the projector that writes it. A decision is at most 500 characters; `record_decision` refuses a longer one.
+- **Over budget**, the builder trims in this order: resting chapter lines, then the oldest artifacts, then the live chapter's oldest turns, each replaced by one line that says what was left out. The live chapter's last turn is always kept whole.
+- **Active decisions never drop silently.** When they need more than their share, the newest are kept in full up to the share, and the rest are listed by title only, newest first. If even the titles do not fit, the pack says how many older decisions it left out, and the hob reads them with `find`. The pack never goes over its budget.
+- **Overflow is shown.** The `PackReport` marks each part it trimmed and by how much. When active decisions overflow, the Focus chip says so, and the hub suggests crossing out the decisions that no longer hold, or moving a topic into a camp.
 - Each turn logs a `PackReport`: each part and its size in tokens. The Focus chip shows it, and a dev-only endpoint and a snapshot test show it in review.
 - `agents/chat.ts` builds a session's starting context from the pack instead of the transcript.
 
@@ -148,6 +151,17 @@ Five slices, in order. Each leaves the app working.
 
 Shared camps, with more than one person, come after. They need users as actors (accounts, membership, who sees what), which is a separate design. Nothing here blocks them.
 
+## Rationale
+
+- **Records over transcripts.** A transcript's cost grows with every turn, and what matters in it is a few decisions and artifacts. Reading those records keeps a turn's cost tied to the live topic, and the same records feed the sheet and find, so nothing is worked out twice.
+- **A camp is a thread.** Threads already have titles, pins, archive, unread markers, brains and sessions. A `kind` reuses all of it, where a new Camp table would copy it.
+- **Chapters start sessions.** A runtime session cannot forget part of itself. Starting one per chapter is the only way, on both Claude Code and Codex, to stop old topics riding along.
+- **Moving, not copying.** Two copies of a decision drift apart. Re-parenting in one transaction keeps one truth, and the stub keeps the chat readable.
+- **The hub decides status.** It already knows every state. Publishing it once removes the rules each screen copies, and two devices cannot disagree.
+- **Explicit machines.** The run loop shows the cost of state spread over sets: every new path has to remember them all. A table with one owner and one event per change can be tested by model, diagrammed and read.
+- **Rules before models.** Numbers, clashes and status must be exact, free and work under No AI. A model only judges, and only in projectors, so a slow or failed call never blocks you.
+- **Small tools.** `fast-check` and three checks of our own cover what XState or a workflow engine would add, without a second home for state.
+
 ## Consequences
 
 - Turn cost stops growing with a thread's length. A turn reads records and the live chapter only.
@@ -167,7 +181,7 @@ The scenarios that would show this decision holds. None is proven yet; each name
 - After the migration each hob has exactly one open chat, its other threads are camps with their titles, and every message belongs to a chapter; a second open chat for a hob is refused by the database. Not proven yet ([#1362](https://github.com/otaviobarros/hobbots/issues/1362)).
 - Make a camp and Start fresh each commit state, journal and backpack items in one transaction; a crash between them leaves neither half. Carried items arrive in the new chat once. Not proven yet ([#1362](https://github.com/otaviobarros/hobbots/issues/1362)).
 - A hob on Claude Code, Codex and the fake runtime calls `start_chapter`, and the next turn starts a new session seeded from the pack, not the transcript. Not proven yet ([#1363](https://github.com/otaviobarros/hobbots/issues/1363)).
-- The pack is the same for the same records, stays within its budget, and never drops the memory brief or active decisions; a long thread's turn costs no more than a short one's plus its live chapter, measured before and after. Not proven yet ([#1363](https://github.com/otaviobarros/hobbots/issues/1363)).
+- The pack is the same for the same records and never goes over its budget, even when the memory brief, the camp brief and the active decisions alone would; then every active decision still appears in full, by title or in the count of those left out, the `PackReport` marks the trim, and the Focus chip shows it. A long thread's turn costs no more than a short one's plus its live chapter, measured before and after. Not proven yet ([#1363](https://github.com/otaviobarros/hobbots/issues/1363)).
 - Moving a chapter into a camp moves its messages, decisions, artifacts, open questions and quests in one transaction and leaves a stub; nothing appears in both. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - A changed decision is kept and crossed out; find answers "where did we decide X" from records and cites them; a private camp's entries never reach memory. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - The brief and chapter summaries are written by projectors that resume from their cursor after a restart and write nothing twice. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
