@@ -85,7 +85,7 @@ Records are written once, in the same transaction and journal as the message tha
 - **Onboarding** shows it with the smallest model of the runtime you just connected already picked, so it is one tap, not a new question.
 - **It judges; rules decide facts.** The brain writes the brief and chapter summaries, judges whether a chapter is drifting into its own topic, and whether two quests clash in meaning. Numbers, path and branch clashes, and every status stay pure rules, so they are exact, free and work under No AI.
 - **Only in projectors.** The brain is called by cursor projectors, never in a command's request path. With No AI, a summary falls back to a plain one and a judgment to its rule.
-- **A decision port.** Judgments go through `HubDecider`: a schema of choices and an input in, a choice and a confidence out, decoded by `Schema`. The first implementation asks the hub's brain for an answer in that shape. A typed decision model, such as TypeSafe's Jev, can implement it later as a provider that needs your API key.
+- **A decision port.** Judgments go through `HubDecider`: a schema of choices and an input in, a choice and a confidence out, decoded by `Schema`. The first implementation asks the hub's brain for an answer in that shape. Another provider can implement it later.
 
 ### Every lifecycle is an explicit machine
 
