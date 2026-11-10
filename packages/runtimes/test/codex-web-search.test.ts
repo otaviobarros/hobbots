@@ -1,7 +1,15 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type HubTools, type PromptRequest, type RuntimeEvent, WEB_RESULTS_LINE } from "@hobbots/agents";
+import {
+  type HubTools,
+  makeRedactor,
+  type PromptRequest,
+  type RuntimeEvent,
+  type TurnApprovals,
+  WEB_RESULTS_LINE,
+  type WebRead,
+} from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Exit, Stream } from "effect";
@@ -9,7 +17,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { codexTurnEvents } from "../src/codex/events.ts";
 import { type CodexTurnConfig, codexFolders, runCodexTurn } from "../src/codex/turn.ts";
 import type { ProcessSandboxShape } from "../src/sandbox.ts";
-import { claudeWebSearched, codexWebSearched } from "../src/web-search.ts";
+import { CODEX_SEARCH_PAGE, claudeWebSearched, codexWebSearched } from "../src/web-search.ts";
 import { completed, fakeServer, n, THREAD, TURN } from "./codex-app-server.ts";
 
 // Codex's own web search, in cached mode only (ADR 036, #1266).
@@ -298,5 +306,91 @@ describe("a Codex turn that may search the web", () => {
       expect(restricted.searches()).toBe(false);
       expect(restricted.settings()).toContain('web_search = "disabled"');
     }
+  });
+
+  // covers ADR 036, STD-SEC-002
+  it("[TC-RT-535] keeps Codex's search off where Use the web asks first or is Never, since its search can open pages", async () => {
+    for (const hob of [
+      { ...EMPTY_HOB_POLICY, overrides: { "use-web": "ask" } },
+      { ...EMPTY_HOB_POLICY, overrides: { "use-web": "deny" } },
+    ] as const) {
+      const turn = await setup(fakeServer({ script: [completed("completed")] }), hob);
+      // Even where the hub asked for search, the adapter checks the page rules itself.
+      await run({ ...turn.turnConfig, cachedSearch: Effect.succeed(true) }, turn.request);
+      expect(turn.searches()).toBe(false);
+      expect(turn.settings()).toContain('web_search = "disabled"');
+    }
+  });
+
+  // covers ADR 036
+  it("[TC-RT-536] marks the session as having read the web when Codex's search opens a page, without finding its URL", async () => {
+    const server = fakeServer({
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/completed", search("s1", { type: "openPage", url: "https://example.com/written" })),
+        item("item/completed", search("s2", { type: "findInPage", url: null, pattern: "release" })),
+        item("item/completed", { type: "agentMessage", id: "m1", text: "Read it." }),
+        completed("completed"),
+      ],
+    });
+    const { turnConfig, request } = await setup(server);
+    const reads: Array<unknown> = [];
+    const found: Array<unknown> = [];
+    const exit = await run(
+      { ...turnConfig, cachedSearch: Effect.succeed(true) },
+      {
+        ...request,
+        recordSearch: (event) => Effect.sync(() => void found.push(event)),
+        approvals: {
+          request: null,
+          currentAccess: Effect.succeed(request.tools ?? null),
+          grants: Effect.succeed([]),
+          used: () => Effect.void,
+          webMark: { current: Effect.succeed(null), read: (read) => Effect.sync(() => void reads.push(read)) },
+        },
+      },
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(reads).toEqual([
+      { _tag: "Page", url: "https://example.com/written" },
+      { _tag: "Page", url: CODEX_SEARCH_PAGE },
+    ]);
+    // An opened page is not a search, so nothing is found or counted.
+    expect(found).toEqual([]);
+    expect(events(exit).filter((event) => event._tag === "WebSearched")).toEqual([]);
+  });
+
+  // covers ADR 036, STD-SEC-002
+  it("[TC-RT-537] keeps a credential out of the mark when Codex's search opens a URL that carries one", async () => {
+    const token = "hob-known-secret-7Qk2";
+    const server = fakeServer({
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/completed", search("s1", { type: "openPage", url: "https://ada:hunter22@example.com/a" })),
+        item("item/completed", search("s2", { type: "findInPage", url: `https://example.com/b?key=${token}` })),
+        completed("completed"),
+      ],
+    });
+    const { turnConfig, request } = await setup(server);
+    const reads: Array<WebRead> = [];
+    const approvals: TurnApprovals = {
+      request: null,
+      currentAccess: Effect.succeed(request.tools ?? null),
+      grants: Effect.succeed([]),
+      used: () => Effect.void,
+      webMark: {
+        current: Effect.succeed(null),
+        read: (read) => Effect.sync(() => void reads.push(read)),
+      },
+    };
+    const exit = await run(
+      { ...turnConfig, cachedSearch: Effect.succeed(true) },
+      { ...request, approvals, redaction: makeRedactor([{ kind: "token", value: token }]) },
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(reads).toHaveLength(2);
+    expect(JSON.stringify(reads)).not.toContain("hunter22");
+    expect(JSON.stringify(reads)).not.toContain(token);
+    expect(JSON.stringify(reads[0])).toContain("example.com/a");
   });
 });

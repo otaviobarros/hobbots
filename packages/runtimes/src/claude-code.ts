@@ -1517,7 +1517,15 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       read: (binary, checkedAt) => readPlan(binary).pipe(Effect.map((report) => planFromReport(report, checkedAt))),
     });
 
-    return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), planUsage, sendPrompt });
+    return RuntimeAdapter.of({
+      health,
+      models,
+      enforcement: Effect.succeed(declared),
+      planUsage,
+      // `WebSearch` returns links only, and `WebFetch` stays closed, so every page goes through `web_fetch`.
+      searchOpensPages: false,
+      sendPrompt,
+    });
   });
 
 /** Claude Code with tools under the hub's policy engine and process sandbox. */

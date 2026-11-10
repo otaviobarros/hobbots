@@ -84,7 +84,7 @@ import { nextSteps, replyStepId, stoppedCommands, uncertainCalls } from "./steps
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope, TaskRepository } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
-import { accessNow, HobTools, narrows, turnWebSearch } from "./tools.ts";
+import { accessNow, HobTools, narrows } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
 import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
@@ -1044,7 +1044,7 @@ export class ChatService extends Context.Service<
           const activity = yield* activityOf(tools, taskTurn);
           const webUse = yield* chatWebTurn(agent.id, thread.id, current.id, brain.runtime, taskTurn, workingOn);
           webTurn = webUse;
-          const search = webSearchRequest(turnWebSearch(tools), webUse);
+          const search = webSearchRequest(tools, webUse, adapter);
           yield* activity
             .run(
               {

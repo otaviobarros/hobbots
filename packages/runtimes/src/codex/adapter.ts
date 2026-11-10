@@ -35,7 +35,8 @@ export const codexWebSearch = (version: string | null): RuntimeEnforcement["webS
   version !== null && CACHED_SEARCH_CODEX_VERSIONS.includes(version)
     ? {
         status: "verified",
-        evidence: "This Codex searches OpenAI's cached index only; it opens no page, and live search stays off.",
+        evidence:
+          "This Codex searches OpenAI's cached index only, and live search stays off. Its search can open pages, so it is offered only where Use the web is Allow and no site is blocked.",
       }
     : {
         status: "unverified",
@@ -179,6 +180,9 @@ export const makeCodex = (config: CodexConfig) =>
       planUsage,
       // `thread/resume` takes no dynamic tools, so a resumed thread keeps the ones it started with.
       resumeKeepsHubTools: true,
+      // Its search can open a page it names (`openPage`, `findInPage`), which runs on OpenAI's
+      // servers and cannot pause, so the hub offers it only where every page is read without asking.
+      searchOpensPages: true,
       sendPrompt: (request) => runCodexTurn(turnConfig, request),
     });
   });
