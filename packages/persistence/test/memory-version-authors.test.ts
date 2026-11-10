@@ -1,5 +1,5 @@
 import { MemoryVersionAuthors } from "@hobbots/agents";
-import { AgentId, MemoryPath, MemoryVersion, memoryProjectIdentity } from "@hobbots/domain";
+import { AgentId, type MemoryAuthor, MemoryPath, MemoryVersion, memoryProjectIdentity } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { MemoryVersionAuthorsLive } from "../src/index.ts";
@@ -37,14 +37,14 @@ describe("Who wrote each memory version", () => {
     }).pipe(Effect.provide(MemoryVersionAuthorsLive), Effect.provide(TestDatabase), Effect.runPromise);
 
     expect(found.before).toEqual(
-      new Map([
-        ["v1", pip],
-        ["v2", you],
-        ["v3", pip],
+      new Map<MemoryVersion, MemoryAuthor>([
+        [version("v1"), pip],
+        [version("v2"), you],
+        [version("v3"), pip],
       ]),
     );
     expect(found.all.size).toBe(1_200);
-    expect(found.after).toEqual(new Map([["v3", pip]]));
+    expect(found.after).toEqual(new Map<MemoryVersion, MemoryAuthor>([[version("v3"), pip]]));
     expect(found.none.size).toBe(0);
   });
 });
