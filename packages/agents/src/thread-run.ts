@@ -1,19 +1,19 @@
-import type { Message, MessageId } from "@hobbots/domain";
-import { defineMachine, type MachineEdge } from "@hobbots/domain";
+import type { Message, MessageId, ReplyActivity, ThreadId, ThreadRunStatus } from "@hobbots/domain";
+import { defineMachine, type MachineEdge, ThreadRunState } from "@hobbots/domain";
 import type { Deferred, Ref, Semaphore } from "effect";
 
 /**
  * A thread's run (ADR 037): whether a turn runs there, and what waits for the thread to be free. It
  * lives in memory, as turns do; at start every thread is idle, and queued messages and backpack work
  * start it again. `ChatService` keeps every thread's run in one `Ref`, changed only through
- * `ThreadRunMachine`.
+ * `ThreadRunMachine`, and publishes each transition as `ThreadRunChanged`.
  */
 
 /**
  * Where a thread's run stands. A thread is busy in every state but `idle`, so later prompts queue.
  * Whether the running reply is stopping is the reply's own state, not the run's.
  */
-export type RunState = "idle" | "dispatching" | "running" | "carrying" | "draining";
+export type RunState = ThreadRunState;
 
 /** The reply a running turn is writing, so a stop request can reach it. */
 export interface Reply {
@@ -35,6 +35,8 @@ export interface ThreadRun {
   readonly run: RunState;
   /** The reply of the turn running there, while `running` or `carrying`. */
   readonly reply: Reply | null;
+  /** What that reply is doing, while it runs; null with no reply. */
+  readonly activity: ReplyActivity | null;
   /** The queued message Send now picked to start next. After a restart the queue keeps its order. */
   readonly chosen: MessageId | null;
   /**
@@ -52,8 +54,10 @@ export interface ThreadRun {
 export type ThreadRunEvent =
   /** The dispatcher starts putting the backpack work waiting there into the thread's next turn. */
   | { readonly _tag: "Dispatch" }
-  /** A turn starts, with the reply it writes. */
-  | { readonly _tag: "Launch"; readonly reply: Reply }
+  /** A turn starts, with the reply it writes and what that reply is doing. */
+  | { readonly _tag: "Launch"; readonly reply: Reply; readonly activity: ReplyActivity | null }
+  /** The running reply changed what it is doing; a stale reply, or no change, changes nothing. */
+  | { readonly _tag: "ReplyChanged"; readonly reply: Reply; readonly activity: ReplyActivity | null }
   /** A turn has ended; a stale reply, already replaced, changes nothing. */
   | { readonly _tag: "TurnEnded"; readonly reply: Reply }
   /** The ended turn's drain frees the thread. */
@@ -71,15 +75,38 @@ export type ThreadRunEvent =
   /** Work you stopped may start again: you wrote, resumed it, or its hob woke. */
   | { readonly _tag: "Release" };
 
-export const RUN_STATES: ReadonlyArray<RunState> = ["idle", "dispatching", "running", "carrying", "draining"];
+export const RUN_STATES: ReadonlyArray<RunState> = ThreadRunState.literals;
 const BUSY: ReadonlyArray<RunState> = ["dispatching", "running", "carrying", "draining"];
 
 /** A thread with nothing running and nothing remembered. */
-export const idleRun: ThreadRun = { run: "idle", reply: null, chosen: null, held: false, wakePending: false };
+export const idleRun: ThreadRun = {
+  run: "idle",
+  reply: null,
+  activity: null,
+  chosen: null,
+  held: false,
+  wakePending: false,
+};
 
-/** One rule per state in `states`, each staying in its state, for an event that changes only flags. */
-const staying = <E>(states: ReadonlyArray<RunState>, apply: (run: ThreadRun, event: E) => ThreadRun) =>
-  states.map((state): MachineEdge<RunState, ThreadRun, E> => ({ from: [state], to: state, apply }));
+/** What a running reply is doing now, for `ReplyChanged`. */
+interface ReplyChange {
+  readonly reply: Reply;
+  readonly activity: ReplyActivity | null;
+}
+
+/**
+ * One rule per state in `states`, each staying in its state, for an event that changes only fields
+ * other than the state, when `guard`, if any, holds.
+ */
+const staying = <E>(
+  states: ReadonlyArray<RunState>,
+  apply: (run: ThreadRun, event: E) => ThreadRun,
+  guard?: (run: ThreadRun, event: E) => boolean,
+) =>
+  states.map(
+    (state): MachineEdge<RunState, ThreadRun, E> =>
+      guard === undefined ? { from: [state], to: state, apply } : { from: [state], to: state, guard, apply },
+  );
 
 export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRun, string>({
   name: "ThreadRun",
@@ -94,21 +121,34 @@ export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRu
   events: {
     Dispatch: { from: ["idle"], to: "dispatching", apply: (r) => ({ ...r, run: "dispatching", wakePending: false }) },
     Launch: [
-      { from: ["idle"], to: "running", apply: (r, e) => ({ ...r, run: "running", reply: e.reply }) },
-      { from: ["dispatching"], to: "carrying", apply: (r, e) => ({ ...r, run: "carrying", reply: e.reply }) },
+      {
+        from: ["idle"],
+        to: "running",
+        apply: (r, e) => ({ ...r, run: "running", reply: e.reply, activity: e.activity }),
+      },
+      {
+        from: ["dispatching"],
+        to: "carrying",
+        apply: (r, e) => ({ ...r, run: "carrying", reply: e.reply, activity: e.activity }),
+      },
     ],
+    ReplyChanged: staying(
+      ["running", "carrying"],
+      (r, e: ReplyChange) => ({ ...r, activity: e.activity }),
+      (r, e) => r.reply === e.reply && r.activity !== e.activity,
+    ),
     TurnEnded: [
       {
         from: ["running"],
         to: "draining",
         guard: (r, e) => r.reply === e.reply,
-        apply: (r) => ({ ...r, run: "draining", reply: null }),
+        apply: (r) => ({ ...r, run: "draining", reply: null, activity: null }),
       },
       {
         from: ["carrying"],
         to: "dispatching",
         guard: (r, e) => r.reply === e.reply,
-        apply: (r) => ({ ...r, run: "dispatching", reply: null }),
+        apply: (r) => ({ ...r, run: "dispatching", reply: null, activity: null }),
       },
     ],
     // A drain with nothing left to free, as for a thread that was removed, changes nothing.
@@ -134,3 +174,11 @@ export const isBusy = (run: ThreadRun) => run.run !== "idle";
 
 /** Whether the run is idle and remembers nothing, so it need not be kept. */
 export const isAtRest = (run: ThreadRun) => run.run === "idle" && run.chosen === null && !run.held && !run.wakePending;
+
+/** The run as the hub publishes it, at `revision`. */
+export const runStatus = (threadId: ThreadId, run: ThreadRun, revision: number): ThreadRunStatus => ({
+  threadId,
+  run: run.run,
+  reply: run.activity,
+  revision,
+});

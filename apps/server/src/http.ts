@@ -37,6 +37,7 @@ import { HobChangesHandlers } from "./hob-changes.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { HobMemoryHandlers } from "./hob-memory.ts";
+import { HobPresences } from "./hob-presence.ts";
 import { HobProposalsHandlers } from "./hob-proposals.ts";
 import { Installation } from "./installation.ts";
 import { MemoryPagesHandlers } from "./memory.ts";
@@ -153,6 +154,7 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     const adapters = yield* runtimeAdapters;
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
+    const presences = yield* HobPresences;
 
     // A hob is working while one of its threads has a turn running, until the turn's runtime has
     // exited. `TurnStarted` and `TurnEnded` announce each change once it has happened, so a read made
@@ -178,10 +180,14 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
 
     return handlers.handleAll({
       activity: () => activity,
+      status: () =>
+        Effect.all([chat.threadRuns, presences.current]).pipe(
+          Effect.map(([{ revision, runs }, hobs]) => ({ runsRevision: revision, runs, hobs })),
+        ),
       runtimes: () => everyRuntimeHealth(adapters),
     });
   }),
-);
+).pipe(Layer.provide(HobPresences.layer));
 
 /** The hub's name for the waiting screen: the computer's own, without the `.local` macOS adds. */
 const hubName = (host: string = hostname()): string => host.replace(/\.local$/i, "");

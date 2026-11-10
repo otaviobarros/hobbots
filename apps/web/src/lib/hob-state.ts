@@ -1,4 +1,11 @@
-import type { Agent, AgentId, ApprovalRequest, BackpackItem, FailedTask, Question, ThreadId } from "@hobbots/domain";
+import {
+  type Agent,
+  type AgentId,
+  type ApprovalRequest,
+  type BackpackItem,
+  leadsNeedingYou,
+  type Question,
+} from "@hobbots/domain";
 import type { ThreadActivity } from "../api/activity.ts";
 
 /**
@@ -93,33 +100,10 @@ export const hobNeeds = ({
 };
 
 /**
- * The hobs whose tile in the sidebar is marked as needing you (ADR 027). You talk only to the lead,
- * so what waits on you marks the hob whose chat it waits in: a request, stuck work or a member's
- * failed Task by the chat its work was asked in, and a question by the last lead it climbed. The
- * hob that asks keeps its own state. `leadOf` names the hob a chat belongs to, when it is known.
+ * The hobs whose tile in the sidebar is marked as needing you (ADR 027): the rule the hub decides
+ * presence by, so the sidebar agrees with it.
  */
-export const leadNeeds = ({
-  approvals,
-  blockers,
-  questions,
-  failed,
-  leadOf,
-}: {
-  readonly approvals: ReadonlyArray<Pick<ApprovalRequest, "agentId" | "threadId" | "state">>;
-  readonly blockers: ReadonlyArray<Pick<BackpackItem, "recipientId" | "threadId">>;
-  readonly questions: ReadonlyArray<{ readonly question: Pick<Question, "askerId" | "chain"> }>;
-  readonly failed: ReadonlyArray<FailedTask>;
-  readonly leadOf: (threadId: ThreadId) => AgentId | undefined;
-}): ReadonlySet<AgentId> => {
-  const lead = (threadId: ThreadId | null, otherwise: AgentId) =>
-    (threadId === null ? undefined : leadOf(threadId)) ?? otherwise;
-  return new Set([
-    ...approvals.flatMap((request) => (request.state === "pending" ? [lead(request.threadId, request.agentId)] : [])),
-    ...blockers.map((item) => lead(item.threadId, item.recipientId)),
-    ...questions.map(({ question }) => question.chain.at(-1) ?? question.askerId),
-    ...failed.map(({ task, leadId }) => leadId ?? lead(task.threadId, task.ownerId)),
-  ]);
-};
+export const leadNeeds = leadsNeedingYou;
 
 /**
  * One thread's state for the chat header. The hob's lifecycle wins here too, so the header agrees

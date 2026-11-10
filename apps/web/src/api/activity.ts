@@ -1,11 +1,11 @@
-import { isInProgress, type Message, type ThreadId, waitedSteps } from "@hobbots/domain";
+import { type Message, type ReplyActivity, replyActivity, type ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 
 /**
  * What a thread's hob is doing right now, learned from live events. Absent means idle. `waiting`:
  * it has answered and its reply waits only on commands it started (#1056).
  */
-export type ThreadActivity = "thinking" | "working" | "waiting";
+export type ThreadActivity = ReplyActivity;
 export type ActivityMap = Readonly<Record<ThreadId, ThreadActivity>>;
 
 const activityKey = ["activity"] as const;
@@ -27,16 +27,6 @@ export const setActivity = (queryClient: QueryClient, threadId: ThreadId, activi
   });
 
 export const recordActivity = (queryClient: QueryClient, message: Message) =>
-  setActivity(
-    queryClient,
-    message.threadId,
-    isInProgress(message.status)
-      ? waitedSteps(message.steps).length > 0
-        ? "waiting"
-        : message.content.length > 0
-          ? "working"
-          : "thinking"
-      : null,
-  );
+  setActivity(queryClient, message.threadId, replyActivity(message));
 
 export const useActivity = (): ActivityMap => useQuery(activityQuery).data ?? {};

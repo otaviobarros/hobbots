@@ -54,7 +54,11 @@ const transientFrame = (event: HubTransientEvent) => {
       return STREAM_FRAME.commandOutput;
     case "MemoryChanged":
       return STREAM_FRAME.memory;
-    default:
+    case "ThreadRunChanged":
+    case "HobPresenceChanged":
+      return STREAM_FRAME.status;
+    case "TurnStarted":
+    case "TurnEnded":
       return STREAM_FRAME.turn;
   }
 };

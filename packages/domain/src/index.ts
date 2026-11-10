@@ -33,6 +33,7 @@ export * from "./memory-tools.ts";
 export * from "./memory-views.ts";
 export * from "./message.ts";
 export * from "./policy.ts";
+export * from "./presence.ts";
 export * from "./quest.ts";
 export * from "./readiness.ts";
 export * from "./redaction.ts";

@@ -29,6 +29,7 @@ import {
   RUNTIME_NAMES,
   type RuntimeKind,
   type RuntimeSession,
+  replyActivity,
   type SkillMention,
   type SkillTrial,
   sameBrain,
@@ -40,6 +41,7 @@ import {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  type ThreadRunStatus,
   type TurnEnding,
   takesNewWork,
   titleFromPrompt,
@@ -101,6 +103,7 @@ import {
   isAtRest,
   isBusy,
   type Reply,
+  runStatus,
   type ThreadRun,
   type ThreadRunEvent,
   ThreadRunMachine,
@@ -394,6 +397,11 @@ export class ChatService extends Context.Service<
      * announced as the transient `TurnStarted` or `TurnEnded`, published once it has happened.
      */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /**
+     * Every thread whose run is not idle, as `ThreadRunChanged` publishes it, and the revision of the
+     * last transition of any run: a thread left out is idle as of that revision (ADR 037).
+     */
+    readonly threadRuns: Effect.Effect<{ readonly revision: number; readonly runs: ReadonlyArray<ThreadRunStatus> }>;
     /** The replies still streaming or stopping, with all the text held in memory so far. */
     readonly streamingReplies: Effect.Effect<ReadonlyArray<Message>>;
   }
@@ -498,25 +506,40 @@ export class ChatService extends Context.Service<
       const scope = yield* Effect.scope;
       // Every thread's run (ADR 037), changed only through `ThreadRunMachine`. In memory, as turns
       // are; the queue itself is the stored queued messages. A thread with no entry is idle.
-      const runs = yield* Ref.make(HashMap.empty<ThreadId, ThreadRun>());
+      // `revision` counts every transition, so clients can order what each publishes.
+      interface Runs {
+        readonly all: HashMap.HashMap<ThreadId, ThreadRun>;
+        readonly revision: number;
+      }
+      const runs = yield* Ref.make<Runs>({ all: HashMap.empty(), revision: 0 });
       interface StepResult {
         readonly before: ThreadRun;
         readonly taken: boolean;
       }
       const runOf = (threadId: ThreadId) =>
-        Ref.get(runs).pipe(Effect.map((all) => Option.getOrElse(HashMap.get(all, threadId), () => idleRun)));
+        Ref.get(runs).pipe(Effect.map(({ all }) => Option.getOrElse(HashMap.get(all, threadId), () => idleRun)));
       // Applies an event to the thread's run: `taken` says whether its rules allowed it, and `before`
       // is the run it found. A run back at rest is dropped, so the map holds only what is remembered.
+      // Every transition taken is published once as `ThreadRunChanged`, after the change.
       const step = (threadId: ThreadId, event: ThreadRunEvent) =>
-        Ref.modify(runs, (all): readonly [StepResult, HashMap.HashMap<ThreadId, ThreadRun>] => {
-          const before = Option.getOrElse(HashMap.get(all, threadId), () => idleRun);
+        Ref.modify(runs, (current): readonly [StepResult & { readonly published: ThreadRunStatus | null }, Runs] => {
+          const before = Option.getOrElse(HashMap.get(current.all, threadId), () => idleRun);
           const after = ThreadRunMachine.transition(before, event);
-          if (typeof after === "string") return [{ before, taken: false }, all];
+          if (typeof after === "string") return [{ before, taken: false, published: null }, current];
+          const revision = current.revision + 1;
+          const all = isAtRest(after)
+            ? HashMap.remove(current.all, threadId)
+            : HashMap.set(current.all, threadId, after);
           return [
-            { before, taken: true },
-            isAtRest(after) ? HashMap.remove(all, threadId) : HashMap.set(all, threadId, after),
+            { before, taken: true, published: runStatus(threadId, after, revision) },
+            { all, revision },
           ];
-        });
+        }).pipe(
+          Effect.tap(({ published }) =>
+            published === null ? Effect.void : bus.publishTransient({ _tag: "ThreadRunChanged", run: published }),
+          ),
+          Effect.map(({ before, taken }): StepResult => ({ before, taken })),
+        );
       // An event the run loop only sends when the run allows it: a refusal is a bug in the loop.
       const must = (threadId: ThreadId, event: ThreadRunEvent) =>
         step(threadId, event).pipe(
@@ -639,6 +662,14 @@ export class ChatService extends Context.Service<
         );
       });
 
+      // The reply in memory becomes `next`, and the thread's run learns what the reply is doing now.
+      // A reply that no longer runs there changes nothing in the run.
+      const setReply = (reply: Reply, next: Message) =>
+        Ref.set(reply.current, next).pipe(
+          Effect.andThen(step(next.threadId, { _tag: "ReplyChanged", reply, activity: replyActivity(next) })),
+          Effect.asVoid,
+        );
+
       // Applies a domain transition to a running reply, `apply` taking the result in. The lock keeps
       // the turn and a stop request from saving out of order. Finished replies reject changes, so late
       // runtime events and repeated stops are ignored.
@@ -660,7 +691,7 @@ export class ChatService extends Context.Service<
         reply: Reply,
         f: (message: Message) => Message | unknown,
         after: (next: Message) => Effect.Effect<A>,
-      ) => changeReply(reply, f, (next) => Effect.andThen(Ref.set(reply.current, next), after(next)));
+      ) => changeReply(reply, f, (next) => Effect.andThen(setReply(reply, next), after(next)));
 
       // The reply in memory takes the result only once `save` has committed it, and the save is not cut
       // short: a stop that comes while it runs waits for it. So a stop's own save, which starts from the
@@ -669,10 +700,7 @@ export class ChatService extends Context.Service<
         reply: Reply,
         f: (message: Message) => Message | unknown,
         save: (next: Message) => Effect.Effect<A>,
-      ) =>
-        changeReply(reply, f, (next) =>
-          Effect.uninterruptible(Effect.tap(save(next), () => Ref.set(reply.current, next))),
-        );
+      ) => changeReply(reply, f, (next) => Effect.uninterruptible(Effect.tap(save(next), () => setReply(reply, next))));
 
       // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
       // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
@@ -1259,7 +1287,7 @@ export class ChatService extends Context.Service<
             endWait: yield* Deferred.make<void>(),
             waitsStopped: yield* Ref.make<number | null>(null),
           };
-          yield* must(thread.id, { _tag: "Launch", reply });
+          yield* must(thread.id, { _tag: "Launch", reply, activity: replyActivity(saved) });
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
           // may hold while it waits for this very turn to stop.
           const turn = yield* FiberMap.run(
@@ -1645,9 +1673,17 @@ export class ChatService extends Context.Service<
       });
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
+      const threadRuns = Ref.get(runs).pipe(
+        Effect.map(({ all, revision }) => ({
+          revision,
+          runs: Array.from(HashMap.entries(all)).flatMap(([threadId, run]) =>
+            isBusy(run) ? [runStatus(threadId, run, revision)] : [],
+          ),
+        })),
+      );
       const streamingReplies = Effect.suspend(() =>
         Ref.get(runs).pipe(
-          Effect.flatMap((all) =>
+          Effect.flatMap(({ all }) =>
             Effect.forEach(
               Array.from(HashMap.values(all)).flatMap((run) => (run.reply === null ? [] : [run.reply])),
               (reply) => Ref.get(reply.current),
@@ -1845,6 +1881,7 @@ export class ChatService extends Context.Service<
         wake,
         resume,
         activeThreads,
+        threadRuns,
         streamingReplies,
       });
     }),
