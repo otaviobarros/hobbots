@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { AgentId, TaskId, ThreadId } from "./ids.ts";
+import { defineMachine } from "./machine.ts";
 import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";
 import { WebReadMark } from "./web-mark.ts";
@@ -138,40 +139,109 @@ export class StaleTask extends Schema.TaggedError<StaleTask>()("StaleTask", {
 export const TaskTarget = Schema.Literals(["waiting", "blocked", "active", "failed", "cancelling", "cancelled"]);
 export type TaskTarget = typeof TaskTarget.Type;
 
-const ALLOWED: Record<TaskTarget, ReadonlyArray<TaskState>> = {
-  waiting: ["active"],
-  blocked: ["active", "waiting"],
-  active: ["waiting", "blocked"],
-  failed: ["queued", "active", "waiting", "blocked"],
-  cancelling: ["queued", "active", "waiting", "blocked"],
-  // A queued Task has nothing running, so its cancel is confirmed at once.
-  cancelled: ["queued", "cancelling"],
-};
+/** What can happen to a Task. Each event names the time it happened. */
+export type TaskEvent =
+  | { readonly _tag: "Wait"; readonly at: string }
+  | { readonly _tag: "Block"; readonly at: string }
+  | { readonly _tag: "Resume"; readonly at: string }
+  | { readonly _tag: "Fail"; readonly at: string }
+  | { readonly _tag: "RequestCancel"; readonly at: string }
+  | { readonly _tag: "Cancel"; readonly at: string }
+  | {
+      readonly _tag: "Start";
+      readonly at: string;
+      readonly attemptId: AttemptId;
+      readonly readiness: TaskReadiness;
+    }
+  | { readonly _tag: "Retry"; readonly at: string }
+  | { readonly _tag: "Reassign"; readonly at: string; readonly ownerId: AgentId }
+  | { readonly _tag: "Complete"; readonly at: string; readonly result: TaskResult };
 
-/** Pure transitions for a Task (EX-002). Each returns the next Task or why it cannot. */
+/** The states a Task with nothing ended can be in: an Attempt may start, or another hob take it over. */
+const OPEN: ReadonlyArray<TaskState> = ["queued", "active", "waiting", "blocked", "failed"];
+
+const moved = (task: Task, to: TaskState, at: string) => new Task({ ...task, state: to, updatedAt: at });
+
+/** A Task's lifecycle (EX-002, ADR 018), declared once (ADR 037). */
+export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTaskTransition>({
+  name: "Task",
+  states: {
+    queued: "Waiting for its first Attempt, or for the next one after a retry or reassignment",
+    active: "An Attempt is running",
+    waiting: "Waiting on a dependency, an approval or an answer",
+    blocked: "Waiting for a decision from outside its turn: its lead's, or for a step its owner's",
+    cancelling: "A cancel was requested and is not confirmed yet",
+    completed: "Done, with its result",
+    failed: "Ended without a result; a retry or reassignment reopens it",
+    cancelled: "Stopped, and the stop is confirmed",
+  },
+  field: "state",
+  events: {
+    Wait: { from: ["active"], to: "waiting", apply: (task, e) => moved(task, "waiting", e.at) },
+    Block: { from: ["active", "waiting"], to: "blocked", apply: (task, e) => moved(task, "blocked", e.at) },
+    Resume: { from: ["waiting", "blocked"], to: "active", apply: (task, e) => moved(task, "active", e.at) },
+    Fail: {
+      from: ["queued", "active", "waiting", "blocked"],
+      to: "failed",
+      apply: (task, e) => moved(task, "failed", e.at),
+    },
+    RequestCancel: {
+      from: ["queued", "active", "waiting", "blocked"],
+      to: "cancelling",
+      apply: (task, e) => moved(task, "cancelling", e.at),
+    },
+    // A queued Task has nothing running, so its cancel is confirmed at once.
+    Cancel: { from: ["queued", "cancelling"], to: "cancelled", apply: (task, e) => moved(task, "cancelled", e.at) },
+    // A first start, a resume, or a retry of a failed Task, once its tree says it is Ready.
+    Start: {
+      from: OPEN,
+      to: "active",
+      guard: (_, e) => e.readiness._tag === "Ready",
+      apply: (task, e) => new Task({ ...task, state: "active", currentAttemptId: e.attemptId, updatedAt: e.at }),
+    },
+    // A retry puts a failed Task back in the queue, for a new Attempt of the same Task (EX-001).
+    Retry: { from: ["failed"], to: "queued", apply: (task, e) => moved(task, "queued", e.at) },
+    // Another hob takes the Task, queued for its first Attempt there; nothing of the earlier owner's carries over.
+    Reassign: {
+      from: OPEN,
+      to: "queued",
+      apply: (task, e) =>
+        new Task({ ...task, ownerId: e.ownerId, state: "queued", currentAttemptId: null, updatedAt: e.at }),
+    },
+    // From its turn, or, once blocked, as its owner decides how it ends (#667).
+    Complete: {
+      from: ["active", "waiting", "blocked"],
+      to: "completed",
+      apply: (task, e) => new Task({ ...task, state: "completed", result: e.result, updatedAt: e.at }),
+    },
+  },
+  illegal: (task, _, to) => new IllegalTaskTransition({ taskId: task.id, from: task.state, to }),
+});
+
+/** The event that moves a Task straight to each target. */
+const TO_TARGET = {
+  waiting: "Wait",
+  blocked: "Block",
+  active: "Resume",
+  failed: "Fail",
+  cancelling: "RequestCancel",
+  cancelled: "Cancel",
+} as const satisfies Record<TaskTarget, TaskEvent["_tag"]>;
+
+/** Pure transitions for a Task (EX-002), as calls on `TaskMachine`. Each returns the next Task or why it cannot. */
 export const TaskTransitions = {
   moveTo: (task: Task, to: TaskTarget, at: string): Task | IllegalTaskTransition =>
-    ALLOWED[to].includes(task.state)
-      ? new Task({ ...task, state: to, updatedAt: at })
-      : new IllegalTaskTransition({ taskId: task.id, from: task.state, to }),
+    TaskMachine.transition(task, { _tag: TO_TARGET[to], at }),
 
   /**
    * A new Attempt makes the Task active: a first start, a resume, or a retry of a failed Task. It
    * starts only when `readiness`, read from its tree, is Ready.
    */
   start: (task: Task, attemptId: AttemptId, at: string, readiness: TaskReadiness): Task | IllegalTaskTransition =>
-    task.state === "completed" ||
-    task.state === "cancelled" ||
-    task.state === "cancelling" ||
-    readiness._tag !== "Ready"
-      ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "active" })
-      : new Task({ ...task, state: "active", currentAttemptId: attemptId, updatedAt: at }),
+    TaskMachine.transition(task, { _tag: "Start", at, attemptId, readiness }),
 
   /** A retry puts a failed Task back in the queue, for a new Attempt of the same Task (EX-001). */
-  retry: (task: Task, at: string): Task | IllegalTaskTransition =>
-    task.state === "failed"
-      ? new Task({ ...task, state: "queued", updatedAt: at })
-      : new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" }),
+  retry: (task: Task, at: string): Task | IllegalTaskTransition => TaskMachine.transition(task, { _tag: "Retry", at }),
 
   /**
    * A reassignment gives a Task that failed, or that is open with nothing running, to another hob,
@@ -179,18 +249,14 @@ export const TaskTransitions = {
    * current one until the new owner starts, so nothing of the earlier owner's carries over.
    */
   reassign: (task: Task, ownerId: AgentId, at: string): Task | IllegalTaskTransition =>
-    task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
-      ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" })
-      : new Task({ ...task, ownerId, state: "queued", currentAttemptId: null, updatedAt: at }),
+    TaskMachine.transition(task, { _tag: "Reassign", at, ownerId }),
 
   /**
    * A Task completes from its turn, or, once blocked, when its owner decides how it ends: a step
    * that stopped on a finding completes with the result its owner gives (#667).
    */
   complete: (task: Task, result: TaskResult, at: string): Task | IllegalTaskTransition =>
-    task.state === "active" || task.state === "waiting" || task.state === "blocked"
-      ? new Task({ ...task, state: "completed", result, updatedAt: at })
-      : new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "completed" }),
+    TaskMachine.transition(task, { _tag: "Complete", at, result }),
 };
 
 /**
