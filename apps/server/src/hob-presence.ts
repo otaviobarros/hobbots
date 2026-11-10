@@ -1,11 +1,15 @@
 import { ApprovalRepository, ChatService, HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
+  type ApprovalRequest,
+  type BackpackItem,
+  type FailedTask,
   type HobPresence,
   hobPresenceState,
   leadsNeedingYou,
   type ReplyActivity,
   type ThreadId,
+  type ThreadRunStatus,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { Context, Effect, HashMap, Layer, Option, PubSub, Ref } from "effect";
@@ -32,6 +36,27 @@ const CHANGES_PRESENCE: ReadonlySet<string> = new Set([
 
 const changesPresence = (event: BusEvent) =>
   event._tag === "Journaled" ? CHANGES_PRESENCE.has(event.entry.payload._tag) : event.event._tag === "ThreadRunChanged";
+
+/** The chats whose hob a presence needs to know: those with a run, and those something waits on you in. */
+const chatsToOwn = ({
+  runs,
+  pending,
+  blockers,
+  failed,
+}: {
+  readonly runs: ReadonlyArray<Pick<ThreadRunStatus, "threadId">>;
+  readonly pending: ReadonlyArray<Pick<ApprovalRequest, "threadId">>;
+  readonly blockers: ReadonlyArray<Pick<BackpackItem, "threadId">>;
+  readonly failed: ReadonlyArray<FailedTask>;
+}): ReadonlyArray<ThreadId> => {
+  const ids = [
+    ...runs.map((run) => run.threadId),
+    ...[...pending, ...blockers, ...failed.map(({ task }) => task)].flatMap((each) =>
+      each.threadId === null ? [] : [each.threadId],
+    ),
+  ];
+  return [...new Set(ids)];
+};
 
 interface Published {
   readonly revision: number;
@@ -71,12 +96,7 @@ export class HobPresences extends Context.Service<
           tasks.listWaitingQuestions,
           tasks.listFailedTasks,
         ]);
-        const chats = new Set<ThreadId>([
-          ...runs.map((run) => run.threadId),
-          ...pending.flatMap((request) => (request.threadId === null ? [] : [request.threadId])),
-          ...blockers.flatMap((item) => (item.threadId === null ? [] : [item.threadId])),
-          ...failed.flatMap(({ task }) => (task.threadId === null ? [] : [task.threadId])),
-        ]);
+        const chats = chatsToOwn({ runs, pending, blockers, failed });
         const owners = new Map(
           yield* Effect.forEach(chats, (threadId) =>
             Effect.map(repo.findThread(threadId), (thread) =>
