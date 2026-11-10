@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -23,7 +24,7 @@ import { LOST_TURN } from "../src/codex/events.ts";
 import { type CodexTurnConfig, codexFolders, runCodexTurn } from "../src/codex/turn.ts";
 import { ProcessSandbox, type ProcessSandboxShape } from "../src/sandbox.ts";
 import { adds, functionCall, type ModelRequest, runs, standIn, textOf } from "../src/testing/responses-stand-in.ts";
-import { approvalsAnswering, approve } from "./codex-fixture.ts";
+import { approvalsAnswering, approve, CLOSED_CODEX_FEATURES } from "./codex-fixture.ts";
 
 /**
  * Runs turns on an installed Codex with a stand-in for the Responses API, as the ADR 024 probe did:
@@ -135,6 +136,23 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
   });
 
   // covers RT-001, EX-004
+  // covers ADR 024
+  it("[TC-RT-743] reads the hob's Codex settings with apps, connectors, plugins and the browser off", {
+    timeout: 60_000,
+  }, async () => {
+    model.moves.push({ say: "Hi." });
+    const exit = await collect(prompt());
+    expect(Exit.isSuccess(exit)).toBe(true);
+    // Codex itself reports each feature off in the hob's home, as every turn of the hob starts it.
+    const listed = execFileSync(codex ?? "codex", ["features", "list"], {
+      env: { ...process.env, CODEX_HOME: codexFolders(join(temp, "hob")).home },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const state = new Map(listed.split("\n").map((line) => [line.split(/\s+/)[0], line.trim().split(/\s+/).at(-1)]));
+    for (const feature of CLOSED_CODEX_FEATURES) expect([feature, state.get(feature)]).toEqual([feature, "false"]);
+  });
+
   it("[TC-RT-030] stops mid-turn once Codex acknowledges the interrupt, and the thread goes on", {
     timeout: 60_000,
   }, async () => {
