@@ -1,6 +1,7 @@
 // The machines Hobbots declares with `defineMachine` (ADR 037, STD-ARCH-013), found in every package's
-// source and the server's, and read from the modules that declare them. The scripts that use this run
-// with Node's type transforms, so the tables read here are the ones the code runs.
+// source and the server's, and read from the modules that declare them. Node strips the TypeScript
+// types, so the tables read here are the ones the code runs. A module that declares a machine, and what
+// it imports, must use only erasable TypeScript: no enums or parameter properties.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -58,7 +59,11 @@ export const loadMachines = async (root = new URL("../", import.meta.url)) => {
       throw new Error(
         `${file}: give ${untyped.exportName} its type arguments, defineMachine<State, Event, Record, Error>, so a missing or extra event does not compile (STD-ARCH-013)`,
       );
-    const module = await import(new URL(file, root).href);
+    const module = await import(new URL(file, root).href).catch((error) => {
+      throw new Error(
+        `${file} could not be loaded with Node's type stripping (${error.message}); declare the machine in a module that uses only erasable TypeScript, such as one in @hobbots/domain`,
+      );
+    });
     for (const { exportName } of declarations) {
       if (!isMachine(module[exportName])) throw new Error(`${file}: ${exportName} is not a machine at run time`);
       found.push({ exportName, machine: module[exportName], module: file });
