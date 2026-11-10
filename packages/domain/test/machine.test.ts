@@ -214,8 +214,27 @@ describe("defineMachine", () => {
           },
           illegal: (t, e, to) => `${e._tag}: ${t.run} to ${to}`,
         });
-      expect(define).toThrow(new MachineDefect("Thread: End has a rule an earlier unguarded rule always takes first"));
+      expect(define).toThrow(new MachineDefect("Thread: End has a rule earlier unguarded rules always take first"));
     });
+  });
+
+  it("allows a rule that shares a state with an earlier unguarded rule but starts from another too", () => {
+    const define = () =>
+      defineMachine<Light, LightEvent, Lamp, Refused>({
+        name: "Lamp",
+        states: { off: "Dark", on: "Lit", broken: "Needs a fix" },
+        field: "state",
+        events: {
+          Switch: { from: ["off"], to: "on", apply: (lamp) => ({ ...lamp, state: "on" }) },
+          Break: [
+            { from: ["off"], to: "broken", apply: (lamp) => ({ ...lamp, state: "broken" }) },
+            { from: ["off", "on"], to: "broken", apply: (lamp) => ({ ...lamp, state: "broken" }) },
+          ],
+          Fix: { from: ["broken"], to: "off", apply: (lamp) => ({ ...lamp, state: "off" }) },
+        },
+        illegal: (lamp, _, to) => new Refused(lamp.state, to),
+      });
+    expect(define).not.toThrow();
   });
 
   it("throws a defect for a rule that starts from no state", () => {

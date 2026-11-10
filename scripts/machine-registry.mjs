@@ -42,14 +42,35 @@ export const declarationsIn = (text) =>
     typed: match[3] === "<",
   }));
 
+const CALLED = /\bdefineMachine\s*[<(]/g;
+const ALIASED = /\bdefineMachine\s+as\s+\w+/;
+
+/**
+ * Why `text` uses `defineMachine` in a way the registry cannot read, or undefined. Every call must be
+ * the whole value of its own `export const`, so a machine wrapped with helpers, built with
+ * `Object.assign`, or made through an alias is refused rather than missed.
+ */
+export const unreadUse = (text) => {
+  if (ALIASED.test(text)) return "imports defineMachine under another name; import it by its own name";
+  const calls = [...text.matchAll(CALLED)].length;
+  const declared = declarationsIn(text).length;
+  if (calls > declared)
+    return "calls defineMachine other than as `export const XMachine = defineMachine<…>(…)`; declare the machine on its own and add helpers as separate exports, such as `export const ThreadRun = { ...ThreadRunMachine, isRunning }`";
+  return undefined;
+};
+
 /**
  * Each machine with the export that holds it and the module that declares it, sorted by name. Fails
- * when a machine is not exported, is not a machine at run time, or shares its name with another.
+ * when a machine is not exported, is declared in a way it cannot read, is not a machine at run time, or
+ * shares its name with another.
  */
 export const loadMachines = async (root = new URL("../", import.meta.url)) => {
   const found = [];
   for (const file of sourceFiles(root)) {
-    const declarations = declarationsIn(readFileSync(new URL(file, root), "utf8"));
+    const text = readFileSync(new URL(file, root), "utf8");
+    const unread = unreadUse(text);
+    if (unread !== undefined) throw new Error(`${file}: ${unread} (STD-ARCH-013)`);
+    const declarations = declarationsIn(text);
     if (declarations.length === 0) continue;
     const hidden = declarations.find((declaration) => !declaration.exported);
     if (hidden !== undefined)

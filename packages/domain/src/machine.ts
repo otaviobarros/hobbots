@@ -1,13 +1,9 @@
 /**
- * One way to declare a lifecycle (ADR 037, STD-ARCH-013): its states, its events and, for each
- * event, the rules it follows: the states a rule may start from, the state it leads to, an optional
- * guard and how the record changes. `transition` is pure and returns the next record or the machine's
- * own error. The table is exported, so tests, the diagram script (`scripts/machines.mjs`) and checks
- * read the same rules the code runs. A machine that leaves out a state or an event of its unions does
- * not compile, and a declaration whose rules contradict themselves fails when it is defined.
- *
- * Name a machine after the record it governs (`Task` for Task): the state-comparison check looks for
- * that name among a file's imports.
+ * One way to declare a lifecycle (ADR 037, STD-ARCH-013): its states, its events and each event's
+ * rules. `transition` is pure and returns the next record or the machine's own error. The table is
+ * exported, so tests, diagrams (`scripts/machines.mjs`) and checks read the rules the code runs. A
+ * missing state or event does not compile, and rules that contradict themselves fail when defined.
+ * Name a machine after the record it governs (`Task`): the comparison check looks for that import.
  */
 
 /** An event a machine takes: a tagged object. */
@@ -15,7 +11,7 @@ export interface MachineEvent {
   readonly _tag: string;
 }
 
-/** One rule: the states it may start from, the state it leads to, and how the record changes. */
+/** One rule: the states it starts from, the state it leads to, and how the record changes. */
 export interface MachineEdge<S extends string, X, E> {
   readonly from: ReadonlyArray<S>;
   readonly to: S;
@@ -27,35 +23,27 @@ export interface MachineEdge<S extends string, X, E> {
 }
 
 /**
- * An event's rules: one, or several tried in order, where the first whose `from` holds the record's
- * state and whose guard passes is taken. Several rules let one event lead to different states, such as
- * a turn's end leading to idle or to the next turn.
+ * An event's rules: one, or several tried in order, the first whose `from` and guard hold being taken,
+ * so one event can lead to different states, such as a turn's end to idle or to the next turn.
  */
 export type MachineRules<S extends string, X, E> = MachineEdge<S, X, E> | ReadonlyArray<MachineEdge<S, X, E>>;
 
 /** The fields of a record that hold a state of `S`. */
-export type StateField<X, S extends string> = {
-  [K in keyof X]-?: X[K] extends S ? K : never;
-}[keyof X] &
-  string;
+export type StateField<X, S extends string> = { [K in keyof X]-?: X[K] extends S ? K : never }[keyof X] & string;
 
 export interface MachineSpec<S extends string, E extends MachineEvent, X, Err> {
-  /** The machine's name, as the diagrams and checks show it: the name of the record it governs. */
+  /** The machine's name, as diagrams and checks show it: the name of the record it governs. */
   readonly name: string;
-  /**
-   * Every state, each with what it means. Keyed by the state union `S`, so a state left out, or one
-   * that is not in `S` written in the literal, does not compile.
-   */
+  /** Every state with what it means, keyed by `S`, so a state left out or not in `S` does not compile. */
   readonly states: { readonly [K in S]: string };
   /** The field of the record that holds the state, which only this machine's module compares. */
   readonly field: StateField<X, S>;
-  /** The rules of every event of the union `E`. */
   readonly events: { readonly [K in E["_tag"]]: MachineRules<S, X, Extract<E, { readonly _tag: K }>> };
   /** The machine's error for an event its rules refuse, with the state it would have led to. */
   readonly illegal: (record: X, event: E, to: S) => Err;
 }
 
-/** A row of the exported table: one rule of an event, where it may start and where it leads. */
+/** A row of the exported table: one rule of an event. */
 export interface MachineRow<S extends string> {
   readonly event: string;
   readonly from: ReadonlyArray<S>;
@@ -65,12 +53,11 @@ export interface MachineRow<S extends string> {
 
 export interface Machine<S extends string, E extends MachineEvent, X, Err> {
   readonly name: string;
-  /** Every state, in the order the spec declares them. */
+  /** Every state, in the order declared, and what each means. */
   readonly states: ReadonlyArray<S>;
-  /** What each state means. */
   readonly meanings: { readonly [K in S]: string };
   readonly field: string;
-  /** One row per rule, in the order the spec declares them. */
+  /** One row per rule, in the order declared. */
   readonly table: ReadonlyArray<MachineRow<S>>;
   readonly stateOf: (record: X) => S;
   /** The next record, or the machine's error when its rules refuse the event. */
@@ -80,34 +67,29 @@ export interface Machine<S extends string, E extends MachineEvent, X, Err> {
 }
 
 /**
- * A machine whose declaration or use is wrong, not an event its rules refuse: rules that contradict
- * themselves, a rule that leaves the record in a state other than its `to`, or an event of no known
- * kind. It is a bug, so it is thrown, never returned.
+ * A bug in a machine's declaration or use, not a refused event: rules that contradict themselves, a
+ * rule that leaves the record in a state other than its `to`, or an event of no known kind. Thrown.
  */
 export class MachineDefect extends Error {
   override readonly name = "MachineDefect";
 }
 
-/** Each event's rules, checked once against the states: none may be empty, unknown or unreachable. */
-const checkedRules = <S extends string, X, E>(
-  name: string,
-  states: ReadonlyArray<S>,
-  events: Readonly<Record<string, MachineRules<S, X, E>>>,
-) =>
+/** Each event's rules, checked once: none may be empty, name an unknown state, or never run. */
+const checkedRules = <S extends string, X, E>(name: string, states: ReadonlyArray<S>, events: object) =>
   new Map(
-    Object.entries(events).map(([event, rules]) => {
+    Object.entries(events).map(([event, rules]: [string, MachineRules<S, X, E>]) => {
       const list: ReadonlyArray<MachineEdge<S, X, E>> = Array.isArray(rules) ? rules : [rules];
       const defect = (why: string) => new MachineDefect(`${name}: ${event} ${why}`);
       if (list.length === 0) throw defect("has no rule");
-      list.forEach((rule, index) => {
+      const taken = new Set<S>(); // states an earlier unguarded rule always takes
+      for (const rule of list) {
         if (rule.from.length === 0) throw defect("has a rule that starts from no state");
-        for (const state of [...rule.from, rule.to])
-          if (!states.includes(state)) throw defect(`names ${state}, which is not a state`);
-        const earlier = list
-          .slice(0, index)
-          .find((e) => e.guard === undefined && e.from.some((s) => rule.from.includes(s)));
-        if (earlier !== undefined) throw defect(`has a rule an earlier unguarded rule always takes first`);
-      });
+        const unknown = [...rule.from, rule.to].find((state) => !states.includes(state));
+        if (unknown !== undefined) throw defect(`names ${unknown}, which is not a state`);
+        if (rule.from.every((state) => taken.has(state)))
+          throw defect("has a rule earlier unguarded rules always take first");
+        if (rule.guard === undefined) for (const state of rule.from) taken.add(state);
+      }
       return [event, list.map((rule) => ({ ...rule, from: Object.freeze([...rule.from]) }))] as const;
     }),
   );
@@ -115,25 +97,17 @@ const checkedRules = <S extends string, X, E>(
 export const defineMachine = <S extends string, E extends MachineEvent, X, Err>(
   spec: MachineSpec<S, E, X, Err>,
 ): Machine<S, E, X, Err> => {
-  // The type requires every state of `S` as a key. An object literal, as every machine writes it, can
-  // hold no other; one built elsewhere and passed in could, and would show as a state no rule reaches.
+  // An object literal, as every machine writes it, holds exactly the states of `S`.
   const states = Object.keys(spec.states).filter((key): key is S => Object.hasOwn(spec.states, key));
-  // `field` holds a state of `S` by its type, so reading it gives a state.
-  const stateOf = (record: X) => record[spec.field] as S;
+  const stateOf = (record: X) => record[spec.field] as S; // the field holds a state by its type
   const rules = checkedRules<S, X, E>(spec.name, states, spec.events);
-  const rulesOf = (event: E) => {
-    const list = rules.get(event._tag);
-    if (list === undefined) throw new MachineDefect(`${spec.name}: no rule for an event of kind ${event._tag}`);
-    return list;
-  };
-  /** The rule the event takes from the record's state, or the first it would have taken without its guard. */
+  /** The rule the event takes now, and the one whose `to` a refusal names. */
   const choose = (record: X, event: E) => {
-    const state = stateOf(record);
-    const from = rulesOf(event).filter((rule) => rule.from.includes(state));
+    const all = rules.get(event._tag);
+    if (all === undefined) throw new MachineDefect(`${spec.name}: no rule for an event of kind ${event._tag}`);
+    const from = all.filter((rule) => rule.from.includes(stateOf(record)));
     const taken = from.find((rule) => rule.guard === undefined || rule.guard(record, event));
-    // An event's first rule names where it leads when no rule starts from this state.
-    const refused = (from[0] ?? rulesOf(event)[0]) as MachineEdge<S, X, E>;
-    return { taken, refused };
+    return { taken, refused: (from[0] ?? all[0]) as MachineEdge<S, X, E> }; // checkedRules allows no empty list
   };
   return {
     name: spec.name,
@@ -151,10 +125,9 @@ export const defineMachine = <S extends string, E extends MachineEvent, X, Err>(
       if (taken === undefined) return spec.illegal(record, event, refused.to);
       const next = taken.apply(record, event);
       // The result must be in the state its row names, so the table stays true.
-      const landed = stateOf(next);
-      if (landed !== taken.to)
+      if (stateOf(next) !== taken.to)
         throw new MachineDefect(
-          `${spec.name}: ${event._tag} names ${taken.to} as its next state, its rule left ${landed}`,
+          `${spec.name}: ${event._tag} names ${taken.to} as its next state, its rule left ${stateOf(next)}`,
         );
       return next;
     },
