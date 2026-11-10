@@ -532,6 +532,10 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           expect(page?.markdown).toContain("Where are the docs?");
           // start, two prompts, two replies: the start is not sent again
           expect(yield* memory.observations(pip, threadId)).toBe(5);
+          // Each end wrote the page again, and History names the hob on every version (#1317).
+          const history = yield* memory.store.history(you, pipsOwn, sessionPage(threadId));
+          expect(history.length).toBeGreaterThan(1);
+          for (const entry of history) expect(entry.author).toEqual({ _tag: "Hob", agentId: pip });
         }),
       ));
 

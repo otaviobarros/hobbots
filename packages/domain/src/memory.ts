@@ -118,9 +118,13 @@ export const MemoryPageVersion = Schema.Struct({
   version: MemoryVersion,
   /**
    * The version it replaced, or null for a page's first version, a page started again after a forget
-   * included. Memory names an author only for the latest version, so this is how a write is known.
+   * included. A version whose author memory cannot name is known as a write by this.
    */
   supersedes: Schema.NullOr(MemoryVersion),
+  /**
+   * Who wrote it, or null when nobody recorded it: a write the engine made on its own, or one from
+   * before the hub recorded authors.
+   */
   author: Schema.NullOr(MemoryAuthor),
   writtenAt: Schema.String,
   latest: Schema.Boolean,

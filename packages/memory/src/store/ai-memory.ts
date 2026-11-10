@@ -1,6 +1,13 @@
-import { guardMemoryStore, MemoryStore, type MemoryStoreShape } from "@hobbots/agents";
+import {
+  guardMemoryStore,
+  MemoryStore,
+  type MemoryStoreShape,
+  MemoryVersionAuthors,
+  type MemoryVersionAuthorsShape,
+} from "@hobbots/agents";
 import {
   type MemoryActor,
+  type MemoryAuthor,
   type MemoryChangedLine,
   MemoryConflict,
   type MemoryDraft,
@@ -17,6 +24,7 @@ import {
   MemoryUnavailable,
   MemoryVersion,
   type MemoryVersionChanges,
+  memoryAuthorOf,
   memorySearchTerms,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema, Semaphore } from "effect";
@@ -44,7 +52,8 @@ import {
  * the proxy bearer, asserting the hob, so ai-memory stamps the hob as each page's author; your edits
  * and every read go with the root bearer. Scopes map to ai-memory projects (`engineProjectOf`); a
  * scope with no project yet is empty. Which scopes a call may touch is decided by `guardMemoryStore`
- * before any request is made.
+ * before any request is made. ai-memory names a version's author only for its own registered users,
+ * so the hub records who made each write it sends (`MemoryVersionAuthors`), and History reads them.
  */
 
 // What ai-memory answers, in the fields read.
@@ -232,12 +241,30 @@ const refusalIsOutage = <A, E, R>(
     ),
   ) as Effect.Effect<A, Exclude<E, EngineRefused> | MemoryUnavailable, R>;
 
-const makeStore = (client: EngineClient): MemoryStoreShape => {
+const makeStore = (client: EngineClient, authors: MemoryVersionAuthorsShape): MemoryStoreShape => {
   /**
    * The hub's changes to memory run one at a time, so none of them lands between a restore's check
    * of the page and the engine's restore, which takes no precondition of its own.
    */
   const changing = Semaphore.makeUnsafe(1);
+  /**
+   * Records who made a write memory took. The write stands whatever happens here: failing it would
+   * have a hob send it again, and a version without a recorded author only reads "Changed".
+   */
+  const recordAuthor = (scope: MemoryScope, path: MemoryPath, version: MemoryVersion, author: MemoryAuthor) =>
+    Effect.ignoreCause(authors.record(scope, path, version, author), {
+      log: "Warn",
+      message: "Could not record who wrote a memory version",
+    });
+  /**
+   * Drops what was recorded of a forgotten page's versions. The forget stands whatever happens here, so
+   * you still get its Undo: rows left behind name versions memory no longer has, and none is reused.
+   */
+  const forgetAuthors = (scope: MemoryScope, path: MemoryPath) =>
+    Effect.ignoreCause(authors.forget(scope, path), {
+      log: "Warn",
+      message: "Could not drop who wrote a forgotten memory page's versions",
+    });
   /**
    * A project's engine name is hashed, so the identity it holds is kept in the index project, one
    * page per project, written before the project's first page: `scopes` reads it back.
@@ -435,6 +462,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       )
       .pipe(
         Effect.map((json) => MemoryVersion.make(json.page_id)),
+        Effect.tap((version) => recordAuthor(scope, draft.path, version, memoryAuthorOf(actor))),
         Effect.catchTag("EngineRefused", conflictOf(draft.path)),
         refusalIsOutage,
       );
@@ -581,12 +609,14 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           total = json.total;
         } while (versions.length < total);
         if (versions.length === 0) return [];
-        // ai-memory stamps the author in the page's frontmatter, so only the latest version names one.
+        // ai-memory stamps the author in the page's frontmatter, so it names only the latest version's;
+        // the others are named by what the hub recorded of its writes.
         const latest = yield* pageOf(scope, path);
+        const recorded = yield* authors.of(versions.map((version) => MemoryVersion.make(version.id)));
         return versions.map((version) => ({
           version: MemoryVersion.make(version.id),
           supersedes: version.supersedes == null ? null : MemoryVersion.make(version.supersedes),
-          author: version.is_latest ? (latest?.author ?? null) : null,
+          author: recorded.get(MemoryVersion.make(version.id)) ?? (version.is_latest ? (latest?.author ?? null) : null),
           writtenAt: version.created_at,
           latest: version.is_latest,
         }));
@@ -630,6 +660,7 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
       }
       const where = engineProjectOf(scope);
       return client.tool(ROOT, "memory_delete_page", { ...where, path, ...preconditionOf(expected) }, DeletedJson).pipe(
+        Effect.tap((json) => (json.deleted ? forgetAuthors(scope, path) : Effect.void)),
         Effect.map((json) => {
           if (!json.deleted) return null;
           // With nothing to checkpoint first, the revision before the delete is its parent.
@@ -663,7 +694,9 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
           .admin("restore-page", { ...engineProjectOf(scope), path, ...source }, WrittenJson)
           // A version the page never had, or one gone with a forget, leaves the page as it is.
           .pipe(Effect.catchTag("EngineRefused", () => currentConflict(scope, path)));
-        return yield* stampedYours(actor, scope, path, MemoryVersion.make(json.page_id));
+        const restored = MemoryVersion.make(json.page_id);
+        yield* recordAuthor(scope, path, restored, memoryAuthorOf(actor));
+        return yield* stampedYours(actor, scope, path, restored);
       }).pipe(refusalIsOutage, changing.withPermit),
     capture: (actor, scope, sessionId, items) =>
       Effect.gen(function* () {
@@ -683,13 +716,27 @@ const makeStore = (client: EngineClient): MemoryStoreShape => {
         }
         return acknowledged;
       }).pipe(refusalIsOutage),
-    endSession: (actor, scope, sessionId, key) =>
-      Effect.flatMap(pageOf(scope, MemoryPath.make(`sessions/${sessionId}.md`)), (note) =>
+    endSession: (actor, scope, sessionId, key) => {
+      const path = MemoryPath.make(`sessions/${sessionId}.md`);
+      return Effect.flatMap(pageOf(scope, path), (note) =>
         // The engine writes a session's page again at every end, pinned or not, so the end of a
         // session whose chat note you pinned is not sent: the note stays as it is, and the capture
         // worker keeps the end and sends it again once you unpin it.
-        note?.pinned === true ? Effect.succeed(false) : Effect.as(endOf(actor, scope, sessionId, key), true),
-      ).pipe(refusalIsOutage, changing.withPermit),
+        note?.pinned === true
+          ? Effect.succeed(false)
+          : endOf(actor, scope, sessionId, key).pipe(
+              // The engine writes the page before it answers, and no other change of the hub's lands
+              // meanwhile, so a new version is this end's. An end it had already taken writes none.
+              Effect.andThen(pageOf(scope, path)),
+              Effect.flatMap((page) =>
+                page === null || page.version === note?.version
+                  ? Effect.void
+                  : recordAuthor(scope, path, page.version, memoryAuthorOf(actor)),
+              ),
+              Effect.as(true),
+            ),
+      ).pipe(refusalIsOutage, changing.withPermit);
+    },
     check: (_actor, scope) =>
       whenHeld(
         engineProjectOf(scope),
@@ -769,5 +816,9 @@ const preconditionOf = (expected: MemoryExpected): Record<string, unknown> => {
 /** `MemoryStore` on the bundled ai-memory, through `MemoryEngine`'s endpoint, guarded for every caller. */
 export const MemoryStoreAiMemory = Layer.effect(
   MemoryStore,
-  Effect.map(makeEngineClient, (client) => MemoryStore.of(guardMemoryStore(makeStore(client)))),
+  Effect.gen(function* () {
+    const client = yield* makeEngineClient;
+    const authors = yield* MemoryVersionAuthors;
+    return MemoryStore.of(guardMemoryStore(makeStore(client, authors)));
+  }),
 );

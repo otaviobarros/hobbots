@@ -93,6 +93,7 @@ import webUsage from "./0090_web_usage.ts";
 import attemptReadWeb from "./0091_attempt_read_web.ts";
 import webScreens from "./0092_web_screens.ts";
 import hobGitHubAppOrigin from "./0093_hob_github_app_origin.ts";
+import memoryVersionAuthors from "./0094_memory_version_authors.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -193,4 +194,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0091_attempt_read_web": attemptReadWeb,
   "0092_web_screens": webScreens,
   "0093_hob_github_app_origin": hobGitHubAppOrigin,
+  "0094_memory_version_authors": memoryVersionAuthors,
 };
