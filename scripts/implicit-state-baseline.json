@@ -1,0 +1,16 @@
+{
+  "STD-ARCH-013": {
+    "apps/server/src/web-usage.ts": 2,
+    "packages/agents/src/approvals.ts": 1,
+    "packages/agents/src/chat.ts": 6,
+    "packages/agents/src/devices.ts": 1,
+    "packages/agents/src/memory-capture.ts": 2,
+    "packages/agents/src/turn-activity.ts": 5,
+    "packages/charms/src/hob-app-tokens.ts": 1,
+    "packages/orchestration/src/overlaps.ts": 1,
+    "packages/orchestration/src/step-runner.ts": 2,
+    "packages/persistence/src/activity.ts": 1,
+    "packages/persistence/src/diagnostics.ts": 2,
+    "packages/runtimes/src/codex/app-server.ts": 1
+  }
+}

@@ -107,6 +107,68 @@ An older function above the limit keeps a `// complexity-ignore: <reason>` comme
 - **Enforced by:** `scripts/check-complexity.mjs` in `pnpm check` (`pnpm lint:complexity`), with its own tests in `scripts/complexity.test.mjs`.
 - **Applies to:** every tracked JavaScript and TypeScript file Biome checks.
 
+## State and events
+
+These rules come from [ADR 037](../decisions/037-chat-and-camps.md). The [state and events contract](../architecture/state-and-events.md) shows each one in this codebase, with the file to copy from.
+
+### STD-ARCH-013 Every lifecycle is one explicit machine
+
+Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, events, guards and next states in one table, and a pure `transition(state, event)` that returns the next state or `IllegalTransition` (STD-EFFECT-004). A guard reads only the machine's state and the event. The state lives in one field and changes only through `transition`. Other code asks the machine's helpers, such as `canArchive`, and never compares its state field. Never spread a state over several booleans, nullable timestamps, or `Set`s and `Map`s keyed by an id.
+
+- ✅ `ThreadRun.transition(run, { _tag: "Stopped" })`, then `ThreadRun.isRunning(next)`
+- ❌ `busy.has(threadId) || holdBack.has(threadId)`
+- **Why:** one table lists every legal combination, so a new path cannot forget one, and a model-based test and a diagram can read it.
+- **Enforced by:** `scripts/check-implicit-state.mjs` in `pnpm check` (`pnpm lint:state`), which fails on a `Set` or `Map` keyed by an id held for a service's or module's life, with today's cases in `scripts/implicit-state-baseline.json`, a list that only shrinks; and review. The state-comparison and diagram checks join it with `defineMachine` ([#1370](https://github.com/otaviobarros/hobbots/issues/1370)).
+- **Applies to:** `packages/*`, `apps/server`.
+
+### STD-ARCH-014 A command commits state, journal and backpack together
+
+A command that changes durable state is one Effect service method per aggregate. It loads at an expected revision, runs the machine's transition, and writes the state, its journal entries and its backpack items in one transaction, with an idempotency key. Nothing external happens before the commit: no runtime call, no model call, no HTTP request. A model's work runs later in a projector (STD-ARCH-016).
+
+- **Why:** a crash then leaves either the whole change or none of it, and a retried request changes nothing twice. See [ADR 013](../decisions/013-event-journal.md) and [ADR 037](../decisions/037-chat-and-camps.md).
+- **Enforced by:** crash-midway tests (STD-TEST-002) and review.
+- **Applies to:** `packages/*`, `apps/server`.
+
+### STD-ARCH-015 Each transition journals one past-tense event
+
+Every transition of a machine writes exactly one journal event, named in the past tense for what happened, such as `ChapterStarted` or `DecisionSuperseded`, in the same transaction. The journal is the only order of events. Clients and projectors learn of changes only from it.
+
+- **Why:** one event per change makes the journal a complete history that sync, projectors and tests can replay.
+- **Enforced by:** model-based tests that count events per transition, and review.
+- **Applies to:** `packages/*`, `apps/server`.
+
+### STD-ARCH-016 Derived work runs in cursor projectors
+
+Work derived from what happened, such as a summary, a brief or a search index, runs in a projector. It reads the journal after its saved cursor, is idempotent by entry id, saves its cursor per batch, and writes its result as a record with the cursor it used, as memory capture does. An event handler never writes to another aggregate directly. A rule that must hold at once runs as a pure function inside the command's transaction instead, like `backpackItemsFor`.
+
+- **Why:** a slow or failed model call never blocks a turn, a restart resumes where it stopped, and the order of writes stays visible.
+- **Enforced by:** restart tests that check nothing is written twice, and review.
+- **Applies to:** `packages/*`, `apps/server`.
+
+### STD-ARCH-017 The bus only wakes things up
+
+The in-process bus announces committed journal entries, and carries transient events such as streamed reply chunks. Neither holds work. A receiver re-reads durable state to decide what to do, as `WakeOnArrival` does. Losing an announcement never loses work. Work for a hob goes in its backpack, never in a second queue (ADR 019).
+
+- **Why:** an in-memory announcement is lost on restart, and the durable records are what make work survive (STD-DATA-001).
+- **Enforced by:** restart-recovery tests (STD-TEST-002) and review.
+- **Applies to:** `packages/*`, `apps/server`.
+
+### STD-ARCH-018 A turn reads records, not the transcript
+
+A runtime session starts from the context pack: briefs, active decisions, the artifacts index, the live chapter and one line per resting chapter, built by a pure function within a budget. Never replay a thread's transcript as context, except for a brain switch inside a live chapter (ADR 017). The pack never goes over its budget and never drops an active decision silently.
+
+- **Why:** a turn's cost then follows the live topic, not the thread's length.
+- **Enforced by:** snapshot tests of the pack and its `PackReport`, and review.
+- **Applies to:** `packages/agents`, `packages/runtimes`.
+
+### STD-ARCH-019 Records move, and every author is named
+
+A record that changes place, such as a chapter and its decisions moving into a camp, is re-parented in one transaction and leaves a stub where it was. It is never copied. Every authored record carries an explicit `actor`, `{ kind: "user" | "hob" | "hub", id }`, never an implied "you".
+
+- **Why:** two copies drift apart, and a named author keeps shared camps possible without a migration of meaning.
+- **Enforced by:** review.
+- **Applies to:** `packages/*`, `apps/server`.
+
 ## Guidance
 
 - Add a DTO or a mapping layer only where a boundary needs a different shape. Pass Schemas through otherwise.

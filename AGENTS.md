@@ -6,7 +6,7 @@ The code grew from the first validation slice of [ADR 009](docs/decisions/009-to
 
 ## Commands
 
-- `pnpm check` runs the standards check (rule index, ADR validation sections, evidence records), the layer check, the complexity check, knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
+- `pnpm check` runs the standards check (rule index, ADR validation sections, evidence records), the layer check, the complexity check, the implicit-state check, knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
 - `pnpm test:pg` runs the persistence and server suites on PostgreSQL. Run it when a change touches SQL, migrations or repositories. It needs Docker.
 - `pnpm add <pkg>` adds a dependency at its latest stable release, pinned exactly (STD-DOCS-006). Effect packages use the workspace catalog (STD-EFFECT-005).
 
@@ -19,6 +19,7 @@ Every change follows the [engineering standards](docs/standards/README.md). Befo
 | Layers and packages         | [architecture](docs/standards/architecture.md), [duplication](docs/standards/duplication.md) | [Architecture overview](docs/architecture/overview.md)                                                                                                       |
 | Identity and sessions       | [architecture](docs/standards/architecture.md)                                               | [Agent model](docs/architecture/agent-model.md), [conversations](docs/architecture/conversations.md)                                                         |
 | Delegation and scheduling   | [effect](docs/standards/effect.md), [data](docs/standards/data.md)                           | [Orchestration](docs/architecture/orchestration.md), [backpack](docs/architecture/inbox.md), [execution lifecycle](docs/architecture/execution-lifecycle.md) |
+| State, events and camps     | [architecture](docs/standards/architecture.md), [react](docs/standards/react.md)             | [State and events](docs/architecture/state-and-events.md), [chat and camps](docs/architecture/chat-and-camps.md)                                             |
 | Tools and authority         | [security](docs/standards/security.md)                                                       | [Permissions](docs/architecture/permissions.md), [runtime adapters](docs/architecture/runtime-adapters.md)                                                   |
 | Storage and transport       | [data](docs/standards/data.md), [effect](docs/standards/effect.md)                           | [Persistence](docs/architecture/persistence.md), [API and events](docs/architecture/api-events.md), [deployment](docs/architecture/deployment.md)            |
 | UI                          | [react](docs/standards/react.md), [ui](docs/standards/ui.md), [i18n](docs/standards/i18n.md) | [Design specification](docs/design/ui-ux.md), [screen inventory](docs/design/screens-and-flows.md)                                                           |

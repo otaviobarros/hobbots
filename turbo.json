@@ -43,6 +43,7 @@
     "//#lint:layers": {},
     "//#lint:complexity": {},
     "//#lint:frontend": {},
+    "//#lint:state": {},
     "//#test:scripts": {},
     "dev": {
       "cache": false,
