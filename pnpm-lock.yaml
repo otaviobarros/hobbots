@@ -302,6 +302,9 @@ importers:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
       tsx:
         specifier: 4.23.15
         version: 4.23.15
@@ -464,6 +467,9 @@ importers:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
 
   packages/api:
     dependencies:

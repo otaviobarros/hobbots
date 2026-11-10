@@ -47,7 +47,20 @@ import {
   type WebReadMark,
   waitedSteps,
 } from "@hobbots/domain";
-import { Context, DateTime, Deferred, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
+import {
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Fiber,
+  FiberMap,
+  HashMap,
+  Layer,
+  Option,
+  Ref,
+  Semaphore,
+  Stream,
+} from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing, contextBlock } from "./briefing.ts";
@@ -83,6 +96,15 @@ import {
 import { nextSteps, replyStepId, stoppedCommands, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope, TaskRepository } from "./tasks.ts";
+import {
+  idleRun,
+  isAtRest,
+  isBusy,
+  type Reply,
+  type ThreadRun,
+  type ThreadRunEvent,
+  ThreadRunMachine,
+} from "./thread-run.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
@@ -90,21 +112,6 @@ import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
 import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
 import { type WebSearchTurn, webSearchRequest, webSearchTurn } from "./web-usage.ts";
 import { workHeld } from "./work-hold.ts";
-
-interface Reply {
-  readonly current: Ref.Ref<Message>;
-  readonly lock: Semaphore.Semaphore;
-  /** How many steps the reply had from earlier turns when Continue resumed it; this turn's come after. */
-  readonly stepsFrom: number;
-  /** The text the reply already had when Continue resumed it; the runtime's final text comes after it. */
-  readonly prefix: string;
-  /** Whether the turn carries work that needs the hob, so a stop holds it back until you write again. */
-  readonly carries: boolean;
-  /** Done once you press Stop waiting, which ends the turn while it only waits on commands (#1056). */
-  readonly endWait: Deferred.Deferred<void>;
-  /** How many commands Stop waiting stopped, once it has ended the turn's stream; null before. */
-  readonly waitsStopped: Ref.Ref<number | null>;
-}
 
 /**
  * A reply whose runtime stream ended without a result. Stop waiting ended it (`waitsStopped` is how
@@ -489,21 +496,36 @@ export class ChatService extends Context.Service<
       const held = yield* workHeld;
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
-      // The reply each running turn is writing, so a stop request can reach it.
-      const replies = new Map<ThreadId, Reply>();
-      // Threads with a turn running or just ended and not yet drained. In-process, as turns are;
-      // the queue itself is the stored queued messages.
-      const busy = new Set<ThreadId>();
-      // The queued message Send now picked to start next in each thread.
-      const chosen = new Map<ThreadId, MessageId>();
-      // Threads whose turn carrying backpack work you stopped: the work waits for your next message
-      // there, or for the hob to wake, instead of starting again on its own. In memory: a restart
-      // delivers it again.
-      const holdBack = new Set<ThreadId>();
-      // Busy threads woken meanwhile, as when work arrives for their hob: once the thread is freed,
-      // what waits there is looked at again, so work that arrived after the dispatcher looked waits
-      // no longer than that.
-      const rewake = new Set<ThreadId>();
+      // Every thread's run (ADR 037), changed only through `ThreadRunMachine`. In memory, as turns
+      // are; the queue itself is the stored queued messages. A thread with no entry is idle.
+      const runs = yield* Ref.make(HashMap.empty<ThreadId, ThreadRun>());
+      interface StepResult {
+        readonly before: ThreadRun;
+        readonly taken: boolean;
+      }
+      const runOf = (threadId: ThreadId) =>
+        Ref.get(runs).pipe(Effect.map((all) => Option.getOrElse(HashMap.get(all, threadId), () => idleRun)));
+      // Applies an event to the thread's run: `taken` says whether its rules allowed it, and `before`
+      // is the run it found. A run back at rest is dropped, so the map holds only what is remembered.
+      const step = (threadId: ThreadId, event: ThreadRunEvent) =>
+        Ref.modify(runs, (all): readonly [StepResult, HashMap.HashMap<ThreadId, ThreadRun>] => {
+          const before = Option.getOrElse(HashMap.get(all, threadId), () => idleRun);
+          const after = ThreadRunMachine.transition(before, event);
+          if (typeof after === "string") return [{ before, taken: false }, all];
+          return [
+            { before, taken: true },
+            isAtRest(after) ? HashMap.remove(all, threadId) : HashMap.set(all, threadId, after),
+          ];
+        });
+      // An event the run loop only sends when the run allows it: a refusal is a bug in the loop.
+      const must = (threadId: ThreadId, event: ThreadRunEvent) =>
+        step(threadId, event).pipe(
+          Effect.flatMap((result) =>
+            result.taken
+              ? Effect.succeed(result)
+              : Effect.die(new Error(`ThreadRun: ${event._tag} is not allowed while the run is ${result.before.run}`)),
+          ),
+        );
 
       const findThread = (threadId: ThreadId) =>
         repo.findThread(threadId).pipe(
@@ -1131,11 +1153,11 @@ export class ChatService extends Context.Service<
           Effect.scoped,
           // Runs after the runtime's stream has closed, so "stopped" means the turn really ended.
           Effect.onInterrupt(() => transition(reply, MessageTransitions.interrupt, saveMessage)),
+          // A reply already replaced by a newer turn's changes nothing.
           Effect.ensuring(
-            Effect.sync(() => {
-              if (replies.get(thread.id) === reply) replies.delete(thread.id);
-              granted.delete(thread.id);
-            }),
+            step(thread.id, { _tag: "TurnEnded", reply }).pipe(
+              Effect.andThen(Effect.sync(() => granted.delete(thread.id))),
+            ),
           ),
         );
 
@@ -1226,7 +1248,6 @@ export class ChatService extends Context.Service<
             agent,
             systemInstructions(config.name, config),
           );
-          busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.
           const reply: Reply = {
             current: yield* Ref.make(saved),
@@ -1238,7 +1259,7 @@ export class ChatService extends Context.Service<
             endWait: yield* Deferred.make<void>(),
             waitsStopped: yield* Ref.make<number | null>(null),
           };
-          replies.set(thread.id, reply);
+          yield* must(thread.id, { _tag: "Launch", reply });
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
           // may hold while it waits for this very turn to stop.
           const turn = yield* FiberMap.run(
@@ -1281,8 +1302,9 @@ export class ChatService extends Context.Service<
       const nextQueued = (threadId: ThreadId) =>
         Effect.gen(function* () {
           const queued = (yield* repo.listMessages(threadId)).filter((m) => m.status === "queued");
-          const next = queued.find((m) => m.id === chosen.get(threadId)) ?? queued[0];
-          chosen.delete(threadId);
+          const { chosen } = yield* runOf(threadId);
+          const next = queued.find((m) => m.id === chosen) ?? queued[0];
+          yield* step(threadId, { _tag: "Unchoose", messageId: null });
           if (next === undefined) return null;
           const started = QueuedMessageTransitions.start(next);
           return started instanceof Message ? started : null;
@@ -1320,10 +1342,10 @@ export class ChatService extends Context.Service<
         Effect.gen(function* () {
           if (yield* held) return;
           // A message of yours waiting there takes the work you stopped along with it.
-          if (holdBack.has(threadId) && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
-            holdBack.delete(threadId);
+          if ((yield* runOf(threadId)).held && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
+            yield* step(threadId, { _tag: "Release" });
           }
-          if (Option.isNone(continuations) || holdBack.has(threadId)) {
+          if (Option.isNone(continuations) || (yield* runOf(threadId)).held) {
             yield* startQueued(threadId);
             return;
           }
@@ -1332,9 +1354,8 @@ export class ChatService extends Context.Service<
             yield* startQueued(threadId);
             return;
           }
-          busy.add(threadId);
           // The dispatch reads the backpack after this, so it sees whatever a wake until now announced.
-          rewake.delete(threadId);
+          yield* must(threadId, { _tag: "Dispatch" });
           yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id), scope);
         });
 
@@ -1351,7 +1372,7 @@ export class ChatService extends Context.Service<
                   agentId,
                   Effect.gen(function* () {
                     const found = yield* workable(threadId);
-                    if (found === null || holdBack.has(threadId)) return null;
+                    if (found === null || (yield* runOf(threadId)).held) return null;
                     if (routineOnly && Option.isNone(yield* repo.nextQueuedMessage(threadId))) return null;
                     return MessageId.make(crypto.randomUUID());
                   }),
@@ -1365,10 +1386,9 @@ export class ChatService extends Context.Service<
             );
           yield* admission.withHob(
             agentId,
-            Effect.suspend(() => {
-              busy.delete(threadId);
-              const woken = rewake.delete(threadId);
-              return ran || woken ? startNext(threadId) : Effect.asVoid(startQueued(threadId));
+            Effect.gen(function* () {
+              const { before } = yield* must(threadId, { _tag: "Delivered" });
+              yield* ran || before.wakePending ? startNext(threadId) : Effect.asVoid(startQueued(threadId));
             }),
           );
         });
@@ -1387,7 +1407,7 @@ export class ChatService extends Context.Service<
             agentId,
             Effect.gen(function* () {
               const found = yield* workable(threadId);
-              if (found === null || holdBack.has(threadId)) return null;
+              if (found === null || (yield* runOf(threadId)).held) return null;
               const queued = yield* startQueued(threadId, { ...start, context: work.text("context") });
               if (queued !== null) return queued.turn;
               // The message it was to ride along is gone: routine progress waits for the next one.
@@ -1416,13 +1436,13 @@ export class ChatService extends Context.Service<
           const ended = yield* FiberMap.get(turns, threadId);
           if (Option.isSome(ended)) yield* Fiber.await(ended.value);
           const thread = yield* repo.findThread(threadId);
-          if (Option.isNone(thread)) return busy.delete(threadId);
+          if (Option.isNone(thread)) {
+            yield* step(threadId, { _tag: "Drained" });
+            return;
+          }
           yield* admission.withHob(
             thread.value.agentId,
-            Effect.suspend(() => {
-              busy.delete(threadId);
-              return startNext(threadId);
-            }),
+            step(threadId, { _tag: "Drained" }).pipe(Effect.andThen(startNext(threadId))),
           );
         });
 
@@ -1437,8 +1457,10 @@ export class ChatService extends Context.Service<
                 onSome: (thread) =>
                   admission.withHob(
                     thread.agentId,
-                    Effect.suspend(() =>
-                      busy.has(threadId) ? Effect.sync(() => rewake.add(threadId)) : startNext(threadId),
+                    runOf(threadId).pipe(
+                      Effect.flatMap((run) =>
+                        isBusy(run) ? Effect.asVoid(step(threadId, { _tag: "WakeLater" })) : startNext(threadId),
+                      ),
                     ),
                   ),
               }),
@@ -1469,7 +1491,7 @@ export class ChatService extends Context.Service<
         Effect.gen(function* () {
           if (Option.isNone(continuations)) return false;
           const service = continuations.value;
-          if (holdBack.has(threadId) && (yield* service.waiting(agentId)).includes(threadId)) return true;
+          if ((yield* runOf(threadId)).held && (yield* service.waiting(agentId)).includes(threadId)) return true;
           return yield* service.progressWaits(threadId, agentId);
         });
 
@@ -1488,8 +1510,8 @@ export class ChatService extends Context.Service<
             yield* requireLive(thread);
             // A message waits while its hob is paused, while a reply runs, and behind any message
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
-            const waits =
-              agent.status === "paused" || busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
+            const busy = isBusy(yield* runOf(threadId));
+            const waits = agent.status === "paused" || busy || Option.isSome(yield* repo.nextQueuedMessage(threadId));
             // Work you stopped here, and routine progress, ride along: the message starts through the
             // dispatcher, under their claims.
             const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
@@ -1514,9 +1536,9 @@ export class ChatService extends Context.Service<
             const saved = yield* saveMessage(userMessage);
             // A message that waits behind a busy thread has the thread look at its work again once it
             // is free, so a dispatch that already found nothing does not start it without its progress.
-            if (busy.has(threadId)) rewake.add(threadId);
+            if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });
             // Work you stopped in this thread may start again once this message is answered.
-            holdBack.delete(threadId);
+            yield* step(threadId, { _tag: "Release" });
             if (carries) yield* startNext(threadId);
             if (waits || carries) return { userMessage: saved, assistantMessage: null };
             const begun = yield* beginTurn(thread, agent, saved);
@@ -1531,7 +1553,7 @@ export class ChatService extends Context.Service<
           agentId,
           Effect.gen(function* () {
             if (!(yield* saveRemoved(threadId, messageId))) return yield* new MessageNotQueued({ messageId });
-            if (chosen.get(threadId) === messageId) chosen.delete(threadId);
+            yield* step(threadId, { _tag: "Unchoose", messageId });
           }),
         );
       });
@@ -1546,18 +1568,24 @@ export class ChatService extends Context.Service<
             if (!messages.some((m) => m.id === messageId && m.status === "queued")) {
               return yield* new MessageNotQueued({ messageId });
             }
-            chosen.set(threadId, messageId);
+            yield* step(threadId, { _tag: "Choose", messageId });
             // The chosen message starts in the drain once the stopped turn has ended.
-            if (busy.has(threadId)) yield* stop(threadId);
+            if (isBusy(yield* runOf(threadId))) yield* stop(threadId);
             else yield* startNext(threadId);
           }),
         );
       });
 
+      /** The reply of the turn running in the thread, if any; fails when there is no such thread. */
+      const runningReply = (threadId: ThreadId) =>
+        findThread(threadId).pipe(
+          Effect.andThen(runOf(threadId)),
+          Effect.map((run) => run.reply),
+        );
+
       const stop = Effect.fn("ChatService.stop")(function* (threadId: ThreadId) {
-        yield* findThread(threadId);
-        const reply = replies.get(threadId);
-        if (!reply) return;
+        const reply = yield* runningReply(threadId);
+        if (reply === null) return;
         // Only the first request moves the reply to stopping and interrupts the turn.
         const requested = yield* transition(
           reply,
@@ -1565,7 +1593,7 @@ export class ChatService extends Context.Service<
           saveMessage,
         );
         // Work the turn carried waits for you instead of starting again on its own.
-        if (Option.isSome(requested) && reply.carries) holdBack.add(threadId);
+        if (Option.isSome(requested) && reply.carries) yield* step(threadId, { _tag: "Hold" });
         // The turn records the confirmed outcome itself once the runtime has stopped.
         if (Option.isSome(requested)) yield* Effect.forkIn(FiberMap.remove(turns, threadId), scope);
       });
@@ -1573,9 +1601,8 @@ export class ChatService extends Context.Service<
       // Stop waiting (#1056): only a reply waiting on commands ends this way; it shows as stopping until
       // the runtime has ended, then completes in the turn itself.
       const stopWaiting = Effect.fn("ChatService.stopWaiting")(function* (threadId: ThreadId) {
-        yield* findThread(threadId);
-        const reply = replies.get(threadId);
-        if (!reply) return;
+        const reply = yield* runningReply(threadId);
+        if (reply === null) return;
         const requested = yield* transition(
           reply,
           (m) =>
@@ -1598,7 +1625,7 @@ export class ChatService extends Context.Service<
             yield* requireLive(thread);
             const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
             const message = transcript.at(-1);
-            if (busy.has(threadId) || message?.id !== messageId || !isResumable(message.status)) {
+            if (isBusy(yield* runOf(threadId)) || message?.id !== messageId || !isResumable(message.status)) {
               return yield* new ReplyNotResumable({ messageId });
             }
             const resumed = MessageTransitions.resume(message);
@@ -1619,7 +1646,14 @@ export class ChatService extends Context.Service<
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
       const streamingReplies = Effect.suspend(() =>
-        Effect.forEach(Array.from(replies.values()), (reply) => Ref.get(reply.current)),
+        Ref.get(runs).pipe(
+          Effect.flatMap((all) =>
+            Effect.forEach(
+              Array.from(HashMap.values(all)).flatMap((run) => (run.reply === null ? [] : [run.reply])),
+              (reply) => Ref.get(reply.current),
+            ),
+          ),
+        ),
       ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
       const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
         for (const threadId of yield* activeThreads) {
@@ -1777,17 +1811,13 @@ export class ChatService extends Context.Service<
         const own = yield* Effect.filter(threads, (threadId) =>
           repo.findThread(threadId).pipe(Effect.map((t) => Option.isSome(t) && t.value.agentId === agentId)),
         );
-        for (const threadId of own) holdBack.delete(threadId);
+        yield* Effect.forEach(own, (threadId) => step(threadId, { _tag: "Release" }));
         yield* drainThreads(own);
         if (Option.isSome(taskTurns)) yield* taskTurns.value.drainAgent(agentId);
       });
 
       const wake = (threadId: ThreadId) => drainThreads([threadId]);
-      const resume = (threadId: ThreadId) =>
-        Effect.suspend(() => {
-          holdBack.delete(threadId);
-          return wake(threadId);
-        });
+      const resume = (threadId: ThreadId) => step(threadId, { _tag: "Release" }).pipe(Effect.andThen(wake(threadId)));
 
       // Messages queued and work left waiting before a restart start again, through the same path
       // as any other.

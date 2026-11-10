@@ -182,11 +182,20 @@ Building `defineMachine` settled these details.
 - **A rule lands where its row says.** If a rule's `apply` leaves the record in a state other than its `to`, the transition throws `MachineDefect`, a bug in the declaration, so the exported table is always true. So does a declaration whose rules contradict themselves, and an event of no known kind.
 - **The field is typed.** The state field must be a field of the record that holds a state, and the machine reads its state from it.
 
+## Amendment: ThreadRun's states ([#1371](https://github.com/otaviobarros/hobbots/issues/1371))
+
+Building `ThreadRun` changed its states from idle, starting, running, stopping and held.
+
+- **The states say who frees the thread.** They are `idle`, `dispatching` (the dispatcher is putting backpack work into the next turn), `running` (a turn whose own drain frees the thread), `carrying` (a turn the dispatcher started, carrying that work) and `draining` (the turn has ended and its drain has yet to free the thread). A turn's end leads to `draining` or back to `dispatching`, so the dispatcher, not the turn, frees a thread it started a turn in.
+- **Stopping stays on the reply.** Whether a running reply is stopping is the reply message's own status, `stopping`, so the run does not hold it a second time.
+- **Held and the wake are flags.** `held` (you stopped a turn that carried work, so the work waits for your next message) and `wakePending` (work arrived while the thread was busy) both outlive a turn and hold while the run is `idle`, so they are fields of the record, not states. The record also holds the running reply and the message Send now picked.
+- **Proven through the chat.** Besides the machine's own model test, `[TC-CH-293]` plays random sends, Send now, stops, arrivals of backpack work, stops racing arrivals, finished turns and restarts against one thread with the real dispatcher, and checks after every step that the chat started exactly the turns a model of the run predicts, carrying work or not, with the queue it predicts.
+
 ## Validation
 
 The scenarios that would show this decision holds. None is proven yet; each names the slice that will prove it.
 
-- Every existing chat, stop, Stop waiting, continue and dispatcher test passes unchanged against `ThreadRun`, and model-based tests of random send, wake, stop, turn end and restart agree with the machine's model. Not proven yet ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)).
+- Every existing chat, stop, Stop waiting, continue and dispatcher test passes unchanged against `ThreadRun`, and model-based tests of random send, wake, stop, turn end and restart agree with the machine's model. Proven for `ThreadRun` by `[TC-CH-293]` and its machine's model test ([#1371](https://github.com/otaviobarros/hobbots/issues/1371)).
 - Two clients following the same hub show the same hob, thread and quest status through every transition, on SQLite and PostgreSQL, with no status worked out in the client. Not proven yet ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)).
 - `pnpm check` fails on an out-of-date machine diagram, on a new id-keyed `Set` or `Map` held as service state, and on a state comparison outside its machine. Not proven yet ([#1360](https://github.com/otaviobarros/hobbots/issues/1360), [#1361](https://github.com/otaviobarros/hobbots/issues/1361)).
 - After the migration each hob has exactly one open chat, its other threads are camps with their titles, and every message belongs to a chapter; a second open chat for a hob is refused by the database. Not proven yet ([#1362](https://github.com/otaviobarros/hobbots/issues/1362)).
