@@ -6,6 +6,10 @@
 // a generator, the `Effect.gen(function* () { … })` that builds a service. A collection built and
 // used inside one plain function, such as a fold, is not state and is not flagged. A deliberate case
 // says why with `standards-allow STD-ARCH-013: <reason>` on its line or the line above.
+//
+// It also flags a comparison of a machine's state field outside the module that declares the machine:
+// `task.state === "active"`, or a `switch` on `.state` with a case naming one of its states. Code
+// elsewhere asks the machine, through `can` or a helper the module exports (STD-ARCH-013).
 
 import { parseSync, visitorKeys } from "oxc-parser";
 
@@ -43,8 +47,22 @@ const OPT_OUT = new RegExp(`^\\s*standards-allow ${RULE}:\\s*\\S`);
 const isFunction = (node) =>
   node.type === "FunctionExpression" || node.type === "FunctionDeclaration" || node.type === "ArrowFunctionExpression";
 
-/** The problems in one file, as `file:line: message (STD-ARCH-013)`. */
-export const checkFile = (file, text) => {
+const EQUALITY = new Set(["===", "!==", "==", "!="]);
+
+/** The field a node reads, as in `task.state` or `task?.state`, or undefined. */
+const fieldOf = (node) => {
+  const inner = node?.type === "ChainExpression" ? node.expression : node;
+  if (inner?.type !== "MemberExpression" || inner.computed || inner.property?.type !== "Identifier") return undefined;
+  return inner.property.name;
+};
+
+const stringOf = (node) => (node?.type === "Literal" && typeof node.value === "string" ? node.value : undefined);
+
+/**
+ * The problems in one file, as `file:line: message (STD-ARCH-013)`. `machines` lists each declared
+ * machine as `{ name, field, states, module }`, for the state-comparison rule.
+ */
+export const checkFile = (file, text, machines = []) => {
   const { program, errors, comments } = parseSync(file, text);
   if (errors.length > 0) return [];
   const lineOf = (offset) => text.slice(0, offset).split("\n").length;
@@ -92,8 +110,41 @@ export const checkFile = (file, text) => {
   };
 
   statements(program.body);
+
+  // Comparisons of a machine's state field, anywhere in the file but the machine's own module.
+  const foreign = machines.filter((machine) => machine.module !== file);
+  const machineOf = (field, state) =>
+    state === undefined ? undefined : foreign.find((m) => m.field === field && m.states.includes(state));
+  const compared = (node, field, state) => {
+    const machine = machineOf(field, state);
+    if (machine === undefined) return;
+    const line = lineOf(node.start);
+    if (optOutLines.has(line) || optOutLines.has(line - 1)) return;
+    problems.push(
+      `${file}:${line}: compares \`.${field}\` with "${state}", a state of the ${machine.name} machine in ${machine.module}; outside that module ask the machine, through \`can\` or a helper it exports, and a field of another lifecycle is declared as its own machine (${RULE})`,
+    );
+  };
+  const comparisons = (node) => {
+    if (node === null || typeof node !== "object" || typeof node.type !== "string") return;
+    if (node.type === "BinaryExpression" && EQUALITY.has(node.operator)) {
+      const left = fieldOf(node.left);
+      const right = fieldOf(node.right);
+      if (left !== undefined) compared(node, left, stringOf(node.right));
+      else if (right !== undefined) compared(node, right, stringOf(node.left));
+    }
+    if (node.type === "SwitchStatement") {
+      const field = fieldOf(node.discriminant);
+      if (field !== undefined) for (const each of node.cases) compared(each, field, stringOf(each.test));
+    }
+    for (const key of visitorKeys[node.type] ?? []) {
+      const child = node[key];
+      if (Array.isArray(child)) for (const item of child) comparisons(item);
+      else comparisons(child);
+    }
+  };
+  if (foreign.length > 0) comparisons(program);
   return problems;
 };
 
 /** Every problem in `files`, read with `read`. */
-export const check = (files, read) => files.flatMap((file) => checkFile(file, read(file)));
+export const check = (files, read, machines = []) => files.flatMap((file) => checkFile(file, read(file), machines));

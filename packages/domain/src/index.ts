@@ -23,6 +23,7 @@ export * from "./ids.ts";
 export * from "./ledger.ts";
 export * from "./local-git.ts";
 export * from "./look.ts";
+export * from "./machine.ts";
 export * from "./memory.ts";
 export * from "./memory-engine.ts";
 export * from "./memory-search.ts";

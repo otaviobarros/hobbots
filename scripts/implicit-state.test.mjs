@@ -53,3 +53,31 @@ test("an opt-out inside a string is not an opt-out", () => {
     '  const note = "standards-allow STD-ARCH-013: not a comment";\n  const open = new Map<DeviceId, Socket>();';
   assert.equal(checkFile("a.ts", service(body)).length, 1);
 });
+
+const machines = [{ name: "Task", field: "state", states: ["queued", "active"], module: "task.ts" }];
+
+test("a comparison of a machine's state outside its module fails", () => {
+  const problems = checkFile("a.ts", 'const busy = task.state === "active";', machines);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^a\.ts:1: compares `\.state` with "active", a state of the Task machine in task\.ts/);
+  assert.equal(checkFile("a.ts", 'const busy = "queued" !== task?.state;', machines).length, 1);
+});
+
+test("a switch on a machine's state outside its module fails once per case", () => {
+  const text = 'switch (task.state) {\n  case "queued":\n  case "active":\n    break;\n  case "done":\n}';
+  assert.equal(checkFile("a.ts", text, machines).length, 2);
+});
+
+test("a comparison in the machine's own module passes", () => {
+  assert.deepEqual(checkFile("task.ts", 'const busy = task.state === "active";', machines), []);
+});
+
+test("a comparison with a value that is not one of the machine's states passes", () => {
+  assert.deepEqual(checkFile("a.ts", 'const busy = task.state === "running" || task.kind === "active";', machines), []);
+});
+
+test("a comparison opted out with a reason passes", () => {
+  const text =
+    "// standards-allow STD-ARCH-013: an Attempt's state, not a Task's\nconst live = attempt.state === \"active\";";
+  assert.deepEqual(checkFile("a.ts", text, machines), []);
+});

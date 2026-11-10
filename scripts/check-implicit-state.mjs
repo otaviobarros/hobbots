@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Runs the implicit-state check (STD-ARCH-013) on the hub's packages and the server.
+// Runs the implicit-state check (STD-ARCH-013) on the hub's packages and the server: no undeclared
+// machine in a Set or Map, and no machine's state compared outside the module that declares it.
 // Usage: node scripts/check-implicit-state.mjs [--shrink-baseline]
 //
 // scripts/implicit-state-baseline.json lists what main had when the check was turned on, per file. It
@@ -10,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { applyBaseline, shrinkBaseline } from "./frontend.mjs";
 import { check } from "./implicit-state.mjs";
+import { loadMachines } from "./machine-registry.mjs";
 
 const BASELINE = new URL("./implicit-state-baseline.json", import.meta.url);
 
@@ -23,7 +25,13 @@ const files = execFileSync("git", ["ls-files", "packages", "apps/server/src"], {
       !/\/(?:fake|testing)[^/]*\.ts$/.test(file),
   );
 
-const found = check(files, (file) => readFileSync(file, "utf8"));
+const machines = (await loadMachines()).map(({ machine, module }) => ({
+  name: machine.name,
+  field: machine.field,
+  states: machine.states,
+  module,
+}));
+const found = check(files, (file) => readFileSync(file, "utf8"), machines);
 const shrink = process.argv.includes("--shrink-baseline");
 const baseline = JSON.parse(readFileSync(BASELINE, "utf8"));
 
