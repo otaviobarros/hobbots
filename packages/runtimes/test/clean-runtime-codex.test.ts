@@ -22,20 +22,24 @@ import { startAppServer } from "../src/codex/app-server.ts";
 import { unexpectedSkillsMessage } from "../src/codex/skills.ts";
 import { type CodexTurnConfig, runCodexTurn } from "../src/codex/turn.ts";
 import { SKILL_MOUNTS, skillMountsHash } from "../src/skills.ts";
-import { functionCall, type Move, runs, standIn } from "../src/testing/responses-stand-in.ts";
+import { functionCall, type Move, runs, standIn, textOf } from "../src/testing/responses-stand-in.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
   type CleanRuntimeFixture,
+  CONTRACT_ANSWER,
   CONTRACT_HUB_TOOL,
   CONTRACT_ROSTER,
+  CONTRACT_SEARCH,
   cleanRuntimeFixture,
+  contractPageText,
   FOREIGN_MARKERS,
   LIBRARY_SKILL,
   ROSTER_INJECTION,
   SET_RULES,
   SET_SIBLING,
   SET_SKILL,
+  searchAndReadContract,
   stepRecordingContract,
   TEAM_SET,
   WEB_FETCH_CONTRACT_TOOL,
@@ -369,6 +373,72 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
       expect(Exit.isSuccess(exit), String(exit)).toBe(true);
     }
     expect(searchTools(asked)).toEqual([[], [], [], []]);
+  });
+
+  // covers RT-001, ADR 036 (On every runtime)
+  it("[TC-RT-1272-02] a hob searches with cached search, reads two pages from the results and answers with them as sources", {
+    timeout: 120_000,
+  }, async () => {
+    const contract = searchAndReadContract();
+    const [first, second] = CONTRACT_SEARCH.hits;
+    const asked = model.requests.length;
+    const searching = { ...config, cachedSearch: Effect.succeed(true) };
+    const { approvals } = approvalsAnswering(approve, access);
+    // A move an earlier turn left unused would answer this turn's first request instead.
+    model.moves.length = 0;
+    model.moves.push(
+      {
+        call: {
+          type: "web_search_call",
+          id: "ws-lamp-oil",
+          status: "completed",
+          action: {
+            type: "search",
+            query: CONTRACT_SEARCH.query,
+            sources: CONTRACT_SEARCH.hits.map((hit) => ({ type: "url", ...hit })),
+          },
+        },
+      },
+      functionCall(WEB_FETCH_CONTRACT_TOOL.name, { url: first.url }, "read-first"),
+      functionCall(WEB_FETCH_CONTRACT_TOOL.name, { url: second.url }, "read-second"),
+      { say: CONTRACT_ANSWER },
+    );
+    const exit = await Effect.runPromise(
+      Stream.runCollect(
+        runCodexTurn(searching, {
+          prompt: "How should lamp oil be kept?",
+          sessionId: null,
+          instructions: "You are Pip.",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+          approvals,
+          tools: access,
+          webSearch: true,
+          hubTools: contract.hubTools,
+          recordToolStart: contract.recordToolStart,
+          recordSearch: contract.recordSearch,
+          checkWebSearch: contract.checkWebSearch,
+        }),
+      ).pipe(Effect.exit),
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    // Codex's hosted search cannot be refused inside a turn, so the hub's limits are never asked;
+    // the search is recorded before the first page is read.
+    expect(contract.order).toEqual([`searched ${CONTRACT_SEARCH.query}`, `read ${first.url}`, `read ${second.url}`]);
+    // A stand-in model's search has no results: Codex gets them from OpenAI's search out of band, so
+    // they are proven only with a real search (ADR 036, Validation).
+    expect(contract.searched).toEqual([expect.objectContaining({ query: CONTRACT_SEARCH.query, results: null })]);
+    // Every request of the turn holds Codex to cached search.
+    const offered = searchTools(asked);
+    expect(offered.length).toBe(4);
+    for (const tools of offered) expect(tools).toEqual([expect.objectContaining({ external_web_access: false })]);
+    // The model got both pages, and its answer names them as its sources.
+    const last = textOf(model.requests.at(-1));
+    for (const hit of CONTRACT_SEARCH.hits) expect(last).toContain(contractPageText(hit.url));
+    const said = events.flatMap((event) => (event._tag === "TextDelta" ? [event.text] : [])).join("");
+    expect(said).toContain(CONTRACT_ANSWER);
   });
 
   // covers RT-001, ADR 029

@@ -811,6 +811,38 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
   });
 });
 
+describe("a GitHub comment after the session read the web (#1272)", () => {
+  // covers ADR 036 (The read-the-web mark), ADR 031
+  it("[TC-PE-1272-04] a comment a saved grant answers waits for you once the session searched, and another chat still posts it", {
+    timeout: TIMEOUT,
+  }, async () => {
+    await connected();
+    const hob = await summon("Lantern", ["github"]);
+    const item = github.items("octo/workshop")[0];
+    const comment = (key: string) => call("github_comment", { number: item?.number, body: `Seen (${key}).`, key });
+    // Always allow, then a chat that never read the web posts without asking.
+    await approve(await turn(hob, comment("first")), "always");
+    const granted = await turn(hob, comment("granted"));
+    expect(granted.pending).toBeUndefined();
+    expect(toolSteps(granted.reply as Message)).toMatchObject([{ state: "done" }]);
+
+    // A search marks the session: the same comment now waits for you, with the reason.
+    const marked = await turn(hob, "fake:search workshop crash fix", comment("after-search"));
+    expect(marked.pending).toMatchObject({
+      tool: "github_comment",
+      operation: "github.comment",
+      reasonCode: "read-the-web",
+    });
+    await decide(marked.pending as ApprovalRequest, { decision: "deny" });
+    await settled(marked.thread);
+    const bodies = (github.items("octo/workshop").find((it) => it.number === item?.number)?.comments ?? []).map(
+      (posted) => posted.body,
+    );
+    expect(bodies.some((body) => body.startsWith("Seen (after-search)"))).toBe(false);
+    expect(bodies.some((body) => body.startsWith("Seen (granted)"))).toBe(true);
+  });
+});
+
 /** The tools a turn's runtime was handed, as the model reads them: name, description and input schema. */
 const toolList = (request: PromptRequest) =>
   (request.hubTools?.tools ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));

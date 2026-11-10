@@ -16,9 +16,12 @@ import {
   AGENTS_SKILL,
   ASKED_SKILL,
   type CleanRuntimeFixture,
+  CONTRACT_ANSWER,
   CONTRACT_HUB_TOOL,
   CONTRACT_ROSTER,
+  CONTRACT_SEARCH,
   cleanRuntimeFixture,
+  contractPageText,
   FOREIGN_MARKERS,
   FOREIGN_SKILLS,
   LIBRARY_SKILL,
@@ -27,6 +30,7 @@ import {
   SET_SIBLING,
   SET_SKILL,
   SET_SKIPPED,
+  searchAndReadContract,
   stepRecordingContract,
   TEAM_SET,
   WEB_FETCH_CONTRACT_TOOL,
@@ -273,6 +277,51 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
       expect(toolsOf(requests)).not.toContain("WebFetch");
       if (requests !== allowed.requests) expect(toolsOf(requests)).not.toContain("WebSearch");
     }
+  });
+
+  // covers RT-001, ADR 036 (On every runtime)
+  it("[TC-RT-1272-01] a hob searches with WebSearch, reads two pages from the results and answers with them as sources", {
+    timeout: 120_000,
+  }, async () => {
+    const contract = searchAndReadContract();
+    const [first, second] = CONTRACT_SEARCH.hits;
+    model.searches.push(CONTRACT_SEARCH.hits);
+    const { exit, requests } = await turn(
+      {
+        prompt: "How should lamp oil be kept?",
+        tools: access,
+        webSearch: true,
+        hubTools: contract.hubTools,
+        recordToolStart: contract.recordToolStart,
+        recordSearch: contract.recordSearch,
+        checkWebSearch: contract.checkWebSearch,
+      },
+      [
+        { tool: "WebSearch", input: { query: CONTRACT_SEARCH.query } },
+        { tool: `mcp__hobbots__${WEB_FETCH_CONTRACT_TOOL.name}`, input: { url: first.url } },
+        { tool: `mcp__hobbots__${WEB_FETCH_CONTRACT_TOOL.name}`, input: { url: second.url } },
+        { say: CONTRACT_ANSWER },
+      ],
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    // The hub's limits were asked first, then the results were found before any page was read.
+    expect(contract.order).toEqual([
+      `checked ${CONTRACT_SEARCH.query}`,
+      `searched ${CONTRACT_SEARCH.query}`,
+      `read ${first.url}`,
+      `read ${second.url}`,
+    ]);
+    expect(model.queries).toEqual([CONTRACT_SEARCH.query]);
+    // The hits come from Claude Code's structured result, so both pages count as found.
+    expect(contract.searched).toEqual([
+      expect.objectContaining({ query: CONTRACT_SEARCH.query, results: CONTRACT_SEARCH.hits }),
+    ]);
+    // The model got both pages, and its answer names them as its sources.
+    const last = JSON.stringify(requests.at(-1)?.messages ?? []);
+    for (const hit of CONTRACT_SEARCH.hits) expect(last).toContain(contractPageText(hit.url));
+    const said = events.flatMap((event) => (event._tag === "TextDelta" ? [event.text] : [])).join("");
+    expect(said).toContain(CONTRACT_ANSWER);
   });
 
   // covers RT-001, ADR 029
