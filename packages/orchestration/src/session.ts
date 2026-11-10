@@ -25,7 +25,6 @@ import {
   type TurnApprovals,
   TurnSkillsInUse,
   trackTurn,
-  turnWebSearch,
   webMarkBriefing,
   webSearchRequest,
   webSearchTurn,
@@ -234,7 +233,7 @@ export const runSessionTurn = (
       taskId: Effect.succeed(turn.taskId),
       attemptId: Effect.succeed(turn.attemptId),
     });
-    const search = webSearchRequest(turnWebSearch(turn.access), webUse);
+    const search = webSearchRequest(turn.access, webUse, adapter);
     yield* activity
       .run(
         {

@@ -170,7 +170,7 @@ export const messages = {
       what: ({ answer }: { answer: string }) => `Looks things up and brings back links. Search the web: ${answer}.`,
       claude: "Its own search tool. Hobbots checks each search before it runs, and counts it.",
       codex:
-        "Its own search, from OpenAI's cached index only. Hobbots turns it on or off for each turn; it cannot pause mid-turn, so it has no Ask.",
+        "Its own search, from OpenAI's cached index only. It can also open pages, so Hobbots turns it on only for turns where Use the web is Allow and no site is blocked. It cannot pause mid-turn, so it has no Ask.",
     },
     pages: {
       name: "Reading pages",
@@ -179,7 +179,7 @@ export const messages = {
       claude:
         "Hobbots' own page tool. Claude Code's WebFetch stays off, since it summarizes pages where Hobbots cannot see them.",
       codex:
-        "The same Hobbots tool, so every page follows the same rules on both. Codex has no page reader of its own.",
+        "The same Hobbots tool, so every page follows the same rules on both. Codex's search can open pages too, which is why it is off unless every page may be read without asking.",
     },
     runtime: { "claude-code": "Claude Code", codex: "Codex" },
     thisHob: ({ name }: { name: string }) => name,

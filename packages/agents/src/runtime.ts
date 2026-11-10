@@ -494,7 +494,8 @@ export interface PromptRequest {
   readonly tools?: ToolAccess | null;
   /**
    * Whether the turn may use the runtime's own web search (ADR 036), settled by the hub from the
-   * policy as the turn starts (`turnWebSearch`). The adapter offers it only on a turn with tools,
+   * policy, and from the page rules where the runtime's search opens pages, as the turn starts
+   * (`turnWebSearch`). The adapter offers it only on a turn with tools,
    * where it decides calls, and only where its enforcement verifies search. Absent, it offers none.
    */
   readonly webSearch?: boolean;
@@ -576,6 +577,12 @@ export interface RuntimeAdapterShape {
    * holds, such as `read_hob` in the roster (ADR 032). Absent, a session is offered each turn's own.
    */
   readonly resumeKeepsHubTools?: boolean;
+  /**
+   * Whether the runtime's own web search can also open pages, outside `web_fetch` and the hub's page
+   * rules (ADR 036). The hub then offers search only where Use the web reads any public page without
+   * asking and no site is blocked (`turnWebSearch`). Absent, the hub assumes it can.
+   */
+  readonly searchOpensPages?: boolean;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }

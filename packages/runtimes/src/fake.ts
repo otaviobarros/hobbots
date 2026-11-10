@@ -927,6 +927,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     enforcement: Effect.succeed(enforcement),
     // Fake Claude Code reports a plan with fixed meters; fake Codex reports none, as an API key would.
     ...(runtime === "claude-code" ? { planUsage: fakePlanUsage } : {}),
+    // As the real runtime's search: fake Codex's is offered only where every page is read without asking.
+    searchOpensPages: runtime === "codex",
     sendPrompt,
   });
 };

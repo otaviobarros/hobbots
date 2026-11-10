@@ -6,6 +6,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
   type RuntimeLimitReached,
+  turnWebSearch,
   WEB_RESULTS_LINE,
 } from "@hobbots/agents";
 import type { AnyOperation, SandboxState } from "@hobbots/domain";
@@ -30,7 +31,7 @@ import {
 } from "../sandbox.ts";
 import { askedMount, holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
 import { offeredTools, toolLabel } from "../tool-calls.ts";
-import { codexWebSearched, recordSearched } from "../web-search.ts";
+import { codexPageRead, codexWebSearched, recordSearched } from "../web-search.ts";
 import {
   type AppServer,
   type AppServerCommand,
@@ -371,18 +372,25 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
 /**
  * Records a search of the turn's thread as Codex's notification is read (ADR 036), before any
  * request Codex sent after it, so a hub call that follows the search finds its results however
- * long the turn's events take to be read. The turn's events report the search as well.
+ * long the turn's events take to be read. The turn's events report the search as well. A page
+ * its search opened marks the session as having read the web just as soon.
  */
 const searchFirst = (
-  record: PromptRequest["recordSearch"],
+  request: Pick<PromptRequest, "recordSearch" | "approvals">,
   thread: string | undefined,
   notification: AppServerNotification,
 ): Effect.Effect<void> => {
-  if (!record || thread === undefined || notification.method !== "item/completed") return Effect.void;
+  if (thread === undefined || notification.method !== "item/completed") return Effect.void;
   const params = notification.params as { readonly threadId?: string; readonly item?: ThreadItem } | null;
   if (params?.threadId !== thread || params.item?.type !== "webSearch") return Effect.void;
   const searched = codexWebSearched(params.item);
-  return searched === undefined ? Effect.void : recordSearched(record, searched);
+  if (searched !== undefined) return recordSearched(request.recordSearch, searched);
+  // A page its search opened marks the session as having read the web, as a page `web_fetch` reads does.
+  const page = codexPageRead(params.item);
+  const mark = request.approvals?.webMark;
+  return page === undefined || mark === undefined
+    ? Effect.void
+    : mark.read({ _tag: "Page", url: page }).pipe(Effect.catchDefect(() => Effect.void));
 };
 
 /**
@@ -591,7 +599,11 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
   Effect.gen(function* () {
     const governed = governedTurn(config, request);
     const runtimeFolder = request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat");
-    const webSearch = governed?.tools.webSearch === true && (yield* config.cachedSearch ?? Effect.succeed(false));
+    // Its search can open pages outside `web_fetch`, so it also needs every page to be read without asking.
+    const webSearch =
+      governed?.tools.webSearch === true &&
+      turnWebSearch(request.tools, { searchOpensPages: true }) &&
+      (yield* config.cachedSearch ?? Effect.succeed(false));
     const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed));
     const cwd = governed?.tools.folders[0] ?? config.workspaceDir;
     // The turn's skills, in a folder of their own for as long as it runs, and every other skill Codex
@@ -744,7 +756,7 @@ const turnEvents = (
       const server = yield* config
         .start(launch.command, {
           handlers: requestHandlers(config, binary, request.hubTools, () => turn),
-          beforeNotification: (notification) => searchFirst(request.recordSearch, thread, notification),
+          beforeNotification: (notification) => searchFirst(request, thread, notification),
           clientVersion: config.clientVersion,
         })
         .pipe(Effect.mapError(failed));
