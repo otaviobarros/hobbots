@@ -8,8 +8,11 @@
 // says why with `standards-allow STD-ARCH-013: <reason>` on its line or the line above.
 //
 // It also flags a comparison of a machine's state field outside the module that declares the machine:
-// `task.state === "active"`, or a `switch` on `.state` with a case naming one of its states. Code
-// elsewhere asks the machine, through `can` or a helper the module exports (STD-ARCH-013).
+// `task.state === "active"`, `["queued", "active"].includes(task.state)`, or a `switch` on `.state`
+// with a case naming one of its states, through casts and destructuring too. Code elsewhere asks the machine, through `can` or a helper the
+// module exports (STD-ARCH-013). Syntax alone does not know a value's type, so a machine is checked
+// only in a file that imports its record or the machine, by name: a machine is named after its record
+// (`Task`), so code that never names a Task, such as a socket's `.state === "running"`, is left alone.
 
 import { parseSync, visitorKeys } from "oxc-parser";
 
@@ -49,18 +52,65 @@ const isFunction = (node) =>
 
 const EQUALITY = new Set(["===", "!==", "==", "!="]);
 
-/** The field a node reads, as in `task.state` or `task?.state`, or undefined. */
+/** A node without the wrappers that do not change its value: `(x)`, `x!`, `x as T`, `x satisfies T`, `x?.y`. */
+const unwrapped = (node) =>
+  node?.type === "ParenthesizedExpression" ||
+  node?.type === "TSNonNullExpression" ||
+  node?.type === "TSAsExpression" ||
+  node?.type === "TSSatisfiesExpression" ||
+  node?.type === "ChainExpression"
+    ? unwrapped(node.expression)
+    : node;
+
+/**
+ * The field a node reads, as in `task.state`, `task?.state` or `(task.state as string)`, or the name of
+ * a binding named like a field, as in `const { state } = task`, or undefined.
+ */
 const fieldOf = (node) => {
-  const inner = node?.type === "ChainExpression" ? node.expression : node;
+  const inner = unwrapped(node);
+  if (inner?.type === "Identifier") return inner.name;
   if (inner?.type !== "MemberExpression" || inner.computed || inner.property?.type !== "Identifier") return undefined;
   return inner.property.name;
 };
 
-const stringOf = (node) => (node?.type === "Literal" && typeof node.value === "string" ? node.value : undefined);
+const stringOf = (node) => {
+  const inner = unwrapped(node);
+  return inner?.type === "Literal" && typeof inner.value === "string" ? inner.value : undefined;
+};
+
+/** `["queued", "active"].includes(task.state)`: the array of a call to `includes` on a literal list. */
+const listIncluding = (node) =>
+  node.type === "CallExpression" &&
+  node.callee?.type === "MemberExpression" &&
+  !node.callee.computed &&
+  node.callee.property?.name === "includes" &&
+  node.callee.object?.type === "ArrayExpression"
+    ? node.callee.object
+    : undefined;
+
+/** The comparisons one node makes of a field with a string, as `[node, field, string]`. */
+const comparedIn = (node) => {
+  if (node.type === "BinaryExpression" && EQUALITY.has(node.operator)) {
+    const left = fieldOf(node.left);
+    if (left !== undefined) return [[node, left, stringOf(node.right)]];
+    const right = fieldOf(node.right);
+    return right === undefined ? [] : [[node, right, stringOf(node.left)]];
+  }
+  const list = listIncluding(node);
+  if (list !== undefined) {
+    const field = fieldOf(node.arguments?.[0]);
+    return field === undefined ? [] : list.elements.map((each) => [node, field, stringOf(each)]);
+  }
+  if (node.type === "SwitchStatement") {
+    const field = fieldOf(node.discriminant);
+    return field === undefined ? [] : node.cases.map((each) => [each, field, stringOf(each.test)]);
+  }
+  return [];
+};
 
 /**
  * The problems in one file, as `file:line: message (STD-ARCH-013)`. `machines` lists each declared
- * machine as `{ name, field, states, module }`, for the state-comparison rule.
+ * machine as `{ name, exportName, field, states, module }`, for the state-comparison rule.
  */
 export const checkFile = (file, text, machines = []) => {
   const { program, errors, comments } = parseSync(file, text);
@@ -114,11 +164,20 @@ export const checkFile = (file, text, machines = []) => {
   // Comparisons of a machine's state field outside the machine's own module. Syntax alone cannot tell
   // two machines with the same field and state apart, so a module that declares a machine with that
   // field and state may compare it: its own helpers stay legal, and every other module is checked.
+  const imported = new Set(
+    program.body
+      .filter((statement) => statement.type === "ImportDeclaration")
+      .flatMap((statement) => statement.specifiers ?? [])
+      .map((specifier) => specifier.imported?.name ?? specifier.local?.name),
+  );
+  const inScope = machines.filter(
+    (m) => m.module === file || imported.has(m.name) || (m.exportName !== undefined && imported.has(m.exportName)),
+  );
   const holds = (machine, field, state) => machine.field === field && machine.states.includes(state);
   const machineOf = (field, state) => {
     if (state === undefined) return undefined;
-    if (machines.some((m) => m.module === file && holds(m, field, state))) return undefined;
-    return machines.find((m) => holds(m, field, state));
+    if (inScope.some((m) => m.module === file && holds(m, field, state))) return undefined;
+    return inScope.find((m) => holds(m, field, state));
   };
   const compared = (node, field, state) => {
     const machine = machineOf(field, state);
@@ -131,23 +190,14 @@ export const checkFile = (file, text, machines = []) => {
   };
   const comparisons = (node) => {
     if (node === null || typeof node !== "object" || typeof node.type !== "string") return;
-    if (node.type === "BinaryExpression" && EQUALITY.has(node.operator)) {
-      const left = fieldOf(node.left);
-      const right = fieldOf(node.right);
-      if (left !== undefined) compared(node, left, stringOf(node.right));
-      else if (right !== undefined) compared(node, right, stringOf(node.left));
-    }
-    if (node.type === "SwitchStatement") {
-      const field = fieldOf(node.discriminant);
-      if (field !== undefined) for (const each of node.cases) compared(each, field, stringOf(each.test));
-    }
+    for (const [at, field, state] of comparedIn(node)) compared(at, field, state);
     for (const key of visitorKeys[node.type] ?? []) {
       const child = node[key];
       if (Array.isArray(child)) for (const item of child) comparisons(item);
       else comparisons(child);
     }
   };
-  if (machines.length > 0) comparisons(program);
+  if (inScope.length > 0) comparisons(program);
   return problems;
 };
 

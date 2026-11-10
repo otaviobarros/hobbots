@@ -176,7 +176,6 @@ export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTask
     cancelled: "Stopped, and the stop is confirmed",
   },
   field: "state",
-  stateOf: (task) => task.state,
   events: {
     Wait: { from: ["active"], to: "waiting", apply: (task, e) => moved(task, "waiting", e.at) },
     Block: { from: ["active", "waiting"], to: "blocked", apply: (task, e) => moved(task, "blocked", e.at) },

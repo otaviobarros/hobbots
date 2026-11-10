@@ -178,7 +178,9 @@ Building `defineMachine` settled these details.
 
 - **Each machine keeps its own error.** A refused event returns the machine's own typed error, built by its `illegal` function, such as `IllegalTaskTransition`, rather than one shared `IllegalTransition`. Callers keep the error they already handle.
 - **States carry their meaning.** A machine declares its states as an object keyed by its state union, each with what it means, so a state left out does not compile, and the diagrams show each meaning.
-- **A rule lands where its row says.** If a rule's `apply` leaves the record in a state other than its `to`, the transition throws `MachineDefect`, a bug in the declaration, so the exported table is always true.
+- **An event can have several rules.** One event may lead to different states, each rule with its own guard, tried in order. A turn's end that leads to idle or to the next turn is one event with two rules, so callers never read the state to pick the event.
+- **A rule lands where its row says.** If a rule's `apply` leaves the record in a state other than its `to`, the transition throws `MachineDefect`, a bug in the declaration, so the exported table is always true. So does a declaration whose rules contradict themselves, and an event of no known kind.
+- **The field is typed.** The state field must be a field of the record that holds a state, and the machine reads its state from it.
 
 ## Validation
 

@@ -25,8 +25,14 @@ const files = execFileSync("git", ["ls-files", "packages", "apps/server/src"], {
       !/\/(?:fake|testing)[^/]*\.ts$/.test(file),
   );
 
-const machines = (await loadMachines()).map(({ machine, module }) => ({
+const machines = (
+  await loadMachines().catch((error) => {
+    console.error(`Machines could not be read: ${error.message}`);
+    process.exit(1);
+  })
+).map(({ exportName, machine, module }) => ({
   name: machine.name,
+  exportName,
   field: machine.field,
   states: machine.states,
   module,

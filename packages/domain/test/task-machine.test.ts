@@ -12,7 +12,7 @@ import {
   TaskState as TaskStates,
   TaskTransitions,
 } from "../src/index.ts";
-import { agreesWithModel } from "./machine-model.ts";
+import { agreesWithModel } from "../testing/machine-model.ts";
 
 const at = "2026-01-01T00:00:00.000Z";
 
@@ -39,6 +39,7 @@ interface TaskView {
   readonly ownerId: string;
   readonly currentAttemptId: string | null;
   readonly result: TaskResult | null;
+  readonly updatedAt: string;
 }
 
 const view = (t: Task): TaskView => ({
@@ -46,12 +47,15 @@ const view = (t: Task): TaskView => ({
   ownerId: t.ownerId,
   currentAttemptId: t.currentAttemptId,
   result: t.result,
+  updatedAt: t.updatedAt,
 });
 
 // The rules as they were written by hand before Task moved onto defineMachine, kept apart from the
 // machine so the two can disagree.
 const ended = (state: TaskState) => state === "completed" || state === "cancelled" || state === "cancelling";
-const stepModel = (m: TaskView, e: TaskEvent): TaskView | "refused" => {
+const stepModel = (before: TaskView, e: TaskEvent): TaskView | "refused" => {
+  // Every change names the time it happened.
+  const m = { ...before, updatedAt: e.at };
   const to = (state: TaskState, from: ReadonlyArray<TaskState>) =>
     from.includes(m.state) ? { ...m, state } : "refused";
   switch (e._tag) {
@@ -82,25 +86,29 @@ const stepModel = (m: TaskView, e: TaskEvent): TaskView | "refused" => {
   }
 };
 
+// Each event has its own time, so a rule that keeps the old time is caught.
+const times = fc
+  .integer({ min: 0, max: 10_000 })
+  .map((minute) => new Date(Date.UTC(2026, 0, 1) + minute * 60_000).toISOString());
 const attemptIds = fc.constantFrom("attempt-1", "attempt-2").map((id) => id as AttemptId);
 const events: fc.Arbitrary<TaskEvent> = fc.oneof(
   fc
     .constantFrom("Wait", "Block", "Resume", "Fail", "RequestCancel", "Cancel", "Retry")
-    .map((tag) => ({ _tag: tag, at }) as TaskEvent),
+    .chain((tag) => times.map((at) => ({ _tag: tag, at }) as TaskEvent)),
   fc.record({
     _tag: fc.constant("Start" as const),
-    at: fc.constant(at),
+    at: times,
     attemptId: attemptIds,
     readiness: fc.constantFrom({ _tag: "Ready" as const }, { _tag: "Waiting" as const, on: ["task-2" as Task["id"]] }),
   }),
   fc.record({
     _tag: fc.constant("Reassign" as const),
-    at: fc.constant(at),
+    at: times,
     ownerId: fc.constantFrom("hob-1", "hob-2").map((id) => id as AgentId),
   }),
   fc.record({
     _tag: fc.constant("Complete" as const),
-    at: fc.constant(at),
+    at: times,
     result: attemptIds.map((attemptId) => ({ summary: "Done", attemptId })),
   }),
 );

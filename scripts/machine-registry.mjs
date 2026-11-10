@@ -1,11 +1,9 @@
-// The machines Hobbots declares with `defineMachine` (ADR 037, STD-ARCH-013), read from the modules
-// that export them. Node strips the TypeScript types, so the tables read here are the ones the code runs.
+// The machines Hobbots declares with `defineMachine` (ADR 037, STD-ARCH-013), found in every package's
+// source and the server's, and read from the modules that declare them. The scripts that use this run
+// with Node's type transforms, so the tables read here are the ones the code runs.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-
-/** The modules whose exports are searched for machines. A machine declared elsewhere adds its package here. */
-const ENTRIES = ["packages/domain/src/index.ts"];
 
 const isMachine = (value) =>
   value !== null &&
@@ -17,24 +15,63 @@ const isMachine = (value) =>
   Array.isArray(value.table) &&
   typeof value.transition === "function";
 
-/** Each machine with the export that holds it and the module that declares it, sorted by name. */
-export const loadMachines = async (root = new URL("../", import.meta.url)) => {
-  const sources = execFileSync("git", ["ls-files", "packages", "apps/server/src"], {
-    cwd: root,
-    encoding: "utf8",
-  })
+const DECLARED = /\b(export\s+)?const\s+(\w+)\b[^=;]*=\s*defineMachine\s*([<(])/g;
+
+/** The source files a machine may be declared in: the packages' and the server's, without tests. */
+export const sourceFiles = (root) =>
+  execFileSync("git", ["ls-files", "packages", "apps/server/src"], { cwd: root, encoding: "utf8" })
     .split("\n")
-    .filter((file) => /\.ts$/.test(file) && !/\.test\.ts$/.test(file));
-  const found = new Map();
-  for (const entry of ENTRIES) {
-    const module = await import(new URL(entry, root).href);
-    for (const [exportName, value] of Object.entries(module)) {
-      if (!isMachine(value) || found.has(exportName)) continue;
-      const declaration = new RegExp(`export const ${exportName}\\b[^=]*=\\s*defineMachine\\b`);
-      const file = sources.find((source) => declaration.test(readFileSync(new URL(source, root), "utf8")));
-      if (file === undefined) throw new Error(`No module declares ${exportName} with defineMachine`);
-      found.set(exportName, { exportName, machine: value, module: file });
+    .filter(
+      (file) =>
+        /^(?:packages\/[^/]+\/src|apps\/server\/src)\//.test(file) &&
+        /\.ts$/.test(file) &&
+        !/\.test\.ts$/.test(file) &&
+        file !== "packages/domain/src/machine.ts",
+    );
+
+/**
+ * Each declaration of a machine in `text`, as `{ exportName, exported, typed }`: `typed` when it passes
+ * its type arguments, which a missing or extra event needs to fail to compile. Pure, so it is tested
+ * without a repository.
+ */
+export const declarationsIn = (text) =>
+  [...text.matchAll(DECLARED)].map((match) => ({
+    exportName: match[2],
+    exported: match[1] !== undefined,
+    typed: match[3] === "<",
+  }));
+
+/**
+ * Each machine with the export that holds it and the module that declares it, sorted by name. Fails
+ * when a machine is not exported, is not a machine at run time, or shares its name with another.
+ */
+export const loadMachines = async (root = new URL("../", import.meta.url)) => {
+  const found = [];
+  for (const file of sourceFiles(root)) {
+    const declarations = declarationsIn(readFileSync(new URL(file, root), "utf8"));
+    if (declarations.length === 0) continue;
+    const hidden = declarations.find((declaration) => !declaration.exported);
+    if (hidden !== undefined)
+      throw new Error(`${file}: export ${hidden.exportName}, so its diagram and checks can read it (STD-ARCH-013)`);
+    const untyped = declarations.find((declaration) => !declaration.typed);
+    if (untyped !== undefined)
+      throw new Error(
+        `${file}: give ${untyped.exportName} its type arguments, defineMachine<State, Event, Record, Error>, so a missing or extra event does not compile (STD-ARCH-013)`,
+      );
+    const module = await import(new URL(file, root).href);
+    for (const { exportName } of declarations) {
+      if (!isMachine(module[exportName])) throw new Error(`${file}: ${exportName} is not a machine at run time`);
+      found.push({ exportName, machine: module[exportName], module: file });
     }
   }
-  return [...found.values()].sort((a, b) => a.machine.name.localeCompare(b.machine.name));
+  const byName = new Map();
+  for (const entry of found) {
+    const other = byName.get(entry.machine.name);
+    if (other !== undefined)
+      throw new Error(
+        `Two machines are named ${entry.machine.name}: ${other.exportName} in ${other.module} and ${entry.exportName} in ${entry.module}`,
+      );
+    byName.set(entry.machine.name, entry);
+  }
+  return found.sort((a, b) => a.machine.name.localeCompare(b.machine.name));
 };

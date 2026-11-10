@@ -45,7 +45,10 @@ export const render = ({ exportName, machine, module }) => {
   ].join("\n");
 };
 
-const machines = await loadMachines();
+const machines = await loadMachines().catch((error) => {
+  console.error(`Machines could not be read: ${error.message}`);
+  process.exit(1);
+});
 const pages = new Map(machines.map((entry) => [`${kebab(entry.machine.name)}.md`, render(entry)]));
 const existing = (() => {
   try {
