@@ -13,6 +13,7 @@ const isMachine = (value) =>
   typeof value.name === "string" &&
   typeof value.field === "string" &&
   Array.isArray(value.states) &&
+  typeof value.meanings === "object" &&
   Array.isArray(value.table) &&
   typeof value.transition === "function";
 

@@ -3,7 +3,7 @@
  * event, the states it may start from, the state it leads to, an optional guard and how the record
  * changes. `transition` is pure and returns the next record or the machine's own error. The table is
  * exported, so tests, the diagram script (`scripts/machines.mjs`) and checks read the same rules the
- * code runs. A machine that leaves out an event of its union does not compile.
+ * code runs. A machine that leaves out a state or an event of its unions does not compile.
  */
 
 /** An event a machine takes: a tagged object. */
@@ -25,7 +25,11 @@ export interface MachineEdge<S extends string, X, E> {
 export interface MachineSpec<S extends string, E extends MachineEvent, X, Err> {
   /** The machine's name, as the diagrams and checks show it. */
   readonly name: string;
-  readonly states: ReadonlyArray<S>;
+  /**
+   * Every state, each with what it means. Keyed by the state union `S`, so a state left out or one
+   * that is not in `S` does not compile.
+   */
+  readonly states: { readonly [K in S]: string };
   /** The field of the record that holds the state, which only this machine's module compares. */
   readonly field: string;
   readonly stateOf: (record: X) => S;
@@ -45,7 +49,10 @@ export interface MachineRow<S extends string> {
 
 export interface Machine<S extends string, E extends MachineEvent, X, Err> {
   readonly name: string;
+  /** Every state, in the order the spec declares them. */
   readonly states: ReadonlyArray<S>;
+  /** What each state means. */
+  readonly meanings: { readonly [K in S]: string };
   readonly field: string;
   readonly table: ReadonlyArray<MachineRow<S>>;
   readonly stateOf: (record: X) => S;
@@ -63,7 +70,9 @@ export const defineMachine = <S extends string, E extends MachineEvent, X, Err>(
     edge.from.includes(spec.stateOf(record)) && (edge.guard === undefined || edge.guard(record, event));
   return {
     name: spec.name,
-    states: spec.states,
+    // The keys are exactly `S`: the spec's type admits no other and leaves none out.
+    states: Object.keys(spec.states).filter((key): key is S => Object.hasOwn(spec.states, key)),
+    meanings: spec.states,
     field: spec.field,
     table: [...rules].map(([event, edge]) => ({
       event,

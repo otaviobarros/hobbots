@@ -19,7 +19,7 @@ class Refused {
 
 const LampMachine = defineMachine<Light, LightEvent, Lamp, Refused>({
   name: "Lamp",
-  states: ["off", "on", "broken"],
+  states: { off: "Dark", on: "Lit", broken: "Needs a fix" },
   field: "state",
   stateOf: (lamp) => lamp.state,
   events: {
@@ -71,7 +71,7 @@ describe("defineMachine", () => {
   it("does not compile when an event has no rule", () => {
     defineMachine<Light, LightEvent, Lamp, Refused>({
       name: "Lamp",
-      states: ["off", "on", "broken"],
+      states: { off: "Dark", on: "Lit", broken: "Needs a fix" },
       field: "state",
       stateOf: (lamp) => lamp.state,
       // @ts-expect-error Fix has no rule.
@@ -86,7 +86,7 @@ describe("defineMachine", () => {
   it("does not compile when a rule leads to a state the machine does not have", () => {
     defineMachine<Light, LightEvent, Lamp, Refused>({
       name: "Lamp",
-      states: ["off", "on", "broken"],
+      states: { off: "Dark", on: "Lit", broken: "Needs a fix" },
       field: "state",
       stateOf: (lamp) => lamp.state,
       events: {
@@ -97,5 +97,42 @@ describe("defineMachine", () => {
       },
       illegal: (lamp, _, to) => new Refused(lamp.state, to),
     });
+  });
+
+  it("does not compile when a state is left out", () => {
+    defineMachine<Light, LightEvent, Lamp, Refused>({
+      name: "Lamp",
+      // @ts-expect-error "broken" is left out.
+      states: { off: "Dark", on: "Lit" },
+      field: "state",
+      stateOf: (lamp) => lamp.state,
+      events: {
+        Switch: { from: ["off"], to: "on", apply: (lamp) => lamp },
+        Break: { from: ["off"], to: "broken", apply: (lamp) => lamp },
+        Fix: { from: ["broken"], to: "off", apply: (lamp) => lamp },
+      },
+      illegal: (lamp, _, to) => new Refused(lamp.state, to),
+    });
+  });
+
+  it("does not compile when it declares a state outside its union", () => {
+    defineMachine<Light, LightEvent, Lamp, Refused>({
+      name: "Lamp",
+      // @ts-expect-error "dimmed" is not a state.
+      states: { off: "Dark", on: "Lit", broken: "Needs a fix", dimmed: "Half lit" },
+      field: "state",
+      stateOf: (lamp) => lamp.state,
+      events: {
+        Switch: { from: ["off"], to: "on", apply: (lamp) => lamp },
+        Break: { from: ["off"], to: "broken", apply: (lamp) => lamp },
+        Fix: { from: ["broken"], to: "off", apply: (lamp) => lamp },
+      },
+      illegal: (lamp, _, to) => new Refused(lamp.state, to),
+    });
+  });
+
+  it("lists its states in the order declared, with their meanings", () => {
+    expect(LampMachine.states).toEqual(["off", "on", "broken"]);
+    expect(LampMachine.meanings.broken).toBe("Needs a fix");
   });
 });

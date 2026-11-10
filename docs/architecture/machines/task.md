@@ -2,7 +2,18 @@
 
 Written by `scripts/machines.mjs` from `TaskMachine` in `packages/domain/src/task.ts`. Do not edit it by hand: change the machine and run `pnpm docs:machines`.
 
-States, in its `state` field: `queued`, `active`, `waiting`, `blocked`, `cancelling`, `completed`, `failed`, `cancelled`.
+Its state is in the `state` field.
+
+| State | Meaning |
+| --- | --- |
+| queued | Waiting for its first Attempt, or for the next one after a retry or reassignment |
+| active | An Attempt is running |
+| waiting | Waiting on a dependency, an approval or an answer |
+| blocked | Waiting for a decision from outside its turn: its lead's, or for a step its owner's |
+| cancelling | A cancel was requested and is not confirmed yet |
+| completed | Done, with its result |
+| failed | Ended without a result; a retry or reassignment reopens it |
+| cancelled | Stopped, and the stop is confirmed |
 
 ```mermaid
 stateDiagram-v2

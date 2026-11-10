@@ -165,7 +165,16 @@ const moved = (task: Task, to: TaskState, at: string) => new Task({ ...task, sta
 /** A Task's lifecycle (EX-002, ADR 018), declared once (ADR 037). */
 export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTaskTransition>({
   name: "Task",
-  states: TaskState.literals,
+  states: {
+    queued: "Waiting for its first Attempt, or for the next one after a retry or reassignment",
+    active: "An Attempt is running",
+    waiting: "Waiting on a dependency, an approval or an answer",
+    blocked: "Waiting for a decision from outside its turn: its lead's, or for a step its owner's",
+    cancelling: "A cancel was requested and is not confirmed yet",
+    completed: "Done, with its result",
+    failed: "Ended without a result; a retry or reassignment reopens it",
+    cancelled: "Stopped, and the stop is confirmed",
+  },
   field: "state",
   stateOf: (task) => task.state,
   events: {

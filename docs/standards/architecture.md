@@ -113,7 +113,7 @@ These rules come from [ADR 037](../decisions/037-chat-and-camps.md). The [state 
 
 ### STD-ARCH-013 Every lifecycle is one explicit machine
 
-Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, events, guards and next states in one table, and a pure `transition(state, event)` that returns the next state or `IllegalTransition` (STD-EFFECT-004). A guard reads only the machine's state and the event. The state lives in one field and changes only through `transition`. Other code asks the machine's helpers, such as `canArchive`, and never compares its state field. Never spread a state over several booleans, nullable timestamps, or `Set`s and `Map`s keyed by an id.
+Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, events, guards and next states in one table, and a pure `transition(state, event)` that returns the next state or the machine's own typed illegal-transition error, such as `IllegalTaskTransition` (STD-EFFECT-004). A guard reads only the machine's state and the event. The state lives in one field and changes only through `transition`. Other code asks the machine's helpers, such as `canArchive`, and never compares its state field. Never spread a state over several booleans, nullable timestamps, or `Set`s and `Map`s keyed by an id.
 
 - ✅ `ThreadRun.transition(run, { _tag: "Stopped" })`, then `ThreadRun.isRunning(next)`
 - ❌ `busy.has(threadId) || holdBack.has(threadId)`
