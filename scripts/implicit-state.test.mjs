@@ -37,3 +37,19 @@ test("an opt-out with a reason on the line above passes", () => {
     "  // standards-allow STD-ARCH-013: a cache of open sockets, not lifecycle state\n  const open = new Map<DeviceId, Socket>();";
   assert.deepEqual(checkFile("a.ts", service(body)), []);
 });
+
+test("a collection keyed by an id in its declared type fails", () => {
+  assert.equal(checkFile("a.ts", service("  const busy: Set<ThreadId> = new Set();")).length, 1);
+  assert.equal(checkFile("a.ts", "const waiting: Map<TaskId, number> = new Map();").length, 1);
+});
+
+test("an opt-out with no reason still fails", () => {
+  const body = "  // standards-allow STD-ARCH-013:\n  const open = new Map<DeviceId, Socket>();";
+  assert.equal(checkFile("a.ts", service(body)).length, 1);
+});
+
+test("an opt-out inside a string is not an opt-out", () => {
+  const body =
+    '  const note = "standards-allow STD-ARCH-013: not a comment";\n  const open = new Map<DeviceId, Socket>();';
+  assert.equal(checkFile("a.ts", service(body)).length, 1);
+});

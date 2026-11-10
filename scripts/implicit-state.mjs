@@ -12,24 +12,46 @@ import { parseSync, visitorKeys } from "oxc-parser";
 const RULE = "STD-ARCH-013";
 const KEYED_BY_ID = /Id$/;
 
-/** The name of the first type argument of `new Set<…>` or `new Map<…>`, when it is a type name ending in Id. */
-const idKey = (node) => {
-  if (node?.type !== "NewExpression" || node.callee?.type !== "Identifier") return undefined;
-  if (node.callee.name !== "Set" && node.callee.name !== "Map") return undefined;
-  const first = node.typeArguments?.params?.[0];
+const COLLECTIONS = new Set(["Set", "Map", "ReadonlySet", "ReadonlyMap"]);
+
+/** The key type of a `Set<…>` or `Map<…>` type or constructor, when it is a type name ending in Id. */
+const idKeyOf = (name, typeArguments) => {
+  if (!COLLECTIONS.has(name)) return undefined;
+  const first = typeArguments?.params?.[0];
   if (first?.type !== "TSTypeReference" || first.typeName?.type !== "Identifier") return undefined;
   return KEYED_BY_ID.test(first.typeName.name) ? first.typeName.name : undefined;
 };
+
+/**
+ * The id type a declaration's collection is keyed by: from `new Set<…Id>()`, or from the declared
+ * type, as in `const busy: Set<ThreadId> = new Set()`.
+ */
+const idKey = (declaration) => {
+  const init = declaration.init;
+  if (init?.type !== "NewExpression" || init.callee?.type !== "Identifier") return undefined;
+  if (init.callee.name !== "Set" && init.callee.name !== "Map") return undefined;
+  const declared = declaration.id?.typeAnnotation?.typeAnnotation;
+  const fromType =
+    declared?.type === "TSTypeReference" && declared.typeName?.type === "Identifier"
+      ? idKeyOf(declared.typeName.name, declared.typeArguments)
+      : undefined;
+  return fromType ?? idKeyOf(init.callee.name, init.typeArguments);
+};
+
+const OPT_OUT = new RegExp(`^\\s*standards-allow ${RULE}:\\s*\\S`);
 
 const isFunction = (node) =>
   node.type === "FunctionExpression" || node.type === "FunctionDeclaration" || node.type === "ArrowFunctionExpression";
 
 /** The problems in one file, as `file:line: message (STD-ARCH-013)`. */
 export const checkFile = (file, text) => {
-  const { program, errors } = parseSync(file, text);
+  const { program, errors, comments } = parseSync(file, text);
   if (errors.length > 0) return [];
-  const lines = text.split("\n");
-  const marker = `standards-allow ${RULE}:`;
+  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
+  // An opt-out is a real comment, with a reason, ending on the declaration's line or the line above.
+  const optOutLines = new Set(
+    (comments ?? []).filter((comment) => OPT_OUT.test(comment.value)).map((comment) => lineOf(comment.end)),
+  );
   const problems = [];
 
   const walk = (node) => {
@@ -55,13 +77,13 @@ export const checkFile = (file, text) => {
         continue;
       }
       for (const each of declaration.declarations) {
-        const key = idKey(each.init);
+        const key = idKey(each);
         if (key === undefined) {
           walk(each.init);
           continue;
         }
-        const line = text.slice(0, each.start).split("\n").length;
-        if ((lines[line - 1] ?? "").includes(marker) || (lines[line - 2] ?? "").includes(marker)) continue;
+        const line = lineOf(each.start);
+        if (optOutLines.has(line) || optOutLines.has(line - 1)) continue;
         problems.push(
           `${file}:${line}: \`${each.id?.name ?? "collection"}\` is a collection keyed by ${key} held for a service's or module's life; make it one explicit machine, or move a fold into a plain function (${RULE})`,
         );

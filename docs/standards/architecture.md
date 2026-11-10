@@ -147,7 +147,7 @@ Work derived from what happened, such as a summary, a brief or a search index, r
 
 ### STD-ARCH-017 The bus only wakes things up
 
-The in-process bus announces committed journal entries. A receiver re-reads durable state to decide what to do, as `WakeOnArrival` does. Losing an announcement never loses work. Work for a hob goes in its backpack, never in a second queue (ADR 019).
+The in-process bus announces committed journal entries, and carries transient events such as streamed reply chunks. Neither holds work. A receiver re-reads durable state to decide what to do, as `WakeOnArrival` does. Losing an announcement never loses work. Work for a hob goes in its backpack, never in a second queue (ADR 019).
 
 - **Why:** an in-memory announcement is lost on restart, and the durable records are what make work survive (STD-DATA-001).
 - **Enforced by:** restart-recovery tests (STD-TEST-002) and review.

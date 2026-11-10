@@ -76,7 +76,7 @@ What a client shows about a hob, a thread or a quest is a projection the hub pub
 
 ## The bus
 
-The in-process `EventBus` (`apps/server/src/event-bus.ts`) only announces committed entries. A receiver re-reads durable state to decide what to do, as `WakeOnArrival` does in `apps/server/src/continuations.ts`. Losing an announcement never loses work (STD-DATA-001).
+The in-process `EventBus` (`apps/server/src/event-bus.ts`) carries two kinds of events: committed journal entries, and transient events such as streamed reply chunks, which are never stored (ADR 013). Neither holds work. A receiver re-reads durable state to decide what to do, as `WakeOnArrival` does in `apps/server/src/continuations.ts`, so losing an announcement never loses work (STD-DATA-001). Publishing a transient event is not a breach of these rules; keeping work only in one is.
 
 ## The hub's brain
 

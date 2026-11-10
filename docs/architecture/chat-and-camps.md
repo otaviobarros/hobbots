@@ -82,7 +82,7 @@ Every part has a share of the budget, and the shares add up to it. The pack neve
 
 - `claim` hands out the next free migration or ADR number across every hob, chat and camp, and records path and branch claims.
 - A pure rule in the claim's transaction finds clashes with every open claim. The hub settles what it can and tells each lead through the backpack; the camp shows a Heads-up. It calls no model.
-- Claims are released when their Task ends; a released number is never handed out again.
+- Claims are released when their Task ends. Whether a released number may be handed out again is not decided yet; [#1388](https://github.com/otaviobarros/hobbots/issues/1388) settles it.
 - Slice: [#1365](https://github.com/otaviobarros/hobbots/issues/1365).
 
 ## The hub's brain
