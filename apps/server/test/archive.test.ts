@@ -1,6 +1,15 @@
 import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools } from "@hobbots/agents";
 import { ThreadArchived, ThreadArchiveRefused } from "@hobbots/api";
-import { Agent, AgentId, type Message, type Thread, type ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type Message,
+  SkillName,
+  SkillRevisionHash,
+  SkillTrial,
+  type Thread,
+  type ThreadId,
+} from "@hobbots/domain";
 import { HobbotsRepositoryLive, SearchIndex } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -360,5 +369,41 @@ describe("read threads", () => {
     // The read goes out to every device; reading the same message again sends nothing.
     expect(result.events[0]).toBe(false);
     expect(result.events.filter((unread) => !unread).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // covers CH-009
+  it("[TC-CH-294] gives a hob one open chat, and brings an archived chat back as a camp once another opened", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const first = yield* chat.createThread(HOB_ID);
+        const second = yield* chat.createThread(HOB_ID);
+        const trial = yield* chat.createThread(HOB_ID, {
+          title: "Try lamps",
+          skillTrial: new SkillTrial({
+            name: SkillName.make("lamps"),
+            description: "Lights lamps",
+            hash: SkillRevisionHash.make("a".repeat(64)),
+            skillId: null,
+            base: null,
+            proposalId: null,
+          }),
+        });
+        // With its chat archived the hob has none open, so its next thread is its chat.
+        yield* chat.archive(first.id);
+        const next = yield* chat.createThread(HOB_ID);
+        const restored = yield* chat.restore(first.id);
+        const open = yield* repo.listThreads(HOB_ID);
+        return { first, second, trial, next, restored, chats: open.filter((t) => t.kind === "chat").map((t) => t.id) };
+      }),
+    );
+
+    expect(result.first).toMatchObject({ kind: "chat", state: "open" });
+    expect(result.second).toMatchObject({ kind: "camp", state: "open" });
+    expect(result.trial).toMatchObject({ kind: "camp", state: "open" });
+    expect(result.next).toMatchObject({ kind: "chat", state: "open" });
+    expect(result.restored).toMatchObject({ id: result.first.id, kind: "camp", state: "open", archivedAt: null });
+    expect(result.chats).toEqual([result.next.id]);
   });
 });
