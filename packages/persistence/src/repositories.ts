@@ -126,9 +126,13 @@ const configColumns = (agent: Agent) => ({
 });
 // A thread's sessions, own brain and the draft it tries are JSON text columns (migrations 0020 and 0083).
 // `read_revision` stays on the hub: a read shows only whether the thread is `unread` (migration 0053).
+// `private` is 0 or 1, and `origin` two columns (migration 0095).
 export const threadRows = (
   rows: ReadonlyArray<{
     readonly revision?: unknown;
+    readonly private?: unknown;
+    readonly originThreadId?: unknown;
+    readonly originChapterId?: unknown;
     readonly sessions?: unknown;
     readonly brain?: unknown;
     readonly skillTrial?: unknown;
@@ -137,8 +141,10 @@ export const threadRows = (
     readonly unread?: unknown;
   }>,
 ) =>
-  rows.map(({ lastContent, readRevision: _readRevision, unread, ...row }) => ({
+  rows.map(({ lastContent, readRevision: _readRevision, unread, originThreadId, originChapterId, ...row }) => ({
     ...row,
+    private: Number(row.private ?? 0) === 1,
+    origin: originThreadId == null ? null : { threadId: originThreadId, chapterId: originChapterId ?? null },
     lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
     unread: Number(unread ?? 0) === 1,
     revision: Number(row.revision),
@@ -414,6 +420,12 @@ export const HobbotsRepositoryLive = Layer.effect(
             title: thread.title,
             sessions: JSON.stringify(thread.sessions),
             brain: thread.brain === null ? null : JSON.stringify(thread.brain),
+            kind: thread.kind,
+            goal: thread.goal,
+            private: thread.private ? 1 : 0,
+            origin_thread_id: thread.origin?.threadId ?? null,
+            origin_chapter_id: thread.origin?.chapterId ?? null,
+            state: thread.state,
             archived_at: thread.archivedAt,
             pinned_at: thread.pinnedAt,
             skill_trial: thread.skillTrial === null ? null : JSON.stringify(thread.skillTrial),
@@ -424,6 +436,12 @@ export const HobbotsRepositoryLive = Layer.effect(
             title = excluded.title,
             sessions = excluded.sessions,
             brain = excluded.brain,
+            kind = excluded.kind,
+            goal = excluded.goal,
+            private = excluded.private,
+            origin_thread_id = excluded.origin_thread_id,
+            origin_chapter_id = excluded.origin_chapter_id,
+            state = excluded.state,
             archived_at = excluded.archived_at,
             pinned_at = excluded.pinned_at,
             updated_at = excluded.updated_at,

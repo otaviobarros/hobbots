@@ -14,9 +14,9 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 | `origin` | The thread and chapter a camp came from, or null |
 | `state` | `ThreadLifecycle`: open, archived, superseded |
 
-- Each hob has exactly one open chat, held by a partial unique index.
+- Each hob has exactly one open chat, held by a partial unique index. Built in [#1375](https://github.com/otaviobarros/hobbots/issues/1375), with the fields above and [ThreadLifecycle](machines/thread-lifecycle.md); until the rail and Start fresh land, a hob whose chat is archived has none until its next thread opens one, and a chat restored while another is open comes back as a camp.
 - Start fresh moves the chat to superseded and opens a new one. What it still owes you is recorded as `CarriedItem` rows and appears in the new chat once.
-- Migration: each hob's most recent open thread becomes its chat; its others become camps with their titles.
+- Migration (0095): each hob's most recent open thread becomes its chat; its others become camps with their titles. A skill trial stays a camp.
 - Slice: [#1362](https://github.com/otaviobarros/hobbots/issues/1362).
 
 ## Chapters
