@@ -62,15 +62,34 @@ export interface Machine<S extends string, E extends MachineEvent, X, Err> {
   readonly can: (record: X, event: E) => boolean;
 }
 
+/**
+ * A machine whose own rules disagree: a rule whose `apply` leaves the record in a state other than its
+ * `to`. It is a bug in the machine's declaration, not a refused event, so it is thrown, never returned.
+ */
+export class MachineDefect extends Error {
+  override readonly name = "MachineDefect";
+}
+
 export const defineMachine = <S extends string, E extends MachineEvent, X, Err>(
   spec: MachineSpec<S, E, X, Err>,
 ): Machine<S, E, X, Err> => {
   const rules: ReadonlyMap<string, MachineEdge<S, X, E>> = new Map(Object.entries(spec.events));
   const allows = (record: X, event: E, edge: MachineEdge<S, X, E>) =>
     edge.from.includes(spec.stateOf(record)) && (edge.guard === undefined || edge.guard(record, event));
+  /** The rule's result, which must be in the state its table row names, so the table stays true. */
+  const applied = (record: X, event: E, edge: MachineEdge<S, X, E>) => {
+    const next = edge.apply(record, event);
+    const landed = spec.stateOf(next);
+    if (landed !== edge.to)
+      throw new MachineDefect(
+        `${spec.name}: ${event._tag} names ${edge.to} as its next state, its rule left ${landed}`,
+      );
+    return next;
+  };
   return {
     name: spec.name,
-    // The keys are exactly `S`: the spec's type admits no other and leaves none out.
+    // The type requires every state of `S` as a key. An object literal, as every machine writes it,
+    // can hold no other; one built elsewhere and passed in could, and would show as a state no rule reaches.
     states: Object.keys(spec.states).filter((key): key is S => Object.hasOwn(spec.states, key)),
     meanings: spec.states,
     field: spec.field,
@@ -84,7 +103,7 @@ export const defineMachine = <S extends string, E extends MachineEvent, X, Err>(
     transition: (record, event) => {
       const edge = rules.get(event._tag);
       if (edge === undefined) return spec.illegal(record, event, spec.stateOf(record));
-      return allows(record, event, edge) ? edge.apply(record, event) : spec.illegal(record, event, edge.to);
+      return allows(record, event, edge) ? applied(record, event, edge) : spec.illegal(record, event, edge.to);
     },
     can: (record, event) => {
       const edge = rules.get(event._tag);

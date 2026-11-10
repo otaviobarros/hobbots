@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defineMachine } from "../src/index.ts";
+import { defineMachine, MachineDefect } from "../src/index.ts";
 
 type Light = "off" | "on" | "broken";
 type LightEvent =
@@ -134,5 +134,23 @@ describe("defineMachine", () => {
   it("lists its states in the order declared, with their meanings", () => {
     expect(LampMachine.states).toEqual(["off", "on", "broken"]);
     expect(LampMachine.meanings.broken).toBe("Needs a fix");
+  });
+
+  it("throws a defect when a rule leaves the record in a state other than the one it names", () => {
+    const Misdeclared = defineMachine<Light, LightEvent, Lamp, Refused>({
+      name: "Lamp",
+      states: { off: "Dark", on: "Lit", broken: "Needs a fix" },
+      field: "state",
+      stateOf: (lamp) => lamp.state,
+      events: {
+        Switch: { from: ["off"], to: "on", apply: (lamp) => lamp },
+        Break: { from: ["off"], to: "broken", apply: (lamp) => lamp },
+        Fix: { from: ["broken"], to: "off", apply: (lamp) => lamp },
+      },
+      illegal: (lamp, _, to) => new Refused(lamp.state, to),
+    });
+    expect(() => Misdeclared.transition(off, { _tag: "Switch" })).toThrow(
+      new MachineDefect("Lamp: Switch names on as its next state, its rule left off"),
+    );
   });
 });

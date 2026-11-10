@@ -111,10 +111,15 @@ export const checkFile = (file, text, machines = []) => {
 
   statements(program.body);
 
-  // Comparisons of a machine's state field, anywhere in the file but the machine's own module.
-  const foreign = machines.filter((machine) => machine.module !== file);
-  const machineOf = (field, state) =>
-    state === undefined ? undefined : foreign.find((m) => m.field === field && m.states.includes(state));
+  // Comparisons of a machine's state field outside the machine's own module. Syntax alone cannot tell
+  // two machines with the same field and state apart, so a module that declares a machine with that
+  // field and state may compare it: its own helpers stay legal, and every other module is checked.
+  const holds = (machine, field, state) => machine.field === field && machine.states.includes(state);
+  const machineOf = (field, state) => {
+    if (state === undefined) return undefined;
+    if (machines.some((m) => m.module === file && holds(m, field, state))) return undefined;
+    return machines.find((m) => holds(m, field, state));
+  };
   const compared = (node, field, state) => {
     const machine = machineOf(field, state);
     if (machine === undefined) return;
@@ -142,7 +147,7 @@ export const checkFile = (file, text, machines = []) => {
       else comparisons(child);
     }
   };
-  if (foreign.length > 0) comparisons(program);
+  if (machines.length > 0) comparisons(program);
   return problems;
 };
 

@@ -81,3 +81,16 @@ test("a comparison opted out with a reason passes", () => {
     "// standards-allow STD-ARCH-013: an Attempt's state, not a Task's\nconst live = attempt.state === \"active\";";
   assert.deepEqual(checkFile("a.ts", text, machines), []);
 });
+
+test("with two machines sharing a field and a state, each module compares its own and not the other's", () => {
+  const two = [
+    { name: "Task", field: "state", states: ["queued", "failed"], module: "task.ts" },
+    { name: "Backpack", field: "state", states: ["claimed", "failed"], module: "backpack.ts" },
+  ];
+  assert.deepEqual(checkFile("backpack.ts", 'const lost = item.state === "failed";', two), []);
+  assert.deepEqual(checkFile("task.ts", 'const lost = task.state === "failed";', two), []);
+  const foreign = checkFile("backpack.ts", 'const waiting = task.state === "queued";', two);
+  assert.equal(foreign.length, 1);
+  assert.match(foreign[0], /a state of the Task machine in task\.ts/);
+  assert.equal(checkFile("other.ts", 'const lost = item.state === "failed";', two).length, 1);
+});
