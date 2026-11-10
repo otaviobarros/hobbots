@@ -3,7 +3,7 @@
     "apps/server/src/continuations.ts": 2,
     "apps/server/src/web-usage.ts": 2,
     "packages/agents/src/approvals.ts": 1,
-    "packages/agents/src/chat.ts": 6,
+    "packages/agents/src/chat.ts": 1,
     "packages/agents/src/controls.ts": 2,
     "packages/agents/src/devices.ts": 1,
     "packages/agents/src/memory-capture.ts": 3,
