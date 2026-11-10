@@ -1,7 +1,15 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type HubTools, type PromptRequest, type RuntimeEvent, WEB_RESULTS_LINE } from "@hobbots/agents";
+import {
+  type HubTools,
+  makeRedactor,
+  type PromptRequest,
+  type RuntimeEvent,
+  type TurnApprovals,
+  WEB_RESULTS_LINE,
+  type WebRead,
+} from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Exit, Stream } from "effect";
@@ -350,5 +358,39 @@ describe("a Codex turn that may search the web", () => {
     // An opened page is not a search, so nothing is found or counted.
     expect(found).toEqual([]);
     expect(events(exit).filter((event) => event._tag === "WebSearched")).toEqual([]);
+  });
+
+  // covers ADR 036, STD-SEC-002
+  it("[TC-RT-537] keeps a credential out of the mark when Codex's search opens a URL that carries one", async () => {
+    const token = "hob-known-secret-7Qk2";
+    const server = fakeServer({
+      script: [
+        n("turn/started", { turn: { id: TURN } }),
+        item("item/completed", search("s1", { type: "openPage", url: "https://ada:hunter22@example.com/a" })),
+        item("item/completed", search("s2", { type: "findInPage", url: `https://example.com/b?key=${token}` })),
+        completed("completed"),
+      ],
+    });
+    const { turnConfig, request } = await setup(server);
+    const reads: Array<WebRead> = [];
+    const approvals: TurnApprovals = {
+      request: null,
+      currentAccess: Effect.succeed(request.tools ?? null),
+      grants: Effect.succeed([]),
+      used: () => Effect.void,
+      webMark: {
+        current: Effect.succeed(null),
+        read: (read) => Effect.sync(() => void reads.push(read)),
+      },
+    };
+    const exit = await run(
+      { ...turnConfig, cachedSearch: Effect.succeed(true) },
+      { ...request, approvals, redaction: makeRedactor([{ kind: "token", value: token }]) },
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(reads).toHaveLength(2);
+    expect(JSON.stringify(reads)).not.toContain("hunter22");
+    expect(JSON.stringify(reads)).not.toContain(token);
+    expect(JSON.stringify(reads[0])).toContain("example.com/a");
   });
 });

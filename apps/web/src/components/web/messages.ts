@@ -179,7 +179,7 @@ export const messages = {
       claude:
         "Hobbots' own page tool. Claude Code's WebFetch stays off, since it summarizes pages where Hobbots cannot see them.",
       codex:
-        "The same Hobbots tool, so every page follows the same rules on both. Codex's search can open pages too, which is why it is off unless every page may be read without asking.",
+        "The same Hobbots tool, so every page follows the same rules on both. Codex's search can open pages too, outside these rules, so it is off unless Use the web is Allow and no site is blocked.",
     },
     runtime: { "claude-code": "Claude Code", codex: "Codex" },
     thisHob: ({ name }: { name: string }) => name,

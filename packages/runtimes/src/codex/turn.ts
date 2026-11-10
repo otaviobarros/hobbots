@@ -9,7 +9,7 @@ import {
   turnWebSearch,
   WEB_RESULTS_LINE,
 } from "@hobbots/agents";
-import type { AnyOperation, SandboxState } from "@hobbots/domain";
+import { type AnyOperation, redactSecrets, type SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
@@ -376,7 +376,7 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
  * its search opened marks the session as having read the web just as soon.
  */
 const searchFirst = (
-  request: Pick<PromptRequest, "recordSearch" | "approvals">,
+  request: Pick<PromptRequest, "recordSearch" | "approvals" | "redaction">,
   thread: string | undefined,
   notification: AppServerNotification,
 ): Effect.Effect<void> => {
@@ -386,11 +386,12 @@ const searchFirst = (
   const searched = codexWebSearched(params.item);
   if (searched !== undefined) return recordSearched(request.recordSearch, searched);
   // A page its search opened marks the session as having read the web, as a page `web_fetch` reads does.
+  // The model chose its URL, which can carry a credential, so the mark keeps it redacted.
   const page = codexPageRead(params.item);
   const mark = request.approvals?.webMark;
-  return page === undefined || mark === undefined
-    ? Effect.void
-    : mark.read({ _tag: "Page", url: page }).pipe(Effect.catchDefect(() => Effect.void));
+  if (page === undefined || mark === undefined) return Effect.void;
+  const url = request.redaction ? request.redaction.text(page) : redactSecrets(page);
+  return mark.read({ _tag: "Page", url }).pipe(Effect.catchDefect(() => Effect.void));
 };
 
 /**
