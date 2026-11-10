@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { MemoryStoreShape } from "@hobbots/agents";
+import { type MemoryStoreShape, MemoryVersionAuthors } from "@hobbots/agents";
 import {
   AgentId,
   MemoryForgetDay,
@@ -71,6 +71,39 @@ describe("ai-memory scopes", () => {
     expect(scopeOfEngineProject(INDEX_PROJECT)).toBe(null);
     expect(scopeOfEngineProject({ workspace: "hobbots", project: "scratch" })).toBe(null);
     expect(scopeOfEngineProject({ workspace: "other", project: "hob-h-pip" })).toBe(null);
+  });
+});
+
+describe.runIf(engineEnabled)("who wrote each version, when the hub cannot keep it", () => {
+  // covers ADR 028 (forget, restore), #1317
+  it("[TC-GEN-1317-03] still writes, forgets with its Undo, and restores when the record of authors fails", async () => {
+    const { dataDir, keys } = engineDataDir();
+    const broken = MemoryVersionAuthors.of({
+      record: () => Effect.die(new Error("the database is gone")),
+      of: () => Effect.succeed(new Map()),
+      forget: () => Effect.die(new Error("the database is gone")),
+    });
+    const { store } = await Effect.runPromise(startEngineStore(dataDir, keys, broken));
+    const you = { _tag: "You" } as const;
+    const scope: MemoryScope = { _tag: "Everyone" };
+    const path = MemoryPath.make("notes/kept.md");
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const written = yield* store.write(
+          you,
+          scope,
+          { path, markdown: "# Kept", tags: [], pinned: false },
+          {
+            _tag: "New",
+          },
+        );
+        const undo = yield* store.forget(you, scope, path, { _tag: "Version", version: written });
+        expect(undo).not.toBeNull();
+        expect(yield* store.page(you, scope, path)).toBeNull();
+        yield* store.restore(you, scope, path, undo as NonNullable<typeof undo>, { _tag: "New" });
+        expect(yield* store.page(you, scope, path)).toMatchObject({ markdown: "# Kept" });
+      }),
+    );
   });
 });
 

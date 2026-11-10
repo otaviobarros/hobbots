@@ -257,6 +257,15 @@ const makeStore = (client: EngineClient, authors: MemoryVersionAuthorsShape): Me
       message: "Could not record who wrote a memory version",
     });
   /**
+   * Drops what was recorded of a forgotten page's versions. The forget stands whatever happens here, so
+   * you still get its Undo: rows left behind name versions memory no longer has, and none is reused.
+   */
+  const forgetAuthors = (scope: MemoryScope, path: MemoryPath) =>
+    Effect.ignoreCause(authors.forget(scope, path), {
+      log: "Warn",
+      message: "Could not drop who wrote a forgotten memory page's versions",
+    });
+  /**
    * A project's engine name is hashed, so the identity it holds is kept in the index project, one
    * page per project, written before the project's first page: `scopes` reads it back.
    */
@@ -651,7 +660,7 @@ const makeStore = (client: EngineClient, authors: MemoryVersionAuthorsShape): Me
       }
       const where = engineProjectOf(scope);
       return client.tool(ROOT, "memory_delete_page", { ...where, path, ...preconditionOf(expected) }, DeletedJson).pipe(
-        Effect.tap((json) => (json.deleted ? authors.forget(scope, path) : Effect.void)),
+        Effect.tap((json) => (json.deleted ? forgetAuthors(scope, path) : Effect.void)),
         Effect.map((json) => {
           if (!json.deleted) return null;
           // With nothing to checkpoint first, the revision before the delete is its parent.

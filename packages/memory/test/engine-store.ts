@@ -35,10 +35,14 @@ afterAll(async () => {
 
 /**
  * Starts the engine on `dataDir`, as the hub does, with the version authors kept for that folder
- * across starts, as the hub's database keeps them, and answers its MemoryStore, the scope it runs in
+ * across starts, as the hub's database keeps them (or `authors`), and answers its MemoryStore, the scope it runs in
  * (closing it stops the engine) and its endpoint.
  */
-export const startEngineStore = (dataDir: string, keys: MemoryKeys) =>
+export const startEngineStore = (
+  dataDir: string,
+  keys: MemoryKeys,
+  authors: MemoryVersionAuthorsShape = authorsOf(dataDir),
+) =>
   Effect.gen(function* () {
     if (!fetched) return yield* Effect.die(new Error(`No ai-memory engine in ${folder}; run fetch-engine`));
     const scope = yield* Scope.make();
@@ -47,11 +51,7 @@ export const startEngineStore = (dataDir: string, keys: MemoryKeys) =>
     const layer = MemoryStoreAiMemory.pipe(
       Layer.provideMerge(engine),
       Layer.provide(
-        Layer.mergeAll(
-          NodeServices.layer,
-          FetchHttpClient.layer,
-          Layer.succeed(MemoryVersionAuthors, authorsOf(dataDir)),
-        ),
+        Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, Layer.succeed(MemoryVersionAuthors, authors)),
       ),
     );
     const context = yield* Layer.buildWithScope(layer, scope);
