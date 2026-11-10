@@ -75,6 +75,13 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-ARCH-010 | Every hob has the same capabilities | Active |
 | STD-ARCH-011 | One hub serves every client | Active |
 | STD-ARCH-012 | Functions stay under the complexity limit | Active |
+| STD-ARCH-013 | Every lifecycle is one explicit machine | Active |
+| STD-ARCH-014 | A command commits state, journal and backpack together | Active |
+| STD-ARCH-015 | Each transition journals one past-tense event | Active |
+| STD-ARCH-016 | Derived work runs in cursor projectors | Active |
+| STD-ARCH-017 | The bus only wakes things up | Active |
+| STD-ARCH-018 | A turn reads records, not the transcript | Active |
+| STD-ARCH-019 | Records move, and every author is named | Active |
 | STD-DUP-001 | Search before writing | Active |
 | STD-DUP-002 | Extract logic at its second real copy | Active |
 | STD-DUP-003 | Shared code lives in the layer that owns it | Active |
@@ -121,6 +128,8 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-REACT-025 | Slow updates never block typing | Active |
 | STD-REACT-026 | Stored data is versioned and parsed | Active |
 | STD-REACT-027 | Query hooks own an async call's lifecycle | Active |
+| STD-REACT-028 | Clients render hub state, never derive it | Active |
+| STD-REACT-029 | A flow is a reducer with one type per state | Active |
 | STD-UI-001 | Styles use theme tokens only | Active |
 | STD-UI-002 | Build on the shared primitives | Active |
 | STD-UI-003 | Every control works by keyboard and has a name | Active |

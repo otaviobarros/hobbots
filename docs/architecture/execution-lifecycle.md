@@ -2,7 +2,7 @@
 
 **Decided:** explicit domain states, pure validated transitions, transactional Effect services, durable recovery, task/attempt separation, and one dispatcher for every turn you did not start ([ADR 019](../decisions/019-hob-backpack-and-continuations.md)). The transition contract below is conceptual; finalize schema names and exhaustive transition tables before implementation.
 
-**Explicit machines** ([ADR 037](../decisions/037-chat-and-camps.md), decided, not built). Every lifecycle is declared with `defineMachine` in `@hobbots/domain`, with one owner and one journal event per transition. The thread run loop in `agents/src/chat.ts` becomes the `ThreadRun` machine (idle, starting, running, stopping, held), and the hub publishes thread, hob and Quest status for clients to render ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)). This document says *attempt* for what it used to call an execution.
+**Explicit machines** ([ADR 037](../decisions/037-chat-and-camps.md), decided, not built). Every lifecycle is declared with `defineMachine` in `@hobbots/domain`, with one owner and one journal event per transition. The thread run loop in `agents/src/chat.ts` becomes the `ThreadRun` machine (idle, starting, running, stopping, held), and the hub publishes thread, hob and Quest status for clients to render ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)). The [state and events contract](state-and-events.md) says how every machine, command, event and projector is written. This document says *attempt* for what it used to call an execution.
 
 ## Independent dimensions
 

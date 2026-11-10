@@ -48,6 +48,24 @@ React's [You Might Not Need an Effect](https://react.dev/learn/you-might-not-nee
 - **Enforced by:** Strict Mode in `apps/web/src/main.tsx`, Biome `useExhaustiveDependencies`, and review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
+### STD-REACT-028 Clients render hub state, never derive it
+
+Show a hob's, thread's and quest's status from the hub's projections, such as `ThreadRunChanged`, `HobPresence` and `QuestSummary`. A client never works one out from messages or Task states. Only view state, such as a label or tone for a state, is local.
+
+- **Why:** two devices then always agree, and a rule is not copied into every screen. See [ADR 037](../decisions/037-chat-and-camps.md).
+- **Enforced by:** review, until the hub publishes these projections ([#1374](https://github.com/otaviobarros/hobbots/issues/1374)).
+- **Applies to:** `apps/web`, `apps/desktop`.
+
+### STD-REACT-029 A flow is a reducer with one type per state
+
+Write a multi-step UI flow, such as Make a camp or Start fresh, as one `useReducer` over a discriminated union, with one type per state. Never track a flow's step with several booleans.
+
+- ✅ `type MakeCamp = { step: "naming" } | { step: "saving"; draft: Draft } | { step: "failed"; draft: Draft; error: string }`
+- ❌ `const [saving, setSaving] = useState(false); const [failed, setFailed] = useState(false)`
+- **Why:** an impossible combination, such as saving and failed at once, cannot be written.
+- **Enforced by:** review.
+- **Applies to:** `apps/web`, `packages/ui`.
+
 ## Components
 
 ### STD-REACT-005 Components are grouped by feature
