@@ -3,6 +3,7 @@ import {
   type Committed,
   type EventEnvelope,
   type MemoryActor,
+  type MemoryAuthor,
   type MemoryCaptureItem,
   type MemoryConflict,
   type MemoryDraft,
@@ -23,6 +24,7 @@ import {
   type MemoryVersionChanges,
   memoryProjectIdentity,
   memoryScopeAllowed,
+  memoryScopeKey,
   type SafetyPreset,
   type ThreadId,
 } from "@hobbots/domain";
@@ -150,6 +152,56 @@ export interface MemoryStoreShape {
 }
 
 export class MemoryStore extends Context.Service<MemoryStore, MemoryStoreShape>()("@hobbots/agents/MemoryStore") {}
+
+/**
+ * Who wrote each version of a page, as the hub knows it from the writes it sends (#1317): an engine
+ * that names only the latest version's author reads every older one's here. A version is kept by its
+ * id, which no other page or scope shares.
+ */
+export interface MemoryVersionAuthorsShape {
+  /** Records that `author` wrote `version` of the page at `path` in `scope`. */
+  readonly record: (
+    scope: MemoryScope,
+    path: MemoryPath,
+    version: MemoryVersion,
+    author: MemoryAuthor,
+  ) => Effect.Effect<void>;
+  /** Who wrote each of `versions`, for those recorded. */
+  readonly of: (versions: ReadonlyArray<MemoryVersion>) => Effect.Effect<ReadonlyMap<MemoryVersion, MemoryAuthor>>;
+  /** Drops what is recorded for the page at `path` in `scope`, whose history went with a forget. */
+  readonly forget: (scope: MemoryScope, path: MemoryPath) => Effect.Effect<void>;
+}
+
+export class MemoryVersionAuthors extends Context.Service<MemoryVersionAuthors, MemoryVersionAuthorsShape>()(
+  "@hobbots/agents/MemoryVersionAuthors",
+) {
+  /** Authors kept in the hub's memory, for tests: each call makes a record of its own. */
+  static readonly make = (): MemoryVersionAuthorsShape => {
+    const recorded = new Map<MemoryVersion, { readonly page: string; readonly author: MemoryAuthor }>();
+    const pageKey = (scope: MemoryScope, path: MemoryPath) => `${memoryScopeKey(scope)}\u0000${path}`;
+    return MemoryVersionAuthors.of({
+      record: (scope, path, version, author) =>
+        Effect.sync(() => {
+          recorded.set(version, { page: pageKey(scope, path), author });
+        }),
+      of: (versions) =>
+        Effect.sync(
+          () =>
+            new Map(
+              versions.flatMap((version) => {
+                const found = recorded.get(version);
+                return found === undefined ? [] : [[version, found.author] as const];
+              }),
+            ),
+        ),
+      forget: (scope, path) =>
+        Effect.sync(() => {
+          const page = pageKey(scope, path);
+          for (const [version, found] of recorded) if (found.page === page) recorded.delete(version);
+        }),
+    });
+  };
+}
 
 /** Calls only you may make: a hob has no delete tool, never restores and never runs Check now (ADR 028). */
 const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore", "check"]);

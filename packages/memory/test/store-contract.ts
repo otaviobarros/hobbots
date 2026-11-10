@@ -110,9 +110,8 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             { version: second, supersedes: first, latest: true },
             { version: first, supersedes: null, latest: false },
           ]);
-          expect(history[0]?.author).toEqual({ _tag: "You" });
-          // An engine may know who wrote only the latest version.
-          expect([null, byPip]).toContainEqual(history[1]?.author);
+          // Every version names who wrote it, the ones before the latest too (#1317).
+          expect(history.map((entry) => entry.author)).toEqual([{ _tag: "You" }, byPip]);
         }),
       ));
 
@@ -561,6 +560,25 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           expect(yield* store.page(you, pipsOwn, MemoryPath.make("notes/old.md"))).toMatchObject({
             forgetOn: "2000-01-01",
           });
+        }),
+      ));
+
+    // covers ADR 028 (attribution), #1317
+    it("[TC-GEN-1317-01] names who wrote every version in History: each hob, you, and your restores", () =>
+      run(({ store }) =>
+        Effect.gen(function* () {
+          const path = MemoryPath.make("notes/release.md");
+          const first = yield* store.write(asPip, theApp, draft("notes/release.md", "# Release\n\nTag it."), fresh);
+          yield* store.write(asPip, theApp, draft("notes/release.md", "# Release\n\nTag it, then push."), any);
+          yield* store.write(you, theApp, draft("notes/release.md", "# Release\n\nTag, push, announce."), any);
+          yield* store.restore(you, theApp, path, first, any);
+          const history = yield* store.history(you, theApp, path);
+          // A restore may take more than one version; each is yours.
+          expect(history.at(-1)?.version).toEqual(first);
+          expect(history.slice(-3).map((entry) => entry.author)).toEqual([you, byPip, byPip]);
+          const restored = history.slice(0, -3);
+          expect(restored.length).toBeGreaterThan(0);
+          for (const entry of restored) expect(entry.author).toEqual(you);
         }),
       ));
 

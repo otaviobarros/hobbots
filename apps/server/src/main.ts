@@ -22,6 +22,7 @@ import {
   MemoryCapture,
   MemorySharesLive,
   type MemoryStore,
+  type MemoryVersionAuthors,
   PermissionSummary,
   RecoveryLog,
   RosterReceipts,
@@ -90,6 +91,7 @@ import {
   MemoryCaptureLive,
   MemorySavesLive,
   MemoryShareLogLive,
+  MemoryVersionAuthorsLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -174,7 +176,7 @@ import { WorkbenchStreamRoute } from "./workbench-stream.ts";
  */
 const memoryPageStore = (config: {
   readonly fakeMemory: "off" | "empty" | "seeded" | "down";
-}): Layer.Layer<MemoryStore, never, EventBus | MemoryEngine> =>
+}): Layer.Layer<MemoryStore, never, EventBus | MemoryEngine | MemoryVersionAuthors> =>
   config.fakeMemory === "off"
     ? MemoryStoreAiMemory.pipe(Layer.provide(FetchHttpClient.layer))
     : FakeMemoryLive(config.fakeMemory);
@@ -182,7 +184,7 @@ const memoryPageStore = (config: {
 /** What the Memory page reads, and the watch behind What changed (ADR 028). */
 const memoryPageLayer = (
   config: { readonly memoryLookSeconds: number },
-  store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
+  store: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine | MemoryVersionAuthors>,
 ) => MemoryChanges.layer(Duration.seconds(config.memoryLookSeconds)).pipe(Layer.provideMerge(store));
 
 /**
@@ -207,7 +209,7 @@ const memoryToolsLayer = (
     readonly memoryEngineDir: Option.Option<string>;
     readonly fakeMemory: string;
   },
-  pageStore: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine>,
+  pageStore: Layer.Layer<MemoryStore, never, EventBus | MemoryEngine | MemoryVersionAuthors>,
 ) => {
   if (config.memory === "off") return Layer.empty;
   const folder = memoryEngineFolder(config);
@@ -317,6 +319,8 @@ const ServerLive = Layer.unwrap(
       HobChangesLive,
       MemorySavesLive,
       MemoryShareLogLive,
+      // Who wrote each memory version, which ai-memory names only for the latest (#1317).
+      MemoryVersionAuthorsLive,
       SkillLibraryLive,
       SkillProposalLogLive,
       HobProposalLogLive,

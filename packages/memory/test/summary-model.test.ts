@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { MemoryStore } from "@hobbots/agents";
+import { MemoryStore, MemoryVersionAuthors } from "@hobbots/agents";
 import { AgentId, DEFAULT_MEMORY_SETTINGS, type MemoryActor, type MemoryScope, ThreadId } from "@hobbots/domain";
 import { Context, Effect, Exit, Layer, Redacted, Schedule, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
@@ -42,7 +42,13 @@ describe.runIf(engineEnabled)("a finished chat's summary", () => {
     const layer = MemoryStoreAiMemory.pipe(
       Layer.provideMerge(engine),
       Layer.provideMerge(MemoryModelEndpoint.layer(keys.model).pipe(Layer.provide(standInRuntimes))),
-      Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+      Layer.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          FetchHttpClient.layer,
+          Layer.succeed(MemoryVersionAuthors, MemoryVersionAuthors.make()),
+        ),
+      ),
     );
     const context = await Effect.runPromise(Layer.buildWithScope(layer, scope));
     await Effect.runPromise(
