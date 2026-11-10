@@ -35,3 +35,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [032 — The hob directory](032-hob-directory.md)
 - [034 — The Summoning Charm](034-summoning-charm.md)
 - [036 — Searching and reading the web](036-web-search-and-pages.md)
+- [037 — Chat and camps](037-chat-and-camps.md)
