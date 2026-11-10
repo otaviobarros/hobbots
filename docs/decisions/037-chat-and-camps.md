@@ -1,0 +1,166 @@
+# ADR 037 — Chat and camps
+
+Status: **Accepted.** Amends the threads of the [conversations contract](../architecture/conversations.md) (a thread has a kind, and its transcript is split into chapters), the screens of [ADR 027](027-quest-room.md) (the lanes layout of the Quest room goes; a quest opens as a thread in its camp's sheet, and ADR 027's records stand), and the starting context of a runtime session in [ADR 017](017-switching-brains.md) and [ADR 028](028-memory.md) (a session starts from records, not from the transcript). Builds on the event journal of [ADR 013](013-event-journal.md), the client stores of [ADR 016](016-client-stores-outside-react.md), the Task tree of [ADR 018](018-tasks-and-quests.md) and the backpack of [ADR 019](019-hob-backpack-and-continuations.md). Records the architecture for the chat and camps work ([#1359](https://github.com/otaviobarros/hobbots/issues/1359)).
+
+## Context
+
+A hob's thread grows without end. Every turn of a long thread carries more of its past, so it costs more and drifts more. What was decided, what the hob made and what is still open are buried in the transcript, and finding them means scrolling. Threads also pile up with no shape: each new topic starts a thread, and none of them says what it is for.
+
+The design for this is **chat and camps**:
+
+- Each hob has **one chat**, which never ends. Its transcript is split into **chapters**, one per topic.
+- A topic that grows gets a **camp**: a thread with a goal of its own. A chapter can move from the chat into a camp.
+- **Decisions**, **artifacts** (what a hob makes or changes: a doc, page, email, image, code file, PR or link) and a short **brief** ("Where we are") are kept as records. A turn reads them instead of the whole transcript, and the right sheet shows them.
+- A **quest** sets out from a camp. Its updates and questions land there.
+
+Most of what this needs already exists: threads, the event journal, the backpack, the dispatcher, the Task tree, the memory brief and full-text search. The risk is not missing parts. It is state that is spread over flags and sets and worked out again in several places:
+
+- **The thread run loop.** `packages/agents/src/chat.ts` decides what a thread may do next from five collections: `busy`, `holdBack`, `rewake`, `chosen` and `replies`. A guard reads several of them at once, such as `busy.has(t) || holdBack.has(t)`, and nothing lists the legal combinations. Chapters and Start fresh would each add a path that must remember all five.
+- **The thread lifecycle.** `archivedAt`, `pinnedAt` and `skillTrial` are nullable fields, and archive refusals are worked out ad hoc. Camps add states, such as moved out and made into a camp, that nullable timestamps cannot keep apart.
+- **Activity in the web client.** `apps/web/src/api/activity.ts` works out thinking, working or waiting from each `MessageUpserted`, and `apps/web/src/lib/hob-state.ts` folds it with hob status. The hub already knows these states. Two devices can disagree while events arrive.
+- **Quest rollups.** `apps/web/src/lib/quest-work.ts` and `apps/web/src/lib/led-quests.ts` each fold Task states their own way. The camp's quest pill would be one more copy.
+
+Message, hob, Task and Attempt states are already explicit: pure transitions that refuse an illegal move. That is the pattern to spread.
+
+## Decision
+
+### A camp is a thread with a kind
+
+- `Thread` gains `kind` (`chat` or `camp`), `goal`, `private`, `origin` (the thread and chapter it came from) and `state`. The code keeps `Thread` as the noun; the UI says chat or camp and never thread.
+- **One open chat per hob**, held by a partial unique index on the hob where `kind = 'chat'` and the thread is open.
+- `ThreadLifecycle` has three states: open, archived and superseded (a chat replaced by Start fresh). The timestamps stay as facts. Guards read the state.
+- **Migration.** Each hob's most recent open thread becomes its chat. Its other threads become camps and keep their titles.
+- **A private camp** turns off memory capture for its entries. It keeps the memory brief.
+- The generic New thread entry goes. A hob's chat always exists, and a camp starts from Make a camp.
+
+### Chapters
+
+- A `Chapter` has `threadId`, `number`, `title`, a one-line `summary`, `startedAt`, `endedAt` and `movedTo`. `ChapterState` is live, resting or moved. Exactly one chapter per thread is live.
+- Every message belongs to one chapter (`Message.chapterId`). The migration gives each thread one chapter holding its history.
+- **The hob ends a chapter.** It calls `start_chapter` with a title when the topic changes. The tool is a hub tool on every runtime: Claude Code, Codex and the fake runtime. You can split or merge chapters in the UI. A hub rule may suggest a split; it never splits on its own.
+- **A runtime session belongs to one chapter.** `RuntimeSession` is keyed by thread, runtime and chapter. A new chapter starts a new session, seeded from records. Resuming stays inside a chapter. Replaying the transcript stays only for a brain switch inside a live chapter (ADR 017).
+- **Moving a chapter into a camp moves it.** One command changes the chapter's `threadId`, with its decisions, artifacts, open questions and the quests started in it, in one transaction. The chat keeps a stub that links to the camp. Nothing is copied, so nothing is ever in two places. A running quest moves whole.
+
+### Records
+
+Records are written once, in the same transaction and journal as the message that made them, and read by everything: the context pack, the sheet and find.
+
+| Record | Key fields | Lifecycle |
+| --- | --- | --- |
+| Decision | text, actor, threadId, chapterId, sourceMessageId, supersededBy | active, superseded. A changed decision is kept and crossed out, never edited. |
+| Artifact | kind (code, page, doc, email, image, PR, file), title, latestVersion, origin (Attempt, Quest artifact or message) | A registry over what Attempts and Quests already record. It indexes them and copies nothing. |
+| Brief | threadId, text, revision, writtenBy, basis (journal cursor) | Rewritten by a hub projector at quest steps and chapter ends. |
+| CampSuggestion | threadId, chapterId, reason (codes and counts) | open, kept, accepted, expired. At most one per chapter. |
+| CarriedItem | fromThreadId, toThreadId, ref (question, reminder or backpack item) | Written once by Start fresh. |
+| Claim | scope (migration number, ADR number, path, branch), key, holder (Task), state | held, released, contested. Unique on scope and key. |
+
+- **Every author is an actor**: `{ kind: user | hob | hub, id }` on decisions, notes, claims and messages. There is no implied "you". Shared camps later need this, and adding it now saves a migration of meaning.
+- **A note to self** is a new message role. A note never wakes the dispatcher.
+- **The brief is written by the hub**, not by a hob turn. It costs no turn and keeps working while a hob is paused.
+
+### The context pack
+
+- `ContextPack` is a service, not a table. `buildPack(records, budget)` is pure and deterministic. It reads the memory brief, the camp brief, active decisions, the artifacts index, the live chapter's transcript, one line per resting chapter and carried items.
+- Over budget, it drops resting chapter lines first, then old artifacts. It never drops the memory brief or active decisions.
+- Each turn logs a `PackReport`: each part and its size in tokens. The Focus chip shows it, and a dev-only endpoint and a snapshot test show it in review.
+- `agents/chat.ts` builds a session's starting context from the pack instead of the transcript.
+
+### Quests in camps
+
+- The quest engine stays as it is: the Task tree, Attempts, delegation, the responsibility ledger, steer receipts, the quiet-lead rule, the backpack and the dispatcher.
+- A quest belongs to the thread that started it, which `Quest.threadId` and `Task.threadId` already record. Its updates and questions land in that chat or camp.
+- **The lanes layout of the Quest room (ADR 027) is retired.** A quest opens as a thread in the camp's right sheet, with a link back to the camp. ADR 027's records stand.
+- **One `QuestSummary` projection** on the hub (counts by tone, needs you, ready for review) feeds the quest pill, the rail and Home. It replaces the client rollups.
+- The word quest stays for work a hob leads with a team. A camp is the place; a quest is a job that sets out from it.
+
+### The hub coordinates across every chat and camp
+
+- **The hub hands out migration and ADR numbers.** A hob asks with `claim`, and the hub gives the next free number for that scope, unique across every hob, chat and camp.
+- **The hub watches paths and branches.** A Task's claims on paths and branches are checked against every other open claim. On a clash, the hub settles what it can (a number) and tells each lead involved through the backpack. The UI shows it as a Heads-up.
+- The clash check is a pure rule run in the transaction that writes the claim, with named thresholds and tests. It calls no model.
+
+### Every lifecycle is an explicit machine
+
+- **`defineMachine`** in `@hobbots/domain` declares a machine as states, events, guards and next states. Its `transition(state, event)` is pure and returns the next state or `IllegalTransition`. A guard reads only the machine's state and the event. The compiler checks every state and event is handled. The table is exported, so tests and docs read it.
+- **Machines:** `ThreadRun`, `ThreadLifecycle`, `ChapterState`, `DecisionState`, `SuggestionState` and `ClaimState`. Message, hob, Task and Attempt keep their transitions and move onto `defineMachine` when next touched.
+- **`ThreadRun`** replaces the run loop's five collections. Its states are idle, starting, running, stopping and held, with a `wakePending` flag on the state. One `Ref<HashMap<ThreadId, ThreadRun>>` holds it, changed only through `ThreadRun.transition`, and each change is published as `ThreadRunChanged`. At start every run is idle; queued messages and pending backpack items start it again. Behavior does not change.
+- **Other code asks the machine.** A machine exports helpers such as `isLive`, `canArchive` and `canMoveChapter`. Code outside the machine's module never compares its state field.
+
+### One pattern per part
+
+| Part | Pattern | Rule |
+| --- | --- | --- |
+| Changing durable state | Command handler with an expected revision | One Effect service per aggregate loads, transitions and writes state, journal entries and backpack items in one transaction, with an idempotency key. Nothing external happens before commit. |
+| Telling the world | Domain events in the journal | Past tense, one per transition, in the same transaction: `ChapterStarted`, `ChapterMoved`, `DecisionRecorded`, `CampMade`, `ChatStartedFresh`. The journal is the only order. |
+| Work for a hob | The backpack | Carried items, suggestions for the hob to raise and claim clashes are backpack items, with the same claims, leases and dispatcher. There is no second queue for hobs. |
+| Derived work for the hub (chapter summary, brief, search index, camp suggestion check) | Cursor projectors | Each reads the journal after its saved cursor, as memory capture does, is idempotent by entry id, saves its cursor per batch in `projector_cursors`, and writes a record with the cursor it used. A slow model call never blocks a turn. |
+| Read models (rail, quest pill, catch-up, Focus chip, hob presence) | Projections | What a client must see at once (`QuestSummary`, `ThreadRun`) is computed in the writing transaction or published by its machine. What can lag (brief, chapter summary) comes from a projector. Clients never compute them. |
+| Waking things up | Observer on the in-process bus, after commit | The bus only announces. The receiver re-reads durable state, as `WakeOnArrival` does. A lost announcement never loses work. |
+| Live, non-durable state (thread run, streaming text) | Effect `Ref` or `SubscriptionRef` per machine | Changed only through its machine, and rebuilt at start from durable records. |
+| Rules (suggest a camp, detect a clash) | Pure functions in the transaction | Events in, items out, like `backpackItemsFor`. Thresholds are named constants with tests, not prompts. |
+| UI flows (Make a camp, Start fresh, find and ask, sheet tabs) | Discriminated-union reducers | One reducer per flow, one type per state, no sets of booleans. Server state comes from TanStack Query projections; drafts stay in stores outside React (ADR 016). |
+
+A change that needs a second pattern for the same part comes back to review.
+
+### Patterns we avoid
+
+- **A state spread over booleans, sets or nullable timestamps.** Use one state field read through its machine.
+- **Replaying the transcript as context.** Use the context pack.
+- **External work before commit, or inside a reducer.** Commit first; observers and the dispatcher act after.
+- **An in-memory `Queue` or `PubSub` as the only holder of work.** It is lost on restart. Use the backpack or a projector. In-memory queues are only a wake-up signal.
+- **An event handler that writes to another aggregate.** It hides the order. Use a rule in the same transaction, or a projector with its own cursor.
+- **A model call in a command's request path.** Commands write records; projectors call models later.
+- **Copying records between chat and camp.** Move by re-parenting, with a stub.
+- **Clients deriving server state.** Render hub projections; only view state is local.
+- **A generic workflow engine.** Machines and the backpack cover this feature. Revisit Effect Workflow only for waits of days.
+
+### Tools
+
+- **`fast-check`**, added as a dev dependency, pinned (STD-DOCS-006). Model-based tests run random sequences of commands against the real service and a small model, and check they agree. This is how the `ThreadRun` rewrite proves it keeps today's behavior, races between stop, wake and send included.
+- **`scripts/machines.mjs`** writes a Mermaid diagram per machine into `docs/architecture/machines/`. `pnpm check` fails when a diagram is out of date.
+- **An implicit-state check** on `oxc-parser`, in `scripts/check-*.mjs`. It fails on a `Set` or `Map` keyed by an id that a service holds as state, and on a comparison of a machine's state field outside its module. Today's cases go into a baseline that only shrinks, as `frontend-baseline.json` does.
+- **A glossary check** in `pnpm check`: a term the UI shows matches the code name the glossary gives it. `Agent` stays in code and hob in the UI; `Thread` in code, chat and camp in the UI; artifact in both; Attempt only, never Execution.
+- The rules for machines and these patterns go into the standards ([#1360](https://github.com/otaviobarros/hobbots/issues/1360)).
+
+### Not chosen
+
+- **XState on the hub.** Its actors keep state in memory, which competes with durable records and Effect's own concurrency. On the web, reducers are enough for flows this size.
+- **Effect Workflow or Cluster.** Nothing here waits for days, and the backpack covers durable waits.
+- **A vector store for find.** SQLite FTS5 over records answers "where did we decide X". Semantic recall can come later through memory (ADR 028).
+
+### Rollout
+
+Five slices, in order. Each leaves the app working.
+
+1. **Status you can trust on every device** ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)): `defineMachine`, `fast-check`, the diagram script and the implicit-state check; `ThreadRun` with no change in behavior; `ThreadRunChanged`, `HobPresence` and `QuestSummary`; the client derivations removed.
+2. **Chat and camps** ([#1362](https://github.com/otaviobarros/hobbots/issues/1362)): thread kind, goal, private and state with the migration; the rail; Make a camp; Start fresh with carried items.
+3. **Chapters and the Focus chip** ([#1363](https://github.com/otaviobarros/hobbots/issues/1363)): chapters, `start_chapter`, sessions per chapter, the pack builder and the Focus chip. Token cost is measured before and after.
+4. **Decisions, artifacts and find** ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)): decisions, artifacts, the brief, the sheet tabs, find with ask, and the camp suggestion with Make a camp from a chapter.
+5. **Quests in camps** ([#1365](https://github.com/otaviobarros/hobbots/issues/1365)): the quest pill, the quest thread in the sheet, and the claims register with the Heads-up.
+
+Shared camps, with more than one person, come after. They need users as actors (accounts, membership, who sees what), which is a separate design. Nothing here blocks them.
+
+## Consequences
+
+- Turn cost stops growing with a thread's length. A turn reads records and the live chapter only.
+- Every lifecycle has one table to read, one place that changes it and one event per change. A new path, such as Start fresh, is a new event in a table, not a new set.
+- Every device shows the same status, because the hub decides it.
+- The migration rewrites every thread's kind and gives every message a chapter. It must run in one pass, on SQLite and PostgreSQL, with a test for each.
+- `agents/chat.ts` is rewritten at its core. The existing chat, stop, continue and dispatcher tests must pass unchanged before anything else builds on it.
+- The quest room's lanes screen and its tests go.
+
+## Validation
+
+The scenarios that would show this decision holds. None is proven yet; each names the slice that will prove it.
+
+- Every existing chat, stop, Stop waiting, continue and dispatcher test passes unchanged against `ThreadRun`, and model-based tests of random send, wake, stop, turn end and restart agree with the machine's model. Not proven yet ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)).
+- Two clients following the same hub show the same hob, thread and quest status through every transition, on SQLite and PostgreSQL, with no status worked out in the client. Not proven yet ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)).
+- `pnpm check` fails on an out-of-date machine diagram, on a new id-keyed `Set` or `Map` held as service state, and on a state comparison outside its machine. Not proven yet ([#1360](https://github.com/otaviobarros/hobbots/issues/1360), [#1361](https://github.com/otaviobarros/hobbots/issues/1361)).
+- After the migration each hob has exactly one open chat, its other threads are camps with their titles, and every message belongs to a chapter; a second open chat for a hob is refused by the database. Not proven yet ([#1362](https://github.com/otaviobarros/hobbots/issues/1362)).
+- Make a camp and Start fresh each commit state, journal and backpack items in one transaction; a crash between them leaves neither half. Carried items arrive in the new chat once. Not proven yet ([#1362](https://github.com/otaviobarros/hobbots/issues/1362)).
+- A hob on Claude Code, Codex and the fake runtime calls `start_chapter`, and the next turn starts a new session seeded from the pack, not the transcript. Not proven yet ([#1363](https://github.com/otaviobarros/hobbots/issues/1363)).
+- The pack is the same for the same records, stays within its budget, and never drops the memory brief or active decisions; a long thread's turn costs no more than a short one's plus its live chapter, measured before and after. Not proven yet ([#1363](https://github.com/otaviobarros/hobbots/issues/1363)).
+- Moving a chapter into a camp moves its messages, decisions, artifacts, open questions and quests in one transaction and leaves a stub; nothing appears in both. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
+- A changed decision is kept and crossed out; find answers "where did we decide X" from records and cites them; a private camp's entries never reach memory. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
+- The brief and chapter summaries are written by projectors that resume from their cursor after a restart and write nothing twice. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
+- A quest's updates land in its camp; two quests in different camps that ask for a migration number get different numbers, and two that claim the same path both get a Heads-up through the backpack. Not proven yet ([#1365](https://github.com/otaviobarros/hobbots/issues/1365)).
