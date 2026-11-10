@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.0.4](https://github.com/otaviobarros/hobbots/compare/v0.0.3...v0.0.4) (2026-11-10)
+
+
+### Features
+
+* **agents:** ask whether a hob will write code instead of for a Git identity ([#1243](https://github.com/otaviobarros/hobbots/issues/1243)) ([817bd6b](https://github.com/otaviobarros/hobbots/commit/817bd6b3dc392cd323f67db340f55a01e25ee111))
+* **agents:** decide a Summoning call that asks as a proposal card, row by row ([#1303](https://github.com/otaviobarros/hobbots/issues/1303)) ([e538562](https://github.com/otaviobarros/hobbots/commit/e538562cc7c4259d06600fce88288485b41e1503))
+* **agents:** give every hob the roster of other hobs and read_hob ([#1257](https://github.com/otaviobarros/hobbots/issues/1257)) ([3cd21ed](https://github.com/otaviobarros/hobbots/commit/3cd21ed5715bb223a1595059a4edb9429720efe7))
+* **agents:** let a hob hide from other hobs ([#1253](https://github.com/otaviobarros/hobbots/issues/1253)) ([8c6cbeb](https://github.com/otaviobarros/hobbots/commit/8c6cbebc33d4715217becf6331417f95f773cda8))
+* **agents:** retire a hob with open work by handing it over or finishing first ([#1279](https://github.com/otaviobarros/hobbots/issues/1279)) ([5753649](https://github.com/otaviobarros/hobbots/commit/57536492d32d7acbc426c885b53c9e56ecdb4cb4))
+* **charms:** add the Summoning Charm, so a hob can summon and manage hobs ([#1278](https://github.com/otaviobarros/hobbots/issues/1278)) ([57a65b3](https://github.com/otaviobarros/hobbots/commit/57a65b38d6aee5326066463975d746d2cf0bb3a4))
+* **charms:** link a GitHub App you already have to a hob ([#1324](https://github.com/otaviobarros/hobbots/issues/1324)) ([f10d500](https://github.com/otaviobarros/hobbots/commit/f10d5003655a42acd98ee316b5abc7942d460ba4))
+* **hobs:** add a hob's History, Revert and the Changes log ([#411](https://github.com/otaviobarros/hobbots/issues/411)) ([#1281](https://github.com/otaviobarros/hobbots/issues/1281)) ([b577657](https://github.com/otaviobarros/hobbots/commit/b5776574060f12e67058d5a076099a7a0dd589f2))
+* **hobs:** make what a hob is good at a stored, editable field ([#1254](https://github.com/otaviobarros/hobbots/issues/1254)) ([0e66f8d](https://github.com/otaviobarros/hobbots/commit/0e66f8d1d5ff3080c21bc9e10ed979efc3abd6c1))
+* **hobs:** record who made each hob change and who summoned each hob ([#1256](https://github.com/otaviobarros/hobbots/issues/1256)) ([ad8f03c](https://github.com/otaviobarros/hobbots/commit/ad8f03c3d76cbfeb34152c6f919f916edd5be0ab))
+* **hub-questions:** send hub questions as codes the web app words ([#1236](https://github.com/otaviobarros/hobbots/issues/1236)) ([af16cd7](https://github.com/otaviobarros/hobbots/commit/af16cd76e56cf5643b3a90ddc285702147ffd072))
+* **runtimes:** turn on each runtime's own web search, decided as Search the web ([#1283](https://github.com/otaviobarros/hobbots/issues/1283)) ([a0664ca](https://github.com/otaviobarros/hobbots/commit/a0664cabe37ad1eda9bd682650b3ccd426a4ccee))
+* **skills:** offer a repository's own skills once and import them from its default branch ([#1275](https://github.com/otaviobarros/hobbots/issues/1275)) ([8fe6355](https://github.com/otaviobarros/hobbots/commit/8fe635529242780a71defc32ac6530bc69c2976c))
+* **skills:** show updates from a skill's Git source and update clean ones automatically ([#1229](https://github.com/otaviobarros/hobbots/issues/1229)) ([2325e5b](https://github.com/otaviobarros/hobbots/commit/2325e5b19944da58b7500704249a346dce5df275))
+* **skills:** try a skill in a chat, and add skill health checks ([#1280](https://github.com/otaviobarros/hobbots/issues/1280)) ([d21a03e](https://github.com/otaviobarros/hobbots/commit/d21a03ebeffc4b021ae835d422c70fc644181b9e))
+* **summoning:** cap summons that run without asking you (ADR 034) ([#1291](https://github.com/otaviobarros/hobbots/issues/1291)) ([b4020fb](https://github.com/otaviobarros/hobbots/commit/b4020fb298ad23efb3fb68c8383ce536350b4c44))
+* **web-access:** ask before data leaves a session that read the web ([#1268](https://github.com/otaviobarros/hobbots/issues/1268)) ([#1305](https://github.com/otaviobarros/hobbots/issues/1305)) ([b25c970](https://github.com/otaviobarros/hobbots/commit/b25c970e8a331b9148fdc7f5eab62e6151280677))
+* **web-access:** count a runtime's search results as found URLs ([#1290](https://github.com/otaviobarros/hobbots/issues/1290)) ([9eb315d](https://github.com/otaviobarros/hobbots/commit/9eb315d6b5e2921917fc8c47f28f16f1584c50dc))
+* **web-access:** read web pages through the hub with web_fetch (ADR 036) ([#1284](https://github.com/otaviobarros/hobbots/issues/1284)) ([7e620e9](https://github.com/otaviobarros/hobbots/commit/7e620e969a0db14e4822c5bf68c6e2de15cb3b1b))
+* **web-access:** record web searches and pages read, with limits per turn and day ([#1304](https://github.com/otaviobarros/hobbots/issues/1304)) ([082a2f3](https://github.com/otaviobarros/hobbots/commit/082a2f3c576ed09f5aeb0083f22d9563262b868a))
+* **web:** build the web search screens ([#1313](https://github.com/otaviobarros/hobbots/issues/1313)) ([e3bdbe1](https://github.com/otaviobarros/hobbots/commit/e3bdbe1d81660eece6073608f280285423b3f085))
+* **web:** set the Summoning Charm on the Charms tab and for every hob ([#1292](https://github.com/otaviobarros/hobbots/issues/1292)) ([0694c8f](https://github.com/otaviobarros/hobbots/commit/0694c8fa518066bd36b8bd3666997d318c4d0cbb))
+* **web:** show summons without asking against the caps on the Charms tab ([#1311](https://github.com/otaviobarros/hobbots/issues/1311)) ([b27bad5](https://github.com/otaviobarros/hobbots/commit/b27bad504a48edce3e2dced972492920109f8931))
+
+
+### Bug Fixes
+
+* **agents:** let hobs answer team questions from the roster without reading cards ([#1309](https://github.com/otaviobarros/hobbots/issues/1309)) ([62ab18e](https://github.com/otaviobarros/hobbots/commit/62ab18e5a967bbb626e86bae67b5ac46443cb604))
+* **chat:** keep a command you stopped waiting on from starting again ([#1228](https://github.com/otaviobarros/hobbots/issues/1228)) ([02fec90](https://github.com/otaviobarros/hobbots/commit/02fec9036717d6a3078c535cec6ef297958eadec)), closes [#1217](https://github.com/otaviobarros/hobbots/issues/1217)
+* **memory:** name a chat's page by its title, not its session ID ([#1318](https://github.com/otaviobarros/hobbots/issues/1318)) ([4cdce15](https://github.com/otaviobarros/hobbots/commit/4cdce15109be45202188eabb345dadf4d06b0711))
+* **memory:** name who wrote every version in a page's History ([#1368](https://github.com/otaviobarros/hobbots/issues/1368)) ([3db47cc](https://github.com/otaviobarros/hobbots/commit/3db47cc38b640c3a6d32121e8867004636c1d121))
+* **orchestration:** hold leads to what you said and what the hub kept ([#1274](https://github.com/otaviobarros/hobbots/issues/1274)) ([b47c2bb](https://github.com/otaviobarros/hobbots/commit/b47c2bb98c27fa9de8555212b3b0f49040dd2793))
+* **orchestration:** keep a member's approvals with the user when it asks its lead ([#1246](https://github.com/otaviobarros/hobbots/issues/1246)) ([d392b34](https://github.com/otaviobarros/hobbots/commit/d392b34bde06e6154e23a677969760c0cc9b3492))
+* quiet xcrun's cache error in the sandbox, and ask macOS for Documents when you add it ([#1255](https://github.com/otaviobarros/hobbots/issues/1255)) ([fc24efb](https://github.com/otaviobarros/hobbots/commit/fc24efbd78a26d9581cbc4b8aba7595497349ac7))
+* **runtimes:** tell every hob up front that it never sets its commit identity ([#1227](https://github.com/otaviobarros/hobbots/issues/1227)) ([ccab8f2](https://github.com/otaviobarros/hobbots/commit/ccab8f2ee8583761f00ce474732b1a20c392df1a))
+* **runtimes:** turn off Codex apps, plugins and browser tools for hobs ([#1355](https://github.com/otaviobarros/hobbots/issues/1355)) ([a340e20](https://github.com/otaviobarros/hobbots/commit/a340e2050040e79c74c0d41506aa289c25cc7f71))
+* **web-access:** make web_fetch's undici agent work in the bundled app ([#1288](https://github.com/otaviobarros/hobbots/issues/1288)) ([5863264](https://github.com/otaviobarros/hobbots/commit/5863264e1e658c543ed740fe000773df16a76c8a))
+* **web:** ask hob proposals in the Needs-you tray, keep field names on one line, and add Always allow all ([#1310](https://github.com/otaviobarros/hobbots/issues/1310)) ([b840c8a](https://github.com/otaviobarros/hobbots/commit/b840c8aa69d73d5ce0525c5ab898219f3fd92220))
+* **web:** fold a decided hob proposal into its step as one line per hob ([#1315](https://github.com/otaviobarros/hobbots/issues/1315)) ([e9ede47](https://github.com/otaviobarros/hobbots/commit/e9ede47a8f3b45ae46270276578181d55020b781))
+* **web:** offer a search that opens pages only where every page may be read ([#1358](https://github.com/otaviobarros/hobbots/issues/1358)) ([d4b9161](https://github.com/otaviobarros/hobbots/commit/d4b9161bad6134b6fb87387e1288598d7e6e22bd))
+* **web:** show a Task's work across its tries and read Workbench paths from the Quest's folder ([#1237](https://github.com/otaviobarros/hobbots/issues/1237)) ([daf7bf5](https://github.com/otaviobarros/hobbots/commit/daf7bf5f0ace76087651c32a69728d27f8ecf5ba))
+* **web:** small Skills, Start over and setup fixes from the v0.0.3 smoke test ([#1302](https://github.com/otaviobarros/hobbots/issues/1302)) ([7a3da94](https://github.com/otaviobarros/hobbots/commit/7a3da941af8ed38770a0110b20e8484119f6cd67))
+
 ## [0.0.3](https://github.com/otaviobarros/hobbots/compare/v0.0.2...v0.0.3) (2026-11-08)
 
 
