@@ -70,6 +70,7 @@ describe("a hob's tools", () => {
       appId: 1000,
       clientId: "Iv23test",
       slug: "frodo-hobbots",
+      origin: "made",
       owner: "otaviobarros",
       botUserId: 90001000,
       htmlUrl: "https://github.com/apps/frodo-hobbots",

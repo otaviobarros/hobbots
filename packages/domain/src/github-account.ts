@@ -41,8 +41,8 @@ export const GitHubReachableRepository = Schema.Struct({
 export type GitHubReachableRepository = typeof GitHubReachableRepository.Type;
 
 /**
- * A hob's own GitHub App (ADR 022): made for one hob from a manifest, owned by the user's personal
- * account, so the hob acts on GitHub as its bot, `<slug>[bot]`. Only its identity is kept here; its
+ * A hob's own GitHub App (ADR 022): made for one hob from a manifest, or an app the user already had
+ * and linked, so the hob acts on GitHub as its bot, `<slug>[bot]`. Only its identity is kept here; its
  * private key lives in the OS keychain on the hub, and GitHub's other secrets are never kept.
  */
 export const HobGitHubApp = Schema.Struct({
@@ -52,8 +52,13 @@ export const HobGitHubApp = Schema.Struct({
   clientId: Schema.String,
   /** The app's name in its `github.com/apps/<slug>` address. */
   slug: Schema.String,
-  /** The personal account that owns the app, and the only one it can be installed on. */
+  /** The account that owns the app. A made app's is the user's personal account, the only one it can be installed on. */
   owner: Schema.String,
+  /**
+   * `made`: the hub made it from a manifest for this hob, so disconnecting removes its installations.
+   * `linked`: the user linked an app they already had (#1321), so the hub only forgets its key.
+   */
+  origin: Schema.Literals(["made", "linked"]),
   /** The bot's user ID, for its commit email; null when GitHub did not give it when the app was made. */
   botUserId: Schema.NullOr(Schema.Number),
   /** The app's page on GitHub. */
@@ -153,6 +158,22 @@ export const settleCommitsAs = (
   return { _tag: "UserGiven", config, identity: { name: config.name ?? given.name, email: given.email } };
 };
 
+/** A permission the hob's actions ask for that its app or an installation lacks, by GitHub's name (#1321). */
+export const HobGitHubAppMissingPermission = Schema.Struct({
+  name: Schema.Literals([
+    "metadata",
+    "contents",
+    "issues",
+    "pull_requests",
+    "checks",
+    "actions",
+    "statuses",
+    "workflows",
+  ]),
+  access: Schema.Literals(["read", "write"]),
+});
+export type HobGitHubAppMissingPermission = typeof HobGitHubAppMissingPermission.Type;
+
 /** Where a hob's app is installed: the account, whether it reaches all of its repositories or some, and which. */
 export const HobGitHubAppInstallation = Schema.Struct({
   id: Schema.Number,
@@ -163,5 +184,10 @@ export const HobGitHubAppInstallation = Schema.Struct({
   suspended: Schema.Boolean,
   /** The repositories it reaches, as `owner/name`; null while it is suspended, as GitHub then says none. */
   repositories: Schema.NullOr(Schema.Array(Schema.String)),
+  /**
+   * The permissions the hob's actions use that this installation does not give, as GitHub lists its
+   * granted ones: an app linked without them, or new ones its owner has not accepted yet.
+   */
+  missingPermissions: Schema.Array(HobGitHubAppMissingPermission),
 });
 export type HobGitHubAppInstallation = typeof HobGitHubAppInstallation.Type;

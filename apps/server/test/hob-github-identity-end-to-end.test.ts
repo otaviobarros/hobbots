@@ -682,7 +682,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
     });
     expect(frodoApp().installations).toEqual([]);
     expect(await keyKept(hob)).toBe(false);
-    expect(await appStatus(hob)).toEqual({ _tag: "None", cannotCreate: null });
+    expect(await appStatus(hob)).toEqual({ _tag: "None", cannotCreate: null, cannotLink: null });
 
     // The next comment asks as the user, and goes out under the user's name.
     const fromToken = github.installationTokens.length;

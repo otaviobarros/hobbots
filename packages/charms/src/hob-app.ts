@@ -11,6 +11,7 @@ import {
   type DeviceId,
   type HobGitHubApp,
   type HobGitHubAppInstallation,
+  type HobGitHubAppMissingPermission,
   hobAppBot,
 } from "@hobbots/domain";
 import { Clock, Context, DateTime, Effect, Layer, Option, Redacted, Schema, Semaphore } from "effect";
@@ -31,6 +32,10 @@ import { deleteOutcome, HobAppKeys, type KeychainError } from "./keychain.ts";
  * to the hub with a code, and the hub exchanges it for the app's identity and private key. The key
  * goes to the OS keychain; GitHub's client and webhook secrets are dropped at once. The hub signs in
  * as the app with a JWT to list and remove its installations, and to mint its tokens (#224).
+ *
+ * An app the user already has can be linked instead (#1321): they give its ID and private key, and
+ * the hub reads the app with a JWT signed with that key before it keeps the key in the keychain. The
+ * hub did not make a linked app, so disconnecting it only forgets its key.
  */
 
 /** The repository permissions of the Hobbots GitHub App (ADR 020), and nothing else, by GitHub's names. */
@@ -89,11 +94,41 @@ export type HobAppStatus =
       readonly deleteUrl: string;
     };
 
-/** Why making a hob's app did not start. */
+/**
+ * Why making or linking a hob's app did not start. Linking can also find: `bad-id`, an ID that is no
+ * app ID or client ID; `not-a-key`, a key the hub cannot read; `key-refused`, a key GitHub does not take
+ * for that app; `taken`, an app another hob already has; `unreachable`, GitHub did not answer as
+ * expected; and `keychain-failed`, a key the keychain did not keep.
+ */
 export class HobAppRefused extends Schema.TaggedError<HobAppRefused>()("HobAppRefused", {
-  reason: Schema.Literals(["not-found", "retired", "connected", "left-over", "no-keychain"]),
+  reason: Schema.Literals([
+    "not-found",
+    "retired",
+    "connected",
+    "left-over",
+    "no-keychain",
+    "bad-id",
+    "not-a-key",
+    "key-refused",
+    "taken",
+    "unreachable",
+    "keychain-failed",
+  ]),
   message: Schema.String,
 }) {}
+
+/** What the user gives to link an app they already have (#1321): its app ID or client ID, and its key. */
+export interface HobAppLinkRequest {
+  readonly appId: string;
+  readonly privateKey: Redacted.Redacted<string>;
+}
+
+export interface HobAppLinked {
+  readonly app: HobGitHubApp;
+  readonly bot: string;
+  /** The permissions of `HOB_APP_PERMISSIONS` the app lacks, so the user can add them on GitHub. */
+  readonly missingPermissions: ReadonlyArray<HobGitHubAppMissingPermission>;
+}
 
 /** Why the redirect from GitHub did not give the hob its app. */
 export class HobAppNotMade extends Schema.TaggedError<HobAppNotMade>()("HobAppNotMade", {
@@ -147,7 +182,13 @@ export class HobGitHubAppService extends Context.Service<
     readonly installations: (
       agentId: AgentId,
     ) => Effect.Effect<ReadonlyArray<HobGitHubAppInstallation>, GitHubError | HobAppRefused>;
-    /** Removes the app's installations, then its key, then forgets it. */
+    /** Checks an app the user already has against GitHub, keeps its key and gives it to the hob (#1321). */
+    readonly link: (agentId: AgentId, request: HobAppLinkRequest) => Effect.Effect<HobAppLinked, HobAppRefused>;
+    /** The permissions the hob's actions use that the app itself lacks, as GitHub lists the app's now. */
+    readonly appMissing: (
+      agentId: AgentId,
+    ) => Effect.Effect<ReadonlyArray<HobGitHubAppMissingPermission>, GitHubError | HobAppRefused>;
+    /** Removes a made app's installations, then its key, then forgets it. A linked app keeps its installations. */
     readonly disconnect: (agentId: AgentId) => Effect.Effect<HobAppDisconnected, HobAppRefused>;
   }
 >()("@hobbots/charms/HobGitHubAppService") {}
@@ -187,12 +228,33 @@ const ConversionJson = Schema.Struct({
   pem: Schema.String,
 });
 const UserJson = Schema.Struct({ id: Schema.Number });
+/** What `GET /app` says of the app a JWT signs in as. */
+const AppJson = Schema.Struct({
+  id: Schema.Number,
+  slug: Schema.String,
+  client_id: Schema.String,
+  html_url: Schema.String,
+  owner: Schema.NullOr(Schema.Struct({ login: Schema.String })),
+  permissions: Schema.Record(Schema.String, Schema.String),
+});
+
+/** An app ID, or a client ID such as `Iv1.0123abcd` or `Iv23li…`; anything else never signs a JWT. */
+const APP_ID = /^(?:[0-9]{1,12}|Iv[0-9A-Za-z.]{1,40})$/;
+
+/** The permissions the hob's actions ask for that `granted`, as GitHub lists an app's, does not give. */
+export const missingPermissions = (granted: Readonly<Record<string, string>>): Array<HobGitHubAppMissingPermission> =>
+  Object.entries(HOB_APP_PERMISSIONS).flatMap(([name, access]) => {
+    const has = granted[name];
+    const enough = has === "write" || has === "admin" || (has === "read" && access === "read");
+    return enough ? [] : [{ name: name as keyof typeof HOB_APP_PERMISSIONS, access }];
+  });
 const InstallationJson = Schema.Struct({
   id: Schema.Number,
   account: Schema.NullOr(Schema.Struct({ login: Schema.String })),
   repository_selection: Schema.Literals(["all", "selected"]),
   html_url: Schema.String,
   suspended_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  permissions: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 
 const AccessTokenJson = Schema.Struct({ token: Schema.String, expires_at: Schema.String });
@@ -285,7 +347,8 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           };
         });
 
-      const start = (agentId: AgentId, deviceId: DeviceId, hubUrl: string) =>
+      /** Fails when the hob cannot be given an app now, whether made or linked. */
+      const canGive = (agentId: AgentId) =>
         Effect.gen(function* () {
           const agent = yield* agentOf(agentId);
           if (agent.status === "retired") {
@@ -310,6 +373,12 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               message: "This hub has no keychain Hobbots can use, so it cannot keep a hob's GitHub app key.",
             });
           }
+          return agent;
+        });
+
+      const start = (agentId: AgentId, deviceId: DeviceId, hubUrl: string) =>
+        Effect.gen(function* () {
+          const agent = yield* canGive(agentId);
           const state = Base64Url.encode(yield* random.randomBytes(STATE_BYTES));
           const hash = yield* hashOf(state);
           const expiresAt = (yield* Clock.currentTimeMillis) + STATE_TTL_MS;
@@ -406,32 +475,134 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               clientId: made.client_id,
               slug: made.slug,
               owner: made.owner.login,
+              origin: "made",
               botUserId: yield* botUserId(made.slug),
               htmlUrl: made.html_url,
               connectedAt: DateTime.formatIso(yield* DateTime.now),
             };
-            // The key is in the keychain before the hob's app counts as connected.
-            const unkept = yield* keys.write(open.agentId, pem).pipe(
-              Effect.as(null),
-              Effect.catch((error: KeychainError) => Effect.succeed(error)),
+            const unkept = yield* keep(
+              open.agentId,
+              app,
+              pem,
+              (message) =>
+                `GitHub made the app, but the hub's keychain did not keep its key: ${message} Delete the app on GitHub, then try again.`,
             );
-            if (unkept !== null) {
-              const why = `GitHub made the app, but the hub's keychain did not keep its key: ${unkept.message} Delete the app on GitHub, then try again.`;
-              // A write that failed may still have stored the key. Unless it is surely gone, the app
-              // is kept as left over, so the hub still knows a key may be there (#948).
-              const kept = yield* removeKey(open.agentId, true);
-              if (kept !== null) {
-                yield* Effect.uninterruptible(
-                  apps.save(open.agentId, app).pipe(Effect.andThen(apps.leave(open.agentId, `${why} ${kept}`))),
-                );
-              }
-              return yield* notKept(why, made.slug);
-            }
-            // What the user allowed the hob to do on GitHub as them is not allowed as its bot (ADR 022).
-            yield* grants.switchIdentity(GITHUB_CHARM, open.agentId, apps.save(open.agentId, app));
-            yield* tokens.forget(open.agentId);
+            if (unkept !== null) return yield* notKept(unkept, made.slug);
             yield* Effect.logInfo("A hob's GitHub app was made", { agentId: open.agentId, slug: app.slug });
             return { agentId: open.agentId, hobName: open.hobName, app, installUrl: installUrl(app) };
+          }),
+        );
+
+      /**
+       * Writes the app's key to the keychain, then gives the hob the app: the key is there before the
+       * app counts as connected. Answers why the keychain did not keep it, or null once the hob has it.
+       */
+      const keep = (
+        agentId: AgentId,
+        app: HobGitHubApp,
+        pem: Redacted.Redacted<string>,
+        why: (message: string) => string,
+      ) =>
+        Effect.gen(function* () {
+          const unkept = yield* keys.write(agentId, pem).pipe(
+            Effect.as(null),
+            Effect.catch((error: KeychainError) => Effect.succeed(error)),
+          );
+          if (unkept !== null) {
+            const problem = why(unkept.message);
+            // A write that failed may still have stored the key. Unless it is surely gone, the app
+            // is kept as left over, so the hub still knows a key may be there (#948).
+            const kept = yield* removeKey(agentId, true);
+            if (kept !== null) {
+              yield* Effect.uninterruptible(
+                apps.save(agentId, app).pipe(Effect.andThen(apps.leave(agentId, `${problem} ${kept}`))),
+              );
+            }
+            return problem;
+          }
+          // What the user allowed the hob to do on GitHub as them is not allowed as its bot (ADR 022).
+          yield* grants.switchIdentity(GITHUB_CHARM, agentId, apps.save(agentId, app));
+          yield* tokens.forget(agentId);
+          return null;
+        });
+
+      const linkRefused = (reason: HobAppRefused["reason"], message: string) => new HobAppRefused({ reason, message });
+
+      /** The app a JWT signed with `pem` signs in as, from `GET /app` (#1321). */
+      const appOfKey = (id: string, pem: Redacted.Redacted<string>) =>
+        Effect.gen(function* () {
+          const jwt = yield* appJwt(id, pem).pipe(
+            Effect.mapError(() =>
+              linkRefused(
+                "not-a-key",
+                "That is not a GitHub app private key. Paste the whole .pem file GitHub gave you.",
+              ),
+            ),
+          );
+          yield* remember(Redacted.value(jwt), "a linked GitHub app's sign-in");
+          const unreachable = (message: string) => linkRefused("unreachable", message);
+          const response = yield* send(asApp("/app", jwt), "the app").pipe(
+            Effect.mapError((error) => unreachable(error.message)),
+          );
+          if (response.status === 401) {
+            return yield* linkRefused(
+              "key-refused",
+              "GitHub did not accept this key for that app. Check the app ID, or generate a new private key in the app's settings on GitHub.",
+            );
+          }
+          if (response.status !== 200) return yield* unreachable(`GitHub answered ${response.status} for the app.`);
+          const found = yield* read(response, AppJson, "the app").pipe(
+            Effect.mapError((error) => unreachable(error.message)),
+          );
+          // GitHub signs in only the key's own app, so a JWT for another ID is refused above; this checks it again.
+          if (String(found.id) !== id && found.client_id !== id) {
+            return yield* linkRefused("key-refused", "This key belongs to another GitHub app than the ID you gave.");
+          }
+          return found;
+        });
+
+      const link = (agentId: AgentId, request: HobAppLinkRequest) =>
+        writing.withPermits(1)(
+          Effect.gen(function* () {
+            const agent = yield* canGive(agentId);
+            const id = request.appId.trim();
+            if (!APP_ID.test(id)) {
+              return yield* linkRefused(
+                "bad-id",
+                "Give the App ID or the Client ID from the app's settings on GitHub.",
+              );
+            }
+            const text = Redacted.value(request.privateKey).trim();
+            // Redacted before anything else reads it, so no failure below can show it.
+            yield* remember(text, `${agent.name}'s GitHub app key`);
+            const pem = Redacted.make(`${text}\n`);
+            const found = yield* appOfKey(id, pem);
+            const holder = yield* apps.holder(found.id);
+            if (holder !== null) {
+              return yield* linkRefused(
+                "taken",
+                `${found.slug} is already another hob's app. One app is one hob's name.`,
+              );
+            }
+            const app: HobGitHubApp = {
+              appId: found.id,
+              clientId: found.client_id,
+              slug: found.slug,
+              owner: found.owner?.login ?? "",
+              origin: "linked",
+              botUserId: yield* botUserId(found.slug),
+              htmlUrl: found.html_url,
+              connectedAt: DateTime.formatIso(yield* DateTime.now),
+            };
+            const unkept = yield* keep(
+              agentId,
+              app,
+              pem,
+              (message) => `The hub's keychain did not keep the app's key: ${message} Try again.`,
+            );
+            if (unkept !== null) return yield* linkRefused("keychain-failed", unkept);
+            yield* Effect.logInfo("A hob's GitHub app was linked", { agentId, slug: app.slug });
+            return { app, bot: hobAppBot(app), missingPermissions: missingPermissions(found.permissions) };
           }),
         );
 
@@ -573,25 +744,53 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
                 htmlUrl: installation.html_url,
                 suspended,
                 repositories: suspended ? null : yield* reached(agentId, app, installation.id, jwt),
+                // GitHub lists what an installation grants; one that lists nothing is not judged.
+                missingPermissions:
+                  installation.permissions === undefined ? [] : missingPermissions(installation.permissions),
               } satisfies HobGitHubAppInstallation;
             }),
           { concurrency: 4 },
         );
 
-      const installations = (agentId: AgentId) =>
+      /** Reads the hob's app as itself with `use`, or answers nothing when it has none. */
+      const asHobApp = <A, E, R>(
+        agentId: AgentId,
+        use: (app: HobGitHubApp, jwt: Redacted.Redacted<string>) => Effect.Effect<ReadonlyArray<A>, E, R>,
+      ) =>
         Effect.gen(function* () {
           yield* agentOf(agentId);
           const app = yield* apps.get(agentId);
           if (app === null) return [];
-          const jwt = yield* jwtFor(agentId, app);
-          const listed = yield* listInstallations(agentId, app, jwt);
-          yield* tokens.settled(
-            agentId,
-            app,
-            listed.some((installation) => installation.suspended_at == null),
-          );
-          return yield* named(agentId, app, jwt, listed);
+          return yield* use(app, yield* jwtFor(agentId, app));
         });
+
+      const installations = (agentId: AgentId) =>
+        asHobApp(agentId, (app, jwt) =>
+          Effect.gen(function* () {
+            const listed = yield* listInstallations(agentId, app, jwt);
+            yield* tokens.settled(
+              agentId,
+              app,
+              listed.some((installation) => installation.suspended_at == null),
+            );
+            return yield* named(agentId, app, jwt, listed);
+          }),
+        );
+
+      /**
+       * The permissions the hob's actions use that the app itself lacks, from `GET /app`: what an app
+       * installed nowhere yet still needs, which no installation can say (#1321).
+       */
+      const appMissing = (agentId: AgentId) =>
+        asHobApp(agentId, (app, jwt) =>
+          Effect.gen(function* () {
+            const response = yield* send(asApp("/app", jwt), "the app");
+            if (response.status === 401) return yield* Effect.flip(tokens.keyRefused(agentId, app));
+            if (response.status !== 200) return yield* answered(response.status, "the app");
+            const found = yield* read(response, AppJson, "the app");
+            return missingPermissions(found.permissions);
+          }),
+        );
 
       /** Removes every installation of the app, so it reaches no repository even with a leaked key. */
       const uninstall = (agentId: AgentId, app: HobGitHubApp) =>
@@ -646,12 +845,15 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               // Disconnecting a left-over app dismisses it. Without its key the hub cannot try its
               // installations again; only deleting the app on GitHub closes what is left.
               if (left === null) return { deleteUrl: null, problem: null, keyKept };
-              if (!dismiss) return { deleteUrl: deleteUrl(left.app.slug), problem: left.problem, keyKept };
+              const leftAt = left.app.origin === "linked" ? null : deleteUrl(left.app.slug);
+              if (!dismiss) return { deleteUrl: leftAt, problem: left.problem, keyKept };
               yield* apps.remove(agentId);
-              return { deleteUrl: deleteUrl(left.app.slug), problem: null, keyKept };
+              return { deleteUrl: leftAt, problem: null, keyKept };
             }
-            // Tried once and shown, never retried in a loop (ADR 022).
-            const problem = yield* uninstall(agentId, app);
+            // Tried once and shown, never retried in a loop (ADR 022). The hub did not make a linked
+            // app, so its installations stay as the user set them on GitHub (#1321).
+            const problem = app.origin === "linked" ? null : yield* uninstall(agentId, app);
+            const deleteAt = app.origin === "linked" ? null : deleteUrl(app.slug);
             const kept = yield* removeKey(agentId, true);
             const problems = [problem, kept].filter((each) => each !== null);
             // The hob acts as the bot until here, then as the user: nothing allowed for its bot runs as
@@ -659,13 +861,13 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             if (problems.length === 0) {
               yield* grants.switchIdentity(GITHUB_CHARM, agentId, apps.remove(agentId));
               yield* Effect.logInfo("A hob's GitHub app was disconnected", { agentId, slug: app.slug });
-              return { deleteUrl: deleteUrl(app.slug), problem: null, keyKept: null };
+              return { deleteUrl: deleteAt, problem: null, keyKept: null };
             }
             // Kept as left over, so the problem and where to delete the app stay shown (ADR 022).
             const left = problems.join(" ");
             yield* grants.switchIdentity(GITHUB_CHARM, agentId, apps.leave(agentId, left));
             yield* Effect.logWarning("A hob's GitHub app was not fully removed", { agentId, slug: app.slug });
-            return { deleteUrl: deleteUrl(app.slug), problem: left, keyKept: kept };
+            return { deleteUrl: deleteAt, problem: left, keyKept: kept };
           }),
         );
 
@@ -674,7 +876,16 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           Effect.map(({ deleteUrl, problem }) => ({ deleteUrl, problem })),
         );
 
-      const service = HobGitHubAppService.of({ status, start, form, complete, installations, disconnect });
+      const service = HobGitHubAppService.of({
+        status,
+        start,
+        form,
+        complete,
+        link,
+        installations,
+        appMissing,
+        disconnect,
+      });
       const retired = RetiredHobGitHubApp.of({
         remove: (agentId) =>
           // What could not be removed stays with the hob's app as left over, shown by its status.

@@ -1,4 +1,4 @@
-import { AgentId, HobGitHubApp, HobGitHubAppInstallation } from "@hobbots/domain";
+import { AgentId, HobGitHubApp, HobGitHubAppInstallation, HobGitHubAppMissingPermission } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound } from "./errors.ts";
@@ -13,6 +13,11 @@ export const HobGitHubAppStatus = Schema.Union([
   Schema.TaggedStruct("None", {
     /** Why this hub cannot make a hob's app: no keychain to keep its key in. Null when it can. */
     cannotCreate: Schema.NullOr(Schema.Literal("no-keychain")),
+    /**
+     * Why an app the user already has cannot be linked from here, or null when it can: no keychain, or
+     * `not-local`, a browser that is not on the hub's own computer, which must never send the key.
+     */
+    cannotLink: Schema.NullOr(Schema.Literals(["no-keychain", "not-local"])),
   }),
   Schema.TaggedStruct("Connected", {
     app: HobGitHubApp,
@@ -58,18 +63,52 @@ export const HobGitHubAppDisconnected = Schema.Struct({
 export type HobGitHubAppDisconnected = typeof HobGitHubAppDisconnected.Type;
 
 /**
- * Making the hob's app did not start: the hob is retired, already has one, still shows an old one that
- * was not fully removed, the hub has no keychain, or the request did not come from the hub's own
- * computer, where GitHub's redirect can reach it.
+ * Making or linking the hob's app did not start: the hob is retired, already has one, still shows an
+ * old one that was not fully removed, the hub has no keychain, or the request did not come from the
+ * hub's own computer. Linking an app the user already has (#1321) can also find: `bad-id`, no app ID or
+ * client ID; `not-a-key`, no private key the hub can read; `key-refused`, a key GitHub does not take
+ * for that app; `taken`, another hob's app; `unreachable`, GitHub did not answer as expected; and
+ * `keychain-failed`, a key the keychain did not keep. The client words each reason itself.
  */
 export class HobGitHubAppRefused extends Schema.TaggedError<HobGitHubAppRefused>()(
   "HobGitHubAppRefused",
   {
-    reason: Schema.Literals(["retired", "connected", "left-over", "no-keychain", "not-local"]),
+    reason: Schema.Literals([
+      "retired",
+      "connected",
+      "left-over",
+      "no-keychain",
+      "not-local",
+      "bad-id",
+      "not-a-key",
+      "key-refused",
+      "taken",
+      "unreachable",
+      "keychain-failed",
+    ]),
     message: Schema.String,
   },
   { httpApiStatus: 409 },
 ) {}
+
+/** GitHub's private keys are under 4 KB; anything much longer is not one. */
+const KEY_LIMIT = 16_384;
+
+/** An app the user already has (#1321): its App ID or client ID, and its private key as GitHub gave it. */
+export const HobGitHubAppLink = Schema.Struct({
+  appId: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(64)),
+  // Redacted as soon as it is decoded, so the hub never logs or shows it.
+  privateKey: Schema.RedactedFromValue(Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(KEY_LIMIT))),
+});
+export type HobGitHubAppLink = typeof HobGitHubAppLink.Type;
+
+export const HobGitHubAppLinked = Schema.Struct({
+  app: HobGitHubApp,
+  /** The bot the hob acts as now. */
+  bot: Schema.String,
+  missingPermissions: Schema.Array(HobGitHubAppMissingPermission),
+});
+export type HobGitHubAppLinked = typeof HobGitHubAppLinked.Type;
 
 export class HobGitHubAppGroup extends HttpApiGroup.make("hobGitHubApp")
   .add(
@@ -84,12 +123,27 @@ export class HobGitHubAppGroup extends HttpApiGroup.make("hobGitHubApp")
       success: HobGitHubAppStarted,
       error: [AgentNotFound, HobGitHubAppRefused],
     }),
+    // Checks an app the user already has with GitHub and keeps its key; only from the hub's own computer.
+    HttpApiEndpoint.post("link", "/agents/:agentId/github-app/link", {
+      params: { agentId: AgentId },
+      payload: HobGitHubAppLink,
+      success: HobGitHubAppLinked,
+      error: [AgentNotFound, HobGitHubAppRefused],
+    }),
     HttpApiEndpoint.get("installations", "/agents/:agentId/github-app/installations", {
       params: { agentId: AgentId },
-      success: Schema.Struct({ installations: Schema.Array(HobGitHubAppInstallation) }),
+      success: Schema.Struct({
+        installations: Schema.Array(HobGitHubAppInstallation),
+        /**
+         * While the app is installed nowhere, the permissions the hob's actions use that the app itself
+         * lacks, which no installation can say yet. Empty once it is installed: each installation says.
+         */
+        missingPermissions: Schema.Array(HobGitHubAppMissingPermission),
+      }),
       error: [AgentNotFound, GitHubUnreachable],
     }),
-    // Removes the app's installations and its key; the hob acts as you again. Dismisses a left-over app.
+    // Removes a made app's installations, and the key of any app; the hob acts as you again. A linked
+    // app's installations stay. Dismisses a left-over app.
     HttpApiEndpoint.post("disconnect", "/agents/:agentId/github-app/disconnect", {
       params: { agentId: AgentId },
       success: HobGitHubAppDisconnected,
