@@ -17,7 +17,7 @@ import {
 import { Context, Effect, Layer, Option } from "effect";
 import type { TurnStart } from "./commit-identity.ts";
 import type { HobbotsRepository } from "./repository.ts";
-import type { ToolAccess, ToolPolicy } from "./runtime.ts";
+import type { RuntimeAdapterShape, ToolAccess, ToolPolicy } from "./runtime.ts";
 
 /**
  * The preset's answer for an operation, built-in or declared by a Charm (ADR 031), narrowed by the
@@ -34,10 +34,17 @@ export const operationDecision = (
 
 /**
  * Whether a turn may search the web with its runtime's own search (ADR 036): only with tool access
- * and where Search the web answers Allow. It takes no Ask, so anything else offers no search.
+ * and where Search the web answers Allow. It takes no Ask, so anything else offers no search. A
+ * runtime whose search can open pages, outside `web_fetch` and the page rules, searches only where
+ * Use the web answers Allow too, since none of its pages can ask or be refused.
  */
-export const turnWebSearch = (access: ToolAccess | null | undefined): boolean =>
-  access != null && operationDecision(access.policy, "search-web") === "allow";
+export const turnWebSearch = (
+  access: ToolAccess | null | undefined,
+  runtime: Pick<RuntimeAdapterShape, "searchOpensPages">,
+): boolean =>
+  access != null &&
+  operationDecision(access.policy, "search-web") === "allow" &&
+  (runtime.searchOpensPages === false || operationDecision(access.policy, "use-web") === "allow");
 
 /**
  * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,

@@ -11,9 +11,9 @@ A hob thinks with Claude Code or Codex, signed in with your own account. Each tu
 A hob searches with its runtime's own search, never with a provider of Hobbots' own.
 
 - **Claude Code** runs the search on Anthropic's servers, which search with their partners. The query goes to Anthropic.
-- **Codex** is held to cached search: OpenAI answers from its own index and never opens a page for the hob. The query goes to OpenAI.
+- **Codex** is held to cached search: OpenAI answers from its own index, never live. The query goes to OpenAI. Its search can also open a page it names, served by OpenAI, which Hobbots' site rules cannot see, so Hobbots offers Codex's search only where Use the web answers Allow, no site is blocked and pages are allowed each turn. Under Careful, a Codex hob is offered no search and reads pages with `web_fetch`.
 
-Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting does not hold yet ([evidence](docs/evidence/2026-11-09-v0-0-4-mac-smoke.md)); they were reported under the [security policy](SECURITY.md).
+Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting did not hold ([evidence](docs/evidence/2026-11-09-v0-0-4-mac-smoke.md)); they were reported under the [security policy](SECURITY.md). Hobbots has since been changed to offer Codex's search only as above, which is not yet checked with real models.
 
 ## Pages a hob reads
 
@@ -22,9 +22,9 @@ Search the web can be set to Never for a hob in its Permissions, and then its ru
 - It sends a plain `GET` with the user agent `Hobbots/<version> (+https://hobbots.ai)`. It sends no cookie, password, sign-in or body, and nothing else of yours.
 - It honors robots.txt rules that name Hobbots. It does not read a site you blocked in Settings › Web.
 - It never reaches `localhost`, link-local or cloud metadata addresses. A page on your local network asks you first.
-- A page on a site you have not allowed asks you first under Careful. The same real-model run found Codex reading such a page without asking; it was reported under the [security policy](SECURITY.md). An address a hob wrote itself, which could carry your data in it, asks under every preset.
+- A page on a site you have not allowed asks you first under Careful. The same real-model run found Codex reading such a page without asking, through its own search; it was reported under the [security policy](SECURITY.md), and Codex no longer searches under Careful. An address a hob wrote itself, which could carry your data in it, asks under every preset.
 
-Use the web can be set to Never for a hob in its Permissions, and then it is meant to be offered no `web_fetch`. The same Codex finding applies here.
+Use the web can be set to Never for a hob in its Permissions, and then it is meant to be offered no `web_fetch`. The same run found Codex reading pages through its own search with Use the web at Never; its search is now off whenever Use the web is Never, which is not yet checked with real models.
 
 ## After a hob reads the web
 

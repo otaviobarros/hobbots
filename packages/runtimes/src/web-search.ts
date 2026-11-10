@@ -55,13 +55,14 @@ export const claudeWebSearched = (id: string, input: unknown, response: unknown)
 /** Codex's `webSearch` item's action, as its App Server reports it (0.166.0 and later). */
 export type CodexWebSearchAction =
   | { readonly type: "search"; readonly query?: string | null; readonly queries?: ReadonlyArray<string> | null }
-  | { readonly type: "openPage" | "findInPage" | "other" };
+  | { readonly type: "openPage" | "findInPage"; readonly url?: string | null }
+  | { readonly type: "other" };
 
 /**
  * A completed Codex `webSearch` item that searched: its query from the action, which holds the
  * whole search in `query` or `queries` (`item.query` can be a shortened display string), and the
  * hits in `results`, which Codex passes on as opaque JSON. An action that opened or searched a page
- * is not a search, so it reports nothing; cached search never takes one.
+ * is not a search, so it reports nothing (`codexPageRead` reads it).
  */
 export const codexWebSearched = (item: {
   readonly id: string;
@@ -78,6 +79,21 @@ export const codexWebSearched = (item: {
     query: [...new Set(queries)].join("; ") || (nonEmpty(item.query) ?? ""),
     results: hitsOf(item.results ?? []),
   };
+};
+
+/** What a session read where Codex's search names no page: its source on the read-the-web mark. */
+export const CODEX_SEARCH_PAGE = "a page Codex's web search opened";
+
+/**
+ * The page a completed Codex `webSearch` item read, when its action was not a search: `openPage`
+ * and `findInPage` name a URL the model chose, and any other action may read one too. Its text
+ * reached the model, so the session is marked as having read the web (ADR 036), but the URL is
+ * never found, since the model wrote it.
+ */
+export const codexPageRead = (item: { readonly action?: CodexWebSearchAction | null }): string | undefined => {
+  const action = item.action;
+  if (action == null || action.type === "search") return undefined;
+  return (action.type === "other" ? undefined : nonEmpty(action.url)) ?? CODEX_SEARCH_PAGE;
 };
 
 /**

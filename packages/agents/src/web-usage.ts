@@ -23,7 +23,8 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema, Semaphore } from "effect";
 import { announcer, EventPublisher } from "./ports.ts";
-import type { RuntimeEvent } from "./runtime.ts";
+import type { RuntimeAdapterShape, RuntimeEvent, ToolAccess } from "./runtime.ts";
+import { operationDecision, turnWebSearch } from "./tools.ts";
 
 /**
  * What hobs search and read on the web, and the limits on it (ADR 036, Usage and limits). The hub
@@ -279,6 +280,19 @@ export const webLimitReason = {
   blockedSite: (site: string) => `${site} is on the blocked sites in Settings › Web, so web_fetch does not read it.`,
 };
 
+/**
+ * Why a runtime whose search can open pages has no search this turn (ADR 036): its pages open outside
+ * `web_fetch`, so it searches only where every page would be read without asking.
+ */
+export const pageSearchReason = {
+  useWeb:
+    "Web search is off for this turn: this runtime's search can open pages, and Use the web asks first or is Never for this hob. Read pages with web_fetch instead.",
+  blockedSites:
+    "Web search is off for this turn: this runtime's search can open pages, and Settings › Web blocks some sites. Read pages with web_fetch instead.",
+  pagesPerTurn:
+    "Web search is off for this turn: this runtime's search can open pages, and Settings › Web allows no pages a turn.",
+};
+
 /** Where a turn runs: its hob, chat and reply, the Task and Attempt it works on once known, and its runtime. */
 export interface WebTurnPlace {
   readonly agentId: AgentId;
@@ -297,6 +311,11 @@ export interface WebSearchTurn {
   readonly on: boolean;
   /** What the hob is told when a limit turned search off for the turn, or null. */
   readonly note: string | null;
+  /**
+   * Why a search that can open pages stays off this turn, past the policy (`pageSearchReason`): a
+   * blocked site, or no pages allowed a turn. Null when nothing in Settings › Web holds it.
+   */
+  readonly pagesHeld: string | null;
   /** `PromptRequest.checkWebSearch`: refuses a search past a limit, with the words that name it. */
   readonly check: (query: string) => Effect.Effect<string | null>;
   /** Reads the turn's events: where it is billed, and each search, which it records. */
@@ -307,17 +326,30 @@ export interface WebSearchTurn {
 
 /**
  * What a turn's request takes from its web search: whether it may search, once the policy allows it
- * and the limits leave it on, the check for each search, and the note for its briefing.
+ * (`turnWebSearch`) and the limits leave it on, the check for each search, and the note for its
+ * briefing. Where the runtime's search can open pages, Use the web must answer Allow and Settings ›
+ * Web must hold no page back, since those pages open outside `web_fetch` and cannot ask (ADR 036).
  */
-export const webSearchRequest = (allowed: boolean, web: WebSearchTurn) => ({
-  webSearch: allowed && web.on,
-  checkWebSearch: web.check,
-  note: allowed ? web.note : null,
-});
+export const webSearchRequest = (
+  access: ToolAccess | null | undefined,
+  web: WebSearchTurn,
+  runtime: Pick<RuntimeAdapterShape, "searchOpensPages">,
+) => {
+  const searchable = access != null && operationDecision(access.policy, "search-web") === "allow";
+  const opensPages = runtime.searchOpensPages !== false;
+  const held =
+    !searchable || !opensPages ? null : !turnWebSearch(access, runtime) ? pageSearchReason.useWeb : web.pagesHeld;
+  return {
+    webSearch: searchable && held === null && web.on,
+    checkWebSearch: web.check,
+    note: searchable ? (web.note ?? held) : null,
+  };
+};
 
 const UNLIMITED: WebSearchTurn = {
   on: true,
   note: null,
+  pagesHeld: null,
   check: () => Effect.succeed(null),
   see: () => Effect.void,
   end: Effect.void,
@@ -334,7 +366,7 @@ export const webSearchTurn = (place: WebTurnPlace): Effect.Effect<WebSearchTurn>
     if (Option.isNone(found)) return UNLIMITED;
     const records = found.value;
     const announce = yield* webAnnouncer;
-    const { limits } = yield* webLimitsOf(place.agentId);
+    const { limits, blockedSites } = yield* webLimitsOf(place.agentId);
     const now = yield* DateTime.now;
     const today = yield* records.searchesSince(place.agentId, DateTime.formatIso(DateTime.subtract(now, { days: 1 })));
     const held = place.work === null ? null : yield* records.takeSearchHold(place.work);
@@ -357,6 +389,12 @@ export const webSearchTurn = (place: WebTurnPlace): Effect.Effect<WebSearchTurn>
     return {
       on: off === null,
       note: off === null ? null : `Web search is off for this turn. ${off}`,
+      pagesHeld:
+        blockedSites.length > 0
+          ? pageSearchReason.blockedSites
+          : limits.pagesPerTurn === 0
+            ? pageSearchReason.pagesPerTurn
+            : null,
       check: () =>
         Effect.gen(function* () {
           if (allowed >= limits.searchesPerTurn) return webLimitReason.searchesPerTurn(limits);
