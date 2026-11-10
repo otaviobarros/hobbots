@@ -1,6 +1,6 @@
 # ADR 037 — Chat and camps
 
-Status: **Accepted.** Amends the threads of the [conversations contract](../architecture/conversations.md) (a thread has a kind, and its transcript is split into chapters), the screens of [ADR 027](027-quest-room.md) (the lanes layout of the Quest room goes; a quest opens as a thread in its camp's sheet, and ADR 027's records stand), and the starting context of a runtime session in [ADR 017](017-switching-brains.md) and [ADR 028](028-memory.md) (a session starts from records, not from the transcript). Builds on the event journal of [ADR 013](013-event-journal.md), the client stores of [ADR 016](016-client-stores-outside-react.md), the Task tree of [ADR 018](018-tasks-and-quests.md) and the backpack of [ADR 019](019-hob-backpack-and-continuations.md). Records the architecture for the chat and camps work ([#1359](https://github.com/otaviobarros/hobbots/issues/1359)).
+Status: **Accepted.** Amends the threads of the [conversations contract](../architecture/conversations.md) (a thread has a kind, and its transcript is split into chapters), the screens of [ADR 027](027-quest-room.md) (the lanes layout of the Quest room goes; a quest opens as a thread in its camp's sheet, and ADR 027's records stand), the starting context of a runtime session in [ADR 017](017-switching-brains.md) and [ADR 028](028-memory.md) (a session starts from records, not from the transcript), and the memory model of ADR 028 (it becomes the hub's brain). Builds on the event journal of [ADR 013](013-event-journal.md), the client stores of [ADR 016](016-client-stores-outside-react.md), the Task tree of [ADR 018](018-tasks-and-quests.md) and the backpack of [ADR 019](019-hob-backpack-and-continuations.md). Records the architecture for the chat and camps work ([#1359](https://github.com/otaviobarros/hobbots/issues/1359)).
 
 ## Context
 
@@ -78,6 +78,14 @@ Records are written once, in the same transaction and journal as the message tha
 - **The hub hands out migration and ADR numbers.** A hob asks with `claim`, and the hub gives the next free number for that scope, unique across every hob, chat and camp.
 - **The hub watches paths and branches.** A Task's claims on paths and branches are checked against every other open claim. On a clash, the hub settles what it can (a number) and tells each lead involved through the backpack. The UI shows it as a Heads-up.
 - The clash check is a pure rule run in the transaction that writes the claim, with named thresholds and tests. It calls no model.
+
+### The hub's brain
+
+- **One model for the hub's own judgments.** The memory model of ADR 028 becomes the hub's brain: one choice in Settings of a provider, model, effort and fallback, with an optional model per task. It runs the same way, through the hub's model endpoint on your connected sign-ins, with no API key. No AI stays a valid choice.
+- **Onboarding** shows it with the smallest model of the runtime you just connected already picked, so it is one tap, not a new question.
+- **It judges; rules decide facts.** The brain writes the brief and chapter summaries, judges whether a chapter is drifting into its own topic, and whether two quests clash in meaning. Numbers, path and branch clashes, and every status stay pure rules, so they are exact, free and work under No AI.
+- **Only in projectors.** The brain is called by cursor projectors, never in a command's request path. With No AI, a summary falls back to a plain one and a judgment to its rule.
+- **A decision port.** Judgments go through `HubDecider`: a schema of choices and an input in, a choice and a confidence out, decoded by `Schema`. The first implementation asks the hub's brain for an answer in that shape. A typed decision model, such as TypeSafe's Jev, can implement it later as a provider that needs your API key.
 
 ### Every lifecycle is an explicit machine
 
@@ -163,4 +171,5 @@ The scenarios that would show this decision holds. None is proven yet; each name
 - Moving a chapter into a camp moves its messages, decisions, artifacts, open questions and quests in one transaction and leaves a stub; nothing appears in both. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - A changed decision is kept and crossed out; find answers "where did we decide X" from records and cites them; a private camp's entries never reach memory. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - The brief and chapter summaries are written by projectors that resume from their cursor after a restart and write nothing twice. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
+- With No AI chosen for the hub's brain, briefs, chapter summaries and camp suggestions still appear from their rules, and no model is called; with a brain chosen, a `HubDecider` answer that does not decode falls back to the rule. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - A quest's updates land in its camp; two quests in different camps that ask for a migration number get different numbers, and two that claim the same path both get a Heads-up through the backpack. Not proven yet ([#1365](https://github.com/otaviobarros/hobbots/issues/1365)).
