@@ -1,5 +1,5 @@
 import { HobbotsRepository, MemoryCaptureLog } from "@hobbots/agents";
-import { Agent, AgentId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, TaskId, Thread, ThreadId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -79,5 +79,54 @@ describe("MemoryCaptureLog", () => {
     // Released, compaction goes on as before, and the next hold starts at the head.
     expect(result.released).toBe(1);
     expect(result.again).toEqual({ sequence: 10_002, sessions: [] });
+  });
+
+  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+  it("[TC-GEN-1377-03] names the private camps, and the Tasks in one, as they stand now", async () => {
+    const result = await Effect.gen(function* () {
+      const log = yield* MemoryCaptureLog;
+      const repo = yield* HobbotsRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* seed;
+      const camp = ThreadId.make("camp");
+      const campThread = new Thread({
+        id: camp,
+        agentId,
+        title: "Offer letters",
+        private: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      yield* repo.upsertThread(campThread);
+      const task = (id: string, thread: ThreadId | null) =>
+        sql`INSERT INTO tasks ${sql.insert({
+          id,
+          owner_id: agentId,
+          parent_id: null,
+          root_id: id,
+          thread_id: thread,
+          brief: "Draft it",
+          state: "queued",
+          created_at: now,
+          updated_at: now,
+        })}`;
+      yield* task("in-camp", camp);
+      yield* task("in-thread", threadId);
+      yield* task("in-none", null);
+      const ask = {
+        threadIds: new Set([camp, threadId, ThreadId.make("gone")]),
+        taskIds: new Set(["in-camp", "in-thread", "in-none", "gone"].map((id) => TaskId.make(id))),
+      };
+      const privateNow = yield* log.privateWork(ask);
+      // Made public again, the camp is captured from then on.
+      yield* repo.upsertThread(new Thread({ ...campThread, private: false }));
+      const publicAgain = yield* log.privateWork(ask);
+      const none = yield* log.privateWork({ threadIds: new Set(), taskIds: new Set() });
+      return { privateNow, publicAgain, none };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.privateNow).toEqual({ threadIds: new Set(["camp"]), taskIds: new Set(["in-camp"]) });
+    expect(result.publicAgain).toEqual({ threadIds: new Set(), taskIds: new Set() });
+    expect(result.none).toEqual({ threadIds: new Set(), taskIds: new Set() });
   });
 });

@@ -1,5 +1,5 @@
-import { MemoryCaptureLog, type MemoryCaptureSession } from "@hobbots/agents";
-import { AgentId } from "@hobbots/domain";
+import { MemoryCaptureLog, type MemoryCaptureSession, type MemoryCaptureWork } from "@hobbots/agents";
+import { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { EventJournal } from "./journal.ts";
@@ -43,7 +43,28 @@ export const MemoryCaptureLive = Layer.effect(
       return { sequence: Number(moved?.sequence), sessions: [] };
     }).pipe(sql.withTransaction, sqlOrDie);
 
+    /** Of `work`, the private camps, and the Tasks in one (ADR 037), read now. */
+    const privateWork = (work: MemoryCaptureWork) =>
+      Effect.gen(function* () {
+        const threads =
+          work.threadIds.size === 0
+            ? []
+            : yield* sql<{ readonly id: string }>`SELECT id FROM threads
+                WHERE private = 1 AND ${sql.in("id", [...work.threadIds])}`;
+        const tasks =
+          work.taskIds.size === 0
+            ? []
+            : yield* sql<{ readonly id: string }>`SELECT tasks.id AS id FROM tasks
+                JOIN threads ON threads.id = tasks.thread_id
+                WHERE threads.private = 1 AND ${sql.in("tasks.id", [...work.taskIds])}`;
+        return {
+          threadIds: new Set(threads.map((row) => ThreadId.make(row.id))),
+          taskIds: new Set(tasks.map((row) => TaskId.make(row.id))),
+        };
+      }).pipe(sqlOrDie);
+
     return MemoryCaptureLog.of({
+      privateWork,
       hold,
       release: sqlOrDie(sql`UPDATE memory_capture SET holding = 0 WHERE id = 1`.pipe(Effect.asVoid)),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),

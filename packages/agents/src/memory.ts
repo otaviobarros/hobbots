@@ -26,6 +26,7 @@ import {
   memoryScopeAllowed,
   memoryScopeKey,
   type SafetyPreset,
+  type TaskId,
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
@@ -393,6 +394,12 @@ export interface MemoryCaptureState {
   readonly sessions: ReadonlyArray<MemoryCaptureSession>;
 }
 
+/** The work journal entries belong to: threads, and the Tasks worked outside any chat. */
+export interface MemoryCaptureWork {
+  readonly threadIds: ReadonlySet<ThreadId>;
+  readonly taskIds: ReadonlySet<TaskId>;
+}
+
 /**
  * The capture worker's cursor over the event journal (ADR 028, Capture and summaries). The journal
  * is the outbox: while the cursor holds, journal compaction keeps every entry after it, however old.
@@ -419,5 +426,10 @@ export class MemoryCaptureLog extends Context.Service<
       active: ReadonlyArray<MemoryCaptureSession>,
       ended: ReadonlyArray<MemorySessionId>,
     ) => Effect.Effect<void>;
+    /**
+     * Of `work`, the threads that are private camps now, and the Tasks whose thread is one (ADR 037).
+     * Read as capture sends, so a camp made private stops capture from then on, a replay included.
+     */
+    readonly privateWork: (work: MemoryCaptureWork) => Effect.Effect<MemoryCaptureWork>;
   }
 >()("@hobbots/agents/MemoryCaptureLog") {}

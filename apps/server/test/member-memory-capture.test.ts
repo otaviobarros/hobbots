@@ -1,8 +1,8 @@
-import { MemoryCapture, MemoryStore } from "@hobbots/agents";
-import type { AgentId, MemoryCaptureItem, TaskTree } from "@hobbots/domain";
+import { HobbotsRepository, MemoryCapture, MemoryStore } from "@hobbots/agents";
+import { type AgentId, type MemoryCaptureItem, type TaskTree, Thread } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { MemoryCaptureLive } from "@hobbots/persistence";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   continuations,
@@ -151,5 +151,43 @@ describe("memory capture of a party's work", () => {
     for (const attempt of [pips, nettles]) {
       expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, attempt)).toEqual([]);
     }
+  }, 30_000);
+
+  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+  it("[TC-GEN-1377-04] nothing of a private camp reaches memory, its Quest's members' work included", async () => {
+    const memory = makeMemoryStoreFake();
+    const party = partyHub({ memory: memory.store, activity: true });
+    dispose = party.dispose;
+    const captureRound = captureOver(party, memory);
+    expect(await captureRound()).toBe(true);
+    await party.run(
+      HobbotsRepository.use((repo) =>
+        Effect.flatMap(repo.findThread(threadId), (thread) =>
+          repo.upsertThread(new Thread({ ...Option.getOrThrow(thread), kind: "camp", private: true })),
+        ),
+      ),
+    );
+    await party.run(
+      send([
+        "Plan the surprise party",
+        hub("delegate_task", {
+          key: "venue",
+          hob: "Quill",
+          brief: [
+            "Book the venue",
+            hub("complete_task", { delivered: true, key: "booked", summary: "The garden is booked" }),
+          ].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$venue.task_id"] }),
+      ]),
+    );
+    const tree = await party.run(treeWhen((each) => ownedBy(each, QUILL)?.state === "completed"));
+    await party.run(
+      messagesWhen((all) => continuations(all).some((reply) => reply.content.includes("The garden is booked"))),
+    );
+    expect(await captureRound()).toBe(true);
+
+    expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, threadId)).toEqual([]);
+    expect(memory.controls.captured({ _tag: "Hob", agentId: QUILL }, attemptOf(tree, QUILL))).toEqual([]);
   }, 30_000);
 });

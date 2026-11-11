@@ -32,6 +32,7 @@ import {
   MemoryCaptureLog,
   type MemoryCaptureSession,
   type MemoryCaptureState,
+  type MemoryCaptureWork,
   MemorySaves,
   MemoryStore,
 } from "./memory.ts";
@@ -49,7 +50,8 @@ import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
  * acknowledged all of it. A session quiet for 30 minutes, or whose thread was archived or whose Task
  * ended, is ended, so memory writes its summary page; no runtime turn is spent on it. The same worker
  * sends the `memory_save` calls memory could not take at once. While memory does not answer, nothing
- * moves and nothing is lost: journal compaction keeps every entry after the cursor.
+ * moves and nothing is lost: journal compaction keeps every entry after the cursor. A private camp's
+ * entries, and its Quest's work outside any chat, are never sent (ADR 037); the cursor moves past them.
  */
 
 /** How long a session is quiet before it ends. */
@@ -115,9 +117,18 @@ export interface CapturedEntry {
    */
   readonly opening: ReadonlyArray<MemoryCaptureItem> | null;
   readonly items: ReadonlyArray<MemoryCaptureItem>;
-  /** The session ends: its thread was archived, or its Task ended. */
+  /** The session ends: its thread was archived or made a private camp, or its Task ended. */
   readonly ends: boolean;
+  /** The thread the entry happened in and the Task it worked on, either known, to tell a private camp's (ADR 037). */
+  readonly work: EntryWork;
 }
+
+interface EntryWork {
+  readonly threadId: ThreadId | null;
+  readonly taskId: TaskId | null;
+}
+
+const inThread = (threadId: ThreadId | null): EntryWork => ({ threadId, taskId: null });
 
 const threadStart = (threadId: ThreadId): MemoryCaptureItem => ({
   key: `start:${threadId}`,
@@ -211,12 +222,22 @@ const arrivalOf = (
   const [target, id] = splitTarget(delivery.target);
   if (target === "thread") {
     const threadId = id as ThreadId;
-    return { sessionId: threadId, agentId: item.recipientId, opening: [threadStart(threadId)], items, ends: false };
+    const work = { threadId, taskId: item.taskId };
+    return {
+      sessionId: threadId,
+      agentId: item.recipientId,
+      opening: [threadStart(threadId)],
+      items,
+      ends: false,
+      work,
+    };
   }
   if (target === "task") {
     const attemptId = delivery.turnId as AttemptId;
-    const opening = [attemptStart(attemptId, id as TaskId, item.threadId)];
-    return { sessionId: attemptId, agentId: item.recipientId, opening, items, ends: false };
+    const taskId = id as TaskId;
+    const opening = [attemptStart(attemptId, taskId, item.threadId)];
+    const work = { threadId: item.threadId, taskId };
+    return { sessionId: attemptId, agentId: item.recipientId, opening, items, ends: false, work };
   }
   return null;
 };
@@ -240,10 +261,11 @@ const taskChangeOf = (
 ): CapturedEntry | null => {
   const { task, attempt } = event;
   if (task.parentId === null) return null;
+  const work = { threadId: task.threadId, taskId: task.id };
   if (attempt === null || attempt.taskId !== task.id) {
     // A Task that ended with no Attempt of its own running, as on a cancel or a failure after its turn.
     return isTerminalTask(task.state) && task.currentAttemptId !== null
-      ? { sessionId: task.currentAttemptId, agentId: task.ownerId, opening: null, items: [], ends: true }
+      ? { sessionId: task.currentAttemptId, agentId: task.ownerId, opening: null, items: [], ends: true, work }
       : null;
   }
   const reply = event.reply?.trim() ?? "";
@@ -255,6 +277,7 @@ const taskChangeOf = (
     opening: live || items.length > 0 ? attemptOpening(task, attempt, redacted) : null,
     items,
     ends: !live && isTerminalTask(task.state),
+    work,
   };
 };
 
@@ -282,6 +305,7 @@ const attemptStepsOf = (
         opening: [attemptStart(event.attemptId, event.taskId, entry.correlation.threadId)],
         items: redacted(steps),
         ends: false,
+        work: { threadId: entry.correlation.threadId, taskId: event.taskId },
       };
 };
 
@@ -303,6 +327,7 @@ const messageOf = (entry: EventEnvelope, message: Message, redacted: Redacting):
         opening: [threadStart(message.threadId)],
         items: redacted(items),
         ends: false,
+        work: inThread(message.threadId),
       };
 };
 
@@ -337,6 +362,7 @@ const settledSaveOf = (
       opening: [threadStart(save.threadId)],
       items,
       ends: false,
+      work: inThread(save.threadId),
     };
   }
   const taskId = saveTaskOf(save);
@@ -348,6 +374,7 @@ const settledSaveOf = (
     opening: [attemptStart(attemptId, taskId, null)],
     items,
     ends: false,
+    work: { threadId: null, taskId },
   };
 };
 
@@ -376,13 +403,22 @@ export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): Captu
         opening: [threadStart(quest.threadId)],
         items: redacted([{ key: `quest:${quest.id}`, kind: "quest", text }]),
         ends: false,
+        work: inThread(quest.threadId),
       };
     }
     case "ThreadUpserted": {
+      // Archived, or made a private camp (ADR 037): either ends the session.
       const { thread } = event;
-      return thread.archivedAt === null
+      return thread.archivedAt === null && !thread.private
         ? null
-        : { sessionId: thread.id, agentId: thread.agentId, opening: null, items: [], ends: true };
+        : {
+            sessionId: thread.id,
+            agentId: thread.agentId,
+            opening: null,
+            items: [],
+            ends: true,
+            work: inThread(thread.id),
+          };
     }
     case "TaskStateChanged":
       return taskChangeOf(entry, event, redacted);
@@ -420,17 +456,51 @@ interface Round {
   readonly sent: ReadonlyMap<MemorySessionId, ReadonlySet<string>>;
 }
 
+/** A page of journal entries, and what memory keeps of each. */
+export interface CapturedPage {
+  readonly entries: ReadonlyArray<EventEnvelope>;
+  readonly found: ReadonlyArray<CapturedEntry | null>;
+}
+
+/** What memory keeps of each entry of a page, redacted by `redactor`. */
+const capturePage = (entries: ReadonlyArray<EventEnvelope>, redactor: Redactor): CapturedPage => ({
+  entries,
+  found: entries.map((entry) => capturedEntryOf(entry, redactor)),
+});
+
+/** The threads and Tasks a page's entries belong to, to ask which are private camps. */
+const workOfPage = (page: CapturedPage): MemoryCaptureWork => {
+  const threadIds = new Set<ThreadId>();
+  const taskIds = new Set<TaskId>();
+  for (const found of page.found) {
+    if (found === null) continue;
+    if (found.work.threadId !== null) threadIds.add(found.work.threadId);
+    if (found.work.taskId !== null) taskIds.add(found.work.taskId);
+  }
+  return { threadIds, taskIds };
+};
+
+/** No private camps: what a page plans when none of its work is in one. */
+const NO_PRIVATE_WORK: MemoryCaptureWork = { threadIds: new Set(), taskIds: new Set() };
+
+/** Whether an entry happened in a private camp, or worked on a Task of one (ADR 037). */
+const isPrivate = (found: CapturedEntry, work: MemoryCaptureWork) =>
+  (found.work.threadId !== null && work.threadIds.has(found.work.threadId)) ||
+  (found.work.taskId !== null && work.taskIds.has(found.work.taskId));
+
 /**
  * Plans what a page of entries sends, from the sessions open before it and the keys already sent to
  * them. An entry that only ends a session, as an archive does, does nothing when its session is not
- * open; any other entry opens its session again, which memory continues.
+ * open; any other entry opens its session again, which memory continues. Nothing of a private camp
+ * (`privateWork`) is sent (ADR 037): its entries are skipped, and a session of it still open from
+ * before the camp was made private ends, so what memory has of it stays and nothing more is added.
  */
 export const planRound = (
-  entries: ReadonlyArray<EventEnvelope>,
+  page: CapturedPage,
   open: ReadonlyArray<MemoryCaptureSession>,
-  redactor: Redactor,
   staleBefore: string,
   sent: SentKeys = new Map(),
+  privateWork: MemoryCaptureWork = NO_PRIVATE_WORK,
 ): Round => {
   const sessions = new Map(open.map((session) => [session.sessionId, session]));
   const groups = new Map<MemorySessionId, { readonly agentId: AgentId; readonly items: Array<MemoryCaptureItem> }>();
@@ -458,24 +528,29 @@ export const planRound = (
     sessions.set(sessionId, { sessionId, agentId: group.agentId, lastAt: entry.occurredAt, lastKey: last.key });
     return true;
   };
-  for (const entry of entries) {
-    const found = capturedEntryOf(entry, redactor);
-    if (found === null) continue;
+  page.entries.forEach((entry, at) => {
+    const found = page.found[at] ?? null;
+    if (found === null) return;
     const { sessionId } = found;
+    if (isPrivate(found, privateWork)) {
+      const session = sessions.get(sessionId);
+      if (session !== undefined) ending.set(sessionId, session);
+      return;
+    }
     const opened = sessions.has(sessionId);
-    if (!opened && found.opening === null) continue;
+    if (!opened && found.opening === null) return;
     if (add(entry, found, opened)) {
       touched.add(sessionId);
       ending.delete(sessionId);
     }
     const session = sessions.get(sessionId);
     if (found.ends && session !== undefined) ending.set(sessionId, session);
-  }
+  });
   for (const sessionId of ending.keys()) {
     sessions.delete(sessionId);
     touched.delete(sessionId);
   }
-  const sequence = entries.at(-1)?.sequence ?? 0;
+  const sequence = page.entries.at(-1)?.sequence ?? 0;
   return { sequence, groups, sessions, touched, ended: [...ending.values()], stale, sent: planned };
 };
 
@@ -575,7 +650,9 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
         Effect.gen(function* () {
           const entries = yield* log.readAfter(current.sequence, PAGE);
           if (entries.length === 0) return true;
-          const round = planRound(entries, current.sessions, redactor, yield* before(MEMORY_KEY_WINDOW), sent);
+          const page = capturePage(entries, redactor);
+          const privateWork = yield* log.privateWork(workOfPage(page));
+          const round = planRound(page, current.sessions, yield* before(MEMORY_KEY_WINDOW), sent, privateWork);
           if (round.stale > 0) {
             yield* Effect.logWarning(
               `Memory capture is sending ${round.stale} journal entries older than memory's 30-day replay window; if any reached memory before, it may keep them twice.`,
