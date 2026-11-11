@@ -5,6 +5,7 @@ export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./cancel.ts";
 export * from "./change-actor.ts";
+export * from "./chapter.ts";
 export * from "./charm-call.ts";
 export * from "./device.ts";
 export * from "./directory.ts";

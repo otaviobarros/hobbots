@@ -6,6 +6,7 @@ import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node
 import {
   ActivityRecorder,
   ApprovalService,
+  ChapterService,
   CharmCallService,
   Charms,
   ChatService,
@@ -77,6 +78,7 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  ChapterRepositoryLive,
   CharmCallsLive,
   CodingSetupDismissalRepository,
   DeviceRepositoryLive,
@@ -321,6 +323,7 @@ const ServerLive = Layer.unwrap(
     const Sqlite = RestoreRulesLive(dataDir).pipe(Layer.provideMerge(SqliteLive(database)));
     const Persistence = Layer.mergeAll(
       HobbotsRepositoryLive,
+      ChapterRepositoryLive,
       ApprovalRepositoryLive,
       GrantRepositoryLive,
       TaskRepositoryLive,
@@ -521,6 +524,8 @@ const ServerLive = Layer.unwrap(
             HubReset.layer.pipe(Layer.provide(Legacy)),
             fakePlays(config),
             memoryPageLayer(config, PageStore),
+            // A thread's chapters: start, split and merge (ADR 037).
+            ChapterService.layer,
           ),
         ),
       )

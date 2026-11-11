@@ -257,7 +257,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // A reply continued on another brain is told too, with the text and tool steps its first
         // brain left, so the new one does not redo or contradict that work.
         const switched = continued !== null && continued.runtime !== brain.runtime;
-        const briefed = yield* brief(thread, brain.runtime, switched ? [...before, continued] : before, switched);
+        // Only the live chapter is replayed, and only on a brain switch (ADR 037).
+        const inChapter = before.filter((m) => m.chapterId === thread.liveChapterId);
+        const briefed = yield* brief(thread, brain.runtime, switched ? [...inChapter, continued] : inChapter, switched);
         // Every turn hears of every call the thread left uncertain, whichever brain runs it, since a
         // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
         // Continue names the continued reply's own.

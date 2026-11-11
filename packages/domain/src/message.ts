@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { MessageId, ThreadId } from "./ids.ts";
+import { ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";
@@ -139,6 +139,12 @@ export type ReplyUsage = typeof ReplyUsage.Type;
 export class Message extends Schema.Class<Message>("Message")({
   id: MessageId,
   threadId: ThreadId,
+  /**
+   * The chapter of its thread the message belongs to (ADR 037). Null only on a message not stored
+   * yet: the hub files a new message in its thread's live chapter as it stores it, and a queued one
+   * again as it starts, so every stored message, read or journaled, carries one.
+   */
+  chapterId: Schema.NullOr(ChapterId).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
   role: MessageRole,
   content: Schema.String,
   status: MessageStatus,

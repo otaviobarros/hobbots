@@ -96,6 +96,7 @@ import hobGitHubAppOrigin from "./0093_hob_github_app_origin.ts";
 import memoryVersionAuthors from "./0094_memory_version_authors.ts";
 import threadKinds from "./0095_thread_kinds.ts";
 import memoryCapturePrivateThreads from "./0096_memory_capture_private_threads.ts";
+import chapters from "./0097_chapters.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -199,4 +200,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0094_memory_version_authors": memoryVersionAuthors,
   "0095_thread_kinds": threadKinds,
   "0096_memory_capture_private_threads": memoryCapturePrivateThreads,
+  "0097_chapters": chapters,
 };

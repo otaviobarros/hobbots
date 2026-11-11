@@ -327,14 +327,16 @@ describe("event stream", () => {
           }),
         );
         const announced = yield* chat.createThread(HOB_ID);
-        yield* waitFor(() => entries(connection.frames).length === 2);
+        // Each new thread journals itself and its first chapter (ADR 037).
+        yield* waitFor(() => entries(connection.frames).length === 4);
         return { frames: connection.frames, silent: silent.entries, announced };
       }),
     );
     const sent = entries(result.frames);
-    expect(sent[0]).toEqual(result.silent[0]);
-    expect(sent[1]?.payload).toMatchObject({ _tag: "ThreadUpserted", thread: { id: result.announced.id } });
-    expect(sent[1]?.sequence).toBe((sent[0]?.sequence ?? 0) + 1);
+    expect(sent.slice(0, 2)).toEqual(result.silent);
+    expect(sent[2]?.payload).toMatchObject({ _tag: "ThreadUpserted", thread: { id: result.announced.id } });
+    expect(sent[2]?.sequence).toBe((sent[1]?.sequence ?? 0) + 1);
+    expect(sent[3]?.payload).toMatchObject({ _tag: "ChapterStarted", threadId: result.announced.id });
   });
 
   // covers CH-004

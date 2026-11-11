@@ -2,6 +2,7 @@ export * from "./activity.ts";
 export * from "./approvals.ts";
 export * from "./backpack.ts";
 export * from "./backup.ts";
+export * from "./chapters.ts";
 export * from "./charm-calls.ts";
 export * from "./commit-identity.ts";
 export * from "./devices.ts";

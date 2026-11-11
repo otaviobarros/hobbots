@@ -4,6 +4,7 @@
 import {
   type Agent,
   type AgentConfiguration,
+  liveSession,
   Message,
   type RuntimeKind,
   type RuntimeSession,
@@ -110,7 +111,7 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // whose replies all ran on the current instructions needs nothing, and any other carries them.
     const instructionsChanged = (thread: Thread, runtime: RuntimeKind, agent: Agent, instructions: string) =>
       Effect.gen(function* () {
-        if (!thread.sessions.some((session) => session.runtime === runtime)) return false;
+        if (liveSession(thread, runtime) === undefined) return false;
         const versions = new Set(
           (yield* repo.listMessages(thread.id)).flatMap((m) =>
             m.role === "assistant" && m.configVersion !== null ? [m.configVersion] : [],
@@ -125,12 +126,13 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
       });
 
     // What the turn's session missed, told ahead of the prompt (ADR 017), built from the stored
-    // transcript without asking the brain the thread left. `before` is the transcript before the
-    // turn's own prompt and reply. `switched` when the reply itself moves from another brain, as on
+    // transcript without asking the brain the thread left. `before` is the live chapter's transcript
+    // before the turn's own prompt and reply: a brain switch inside the live chapter is the only
+    // replay of the transcript (ADR 037), and a new chapter's session hears nothing of the others. `switched` when the reply itself moves from another brain, as on
     // Continue. A summary made anew is stored for the next handoff.
     const brief = (thread: Thread, runtime: RuntimeKind, before: ReadonlyArray<Message>, switched: boolean) =>
       Effect.gen(function* () {
-        const session = thread.sessions.find((s) => s.runtime === runtime);
+        const session = liveSession(thread, runtime);
         const missed = session === undefined ? before : missedBy(runtime, session.seenThrough, before);
         // Only a switch needs one: a session is told what other brains wrote that it did not see.
         const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);

@@ -22,6 +22,7 @@
   "devDependencies": {
     "@hobbots/api": "workspace:*",
     "@types/node": "26.6.5",
+    "fast-check": "4.10.2",
     "vitest": "5.0.5"
   }
 }

@@ -247,6 +247,10 @@ const restCorrelationOf = (
         messageId: event.proposal.messageId,
         taskId: event.proposal.taskId,
       };
+    // A chapter change names its thread (ADR 037); a split, the message it cut at, below.
+    case "ChapterStarted":
+    case "ChapterMerged":
+      return { ...NONE, threadId: event.threadId };
     default:
       return { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }

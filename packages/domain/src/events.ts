@@ -4,11 +4,12 @@ import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
+import { Chapter } from "./chapter.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HobProposal } from "./hob-proposals.ts";
 import { HubQuestion } from "./hub-question.ts";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
@@ -58,6 +59,36 @@ const MessageDequeued = Schema.TaggedStruct("MessageDequeued", {
   threadId: ThreadId,
   messageId: MessageId,
   reason: Schema.Literals(["started", "removed"]),
+});
+/**
+ * A thread started a chapter (ADR 037): its first, as the thread was made, or the next one, which
+ * `ended` (the live chapter until then) made way for.
+ */
+const ChapterStarted = Schema.TaggedStruct("ChapterStarted", {
+  threadId: ThreadId,
+  chapter: Chapter,
+  ended: Schema.NullOr(Chapter),
+});
+/**
+ * Chapter `from` was cut at message `messageId`: its messages from there on now belong to the new
+ * chapter `chapter`, right after it. `chapters` is the thread's chapters afterwards, in order.
+ */
+const ChapterSplit = Schema.TaggedStruct("ChapterSplit", {
+  threadId: ThreadId,
+  from: ChapterId,
+  chapter: ChapterId,
+  messageId: MessageId,
+  chapters: Schema.Array(Chapter),
+});
+/**
+ * Chapter `absorbed` merged into `into`, the chapter before it, which now holds its messages; it is
+ * gone. `chapters` is the thread's chapters afterwards, in order.
+ */
+const ChapterMerged = Schema.TaggedStruct("ChapterMerged", {
+  threadId: ThreadId,
+  into: ChapterId,
+  absorbed: ChapterId,
+  chapters: Schema.Array(Chapter),
 });
 /** The user asked to stop a reply; it shows as stopping until the runtime confirms. */
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
@@ -326,6 +357,9 @@ export const JournaledEvent = Schema.Union([
   MessageUpserted,
   MessageQueued,
   MessageDequeued,
+  ChapterStarted,
+  ChapterSplit,
+  ChapterMerged,
   TurnStopRequested,
   TurnStopped,
   ApprovalRequested,
@@ -408,12 +442,18 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   AgentUpserted: 1,
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly. 4: its `kind`, `goal`, `private`, `origin` and `state` (ADR 037).
-  ThreadUpserted: 4,
+  // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0097).
+  ThreadUpserted: 5,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
-  // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly.
-  MessageUpserted: 4,
-  MessageQueued: 1,
+  // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
+  // `chapterId` (ADR 037, migration 0097).
+  MessageUpserted: 5,
+  // 2: its message's `chapterId` (migration 0097).
+  MessageQueued: 2,
   MessageDequeued: 1,
+  ChapterStarted: 1,
+  ChapterSplit: 1,
+  ChapterMerged: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
