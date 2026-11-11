@@ -42,7 +42,8 @@ export interface JudgmentText {
   readonly prompt: string;
 }
 
-const Confidence = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }));
+// Finite, so its JSON Schema is a plain number from 0 to 1, not one that may also be "NaN" or "Infinity".
+const Confidence = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 }));
 
 /** The answer's shape, as the brain is told it and as its reply is decoded. */
 const answerSchema = <A>(choices: Schema.Decoder<A>) => Schema.Struct({ choice: choices, confidence: Confidence });

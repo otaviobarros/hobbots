@@ -25,8 +25,8 @@ afterAll(() => {
 
 const sum: Judgment<"yes" | "no"> = {
   task: "judgments",
-  question: "Does the sum in the input equal 4?",
-  input: "2 + 2",
+  question: "Is the statement in the input true?",
+  input: "2 + 2 = 4",
   choices: Schema.Literals(["yes", "no"]),
   rule: "no",
 };

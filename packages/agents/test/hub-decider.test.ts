@@ -19,7 +19,7 @@ describe("HubDecider", () => {
     expect(text.prompt).toContain(drift.question);
     expect(text.prompt).toContain("<input>\nThe chapter's lines.\n</input>");
     expect(text.prompt).toContain('"drifting"');
-    expect(text.prompt).toContain('"confidence"');
+    expect(text.prompt).toContain('"confidence":{"type":"number","minimum":0,"maximum":1}');
     expect(text.instructions).toContain("JSON");
   });
 
