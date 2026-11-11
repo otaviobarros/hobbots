@@ -351,7 +351,9 @@ describe("hob management, end to end", () => {
       (await named("Mo"))?.instructions === "Write short." ? true : undefined,
     );
     expect(briefed).toBe(true);
-    expect(answered("brief-mo")[0]).toContain("Changed, from each hob's next turn:");
+    // The change is saved before the hub answers the call, so the answer is waited for too.
+    const brief = await eventually(async () => answered("brief-mo")[0]);
+    expect(brief).toContain("Changed, from each hob's next turn:");
   });
 
   // covers ADR 034 (Finding who can summon: several hold it), OR-002, #412
