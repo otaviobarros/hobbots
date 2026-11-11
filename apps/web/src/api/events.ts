@@ -205,6 +205,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // The status the hub decides comes on `status` frames, which the window does not follow yet (#1374).
   "ThreadRunChanged",
   "HobPresenceChanged",
+  "HobPresenceRemoved",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -215,7 +216,8 @@ type UnappliedEvent = Extract<
       | "TurnStarted"
       | "TurnEnded"
       | "ThreadRunChanged"
-      | "HobPresenceChanged";
+      | "HobPresenceChanged"
+      | "HobPresenceRemoved";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

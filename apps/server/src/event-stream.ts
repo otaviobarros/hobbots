@@ -56,6 +56,7 @@ const transientFrame = (event: HubTransientEvent) => {
       return STREAM_FRAME.memory;
     case "ThreadRunChanged":
     case "HobPresenceChanged":
+    case "HobPresenceRemoved":
       return STREAM_FRAME.status;
     case "TurnStarted":
     case "TurnEnded":

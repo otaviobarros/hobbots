@@ -10,8 +10,19 @@ import {
   PermissionSummary,
   RuntimeAdapter,
   type RuntimeEvent,
+  TaskRepository,
 } from "@hobbots/agents";
-import { type Agent, type HobPresence, roleFields, type ThreadRunStatus } from "@hobbots/domain";
+import {
+  type Agent,
+  noStatus,
+  roleFields,
+  type StatusEvent,
+  type StatusSnapshot,
+  type StatusView,
+  shownStatus,
+  withSnapshot,
+  withStatusEvent,
+} from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -48,9 +59,26 @@ const hob = {
 
 let turn: Queue.Queue<RuntimeEvent, Cause.Done>;
 let handler: (request: Request) => Promise<Response>;
+// While set, every read of the failed Tasks fails, as a database that briefly cannot answer does.
+let failing = false;
+let failedReads = 0;
 let dispose: () => Promise<void>;
 
+const FlakyTasks = Layer.effect(
+  TaskRepository,
+  Effect.map(TaskRepository, (tasks) => ({
+    ...tasks,
+    listFailedTasks: Effect.suspend(() => {
+      if (!failing) return tasks.listFailedTasks;
+      failedReads += 1;
+      return Effect.die(new Error("The database did not answer"));
+    }),
+  })),
+).pipe(Layer.provide(TaskRepositoryLive));
+
 beforeEach(() => {
+  failing = false;
+  failedReads = 0;
   // A runtime the test drives: the turn streams what the test offers, and its process exits only
   // when the test ends the queue, however long after the reply completed.
   turn = Effect.runSync(Queue.unbounded<RuntimeEvent, Cause.Done>());
@@ -71,7 +99,7 @@ beforeEach(() => {
           HobbotsRepositoryLive,
           ApprovalRepositoryLive,
           GrantRepositoryLive,
-          TaskRepositoryLive,
+          FlakyTasks,
           EventJournal.layer,
           BackpackLive,
           SetupRepository.layer,
@@ -115,53 +143,37 @@ const waitUntil = (check: () => Promise<boolean>) =>
   Effect.runPromise(
     Effect.promise(check).pipe(
       Effect.flatMap((done) => (done ? Effect.void : Effect.fail("not yet" as const))),
-      Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 400 }),
+      Effect.retry({ schedule: Schedule.spaced("5 millis") }),
+      Effect.timeout("10 seconds"),
     ),
   );
 
-interface HubStatusRead {
-  readonly runsRevision: number;
-  readonly runs: ReadonlyArray<ThreadRunStatus>;
-  readonly hobs: ReadonlyArray<HobPresence>;
-}
+const status = async (): Promise<StatusSnapshot> => (await request("GET", "/api/status")).body;
 
 /** What a client shows: each busy thread's run and reply, and each hob's presence. */
-interface Shown {
-  readonly threads: Readonly<Record<string, string>>;
-  readonly hobs: Readonly<Record<string, string>>;
-}
-
-const status = async (): Promise<HubStatusRead> => (await request("GET", "/api/status")).body;
-
-const shownBy = (read: HubStatusRead): Shown => ({
-  threads: Object.fromEntries(read.runs.map((run) => [run.threadId, `${run.run}/${run.reply ?? "-"}`])),
-  hobs: Object.fromEntries(read.hobs.map((hob) => [hob.agentId, hob.state])),
-});
+const shown = (view: StatusView) => {
+  const { runs, hobs } = shownStatus(view);
+  return {
+    threads: Object.fromEntries(runs.map((run) => [run.threadId, `${run.run}/${run.reply ?? "-"}`])),
+    hobs: Object.fromEntries(hobs.map((presence) => [presence.agentId, presence.state])),
+  };
+};
+type Shown = ReturnType<typeof shown>;
 
 /**
- * Follows `/api/events` as a client does: on `Ready` it reads `/api/status` as its snapshot, and it
- * keeps, per thread and per hob, whichever of the snapshot and each `status` frame has the higher
- * revision. A thread the snapshot leaves out is idle as of its runs revision.
+ * Follows `/api/events` as a client does: on every `Ready` it drops the status it held and reads
+ * `/api/status`, folding the `status` events around it with the domain's rules.
  */
 const followStatus = async () => {
   const response = await handler(new Request("http://localhost:4381/api/events", { headers: AS_WINDOW }));
   const reader = (response.body as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
-  const runs = new Map<string, ThreadRunStatus>();
-  const hobs = new Map<string, HobPresence>();
   const published: Array<number> = [];
-  let runsRevision = -1;
+  let view: StatusView = noStatus;
   let frames: Array<Event> = [];
   const parser = makeParser((event) => {
     if (event._tag === "Event" && (event.event === "status" || event.event === "ready")) frames.push(event);
   });
-  const takeRun = (run: ThreadRunStatus) => {
-    if (run.revision <= runsRevision || (runs.get(run.threadId)?.revision ?? -1) >= run.revision) return;
-    runs.set(run.threadId, run);
-  };
-  const takeHob = (presence: HobPresence) => {
-    if ((hobs.get(presence.agentId)?.revision ?? -1) < presence.revision) hobs.set(presence.agentId, presence);
-  };
   const pump = async () => {
     for (;;) {
       const { done, value } = await reader.read();
@@ -171,31 +183,17 @@ const followStatus = async () => {
       frames = [];
       for (const frame of arrived) {
         if (frame.event === "ready") {
-          const snapshot = await status();
-          for (const [threadId, run] of runs) if (run.revision <= snapshot.runsRevision) runs.delete(threadId);
-          runsRevision = snapshot.runsRevision;
-          for (const run of snapshot.runs) runs.set(run.threadId, run);
-          for (const presence of snapshot.hobs) takeHob(presence);
+          view = withSnapshot(noStatus, await status());
           continue;
         }
-        const data = JSON.parse(frame.data);
-        if (data._tag === "ThreadRunChanged") {
-          published.push(data.run.revision);
-          takeRun(data.run);
-        } else if (data._tag === "HobPresenceChanged") takeHob(data.presence);
+        const event: StatusEvent = JSON.parse(frame.data);
+        if (event._tag === "ThreadRunChanged") published.push(event.run.revision);
+        view = withStatusEvent(view, event);
       }
     }
   };
   const pumping = pump().catch(() => undefined);
-  const shown = (): Shown => ({
-    threads: Object.fromEntries(
-      [...runs.values()]
-        .filter((run) => run.run !== "idle")
-        .map((run) => [run.threadId, `${run.run}/${run.reply ?? "-"}`]),
-    ),
-    hobs: Object.fromEntries([...hobs.values()].map((presence) => [presence.agentId, presence.state])),
-  });
-  return { shown, published, stop: () => reader.cancel().then(() => pumping) };
+  return { shown: () => shown(view), published, stop: () => reader.cancel().then(() => pumping) };
 };
 
 type Follower = Awaited<ReturnType<typeof followStatus>>;
@@ -203,7 +201,7 @@ type Follower = Awaited<ReturnType<typeof followStatus>>;
 /** Waits until every follower shows what the hub reports now, and that is `expected`. */
 const allShow = (followers: ReadonlyArray<Follower>, expected: Shown) =>
   waitUntil(async () => {
-    const now = shownBy(await status());
+    const now = shown(withSnapshot(noStatus, await status()));
     return (
       JSON.stringify(now) === JSON.stringify(expected) &&
       followers.every((follower) => JSON.stringify(follower.shown()) === JSON.stringify(expected))
@@ -212,7 +210,8 @@ const allShow = (followers: ReadonlyArray<Follower>, expected: Shown) =>
 
 const offer = (...events: ReadonlyArray<RuntimeEvent>) => Effect.runSync(Queue.offerAll(turn, events));
 
-describe("hub status", () => {
+// Each wait has its own 10-second limit, so a test may take longer than the default 5 seconds.
+describe("hub status", { timeout: 30_000 }, () => {
   // covers CH-001, UX-001
   it("[TC-CH-294] a client that connects mid-turn shows the same thread run and hob presence as one connected throughout", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
@@ -244,5 +243,33 @@ describe("hub status", () => {
     // Each transition of the run is published once: its revisions run from 1 with no gap or repeat.
     expect(throughout.published).toEqual(throughout.published.map((_, index) => index + 1));
     expect(throughout.published.length).toBeGreaterThanOrEqual(4);
+  });
+
+  // covers UX-001
+  it("[TC-CH-295] a retired hob's presence leaves every client, connected or connecting", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const connected = await followStatus();
+    await allShow([connected], { threads: {}, hobs: { [agent.id]: "idle" } });
+
+    expect((await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" })).status).toBe(200);
+    const connecting = await followStatus();
+    await allShow([connected, connecting], { threads: {}, hobs: {} });
+    await Promise.all([connected.stop(), connecting.stop()]);
+  });
+
+  // covers UX-001
+  it("[TC-CH-296] a presence the hub could not read is read again until it can, with no later change", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const follower = await followStatus();
+    await allShow([follower], { threads: {}, hobs: { [agent.id]: "idle" } });
+
+    failing = true;
+    await request("POST", `/api/agents/${agent.id}/pause`);
+    await waitUntil(async () => failedReads >= 2);
+    expect(follower.shown().hobs).toEqual({ [agent.id]: "idle" });
+    // Nothing else changes from here on: only the hub trying again brings the pause.
+    failing = false;
+    await allShow([follower], { threads: {}, hobs: { [agent.id]: "paused" } });
+    await follower.stop();
   });
 });

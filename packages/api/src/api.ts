@@ -225,15 +225,16 @@ export const Activity = Schema.Struct({
 });
 
 /**
- * The status the hub decides (ADR 037), for the sync snapshot: every thread whose run is not idle,
- * with the revision of the last change to any run, so a thread left out is idle as of it, and every
- * live hob's presence. A client reads it again on every `Ready` and then keeps, per thread and per
- * hob, whichever of it and the `ThreadRunChanged` and `HobPresenceChanged` events has the higher
- * revision. Revisions count from the hub's start.
+ * The status the hub decides (ADR 037), for the sync snapshot: every thread whose run is not idle
+ * and every live hob's presence, each with the revision of the last change of its kind, so a thread
+ * or hob left out has none as of it. Revisions count from the hub's start, so on every `Ready` a
+ * client drops the status it held and reads this again. It then keeps, per thread and per hob,
+ * whichever of this and each later `status` event has the higher revision.
  */
 export const HubStatus = Schema.Struct({
   runsRevision: Schema.Int,
   runs: Schema.Array(ThreadRunStatus),
+  presenceRevision: Schema.Int,
   hobs: Schema.Array(HobPresence),
 });
 export type HubStatus = typeof HubStatus.Type;

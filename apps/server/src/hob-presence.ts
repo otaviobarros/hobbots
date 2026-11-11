@@ -12,7 +12,7 @@ import {
   type ThreadRunStatus,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
-import { Context, Effect, HashMap, Layer, Option, PubSub, Ref } from "effect";
+import { Context, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule } from "effect";
 import { type BusEvent, EventBus } from "./event-bus.ts";
 
 /**
@@ -63,6 +63,40 @@ interface Published {
   readonly hobs: HashMap.HashMap<AgentId, HobPresence>;
 }
 
+type PresenceChange =
+  | { readonly _tag: "Changed"; readonly presence: HobPresence }
+  | { readonly _tag: "Removed"; readonly agentId: AgentId; readonly revision: number };
+
+/**
+ * What was published, brought up to `now`: each hob whose state changed, and each hob that is no
+ * longer live, takes the next revision.
+ */
+const nextPresences = (
+  last: Published,
+  now: ReadonlyArray<Pick<HobPresence, "agentId" | "state">>,
+): readonly [ReadonlyArray<PresenceChange>, Published] => {
+  const changes: Array<PresenceChange> = [];
+  let revision = last.revision;
+  let hobs = HashMap.empty<AgentId, HobPresence>();
+  for (const { agentId, state } of now) {
+    const before = HashMap.get(last.hobs, agentId);
+    if (Option.isSome(before) && before.value.state === state) {
+      hobs = HashMap.set(hobs, agentId, before.value);
+      continue;
+    }
+    revision += 1;
+    const presence = { agentId, state, revision };
+    changes.push({ _tag: "Changed", presence });
+    hobs = HashMap.set(hobs, agentId, presence);
+  }
+  for (const agentId of HashMap.keys(last.hobs)) {
+    if (HashMap.has(hobs, agentId)) continue;
+    revision += 1;
+    changes.push({ _tag: "Removed", agentId, revision });
+  }
+  return [changes, { revision, hobs }];
+};
+
 /**
  * Every hob's presence, decided by the hub and published as `HobPresenceChanged` whenever it changes
  * (ADR 037): its lifecycle first, then whether something waits on you, then what its threads' running
@@ -71,8 +105,11 @@ interface Published {
 export class HobPresences extends Context.Service<
   HobPresences,
   {
-    /** Every hob's presence as last published, for the sync snapshot. */
-    readonly current: Effect.Effect<ReadonlyArray<HobPresence>>;
+    /**
+     * Every live hob's presence as last published, for the sync snapshot, and the revision of the
+     * last change to any: a hob left out has no presence as of it.
+     */
+    readonly current: Effect.Effect<{ readonly revision: number; readonly hobs: ReadonlyArray<HobPresence> }>;
   }
 >()("@hobbots/server/HobPresences") {
   static readonly layer = Layer.effect(
@@ -119,44 +156,47 @@ export class HobPresences extends Context.Service<
         }));
       });
 
-      // Keeps what changed, each at the next revision, drops retired hobs, and publishes the changes.
+      // Keeps what changed, each at the next revision, and publishes it: a new presence, or the end of
+      // a retired hob's.
       const refresh = Effect.gen(function* () {
         const now = yield* decide;
-        const changed = yield* Ref.modify(published, ({ revision, hobs }): readonly [Array<HobPresence>, Published] => {
-          const changes: Array<HobPresence> = [];
-          let next = revision;
-          let kept = HashMap.empty<AgentId, HobPresence>();
-          for (const { agentId, state } of now) {
-            const last = HashMap.get(hobs, agentId);
-            if (Option.isSome(last) && last.value.state === state) {
-              kept = HashMap.set(kept, agentId, last.value);
-            } else {
-              next += 1;
-              const presence = { agentId, state, revision: next };
-              changes.push(presence);
-              kept = HashMap.set(kept, agentId, presence);
-            }
-          }
-          return [changes, { revision: next, hobs: kept }];
-        });
-        yield* Effect.forEach(changed, (presence) => bus.publishTransient({ _tag: "HobPresenceChanged", presence }), {
-          discard: true,
-        });
+        const changes = yield* Ref.modify(published, (last) => nextPresences(last, now));
+        yield* Effect.forEach(
+          changes,
+          (change) =>
+            bus.publishTransient(
+              change._tag === "Changed"
+                ? { _tag: "HobPresenceChanged", presence: change.presence }
+                : { _tag: "HobPresenceRemoved", agentId: change.agentId, revision: change.revision },
+            ),
+          { discard: true },
+        );
       });
+      // A read that fails is tried again, waiting longer each time up to 30 seconds, until one
+      // succeeds, so a presence never stays stale for want of a later change.
+      const refreshed = refresh.pipe(
+        Effect.sandbox,
+        Effect.tapError((cause) => Effect.logWarning("Could not work out the hobs' presence; trying again", cause)),
+        Effect.retry(Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("30 seconds")])),
+      );
 
       // Subscribed before the first read, so no change after it is missed. Changes that arrive
       // together are read once.
       const subscription = yield* bus.subscribe;
-      yield* refresh;
-      yield* PubSub.takeAll(subscription).pipe(
-        Effect.flatMap((events) => (events.some(changesPresence) ? refresh : Effect.void)),
-        Effect.catchCause((cause) => Effect.logWarning("Could not work out the hobs' presence", cause)),
-        Effect.forever,
+      yield* refreshed.pipe(
+        Effect.andThen(
+          PubSub.takeAll(subscription).pipe(
+            Effect.flatMap((events) => (events.some(changesPresence) ? refreshed : Effect.void)),
+            Effect.forever,
+          ),
+        ),
         Effect.forkScoped,
       );
 
       return HobPresences.of({
-        current: Ref.get(published).pipe(Effect.map(({ hobs }) => Array.from(HashMap.values(hobs)))),
+        current: Ref.get(published).pipe(
+          Effect.map(({ revision, hobs }) => ({ revision, hobs: Array.from(HashMap.values(hobs)) })),
+        ),
       });
     }),
   );

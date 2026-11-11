@@ -182,7 +182,12 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
       activity: () => activity,
       status: () =>
         Effect.all([chat.threadRuns, presences.current]).pipe(
-          Effect.map(([{ revision, runs }, hobs]) => ({ runsRevision: revision, runs, hobs })),
+          Effect.map(([runs, presences]) => ({
+            runsRevision: runs.revision,
+            runs: runs.runs,
+            presenceRevision: presences.revision,
+            hobs: presences.hobs,
+          })),
         ),
       runtimes: () => everyRuntimeHealth(adapters),
     });

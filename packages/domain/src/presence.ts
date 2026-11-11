@@ -100,3 +100,99 @@ export const leadsNeedingYou = ({
     ...failed.map(({ task, leadId }) => leadId ?? lead(task.threadId, task.ownerId)),
   ]);
 };
+
+/**
+ * The status a client holds, as the hub published it: each busy thread's run and each live hob's
+ * presence, and the revision of the snapshot of each kind. A thread or hob it leaves out has none.
+ */
+export interface StatusView {
+  readonly runsRevision: number;
+  readonly runs: Readonly<Record<ThreadId, ThreadRunStatus>>;
+  readonly presenceRevision: number;
+  readonly hobs: Readonly<Record<AgentId, HobPresence>>;
+  /** The revision each hob's presence was removed at, so an older change of it is not taken back. */
+  readonly removed: Readonly<Record<AgentId, number>>;
+}
+
+/** What a client holds on each `Ready`, before its snapshot arrives: nothing, since revisions start again with each hub. */
+export const noStatus: StatusView = { runsRevision: -1, runs: {}, presenceRevision: -1, hobs: {}, removed: {} };
+
+/** The snapshot `GET /api/status` serves. */
+export interface StatusSnapshot {
+  readonly runsRevision: number;
+  readonly runs: ReadonlyArray<ThreadRunStatus>;
+  readonly presenceRevision: number;
+  readonly hobs: ReadonlyArray<HobPresence>;
+}
+
+const newerThan = <T>(
+  held: Readonly<Record<string, T>>,
+  revision: number,
+  of: (each: T) => number,
+): Record<string, T> => Object.fromEntries(Object.entries(held).filter(([, each]) => of(each) > revision));
+const revisionOf = (each: { readonly revision: number }) => each.revision;
+
+/**
+ * The status once the snapshot read after `Ready` arrives: what the snapshot holds, except where an
+ * event that came while it was read is newer.
+ */
+export const withSnapshot = (view: StatusView, snapshot: StatusSnapshot): StatusView => {
+  // A removal newer than the snapshot wins over the presence the snapshot still had.
+  const removed = newerThan(view.removed, snapshot.presenceRevision, (revision) => revision);
+  const hobs = {
+    ...Object.fromEntries(snapshot.hobs.map((presence) => [presence.agentId, presence])),
+    ...newerThan(view.hobs, snapshot.presenceRevision, revisionOf),
+  };
+  return {
+    runsRevision: snapshot.runsRevision,
+    runs: {
+      ...Object.fromEntries(snapshot.runs.map((run) => [run.threadId, run])),
+      ...newerThan(view.runs, snapshot.runsRevision, revisionOf),
+    },
+    presenceRevision: snapshot.presenceRevision,
+    hobs: Object.fromEntries(Object.entries(hobs).filter(([agentId]) => !(agentId in removed))),
+    removed,
+  };
+};
+
+/** A status event the hub publishes on `status` frames. */
+export type StatusEvent =
+  | { readonly _tag: "ThreadRunChanged"; readonly run: ThreadRunStatus }
+  | { readonly _tag: "HobPresenceChanged"; readonly presence: HobPresence }
+  | { readonly _tag: "HobPresenceRemoved"; readonly agentId: AgentId; readonly revision: number };
+
+const isNewer = (revision: number, floor: number, held: number | undefined) =>
+  revision > floor && revision > (held ?? -1);
+
+/** The revision of what the client holds of a hob's presence: its presence, or its removal. */
+const heldPresence = (view: StatusView, agentId: AgentId) => view.hobs[agentId]?.revision ?? view.removed[agentId];
+
+/**
+ * The status after an event, when the event is newer than what the client holds. An idle run is
+ * kept as a mark of its revision, and `shownStatus` leaves it out.
+ */
+export const withStatusEvent = (view: StatusView, event: StatusEvent): StatusView => {
+  switch (event._tag) {
+    case "ThreadRunChanged":
+      return isNewer(event.run.revision, view.runsRevision, view.runs[event.run.threadId]?.revision)
+        ? { ...view, runs: { ...view.runs, [event.run.threadId]: event.run } }
+        : view;
+    case "HobPresenceChanged":
+      return isNewer(event.presence.revision, view.presenceRevision, heldPresence(view, event.presence.agentId))
+        ? { ...view, hobs: { ...view.hobs, [event.presence.agentId]: event.presence } }
+        : view;
+    case "HobPresenceRemoved": {
+      if (!isNewer(event.revision, view.presenceRevision, heldPresence(view, event.agentId))) return view;
+      const { [event.agentId]: _, ...hobs } = view.hobs;
+      return { ...view, hobs, removed: { ...view.removed, [event.agentId]: event.revision } };
+    }
+  }
+};
+
+/** What the status shows: each busy thread's run and each live hob's presence. */
+export const shownStatus = (
+  view: StatusView,
+): { readonly runs: ReadonlyArray<ThreadRunStatus>; readonly hobs: ReadonlyArray<HobPresence> } => ({
+  runs: Object.values(view.runs).filter((run) => run.run !== "idle"),
+  hobs: Object.values(view.hobs),
+});
