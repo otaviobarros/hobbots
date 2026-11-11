@@ -30,7 +30,7 @@ export const messages = {
   brain: {
     label: "The hub's brain",
     intro:
-      "The one model Hobbots uses for its own work, outside any hob's turn: summing up a chat for memory, writing a camp's brief, summing up a chapter, and judgment calls such as whether a chapter drifts into a topic of its own. It runs on a plan you already signed in to.",
+      "The one model Hobbots uses for its own work, outside any hob's turn: summing up a chat for memory now and, once camps arrive, writing a camp's brief, summing up a chapter, and judgment calls such as whether a chapter drifts into a topic of its own. It runs on a plan you already signed in to.",
     model: "Model",
     recommended: ({ model }: { model: string }) => `${model} (recommended)`,
     smallest: "Its smallest model",
@@ -90,7 +90,7 @@ export const messages = {
     none: "No AI",
     groups: { memory: "For memory", hub: "For chats and camps" },
     pickFirst: "Pick a provider first.",
-    note: "Every task runs at the brain's effort. Searching and saving never need a model. With No AI, a brief, a chapter summary or a judgment comes from simple rules.",
+    note: "Every task runs at the brain's effort. Searching and saving never need a model. The tasks for chats and camps start once camps arrive; with No AI, they will follow simple rules.",
   },
   shares: {
     label: "What hobs learn",

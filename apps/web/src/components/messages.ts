@@ -108,7 +108,7 @@ export const messages = {
       brain: {
         heading: "The hub's brain",
         intro:
-          "Hobbots' own small helper, outside any hob's turn: it sums up chats for memory, writes a camp's brief and makes quick judgment calls. A small, fast model is enough.",
+          "Hobbots' own small helper, outside any hob's turn: it sums up chats for memory and, once camps arrive, writes a camp's brief and makes quick judgment calls. A small, fast model is enough.",
         model: "Model",
         recommended: "Recommended",
         lines: {

@@ -1,4 +1,5 @@
 import { MEMORY_RUNTIMES, type MemoryModelVendor, type MemorySettings, type RuntimeKind } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { memoryOverviewQuery, useUpdateMemorySettings } from "../../api/memory.ts";
@@ -13,6 +14,7 @@ import {
   vendorOf,
 } from "../memory-settings/brain.ts";
 import { messages as memoryMessages } from "../memory-settings/messages.ts";
+import { effortNote } from "../memory-settings/model.ts";
 import { ModelSelect } from "../memory-settings/model-select.tsx";
 import { messages } from "../messages.ts";
 
@@ -42,6 +44,7 @@ export const useOnboardingBrain = (runtimes: ReadonlyArray<RuntimeKind>) => {
   const claude = useQuery({ ...modelsQuery(MEMORY_RUNTIMES.claude), enabled: connected.includes("claude") }).data;
   const chatgpt = useQuery({ ...modelsQuery(MEMORY_RUNTIMES.chatgpt), enabled: connected.includes("chatgpt") }).data;
   const models: ModelsByVendor = { claude, chatgpt };
+  // A choice shows at once and stays shown when it could not be saved, so it can be sent again.
   const base = update.isPending || update.isError ? update.variables : saved;
   const shown = base === undefined ? undefined : setupBrain(base, connected);
   const save = (next: MemorySettings) => update.mutate(next);
@@ -52,8 +55,19 @@ export const useOnboardingBrain = (runtimes: ReadonlyArray<RuntimeKind>) => {
     busy: update.isPending,
     failed: update.isError,
     pick: (value: string) => shown !== undefined && save(pickBrain(shown, value)),
-    settle: () => {
-      if (shown !== undefined && saved !== undefined && shown !== saved && !update.isPending) save(shown);
+    lower: () => shown !== undefined && save({ ...shown, effort: "low" }),
+    retry: () => shown !== undefined && save(shown),
+    /**
+     * Saves the brain setup shows when it is not the one saved, and says whether Continue can go
+     * on: not while a save is on its way, nor after one failed, so the choice stays to send again.
+     */
+    settle: async (): Promise<boolean> => {
+      if (update.isPending) return false;
+      if (shown === undefined || saved === undefined || (shown === saved && !update.isError)) return true;
+      return update.mutateAsync(shown).then(
+        () => true,
+        () => false,
+      );
     },
   };
 };
@@ -68,6 +82,8 @@ export function OnboardingBrain({ brain }: { brain: OnboardingBrainState }) {
   if (shown === undefined || connected.length === 0) return null;
   const value = brainValue(shown, models);
   const line = value === NO_BRAIN ? copy.lines.none : isRecommended(value) ? copy.lines.recommended : copy.lines.bigger;
+  // An effort chosen before stays as it was, and says so, with the way back to low.
+  const effort = shown.provider === "none" ? null : effortNote(shown, models[shown.provider]);
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2.5 rounded-card bg-card p-[18px]">
       <span className="flex flex-col gap-0.5">
@@ -94,9 +110,21 @@ export function OnboardingBrain({ brain }: { brain: OnboardingBrainState }) {
         )}
       </span>
       {brain.failed ? (
-        <p role="alert" className="m-0 text-detail text-rose">
-          {copy.saveFailed}
-        </p>
+        <span className="flex flex-wrap items-center gap-2">
+          <p role="alert" className="m-0 text-detail text-rose">
+            {copy.saveFailed}
+          </p>
+          <Button variant="ghost" size="xs" onClick={brain.retry}>
+            {memoryMessages.model.retry}
+          </Button>
+        </span>
+      ) : effort?.lower ? (
+        <span className="flex flex-wrap items-center gap-2 text-detail text-label">
+          {effort.text}
+          <Button variant="ghost" size="xs" disabled={brain.busy} onClick={brain.lower}>
+            {memoryMessages.brain.effort.useLow}
+          </Button>
+        </span>
       ) : (
         <span className="text-detail text-label">{line}</span>
       )}

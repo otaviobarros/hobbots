@@ -361,10 +361,10 @@ export function OnboardingProviders() {
   const guide = guideFor(ready, nudged, states);
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/where" }));
-  const next = () => {
+  // Continue waits for the hub's brain to be saved, and stays on the step when it could not be.
+  const next = async () => {
     if (!ready) return setNudged(true);
-    brain.settle();
-    void navigate({ to: "/setup/hob" });
+    if (await brain.settle()) void navigate({ to: "/setup/hob" });
   };
 
   const failed = providers.isError;
@@ -393,10 +393,10 @@ export function OnboardingProviders() {
             {shared.back}
           </Button>
           <Button
-            onClick={next}
+            onClick={() => void next()}
             aria-disabled={!ready}
             aria-describedby="providers-hint"
-            disabled={providers.isPending}
+            disabled={providers.isPending || brain.busy}
             className={cn(
               !ready && "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2",
             )}

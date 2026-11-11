@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_MEMORY_SETTINGS } from "@hobbots/domain";
 import type { Locator } from "@playwright/test";
@@ -159,9 +159,35 @@ test("[TC-GEN-226] setup shows the hub's brain once a provider connects, on its 
   await expect(brain.locator("optgroup")).toHaveCount(1);
   await expect(card.getByText("Recommended", { exact: true })).toBeVisible();
   await expect(card).toContainText("at low reasoning effort");
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
+
+  // Continue waits for the save: held, it can't be pressed again; refused, the step stays with Try again.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((done) => (release = done));
+  let refuse = true;
+  await page.route("**/api/memory/settings", async (route) => {
+    await held;
+    if (refuse) {
+      refuse = false;
+      await route.fulfill({ status: 500, body: "" });
+    } else await route.continue();
+  });
+  const next = page.getByRole("button", { name: "Continue" });
+  await next.click();
+  await expect(next).toBeDisabled();
+  await expect(brain).toBeDisabled();
+  release();
+  await expect(card.getByRole("alert")).toContainText("could not save the hub's brain");
+  await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
+  await expect(brain.locator("option:checked")).toHaveText("Fake Coder (recommended)");
+  // Nothing was saved, so the hub still has the default on Claude.
+  expect(existsSync(join(dataDir, "memory-settings.json")) ? stored() : DEFAULT_MEMORY_SETTINGS).toMatchObject({
+    provider: "claude",
+  });
+  await card.getByRole("button", { name: "Try again" }).click();
+  await expect(card.getByRole("alert")).toHaveCount(0);
   await expect.poll(() => stored()).toMatchObject({ provider: "chatgpt", model: null, effort: "low" });
+  await next.click();
+  await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
 
   // Back in the step, No AI saves at once and says what it means.
   await page.goBack();
@@ -169,6 +195,27 @@ test("[TC-GEN-226] setup shows the hub's brain once a provider connects, on its 
   await expect(card).toContainText("follow simple rules, with no AI");
   await expect(card.getByText("Recommended", { exact: true })).toHaveCount(0);
   await expect.poll(() => stored()).toMatchObject({ provider: "none" });
+});
+
+// covers ADR 037, OP-001
+test("[TC-GEN-227] setup keeps a brain chosen before on a connected provider, says its effort, and brings it back to low", async ({
+  page,
+}) => {
+  writeFileSync(join(dataDir, "memory-settings.json"), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }));
+  hub = await startHub(dataDir);
+  await page.goto(hub.url);
+  await page.getByRole("link", { name: "Get started" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Connect Claude" }).click();
+  const card = page.getByRole("region", { name: "The hub's brain" });
+  await expect(card.getByRole("combobox", { name: "The hub's brain" }).locator("option:checked")).toHaveText(
+    "Fake Thinker (recommended)",
+  );
+  await expect(card).toContainText("Runs at high effort, chosen before.");
+  await expect(card).not.toContainText("at low reasoning effort");
+  await card.getByRole("button", { name: "Use low effort" }).click();
+  await expect(card).toContainText("at low reasoning effort");
+  await expect.poll(() => stored()).toMatchObject({ provider: "claude", effort: "low" });
 });
 
 // covers ADR 028
