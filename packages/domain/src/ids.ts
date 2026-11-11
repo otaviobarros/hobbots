@@ -6,6 +6,10 @@ export type AgentId = typeof AgentId.Type;
 export const ThreadId = Schema.String.pipe(Schema.brand("ThreadId"));
 export type ThreadId = typeof ThreadId.Type;
 
+/** A chapter of a thread (ADR 037). */
+export const ChapterId = Schema.String.pipe(Schema.brand("ChapterId"));
+export type ChapterId = typeof ChapterId.Type;
+
 export const MessageId = Schema.String.pipe(Schema.brand("MessageId"));
 export type MessageId = typeof MessageId.Type;
 

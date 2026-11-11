@@ -5,7 +5,6 @@ import {
   MessageNotQueued,
   ReplyNotResumable,
   ThreadArchived,
-  type ThreadArchiveRefusal,
   ThreadArchiveRefused,
   ThreadNotFound,
 } from "@hobbots/api";
@@ -18,6 +17,7 @@ import {
   type Committed,
   DEFAULT_THREAD_TITLE,
   hobStanding,
+  type IllegalThreadTransition,
   isInProgress,
   isResumable,
   Message,
@@ -42,6 +42,8 @@ import {
   ThreadCheckpoint,
   ThreadId,
   type ThreadRunStatus,
+  ThreadLifecycle,
+  type ThreadLifecycleEvent,
   type TurnEnding,
   takesNewWork,
   titleFromPrompt,
@@ -649,10 +651,13 @@ export class ChatService extends Context.Service<
             if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId });
             yield* requireActive(agent.value);
             const now = yield* nowIso;
+            // The hob's first open thread is its chat (ADR 037); a skill trial is always a camp.
+            const hasChat = (yield* repo.listThreads(agentId)).some(ThreadLifecycle.isOpenChat);
             const thread = new Thread({
               id: ThreadId.make(crypto.randomUUID()),
               agentId,
               title: options.title ?? DEFAULT_THREAD_TITLE,
+              kind: hasChat || options.skillTrial !== undefined ? "camp" : "chat",
               skillTrial: options.skillTrial ?? null,
               createdAt: now,
               updatedAt: now,
@@ -1342,7 +1347,7 @@ export class ChatService extends Context.Service<
       const workable = (threadId: ThreadId) =>
         Effect.gen(function* () {
           const thread = yield* repo.findThread(threadId);
-          if (Option.isNone(thread) || thread.value.archivedAt !== null) return null;
+          if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return null;
           const agent = yield* repo.findAgent(thread.value.agentId);
           if (Option.isNone(agent) || agent.value.status !== "active") return null;
           return { thread: thread.value, agent: agent.value };
@@ -1751,37 +1756,43 @@ export class ChatService extends Context.Service<
         );
       });
 
-      // Why the thread cannot be archived now, if anything stops it. Runs under the hob's lock, so no
-      // turn starts and no message is sent while the thread is being archived.
-      const archiveRefusal = (thread: Thread, agent: Agent) =>
+      // What stops the thread from being archived now, which `ThreadLifecycle` weighs. Runs under the
+      // hob's lock, so no turn starts and no message is sent while the thread is being archived.
+      const archiveBlockers = (thread: Thread, agent: Agent) =>
         Effect.gen(function* () {
-          if (agent.status === "retired") return "hob-retired" as const;
-          if (Option.isSome(approvals)) {
-            const requests = yield* approvals.value.listForThread(thread.id);
-            if (requests.some((request) => request.state === "pending")) return "approval-pending" as const;
-          }
+          const requests = Option.isSome(approvals) ? yield* approvals.value.listForThread(thread.id) : [];
           // A turn whose reply has ended no longer stops it, even before its thread is freed.
           const messages = yield* repo.listMessages(thread.id);
-          return messages.some((m) => m.status === "queued" || isInProgress(m.status))
-            ? ("reply-running" as const)
-            : null;
+          return {
+            hobRetired: agent.status === "retired",
+            approvalPending: requests.some((request) => request.state === "pending"),
+            replyRunning: messages.some((m) => m.status === "queued" || isInProgress(m.status)),
+          };
         });
-      const refuse = (threadId: ThreadId, reason: ThreadArchiveRefusal) =>
-        Effect.fail(new ThreadArchiveRefused({ threadId, reason }));
 
-      // Neither changes `updatedAt`, so a restored thread goes back to its place in the list.
-      const setArchivedAt = (thread: Thread, archivedAt: string | null) =>
-        changeThread(thread.id, (latest) =>
-          (latest.archivedAt === null) === (archivedAt === null) ? null : new Thread({ ...latest, archivedAt }),
-        ).pipe(Effect.map(Option.getOrElse(() => thread)));
+      // Runs the thread's lifecycle on the thread as stored, so a session a turn records meanwhile is
+      // kept, and saves what it changes. A refusal fails as `ThreadArchiveRefused`; one with no reason
+      // is a bug, as callers check the state first.
+      const changeLifecycle = (thread: Thread, event: ThreadLifecycleEvent) =>
+        Effect.gen(function* () {
+          let refused: IllegalThreadTransition | undefined;
+          const changed = yield* changeThread(thread.id, (latest) => {
+            const next = ThreadLifecycle.transition(latest, event);
+            if (next instanceof Thread) return next;
+            refused = next;
+            return null;
+          });
+          if (refused === undefined) return Option.getOrElse(changed, () => thread);
+          if (refused.refusal === null) return yield* Effect.die(refused);
+          return yield* new ThreadArchiveRefused({ threadId: thread.id, reason: refused.refusal });
+        });
 
       const archive = Effect.fn("ChatService.archive")(function* (threadId: ThreadId) {
         return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
-            if (thread.archivedAt !== null) return thread;
-            const reason = yield* archiveRefusal(thread, agent);
-            if (reason !== null) return yield* refuse(threadId, reason);
-            return yield* setArchivedAt(thread, yield* nowIso);
+            if (ThreadLifecycle.isArchived(thread)) return thread;
+            const blockers = yield* archiveBlockers(thread, agent);
+            return yield* changeLifecycle(thread, { _tag: "Archive", at: yield* nowIso, ...blockers });
           }),
         );
       });
@@ -1791,9 +1802,13 @@ export class ChatService extends Context.Service<
           threadId,
           (thread, agent) =>
             Effect.gen(function* () {
-              if (thread.archivedAt === null) return thread;
-              if (agent.status === "retired") return yield* refuse(threadId, "hob-retired");
-              return yield* setArchivedAt(thread, null);
+              if (!ThreadLifecycle.isArchived(thread)) return thread;
+              const others = yield* repo.listThreads(thread.agentId);
+              return yield* changeLifecycle(thread, {
+                _tag: "Restore",
+                hobRetired: agent.status === "retired",
+                chatOpen: others.some((other) => other.id !== thread.id && ThreadLifecycle.isOpenChat(other)),
+              });
             }),
           // Work that arrived while it was archived starts once it is back.
         ).pipe(Effect.tap(() => drainThreads([threadId])));

@@ -13,6 +13,7 @@ import {
   QuestionId,
   SafetyPreset,
   TaskId,
+  ThreadArchiveRefusal,
   ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -46,14 +47,6 @@ export class ToolLogNotFound extends Schema.TaggedError<ToolLogNotFound>()(
   { messageId: MessageId, stepId: Schema.String },
   { httpApiStatus: 404 },
 ) {}
-
-/**
- * Why a thread cannot be archived or restored now. `reply-running`: a reply is running or a
- * message waits in its queue. `approval-pending`: a tool call waits for the user's decision, which
- * wins when both apply. `hob-retired`: a retired hob's threads stay as they are.
- */
-export const ThreadArchiveRefusal = Schema.Literals(["reply-running", "approval-pending", "hob-retired"]);
-export type ThreadArchiveRefusal = typeof ThreadArchiveRefusal.Type;
 
 /** The thread was not archived or restored, for `reason`; nothing changed. */
 export class ThreadArchiveRefused extends Schema.TaggedError<ThreadArchiveRefused>()(
