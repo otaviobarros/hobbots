@@ -10,7 +10,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, MemoryPath, type MemoryScope, type ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, MemoryPath, type MemoryScope, Thread, type ThreadId } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -134,6 +134,22 @@ describe("the memory brief", () => {
 
         const quills = yield* chat.createThread(QUILL);
         expect((yield* hub.say(quills.id, "Run the tests.")).briefing).toBeNull();
+      }),
+    );
+  });
+
+  // covers ADR 037 (A camp is a thread with a kind), CH-001
+  it("[TC-GEN-1377-05] a private camp's turn still carries the memory brief", async () => {
+    const hub = memoryHub();
+    await hub.run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
+        const thread = yield* chat.createThread(PIP);
+        yield* repo.upsertThread(new Thread({ ...thread, kind: "camp", private: true }));
+        const briefed = yield* hub.say(thread.id, "Run the tests.");
+        expect(briefed.briefing).toContain("> Run the fast suite first.");
       }),
     );
   });

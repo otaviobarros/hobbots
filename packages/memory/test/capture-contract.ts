@@ -133,6 +133,8 @@ const makeJournal = (start: string) => {
   const entries: Array<EventEnvelope> = [];
   let cursor = 0;
   let sessions: Array<MemoryCaptureSession> = [];
+  let privateAtCursor: ReadonlyArray<ThreadId> = [];
+  let excluded: ReadonlyArray<string> = [];
   let crashNextSave = false;
   let at = Date.parse(start);
   const append = (payload: JournaledEvent, threadId: ThreadId | null, agentId: AgentId | null = pip) => {
@@ -148,14 +150,39 @@ const makeJournal = (start: string) => {
       payload,
     });
     entries.push(entry);
+    record(payload);
     return entry;
   };
+  /** Each thread's privacy and each Task's thread as they stand now, as the hub's tables hold them. */
+  const privateThreads = new Set<ThreadId>();
+  const taskThreads = new Map<TaskId, ThreadId | null>();
+  const record = (payload: JournaledEvent) => {
+    if (payload._tag === "ThreadUpserted") {
+      if (payload.thread.private) privateThreads.add(payload.thread.id);
+      else privateThreads.delete(payload.thread.id);
+    }
+    if (payload._tag === "TaskStateChanged") taskThreads.set(payload.task.id, payload.task.threadId);
+  };
   const log = MemoryCaptureLog.of({
-    hold: Effect.sync(() => ({ sequence: cursor, sessions })),
+    privacy: (work) =>
+      Effect.sync(() => {
+        const tasks = new Map<TaskId, ThreadId>();
+        for (const taskId of work.taskIds) {
+          const threadId = taskThreads.get(taskId) ?? null;
+          if (threadId !== null) tasks.set(taskId, threadId);
+        }
+        const asked = [...work.threadIds, ...tasks.values()];
+        return { privateNow: new Set(asked.filter((threadId) => privateThreads.has(threadId))), taskThreads: tasks };
+      }),
+    hold: Effect.sync(() => ({
+      sequence: cursor,
+      sessions,
+      exclusions: { privateThreads: privateAtCursor, excluded },
+    })),
     release: Effect.void,
     readAfter: (sequence, limit) =>
       Effect.sync(() => entries.filter((entry) => entry.sequence > sequence).slice(0, limit)),
-    save: (sequence, active, ended) =>
+    save: (sequence, active, ended, exclusions) =>
       Effect.suspend(() => {
         // A hub that stops between memory's acknowledgement and saving the cursor.
         if (crashNextSave) {
@@ -165,6 +192,8 @@ const makeJournal = (start: string) => {
         const replaced = new Set([...active.map((session) => session.sessionId), ...ended]);
         sessions = [...sessions.filter((session) => !replaced.has(session.sessionId)), ...active];
         cursor = sequence;
+        privateAtCursor = exclusions.privateThreads;
+        excluded = [...new Set([...excluded, ...exclusions.excluded])];
         return Effect.void;
       }),
   });
@@ -229,6 +258,23 @@ const exchange = (
     threadId,
   );
 };
+
+/** You make the camp private, or public again (ADR 037). */
+const setPrivate = (journal: Journal, threadId: ThreadId, value: boolean) =>
+  journal.append(
+    {
+      _tag: "ThreadUpserted",
+      thread: new Thread({
+        id: threadId,
+        agentId: pip,
+        title: "Tests",
+        private: value,
+        createdAt: "2026-11-05T12:00:00.000Z",
+        updatedAt: "2026-11-05T13:00:00.000Z",
+      }),
+    },
+    threadId,
+  );
 
 const archive = (journal: Journal, threadId: ThreadId) =>
   journal.append(
@@ -1095,6 +1141,243 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           }
           const tool = observed.find((observation) => observation.title.startsWith("Bash: Running pnpm test"));
           expect(tool === undefined ? null : Date.parse(tool.at)).toBe(Date.parse(ranAt));
+        }),
+      ));
+
+    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    it("[TC-GEN-1377-01] sends nothing of a private camp or its Quest's work, after a replayed journal too, and moves the cursor past it", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          setPrivate(journal, threadId, true);
+          exchange(journal, threadId, "Plan the surprise party.", "Saturday at eight.", {
+            steps: [step("s1", "Reading calendar.md", "Saturday is free")],
+          });
+          const quest = new Quest({
+            id: QuestId.make(crypto.randomUUID()),
+            taskId: TaskId.make(crypto.randomUUID()),
+            leadId: pip,
+            parentQuestId: null,
+            threadId,
+            goal: "Book the venue",
+            acceptance: [],
+            limits: { maxDepth: 2, deadline: null },
+            depth: 1,
+            state: "active",
+            createdAt: "2026-11-05T12:00:00.000Z",
+            endedAt: null,
+          });
+          journal.append({ _tag: "QuestStarted", quest }, threadId);
+          // A member works on the camp's Quest outside any chat, and is answered there.
+          const work = taskWork(journal, threadId, quill, "Book the venue for Saturday");
+          const attemptId = work.start();
+          work.steps([step("s1", "Calling the venue", "Booked")]);
+          arrived(journal, threadId, quill, answered(work.taskId, "Which room?", "The garden."), {
+            target: `task:${work.taskId}`,
+            turnId: attemptId,
+          }).taken();
+          work.replied("The venue is booked.", "completed");
+          const last = journal.append(
+            { _tag: "MessageUpserted", message: message(threadId, "Keep it quiet.") },
+            threadId,
+          );
+
+          expect(yield* capture.runOnce).toBe(true);
+          expect(journal.cursor()).toBe(last.sequence);
+          expect(journal.sessions()).toEqual([]);
+          const nothing = Effect.gen(function* () {
+            expect(yield* memory.observations(pip, threadId)).toBe(0);
+            expect(yield* memory.observations(quill, attemptId)).toBe(0);
+            expect(yield* memory.store.page(you, pipsOwn, sessionPage(threadId))).toBeNull();
+            expect(yield* memory.store.page(you, quillsOwn, sessionPage(attemptId))).toBeNull();
+          });
+          yield* nothing;
+
+          // Every entry sent again, as after a lost cursor, still sends nothing.
+          const replay = makeJournal("2026-11-05T12:00:00.000Z");
+          const replayed = yield* Layer.build(
+            MemoryCapture.make.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(MemoryStore, memory.store),
+                  Layer.succeed(MemoryCaptureLog, {
+                    ...replay.log,
+                    readAfter: journal.log.readAfter,
+                    privacy: journal.log.privacy,
+                  }),
+                ),
+              ),
+            ),
+          );
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          yield* quietPassed;
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          yield* nothing;
+        }),
+      ));
+
+    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    it("[TC-GEN-1377-02] stops capture from when a camp is made private, keeps what memory had, and goes on once it is public again", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          yield* capture.runOnce;
+          // start, the prompt and the reply
+          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
+
+          // Made private: its open session ends, so memory keeps what it had, and nothing more goes in.
+          setPrivate(journal, threadId, true);
+          yield* capture.runOnce;
+          expect(journal.sessions()).toEqual([]);
+          exchange(journal, threadId, "Draft the offer letter.", "Drafted it in offer.md.");
+          yield* capture.runOnce;
+          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(journal.sessions()).toEqual([]);
+          const page = yield* memory.store.page(you, pipsOwn, sessionPage(threadId));
+          expect(page?.markdown).toContain("Where are the docs?");
+          expect(page?.markdown).not.toContain("offer letter");
+
+          // Public again: what happens from then on is captured, in the same session.
+          setPrivate(journal, threadId, false);
+          exchange(journal, threadId, "And the decisions?", "In docs/decisions.");
+          yield* capture.runOnce;
+          // two prompts and two replies after the start, sent once
+          expect(yield* memory.observations(pip, threadId)).toBe(5);
+          archive(journal, threadId);
+          yield* capture.runOnce;
+          const after = yield* memory.store.page(you, pipsOwn, sessionPage(threadId));
+          expect(after?.markdown).toContain("And the decisions?");
+          expect(after?.markdown).not.toContain("offer letter");
+        }),
+      ));
+
+    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    it("[TC-GEN-1377-06] never sends what was written while a camp was private, once it is public again, from a backlog or a replay", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          // Memory is down while the camp is private, and public again by the time it is back.
+          const threadId = ThreadId.make(crypto.randomUUID());
+          yield* memory.down;
+          setPrivate(journal, threadId, true);
+          exchange(journal, threadId, "Draft the offer letter.", "Drafted it in offer.md.");
+          const work = taskWork(journal, threadId, quill, "Check the offer's salary band");
+          const attemptId = work.start();
+          work.steps([step("s1", "Reading bands.md", "Band C")]);
+          work.replied("It is in band C.", "completed");
+          setPrivate(journal, threadId, false);
+          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          expect(yield* capture.runOnce).toBe(false);
+          yield* memory.up;
+          expect(yield* capture.runOnce).toBe(true);
+          archive(journal, threadId);
+          yield* capture.runOnce;
+          // start, the public prompt and its reply
+          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(yield* memory.observations(quill, attemptId)).toBe(0);
+          const page = yield* memory.store.page(you, pipsOwn, sessionPage(threadId));
+          expect(page?.markdown).toContain("Where are the docs?");
+          expect(page?.markdown).not.toContain("offer");
+
+          // The cursor saved the camp as private: what is written after it, before it is public, stays out.
+          const later = ThreadId.make(crypto.randomUUID());
+          setPrivate(journal, later, true);
+          yield* capture.runOnce;
+          exchange(journal, later, "Plan the surprise party.", "Saturday at eight.");
+          setPrivate(journal, later, false);
+          yield* capture.runOnce;
+          expect(yield* memory.observations(pip, later)).toBe(0);
+
+          // Every entry sent again, as after a lost cursor, with the camps public now, adds nothing private.
+          const replay = makeJournal("2026-11-05T12:00:00.000Z");
+          const replayed = yield* Layer.build(
+            MemoryCapture.make.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(MemoryStore, memory.store),
+                  Layer.succeed(MemoryCaptureLog, {
+                    ...replay.log,
+                    readAfter: journal.log.readAfter,
+                    privacy: journal.log.privacy,
+                  }),
+                ),
+              ),
+            ),
+          );
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          yield* quietPassed;
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(yield* memory.observations(quill, attemptId)).toBe(0);
+          expect(yield* memory.observations(pip, later)).toBe(0);
+        }),
+      ));
+
+    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    it("[TC-GEN-1377-09] keeps out for good an Attempt's step and a reply written while the camp was private, after it is public again", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          const threadId = ThreadId.make(crypto.randomUUID());
+          setPrivate(journal, threadId, true);
+          // A member finishes step A while the camp is private, and the hob's reply starts streaming.
+          const work = taskWork(journal, threadId, quill, "Check the offer's salary band");
+          const attemptId = work.start();
+          const privateStep = step("s1", "Reading salaries.md", "Ada earns 9000");
+          work.steps([privateStep]);
+          journal.append({ _tag: "MessageUpserted", message: message(threadId, "Draft the offer letter.") }, threadId);
+          const reply = message(threadId, "", { role: "assistant", status: "streaming" });
+          journal.append({ _tag: "MessageUpserted", message: reply }, threadId);
+          yield* capture.runOnce;
+
+          // The camp is public again: the Attempt goes on, and every change carries step A again.
+          setPrivate(journal, threadId, false);
+          work.steps([privateStep, step("s2", "Running git log", "42 commits")]);
+          work.replied("The band is C.", "completed");
+          journal.append(
+            {
+              _tag: "MessageUpserted",
+              message: new Message({ ...reply, content: "Ada earns 9000, in band C.", status: "complete" }),
+            },
+            threadId,
+          );
+          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          yield* capture.runOnce;
+          archive(journal, threadId);
+          yield* capture.runOnce;
+          yield* quietPassed;
+          yield* capture.runOnce;
+
+          expect(yield* memory.observations(quill, attemptId)).toBe(0);
+          expect(yield* memory.store.page(you, quillsOwn, sessionPage(attemptId))).toBeNull();
+          // start, the public prompt and its reply
+          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          const page = yield* memory.store.page(you, pipsOwn, sessionPage(threadId));
+          expect(page?.markdown).toContain("Where are the docs?");
+          expect(page?.markdown).not.toContain("9000");
+          expect(page?.markdown).not.toContain("offer letter");
+
+          // A replay with the camp public now keeps them out too.
+          const replay = makeJournal("2026-11-05T12:00:00.000Z");
+          const replayed = yield* Layer.build(
+            MemoryCapture.make.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(MemoryStore, memory.store),
+                  Layer.succeed(MemoryCaptureLog, {
+                    ...replay.log,
+                    readAfter: journal.log.readAfter,
+                    privacy: journal.log.privacy,
+                  }),
+                ),
+              ),
+            ),
+          );
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          yield* quietPassed;
+          yield* Context.get(replayed, MemoryCapture).runOnce;
+          expect(yield* memory.observations(quill, attemptId)).toBe(0);
+          expect(yield* memory.observations(pip, threadId)).toBe(3);
         }),
       ));
   });
