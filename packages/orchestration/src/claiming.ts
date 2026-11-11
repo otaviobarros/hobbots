@@ -1,4 +1,4 @@
-import { ClaimRegister, GitWorkspace, MemoryProjects, type TaskRepository } from "@hobbots/agents";
+import { type ClaimOutcome, ClaimRegister, GitWorkspace, MemoryProjects, type TaskRepository } from "@hobbots/agents";
 import {
   type Claim,
   ClaimId,
@@ -58,6 +58,16 @@ const pathOf = (field: string, value: string | undefined) => {
     : Effect.succeed(path);
 };
 
+/** The key a path or branch claim is held by, or null for a number, which the register picks. */
+const keyOf = (input: ClaimInput) => {
+  if (input.scope === "path") return pathOf("path", input.path);
+  if (input.scope !== "branch") return Effect.succeed(null);
+  const branch = claimBranch(input.branch ?? "");
+  return branch === null
+    ? refuse("invalid-input", "A branch's name has no spaces, such as feat/claims.")
+    : Effect.succeed(branch);
+};
+
 /** What the main branch held in a number's folder: its names, or null when the clone has no such branch. */
 type OnMain = ReadonlyArray<string> | null;
 
@@ -77,6 +87,29 @@ const madeText = (claim: Claim, onMain: OnMain, taken: number | null) => {
     return `Your Task holds ${claimSubject(claim)}.${instead} Use ${number}: no other hob, chat or camp gets it.${unread}`;
   }
   return `Your Task holds ${claimSubject(claim)} until it ends.`;
+};
+
+/** The call's result: the hob's text, and the claim's details. */
+const doneOf = (outcome: ClaimOutcome, onMain: OnMain) => {
+  const names = onMain ?? [];
+  const clashes = outcome.clashes.length === 0 ? "" : ` ${claimClashText(outcome.claim, outcome.clashes)}`;
+  const text =
+    outcome._tag === "Held"
+      ? `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`
+      : madeText(outcome.claim, onMain, outcome.taken);
+  return {
+    message: `${text}${clashes}`,
+    details: {
+      claim_id: outcome.claim.id,
+      state: outcome.claim.state,
+      ...(isNumberScope(outcome.claim.scope)
+        ? { number: numberLike(Number(outcome.claim.key), names) }
+        : { key: outcome.claim.key }),
+      ...(outcome.clashes.length === 0
+        ? {}
+        : { clashes_with: outcome.clashes.map((other) => ({ task_id: other.taskId, key: other.key })) }),
+    },
+  };
 };
 
 /**
@@ -123,49 +156,24 @@ export const makeClaiming = (deps: Deps) =>
         const top = yield* workspace.value.repository(folder);
         if (top === null) return yield* refuse("not-a-repository", `${folder} is in no Git repository.`);
         const repository = yield* identityOf(top);
-        const numbered = isNumberScope(input.scope);
-        const directory = numbered ? yield* pathOf("directory", input.directory) : null;
+        const directory = isNumberScope(input.scope) ? yield* pathOf("directory", input.directory) : null;
         const onMain = directory === null ? [] : yield* workspace.value.namesOnMain(top, directory);
-        const names = onMain ?? [];
-        const key =
-          input.scope === "path"
-            ? yield* pathOf("path", input.path)
-            : input.scope === "branch"
-              ? claimBranch(input.branch ?? "")
-              : null;
-        if (input.scope === "branch" && key === null) {
-          return yield* refuse("invalid-input", "A branch's name has no spaces, such as feat/claims.");
-        }
+        const key = yield* keyOf(input);
         const committed = yield* register.value.claim({
           id: ClaimId.make(newId()),
           scope: input.scope,
           repository,
           directory,
           key,
-          onMain: numbersIn(names),
+          onMain: numbersIn(onMain ?? []),
           asked: input.number ?? null,
           taskId: task.id,
           actor: { kind: "hob", id: scope.caller.agentId },
           at: scope.at,
         });
         const outcome = committed.value;
-        const clashes = outcome.clashes.length === 0 ? "" : ` ${claimClashText(outcome.claim, outcome.clashes)}`;
-        const text =
-          outcome._tag === "Held"
-            ? `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`
-            : madeText(outcome.claim, onMain, outcome.taken);
         return {
-          done: {
-            message: `${text}${clashes}`,
-            details: {
-              claim_id: outcome.claim.id,
-              state: outcome.claim.state,
-              ...(numbered ? { number: numberLike(Number(outcome.claim.key), names) } : { key: outcome.claim.key }),
-              ...(outcome.clashes.length === 0
-                ? {}
-                : { clashes_with: outcome.clashes.map((other) => ({ task_id: other.taskId, key: other.key })) }),
-            },
-          },
+          done: doneOf(outcome, onMain),
           entries: committed.entries,
           shown: outcome.clashes.length === 0 ? [] : yield* shownIn(scope, outcome.claim),
         };
