@@ -54,7 +54,14 @@ test("[TC-GEN-222] chooses the memory model in Your data, sees shares follow the
   await expect(pick("Summing up a chat", "No AI")).toBeChecked();
   const stored = () =>
     JSON.parse(readFileSync(join(dataDir, "memory-settings.json"), "utf8")) as Record<string, unknown>;
-  await expect.poll(() => stored().tasks).toEqual({ summaries: "none", check: "same", answers: "same" });
+  await expect.poll(() => stored().tasks).toEqual({
+    summaries: "none",
+    check: "same",
+    answers: "same",
+    brief: "same",
+    chapters: "same",
+    judgments: "same",
+  });
   expect(stored()).toMatchObject({ provider: "chatgpt", model: null, effort: "high" });
 
   // No AI hides the model, and is kept after a reload.
