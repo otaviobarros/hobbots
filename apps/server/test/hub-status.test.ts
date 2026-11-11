@@ -246,7 +246,7 @@ describe("hub status", { timeout: 30_000 }, () => {
   });
 
   // covers UX-001
-  it("[TC-CH-295] a retired hob's presence leaves every client, connected or connecting", async () => {
+  it("[TC-CH-295] a retired hob's presence leaves every client, connected or connecting, and comes back with the hob", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const connected = await followStatus();
     await allShow([connected], { threads: {}, hobs: { [agent.id]: "idle" } });
@@ -254,6 +254,10 @@ describe("hub status", { timeout: 30_000 }, () => {
     expect((await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" })).status).toBe(200);
     const connecting = await followStatus();
     await allShow([connected, connecting], { threads: {}, hobs: {} });
+
+    // Brought back, it has a presence again on both.
+    expect((await request("POST", `/api/agents/${agent.id}/bring-back`)).status).toBe(200);
+    await allShow([connected, connecting], { threads: {}, hobs: { [agent.id]: "idle" } });
     await Promise.all([connected.stop(), connecting.stop()]);
   });
 

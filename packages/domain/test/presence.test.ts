@@ -6,6 +6,7 @@ import {
   hobPresenceState,
   noStatus,
   replyActivity,
+  type StatusEvent,
   type StatusSnapshot,
   shownStatus,
   type ThreadRunStatus,
@@ -100,6 +101,22 @@ describe("the status a client holds", () => {
     // Once the snapshot is in, an event from before it changes nothing.
     const held = withSnapshot(noStatus, snapshot({ runsRevision: 7, runs: [run("running", 7)] }));
     expect(withStatusEvent(held, { _tag: "ThreadRunChanged", run: run("idle", 6) })).toBe(held);
+  });
+
+  it("shows a hob brought back after its removal, even when a snapshot from before both arrives last", () => {
+    // The snapshot is read at revision 3; the hob retires at 4 and comes back at 5 before it arrives.
+    const events: ReadonlyArray<StatusEvent> = [
+      { _tag: "HobPresenceRemoved", agentId: hob, revision: 4 },
+      { _tag: "HobPresenceChanged", presence: presence("idle", 5) },
+    ];
+    const live = events.reduce(withStatusEvent, noStatus);
+    const late = withSnapshot(live, snapshot({ presenceRevision: 3, hobs: [presence("working", 3)] }));
+    expect(shownStatus(late).hobs).toEqual([presence("idle", 5)]);
+    // And a removal after it comes back still wins over the older presence.
+    const gone = withStatusEvent(late, { _tag: "HobPresenceRemoved", agentId: hob, revision: 6 });
+    expect(
+      shownStatus(withSnapshot(gone, snapshot({ presenceRevision: 5, hobs: [presence("idle", 5)] }))).hobs,
+    ).toEqual([]);
   });
 
   it("drops a retired hob's presence, and keeps it dropped against an older snapshot or change", () => {

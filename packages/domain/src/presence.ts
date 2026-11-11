@@ -137,12 +137,14 @@ const revisionOf = (each: { readonly revision: number }) => each.revision;
  * event that came while it was read is newer.
  */
 export const withSnapshot = (view: StatusView, snapshot: StatusSnapshot): StatusView => {
-  // A removal newer than the snapshot wins over the presence the snapshot still had.
+  // What the client holds of a hob is its presence or its removal, never both. Either one newer
+  // than the snapshot wins over what the snapshot had for that hob.
   const removed = newerThan(view.removed, snapshot.presenceRevision, (revision) => revision);
   const hobs = {
     ...Object.fromEntries(snapshot.hobs.map((presence) => [presence.agentId, presence])),
     ...newerThan(view.hobs, snapshot.presenceRevision, revisionOf),
   };
+  for (const agentId of Object.keys(removed)) delete hobs[agentId];
   return {
     runsRevision: snapshot.runsRevision,
     runs: {
@@ -150,7 +152,7 @@ export const withSnapshot = (view: StatusView, snapshot: StatusSnapshot): Status
       ...newerThan(view.runs, snapshot.runsRevision, revisionOf),
     },
     presenceRevision: snapshot.presenceRevision,
-    hobs: Object.fromEntries(Object.entries(hobs).filter(([agentId]) => !(agentId in removed))),
+    hobs,
     removed,
   };
 };
@@ -164,7 +166,7 @@ export type StatusEvent =
 const isNewer = (revision: number, floor: number, held: number | undefined) =>
   revision > floor && revision > (held ?? -1);
 
-/** The revision of what the client holds of a hob's presence: its presence, or its removal. */
+/** The revision of what the client holds of a hob: its presence, or its removal, never both. */
 const heldPresence = (view: StatusView, agentId: AgentId) => view.hobs[agentId]?.revision ?? view.removed[agentId];
 
 /**
@@ -177,10 +179,13 @@ export const withStatusEvent = (view: StatusView, event: StatusEvent): StatusVie
       return isNewer(event.run.revision, view.runsRevision, view.runs[event.run.threadId]?.revision)
         ? { ...view, runs: { ...view.runs, [event.run.threadId]: event.run } }
         : view;
-    case "HobPresenceChanged":
-      return isNewer(event.presence.revision, view.presenceRevision, heldPresence(view, event.presence.agentId))
-        ? { ...view, hobs: { ...view.hobs, [event.presence.agentId]: event.presence } }
-        : view;
+    case "HobPresenceChanged": {
+      const { agentId } = event.presence;
+      if (!isNewer(event.presence.revision, view.presenceRevision, heldPresence(view, agentId))) return view;
+      // A newer presence supersedes the hob's removal, as when it comes back.
+      const { [agentId]: _, ...removed } = view.removed;
+      return { ...view, hobs: { ...view.hobs, [agentId]: event.presence }, removed };
+    }
     case "HobPresenceRemoved": {
       if (!isNewer(event.revision, view.presenceRevision, heldPresence(view, event.agentId))) return view;
       const { [event.agentId]: _, ...hobs } = view.hobs;
