@@ -16,8 +16,9 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Schema } from "effect";
-import { SqlClient, type SqlError } from "effect/sql";
+import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
+import { unreadExpression } from "./thread-columns.ts";
 
 // A thread's chapters (ADR 037, migration 0097). The rules of each command are the pure planners
 // in @hobbots/domain; this runs them on the chapters as stored, inside the transaction that writes
@@ -102,6 +103,29 @@ export const ChapterRepositoryLive = Layer.effect(
         { discard: true },
       );
 
+    // Moves messages to another chapter at `revision`, the sequence of the event that moves them, so a
+    // client holding an earlier version of one takes this one. A thread you had read stays read.
+    const moveMessages = (threadId: ThreadId, revision: number, to: ChapterId, which: Statement.Fragment) =>
+      Effect.gen(function* () {
+        yield* sql`UPDATE threads SET read_revision = ${revision}
+          WHERE id = ${threadId} AND ${unreadExpression(sql)} = 0`;
+        yield* sql`UPDATE messages SET chapter_id = ${to}, revision = ${revision} WHERE ${which}`;
+      });
+
+    // A change of chapter boundaries leaves nothing behind that was worked out from the old ones: the
+    // briefing checkpoint summed up messages that may now be in another chapter (STD-ARCH-018), and
+    // `dropped` chapters' sessions, which must not be resumed when one of them is live again.
+    const forgetBoundaries = (threadId: ThreadId, dropped: ReadonlyArray<ChapterId>) =>
+      Effect.gen(function* () {
+        yield* sql`DELETE FROM thread_checkpoints WHERE thread_id = ${threadId}`;
+        if (dropped.length === 0) return;
+        const [row] = yield* sql<{ readonly sessions: unknown }>`SELECT sessions FROM threads WHERE id = ${threadId}`;
+        const sessions: ReadonlyArray<{ readonly chapterId?: unknown }> = JSON.parse(String(row?.sessions ?? "[]"));
+        const kept = sessions.filter((session) => !dropped.includes(session.chapterId as ChapterId));
+        if (kept.length === sessions.length) return;
+        yield* sql`UPDATE threads SET sessions = ${JSON.stringify(kept)} WHERE id = ${threadId}`;
+      });
+
     // Runs a planned command, or fails with its refusal, which rolls the transaction back.
     const planOrFail = <E extends Refusal>(
       planned: ChapterPlan | E,
@@ -139,6 +163,7 @@ export const ChapterRepositoryLive = Layer.effect(
             first,
           );
           yield* writeChanged(plan);
+          yield* forgetBoundaries(threadId, []);
           const chapter = changedOne(plan, input.id);
           const ended = plan.changed.find((c) => c.id !== input.id) ?? null;
           const event: JournaledEvent = { _tag: "ChapterStarted", threadId, chapter, ended };
@@ -170,8 +195,8 @@ export const ChapterRepositoryLive = Layer.effect(
           const plan = yield* planOrFail(planSplit(threadId, chapters, point, input), first);
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;
-          yield* sql`UPDATE messages SET chapter_id = ${input.id}
-            WHERE chapter_id = ${from} AND seq >= ${Number(at?.seq)}`;
+          yield* moveMessages(threadId, first, input.id, sql`chapter_id = ${from} AND seq >= ${Number(at?.seq)}`);
+          yield* forgetBoundaries(threadId, []);
           const event: JournaledEvent = {
             _tag: "ChapterSplit",
             threadId,
@@ -194,7 +219,7 @@ export const ChapterRepositoryLive = Layer.effect(
           const into = chapters[chapters.findIndex((chapter) => chapter.id === chapterId) - 1] as Chapter;
           // The messages move before their chapter goes, and it goes before the one it merged into
           // may become live.
-          yield* sql`UPDATE messages SET chapter_id = ${into.id} WHERE chapter_id = ${chapterId}`;
+          yield* moveMessages(threadId, first, into.id, sql`chapter_id = ${chapterId}`);
           yield* sql`DELETE FROM chapters WHERE id = ${chapterId}`;
           yield* sql`INSERT INTO merged_chapters ${sql.insert({
             id: chapterId,
@@ -203,6 +228,7 @@ export const ChapterRepositoryLive = Layer.effect(
             merged_at: DateTime.formatIso(yield* DateTime.now),
           })}`;
           yield* writeChanged(plan);
+          yield* forgetBoundaries(threadId, [into.id, chapterId]);
           const event: JournaledEvent = {
             _tag: "ChapterMerged",
             threadId,

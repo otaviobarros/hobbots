@@ -68,6 +68,15 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /**
+   * How many chapters were merged into the live chapter (ADR 037), worked out when the thread is read.
+   * Such a merge makes an earlier chapter live again with a new session, so a turn that began before
+   * it keeps no session for that chapter.
+   */
+  liveChapterMerges: Schema.Number.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(0)),
+    Schema.withConstructorDefault(Effect.succeed(0)),
+  ),
   /** The thread's own brain, or null to think with the hob's. A thread setting: it grants nothing. */
   brain: Schema.NullOr(Brain).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),

@@ -33,7 +33,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -48,12 +48,17 @@ const WREN = AgentId.make("wren");
 
 // What each runtime was asked, in order.
 let asked: Record<RuntimeKind, Array<PromptRequest>>;
+// While set, a prompt waits for it before the runtime answers.
+let held: Promise<void> | null = null;
 
 const recorded = (runtime: RuntimeKind, fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
   ...fake,
   sendPrompt: (request) => {
     asked[runtime].push(request);
-    return fake.sendPrompt(request);
+    const hold = held;
+    return hold === null
+      ? fake.sendPrompt(request)
+      : Stream.unwrap(Effect.promise(() => hold).pipe(Effect.as(fake.sendPrompt(request))));
   },
 });
 
@@ -93,6 +98,7 @@ type Hub = ManagedRuntime.ManagedRuntime<
 let hub: Hub | undefined;
 
 afterEach(async () => {
+  held = null;
   await hub?.dispose();
   hub = undefined;
 });
@@ -142,6 +148,21 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
 
 const startChapter = (id: ThreadId, chapter: string, title: string) =>
   run(ChapterService.use((chapters) => chapters.startChapter(id, { id: ChapterId.make(chapter), title })));
+
+/** Splits the chapter the prompt `content` is in at that prompt, into chapter `chapter`. */
+const splitAt = async (id: ThreadId, content: string, chapter: string) => {
+  const prompt = (await run(HobbotsRepository.use((repo) => repo.listMessages(id)))).find(
+    (m) => m.role === "user" && m.content === content,
+  ) as Message;
+  return run(
+    ChapterService.use((chapters) =>
+      chapters.splitChapter(id, { id: ChapterId.make(chapter), messageId: prompt.id, title: "Split off" }),
+    ),
+  );
+};
+
+const merge = (id: ThreadId, chapter: string) =>
+  run(ChapterService.use((chapters) => chapters.mergeChapters(id, ChapterId.make(chapter))));
 
 describe("runtime sessions keyed by chapter", () => {
   // covers ADR 037 (Chapters), RT-001
@@ -232,5 +253,71 @@ describe("runtime sessions keyed by chapter", () => {
     await run(ChapterService.use((chapters) => chapters.mergeChapters(id, ChapterId.make("garden"))));
     await say(id, "Thanks.");
     expect(asked["claude-code"][3]?.sessionId).toBeNull();
+  });
+
+  // covers ADR 037 (Chapters)
+  it("[TC-CH-1379-04] merging a split-off live chapter back before any turn in it starts a new session", async () => {
+    const id = await start("claude-code");
+    await say(id, "My cat is called Miso.");
+    await say(id, "What should I plant?");
+    const kept = liveSession(await thread(id), "claude-code");
+    expect(kept?.sessionId).toMatch(/^fake-/);
+
+    await splitAt(id, "What should I plant?", "garden");
+    await merge(id, "garden");
+    const merged = await thread(id);
+    expect(merged.liveChapterId).toBe(kept?.chapterId);
+    // The live chapter's old session is dropped, not resumed.
+    expect(liveSession(merged, "claude-code")).toBeUndefined();
+    await say(id, "Thanks.");
+    expect(asked["claude-code"][2]?.sessionId).toBeNull();
+  });
+
+  // covers ADR 037 (Chapters)
+  it("[TC-CH-1379-05] a turn under way while its chapter is split and merged back keeps no session for it", async () => {
+    const id = await start("claude-code");
+    await say(id, "My cat is called Miso.");
+    let release = () => {};
+    held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await run(ChatService.use((chat) => chat.sendPrompt(id, "What should I plant?")));
+    await vi.waitFor(() => expect(asked["claude-code"]).toHaveLength(2));
+
+    await splitAt(id, "What should I plant?", "garden");
+    await merge(id, "garden");
+    held = null;
+    release();
+    await vi.waitFor(async () => {
+      const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
+      expect(all.some((m) => isInProgress(m.status) || m.status === "queued")).toBe(false);
+    });
+
+    expect(liveSession(await thread(id), "claude-code")).toBeUndefined();
+    await say(id, "Thanks.");
+    expect(asked["claude-code"][2]?.sessionId).toBeNull();
+  });
+
+  // covers ADR 037 (Chapters), ADR 017, STD-ARCH-018
+  it("[TC-CH-1379-06] a brain switch after a split is not briefed from a summary of the chapter before it", async () => {
+    const id = await start("claude-code");
+    const filler = "about the garden beds and what grows in them ".repeat(110);
+    await say(id, `Miso is my cat. ${filler}`);
+    for (let n = 1; n <= 6; n++) await say(id, `Garden note ${n}. ${filler}`);
+    // A switch summarizes the older messages, and keeps that summary as the thread's checkpoint.
+    await run(ChatService.use((chat) => chat.setBrain(id, { runtime: "codex", model: null, effort: null })));
+    await say(id, "Where were we?");
+    expect(asked.codex[0]?.briefing).toContain("Miso");
+
+    // The split leaves the checkpoint's last message in the new live chapter, and Miso before it.
+    await splitAt(id, `Garden note 1. ${filler}`, "garden");
+    await run(ChatService.use((chat) => chat.setBrain(id, { runtime: "claude-code", model: null, effort: null })));
+    await say(id, "And now?");
+    const briefed = asked["claude-code"].at(-1) as PromptRequest;
+    expect(briefed.sessionId).toBeNull();
+    expect(briefed.briefing).toContain("Garden note 1.");
+    // No summary line of the first chapter. Miso is still quoted in Codex's reply, which echoed its
+    // own briefing and is in the live chapter.
+    expect(briefed.briefing).not.toMatch(/^- User: “Miso/m);
   });
 });

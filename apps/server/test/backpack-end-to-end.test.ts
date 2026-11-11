@@ -359,7 +359,10 @@ describe("the backpack end to end", () => {
       ["user", "complete"],
       ["assistant", "complete"],
     ]);
-    const working = await run(treeWhen((tree) => ownedBy(tree, QUILL)[0]?.state === "active"));
+    // The launch shows waiting once Aldric's turn has ended, which comes after its reply is stored.
+    const working = await run(
+      treeWhen((tree) => ownedBy(tree, QUILL)[0]?.state === "active" && tree.tasks[0]?.state === "waiting"),
+    );
     expect(working.tasks[0]?.state).toBe("waiting");
     expect(continuationsIn(requests)).toEqual([]);
 

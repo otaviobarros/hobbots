@@ -10,6 +10,7 @@ import {
   MessageId,
   roleFields,
   Thread,
+  ThreadCheckpoint,
   ThreadId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
@@ -538,5 +539,88 @@ describe("chapters in the database", () => {
       expect(reason?._tag === "Fail" && reason.error).toBeInstanceOf(IllegalChapterTransition);
     }
     expect(result.after).toBe(result.head);
+  });
+
+  // covers ADR 037 (Chapters), ADR 017, CH-004, DP-001, STD-ARCH-018
+  it("[TC-DP-1379-06] versions the messages a split or merge moves, and forgets what the old boundaries gave", async () => {
+    const result = await hub.runPromise(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        const store = yield* ChapterRepository;
+        const threadId = ThreadId.make("versions");
+        yield* repo.upsertThread(newThread(threadId));
+        const reply = (id: string) =>
+          new Message({ ...userMessage(threadId, id), role: "assistant", content: `Reply ${id}` });
+        for (const message of [userMessage(threadId, "v1"), reply("v2"), userMessage(threadId, "v3"), reply("v4")])
+          yield* repo.upsertMessage(message);
+        const stored = Option.getOrThrow(yield* repo.findThread(threadId));
+        const first = stored.liveChapterId as ChapterId;
+        yield* repo.upsertThread(
+          new Thread({
+            ...stored,
+            sessions: [
+              { runtime: "claude-code", sessionId: "s1", chapterId: first, seenThrough: MessageId.make("v4") },
+            ],
+          }),
+        );
+        yield* repo.markThreadRead(threadId, MessageId.make("v4"), Number.MAX_SAFE_INTEGER);
+        const checkpoint = new ThreadCheckpoint({
+          threadId,
+          throughMessageId: MessageId.make("v4"),
+          lines: ["- User: “v1”"],
+          omitted: 0,
+          createdAt: NOW,
+        });
+        yield* repo.saveCheckpoint(checkpoint);
+        const revisions = () =>
+          repo.listMessages(threadId).pipe(Effect.map((all) => all.map((m) => [m.id, m.chapterId, m.revision])));
+        const before = yield* revisions();
+
+        const split = yield* store.splitChapter(threadId, {
+          id: ChapterId.make("versions-c2"),
+          messageId: MessageId.make("v3"),
+          title: "Later",
+        });
+        const afterSplit = {
+          messages: yield* revisions(),
+          thread: Option.getOrThrow(yield* repo.findThread(threadId)),
+          checkpoint: yield* repo.findCheckpoint(threadId),
+        };
+        yield* repo.saveCheckpoint(checkpoint);
+        const merged = yield* store.mergeChapters(threadId, ChapterId.make("versions-c2"));
+        const afterMerge = {
+          messages: yield* revisions(),
+          thread: Option.getOrThrow(yield* repo.findThread(threadId)),
+          checkpoint: yield* repo.findCheckpoint(threadId),
+        };
+        return { first, before, split, afterSplit, merged, afterMerge };
+      }),
+    );
+    const splitAt = result.split.entries[0]?.sequence;
+    const mergedAt = result.merged.entries[0]?.sequence;
+    const [v1, v2] = result.before;
+    // A client holding an earlier version of a moved message takes the moved one, which is newer.
+    expect(result.afterSplit.messages).toEqual([
+      v1,
+      v2,
+      ["v3", "versions-c2", splitAt],
+      ["v4", "versions-c2", splitAt],
+    ]);
+    expect(result.afterMerge.messages).toEqual([
+      v1,
+      v2,
+      ["v3", result.first, mergedAt],
+      ["v4", result.first, mergedAt],
+    ]);
+    // A thread you had read stays read, and the briefing summary of the old boundaries is gone.
+    expect([result.afterSplit.thread.unread, result.afterMerge.thread.unread]).toEqual([false, false]);
+    expect([Option.isNone(result.afterSplit.checkpoint), Option.isNone(result.afterMerge.checkpoint)]).toEqual([
+      true,
+      true,
+    ]);
+    // A split leaves the first chapter's session, which is resting; the merge makes it live again
+    // and drops it, so it is never resumed.
+    expect(result.afterSplit.thread.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
+    expect(result.afterMerge.thread).toMatchObject({ liveChapterId: result.first, liveChapterMerges: 1, sessions: [] });
   });
 });
