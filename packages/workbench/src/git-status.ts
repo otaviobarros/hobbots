@@ -173,11 +173,35 @@ const repositoryFrom = async (folder: string): Promise<string | null> => {
   return found === null ? null : realpath(found.dir);
 };
 
+/** Where a clone keeps its default branch, in the order the hub tries them. */
+const MAIN_REFS = ["refs/remotes/origin/HEAD", "refs/remotes/origin/main", "refs/heads/main"];
+
+/**
+ * The names directly in `directory` on the default branch of the repository whose top is `top`, as
+ * this clone has it, for the claims register (ADR 037). Empty when the branch has no such folder,
+ * null when the repository or the branch cannot be read.
+ */
+const namesOnMain = async (top: string, directory: string): Promise<ReadonlyArray<string> | null> => {
+  const repository = await repositoryOf(top, new Map());
+  if (repository === null || repository.dir !== top) return null;
+  const files = repository.common === null ? fs : worktreeFs(repository.gitdir, repository.common);
+  for (const ref of MAIN_REFS) {
+    const oid = await git.resolveRef({ fs: files, gitdir: repository.gitdir, ref }).catch(() => null);
+    if (oid === null) continue;
+    const found = await git
+      .readTree({ fs: files, gitdir: repository.gitdir, oid, filepath: directory })
+      .catch((error: unknown) => (error instanceof git.Errors.NotFoundError ? { tree: [] } : null));
+    return found === null ? null : found.tree.map((entry) => entry.path);
+  }
+  return null;
+};
+
 /** The hub's reader of Git state. */
 export const GitWorkspaceLive = Layer.succeed(
   GitWorkspace,
   GitWorkspace.of({
     uncommitted: (files) => Effect.promise(() => uncommitted(files).catch(() => [])),
     repository: (folder) => Effect.promise(() => repositoryFrom(folder).catch(() => null)),
+    namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
   }),
 );

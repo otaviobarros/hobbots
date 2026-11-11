@@ -6,11 +6,13 @@ import {
   type BackpackPayload,
   type Checkpoint,
   type CheckpointKind,
+  type Claim,
   type Delegation,
   isIdleQuestFinding,
   type JournaledEvent,
   leadsAbove,
   type NewBackpackItem,
+  noteRecipientOf,
   type Quest,
   type QuestId,
   type Question,
@@ -248,6 +250,33 @@ const handedOff: Rule<"HandedOff"> = ({ handOff, artifact }, trees) => {
   ];
 };
 
+/**
+ * A claim that clashes (ADR 037) goes to the lead of each Task involved: the nearest lead still at
+ * work above it, or its own owner when nobody leads it. The new claim's lead hears of every claim
+ * it clashes with; each other Task's lead hears of the new claim. Neither Task is stopped.
+ */
+const claimMade: Rule<"ClaimMade"> = ({ claim, clashes }, trees) => {
+  const draft = (held: Claim, others: ReadonlyArray<Claim>, record: string): ReadonlyArray<Draft> => {
+    const task = trees.byId.get(held.taskId);
+    if (task === undefined) return [];
+    return [
+      {
+        recipientId: noteRecipientOf(task, trees.all),
+        task,
+        attemptId: null,
+        payload: { _tag: "claim-clash", claim: held, clashes: others },
+        record,
+        version: null,
+      },
+    ];
+  };
+  if (clashes.length === 0) return [];
+  return [
+    ...draft(claim, clashes, `claim:${claim.id}`),
+    ...clashes.flatMap((other) => draft(other, [claim], `claim:${other.id}:${claim.id}`)),
+  ];
+};
+
 const RULES: { readonly [Tag in JournaledEvent["_tag"]]?: Rule<Tag> } = {
   TaskCreated: taskCreated,
   TaskCompleted: taskCompleted,
@@ -258,6 +287,7 @@ const RULES: { readonly [Tag in JournaledEvent["_tag"]]?: Rule<Tag> } = {
   QuestionAnswered: questionAnswered,
   NoteLeft: noteLeft,
   HandedOff: handedOff,
+  ClaimMade: claimMade,
 };
 
 const drafts = (event: JournaledEvent, trees: Trees): ReadonlyArray<Draft> => {
@@ -447,6 +477,8 @@ export const tasksTouched = (events: ReadonlyArray<JournaledEvent>): ReadonlyArr
           return [event.note.taskId];
         case "HandedOff":
           return [event.handOff.toTaskId];
+        case "ClaimMade":
+          return [event.claim.taskId, ...event.clashes.map((other) => other.taskId)];
         default:
           return [];
       }

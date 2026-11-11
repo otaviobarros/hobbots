@@ -15,6 +15,7 @@ import {
 import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { recordBackpackItems } from "./backpack-rows.ts";
+import { releaseEndedClaims } from "./claim-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
@@ -218,6 +219,8 @@ const restCorrelationOf = (
   // A hub question has no Task (#976): it names the chat it concerns, if any.
   if ("hubQuestion" in event) return hubQuestionCorrelation(event.hubQuestion);
   if (isTaskEvent(event)) return taskCorrelationOf(event);
+  // A claim names its Task, whose owner and thread the row takes (ADR 037).
+  if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
   if (isSkillEvent(event)) return skillCorrelationOf(event);
   // The Workbench's records name their Task (ADR 023).
   if (isWorkbenchRecord(event)) return { ...NONE, taskId: workbenchTaskOf(event) };
@@ -335,12 +338,15 @@ export const lockJournal = (sql: SqlClient.SqlClient) => makeJournalWriter(sql).
 
 /**
  * The events a change's own events call for in the same transaction, at sequences from `first` on:
- * the backpack items they record (ADR 019), then the grants of the top Tasks they end (ADR 018).
+ * the backpack items they record (ADR 019), then the grants of the top Tasks they end (ADR 018), then
+ * the claims of every Task they end (ADR 037).
  */
 const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEventType>, first: number) =>
   Effect.gen(function* () {
     const items = yield* recordBackpackItems(sql, events, first);
-    return [...items, ...(yield* endTaskGrants(sql, events, first + items.length))];
+    const grants = yield* endTaskGrants(sql, events, first + items.length);
+    const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
+    return [...items, ...grants, ...claims];
   });
 
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.

@@ -191,6 +191,17 @@ Building `ThreadRun` changed its states from idle, starting, running, stopping a
 - **Held and the wake are flags.** `held` (you stopped a turn that carried work, so the work waits for your next message) and `wakePending` (work arrived while the thread was busy) both outlive a turn and hold while the run is `idle`, so they are fields of the record, not states. The record also holds the running reply and the message Send now picked.
 - **Proven through the chat.** Besides the machine's own model test, `[TC-CH-293]` plays random sends, Send now, stops, arrivals of backpack work, stops racing arrivals, finished turns and restarts against one thread with the real dispatcher, and checks after every step that the chat started exactly the turns a model of the run predicts, carrying work or not, with the queue it predicts.
 
+## Amendment: the claims register ([#1388](https://github.com/otaviobarros/hobbots/issues/1388))
+
+Building the claims register settled these details.
+
+- **A released number is never handed out again.** Reusing it would keep numbers dense, but a number seen in a closed branch would then mean two things. So a number is unique in its folder of a repository for good, and the next number is one past every number `main` and the register have held.
+- **Uniqueness.** A number is unique on its repository, the folder its numbers count and the number. A path or branch is unique per Task, since two Tasks may claim the same one and each contests the other; "unique on scope and key" holds for numbers only.
+- **A repository is known across clones.** A claim names a folder in a Git repository, and the hub keys it by the repository's `origin` remote, as memory keys a project (ADR 028), so a checkout and a worktree share their claims. Paths are relative to the repository's top.
+- **Main is read, never fetched.** The hub reads the numbers on the repository's default branch as the clone last fetched it, without running Git. It makes no network call in the claim's transaction.
+- **The machine is `ClaimMachine`.** It is named after its record, like the other machines. A number is never contested. A Task's claims are released in the transaction that ends it.
+- **`claim` is a Task tool.** It needs a Task to hold the claim, so in a chat with no Task yet it starts one, as `plan_steps` does.
+
 ## Validation
 
 The scenarios that would show this decision holds. None is proven yet; each names the slice that will prove it.
@@ -206,4 +217,4 @@ The scenarios that would show this decision holds. None is proven yet; each name
 - A changed decision is kept and crossed out; find answers "where did we decide X" from records and cites them; a private camp's entries never reach memory. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - The brief and chapter summaries are written by projectors that resume from their cursor after a restart and write nothing twice. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - With No AI chosen for the hub's brain, briefs, chapter summaries and camp suggestions still appear from their rules, and no model is called; with a brain chosen, a `HubDecider` answer that does not decode falls back to the rule. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
-- A quest's updates land in its camp; two quests in different camps that ask for a migration number get different numbers, and two that claim the same path both get a Heads-up through the backpack. Not proven yet ([#1365](https://github.com/otaviobarros/hobbots/issues/1365)).
+- Two quests in different camps that ask for a migration number get different numbers, `[TC-OR-1388-01]`; two that claim the same path each tell their lead through the backpack and neither stops, `[TC-OR-1388-02]`; a released number is never handed out again, `[TC-OR-1388-03]`; and the register agrees with a model, claims at once included, `[TC-OR-1388-04]` (all in `apps/server/test/claims.test.ts`). A quest's updates land in its camp, and the camp shows the clash as a Heads-up: not proven yet ([#1389](https://github.com/otaviobarros/hobbots/issues/1389), [#1390](https://github.com/otaviobarros/hobbots/issues/1390)).

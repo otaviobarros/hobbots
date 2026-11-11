@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ClaimScope } from "./claim.ts";
 import { PolicyLayer } from "./policy.ts";
 import { ArtifactKind, choicesProblem, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
 import { ancestorsOf, type Task } from "./task.ts";
@@ -259,6 +260,66 @@ export const TaskToolInputs = {
     key,
     task_id: id("A Task under one of yours to cancel, with everything under it."),
   }),
+  claim: Schema.Struct({
+    key,
+    task_id: taskId,
+    scope: ClaimScope.annotate({
+      description:
+        "migration-number or adr-number: the next free number for a new migration or ADR, unique across every hob, chat and camp. path: a file or folder your Task changes. branch: a branch your Task works on.",
+    }),
+    folder: Schema.optionalKey(
+      Schema.String.annotate({
+        description:
+          "The absolute folder of the Git repository the claim is in, one of your folders or inside one. Leave it out for your first folder.",
+      }),
+    ),
+    directory: Schema.optionalKey(
+      text(
+        "For a number: the folder inside the repository whose files the numbers count, relative to its top, such as packages/persistence/src/migrations or docs/decisions.",
+      ),
+    ),
+    number: Schema.optionalKey(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+        description:
+          "For a number you already use in your work: Hobbots keeps it when it is free, or gives you the next free one.",
+      }),
+    ),
+    path: Schema.optionalKey(
+      text("For a path: the file or folder, relative to the repository's top, such as packages/domain/src/claim.ts."),
+    ),
+    branch: Schema.optionalKey(text("For a branch: its name, such as feat/claims.")),
+  }).check(
+    Schema.makeFilter(
+      (input: {
+        readonly scope: ClaimScope;
+        readonly directory?: string;
+        readonly number?: number;
+        readonly path?: string;
+        readonly branch?: string;
+      }) => claimInputProblem(input),
+    ),
+  ),
+};
+
+/** Why a `claim` call's input does not fit its scope, or undefined when it does. */
+const claimInputProblem = (input: {
+  readonly scope: ClaimScope;
+  readonly directory?: string;
+  readonly number?: number;
+  readonly path?: string;
+  readonly branch?: string;
+}): string | undefined => {
+  const given = (["directory", "number", "path", "branch"] as const).filter((field) => input[field] !== undefined);
+  const wanted: ReadonlyArray<string> =
+    input.scope === "path" ? ["path"] : input.scope === "branch" ? ["branch"] : ["directory", "number"];
+  const extra = given.find((field) => !wanted.includes(field));
+  if (extra !== undefined) return `A ${input.scope} claim takes no ${extra}.`;
+  if (input.scope === "path" && input.path === undefined) return "A path claim needs the path.";
+  if (input.scope === "branch" && input.branch === undefined) return "A branch claim needs the branch.";
+  if (wanted.includes("directory") && input.directory === undefined) {
+    return `A ${input.scope} claim needs the directory whose files the numbers count.`;
+  }
+  return undefined;
 };
 
 export type TaskToolName = keyof typeof TaskToolInputs;
@@ -344,6 +405,12 @@ export const TASK_TOOLS: ReadonlyArray<{
     description: "Cancel a Task under one you own, with everything under it.",
     label: "Cancelling a Task",
   },
+  {
+    name: "claim",
+    description:
+      "Claim what your Task needs that other hobs' work could take too, before you use it. For a new migration or ADR, fetch first, then ask for a number: Hobbots gives the next one free on main, as your clone last fetched it, and in every other chat and camp, and never gives it to anyone else, so use the number it gives. Claim the files, folders or branch your Task changes: when another Task holds an open claim on the same one, both leads hear of it and neither Task is stopped. Claims end when your Task ends. In a conversation with no Task yet, it starts one for this request.",
+    label: "Claiming",
+  },
 ];
 
 export const isTaskToolName = (name: string): name is TaskToolName => Object.hasOwn(TaskToolInputs, name);
@@ -393,6 +460,10 @@ export const TaskToolRefusal = Schema.Literals([
   "destination-theirs",
   // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
   "charm-refused",
+  // A claim in a folder that is in no Git repository, or outside the hob's folders (ADR 037).
+  "not-a-repository",
+  // A claim made where the hub keeps no claims register.
+  "no-register",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;
 

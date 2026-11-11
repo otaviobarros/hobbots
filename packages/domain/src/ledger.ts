@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem, type BackpackItemId } from "./backpack.ts";
+import { claimSubject } from "./claim.ts";
 import { Milestone, Question, type TaskRefusal, type TaskTree, TaskWait } from "./quest.ts";
 import { TaskReadiness } from "./readiness.ts";
 import { descendantsOf, isTerminalTask, Task, TaskId } from "./task.ts";
@@ -163,6 +164,8 @@ const describeItem = (item: BackpackItem): string => {
       return `the hand-off of "${payload.artifact.label}" is not yet read`;
     case "checkpoint":
       return `a ${payload.checkpoint.kind} reported on Task ${payload.checkpoint.taskId} is not yet read: ${payload.checkpoint.summary}`;
+    case "claim-clash":
+      return `a clash over ${claimSubject(payload.claim)} is not yet read`;
     default:
       return `a ${item.kind} item about Task ${item.taskId} is not yet dealt with`;
   }

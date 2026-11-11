@@ -4,6 +4,7 @@ import {
   CONTINUATION_HEADER,
   checkpointText,
   choicesText,
+  claimClashText,
   hobProposalOutcomeText,
   type Question,
   skillProposalText,
@@ -158,6 +159,8 @@ const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
       return `The deadline on Task ${payload.taskId} passed at ${payload.dueAt}.`;
     case "task":
       return `${about(payload.task)} is yours to work on.`;
+    case "claim-clash":
+      return claimClashText(payload.claim, payload.clashes);
     default:
       return describeRoutine(item);
   }
