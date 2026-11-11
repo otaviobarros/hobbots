@@ -1,6 +1,7 @@
 import { type HobUnavailable, type ThreadArchived, ThreadArchiveRefused, type ThreadNotFound } from "@hobbots/api";
 import {
   type Agent,
+  type ArchiveBlockers,
   type Brain,
   type IllegalThreadTransition,
   isInProgress,
@@ -40,13 +41,32 @@ export interface ThreadCommandsDeps extends Pick<TurnRunnerDeps, "changeThread" 
   readonly drainThreads: (threadIds: ReadonlyArray<ThreadId>) => Effect.Effect<unknown>;
 }
 
+/**
+ * What stops a thread from being archived or superseded now, which `ThreadLifecycle` weighs. Run it
+ * under the hob's lock, so no turn starts and no message is sent while the thread changes.
+ */
+export const archiveBlockersOf = Effect.gen(function* () {
+  const repo = yield* HobbotsRepository;
+  // Without approvals, no request waits in a thread, so none stops its archive.
+  const approvals = yield* Effect.serviceOption(ApprovalService);
+  return (thread: Thread, agent: Agent) =>
+    Effect.gen(function* () {
+      const requests = Option.isSome(approvals) ? yield* approvals.value.listForThread(thread.id) : [];
+      // A turn whose reply has ended no longer stops it, even before its thread is freed.
+      const messages = yield* repo.listMessages(thread.id);
+      return {
+        hobRetired: agent.status === "retired",
+        approvalPending: requests.some((request) => request.state === "pending"),
+        replyRunning: messages.some((m) => m.status === "queued" || isInProgress(m.status)),
+      } satisfies ArchiveBlockers;
+    });
+});
+
 export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
   Effect.gen(function* () {
     const { findThread, requireActive, requireLive, withThreadHob, changeThread, announce, drainThreads } = deps;
     const repo = yield* HobbotsRepository;
     const adapters = yield* runtimeAdapters;
-    // Without approvals, no request waits in a thread, so none stops its archive.
-    const approvals = yield* Effect.serviceOption(ApprovalService);
 
     const checkBrainSwitch = Effect.fn("ChatService.checkBrainSwitch")(function* (threadId: ThreadId) {
       const thread = yield* findThread(threadId);
@@ -84,19 +104,7 @@ export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
       );
     });
 
-    // What stops the thread from being archived now, which `ThreadLifecycle` weighs. Runs under the
-    // hob's lock, so no turn starts and no message is sent while the thread is being archived.
-    const archiveBlockers = (thread: Thread, agent: Agent) =>
-      Effect.gen(function* () {
-        const requests = Option.isSome(approvals) ? yield* approvals.value.listForThread(thread.id) : [];
-        // A turn whose reply has ended no longer stops it, even before its thread is freed.
-        const messages = yield* repo.listMessages(thread.id);
-        return {
-          hobRetired: agent.status === "retired",
-          approvalPending: requests.some((request) => request.state === "pending"),
-          replyRunning: messages.some((m) => m.status === "queued" || isInProgress(m.status)),
-        };
-      });
+    const archiveBlockers = yield* archiveBlockersOf;
 
     // Runs the thread's lifecycle on the thread as stored, so a session a turn records meanwhile is
     // kept, and saves what it changes. A refusal fails as `ThreadArchiveRefused`; one with no reason

@@ -83,13 +83,22 @@ const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
   return { ...NONE, taskId: "checkpoint" in event ? event.checkpoint.taskId : event.handOff.toTaskId };
 };
 
+type ThreadEvent = Extract<JournaledEventType, { readonly _tag: "ThreadUpserted" | "CampMade" | "ChatStartedFresh" }>;
+const THREAD_EVENTS: ReadonlySet<string> = new Set(["ThreadUpserted", "CampMade", "ChatStartedFresh"]);
+const isThreadEvent = (event: JournaledEventType): event is ThreadEvent => THREAD_EVENTS.has(event._tag);
+
+/** A thread's own events; Start fresh is journaled in the new chat, whose origin names the chat it replaced. */
+const threadCorrelationOf = (event: ThreadEvent): RowCorrelation => {
+  const thread = event._tag === "ChatStartedFresh" ? event.chat : event.thread;
+  return { ...NONE, agentId: thread.agentId, threadId: thread.id };
+};
+
 const correlationOf = (event: JournaledEventType): RowCorrelation => {
   if (isWebEvent(event)) return webCorrelationOf(event);
+  if (isThreadEvent(event)) return threadCorrelationOf(event);
   switch (event._tag) {
     case "AgentUpserted":
       return { ...NONE, agentId: event.agent.id };
-    case "ThreadUpserted":
-      return { ...NONE, agentId: event.thread.agentId, threadId: event.thread.id };
     case "ApprovalRequested":
     case "ApprovalResolved":
       return {
@@ -197,6 +206,8 @@ const restCorrelationOf = (
       readonly _tag:
         | "AgentUpserted"
         | "ThreadUpserted"
+        | "CampMade"
+        | "ChatStartedFresh"
         | "ApprovalRequested"
         | "ApprovalResolved"
         | "GrantCreated"

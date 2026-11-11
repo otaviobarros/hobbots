@@ -64,6 +64,18 @@ const applyToThread =
     return trees === read.trees ? read : { ...read, trees };
   };
 
+/**
+ * A thread's Tasks moved to another thread, as Start fresh moves them (ADR 037): its list is read
+ * again. No Task event says so, so a read already in flight may have been taken before the move, and
+ * while the list has no data yet Query would hand that read back instead of starting another. It is
+ * cancelled first (STD-REACT-012).
+ */
+export const threadTasksMoved = async (queryClient: QueryClient, threadId: ThreadId) => {
+  const queryKey = taskKeys.thread(threadId);
+  await queryClient.cancelQueries({ queryKey, exact: true });
+  await queryClient.invalidateQueries({ queryKey, exact: true });
+};
+
 /** The Tasks a thread's requests started, each with everything under it. */
 export const threadTasksQuery = (threadId: ThreadId) =>
   queryOptions({
