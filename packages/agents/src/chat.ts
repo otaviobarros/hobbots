@@ -111,8 +111,9 @@ import {
   ThreadRunMachine,
 } from "./thread-run.ts";
 import { keepToolOutput } from "./tool-output.ts";
-import { accessNow, HobTools, narrows } from "./tools.ts";
+import { HobTools } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
+import { makeTurnGrants } from "./turn-grants.ts";
 import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
 import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
 import { type WebSearchTurn, webSearchRequest, webSearchTurn } from "./web-usage.ts";
@@ -751,19 +752,7 @@ export class ChatService extends Context.Service<
           return briefing?.text ?? null;
         });
 
-      // What each running turn was given to work with, so a narrower policy stops it. Reading a grant
-      // and reviewing them take turns, so no change to the policy lands between the two unseen.
-      const authority = yield* Semaphore.make(1);
-      const granted = new Map<ThreadId, { readonly agentId: AgentId; readonly access: ToolAccess | null }>();
-      const currentAccess = (agentId: AgentId) => accessNow(repo, hobTools, agentId);
-      const grant = (threadId: ThreadId, agent: Agent) =>
-        Semaphore.withPermit(
-          authority,
-          // The turn starts here, so a question about it goes to this chat (#741).
-          accessNow(repo, hobTools, agent.id, { chat: { agentId: agent.id, threadId } }).pipe(
-            Effect.tap((access) => Effect.sync(() => granted.set(threadId, { agentId: agent.id, access }))),
-          ),
-        );
+      const { currentAccess, grant, release, narrowed: narrowedTurns } = yield* makeTurnGrants(repo, hobTools);
 
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
       // Its tools are the exception: a narrower policy stops it (reviewAuthority).
@@ -1187,11 +1176,7 @@ export class ChatService extends Context.Service<
           // Runs after the runtime's stream has closed, so "stopped" means the turn really ended.
           Effect.onInterrupt(() => transition(reply, MessageTransitions.interrupt, saveMessage)),
           // A reply already replaced by a newer turn's changes nothing.
-          Effect.ensuring(
-            step(thread.id, { _tag: "TurnEnded", reply }).pipe(
-              Effect.andThen(Effect.sync(() => granted.delete(thread.id))),
-            ),
-          ),
+          Effect.ensuring(step(thread.id, { _tag: "TurnEnded", reply }).pipe(Effect.andThen(release(thread.id)))),
         );
 
       // Starts a turn for a prompt that is already stored, or for a continuation's prompt, which
@@ -1705,18 +1690,9 @@ export class ChatService extends Context.Service<
       });
 
       const reviewAuthority = Effect.fn("ChatService.reviewAuthority")(function* (agentId?: AgentId) {
-        // The grants are listed once the permit is held, so a grant that was being read is listed too.
-        const narrowed = yield* Semaphore.withPermit(
-          authority,
-          Effect.suspend(() =>
-            Effect.filter(
-              Array.from(granted).filter(([, turn]) => agentId === undefined || turn.agentId === agentId),
-              ([, turn]) => Effect.map(currentAccess(turn.agentId), (access) => narrows(turn.access, access)),
-            ),
-          ),
-        );
+        const narrowed = yield* narrowedTurns(agentId);
         // Outside the permit: a turn that is stopping may still be reading its grant.
-        yield* Effect.forEach(narrowed, ([threadId]) => FiberMap.remove(turns, threadId), { discard: true });
+        yield* Effect.forEach(narrowed, (threadId) => FiberMap.remove(turns, threadId), { discard: true });
         if (Option.isSome(taskTurns)) yield* taskTurns.value.reviewAuthority(agentId);
       });
 
