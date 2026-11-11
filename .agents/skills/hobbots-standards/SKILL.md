@@ -11,6 +11,7 @@ The rules live in `docs/standards/`. The index is `docs/standards/README.md`.
 
 1. Find the areas the change touches in the prefix table of `docs/standards/README.md`. A component change touches at least `STD-REACT`, `STD-UI` and `STD-I18N`. A backend change touches at least `STD-ARCH`, `STD-EFFECT` and `STD-DUP`.
 2. Read each of those area files in full.
+   A change to a lifecycle, a command, a journal event, a projector, the backpack, what a turn reads, a status a client shows or a multi-step UI flow also follows STD-ARCH-013 to STD-ARCH-019 and STD-REACT-028 and 029. Read the state and events contract in `docs/architecture/state-and-events.md` and ADR 037 in `docs/decisions/037-chat-and-camps.md` with them.
 3. Apply every rule in them. The step is done when you can say, for each rule, that the change follows it or that it does not apply.
 4. Cite the IDs you applied in the plan or the review, for example "follows STD-REACT-001". A review finding names the rule it breaks.
 
