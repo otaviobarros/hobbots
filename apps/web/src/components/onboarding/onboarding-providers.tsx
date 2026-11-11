@@ -16,6 +16,7 @@ import { useUpdateSetup, watchedSetupQuery } from "../../api/setup.ts";
 import { PROVIDER_MAKERS, PROVIDER_MARKS, PROVIDER_NAMES, PROVIDERS } from "../../lib/providers.ts";
 import { messages } from "../messages.ts";
 import { providerFix, SignInSteps, WithCommand } from "../providers/provider-fix.tsx";
+import { OnboardingBrain, useOnboardingBrain } from "./onboarding-brain.tsx";
 import { OnboardingFrame, type PreviewChip } from "./onboarding-frame.tsx";
 import { setupSummary } from "./onboarding-preview.ts";
 
@@ -311,7 +312,8 @@ const captionFor = (states: States): string => {
 /**
  * Onboarding step 1: the providers found on this computer, Claude Code and Codex. A ready provider
  * shows as found until the user connects it; the choice is stored on the hub, and setup continues
- * once any connected provider is ready. Each problem shows its fix and Check again, so fixing it in
+ * once any connected provider is ready. Once one is connected, the hub's brain shows under them,
+ * on that provider's smallest model. Each problem shows its fix and Check again, so fixing it in
  * a terminal is enough, without restarting Hobbots.
  */
 export function OnboardingProviders() {
@@ -335,6 +337,7 @@ export function OnboardingProviders() {
   );
   const ready = canContinueSetup(runtimes.data, connected);
   const readyConnected = states.filter(([, state]) => state === "connected").map(([runtime]) => runtime);
+  const brain = useOnboardingBrain(readyConnected);
   const [nudged, setNudged] = useState(false);
   // The provider whose Connect or Disconnect is on its way.
   const [changing, setChanging] = useState<RuntimeKind | null>(null);
@@ -358,9 +361,10 @@ export function OnboardingProviders() {
   const guide = guideFor(ready, nudged, states);
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/where" }));
-  const next = () => {
+  // Continue waits for the hub's brain to be saved, and stays on the step when it could not be.
+  const next = async () => {
     if (!ready) return setNudged(true);
-    void navigate({ to: "/setup/hob" });
+    if (await brain.settle()) void navigate({ to: "/setup/hob" });
   };
 
   const failed = providers.isError;
@@ -389,10 +393,10 @@ export function OnboardingProviders() {
             {shared.back}
           </Button>
           <Button
-            onClick={next}
+            onClick={() => void next()}
             aria-disabled={!ready}
             aria-describedby="providers-hint"
-            disabled={providers.isPending}
+            disabled={providers.isPending || (ready && brain.holding)}
             className={cn(
               !ready && "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2",
             )}
@@ -421,6 +425,7 @@ export function OnboardingProviders() {
             onDisconnect={() => change(runtime, false)}
           />
         ))}
+        <OnboardingBrain brain={brain} />
         <span className="lbl text-label">{copy.later.heading}</span>
         <div className="flex flex-col gap-1.5">
           {LATER.map((p) => (
