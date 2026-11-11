@@ -48,10 +48,13 @@ export const HubBrainDecider = (settings: Effect.Effect<MemorySettings>) =>
             for (const { runtime, model } of judgmentRuntimes(chosen, judgment)) {
               const reply = yield* endpoint.ask(runtime, model, chosen.effort, text);
               if (Option.isNone(reply)) continue;
-              return Option.match(decodeJudgment(judgment, reply.value), {
-                onNone: () => byRule(judgment),
-                onSome: ({ choice, confidence }) => ({ choice, confidence, by: "brain" as const }),
-              });
+              const decoded = decodeJudgment(judgment, reply.value);
+              if (Option.isSome(decoded)) return { ...decoded.value, by: "brain" as const };
+              // Never the reply itself, which may quote what was judged.
+              yield* Effect.logWarning(
+                `The hub's brain answered a ${judgment.task} judgment out of shape on ${runtime}`,
+              );
+              return byRule(judgment);
             }
             return byRule(judgment);
           }),

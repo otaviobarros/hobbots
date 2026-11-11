@@ -47,17 +47,22 @@ const Confidence = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1
 /** The answer's shape, as the brain is told it and as its reply is decoded. */
 const answerSchema = <A>(choices: Schema.Decoder<A>) => Schema.Struct({ choice: choices, confidence: Confidence });
 
+/**
+ * The turn's text. The question, the input and the answer's shape all go in the prompt itself:
+ * a runtime adds the instructions to a long system prompt of its own, where a small model at low
+ * effort can lose them and answer the input instead (seen with Claude Code's smallest model).
+ */
 export const judgmentText = <A>(judgment: Judgment<A>): JudgmentText => {
   const document = Schema.toJsonSchemaDocument(answerSchema(judgment.choices));
   const definitions = Object.keys(document.definitions).length > 0 ? { $defs: document.definitions } : {};
   return {
-    instructions: [
+    instructions: "You make one judgment for the Hobbots hub. Reply with one JSON object and nothing else.",
+    prompt: [
       judgment.question,
-      "Answer with one JSON object and nothing else, matching this JSON Schema.",
-      "`confidence` is how sure you are, from 0 to 1.",
+      `<input>\n${judgment.input}\n</input>`,
+      "Answer the question about the input with one JSON object and nothing else, matching this JSON Schema. `confidence` is how sure you are, from 0 to 1.",
       JSON.stringify({ ...document.schema, ...definitions }),
     ].join("\n\n"),
-    prompt: judgment.input,
   };
 };
 

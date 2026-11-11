@@ -13,12 +13,14 @@ const drift: Judgment<"same" | "drifting"> = {
 };
 
 describe("HubDecider", () => {
-  it("tells the brain the question and the answer's shape, and gives it the input", () => {
+  it("asks the question about the input in the prompt, with the answer's shape", () => {
     const text = judgmentText(drift);
-    expect(text.prompt).toBe("The chapter's lines.");
-    expect(text.instructions).toContain(drift.question);
-    expect(text.instructions).toContain('"drifting"');
-    expect(text.instructions).toContain('"confidence"');
+    // All of it in the prompt, which a runtime never buries under its own system prompt.
+    expect(text.prompt).toContain(drift.question);
+    expect(text.prompt).toContain("<input>\nThe chapter's lines.\n</input>");
+    expect(text.prompt).toContain('"drifting"');
+    expect(text.prompt).toContain('"confidence"');
+    expect(text.instructions).toContain("JSON");
   });
 
   it("decodes an answer in the judgment's shape, in a code fence or bare", () => {

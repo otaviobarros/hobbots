@@ -50,9 +50,10 @@ describe("the hub's brain", () => {
     claude.answer({ _tag: "Reply", text: '```json\n{"choice":"clash","confidence":0.9}\n```' });
     expect(await decide()).toEqual({ choice: "clash", confidence: 0.9, by: "brain" });
     expect(claude.turns).toMatchObject([
-      { prompt: clash.input, model: "quick", tools: null, hubTools: null, sessionId: null, ephemeral: true },
+      { model: "quick", tools: null, hubTools: null, sessionId: null, ephemeral: true },
     ]);
-    expect(claude.turns[0]?.instructions).toContain(clash.question);
+    expect(claude.turns[0]?.prompt).toContain(clash.question);
+    expect(claude.turns[0]?.prompt).toContain(clash.input);
 
     // A change in Settings applies to the next judgment: Codex now, at an effort its model takes.
     settings = { ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt", model: "big" };
