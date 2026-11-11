@@ -1,14 +1,17 @@
+import type { ThreadKeyReused } from "@hobbots/api";
 import type {
   Agent,
   AgentConfiguration,
   AgentId,
   AgentStatus,
+  CarriedOver,
   ChangeActor,
   Committed,
   Message,
   MessageId,
   Retiring,
   SkillUse,
+  StartedFresh,
   Thread,
   ThreadCheckpoint,
   ThreadId,
@@ -107,5 +110,23 @@ export class HobbotsRepository extends Context.Service<
     readonly findCheckpoint: (threadId: ThreadId) => Effect.Effect<Option.Option<ThreadCheckpoint>>;
     /** Replaces the thread's stored summary. */
     readonly saveCheckpoint: (checkpoint: ThreadCheckpoint) => Effect.Effect<void>;
+    /**
+     * Writes a new camp and journals `CampMade`, in one transaction (ADR 037). The camp's id is the
+     * command's key: the same camp stored under it already is returned as it is, with nothing
+     * journaled, and a different thread under it is refused.
+     */
+    readonly makeCamp: (camp: Thread) => Effect.Effect<Committed<Thread>, ThreadKeyReused>;
+    /**
+     * Start fresh, in one transaction (ADR 037): writes `superseded`, the chat after its Supersede,
+     * at the revision it was read at, and the new `chat`; moves the chat's open work to the new one,
+     * recording each thing as a carried item; journals `ChatStartedFresh`, then each moved backpack
+     * item as `BackpackItemChanged`. None, and nothing changed, when the chat changed since it was read.
+     */
+    readonly startFresh: (input: {
+      readonly superseded: Thread;
+      readonly chat: Thread;
+    }) => Effect.Effect<Option.Option<Committed<StartedFresh>>>;
+    /** What Start fresh carried into the thread, in the order it recorded them; none for most threads. */
+    readonly listCarriedOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOver>>;
   }
 >()("@hobbots/agents/HobbotsRepository") {}

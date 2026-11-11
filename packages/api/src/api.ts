@@ -3,6 +3,7 @@ import {
   AgentId,
   AgentStatus,
   Brain,
+  CAMP_GOAL_MAX,
   Effort,
   HOB_LABEL_MAX,
   HobColor,
@@ -18,6 +19,7 @@ import {
   RuntimeKind,
   RuntimeModels,
   SkillName,
+  StartedFresh,
   SummonCaps,
   THREAD_TITLE_MAX,
   Thread,
@@ -39,8 +41,10 @@ import {
   InvalidHob,
   MessageNotQueued,
   ReplyNotResumable,
+  StartFreshRefused,
   ThreadArchived,
   ThreadArchiveRefused,
+  ThreadKeyReused,
   ThreadNotFound,
   ToolLogNotFound,
 } from "./errors.ts";
@@ -172,6 +176,25 @@ export const RenameThreadPayload = Schema.Struct({
   title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
 });
 
+/**
+ * The key of Make a camp or Start fresh: the command's idempotency key, which becomes the new
+ * thread's id, so sending the same request again changes nothing.
+ */
+const ThreadKey = ThreadId.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(100));
+
+/** A camp to make for a hob (ADR 037): its title, its goal, if any, and whether it is private. */
+export const MakeCampPayload = Schema.Struct({
+  key: ThreadKey,
+  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
+  goal: Schema.NullOr(Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(CAMP_GOAL_MAX))),
+  private: Schema.Boolean,
+});
+export type MakeCampPayload = typeof MakeCampPayload.Type;
+
+/** Start fresh on a hob's chat (ADR 037); `key` becomes the new chat's id. */
+export const StartFreshPayload = Schema.Struct({ key: ThreadKey });
+export type StartFreshPayload = typeof StartFreshPayload.Type;
+
 /** Whether a chat is pinned to the top of its hob's chats. */
 export const PinThreadPayload = Schema.Struct({ pinned: Schema.Boolean });
 
@@ -298,6 +321,13 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       success: Thread,
       error: [AgentNotFound, HobUnavailable],
     }),
+    // Makes a camp for the hob (ADR 037); the same request sent again returns the camp it made.
+    HttpApiEndpoint.post("makeCamp", "/agents/:agentId/camps", {
+      params: { agentId: AgentId },
+      payload: MakeCampPayload,
+      success: Thread,
+      error: [AgentNotFound, HobUnavailable, ThreadKeyReused],
+    }),
     // The hob's live hobs summoned without asking you, and the caps on them (ADR 034).
     HttpApiEndpoint.get("summonCaps", "/agents/:agentId/summon-caps", {
       params: { agentId: AgentId },
@@ -388,6 +418,14 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       success: Thread,
       error: [ThreadNotFound, ThreadArchiveRefused],
+    }),
+    // Supersedes the hob's chat and opens a new one with what it still owed (ADR 037); the same
+    // request sent again returns what it did.
+    HttpApiEndpoint.post("startFresh", "/threads/:threadId/start-fresh", {
+      params: { threadId: ThreadId },
+      payload: StartFreshPayload,
+      success: StartedFresh,
+      error: [ThreadNotFound, StartFreshRefused, ThreadKeyReused],
     }),
   )
   .middleware(DeviceSession)

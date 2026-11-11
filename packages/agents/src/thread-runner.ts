@@ -4,6 +4,7 @@ import {
   type AgentId,
   type BackpackTurnEnd,
   type Brain,
+  carriedOverBriefing,
   DEFAULT_THREAD_TITLE,
   isInProgress,
   Message,
@@ -265,8 +266,14 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // The turn right after a reply hears of the commands you stopped while it waited (#1056).
         const lastReply = before.findLast((m) => m.role === "assistant");
         const stopped = lastReply === undefined ? null : stoppedCommands(lastReply.steps);
+        // A chat Start fresh opened hears what it carried over in its first turn (ADR 037).
+        const carried =
+          thread.origin !== null && !before.some((m) => m.role === "assistant")
+            ? carriedOverBriefing(yield* repo.listCarriedOver(thread.id))
+            : null;
         const briefing =
-          [briefed, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
+          [briefed, carried, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") ||
+          null;
         const changed = yield* instructionsChanged(
           thread,
           brain.runtime,

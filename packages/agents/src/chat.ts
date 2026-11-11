@@ -4,8 +4,10 @@ import {
   type InvalidHob,
   MessageNotQueued,
   ReplyNotResumable,
+  type StartFreshRefused,
   ThreadArchived,
   type ThreadArchiveRefused,
+  type ThreadKeyReused,
   ThreadNotFound,
 } from "@hobbots/api";
 import {
@@ -22,6 +24,7 @@ import {
   openThreadTask,
   type SkillMention,
   type SkillTrial,
+  type StartedFresh,
   Thread,
   ThreadId,
   ThreadLifecycle,
@@ -31,6 +34,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import { HobAdmission } from "./admission.ts";
+import { type CampRequest, makeCampCommands } from "./camp-commands.ts";
 import { Continuations } from "./continuations.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -168,6 +172,24 @@ export class ChatService extends Context.Service<
     ) => Effect.Effect<Thread, ThreadNotFound>;
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
+    /**
+     * Makes a camp for the hob, with a title, a goal and whether it is private (ADR 037). Its key
+     * becomes the camp's id: the same camp asked for again is returned unchanged, and a key that
+     * names another thread is refused. Refused for a hob that takes no new work.
+     */
+    readonly makeCamp: (
+      agentId: AgentId,
+      request: CampRequest,
+    ) => Effect.Effect<Thread, AgentNotFound | HobUnavailable | ThreadKeyReused>;
+    /**
+     * Starts the hob's chat fresh (ADR 037): the chat is superseded and a new one opens under `key`,
+     * with what the old one still owed moved into it. Refused for a thread that is not its hob's open
+     * chat, and for what stops an archive. The same request sent again returns what it did.
+     */
+    readonly startFresh: (
+      threadId: ThreadId,
+      key: ThreadId,
+    ) => Effect.Effect<StartedFresh, ThreadNotFound | StartFreshRefused | ThreadKeyReused>;
     /** Starts the hob's queued messages and the work waiting in its backpack, in threads with no turn running, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /**
@@ -300,17 +322,25 @@ export class ChatService extends Context.Service<
           ),
         );
 
+      // Reads the hob under its lock, so a pause or retirement cannot slip in before `body` ends.
+      const withHob = <A, E, R>(agentId: AgentId, body: (agent: Agent) => Effect.Effect<A, E, R>) =>
+        admission.withHob(
+          agentId,
+          Effect.gen(function* () {
+            const agent = yield* repo.findAgent(agentId);
+            if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId });
+            return yield* body(agent.value);
+          }),
+        );
+
       // Status is read under the hob's lock, so a pause or retirement cannot slip in before the thread is saved.
       const createThread = Effect.fn("ChatService.createThread")(function* (
         agentId: AgentId,
         options: { readonly title?: string; readonly skillTrial?: SkillTrial } = {},
       ) {
-        return yield* admission.withHob(
-          agentId,
+        return yield* withHob(agentId, (agent) =>
           Effect.gen(function* () {
-            const agent = yield* repo.findAgent(agentId);
-            if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId });
-            yield* requireActive(agent.value);
+            yield* requireActive(agent);
             const now = yield* nowIso;
             // The hob's first open thread is its chat (ADR 037); a skill trial is always a camp.
             const hasChat = (yield* repo.listThreads(agentId)).some(ThreadLifecycle.isOpenChat);
@@ -535,6 +565,7 @@ export class ChatService extends Context.Service<
           announce,
           drainThreads,
         });
+      const { makeCamp, startFresh } = yield* makeCampCommands({ requireActive, withHob, withThreadHob, announce });
 
       // The threads with your queued messages or backpack work waiting: of one hob, or of every hob.
       const threadsWaiting = (agentId?: AgentId) =>
@@ -580,6 +611,8 @@ export class ChatService extends Context.Service<
         setPinned,
         markRead,
         restore,
+        makeCamp,
+        startFresh,
         drainAgent,
         wake,
         resume,
