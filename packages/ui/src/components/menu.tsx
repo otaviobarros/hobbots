@@ -23,12 +23,50 @@ function DropdownMenuTrigger(props: React.ComponentProps<typeof DropdownMenuPrim
   return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
 }
 
+/**
+ * A trigger that looks like a field naming the current choice, with ▾ after it, as a select does
+ * (Hobbots never shows the system's own select menu).
+ */
+function DropdownMenuSelectTrigger({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+  return (
+    <DropdownMenuPrimitive.Trigger
+      data-slot="dropdown-menu-select-trigger"
+      className={cn(
+        "flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-(length:--edge) border-control bg-deep px-2.5 text-start text-detail text-text-strong hover:border-lantern disabled:cursor-default disabled:opacity-60 data-[state=open]:border-lantern",
+        className,
+      )}
+      {...props}
+    >
+      <span className="min-w-0 truncate">{children}</span>
+      <span aria-hidden className="shrink-0 text-meta text-label">
+        ▾
+      </span>
+    </DropdownMenuPrimitive.Trigger>
+  );
+}
+
+// `list` is a long list to pick from, such as a select's: rounded, shadowed, and scrolling past 360px.
+const dropdownContentVariants = cva(contentClass, {
+  variants: {
+    look: {
+      menu: "",
+      list: "max-h-[360px] overflow-y-auto rounded-card border border-line-2 shadow-menu [clip-path:none]",
+    },
+  },
+  defaultVariants: { look: "menu" },
+});
+
 function DropdownMenuContent({
   className,
   align = "start",
   sideOffset = 4,
+  look = "menu",
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content> & VariantProps<typeof dropdownContentVariants>) {
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
@@ -36,7 +74,7 @@ function DropdownMenuContent({
         align={align}
         sideOffset={sideOffset}
         collisionPadding={8}
-        className={cn(contentClass, className)}
+        className={cn(dropdownContentVariants({ look }), className)}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
@@ -65,6 +103,30 @@ function DropdownMenuItem({
       className={cn(dropdownItemVariants({ variant, inset }), className)}
       {...props}
     />
+  );
+}
+
+/** A set of items where one is chosen, such as a list of models; the chosen one shows a check. */
+function DropdownMenuRadioGroup(props: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
+  return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
+}
+
+function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      data-slot="dropdown-menu-radio-item"
+      className={cn(itemClass, "flex-row items-center gap-2 ps-7 relative", className)}
+      {...props}
+    >
+      <DropdownMenuPrimitive.ItemIndicator className="absolute start-2.5 text-moonlight" aria-hidden>
+        ✓
+      </DropdownMenuPrimitive.ItemIndicator>
+      {children}
+    </DropdownMenuPrimitive.RadioItem>
   );
 }
 
@@ -131,6 +193,9 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSelectTrigger,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   MenuShortcut,

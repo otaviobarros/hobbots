@@ -10,7 +10,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { useUpdateMemorySettings } from "../../api/memory.ts";
-import { modelsQuery } from "../../api/queries.ts";
+import { modelsQuery, runtimesQuery } from "../../api/queries.ts";
 import { setupQuery } from "../../api/setup.ts";
 import { brainGroups, brainValue, NO_BRAIN, pickBrain, vendorOf } from "./brain.ts";
 import { messages } from "./messages.ts";
@@ -47,6 +47,19 @@ export function HubBrainCard() {
 }
 
 /**
+ * The providers the brain can run on: any runtime signed in on the hub, as its fallback does, one
+ * connected for the hobs or one ready on this hub that the hobs do not use.
+ */
+const useSignedIn = (): ReadonlyArray<MemoryModelVendor> => {
+  const forHobs = useQuery(setupQuery).data?.connectedProviders ?? [];
+  const ready = (useQuery(runtimesQuery).data ?? []).filter((health) => health.availability === "ready");
+  return [...forHobs, ...ready.map((health) => health.runtime)].flatMap((runtime) => {
+    const each = vendorOf(runtime);
+    return each === undefined ? [] : [each];
+  });
+};
+
+/**
  * The model, from one list grouped by provider, the effort it runs at, the hint under it, what the
  * brain runs with when it differs, the fallback and, behind a toggle, a model per task. A pending
  * change shows at once.
@@ -57,10 +70,7 @@ function BrainChoices({ settings, state }: { settings: MemorySettings; state: Me
   const failed = update.isError ? update.variables : undefined;
   const shown = (update.isPending ? update.variables : failed) ?? settings;
   const vendor = shown.provider === "none" ? null : shown.provider;
-  const connected = (useQuery(setupQuery).data?.connectedProviders ?? []).flatMap((runtime) => {
-    const each = vendorOf(runtime);
-    return each === undefined ? [] : [each];
-  });
+  const connected = useSignedIn();
   // A runtime's models are asked for when the list shows them, or the fallback names its smallest.
   const listed = (each: MemoryModelVendor) =>
     connected.includes(each) || shown.provider === each || shown.fallback === "other";

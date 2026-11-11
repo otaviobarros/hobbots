@@ -33,6 +33,7 @@ export const messages = {
       "The one model Hobbots uses for its own work, outside any hob's turn: summing up a chat for memory now and, once camps arrive, writing a camp's brief, summing up a chapter, and judgment calls such as whether a chapter drifts into a topic of its own. It runs on a plan you already signed in to.",
     model: "Model",
     recommended: ({ model }: { model: string }) => `${model} (recommended)`,
+    list: ({ label, choice }: { label: string; choice: string }) => `${label}: ${choice}`,
     smallest: "Its smallest model",
     none: "No AI",
     effort: {
