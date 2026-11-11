@@ -92,6 +92,7 @@ import {
   MemorySavesLive,
   MemoryShareLogLive,
   MemoryVersionAuthorsLive,
+  PrivateCampsLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -318,6 +319,8 @@ const ServerLive = Layer.unwrap(
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,
+      // Which turns are in a private camp, whose saves are refused (ADR 037).
+      PrivateCampsLive,
       MemoryShareLogLive,
       // Who wrote each memory version, which ai-memory names only for the latest (#1317).
       MemoryVersionAuthorsLive,

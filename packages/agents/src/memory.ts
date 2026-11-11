@@ -388,10 +388,14 @@ export interface MemoryCaptureSession {
   readonly lastKey: string;
 }
 
-/** Where capture stands: the last journal entry memory acknowledged, and the sessions that are open. */
+/**
+ * Where capture stands: the last journal entry memory acknowledged, the sessions that are open, and
+ * the camps that were private as of that entry (ADR 037), which capture follows along the journal.
+ */
 export interface MemoryCaptureState {
   readonly sequence: number;
   readonly sessions: ReadonlyArray<MemoryCaptureSession>;
+  readonly privateThreads: ReadonlyArray<ThreadId>;
 }
 
 /** The work journal entries belong to: threads, and the Tasks worked outside any chat. */
@@ -399,6 +403,18 @@ export interface MemoryCaptureWork {
   readonly threadIds: ReadonlySet<ThreadId>;
   readonly taskIds: ReadonlySet<TaskId>;
 }
+
+/** What capture reads of that work now: the camps private now, and the thread each Task is in. */
+export interface MemoryCapturePrivacy {
+  readonly privateNow: ReadonlySet<ThreadId>;
+  readonly taskThreads: ReadonlyMap<TaskId, ThreadId>;
+}
+
+/** Whether a turn's work is in a private camp (ADR 037): its thread is one, or its Task's thread is. */
+export class PrivateCamps extends Context.Service<
+  PrivateCamps,
+  { readonly holds: (work: { readonly threadId: ThreadId | null; readonly taskId?: TaskId }) => Effect.Effect<boolean> }
+>()("@hobbots/agents/PrivateCamps") {}
 
 /**
  * The capture worker's cursor over the event journal (ADR 028, Capture and summaries). The journal
@@ -410,7 +426,7 @@ export class MemoryCaptureLog extends Context.Service<
     /**
      * Takes the hold, so compaction keeps every entry after the cursor, and answers where capture
      * stands. A cursor that was not holding, because memory was off or never on, starts again at the
-     * journal's head with no open session: memory gets what happens from now on.
+     * journal's head with no open session and the camps private now: memory gets what happens from now on.
      */
     readonly hold: Effect.Effect<MemoryCaptureState>;
     /** Lets compaction go on as if there were no capture, for a hub whose memory is turned off. */
@@ -418,18 +434,17 @@ export class MemoryCaptureLog extends Context.Service<
     /** Committed journal entries after `sequence`, in order, at most `limit` of them. */
     readonly readAfter: (sequence: number, limit: number) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
     /**
-     * Saves, in one transaction, the cursor at `sequence`, the sessions still open (`active`, each as it now stands), and
-     * the ends of the sessions in `ended`, once memory acknowledged everything up to there.
+     * Saves, in one transaction, the cursor at `sequence`, the sessions still open (`active`, each as it now stands),
+     * the ends of the sessions in `ended`, and the camps private as of `sequence`, once memory acknowledged
+     * everything up to there.
      */
     readonly save: (
       sequence: number,
       active: ReadonlyArray<MemoryCaptureSession>,
       ended: ReadonlyArray<MemorySessionId>,
+      privateThreads: ReadonlyArray<ThreadId>,
     ) => Effect.Effect<void>;
-    /**
-     * Of `work`, the threads that are private camps now, and the Tasks whose thread is one (ADR 037).
-     * Read as capture sends, so a camp made private stops capture from then on, a replay included.
-     */
-    readonly privateWork: (work: MemoryCaptureWork) => Effect.Effect<MemoryCaptureWork>;
+    /** Of `work`, the camps private now and the thread of each Task (ADR 037), read as capture sends. */
+    readonly privacy: (work: MemoryCaptureWork) => Effect.Effect<MemoryCapturePrivacy>;
   }
 >()("@hobbots/agents/MemoryCaptureLog") {}

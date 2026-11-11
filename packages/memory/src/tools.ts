@@ -14,6 +14,7 @@ import {
   MemoryStore,
   MemoryTools,
   offerHubActions,
+  PrivateCamps,
   type Redactor,
   type ToolAccess,
   type WebMark,
@@ -106,6 +107,9 @@ export const searchText = (query: string, hits: ReadonlyArray<MemoryHit>): strin
   ].join("\n");
 };
 
+/** What a hob is told when it saves from a private camp, which keeps nothing in memory (ADR 037). */
+export const PRIVATE_CAMP_SAVE = `This camp is private, so nothing from it is kept in memory and nothing was saved. Ask the user to save it from another chat or camp if it should be remembered.`;
+
 const NO_SHARES = `Hobbots cannot share memory pages on this hub yet, so nothing was saved. Save it to your own memory with the scope "mine" instead.`;
 
 /** What a hob is told when it used a key before, by where that save stands. */
@@ -167,6 +171,7 @@ export const MemoryToolsLive = Layer.effect(
     const saves = yield* MemorySaves;
     const projects = yield* MemoryProjects;
     const shares = yield* Effect.serviceOption(MemoryShares);
+    const privateCamps = yield* PrivateCamps;
     const publisher = yield* Effect.serviceOption(EventPublisher);
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
@@ -310,6 +315,9 @@ export const MemoryToolsLive = Layer.effect(
       (redactor: Redactor, mark: WebMark | undefined) =>
       (input: MemorySaveInput, { turn, access }: HubPlanContext) =>
         Effect.gen(function* () {
+          // A private camp keeps nothing in memory: a save, or a share, from it is refused before anything is asked.
+          const work = { threadId: turn.threadId, ...(turn.taskId === undefined ? {} : { taskId: turn.taskId }) };
+          if (yield* privateCamps.holds(work)) return yield* new HubRefusal({ message: PRIVATE_CAMP_SAVE });
           // What the session read of the web, which the page names as its source (ADR 036).
           const read = mark === undefined ? null : yield* mark.current;
           const { key: _key, markdown: _markdown, ...shown } = input;

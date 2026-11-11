@@ -9,6 +9,7 @@ import {
   type MemoryStoreShape,
   MemoryTools,
   makeRedactor,
+  PrivateCamps,
   type ToolAccess,
 } from "@hobbots/agents";
 import {
@@ -17,8 +18,9 @@ import {
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
   memoryProjectIdentity,
+  ThreadId,
 } from "@hobbots/domain";
-import { MemoryToolsLive } from "@hobbots/memory";
+import { MemoryToolsLive, PRIVATE_CAMP_SAVE } from "@hobbots/memory";
 import { makeMemorySavesFake, makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { PolicyEngine } from "@hobbots/permissions";
 import { type HubCallRuntime, hubCallRuntimes } from "@hobbots/runtimes/testing";
@@ -46,8 +48,11 @@ const access: ToolAccess = {
   commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
 };
 
-/** One hub's memory tools, over the in-memory store, with every record and store call in `order`. */
-const memoryHub = () => {
+/** A private camp (ADR 037): nothing from it is saved to memory. */
+const camp = ThreadId.make("camp");
+
+/** One hub's memory tools for a turn in `threadId`, over the in-memory store, with every record and store call in `order`. */
+const memoryHub = (threadId: ThreadId | null = null) => {
   const memory = makeMemoryStoreFake();
   const saves = makeMemorySavesFake();
   const order: Array<string> = [];
@@ -77,12 +82,13 @@ const memoryHub = () => {
           }),
         ),
         PolicyEngine.node,
+        Layer.succeed(PrivateCamps, { holds: (work) => Effect.succeed(work.threadId === camp) }),
       ),
     ),
   );
   const turn: CharmTurn = {
     agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000001"),
-    threadId: null,
+    threadId,
     messageId: null,
     scope: () => "reply:m1",
     also: "reply:m1",
@@ -117,9 +123,9 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** Runs a turn on `runtime` that saves the lesson and searches for it, with a recorder answering `records`. */
-const saveAndSearch = async (runtime: HubCallRuntime, records: boolean) => {
-  const hub = memoryHub();
+/** Runs a turn on `runtime` in `threadId` that saves the lesson and searches for it, with a recorder answering `records`. */
+const saveAndSearch = async (runtime: HubCallRuntime, records: boolean, threadId: ThreadId | null = null) => {
+  const hub = memoryHub(threadId);
   const hubTools = await hub.tools;
   if (hubTools === null) throw new Error("No memory tools");
   const { exit } = await runtime.turn({
@@ -135,7 +141,7 @@ const saveAndSearch = async (runtime: HubCallRuntime, records: boolean) => {
     ],
   });
   expect(Exit.isSuccess(exit), String(exit)).toBe(true);
-  return hub;
+  return { ...hub, exit };
 };
 
 describe("the Memory tools on every runtime", () => {
@@ -158,6 +164,20 @@ describe("the Memory tools on every runtime", () => {
         "recorded memory_search search-memory",
       ]);
       expect(unrecorded.saves.saves(), runtime.name).toEqual([]);
+    }
+  });
+
+  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
+  it("[TC-GEN-1377-08] each runtime's save from a private camp is refused before memory is reached, and its search still runs", {
+    timeout: 240_000,
+  }, async () => {
+    for (const runtime of runtimes.runtimes) {
+      const hub = await saveAndSearch(runtime, true, camp);
+      expect(hub.order, runtime.name).toEqual(["recorded memory_search search-memory", "search"]);
+      expect(hub.saves.saves(), runtime.name).toEqual([]);
+      // The hob reads why: on a real runtime its model is sent the refusal.
+      const told = runtime.name === "fake" ? JSON.stringify(hub.exit) : runtime.modelText().join("\n");
+      expect(told, runtime.name).toContain("This camp is private");
     }
   });
 });

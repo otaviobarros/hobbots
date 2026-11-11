@@ -48,6 +48,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   MemoryShareLogLive,
+  PrivateCampsLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
@@ -92,6 +93,7 @@ const App = (store: MemoryStoreShape) => {
     SetupRepository.layer,
     SearchIndex.layer,
     MemoryShareLogLive,
+    PrivateCampsLive,
   ).pipe(Layer.provideMerge(TestDatabase));
   const Memory = MemoryToolsLive.pipe(
     Layer.provideMerge(MemorySharesLive),

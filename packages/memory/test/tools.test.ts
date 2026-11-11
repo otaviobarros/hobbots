@@ -15,6 +15,7 @@ import {
   type MemoryStoreShape,
   MemoryTools,
   makeRedactor,
+  PrivateCamps,
   type RuntimeEvent,
   type ToolAccess,
   type TurnApprovals,
@@ -34,11 +35,13 @@ import {
   memoryProjectIdentity,
   type PolicyDecision,
   SafetyPreset,
+  TaskId,
+  ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { MemoryToolsLive } from "../src/index.ts";
+import { MemoryToolsLive, PRIVATE_CAMP_SAVE } from "../src/index.ts";
 import { makeMemorySavesFake, makeMemoryStoreFake } from "../src/testing.ts";
 import { engineDataDir, engineEnabled, startEngineStore } from "./engine-store.ts";
 
@@ -124,6 +127,10 @@ const withMark = (approvals: TurnApprovals | null, webMark: WebMark | undefined)
         webMark,
       };
 
+/** A private camp, and a Task worked on in it (ADR 037). */
+const camp = ThreadId.make("camp");
+const campTask = TaskId.make("camp-task");
+
 /** One hub's memory: its tools, its store and save records, every call that reached the store, and its shares. */
 const makeHub = (options: { readonly shares?: boolean; readonly store?: MemoryStoreShape } = {}) => {
   const memory = makeMemoryStoreFake();
@@ -165,6 +172,9 @@ const makeHub = (options: { readonly shares?: boolean; readonly store?: MemorySt
           }),
         ),
         PolicyEngine.node,
+        Layer.succeed(PrivateCamps, {
+          holds: ({ threadId, taskId }) => Effect.succeed(threadId === camp || taskId === campTask),
+        }),
         options.shares ? Layer.succeed(MemoryShares, shares) : Layer.empty,
       ),
     ),
@@ -182,6 +192,9 @@ interface CallOptions {
   readonly work?: string;
   /** The Attempt a turn outside any chat runs as. */
   readonly attemptId?: AttemptId;
+  /** The thread a chat turn writes, or the Task a turn outside any chat works on. */
+  readonly threadId?: ThreadId;
+  readonly taskId?: TaskId;
   /**
    * What recording the call's step answers, as the turn's `recordToolStart` would (ADR 031); each
    * record lands in the hub's `reached`, beside the store's calls. Absent, the step reports its start.
@@ -198,8 +211,9 @@ const callOn = (hub: Hub, name: string, input: unknown, options: CallOptions = {
     let started = false;
     const turn: CharmTurn = {
       agentId: options.as ?? pip,
-      threadId: null,
+      threadId: options.threadId ?? null,
       messageId: null,
+      ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
       scope: () => options.work ?? "reply:m1",
       also: options.work ?? "reply:m1",
       ...(options.attemptId === undefined ? {} : { attemptId: options.attemptId }),
@@ -365,6 +379,29 @@ describe("the memory tools", () => {
       ["notes/tests.md", attemptId],
       ["notes/chat.md", undefined],
     ]);
+  });
+
+  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
+  it("[TC-GEN-1377-07] refuses a save or a share from a private camp, or a Task in one, before anything is asked or written", async () => {
+    const hub = makeHub({ shares: true });
+    const asked: Array<ApprovalAction> = [];
+    const user = { asked, answer: "approve" } as const;
+    const fromCamp = await callOn(hub, MEMORY_SAVE_TOOL, page("camp"), { threadId: camp, records: true, user });
+    const fromTask = await callOn(hub, MEMORY_SAVE_TOOL, page("task"), { taskId: campTask, work: "task:camp-task" });
+    const share = await callOn(hub, MEMORY_SAVE_TOOL, page("share", { scope: "everyone" }), { threadId: camp, user });
+    for (const { answer } of [fromCamp, fromTask, share]) {
+      expect(answer).toEqual({ text: PRIVATE_CAMP_SAVE, refused: true });
+    }
+    expect(hub.reached).toEqual([]);
+    expect(asked).toEqual([]);
+    expect(hub.saves.saves()).toEqual([]);
+    expect(hub.shared).toEqual([]);
+    // It still reads memory, and a save from another thread goes through.
+    expect((await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { threadId: camp })).answer?.refused).toBe(
+      false,
+    );
+    await callOn(hub, MEMORY_SAVE_TOOL, page("elsewhere"), { threadId: ThreadId.make("public") });
+    expect(hub.saves.saves().map((save) => save.key)).toHaveLength(1);
   });
 
   // covers EX-004, ADR 028 (The memory tools), ADR 031

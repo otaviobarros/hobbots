@@ -30,7 +30,7 @@ Message, hob, Task and Attempt states are already explicit: pure transitions tha
 - **One open chat per hob**, held by a partial unique index on the hob where `kind = 'chat'` and the thread is open.
 - `ThreadLifecycle` has three states: open, archived and superseded (a chat replaced by Start fresh). The timestamps stay as facts. Guards read the state.
 - **Migration.** Each hob's most recent open thread becomes its chat. Its other threads become camps and keep their titles.
-- **A private camp** turns off memory capture for its entries. It keeps the memory brief.
+- **A private camp** keeps nothing in memory. Capture skips every entry written while the camp was private, its Quest's work outside any chat included, even after the camp is public again; capture follows each camp's privacy along the journal from its cursor. A `memory_save` or share from the camp, or from a Task in it, is refused. The camp keeps the memory brief, and what memory had from before it was made private stays.
 - The generic New thread entry goes. A hob's chat always exists, and a camp starts from Make a camp.
 
 ### Chapters

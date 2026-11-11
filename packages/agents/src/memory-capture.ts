@@ -30,6 +30,7 @@ import {
 import { Context, DateTime, Duration, Effect, Layer, Option, Schedule } from "effect";
 import {
   MemoryCaptureLog,
+  type MemoryCapturePrivacy,
   type MemoryCaptureSession,
   type MemoryCaptureState,
   type MemoryCaptureWork,
@@ -51,7 +52,8 @@ import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
  * ended, is ended, so memory writes its summary page; no runtime turn is spent on it. The same worker
  * sends the `memory_save` calls memory could not take at once. While memory does not answer, nothing
  * moves and nothing is lost: journal compaction keeps every entry after the cursor. A private camp's
- * entries, and its Quest's work outside any chat, are never sent (ADR 037); the cursor moves past them.
+ * entries, and its Quest's work outside any chat, are never sent (ADR 037), even once it is public
+ * again: the worker follows each camp's privacy along the journal, and the cursor moves past them.
  */
 
 /** How long a session is quiet before it ends. */
@@ -454,6 +456,8 @@ interface Round {
   readonly stale: number;
   /** The keys sent to each session it touched, those sent before included. */
   readonly sent: ReadonlyMap<MemorySessionId, ReadonlySet<string>>;
+  /** The camps private as of the page's last entry. */
+  readonly privateThreads: ReadonlyArray<ThreadId>;
 }
 
 /** A page of journal entries, and what memory keeps of each. */
@@ -480,28 +484,47 @@ const workOfPage = (page: CapturedPage): MemoryCaptureWork => {
   return { threadIds, taskIds };
 };
 
-/** No private camps: what a page plans when none of its work is in one. */
-const NO_PRIVATE_WORK: MemoryCaptureWork = { threadIds: new Set(), taskIds: new Set() };
+/** Which camps were private where capture stands, and what capture reads of the page's work now. */
+export interface PagePrivacy {
+  /** The camps private as of the entry before the page. */
+  readonly atCursor: ReadonlyArray<ThreadId>;
+  readonly now: MemoryCapturePrivacy;
+}
 
-/** Whether an entry happened in a private camp, or worked on a Task of one (ADR 037). */
-const isPrivate = (found: CapturedEntry, work: MemoryCaptureWork) =>
-  (found.work.threadId !== null && work.threadIds.has(found.work.threadId)) ||
-  (found.work.taskId !== null && work.taskIds.has(found.work.taskId));
+const NO_PRIVACY: PagePrivacy = { atCursor: [], now: { privateNow: new Set(), taskThreads: new Map() } };
+
+/** The thread an entry belongs to: its own, or its Task's. */
+const threadOf = (found: CapturedEntry, now: MemoryCapturePrivacy): ThreadId | null =>
+  found.work.threadId ?? (found.work.taskId === null ? null : (now.taskThreads.get(found.work.taskId) ?? null));
+
+/** Follows a camp's privacy along the journal: every change of it is a `ThreadUpserted` entry. */
+const followPrivacy = (entry: EventEnvelope, privateThreads: Set<ThreadId>) => {
+  if (entry.payload._tag !== "ThreadUpserted") return;
+  const { thread } = entry.payload;
+  if (thread.private) privateThreads.add(thread.id);
+  else privateThreads.delete(thread.id);
+};
 
 /**
  * Plans what a page of entries sends, from the sessions open before it and the keys already sent to
  * them. An entry that only ends a session, as an archive does, does nothing when its session is not
  * open; any other entry opens its session again, which memory continues. Nothing of a private camp
- * (`privateWork`) is sent (ADR 037): its entries are skipped, and a session of it still open from
- * before the camp was made private ends, so what memory has of it stays and nothing more is added.
+ * is sent (ADR 037): an entry is skipped when its camp was private when it was written, as the
+ * journal says, or is private now. A session of it still open from before the camp was made
+ * private ends, so what memory has of it stays and nothing more is added.
  */
 export const planRound = (
   page: CapturedPage,
   open: ReadonlyArray<MemoryCaptureSession>,
   staleBefore: string,
   sent: SentKeys = new Map(),
-  privateWork: MemoryCaptureWork = NO_PRIVATE_WORK,
+  privacy: PagePrivacy = NO_PRIVACY,
 ): Round => {
+  const privateThreads = new Set(privacy.atCursor);
+  const isPrivate = (found: CapturedEntry) => {
+    const threadId = threadOf(found, privacy.now);
+    return threadId !== null && (privateThreads.has(threadId) || privacy.now.privateNow.has(threadId));
+  };
   const sessions = new Map(open.map((session) => [session.sessionId, session]));
   const groups = new Map<MemorySessionId, { readonly agentId: AgentId; readonly items: Array<MemoryCaptureItem> }>();
   const planned = new Map<MemorySessionId, Set<string>>();
@@ -529,10 +552,11 @@ export const planRound = (
     return true;
   };
   page.entries.forEach((entry, at) => {
+    followPrivacy(entry, privateThreads);
     const found = page.found[at] ?? null;
     if (found === null) return;
     const { sessionId } = found;
-    if (isPrivate(found, privateWork)) {
+    if (isPrivate(found)) {
       const session = sessions.get(sessionId);
       if (session !== undefined) ending.set(sessionId, session);
       return;
@@ -551,7 +575,16 @@ export const planRound = (
     touched.delete(sessionId);
   }
   const sequence = page.entries.at(-1)?.sequence ?? 0;
-  return { sequence, groups, sessions, touched, ended: [...ending.values()], stale, sent: planned };
+  return {
+    sequence,
+    groups,
+    sessions,
+    touched,
+    ended: [...ending.values()],
+    stale,
+    sent: planned,
+    privateThreads: [...privateThreads],
+  };
 };
 
 export interface MemoryCaptureShape {
@@ -651,8 +684,8 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           const entries = yield* log.readAfter(current.sequence, PAGE);
           if (entries.length === 0) return true;
           const page = capturePage(entries, redactor);
-          const privateWork = yield* log.privateWork(workOfPage(page));
-          const round = planRound(page, current.sessions, yield* before(MEMORY_KEY_WINDOW), sent, privateWork);
+          const privacy = { atCursor: current.privateThreads, now: yield* log.privacy(workOfPage(page)) };
+          const round = planRound(page, current.sessions, yield* before(MEMORY_KEY_WINDOW), sent, privacy);
           if (round.stale > 0) {
             yield* Effect.logWarning(
               `Memory capture is sending ${round.stale} journal entries older than memory's 30-day replay window; if any reached memory before, it may keep them twice.`,
@@ -683,8 +716,13 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
             round.sequence,
             active,
             round.ended.filter((session) => !waiting.includes(session)).map((session) => session.sessionId),
+            round.privateThreads,
           );
-          state = { sequence: round.sequence, sessions: [...round.sessions.values()] };
+          state = {
+            sequence: round.sequence,
+            sessions: [...round.sessions.values()],
+            privateThreads: round.privateThreads,
+          };
           for (const [sessionId, keys] of round.sent) {
             if (round.sessions.has(sessionId)) sent.set(sessionId, keys);
             else sent.delete(sessionId);
@@ -702,7 +740,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           const ended = new Set<MemorySessionId>();
           for (const session of quiet) if (yield* endSession(session)) ended.add(session.sessionId);
           if (ended.size === 0) return;
-          yield* log.save(current.sequence, [], [...ended]);
+          yield* log.save(current.sequence, [], [...ended], current.privateThreads);
           state = { ...current, sessions: current.sessions.filter((session) => !ended.has(session.sessionId)) };
           for (const sessionId of ended) sent.delete(sessionId);
         });

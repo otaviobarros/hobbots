@@ -10,7 +10,7 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 | --- | --- |
 | `kind` | `chat` or `camp` |
 | `goal` | A camp's goal; null for a chat |
-| `private` | A private camp is never captured into memory; it still reads the memory brief |
+| `private` | A private camp keeps nothing in memory: capture skips what was written while it was private, even once it is public again, and a `memory_save` from it is refused. It still reads the memory brief |
 | `origin` | The thread and chapter a camp came from, or null |
 | `state` | `ThreadLifecycle`: open, archived, superseded |
 
