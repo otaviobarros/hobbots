@@ -69,7 +69,14 @@ export const withProvider = (settings: MemorySettings, provider: MemoryModelProv
     ...settings,
     provider,
     model: null,
-    tasks: { summaries: same(settings.tasks.summaries), check: SAME_MEMORY_MODEL, answers: SAME_MEMORY_MODEL },
+    tasks: {
+      summaries: same(settings.tasks.summaries),
+      check: SAME_MEMORY_MODEL,
+      answers: SAME_MEMORY_MODEL,
+      brief: same(settings.tasks.brief),
+      chapters: same(settings.tasks.chapters),
+      judgments: same(settings.tasks.judgments),
+    },
   };
 };
 
@@ -220,8 +227,18 @@ export const usageLine = (
   return overview.usage === null ? copy.usage.unknown : callsLine(overview.usage, locale);
 };
 
-const callsLine = (usage: MemoryModelUsage, locale?: string) =>
-  copy.usage.calls({
+/**
+ * Usage's line for the hub's brain's own turns (ADR 037), which the memory engine never counts;
+ * none until it has made one.
+ */
+export const hubUsageLine = (overview: Pick<MemoryOverview, "hubUsage"> | undefined, locale?: string) => {
+  const usage = overview?.hubUsage;
+  if (usage === undefined || usage === null || usage.calls === 0) return null;
+  return callsLine(usage, locale, copy.usage.hubCalls);
+};
+
+const callsLine = (usage: MemoryModelUsage, locale?: string, line = copy.usage.calls) =>
+  line({
     calls: plural(
       usage.calls,
       { one: copy.usage.callCount.one, other: copy.usage.callCount.other(formatCount(usage.calls, locale)) },

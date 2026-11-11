@@ -51,6 +51,8 @@ const MODEL_URL = "http://127.0.0.1:9";
 const StubModelEndpoint = Layer.succeed(MemoryModelEndpoint, {
   url: MODEL_URL,
   limited: () => Effect.succeedNone,
+  ask: () => Effect.succeedNone,
+  hubUsage: Effect.succeed({ calls: 0, inputTokens: 0, outputTokens: 0, since: null }),
 });
 
 /** Runs `body` against an engine on the stand-in binary, then closes its scope. */

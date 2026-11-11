@@ -9,7 +9,14 @@ import {
   type RuntimeLimitReached,
   runtimeAdapters,
 } from "@hobbots/agents";
-import { Effort, memoryEffortOn, memoryModelOn, type ReplyUsage, RuntimeKind } from "@hobbots/domain";
+import {
+  Effort,
+  type MemoryModelUsage,
+  memoryEffortOn,
+  memoryModelOn,
+  type ReplyUsage,
+  RuntimeKind,
+} from "@hobbots/domain";
 import { Clock, Context, Effect, Layer, Option, Redacted, Ref, Schema, Semaphore, Stream } from "effect";
 import { HttpRouter, HttpServer, type HttpServerRequest, HttpServerResponse } from "effect/http";
 import { SMALLEST_MODEL } from "./config.ts";
@@ -29,6 +36,20 @@ export interface MemoryModelEndpointShape {
    * the runtime said. A task that runs clears it, and so does the time it named passing.
    */
   readonly limited: (runtime: RuntimeKind) => Effect.Effect<Option.Option<{ readonly resetsAt: string | null }>>;
+  /**
+   * Runs one of the hub's own turns, such as a judgment (ADR 037), on `runtime` the way a memory
+   * task runs: `model` null for its smallest, at `effort` when the model takes it. Its reply, or
+   * none when the runtime could not run it or ended without one; a plan's limit is remembered as a
+   * memory task's is. The engine never sees these turns, so the endpoint counts them itself.
+   */
+  readonly ask: (
+    runtime: RuntimeKind,
+    model: string | null,
+    effort: Effort | null,
+    text: MemoryTurnText,
+  ) => Effect.Effect<Option.Option<string>>;
+  /** How much the hub's own turns used since the hub started. */
+  readonly hubUsage: Effect.Effect<MemoryModelUsage>;
 }
 
 export class MemoryModelEndpoint extends Context.Service<MemoryModelEndpoint, MemoryModelEndpointShape>()(
@@ -52,7 +73,12 @@ export class MemoryModelEndpoint extends Context.Service<MemoryModelEndpoint, Me
         );
         const address = Context.get(served, HttpServer.HttpServer).address;
         if (address._tag !== "InetAddressV4") return yield* Effect.die("The memory model endpoint has no IPv4 address");
-        return MemoryModelEndpoint.of({ url: `http://127.0.0.1:${address.port}`, limited: answer.limited });
+        return MemoryModelEndpoint.of({
+          url: `http://127.0.0.1:${address.port}`,
+          limited: answer.limited,
+          ask: answer.ask,
+          hubUsage: answer.hubUsage,
+        });
       }),
     );
 }
@@ -141,6 +167,12 @@ const retryAfter = (resetsAt: string | null, now: number): Record<string, string
   return Number.isFinite(at) && at > now ? { "Retry-After": String(Math.ceil((at - now) / 1000)) } : {};
 };
 
+/** The model and effort a turn asks for: null for the runtime's smallest, and for no effort chosen. */
+interface AskedModel {
+  readonly model: string | null;
+  readonly effort: Effort | null;
+}
+
 /** What a finished turn said, and what it used when the runtime reports it. */
 interface TurnReply {
   readonly text: string;
@@ -196,23 +228,42 @@ export const memoryModelAnswerer = (adapters: RuntimeAdapters, key: Redacted.Red
       return next;
     });
 
-  const run = (runtime: RuntimeKind, adapter: RuntimeAdapterShape, request: ChatRequest) =>
+  /**
+   * One turn on the runtime's adapter, on the model asked for while it offers it, else its
+   * smallest, at an effort the model takes. A plan's limit is remembered, and a turn that runs
+   * clears it.
+   */
+  const turn = (adapter: RuntimeAdapterShape, runtime: RuntimeKind, asked: AskedModel, text: MemoryTurnText) =>
     Effect.gen(function* () {
       const listed = yield* adapter.models;
-      const { model } = memoryModelOn(listed, request.model === SMALLEST_MODEL ? null : request.model);
+      const { model } = memoryModelOn(listed, asked.model);
+      const effort = memoryEffortOn(model, asked.effort);
+      const request = memoryPromptRequest(text, model?.id ?? null, effort);
+      const reply = yield* turns.withPermit(runTurn(adapter, request));
+      if (reply !== null) yield* setLimit(runtime, undefined);
+      return { model: model?.id ?? null, reply };
+    }).pipe(
+      Effect.tapError((error) =>
+        error._tag === "RuntimeLimitReached" ? setLimit(runtime, error.resetsAt) : Effect.void,
+      ),
+    );
+
+  const run = (runtime: RuntimeKind, adapter: RuntimeAdapterShape, request: ChatRequest) =>
+    Effect.gen(function* () {
       const asked = request.reasoning_effort ?? null;
-      const effort = memoryEffortOn(model, isEffort(asked) ? asked : null);
-      const turn = memoryPromptRequest(memoryTurnText(request.messages), model?.id ?? null, effort);
-      const reply = yield* turns.withPermit(runTurn(adapter, turn));
+      const { model, reply } = yield* turn(
+        adapter,
+        runtime,
+        { model: request.model === SMALLEST_MODEL ? null : request.model, effort: isEffort(asked) ? asked : null },
+        memoryTurnText(request.messages),
+      );
       const now = yield* Clock.currentTimeMillis;
       if (reply === null) return failure(502, "server_error", "The runtime ended the turn without a reply.");
-      yield* setLimit(runtime, undefined);
-      return HttpServerResponse.jsonUnsafe(completion(model?.id ?? request.model, reply, now), { headers: NO_STORE });
+      return HttpServerResponse.jsonUnsafe(completion(model ?? request.model, reply, now), { headers: NO_STORE });
     }).pipe(
       Effect.catchTags({
         RuntimeLimitReached: (limit: RuntimeLimitReached) =>
           Effect.gen(function* () {
-            yield* setLimit(runtime, limit.resetsAt);
             const now = yield* Clock.currentTimeMillis;
             return failure(
               429,
@@ -230,6 +281,33 @@ export const memoryModelAnswerer = (adapters: RuntimeAdapters, key: Redacted.Red
       }),
     );
 
+  const usage = Ref.makeUnsafe<MemoryModelUsage>({ calls: 0, inputTokens: 0, outputTokens: 0, since: null });
+
+  const count = (reply: TurnReply) =>
+    Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      Ref.update(usage, (used) => ({
+        calls: used.calls + 1,
+        inputTokens: used.inputTokens + (reply.usage?.inputTokens ?? 0),
+        outputTokens: used.outputTokens + (reply.usage?.outputTokens ?? 0),
+        since: used.since ?? new Date(now).toISOString(),
+      })),
+    );
+
+  const ask = (runtime: RuntimeKind, model: string | null, effort: Effort | null, text: MemoryTurnText) => {
+    const adapter = adapters(runtime);
+    if (adapter === undefined) return Effect.succeed(Option.none<string>());
+    return turn(adapter, runtime, { model, effort }, text).pipe(
+      Effect.flatMap(({ reply }) =>
+        reply === null ? Effect.succeed(Option.none<string>()) : Effect.as(count(reply), Option.some(reply.text)),
+      ),
+      Effect.catchTags({
+        RuntimeLimitReached: () => Effect.succeed(Option.none<string>()),
+        RuntimeError: (error: RuntimeError) =>
+          Effect.logWarning(`A hub turn could not run: ${error.message}`).pipe(Effect.as(Option.none<string>())),
+      }),
+    );
+  };
+
   const handle = (request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
       if (!authorized(request, key)) return failure(401, "authentication_error", "Not authorized.");
@@ -241,5 +319,5 @@ export const memoryModelAnswerer = (adapters: RuntimeAdapters, key: Redacted.Red
       return yield* run(runtime, adapter, body.value);
     });
 
-  return { handle, limited };
+  return { handle, limited, ask, hubUsage: Ref.get(usage) };
 };

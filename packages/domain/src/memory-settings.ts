@@ -1,10 +1,11 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Effort, type RuntimeKind } from "./agent.ts";
 import type { RuntimeModel, RuntimeModels } from "./runtime.ts";
 
 /**
- * The memory model (ADR 028): the one model memory work outside a chat uses, such as summing up a
- * chat after it ends or Check now. Chosen in Settings › Your data › Memory, in Hobbots' own words.
+ * The memory model (ADR 028), which ADR 037 makes the hub's brain: the one model the hub's own work
+ * outside a chat uses, such as summing up a chat after it ends, Check now, a camp's brief, chapter
+ * summaries and the hub's judgments. Chosen in Settings › Your data › Memory, in Hobbots' own words.
  * It runs only through a runtime's adapter, on the sign-in that runtime already has, so its models,
  * efforts and availability are the runtime's own, as the brain picker shows them. It never depends
  * on a hob's brain.
@@ -42,10 +43,17 @@ export const SAME_MEMORY_MODEL = "same";
 /** The summaries choice that writes them with no AI. */
 export const NO_MEMORY_MODEL = "none";
 
+/** A hub task added after the memory tasks: a settings file saved before it reads it as `same`. */
+const hubTask = MemoryModelId.pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed(SAME_MEMORY_MODEL)),
+  Schema.withConstructorDefault(Effect.succeed(SAME_MEMORY_MODEL)),
+);
+
 /**
- * The memory tasks that can be given their own model, each `same` as the others or a model the
- * provider's runtime offers, by its id; summing up a chat can also be `none`, summaries with no AI.
- * Searching and saving never need one.
+ * The tasks that can be given their own model, each `same` as the others or a model the
+ * provider's runtime offers, by its id. Summing up a chat, the brief, chapter summaries and
+ * judgments can also be `none`: a plain summary or the caller's rule, with no AI. Searching and
+ * saving never need one.
  */
 export const MemoryTasks = Schema.Struct({
   /** Summing up a chat after it ends. */
@@ -54,10 +62,30 @@ export const MemoryTasks = Schema.Struct({
   check: MemoryModelId,
   /** Answering questions about memory in plain words. */
   answers: MemoryModelId,
+  /** Writing a camp's brief (ADR 037). */
+  brief: hubTask,
+  /** Summing up a chapter once it rests (ADR 037). */
+  chapters: hubTask,
+  /** The hub's judgments: a chapter drifting into its own topic, two quests that clash in meaning (ADR 037). */
+  judgments: hubTask,
 });
 export type MemoryTasks = typeof MemoryTasks.Type;
 
 export type MemoryTask = keyof MemoryTasks;
+
+/** Every task, in the order Settings lists them. */
+export const MEMORY_TASKS: ReadonlyArray<MemoryTask> = [
+  "summaries",
+  "check",
+  "answers",
+  "brief",
+  "chapters",
+  "judgments",
+];
+
+/** The tasks the hub runs itself, through `HubDecider`, rather than the memory engine (ADR 037). */
+export const HubTask = Schema.Literals(["brief", "chapters", "judgments"]);
+export type HubTask = typeof HubTask.Type;
 
 /**
  * The memory model as you chose it: a provider, a model id its runtime reports, or null for the
@@ -82,7 +110,28 @@ export const DEFAULT_MEMORY_SETTINGS: MemorySettings = {
   model: null,
   effort: "low",
   fallback: "plain",
-  tasks: { summaries: SAME_MEMORY_MODEL, check: SAME_MEMORY_MODEL, answers: SAME_MEMORY_MODEL },
+  tasks: {
+    summaries: SAME_MEMORY_MODEL,
+    check: SAME_MEMORY_MODEL,
+    answers: SAME_MEMORY_MODEL,
+    brief: SAME_MEMORY_MODEL,
+    chapters: SAME_MEMORY_MODEL,
+    judgments: SAME_MEMORY_MODEL,
+  },
+};
+
+/**
+ * The model a hub task asks for on its provider's runtime: null for the runtime's smallest or the
+ * memory model's own choice, or `none` when you chose No AI for the brain or for the task, so the
+ * caller's rule answers and no model is called.
+ */
+export const hubTaskModel = (
+  settings: MemorySettings,
+  task: HubTask,
+): { readonly provider: MemoryModelVendor; readonly model: string | null } | typeof NO_MEMORY_MODEL => {
+  const chosen = settings.tasks[task];
+  if (settings.provider === "none" || chosen === NO_MEMORY_MODEL) return NO_MEMORY_MODEL;
+  return { provider: settings.provider, model: chosen === SAME_MEMORY_MODEL ? settings.model : chosen };
 };
 
 /** The other provider, which `other` falls back to. */
@@ -120,7 +169,7 @@ export const memoryModelOn = (
 
 /** A task given its own model that the runtime no longer offers, and the model it runs on instead. */
 export const MemoryTaskReplaced = Schema.Struct({
-  task: Schema.Literals(["summaries", "check", "answers"]),
+  task: Schema.Literals(["summaries", "check", "answers", "brief", "chapters", "judgments"]),
   replaced: Schema.String,
   model: Schema.NullOr(Schema.String),
 });
@@ -134,7 +183,7 @@ export const replacedMemoryTasks = (
   models: RuntimeModels | undefined,
   tasks: MemoryTasks,
 ): ReadonlyArray<MemoryTaskReplaced> =>
-  (["summaries", "check", "answers"] as const).flatMap((task) => {
+  MEMORY_TASKS.flatMap((task) => {
     const chosen = tasks[task];
     if (chosen === SAME_MEMORY_MODEL || chosen === NO_MEMORY_MODEL) return [];
     const { model, replaced } = memoryModelOn(models, chosen);

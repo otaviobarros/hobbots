@@ -22,6 +22,7 @@ export * from "./hob-proposal-log.ts";
 export * from "./hob-proposals.ts";
 export * from "./hobs.ts";
 export * from "./hub-actions.ts";
+export * from "./hub-decider.ts";
 export * from "./hub-questions.ts";
 export * from "./lifecycle.ts";
 export * from "./memory.ts";

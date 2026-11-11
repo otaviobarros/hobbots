@@ -61,6 +61,7 @@ import {
   defaultEngineFolder,
   ENGINE_BINARY,
   engineSettingsFor,
+  HubBrainDecider,
   loadOrCreateMemoryKeys,
   MemoryEngine,
   type MemoryKeys,
@@ -223,22 +224,30 @@ const memoryToolsLayer = (
   );
 };
 
-/** The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary. */
+/**
+ * The memory engine as the hub's settings choose it: turned off, missing, or the bundled binary;
+ * beside it the hub's model endpoint, and the hub's brain (ADR 037), which judges through that
+ * endpoint whether memory runs or not.
+ */
 const memoryEngineLayer = (
   config: { readonly memory: "on" | "off"; readonly memoryEngineDir: Option.Option<string> },
   dataDir: string,
   keys: MemoryKeys,
 ) => {
-  if (config.memory === "off") return MemoryEngine.off("disabled", dataDir, keys);
   const folder = memoryEngineFolder(config);
-  if (folder === "") return MemoryEngine.off("missing", dataDir, keys);
   // The memory model you chose (ADR 028). The engine reaches it only through the hub's endpoint,
   // which runs each memory task on the runtime's adapter and its sign-in.
-  const settings = engineSettingsFor(readMemorySettings(dataDir));
-  return MemoryEngine.layer({ folder, dataDir, keys, settings }).pipe(
-    Layer.provideMerge(MemoryModelEndpoint.layer(keys.model)),
-    Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
-  );
+  const engine =
+    config.memory === "off"
+      ? MemoryEngine.off("disabled", dataDir, keys)
+      : folder === ""
+        ? MemoryEngine.off("missing", dataDir, keys)
+        : MemoryEngine.layer({ folder, dataDir, keys, settings: engineSettingsFor(readMemorySettings(dataDir)) }).pipe(
+            Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+          );
+  // Read on every judgment, so a choice in Settings applies to the next one without a restart.
+  const brain = HubBrainDecider(Effect.sync(() => readMemorySettings(dataDir)));
+  return Layer.mergeAll(engine, brain).pipe(Layer.provideMerge(MemoryModelEndpoint.layer(keys.model)));
 };
 
 /** What the fake runtime plays on the hub's records when asked: the scripted Quest, and the hub's own questions. */

@@ -71,6 +71,12 @@ export const messages = {
       summaries: { title: "Summing up a chat", detail: "After a chat ends, or when a hob is gone" },
       check: { title: "Check now", detail: "Pages that disagree or look out of date" },
       answers: { title: "Answering questions about memory", detail: "When you ask Memory a question in plain words" },
+      brief: { title: "Writing a camp's brief", detail: "What a camp is for and where it stands" },
+      chapters: { title: "Summing up a chapter", detail: "Once a chapter of a chat rests" },
+      judgments: {
+        title: "Judgment calls",
+        detail: "Whether a chapter drifts into its own topic, or two quests clash",
+      },
     },
     same: "Same",
     gone: ({ model }: { model: string }) => `${model} (no longer offered)`,
@@ -103,6 +109,8 @@ export const messages = {
       `${provider} is ${state}, so summaries follow your fallback for now.`,
     limited: "at its plan's limit",
     calls: ({ calls, tokens }: { calls: string; tokens: string }) => `${calls} · ${tokens} since memory last started`,
+    hubCalls: ({ calls, tokens }: { calls: string; tokens: string }) =>
+      `The hub's own judgments and summaries: ${calls} · ${tokens} since the hub started`,
     callCount: { one: "1 call", other: (count: string) => `${count} calls` },
     tokens: ({ count }: { count: string }) => `${count} tokens`,
     unknown: "Memory isn't answering right now.",

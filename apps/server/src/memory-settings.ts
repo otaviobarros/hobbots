@@ -165,6 +165,7 @@ export const MemoryHandlers = HttpApiBuilder.group(HobbotsApi, "memory", (handle
         pages: status?.pages ?? null,
         bytes: yield* store.bytes,
         usage: status?.usage ?? null,
+        hubUsage: endpoint === undefined ? null : yield* endpoint.hubUsage,
       } satisfies MemoryOverview;
     });
 

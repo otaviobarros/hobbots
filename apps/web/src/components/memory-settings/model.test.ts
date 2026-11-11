@@ -4,6 +4,7 @@ import {
   effortOptions,
   engineTag,
   fallbackOptions,
+  hubUsageLine,
   keptLine,
   modelHint,
   modelOptions,
@@ -62,12 +63,12 @@ describe("the memory model's choices", () => {
     const careful = {
       ...DEFAULT_MEMORY_SETTINGS,
       model: "careful",
-      tasks: { summaries: "none", check: "careful", answers: "same" },
+      tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "none", check: "careful", answers: "same" },
     };
     expect(withProvider(careful, "chatgpt")).toMatchObject({
       provider: "chatgpt",
       model: null,
-      tasks: { summaries: "none", check: "same", answers: "same" },
+      tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "none", check: "same", answers: "same" },
     });
     expect(withProvider(careful, "none")).toMatchObject({ provider: "none", model: "careful" });
     expect(withProvider({ ...careful, provider: "none" }, "claude")).toMatchObject({ model: "careful" });
@@ -178,5 +179,15 @@ describe("Usage's Memory line", () => {
       usageLine({ state: { _tag: "Unavailable", provider: "chatgpt", state: "limited", resetsAt: null }, usage: null }),
     ).toBe("ChatGPT is at its plan's limit, so summaries follow your fallback for now.");
     expect(usageLine(undefined)).toBeNull();
+  });
+
+  it("counts the hub's own judgments and summaries apart, once it has made one", () => {
+    const usage = { calls: 2, inputTokens: 300, outputTokens: 40, since: null };
+    expect(hubUsageLine({ hubUsage: usage }, "en-US")).toBe(
+      "The hub's own judgments and summaries: 2 calls · 340 tokens since the hub started",
+    );
+    expect(hubUsageLine({ hubUsage: { ...usage, calls: 0 } })).toBeNull();
+    expect(hubUsageLine({ hubUsage: null })).toBeNull();
+    expect(hubUsageLine(undefined)).toBeNull();
   });
 });

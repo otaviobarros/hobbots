@@ -89,6 +89,10 @@ Every part has a share of the budget, and the shares add up to it. The pack neve
 
 One model for the hub's own judgments, chosen in Settings and onboarding, extending ADR 028's memory model. It writes briefs and summaries and judges topic drift and quest clashes in meaning, only in projectors, through `HubDecider`. Under No AI every judgment falls back to its rule ([#1367](https://github.com/otaviobarros/hobbots/issues/1367)).
 
+- **Settings.** `MemorySettings` in `@hobbots/domain` is the brain: provider, model, effort and fallback, with a model per task. The hub's own tasks are `brief`, `chapters` and `judgments`, beside the memory tasks; a settings file saved before them reads each as `same`. `hubTaskModel` says which model a task asks for, or `none` under No AI.
+- **The port.** `HubDecider` in `@hobbots/agents` takes a `Judgment`: the task, the question, the input, a `Schema` of the choices and the caller's rule. It returns a `Decided`: the choice, a confidence from 0 to 1, and whether the brain or the rule made it. `HubDecider.rules` answers every judgment with its rule.
+- **The brain.** `HubBrainDecider` in `@hobbots/memory` runs each judgment as one turn through the hub's model endpoint, on Claude Code or Codex, with no tools and no session. It reads the settings on every judgment, so a change applies to the next one. A runtime that cannot run it passes it to the `other` fallback; a reply that does not decode leaves the rule. The endpoint counts these turns for Usage, since the memory engine never sees them.
+
 ## Words
 
 | UI | Code |
