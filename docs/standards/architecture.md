@@ -118,7 +118,7 @@ Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, ev
 - ✅ `ThreadRun.transition(run, { _tag: "Stopped" })`, then `ThreadRun.isRunning(next)`
 - ❌ `busy.has(threadId) || holdBack.has(threadId)`
 - **Why:** one table lists every legal combination, so a new path cannot forget one, and a model-based test and a diagram can read it.
-- **Enforced by:** `scripts/check-implicit-state.mjs` in `pnpm check` (`pnpm lint:state`), which fails on a `Set` or `Map` keyed by an id held for a service's or module's life, with today's cases in `scripts/implicit-state-baseline.json`, a list that only shrinks; and review. The state-comparison and diagram checks join it with `defineMachine` ([#1370](https://github.com/otaviobarros/hobbots/issues/1370)).
+- **Enforced by:** `scripts/check-implicit-state.mjs` in `pnpm check` (`pnpm lint:state`), which fails on a `Set` or `Map` keyed by an id held for a service's or module's life, and on a machine's state field compared outside its module, with today's cases in `scripts/implicit-state-baseline.json`, a list that only shrinks; `scripts/machines.mjs` in `pnpm check` (`pnpm lint:machines`), which fails when a machine is not its own `defineMachine` export or its diagram in `docs/architecture/machines/` is out of date (`pnpm docs:machines` writes them); a model-based test of each machine with `fast-check` and `agreesWithModel`; and review.
 - **Applies to:** `packages/*`, `apps/server`.
 
 ### STD-ARCH-014 A command commits state, journal and backpack together

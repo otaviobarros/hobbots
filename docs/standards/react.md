@@ -62,7 +62,7 @@ Write a multi-step UI flow, such as Make a camp or Start fresh, as one `useReduc
 
 - ✅ `type MakeCamp = { step: "naming" } | { step: "saving"; draft: Draft } | { step: "failed"; draft: Draft; error: string }`
 - ❌ `const [saving, setSaving] = useState(false); const [failed, setFailed] = useState(false)`
-- **Why:** an impossible combination, such as saving and failed at once, cannot be written.
+- **Why:** an impossible combination, such as saving and failed at once, cannot be written. See [ADR 037](../decisions/037-chat-and-camps.md).
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
