@@ -76,6 +76,8 @@ const LimitsEndpoint = Layer.succeed(MemoryModelEndpoint, {
   url: "http://127.0.0.1:9",
   limited: (runtime) =>
     Effect.succeed(limited.has(runtime) ? Option.some({ resetsAt: limited.get(runtime) ?? null }) : Option.none()),
+  ask: () => Effect.succeedNone,
+  hubUsage: Effect.succeed({ calls: 2, inputTokens: 300, outputTokens: 40, since: "2026-11-05T00:00:00.000Z" }),
 });
 
 beforeEach(async () => {
@@ -166,6 +168,8 @@ describe("the memory model in Settings", () => {
     expect(overview.pages).toBe(12);
     expect(overview.bytes).toBe("# Notes\n".length);
     expect(overview.usage?.calls).toBe(3);
+    // The hub's brain's own turns, which the engine never counts (ADR 037).
+    expect(overview.hubUsage?.calls).toBe(2);
     // Nothing about the engine's address or keys.
     expect(JSON.stringify(body)).not.toMatch(/127\.0\.0\.1|bearer|"url"|"root"|"proxy"/i);
   });
@@ -178,7 +182,7 @@ describe("the memory model in Settings", () => {
       model: "fake-coder",
       effort: "medium",
       fallback: "other",
-      tasks: { summaries: "none", check: "fake-coder", answers: "same" },
+      tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "none", check: "fake-coder", answers: "same" },
     };
     const { status, body } = await request("PUT", "/api/memory/settings", chosen);
     expect(status).toBe(200);
@@ -228,7 +232,7 @@ describe("the memory model in Settings", () => {
     await request("PUT", "/api/memory/settings", {
       ...DEFAULT_MEMORY_SETTINGS,
       model: "fake-thinker",
-      tasks: { summaries: "same", check: "gone-2", answers: "fake-thinker" },
+      tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "same", check: "gone-2", answers: "fake-thinker" },
     });
     expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
       _tag: "Model",

@@ -19,6 +19,11 @@ export const MemoryOverview = Schema.Struct({
   bytes: Schema.NullOr(Schema.Number),
   /** The memory model's use since the engine last started; null while the engine does not answer. */
   usage: Schema.NullOr(MemoryModelUsage),
+  /**
+   * The hub's brain's own turns since the hub started (ADR 037), such as its judgments, which the
+   * engine never sees; null on a hub without the model endpoint.
+   */
+  hubUsage: Schema.NullOr(MemoryModelUsage),
 });
 export type MemoryOverview = typeof MemoryOverview.Type;
 

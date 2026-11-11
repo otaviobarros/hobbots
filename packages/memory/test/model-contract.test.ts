@@ -129,7 +129,7 @@ describe.runIf(enabled)(`the memory model on the bundled ai-memory ${AI_MEMORY_V
       {
         ...DEFAULT_MEMORY_SETTINGS,
         fallback: "other",
-        tasks: { summaries: "careful", check: "careful", answers: "same" },
+        tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "careful", check: "careful", answers: "same" },
       },
       async (url) => {
         const { raw, read } = await statusOf(url);

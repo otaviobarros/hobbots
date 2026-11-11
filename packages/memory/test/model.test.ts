@@ -43,7 +43,7 @@ describe("the memory model as the engine's provider settings", () => {
     const chosen = settings({
       provider: "none",
       fallback: "other",
-      tasks: { summaries: "careful", check: "careful", answers: "careful" },
+      tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "careful", check: "careful", answers: "careful" },
     });
     const config = configFor(chosen);
     expect(config).not.toMatch(/llm|consolidate|auto_improve/);
@@ -63,14 +63,24 @@ describe("the memory model as the engine's provider settings", () => {
   // covers ADR 028
   it("[TC-GEN-215] gives a task its own model of the runtime with its own fallbacks, or sums up chats with no AI", () => {
     const config = configFor(
-      settings({ fallback: "other", tasks: { summaries: "careful", check: "claude-opus-4-8[1m]", answers: "same" } }),
+      settings({
+        fallback: "other",
+        tasks: {
+          ...DEFAULT_MEMORY_SETTINGS.tasks,
+          summaries: "careful",
+          check: "claude-opus-4-8[1m]",
+          answers: "same",
+        },
+      }),
     );
     expect(config).toContain(table("llm.consolidation", "claude-code", "careful"));
     expect(config).toContain(table("llm.lint", "claude-code", "claude-opus-4-8[1m]"));
     expect(config).toContain(table("[llm.lint.fallbacks]", "codex", "smallest"));
     expect(config).not.toContain("[llm.query_answer]");
 
-    const plain = configFor(settings({ tasks: { summaries: "none", check: "same", answers: "careful" } }));
+    const plain = configFor(
+      settings({ tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, summaries: "none", check: "same", answers: "careful" } }),
+    );
     expect(plain).toContain("consolidate_on_session_end = false");
     expect(plain).toContain(table("llm.query_answer", "claude-code", "careful"));
     expect(plain).not.toContain("[llm.consolidation]");
