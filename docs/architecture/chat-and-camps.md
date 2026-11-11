@@ -46,7 +46,7 @@ Each is written in the same transaction and journal as the message that made it,
 | Brief | threadId, text, revision, writtenBy, basis cursor | rewritten by a projector at chapter ends and quest steps |
 | CampSuggestion | threadId, chapterId, reason codes and counts | open, kept, accepted, expired; at most one per chapter |
 | CarriedItem | fromThreadId, toThreadId, ref | written once by Start fresh |
-| Claim | scope (migration number, ADR number, path, branch), repository, key, holder Task, actor | [Claim](machines/claim.md): held, contested, released. A number is unique in its folder of a repository for good; a path or branch once per Task |
+| Claim | scope (sequence, path, branch), repository, key, holder Task, actor | [Claim](machines/claim.md): held, contested, released. A number is unique in its folder of a repository for good; a path or branch once per Task |
 
 A note to self is a message role that never wakes the dispatcher.
 
@@ -83,11 +83,12 @@ Every part has a share of the budget, and the shares add up to it. The pack neve
 Built in [#1388](https://github.com/otaviobarros/hobbots/issues/1388): `Claim` and its machine in `packages/domain/src/claim.ts`, the register in `packages/persistence/src/claims.ts` (migration 0097), and `claim` with the Task tools on every runtime.
 
 - **`claim`** is a Task tool. It records a claim for the Task the hob works on, and in a chat with no Task yet it starts one, as `plan_steps` does. A claim names a folder of the hob's, inside a Git repository. The repository is known by its `origin` remote, so two clones or worktrees share their claims.
-- **Numbers.** For a migration or ADR number, the hob names the folder whose files the numbers count, such as `docs/decisions`. The hub reads that folder on the repository's default branch as the clone has it (`origin`'s HEAD, else `origin/main`, else `main`), without running Git, and hands out one past every number `main` and the register hold. A number the hob already uses is kept when it is free; otherwise the hub settles on the next free one and says so. Concurrent claims take the journal's head in turn, so each gets its own number.
+- **Sequences.** A `sequence` claim is the next number in a folder whose files start with one: migrations, ADRs, or any other numbered files. The hob names the folder whose files the numbers count, such as `docs/decisions`. The hub reads that folder on the repository's default branch as the clone has it (`origin`'s HEAD, else `origin/main`, else `main`), without running Git, and hands out one past every number `main` and the register hold. A number the hob already uses is kept when it is free; otherwise the hub settles on the next free one and says so. Concurrent claims take the journal's head in turn, so each gets its own number.
 - **A released number is never handed out again** (decided in #1388). Reusing it would keep numbers dense, but a number seen in a closed branch would then mean two things. A number is unique in its folder of a repository for good, released or not.
 - **Paths and branches.** A pure rule in the claim's transaction finds clashes with every other Task's open claim in the same repository: the same branch, or a path that is the other or inside it, comparing whole names. The new claim and each held claim it clashes with become contested. Each lead involved gets a `claim-clash` backpack item: the nearest lead still at work above the Task, or its owner when nobody leads it. Neither Task is stopped. A claim of the same path or branch by the same Task again changes nothing. It calls no model.
 - **Release.** A Task's claims are released in the transaction that ends it, completed, failed or cancelled, at any depth; a contested claim that clashes with nothing left goes back to held. A retry that reopens a failed Task does not bring its claims back.
 - **Not built yet.** The camp's Heads-up for a clash ([#1390](https://github.com/otaviobarros/hobbots/issues/1390)).
+- **Next.** Claims beyond the repository: spaces from connectors, four clash shapes, read or write, how hard a clash bites, and claims the hub makes on its own ([#1413](https://github.com/otaviobarros/hobbots/issues/1413), ADR 037 amendment).
 - Slice: [#1365](https://github.com/otaviobarros/hobbots/issues/1365).
 
 ## The hub's brain

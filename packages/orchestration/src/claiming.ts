@@ -7,7 +7,7 @@ import {
   claimClashText,
   claimPath,
   claimSubject,
-  isNumberScope,
+  isSequenceScope,
   isTerminalTask,
   memoryProjectIdentity,
   numberLike,
@@ -73,7 +73,7 @@ type OnMain = ReadonlyArray<string> | null;
 
 /** What the hob is told of its claim: what it holds, and for a number, the number to use. */
 const madeText = (claim: Claim, onMain: OnMain, taken: number | null) => {
-  if (isNumberScope(claim.scope)) {
+  if (isSequenceScope(claim.scope)) {
     const names = onMain ?? [];
     const number = numberLike(Number(claim.key), names);
     const instead =
@@ -102,7 +102,7 @@ const doneOf = (outcome: ClaimOutcome, onMain: OnMain) => {
     details: {
       claim_id: outcome.claim.id,
       state: outcome.claim.state,
-      ...(isNumberScope(outcome.claim.scope)
+      ...(isSequenceScope(outcome.claim.scope)
         ? { number: numberLike(Number(outcome.claim.key), names) }
         : { key: outcome.claim.key }),
       ...(outcome.clashes.length === 0
@@ -156,7 +156,7 @@ export const makeClaiming = (deps: Deps) =>
         const top = yield* workspace.value.repository(folder);
         if (top === null) return yield* refuse("not-a-repository", `${folder} is in no Git repository.`);
         const repository = yield* identityOf(top);
-        const directory = isNumberScope(input.scope) ? yield* pathOf("directory", input.directory) : null;
+        const directory = isSequenceScope(input.scope) ? yield* pathOf("directory", input.directory) : null;
         const onMain = directory === null ? [] : yield* workspace.value.namesOnMain(top, directory);
         const key = yield* keyOf(input);
         const committed = yield* register.value.claim({

@@ -1,5 +1,5 @@
 import { type ClaimOutcome, ClaimRegister, type ClaimRequest } from "@hobbots/agents";
-import { Claim, Claims, isNumberScope, type JournaledEvent, pickNumber } from "@hobbots/domain";
+import { Claim, Claims, isSequenceScope, type JournaledEvent, pickNumber } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { type ClaimRow, claimsFromRows, claimToRow, movedClaim, saveClaim } from "./claim-rows.ts";
@@ -29,7 +29,7 @@ export const ClaimRegisterLive = Layer.effect(
     /** The key a new claim takes: the path or branch asked for, or the number the register picks. */
     const keyOf = (request: ClaimRequest) =>
       Effect.gen(function* () {
-        if (!isNumberScope(request.scope) || request.directory === null) {
+        if (!isSequenceScope(request.scope) || request.directory === null) {
           return { key: request.key ?? "", taken: null };
         }
         // Released claims count too: a number is never handed out twice.
@@ -48,7 +48,7 @@ export const ClaimRegisterLive = Layer.effect(
         Effect.gen(function* () {
           const open = yield* openOn(request);
           const own = open.find((each) => each.taskId === request.taskId && each.key === request.key);
-          if (own !== undefined && !isNumberScope(request.scope)) {
+          if (own !== undefined && !isSequenceScope(request.scope)) {
             const held: ClaimOutcome = { _tag: "Held", claim: own, clashes: Claims.clashesOf(own, open) };
             return { value: held, events: [] as ReadonlyArray<JournaledEvent> };
           }

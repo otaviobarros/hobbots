@@ -219,7 +219,7 @@ describe("the claims register", () => {
       await h.seed;
       await h.request(FRODO, A);
       await h.request(SAM, B);
-      const input = { scope: "migration-number", directory: MIGRATIONS } as const;
+      const input = { scope: "sequence", directory: MIGRATIONS } as const;
       // Asked at once, from a checkout and from a worktree of the same repository.
       const [frodo, sam] = (await Promise.all([
         h.call(FRODO, A, { key: "m", ...input }),
@@ -231,7 +231,7 @@ describe("the claims register", () => {
       expect(asked.details.number).toBe("0005");
       expect(asked.message).toContain("0002 is taken");
       // ADR numbers count in their own folder.
-      const adr = await h.call(FRODO, A, { key: "adr", scope: "adr-number", directory: "docs/decisions" });
+      const adr = await h.call(FRODO, A, { key: "adr", scope: "sequence", directory: "docs/decisions" });
       expect(adr.details.number).toBe("002");
       // The same key again answers as the first call did, and hands out nothing new.
       expect((await h.call(FRODO, A, { key: "m", ...input })).details.number).toBe(frodo.details.number);
@@ -283,7 +283,7 @@ describe("the claims register", () => {
       await h.seed;
       await h.request(FRODO, A, false);
       await h.request(SAM, B);
-      const input = { scope: "migration-number", directory: MIGRATIONS } as const;
+      const input = { scope: "sequence", directory: MIGRATIONS } as const;
       expect((await h.call(FRODO, A, { key: "m", ...input })).details.number).toBe("0003");
       await h.call(FRODO, A, { key: "p", scope: "branch", branch: "feat/claims" });
       await h.call(SAM, B, { key: "p", scope: "branch", branch: "refs/heads/feat/claims" });
@@ -313,7 +313,7 @@ type Step =
 
 const TASKS = 3;
 const keys = fc.constantFrom("a", "a/b", "b", "c");
-const scopes = fc.constantFrom<ClaimScope>("migration-number", "path", "branch");
+const scopes = fc.constantFrom<ClaimScope>("sequence", "path", "branch");
 const steps: fc.Arbitrary<Step> = fc.oneof(
   fc.record({ _tag: fc.constant("Claim" as const), task: fc.nat({ max: TASKS - 1 }), scope: scopes, key: keys }),
   fc.record({
@@ -343,7 +343,7 @@ const overlaps = (scope: ClaimScope, a: string, b: string) =>
 /** Contested exactly while another Task's open claim on the same scope overlaps it. */
 const settle = (model: Model) => {
   for (const claim of model.claims) {
-    if (claim.state === "released" || claim.scope === "migration-number") continue;
+    if (claim.state === "released" || claim.scope === "sequence") continue;
     const clashing = model.claims.some(
       (other) =>
         other !== claim &&
@@ -358,7 +358,7 @@ const settle = (model: Model) => {
 
 const claimInModel = (model: Model, task: number, scope: ClaimScope, key: string) => {
   if (model.ended.has(task)) return;
-  if (scope === "migration-number") {
+  if (scope === "sequence") {
     model.numbers += 1;
     (model.claims as Array<Model["claims"][number]>).push({ task, scope, key: String(model.numbers), state: "held" });
     return;
@@ -393,8 +393,8 @@ describe("ClaimRegister", () => {
                   id: ClaimId.make(`claim-${made}`),
                   scope,
                   repository: "github.com/me/app",
-                  directory: scope === "migration-number" ? MIGRATIONS : null,
-                  key: scope === "migration-number" ? null : key,
+                  directory: scope === "sequence" ? MIGRATIONS : null,
+                  key: scope === "sequence" ? null : key,
                   onMain: [],
                   asked: null,
                   taskId: taskIds[task] as TaskId,
@@ -427,19 +427,15 @@ describe("ClaimRegister", () => {
             const index = (claim: Claim) => taskIds.indexOf(claim.taskId);
             // Numbers are compared as a set: two claims at once may take them in either order.
             expect(
-              shown(
-                stored
-                  .filter((each) => each.scope !== "migration-number")
-                  .map((each) => ({ ...each, task: index(each) })),
-              ),
-            ).toEqual(shown(model.claims.filter((each) => each.scope !== "migration-number")));
-            const numbers = stored.filter((each) => each.scope === "migration-number");
+              shown(stored.filter((each) => each.scope !== "sequence").map((each) => ({ ...each, task: index(each) }))),
+            ).toEqual(shown(model.claims.filter((each) => each.scope !== "sequence")));
+            const numbers = stored.filter((each) => each.scope === "sequence");
             expect(numbers.map((each) => Number(each.key)).sort((a, b) => a - b)).toEqual(
               Array.from({ length: model.numbers }, (_, n) => n + 1),
             );
             expect(numbers.map((each) => `${index(each)} ${each.state}`).sort()).toEqual(
               model.claims
-                .filter((each) => each.scope === "migration-number")
+                .filter((each) => each.scope === "sequence")
                 .map((each) => `${each.task} ${each.state}`)
                 .sort(),
             );

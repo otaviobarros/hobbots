@@ -7,13 +7,13 @@ export interface ClaimRequest {
   readonly scope: ClaimScope;
   /** Who the repository is across clones and worktrees. */
   readonly repository: string;
-  /** For a number scope, the folder inside the repository its numbers count in; null otherwise. */
+  /** For a sequence, the folder inside the repository its numbers count in; null otherwise. */
   readonly directory: string | null;
   /** For a path or a branch, its key; null for a number, which the register picks. */
   readonly key: string | null;
-  /** For a number scope: the numbers the repository's `main` already has in `directory`. */
+  /** For a sequence: the numbers the repository's `main` already has in `directory`. */
   readonly onMain: ReadonlyArray<number>;
-  /** For a number scope: the number the hob already uses, kept when it is free. */
+  /** For a sequence: the number the hob already uses, kept when it is free. */
   readonly asked: number | null;
   readonly taskId: TaskId;
   readonly actor: Actor;

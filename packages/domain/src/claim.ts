@@ -4,9 +4,9 @@ import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
 
 /**
- * The claims register (ADR 037, The hub coordinates across every chat and camp). A hob claims a
- * migration or ADR number, a path or a branch with `claim`, and the hub records it for the Task it
- * works on. The hub hands out each number once across every hob, chat and camp, and watches paths
+ * The claims register (ADR 037, The hub coordinates across every chat and camp). A hob claims the
+ * next number in a folder, such as a migration's or an ADR's, a path or a branch with `claim`, and
+ * the hub records it for the Task it works on. The hub hands out each number once across every hob, chat and camp, and watches paths
  * and branches for clashes. Every rule here is pure and calls no model.
  */
 
@@ -14,14 +14,15 @@ export const ClaimId = Schema.String.pipe(Schema.brand("ClaimId"));
 export type ClaimId = typeof ClaimId.Type;
 
 /**
- * What a claim is on. A number scope counts the files in one folder of a repository, such as its
- * migrations or its ADRs; `path` is a file or a folder; `branch` is a branch name.
+ * What a claim is on. `sequence` is the next number in one folder of a repository whose files start
+ * with one, such as its migrations, its ADRs or its invoices; `path` is a file or a folder; `branch`
+ * is a branch name.
  */
-export const ClaimScope = Schema.Literals(["migration-number", "adr-number", "path", "branch"]);
+export const ClaimScope = Schema.Literals(["sequence", "path", "branch"]);
 export type ClaimScope = typeof ClaimScope.Type;
 
 /** Whether a scope is a number the hub hands out, rather than a name it watches. */
-export const isNumberScope = (scope: ClaimScope): boolean => scope === "migration-number" || scope === "adr-number";
+export const isSequenceScope = (scope: ClaimScope): boolean => scope === "sequence";
 
 /** Where a claim stands, held by `ClaimMachine`. */
 export const ClaimState = Schema.Literals(["held", "contested", "released"]);
@@ -81,7 +82,7 @@ export const ClaimMachine = defineMachine<ClaimState, ClaimEvent, Claim, Illegal
     Contest: {
       from: ["held"],
       to: "contested",
-      guard: (claim) => !isNumberScope(claim.scope),
+      guard: (claim) => !isSequenceScope(claim.scope),
       apply: (claim, e) => new Claim({ ...claim, state: "contested", updatedAt: e.at }),
     },
     // The last claim it clashed with was released.
@@ -116,7 +117,7 @@ export const claimsClash = (a: Claim, b: Claim): boolean =>
   a.taskId !== b.taskId &&
   a.scope === b.scope &&
   a.repository === b.repository &&
-  !isNumberScope(a.scope) &&
+  !isSequenceScope(a.scope) &&
   (a.scope === "path" ? pathsOverlap(a.key, b.key) : a.key === b.key);
 
 /** `ClaimMachine` with the questions code outside this module asks of a claim's state. */
@@ -211,7 +212,7 @@ export const claimSubject = (claim: Claim): string => {
     case "branch":
       return `branch ${claim.key} in ${claim.repository}`;
     default:
-      return `${claim.scope === "migration-number" ? "migration" : "ADR"} number ${claim.key} in ${claim.directory ?? ""} of ${claim.repository}`;
+      return `number ${claim.key} in ${claim.directory ?? ""} of ${claim.repository}`;
   }
 };
 

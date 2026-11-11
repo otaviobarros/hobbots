@@ -36,7 +36,7 @@ const claim = (fields: ClaimFields = {}) =>
     id: ClaimId.make(fields.id ?? "claim-1"),
     scope: fields.scope ?? "path",
     repository: fields.repository ?? "github.com/me/app",
-    directory: fields.scope === "migration-number" || fields.scope === "adr-number" ? "docs/decisions" : null,
+    directory: fields.scope === "sequence" ? "docs/decisions" : null,
     key: fields.key ?? "docs/a.md",
     taskId: (fields.taskId ?? "task-1") as TaskId,
     actor: { kind: "hob", id: "hob-1" },
@@ -59,7 +59,7 @@ const view = (c: Claim): ClaimView => ({
   state: c.state,
   updatedAt: c.updatedAt,
   releasedAt: c.releasedAt,
-  numbered: c.scope === "migration-number" || c.scope === "adr-number",
+  numbered: c.scope === "sequence",
 });
 
 // The rules of #1388, written apart from the machine so the two can disagree: a number is never
@@ -83,7 +83,7 @@ const events: fc.Arbitrary<ClaimEvent> = fc.oneof(
   fc.record({ _tag: fc.constant("Clear" as const), at: times }),
   fc.record({ _tag: fc.constant("Release" as const), at: times }),
 );
-const scopes = fc.constantFrom<ClaimScope>("migration-number", "adr-number", "path", "branch");
+const scopes = fc.constantFrom<ClaimScope>("sequence", "path", "branch");
 
 describe("ClaimMachine", () => {
   it("agrees with a model of contest, clear and release over random runs of events", () => {
@@ -108,7 +108,7 @@ describe("ClaimMachine", () => {
   });
 
   it("never contests a number and never brings a released claim back", () => {
-    const number = claim({ scope: "migration-number", key: "97" });
+    const number = claim({ scope: "sequence", key: "97" });
     expect(Claims.transition(number, { _tag: "Contest", at })).toBeInstanceOf(IllegalClaimTransition);
     const released = claim({ state: "released" });
     expect(Claims.transition(released, { _tag: "Clear", at })).toBeInstanceOf(IllegalClaimTransition);
@@ -132,8 +132,8 @@ describe("claim rules", () => {
     expect(claimsClash(branch, of({ scope: "branch", key: "feat/claims" }))).toBe(true);
     expect(claimsClash(branch, of({ scope: "branch", key: "feat/claims-two" }))).toBe(false);
     expect(claimsClash(branch, of({ scope: "path", key: "feat/claims" }))).toBe(false);
-    const number = claim({ scope: "adr-number", key: "37" });
-    expect(claimsClash(number, of({ scope: "adr-number", key: "37" }))).toBe(false);
+    const number = claim({ scope: "sequence", key: "37" });
+    expect(claimsClash(number, of({ scope: "sequence", key: "37" }))).toBe(false);
   });
 
   it("clears a contested claim only once nothing it clashes with is left open", () => {

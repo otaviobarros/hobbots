@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 
-// The claims register (ADR 037): a hob's claim on a migration or ADR number, a path or a branch,
+// The claims register (ADR 037): a hob's claim on the next number in a folder, a path or a branch,
 // held by a Task until the Task ends. A number is unique in its folder of a repository for good,
 // released or not, so it is never handed out twice; a path or branch once per Task, since two Tasks
 // may claim the same one and each contests the other.

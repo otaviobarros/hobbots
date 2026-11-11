@@ -265,7 +265,7 @@ export const TaskToolInputs = {
     task_id: taskId,
     scope: ClaimScope.annotate({
       description:
-        "migration-number or adr-number: the next free number for a new migration or ADR, unique across every hob, chat and camp. path: a file or folder your Task changes. branch: a branch your Task works on.",
+        "sequence: the next free number in a folder whose files start with one, such as migrations or ADRs, unique across every hob, chat and camp. path: a file or folder your Task changes. branch: a branch your Task works on.",
     }),
     folder: Schema.optionalKey(
       Schema.String.annotate({
@@ -408,7 +408,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "claim",
     description:
-      "Claim what your Task needs that other hobs' work could take too, before you use it. For a new migration or ADR, fetch first, then ask for a number: Hobbots gives the next one free on main, as your clone last fetched it, and in every other chat and camp, and never gives it to anyone else, so use the number it gives. Claim the files, folders or branch your Task changes: when another Task holds an open claim on the same one, both leads hear of it and neither Task is stopped. Claims end when your Task ends. In a conversation with no Task yet, it starts one for this request.",
+      "Claim what your Task needs that other hobs' work could take too, before you use it. For a new numbered file, such as a migration or an ADR, fetch first, then ask for the next number in its folder: Hobbots gives the next one free on main, as your clone last fetched it, and in every other chat and camp, and never gives it to anyone else, so use the number it gives. Claim the files, folders or branch your Task changes: when another Task holds an open claim on the same one, both leads hear of it and neither Task is stopped. Claims end when your Task ends. In a conversation with no Task yet, it starts one for this request.",
     label: "Claiming",
   },
 ];

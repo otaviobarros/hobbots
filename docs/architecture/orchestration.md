@@ -45,7 +45,7 @@ Expose controlled Hobbots tools through MCP or a supported equivalent adapter in
 | `message_task` | A lead | Sends a message to a member's Task directly under its own, which wakes the member. While a turn runs on that Task, the message waits for the turn to end, and the result says so and why, such as an approval request the turn waits on ([#701](https://github.com/otaviobarros/hobbots/issues/701)) |
 | `complete_task` | A Task's owner | Returns the result, subject to the completion gate |
 | `cancel_task` | A Task's owner | Cancels one of its child Tasks and that Task's subtree |
-| `claim` | A Task's owner | Claims a migration or ADR number, a path or a branch for its Task, across every chat and camp ([chat and camps](chat-and-camps.md#the-claims-register)) |
+| `claim` | A Task's owner | Claims the next number in a folder (a sequence, such as migrations or ADRs), a path or a branch for its Task, across every chat and camp ([chat and camps](chat-and-camps.md#the-claims-register)) |
 
 `list_tasks`, `get_task` and `get_quest_status` stay as read tools, scoped to the caller's subtree. `send_agent_message` reaches only between a lead and its own members; members never message each other. Tool names can change during implementation; what each one does is decided in [ADR 018](../decisions/018-tasks-and-quests.md).
 

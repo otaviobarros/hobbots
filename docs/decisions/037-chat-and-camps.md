@@ -201,6 +201,20 @@ Building the claims register settled these details.
 - **Main is read, never fetched.** The hub reads the numbers on the repository's default branch as the clone last fetched it, without running Git. It makes no network call in the claim's transaction.
 - **The machine is `ClaimMachine`.** It is named after its record, like the other machines. A number is never contested. A Task's claims are released in the transaction that ends it.
 - **`claim` is a Task tool.** It needs a Task to hold the claim, so in a chat with no Task yet it starts one, as `plan_steps` does.
+- **One sequence scope.** Numbers are not only for migrations and ADRs: any folder whose files start with a number counts the same way. So the scopes are `sequence`, `path` and `branch`, and the hob names the folder. No scope names a kind of file.
+
+## Amendment: claims beyond the repository ([#1413](https://github.com/otaviobarros/hobbots/issues/1413))
+
+**Direction, not decided.** The register of #1388 serves a coding team. Hobbots is for every team, and a marketing, finance or support hob shares things that clash the same way: a post, a campaign's audience, a calendar slot, a budget tab, an invoice, a month being closed, a customer several teams write to. What can be claimed must not be a fixed list in the code. The direction, to be decided in #1413 before it is built:
+
+- **A claim is what, where and how.** *Where* is a space: a Git repository as today, a connector's space such as a Drive, a CRM or a Slack workspace, or the hub itself. *What* is a key in that space. *How* is the shape of its clash rule. A connector says what can be claimed in its space, so claims grow with connectors, not with the hub's code.
+- **Four shapes.** Same name (branches today), inside, by whole segments (paths today), sequence (numbers today, never contested) and overlapping time (a send window, an accounting period). Each is a pure rule in the claim's transaction, as today.
+- **Read or write.** Two readers never clash.
+- **How hard a clash bites.** A heads-up through the backpack, as today; wait until the other Task ends; or ask the person first. Paying an invoice twice asks; two drafts of a post only hear of each other.
+- **Claims the hub makes.** When a hob edits a doc, sends an email or opens a branch through a tool the hub knows, the hub claims it for the Task, so a person never has to say "claim". Clients show who holds what in plain words.
+- **Expiry and hand-off.** A claim can lapse after a time, and a waiting Task can take it once it is released.
+
+`ClaimMachine`, the register, clash items in the backpack and release when a Task ends stay as they are; the space and the shape replace the fixed scope list.
 
 ## Validation
 
