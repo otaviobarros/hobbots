@@ -25,23 +25,30 @@ export const messages = {
   chat: {
     title: "In a chat",
     body: ", a hob saves what it learns as it works, with no extra model call.",
-    note: "Summaries after a chat use the memory model below.",
+    note: "Summaries after a chat use the hub's brain above.",
+  },
+  brain: {
+    label: "The hub's brain",
+    intro:
+      "The one model Hobbots uses for its own work, outside any hob's turn: summing up a chat for memory, writing a camp's brief, summing up a chapter, and judgment calls such as whether a chapter drifts into a topic of its own. It runs on a plan you already signed in to.",
+    model: "Model",
+    recommended: ({ model }: { model: string }) => `${model} (recommended)`,
+    smallest: "Its smallest model",
+    none: "No AI",
+    effort: {
+      low: "Runs at low effort: this work needs no more.",
+      other: ({ effort }: { effort: string }) =>
+        `Runs at ${effort} effort, chosen before. Low is enough for this work, and faster.`,
+      useLow: "Use low effort",
+    },
   },
   model: {
-    title: "Memory model",
-    intro:
-      "For memory work no chat is running: summing up a chat after it ends, Check now and answering questions about memory.",
-    provider: "Provider",
-    model: "Model",
-    effort: "Effort",
-    providers: { claude: "Claude", chatgpt: "ChatGPT", gemini: "Gemini", none: "No AI" },
-    geminiLater: "Gemini arrives in a later update.",
+    providers: { claude: "Claude", chatgpt: "ChatGPT", none: "No AI" },
     hints: {
       none: "Summaries are short lists of what happened, with no AI. Free, and nothing leaves the hub.",
-      high: "High effort can be too slow for summaries: they may time out and fall back. Low is enough for this work.",
       claude: "Uses your Claude Code sign-in.",
       chatgpt: "Uses your ChatGPT sign-in through Codex.",
-      small: "A small, fast model is enough for summaries.",
+      small: "A small, fast model is enough for this work.",
       bigger: "A bigger model is more careful, and uses more of your plan.",
     },
     noModels: "The models appear once the provider answers.",
@@ -62,7 +69,7 @@ export const messages = {
   fallback: {
     title: "If it is not available",
     options: { plain: "Write simple summaries", other: ({ other }: { other: string }) => `Use ${other}` },
-    note: "For example, when a plan runs out for the week or a provider is signed out. Nothing is lost either way: a summary written without AI can be improved later.",
+    note: "For example, when a plan runs out for the week or a provider is signed out. Nothing is lost either way: a summary written without AI can be improved later, and a judgment falls back to its rule.",
   },
   tasks: {
     show: "Choose a model per task…",
@@ -81,8 +88,9 @@ export const messages = {
     same: "Same",
     gone: ({ model }: { model: string }) => `${model} (no longer offered)`,
     none: "No AI",
+    groups: { memory: "For memory", hub: "For chats and camps" },
     pickFirst: "Pick a provider first.",
-    note: "Effort is shared by every task. Searching and saving never need a model.",
+    note: "Every task runs at the brain's effort. Searching and saving never need a model. With No AI, a brief, a chapter summary or a judgment comes from simple rules.",
   },
   shares: {
     label: "What hobs learn",
@@ -114,6 +122,6 @@ export const messages = {
     callCount: { one: "1 call", other: (count: string) => `${count} calls` },
     tokens: ({ count }: { count: string }) => `${count} tokens`,
     unknown: "Memory isn't answering right now.",
-    open: "Choose the memory model",
+    open: "Choose the hub's brain",
   },
 };

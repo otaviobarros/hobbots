@@ -25,7 +25,7 @@ export function MemoryUsage() {
         <span className="text-text">{line}</span>
         {hub !== null && <span className="text-detail text-text-secondary">{hub}</span>}
       </span>
-      <Link to="/settings/$section" params={{ section: "data" }} hash="memory" className="text-link underline">
+      <Link to="/settings/$section" params={{ section: "data" }} hash="brain" className="text-link underline">
         {messages.usage.open}
       </Link>
     </p>

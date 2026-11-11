@@ -105,6 +105,22 @@ export const messages = {
       disconnectLabel: ({ provider }: { provider: string }) => `Disconnect ${provider}`,
       saveFailed: "Hobbots could not save that. Try again in a moment.",
       connectOne: "Connect at least one to continue",
+      brain: {
+        heading: "The hub's brain",
+        intro:
+          "Hobbots' own small helper, outside any hob's turn: it sums up chats for memory, writes a camp's brief and makes quick judgment calls. A small, fast model is enough.",
+        model: "Model",
+        recommended: "Recommended",
+        lines: {
+          recommended:
+            "Picked for you: the smallest model on the plan you just connected, at low reasoning effort. Short summaries and quick calls need no more, and it leaves the most of your plan for your hobs. Its calls show in Usage.",
+          bigger:
+            "It still runs at low reasoning effort: a bigger model is slower and uses more of your plan, with little gain for this work. Its calls show in Usage. Change it any time in Settings › Your data.",
+          none: "Summaries and briefs follow simple rules, with no AI. Free, and nothing leaves this Mac. Change it any time in Settings › Your data.",
+        },
+        saveFailed:
+          "Hobbots could not save the hub's brain. Pick it again, or change it later in Settings › Your data.",
+      },
       later: {
         heading: "Or connect another",
         tag: "Later",

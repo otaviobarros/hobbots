@@ -85,7 +85,7 @@ Records are written once, in the same transaction and journal as the message tha
 
 ### The hub's brain
 
-- **One model for the hub's own judgments.** The memory model of ADR 028 becomes the hub's brain: one choice in Settings of a provider, model, effort and fallback, with an optional model per task. It runs the same way, through the hub's model endpoint on your connected sign-ins, with no API key. No AI stays a valid choice.
+- **One model for the hub's own judgments.** The memory model of ADR 028 becomes the hub's brain: one choice in Settings, a model from one list of every connected runtime's models (grouped by provider, each one's smallest recommended) or No AI, at low effort, with a fallback and an optional model per task. Setup offers it once a runtime connects, on that runtime's smallest model. It runs the same way, through the hub's model endpoint on your connected sign-ins, with no API key. No AI stays a valid choice.
 - **Onboarding** shows it with the smallest model of the runtime you just connected already picked, so it is one tap, not a new question.
 - **It judges; rules decide facts.** The brain writes the brief and chapter summaries, judges whether a chapter is drifting into its own topic, and whether two quests clash in meaning. Numbers, path and branch clashes, and every status stay pure rules, so they are exact, free and work under No AI.
 - **Only in projectors.** The brain is called by cursor projectors, never in a command's request path. With No AI, a summary falls back to a plain one and a judgment to its rule.
