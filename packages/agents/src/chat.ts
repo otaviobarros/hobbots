@@ -33,13 +33,11 @@ import {
   type SkillMention,
   type SkillTrial,
   sameBrain,
-  skillTitle,
   stripEscapes,
   systemInstructions,
   type TaskBriefMark,
   type TaskId,
   Thread,
-  ThreadCheckpoint,
   ThreadId,
   ThreadLifecycle,
   type ThreadLifecycleEvent,
@@ -67,20 +65,18 @@ import {
 } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
-import { buildBriefing, contextBlock } from "./briefing.ts";
+import { contextBlock } from "./briefing.ts";
 import { type CharmTurn, hubToolOffer, joinHubTools, type WebRecordPlace } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
-import { deliveredRoster, rosterAtStart, sameRoster, turnRoster } from "./hob-directory.ts";
+import { deliveredRoster, rosterAtStart, sameRoster } from "./hob-directory.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
-import { MemoryProjects, MemoryStore } from "./memory.ts";
-import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief, turnMemoryBrief } from "./memory-brief.ts";
+import { deliveredMemoryBrief, startedMemoryBrief } from "./memory-brief.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
   type CallSteering,
   type HubTools,
-  type RuntimeAdapterShape,
   type RuntimeEvent,
   runtimeAdapters,
   type ToolAccess,
@@ -92,7 +88,6 @@ import {
   mentionedSkill,
   namedSkills,
   runtimePrompt,
-  skillMounter,
   skillUseRecorder,
   TurnSkillsInUse,
   withUsedSkill,
@@ -114,6 +109,7 @@ import { keepToolOutput } from "./tool-output.ts";
 import { HobTools } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import { makeTurnGrants } from "./turn-grants.ts";
+import { draftGoneText, makeTurnInputs, withSkills } from "./turn-inputs.ts";
 import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
 import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
 import { type WebSearchTurn, webSearchRequest, webSearchTurn } from "./web-usage.ts";
@@ -268,18 +264,6 @@ const chatWebPlace = (
   taskId: workingOn,
   attemptId: taskTurn === null ? Effect.succeed(null) : taskTurn.attempt,
 });
-
-/**
- * The messages a runtime's session missed (ADR 017): everything after the last one it saw, and that
- * one too when another brain continued it since. Without a record of what it saw, everything after
- * its own latest reply.
- */
-const missedBy = (runtime: RuntimeKind, seenThrough: string | null, before: ReadonlyArray<Message>) => {
-  const seen = before.findIndex((m) => m.id === seenThrough);
-  if (seen !== -1) return before.slice(before[seen]?.runtime === runtime ? seen + 1 : seen);
-  const own = before.findLastIndex((m) => m.role === "assistant" && m.runtime === runtime);
-  return before.slice(own + 1);
-};
 
 export class ChatService extends Context.Service<
   ChatService,
@@ -439,68 +423,11 @@ export class ChatService extends Context.Service<
       const taskRecords = yield* Effect.serviceOption(TaskRepository);
       // Without Charms or local Git tools, turns offer only the Task tools.
       const charmsFor = yield* hubToolOffer;
-      // Without memory, turns are told nothing from it (ADR 028).
-      const memoryStore = yield* Effect.serviceOption(MemoryStore);
-      // Without project identities, each folder is the project of its name.
-      const memoryProjects = yield* Effect.serviceOption(MemoryProjects);
-      // What the turn's session is told from the hob's memory: sent when the session is new or last
-      // received a different brief (ADR 028).
-      const memoryBriefFor = (agent: Agent, tools: ToolAccess | null, session: RuntimeSession | undefined) =>
-        Option.isNone(memoryStore)
-          ? Effect.succeed<TurnMemoryBrief | null>(null)
-          : turnMemoryBrief(memoryStore.value, memoryProjects, agent.id, tools?.folders ?? [], session?.memoryBrief);
-      // The other hobs on the hub (ADR 032), sent when the session is new or last received a different roster.
-      const rosterFor = (
-        agent: Agent,
-        tools: ToolAccess | null,
-        session: RuntimeSession | undefined,
-        adapter: RuntimeAdapterShape,
-      ) =>
-        turnRoster({
-          agentId: agent.id,
-          access: tools,
-          redactor,
-          received: session?.roster,
-          resumed: session !== undefined,
-          keepsTools: adapter.resumeKeepsHubTools === true,
-        });
-      // Without a skills library, turns have no skills (ADR 029).
-      const skillMounts = yield* skillMounter;
-      // The skills recorded with a message of yours when it was accepted (ADR 029), so a queued message
-      // keeps them through a rollout. Read with the folders the hob works in now.
-      const acceptedSkills = (agent: Agent) =>
-        skillMounts.enabled
-          ? Effect.flatMap(hobTools.access(agent), (access) =>
-              skillMounts.resolve({ agentId: agent.id, policy: agent.policy, folders: access?.folders ?? [] }),
-            )
-          : Effect.succeed(null);
-      // A chat that tries a draft records no library skill with a message, and `/` names the draft
-      // (ADR 029, Try in a chat).
-      /** Why a trial chat's turn did not start, and how to try the draft again (ADR 029, Try in a chat). */
-      const draftGoneText = (name: string) =>
-        `The draft of ${skillTitle(name)} this chat tries is no longer on this hub, as after a restore, so nothing ran here. Try in a chat again from where you wrote it.`;
-      const acceptedIn = (thread: Thread, agent: Agent) =>
-        thread.skillTrial === null ? acceptedSkills(agent) : Effect.succeed<Message["skills"]>([]);
-      // A turn's skills: those its message was accepted with, or, for a continuation or a message
-      // from before, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
-      // A chat that tries a draft loads the draft alone, and records no library skill (ADR 029, Try in a chat).
-      const skillsFor = (
-        agent: Agent,
-        config: AgentConfiguration,
-        tools: ToolAccess | null,
-        thread: Thread,
-        yours?: Message,
-      ) =>
-        Effect.gen(function* () {
-          const trial = thread.skillTrial;
-          if (trial !== null) return { recorded: [], mounts: yield* skillMounts.draft(trial), trial };
-          const recorded =
-            yours?.skills ??
-            (yield* skillMounts.resolve({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] }));
-          return { recorded, mounts: yield* skillMounts.mounts(recorded), trial };
-        });
-      const withSkills = (recorded: Message["skills"]) => (message: Message) =>
-        recorded === null ? undefined : new Message({ ...message, skills: recorded });
+      const { memoryBriefFor, rosterFor, acceptedIn, skillsFor, instructionsChanged, brief } = yield* makeTurnInputs(
+        repo,
+        hobTools,
+        redactor,
+      );
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -707,50 +634,6 @@ export class ChatService extends Context.Service<
         f: (message: Message) => Message | unknown,
         save: (next: Message) => Effect.Effect<A>,
       ) => changeReply(reply, f, (next) => Effect.uninterruptible(Effect.tap(save(next), () => setReply(reply, next))));
-
-      // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
-      // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
-      // not have delivered its own, and threads from before #164 never received theirs. So a thread
-      // whose replies all ran on the current instructions needs nothing, and any other carries them.
-      const instructionsChanged = (thread: Thread, runtime: RuntimeKind, agent: Agent, instructions: string) =>
-        Effect.gen(function* () {
-          if (!thread.sessions.some((session) => session.runtime === runtime)) return false;
-          const versions = new Set(
-            (yield* repo.listMessages(thread.id)).flatMap((m) =>
-              m.role === "assistant" && m.configVersion !== null ? [m.configVersion] : [],
-            ),
-          );
-          for (const version of versions) {
-            const config = yield* repo.findAgentConfig(agent.id, version);
-            if (Option.isNone(config) || systemInstructions(config.value.name, config.value) !== instructions)
-              return true;
-          }
-          return false;
-        });
-
-      // What the turn's session missed, told ahead of the prompt (ADR 017), built from the stored
-      // transcript without asking the brain the thread left. `before` is the transcript before the
-      // turn's own prompt and reply. `switched` when the reply itself moves from another brain, as on
-      // Continue. A summary made anew is stored for the next handoff.
-      const brief = (thread: Thread, runtime: RuntimeKind, before: ReadonlyArray<Message>, switched: boolean) =>
-        Effect.gen(function* () {
-          const session = thread.sessions.find((s) => s.runtime === runtime);
-          const missed = session === undefined ? before : missedBy(runtime, session.seenThrough, before);
-          // Only a switch needs one: a session is told what other brains wrote that it did not see.
-          const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
-          if (!switched && !others) return null;
-          const briefing = buildBriefing({
-            kind: session === undefined ? "new" : "resumed",
-            messages: missed,
-            checkpoint: session === undefined ? Option.getOrNull(yield* repo.findCheckpoint(thread.id)) : null,
-          });
-          if (briefing?.checkpoint) {
-            yield* repo.saveCheckpoint(
-              new ThreadCheckpoint({ threadId: thread.id, ...briefing.checkpoint, createdAt: yield* nowIso }),
-            );
-          }
-          return briefing?.text ?? null;
-        });
 
       const { currentAccess, grant, release, narrowed: narrowedTurns } = yield* makeTurnGrants(repo, hobTools);
 
