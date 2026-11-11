@@ -17,6 +17,8 @@ stateDiagram-v2
   idle --> dispatching: Dispatch
   idle --> running: Launch
   dispatching --> carrying: Launch
+  running --> running: ReplyChanged (guarded)
+  carrying --> carrying: ReplyChanged (guarded)
   running --> draining: TurnEnded (guarded)
   carrying --> dispatching: TurnEnded (guarded)
   draining --> idle: Drained
@@ -53,6 +55,8 @@ stateDiagram-v2
 | Dispatch | idle | dispatching | no |
 | Launch | idle | running | no |
 | Launch | dispatching | carrying | no |
+| ReplyChanged | running | running | yes |
+| ReplyChanged | carrying | carrying | yes |
 | TurnEnded | running | draining | yes |
 | TurnEnded | carrying | dispatching | yes |
 | Drained | draining | idle | no |

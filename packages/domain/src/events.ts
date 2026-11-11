@@ -12,6 +12,7 @@ import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
+import { HobPresence, ThreadRunStatus } from "./presence.ts";
 import {
   ArtifactRef,
   Checkpoint,
@@ -284,8 +285,39 @@ export const TurnEnded = Schema.TaggedStruct("TurnEnded", { threadId: ThreadId, 
 export type TurnStarted = typeof TurnStarted.Type;
 export type TurnEnded = typeof TurnEnded.Type;
 
+/**
+ * A thread's run changed (ADR 037): published once for every transition of its `ThreadRun`, after
+ * the change, with the run as it now is. Transient: runs live in the hub's process and a restart
+ * leaves every one idle, so on every `Ready` a client drops the status it held and reads
+ * `GET /api/status` again instead.
+ */
+export const ThreadRunChanged = Schema.TaggedStruct("ThreadRunChanged", { run: ThreadRunStatus });
+export type ThreadRunChanged = typeof ThreadRunChanged.Type;
+
+/**
+ * A hob's presence changed (ADR 037): its lifecycle, what waits on you, or what its threads' replies
+ * are doing. Published only when the presence differs from the last one published. Transient, like
+ * `ThreadRunChanged`.
+ */
+export const HobPresenceChanged = Schema.TaggedStruct("HobPresenceChanged", { presence: HobPresence });
+export type HobPresenceChanged = typeof HobPresenceChanged.Type;
+
+/**
+ * A hob no longer has a presence, as once it retires, at `revision` of the presences. Transient,
+ * like `HobPresenceChanged`.
+ */
+export const HobPresenceRemoved = Schema.TaggedStruct("HobPresenceRemoved", { agentId: AgentId, revision: Schema.Int });
+export type HobPresenceRemoved = typeof HobPresenceRemoved.Type;
+
 /** A transient event: delivered live, never journaled. */
-export type TransientEvent = MessageDelta | TurnStarted | TurnEnded | CommandOutput;
+export type TransientEvent =
+  | MessageDelta
+  | TurnStarted
+  | TurnEnded
+  | CommandOutput
+  | ThreadRunChanged
+  | HobPresenceChanged
+  | HobPresenceRemoved;
 
 /** State events: each is written to the event journal in the transaction that makes its change (ADR 013). */
 export const JournaledEvent = Schema.Union([
@@ -362,6 +394,9 @@ export const HobbotsEvent = Schema.Union([
   TurnStarted,
   TurnEnded,
   CommandOutput,
+  ThreadRunChanged,
+  HobPresenceChanged,
+  HobPresenceRemoved,
 ]);
 export type HobbotsEvent = typeof HobbotsEvent.Type;
 export type MessageDelta = typeof MessageDelta.Type;
@@ -506,7 +541,8 @@ export type StreamReady = typeof StreamReady.Type;
 /**
  * The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013).
  * `turn` carries `TurnStarted` and `TurnEnded`, `remote-access` carries `RemoteAccessChanged`,
- * `command-output` carries `CommandOutput` and `memory` carries `MemoryChanged`.
+ * `command-output` carries `CommandOutput`, `memory` carries `MemoryChanged` and `status` carries
+ * `ThreadRunChanged`, `HobPresenceChanged` and `HobPresenceRemoved`.
  */
 export const STREAM_FRAME = {
   ready: "ready",
@@ -515,4 +551,5 @@ export const STREAM_FRAME = {
   remoteAccess: "remote-access",
   commandOutput: "command-output",
   memory: "memory",
+  status: "status",
 } as const;

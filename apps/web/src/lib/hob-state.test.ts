@@ -1,4 +1,4 @@
-import { AgentId, ThreadId } from "@hobbots/domain";
+import { AgentId, hobPresenceState, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { hobNeeds, hobState, leadNeeds, sceneOrder, threadState, withRequests } from "./hob-state.ts";
 
@@ -122,5 +122,25 @@ describe("leadNeeds", () => {
       leadOf,
     });
     expect([...needs].sort()).toEqual([ada, pip]);
+  });
+});
+
+// The hub decides presence by the same order this file shows it in (ADR 037), for every combination.
+describe("the hub's presence", () => {
+  const activities = ["thinking", "working", "waiting"] as const;
+  // Every set of activities a hob's threads can have at once: each bit of `mask` takes one.
+  const subsets = Array.from({ length: 2 ** activities.length }, (_, mask) =>
+    activities.filter((_, bit) => (mask >> bit) & 1),
+  );
+  it("agrees with the client's fold of lifecycle, what waits on you and its threads", () => {
+    for (const status of ["active", "paused"] as const)
+      for (const needsYou of [false, true])
+        for (const replies of subsets) {
+          const threads = replies.map((_, index) => ({ id: `t${index}` }));
+          const activity = Object.fromEntries(replies.map((reply, index) => [`t${index}`, reply]));
+          expect(hobPresenceState({ status, needsYou, replies })).toBe(
+            withRequests(hobState({ status }, threads, activity), needsYou),
+          );
+        }
   });
 });

@@ -1,4 +1,4 @@
-import { MessageId } from "@hobbots/domain";
+import { MessageId, type ReplyActivity, ThreadId } from "@hobbots/domain";
 import { agreesWithModel } from "@hobbots/domain/machine-testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import {
   type Reply,
   RUN_STATES,
   type RunState,
+  runStatus,
   type ThreadRun,
   type ThreadRunEvent,
   ThreadRunMachine,
@@ -18,11 +19,13 @@ import {
 const replies = [0, 1, 2].map((n) => ({ n }) as unknown as Reply);
 const replyIndex = (reply: Reply | null) => (reply === null ? null : replies.indexOf(reply));
 const messages = ["m-1", "m-2", "m-3"].map((id) => MessageId.make(id));
+const threadId = ThreadId.make("t-1");
 
 /** What the model tracks of a run: every field, with the reply as its place in `replies`. */
 interface RunView {
   readonly run: RunState;
   readonly reply: number | null;
+  readonly activity: ReplyActivity | null;
   readonly chosen: MessageId | null;
   readonly held: boolean;
   readonly wakePending: boolean;
@@ -31,6 +34,7 @@ interface RunView {
 const view = (run: ThreadRun): RunView => ({
   run: run.run,
   reply: replyIndex(run.reply),
+  activity: run.activity,
   chosen: run.chosen,
   held: run.held,
   wakePending: run.wakePending,
@@ -45,14 +49,20 @@ type Rule<T extends ThreadRunEvent["_tag"]> = (
 const rules: { readonly [T in ThreadRunEvent["_tag"]]: Rule<T> } = {
   Dispatch: (m) => (m.run === "idle" ? { ...m, run: "dispatching", wakePending: false } : "refused"),
   Launch: (m, e) => {
-    if (m.run === "idle") return { ...m, run: "running", reply: replyIndex(e.reply) };
-    return m.run === "dispatching" ? { ...m, run: "carrying", reply: replyIndex(e.reply) } : "refused";
+    const launched = { reply: replyIndex(e.reply), activity: e.activity };
+    if (m.run === "idle") return { ...m, ...launched, run: "running" };
+    return m.run === "dispatching" ? { ...m, ...launched, run: "carrying" } : "refused";
   },
+  // Only the reply that runs now reports what it does, and only a change is a transition.
+  ReplyChanged: (m, e) =>
+    (m.run === "running" || m.run === "carrying") && m.reply === replyIndex(e.reply) && m.activity !== e.activity
+      ? { ...m, activity: e.activity }
+      : "refused",
   // Only the turn that runs now can end; a stale reply is refused.
   TurnEnded: (m, e) => {
     if (m.reply !== replyIndex(e.reply)) return "refused";
-    if (m.run === "running") return { ...m, run: "draining", reply: null };
-    return m.run === "carrying" ? { ...m, run: "dispatching", reply: null } : "refused";
+    if (m.run === "running") return { ...m, run: "draining", reply: null, activity: null };
+    return m.run === "carrying" ? { ...m, run: "dispatching", reply: null, activity: null } : "refused";
   },
   Drained: (m) => {
     if (m.run === "draining") return { ...m, run: "idle" };
@@ -71,10 +81,12 @@ const step = (m: RunView, event: ThreadRunEvent) =>
 
 const reply = fc.constantFrom(...replies);
 const messageId = fc.constantFrom(...messages);
+const activity = fc.constantFrom<ReplyActivity | null>("thinking", "working", "waiting", null);
 
 const events: fc.Arbitrary<ThreadRunEvent> = fc.oneof(
   fc.constant({ _tag: "Dispatch" } as const),
-  reply.map((r) => ({ _tag: "Launch", reply: r }) as const),
+  fc.tuple(reply, activity).map(([r, a]) => ({ _tag: "Launch", reply: r, activity: a }) as const),
+  fc.tuple(reply, activity).map(([r, a]) => ({ _tag: "ReplyChanged", reply: r, activity: a }) as const),
   reply.map((r) => ({ _tag: "TurnEnded", reply: r }) as const),
   fc.constant({ _tag: "Drained" } as const),
   fc.constant({ _tag: "Delivered" } as const),
@@ -92,6 +104,7 @@ const records: fc.Arbitrary<ThreadRun> = fc.oneof(
     .record({
       run: fc.constantFrom(...RUN_STATES),
       reply,
+      activity,
       chosen: fc.option(messageId, { nil: null }),
       held: fc.boolean(),
       wakePending: fc.boolean(),
@@ -99,6 +112,7 @@ const records: fc.Arbitrary<ThreadRun> = fc.oneof(
     .map((r) => ({
       ...r,
       reply: r.run === "running" || r.run === "carrying" ? r.reply : null,
+      activity: r.run === "running" || r.run === "carrying" ? r.activity : null,
       wakePending: r.run === "idle" ? false : r.wakePending,
     })),
 );
@@ -124,29 +138,46 @@ describe("ThreadRunMachine", () => {
 
   it("frees a thread once its turn ends and drains", () => {
     const r = replies[0] as Reply;
-    const run = apply(idleRun, { _tag: "Launch", reply: r });
+    const run = apply(idleRun, { _tag: "Launch", reply: r, activity: "thinking" });
     expect(isBusy(run)).toBe(true);
     const ended = apply(run, { _tag: "TurnEnded", reply: r }, { _tag: "Drained" });
     expect(isBusy(ended)).toBe(false);
     expect(isAtRest(ended)).toBe(true);
   });
 
+  it("follows what the running reply does, and publishes it with the run", () => {
+    const [first, second] = replies as [Reply, Reply];
+    const run = apply(idleRun, { _tag: "Launch", reply: first, activity: "thinking" });
+    const writing = apply(run, { _tag: "ReplyChanged", reply: first, activity: "working" });
+    expect(runStatus(threadId, writing, 4)).toEqual({ threadId, run: "running", reply: "working", revision: 4 });
+    // No change, or a reply that no longer runs, is no transition, so nothing is published for it.
+    expect(ThreadRunMachine.can(writing, { _tag: "ReplyChanged", reply: first, activity: "working" })).toBe(false);
+    expect(ThreadRunMachine.can(writing, { _tag: "ReplyChanged", reply: second, activity: "waiting" })).toBe(false);
+    const ended = apply(writing, { _tag: "TurnEnded", reply: first });
+    expect(runStatus(threadId, ended, 5)).toEqual({ threadId, run: "draining", reply: null, revision: 5 });
+  });
+
   it("refuses the end of a turn that another turn already replaced", () => {
     const [first, second] = replies as [Reply, Reply];
-    const run = apply(idleRun, { _tag: "Launch", reply: second });
+    const run = apply(idleRun, { _tag: "Launch", reply: second, activity: "thinking" });
     expect(ThreadRunMachine.can(run, { _tag: "TurnEnded", reply: first })).toBe(false);
   });
 
   it("goes back to dispatching when a carried turn ends, so the dispatcher frees the thread", () => {
     const r = replies[0] as Reply;
-    const run = apply(idleRun, { _tag: "Dispatch" }, { _tag: "Launch", reply: r }, { _tag: "TurnEnded", reply: r });
+    const run = apply(
+      idleRun,
+      { _tag: "Dispatch" },
+      { _tag: "Launch", reply: r, activity: "thinking" },
+      { _tag: "TurnEnded", reply: r },
+    );
     expect(run.run).toBe("dispatching");
     expect(apply(run, { _tag: "Delivered" }).run).toBe("idle");
   });
 
   it("keeps a wake that arrives while busy until the dispatcher next looks", () => {
     const r = replies[0] as Reply;
-    const woken = apply(idleRun, { _tag: "Launch", reply: r }, { _tag: "WakeLater" });
+    const woken = apply(idleRun, { _tag: "Launch", reply: r, activity: "thinking" }, { _tag: "WakeLater" });
     expect(woken.wakePending).toBe(true);
     expect(isAtRest(apply(woken, { _tag: "TurnEnded", reply: r }, { _tag: "Drained" }))).toBe(false);
     expect(apply(woken, { _tag: "TurnEnded", reply: r }, { _tag: "Drained" }, { _tag: "Dispatch" }).wakePending).toBe(
