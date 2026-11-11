@@ -202,6 +202,8 @@ export const GitWorkspaceLive = Layer.succeed(
   GitWorkspace.of({
     uncommitted: (files) => Effect.promise(() => uncommitted(files).catch(() => [])),
     repository: (folder) => Effect.promise(() => repositoryFrom(folder).catch(() => null)),
+    realFolder: (folder) =>
+      Effect.promise(() => (isAbsolute(folder) ? realpath(folder).catch(() => null) : Promise.resolve(null))),
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
   }),
 );

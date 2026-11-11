@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { ClaimRegister, HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
@@ -13,6 +13,7 @@ import {
   type TaskId,
   TaskId as TaskIds,
   type TaskToolDone,
+  TaskToolRefused,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
@@ -45,11 +46,14 @@ import { NodeFolderChecks } from "../src/folders.ts";
 const now = "2026-11-11T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
 const SAM = AgentId.make("sam");
+// Merry works only in the repository's docs folder.
+const MERRY = AgentId.make("merry");
 const MIGRATIONS = "packages/persistence/src/migrations";
 
 let root: string;
 let checkout: string;
 let worktree: string;
+let outside: string;
 
 const git = (cwd: string, ...args: ReadonlyArray<string>) =>
   execFileSync("git", ["-c", "user.name=Ada", "-c", "user.email=ada@example.com", ...args], { cwd, stdio: "pipe" });
@@ -68,9 +72,21 @@ beforeAll(() => {
   git(checkout, "commit", "-q", "-m", "first");
   git(checkout, "remote", "add", "origin", "https://github.com/me/app.git");
   git(checkout, "worktree", "add", "-q", "-b", "camp", worktree);
+  // A repository beside the checkout that no hob was given, and a link to it from inside the checkout.
+  outside = join(root, "private");
+  mkdirSync(join(outside, "docs", "decisions"), { recursive: true });
+  writeFileSync(join(outside, "docs", "decisions", "001-secret.md"), "# Secret\n");
+  git(root, "init", "-q", "-b", "main", outside);
+  git(outside, "add", ".");
+  git(outside, "commit", "-q", "-m", "first");
+  symlinkSync(outside, join(checkout, "private-link"));
 });
 
-const folderOf: Record<string, () => string> = { [FRODO]: () => checkout, [SAM]: () => worktree };
+const folderOf: Record<string, () => string> = {
+  [FRODO]: () => checkout,
+  [SAM]: () => worktree,
+  [MERRY]: () => join(checkout, "docs"),
+};
 
 const TestHobTools = Layer.sync(HobTools, () =>
   HobTools.of({
@@ -116,10 +132,13 @@ type Services = Layer.Success<typeof App>;
 const hub = () => {
   const runtime = ManagedRuntime.make(App);
   const run = <A, E>(effect: Effect.Effect<A, E, Services>) => runtime.runPromise(effect);
-  const call = (agentId: AgentId, taskId: TaskId, input: Record<string, unknown>) =>
-    run(Effect.flatMap(Effect.service(TaskTools), (tools) => tools.call({ agentId, taskId }, "claim", input)));
+  const claim = (agentId: AgentId, taskId: TaskId, input: Record<string, unknown>) =>
+    Effect.flatMap(Effect.service(TaskTools), (tools) => tools.call({ agentId, taskId }, "claim", input));
+  const call = (agentId: AgentId, taskId: TaskId, input: Record<string, unknown>) => run(claim(agentId, taskId, input));
+  const refused = (agentId: AgentId, taskId: TaskId, input: Record<string, unknown>) =>
+    run(Effect.flip(claim(agentId, taskId, input)));
   /** A hob's request in a camp of its own, with its turn started unless `started` is false. */
-  const request = (agentId: AgentId, taskId: TaskId, started = true) =>
+  const request = (agentId: AgentId, taskId: TaskId, started = true, parentId: TaskId | null = null) =>
     run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -132,7 +151,7 @@ const hub = () => {
           task: {
             id: taskId,
             ownerId: agentId,
-            parentId: null,
+            parentId,
             threadId,
             brief: "Build",
             dependsOn: [],
@@ -158,6 +177,7 @@ const hub = () => {
       for (const [id, name] of [
         [FRODO, "Frodo"],
         [SAM, "Sam"],
+        [MERRY, "Merry"],
       ] as const) {
         yield* repo.insertAgent(
           new Agent({
@@ -201,15 +221,49 @@ const hub = () => {
         yield* Effect.orDie(tasks.moveTask(taskId, task.revision, "cancelled", now));
       }),
     );
+  /** Fails a member Task, then retries it: the same Task, open again. */
+  const failAndRetry = (taskId: TaskId) =>
+    run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const latest = Effect.gen(function* () {
+          const task = Option.getOrThrow(yield* tasks.readTree(taskId)).tasks.find((each) => each.id === taskId);
+          if (task === undefined) throw new Error(`no Task ${taskId}`);
+          return task;
+        });
+        yield* tasks.updateAttempt(AttemptId.make(`${taskId}-1`), {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "The build broke" },
+          at: now,
+        });
+        const ended = yield* latest;
+        if (ended.state !== "failed") yield* Effect.orDie(tasks.moveTask(taskId, ended.revision, "failed", now));
+        yield* Effect.orDie(tasks.retryTask(taskId, (yield* latest).revision, now));
+      }),
+    );
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
       (tree) => Option.getOrThrow(tree).tasks[0],
     );
-  return { run, call, request, seed, clashItems, claimsOf, end, taskOf, dispose: () => runtime.dispose() };
+  return {
+    run,
+    call,
+    refused,
+    request,
+    seed,
+    clashItems,
+    claimsOf,
+    end,
+    failAndRetry,
+    taskOf,
+    dispose: () => runtime.dispose(),
+  };
 };
 
 const A = TaskIds.make("task-frodo");
 const B = TaskIds.make("task-sam");
+const C = TaskIds.make("task-merry");
+const MEMBER = TaskIds.make("task-frodo-member");
 
 describe("the claims register", () => {
   // covers OR-004
@@ -294,6 +348,61 @@ describe("the claims register", () => {
       // Number 3 went with Frodo's Task, and stays his: Sam gets 4.
       expect((await h.call(SAM, B, { key: "m", ...input })).details.number).toBe("0004");
       expect((await h.call(SAM, B, { key: "m3", ...input, number: 3 })).details.number).toBe("0005");
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers OR-004, OR-007
+  it("[TC-OR-1388-05] lets a retried Task claim again the path and branch its failure released", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      await h.request(FRODO, A);
+      await h.request(FRODO, MEMBER, true, A);
+      await h.call(FRODO, MEMBER, { key: "p", scope: "path", path: "docs" });
+      await h.call(FRODO, MEMBER, { key: "b", scope: "branch", branch: "feat/claims" });
+      await h.failAndRetry(MEMBER);
+      expect((await h.claimsOf(MEMBER)).map((claim) => claim.state)).toEqual(["released", "released"]);
+      // The released claims stay in the register; the retried Task holds new ones on the same names.
+      expect((await h.call(FRODO, MEMBER, { key: "p2", scope: "path", path: "docs" })).details.state).toBe("held");
+      expect((await h.call(FRODO, MEMBER, { key: "b2", scope: "branch", branch: "feat/claims" })).details.state).toBe(
+        "held",
+      );
+      expect((await h.claimsOf(MEMBER)).map((claim) => claim.state).sort()).toEqual([
+        "held",
+        "held",
+        "released",
+        "released",
+      ]);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers PE-002, PE-004
+  it("[TC-OR-1388-06] claims nothing outside the hob's folders, whatever the folder's spelling", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      await h.request(FRODO, A);
+      await h.request(MERRY, C);
+      const adr = { scope: "sequence", directory: "docs/decisions" } as const;
+      // Climbing out with "..", or through a link inside the hob's folder, reaches a repository it was not given.
+      for (const folder of [`${checkout}${sep}..${sep}private`, join(checkout, "private-link"), outside]) {
+        const refusal = await h.refused(FRODO, A, { key: `out-${folder}`, folder, ...adr });
+        expect(refusal).toBeInstanceOf(TaskToolRefused);
+        expect((refusal as TaskToolRefused).reason).toBe("not-a-repository");
+      }
+      // A hob given one folder of a repository claims only inside it.
+      expect((await h.call(MERRY, C, { key: "adr", ...adr })).details.number).toBe("002");
+      for (const input of [
+        { key: "migration", scope: "sequence", directory: MIGRATIONS },
+        { key: "path", scope: "path", path: "packages/domain" },
+      ]) {
+        expect(((await h.refused(MERRY, C, input)) as TaskToolRefused).reason).toBe("not-a-repository");
+      }
+      expect(await h.claimsOf(A)).toEqual([]);
     } finally {
       await h.dispose();
     }

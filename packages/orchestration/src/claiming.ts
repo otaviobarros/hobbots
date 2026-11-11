@@ -34,17 +34,37 @@ const lastName = (folder: string, separator: PathSeparator) =>
     .filter((name) => name !== "")
     .at(-1) ?? folder;
 
-/** The folder a claim is in: the one the call names, inside the hob's folders, or its first folder. */
-const folderOf = (input: ClaimInput, folders: ReadonlyArray<string>, separator: PathSeparator) => {
-  const named = input.folder?.trim();
-  if (named === undefined || named === "") {
-    const first = folders[0];
-    return first === undefined ? refuse("not-a-repository", "You have no folder to claim in.") : Effect.succeed(first);
-  }
-  const folder = named.length > 1 && named.endsWith(separator) ? named.slice(0, -separator.length) : named;
-  return folders.some((each) => holds(each, folder, separator))
-    ? Effect.succeed(folder)
-    : refuse("not-a-repository", `${named} is not one of your folders or inside one.`);
+/**
+ * The folder a claim is in: the one the call names, or the hob's first folder. A named folder is
+ * resolved first, every link and `..` taken as the kernel walks it, and must then be one of the
+ * hob's folders or inside one, so no spelling reaches a repository outside them.
+ */
+const folderOf = (
+  input: ClaimInput,
+  folders: ReadonlyArray<string>,
+  separator: PathSeparator,
+  realFolder: (folder: string) => Effect.Effect<string | null>,
+) =>
+  Effect.gen(function* () {
+    const named = input.folder?.trim();
+    if (named === undefined || named === "") {
+      const first = folders[0];
+      return first === undefined ? yield* refuse("not-a-repository", "You have no folder to claim in.") : first;
+    }
+    const real = yield* realFolder(named);
+    return real !== null && folders.some((each) => holds(each, real, separator))
+      ? real
+      : yield* refuse("not-a-repository", `${named} is not one of your folders or inside one.`);
+  });
+
+/**
+ * Whether `relative`, a path inside the repository whose top is `top`, is in one of the hob's
+ * folders. A hob whose folder is part of a larger repository claims only inside its own part.
+ */
+const insideFolders = (top: string, relative: string, folders: ReadonlyArray<string>, separator: PathSeparator) => {
+  const base = top.endsWith(separator) ? top.slice(0, -separator.length) : top;
+  const spelled = `${base}${separator}${relative.split("/").join(separator)}`;
+  return folders.some((each) => holds(each, spelled, separator));
 };
 
 /** A path the call names, as a claim keys it, or a refusal that says what a path must be. */
@@ -152,13 +172,18 @@ export const makeClaiming = (deps: Deps) =>
         if (isTerminalTask(task.state)) {
           return yield* refuse("task-state", `Task ${task.id} has ended, so it can claim nothing.`);
         }
-        const folder = yield* folderOf(input, yield* deps.folders(scope, task), separator);
+        const folders = yield* deps.folders(scope, task);
+        const folder = yield* folderOf(input, folders, separator, workspace.value.realFolder);
         const top = yield* workspace.value.repository(folder);
         if (top === null) return yield* refuse("not-a-repository", `${folder} is in no Git repository.`);
-        const repository = yield* identityOf(top);
         const directory = isSequenceScope(input.scope) ? yield* pathOf("directory", input.directory) : null;
-        const onMain = directory === null ? [] : yield* workspace.value.namesOnMain(top, directory);
         const key = yield* keyOf(input);
+        const place = directory ?? (input.scope === "path" ? key : null);
+        if (place !== null && !insideFolders(top, place, folders, separator)) {
+          return yield* refuse("not-a-repository", `${place} is outside your folders, so you cannot claim it.`);
+        }
+        const repository = yield* identityOf(top);
+        const onMain = directory === null ? [] : yield* workspace.value.namesOnMain(top, directory);
         const committed = yield* register.value.claim({
           id: ClaimId.make(newId()),
           scope: input.scope,

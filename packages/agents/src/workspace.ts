@@ -25,6 +25,12 @@ export interface GitWorkspaceShape {
    */
   readonly repository: (folder: string) => Effect.Effect<string | null>;
   /**
+   * The real path of `folder`, every link and `..` resolved as the kernel walks it, or null when it
+   * is not an absolute path or cannot be read. A folder a hob names is checked against its own
+   * folders by this path, never by its spelling.
+   */
+  readonly realFolder: (folder: string) => Effect.Effect<string | null>;
+  /**
    * The names of the files and folders directly in `directory`, a path inside the repository whose
    * top is `repository` with `/` between names, as its default branch has them: `origin`'s HEAD, else
    * `origin/main`, else `main`, as this clone last fetched them. Empty when the directory is not
