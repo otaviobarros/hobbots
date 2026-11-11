@@ -42,14 +42,21 @@ export const threadColumns = (thread: Thread) => ({
   revision: thread.revision,
 });
 
-/** Whether a camp stored under a key is the one asked for again: same hob, title, goal and privacy. */
-const sameCamp = (stored: Thread, asked: Thread) =>
+/** What Make a camp was asked under a key, as it was asked: a later rename does not change it. */
+const campRequestColumns = (camp: Thread) => ({
+  key: camp.id,
+  agent_id: camp.agentId,
+  title: camp.title,
+  goal: camp.goal,
+  private: camp.private ? 1 : 0,
+});
+
+/** Whether the request stored under a key is the one asked again: same hob, title, goal and privacy. */
+const sameRequest = (stored: Row, asked: Thread) =>
   stored.agentId === asked.agentId &&
-  stored.kind === "camp" &&
   stored.title === asked.title &&
-  stored.goal === asked.goal &&
-  stored.private === asked.private &&
-  stored.origin === null;
+  (stored.goal ?? null) === asked.goal &&
+  Boolean(Number(stored.private)) === asked.private;
 
 // The chat changed between the read and the write: the change rolls back, and the caller reads again.
 class StaleChat extends Data.TaggedError("StaleChat") {}
@@ -91,10 +98,12 @@ export const makeCampWrites = (
       Effect.gen(function* () {
         const stored = yield* readThread(camp.id);
         if (stored !== undefined) {
-          if (sameCamp(stored, camp)) return { value: stored, events: [] };
+          const [request] = yield* sql<Row>`SELECT * FROM camp_requests WHERE key = ${camp.id}`;
+          if (request !== undefined && sameRequest(request, camp)) return { value: stored, events: [] };
           return yield* new ThreadKeyReused({ threadId: camp.id });
         }
         yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
+        yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
         const thread = yield* shown(camp.id);
         return { value: thread, events: [{ _tag: "CampMade", thread } as const] };
       }),

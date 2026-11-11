@@ -1,3 +1,4 @@
+import type { ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -25,6 +26,7 @@ import { queryKeys } from "./queries.ts";
 import { remoteAccessQuery } from "./remote-access.ts";
 import { skillProposalsQuery } from "./skill-proposals.ts";
 import { skillFeedbackQuery, skillQuery, skillRevisionQuery, skillsListQuery } from "./skills.ts";
+import { threadTasksQuery } from "./tasks.ts";
 
 const threadId = ThreadId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
@@ -149,6 +151,39 @@ describe("applyEvent", () => {
     applyEvent(client, { _tag: "ThreadUpserted", thread: restored });
     expect(client.getQueryData(queryKeys.threads(hobId))).toEqual([restored]);
     expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([]);
+  });
+
+  // covers CH-009
+  it("[TC-CH-1376-08] drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const hobId = AgentId.make("aldric");
+    const old = new Thread({ id: threadId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now });
+    const fresh = new Thread({
+      id: ThreadId.make("fresh"),
+      agentId: hobId,
+      title: "New chat",
+      origin: { threadId, chapterId: null },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const reads: Array<(answer: ThreadTasksRead) => void> = [];
+    const observer = new QueryObserver(client, {
+      ...threadTasksQuery(threadId),
+      queryFn: () => new Promise<ThreadTasksRead>((resolve) => reads.push(resolve)),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    await tick();
+
+    applyEvent(client, { _tag: "ChatStartedFresh", superseded: old, chat: fresh, carried: [] });
+    await tick();
+    expect(reads).toHaveLength(2);
+    reads[1]?.({ cursor: "1:2", trees: [] });
+    // The read taken before the move answers last, with the work that has since moved.
+    reads[0]?.({ cursor: "1:1", trees: [{} as ThreadTasksRead["trees"][number]] });
+    await tick();
+    expect(observer.getCurrentResult().data?.trees).toEqual([]);
+    unsubscribe();
   });
 
   it("adds a hob created elsewhere to a loaded hob list", () => {

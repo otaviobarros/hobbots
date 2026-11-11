@@ -52,7 +52,7 @@ import {
   syncState,
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
-import { applyTaskEvent, taskKeys } from "./tasks.ts";
+import { applyTaskEvent, threadTasksMoved } from "./tasks.ts";
 import { showUnread } from "./thread-reads.ts";
 import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
@@ -270,7 +270,7 @@ const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
   for (const thread of [event.superseded, event.chat]) {
     recordThread(queryClient, thread);
     placeThread(queryClient, thread);
-    void queryClient.invalidateQueries({ queryKey: taskKeys.thread(thread.id) });
+    void threadTasksMoved(queryClient, thread.id);
   }
 };
 

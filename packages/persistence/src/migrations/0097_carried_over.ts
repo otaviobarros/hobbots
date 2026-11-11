@@ -5,6 +5,9 @@ import { SqlClient } from "effect/sql";
 // thing, written once in the transaction that moved it. `ref_kind` is `task`, `question`, `reminder`
 // or `backpack-item`, and `ref_id` the id it names. The primary key keeps a thing from being carried
 // out of the same chat twice; the index finds what a new chat carries for its first turn.
+//
+// `camp_requests` keeps what Make a camp was asked, under its key, as it was asked. The camp's own
+// title can be renamed later, so the same request sent again is checked against this row.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
@@ -20,4 +23,13 @@ export default Effect.gen(function* () {
     )
   `;
   yield* sql`CREATE INDEX carried_over_to ON carried_over (to_thread_id, position)`;
+  yield* sql`
+    CREATE TABLE camp_requests (
+      key TEXT PRIMARY KEY REFERENCES threads(id),
+      agent_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      goal TEXT,
+      private INTEGER NOT NULL
+    )
+  `;
 });

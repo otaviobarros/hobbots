@@ -163,7 +163,7 @@ const breakNextAppend = Effect.gen(function* () {
 
 describe("Make a camp", () => {
   // covers CH-009
-  it("[TC-CH-1376-01] writes the camp and journals CampMade once, answers the same request again, and refuses a reused key", async () => {
+  it("[TC-CH-1376-01] writes the camp and journals CampMade once, answers the same request again even after a rename, and refuses a reused key", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* hobWithChat;
@@ -171,9 +171,12 @@ describe("Make a camp", () => {
         const journal = yield* EventJournal;
         const made = yield* repo.makeCamp(camp());
         const again = yield* repo.makeCamp(camp({ createdAt: LATER, updatedAt: LATER }));
+        // Renamed since, the camp still answers the request that made it.
+        const renamed = yield* repo.upsertThread(new Thread({ ...made.value, title: "Launch post, renamed" }));
+        const afterRename = yield* repo.makeCamp(camp({ createdAt: LATER, updatedAt: LATER }));
         const reused = yield* Effect.exit(repo.makeCamp(camp({ title: "Something else" })));
         const onChat = yield* Effect.exit(repo.makeCamp(camp({ id: CHAT })));
-        return { made, again, reused, onChat, entries: yield* journal.readAfter(0) };
+        return { made, again, renamed, afterRename, reused, onChat, entries: yield* journal.readAfter(0) };
       }),
     );
 
@@ -187,6 +190,8 @@ describe("Make a camp", () => {
     expect(result.made.entries.map((entry) => entry.payload._tag)).toEqual(["CampMade"]);
     expect(result.again.entries).toEqual([]);
     expect(result.again.value).toEqual(result.made.value);
+    expect(result.afterRename.entries).toEqual([]);
+    expect(result.afterRename.value).toEqual(result.renamed.value);
     expect(result.reused).toEqual(Exit.fail(new ThreadKeyReused({ threadId: ThreadId.make("camp-1") })));
     expect(result.onChat).toEqual(Exit.fail(new ThreadKeyReused({ threadId: CHAT })));
     expect(result.entries.filter((entry) => entry.payload._tag === "CampMade")).toHaveLength(1);
