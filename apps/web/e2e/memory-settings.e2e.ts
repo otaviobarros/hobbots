@@ -203,19 +203,55 @@ test("[TC-GEN-227] setup keeps a brain chosen before on a connected provider, sa
 }) => {
   writeFileSync(join(dataDir, "memory-settings.json"), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }));
   hub = await startHub(dataDir);
+  // The runtime's model list does not answer: its models' efforts are unknown, so high is not taken as low.
+  const models = {
+    unroute: () => page.unroute("**/api/runtimes/claude-code/models"),
+  };
+  await page.route("**/api/runtimes/claude-code/models", (route) => route.fulfill({ status: 500, body: "" }));
   await page.goto(hub.url);
   await page.getByRole("link", { name: "Get started" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Connect Claude" }).click();
   const card = page.getByRole("region", { name: "The hub's brain" });
   await expect(card.getByRole("combobox", { name: "The hub's brain" }).locator("option:checked")).toHaveText(
-    "Fake Thinker (recommended)",
+    "Its smallest model (recommended)",
   );
   await expect(card).toContainText("Runs at high effort, chosen before.");
   await expect(card).not.toContainText("at low reasoning effort");
+  await models.unroute();
   await card.getByRole("button", { name: "Use low effort" }).click();
   await expect(card).toContainText("at low reasoning effort");
   await expect.poll(() => stored()).toMatchObject({ provider: "claude", effort: "low" });
+});
+
+// covers ADR 037, OP-001
+test("[TC-GEN-228] setup waits for the saved brain to be read before Continue, and reads it again after a failure", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  let refuse = true;
+  await page.route("**/api/memory", async (route) => {
+    if (refuse) await route.fulfill({ status: 500, body: "" });
+    else await route.continue();
+  });
+  await page.goto(hub.url);
+  await page.getByRole("link", { name: "Get started" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Connect Codex" }).click();
+  const card = page.getByRole("region", { name: "The hub's brain" });
+  const next = page.getByRole("button", { name: "Continue" });
+  // While the saved brain can't be read, setup can't tell whether it must move, so it does not go on.
+  await expect(next).toBeDisabled();
+  await expect(card.getByRole("alert")).toContainText("could not read the hub's brain", { timeout: 20_000 });
+  await expect(next).toBeDisabled();
+  refuse = false;
+  await card.getByRole("button", { name: "Try again" }).click();
+  await expect(card.getByRole("combobox", { name: "The hub's brain" }).locator("option:checked")).toHaveText(
+    "Fake Coder (recommended)",
+  );
+  await next.click();
+  await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
+  await expect.poll(() => stored()).toMatchObject({ provider: "chatgpt", model: null, effort: "low" });
 });
 
 // covers ADR 028

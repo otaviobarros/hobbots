@@ -396,7 +396,7 @@ export function OnboardingProviders() {
             onClick={() => void next()}
             aria-disabled={!ready}
             aria-describedby="providers-hint"
-            disabled={providers.isPending || brain.busy}
+            disabled={providers.isPending || (ready && brain.holding)}
             className={cn(
               !ready && "cursor-not-allowed bg-line-2 text-label [--press-color:transparent] hover:bg-line-2",
             )}

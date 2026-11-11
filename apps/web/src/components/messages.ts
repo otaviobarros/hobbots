@@ -118,6 +118,8 @@ export const messages = {
             "It still runs at low reasoning effort: a bigger model is slower and uses more of your plan, with little gain for this work. Its calls show in Usage. Change it any time in Settings › Your data.",
           none: "Summaries and briefs follow simple rules, with no AI. Free, and nothing leaves this Mac. Change it any time in Settings › Your data.",
         },
+        reading: "Reading the hub's brain…",
+        readFailed: "Hobbots could not read the hub's brain, so setup can't pick it yet.",
         saveFailed:
           "Hobbots could not save the hub's brain. Pick it again, or change it later in Settings › Your data.",
       },
