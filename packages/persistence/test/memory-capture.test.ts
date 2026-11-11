@@ -57,10 +57,10 @@ describe("MemoryCaptureLog", () => {
       yield* sql`UPDATE memory_capture SET sequence = 0`;
       const kept = yield* journal.compact;
       const session = { sessionId: threadId, agentId, lastAt: now, lastKey: "message:m1" };
-      yield* log.save(1, [session], [], []);
+      yield* log.save(1, [session], [], { privateThreads: [], excluded: ["attempt:a1"] });
       const afterOne = yield* journal.compact;
       const held = yield* log.hold;
-      yield* log.save(2, [], [threadId], []);
+      yield* log.save(2, [], [threadId], { privateThreads: [], excluded: ["attempt:a1", "message:m2"] });
       const ended = yield* log.hold;
       yield* log.release;
       const released = yield* journal.compact;
@@ -68,18 +68,28 @@ describe("MemoryCaptureLog", () => {
       return { first, kept, afterOne, held, ended, released, again };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    expect(result.first).toEqual({ sequence: 10_002, sessions: [], privateThreads: [] });
+    expect(result.first).toEqual({ sequence: 10_002, sessions: [], exclusions: { privateThreads: [], excluded: [] } });
     expect(result.kept).toBe(0);
     expect(result.afterOne).toBe(1);
     expect(result.held).toEqual({
       sequence: 1,
       sessions: [{ sessionId: threadId, agentId, lastAt: now, lastKey: "message:m1" }],
-      privateThreads: [],
+      exclusions: { privateThreads: [], excluded: ["attempt:a1"] },
     });
-    expect(result.ended).toEqual({ sequence: 2, sessions: [], privateThreads: [] });
+    // A unit kept out again is kept once, and the ones kept before stay.
+    expect(result.ended).toEqual({
+      sequence: 2,
+      sessions: [],
+      exclusions: { privateThreads: [], excluded: ["attempt:a1", "message:m2"] },
+    });
     // Released, compaction goes on as before, and the next hold starts at the head.
     expect(result.released).toBe(1);
-    expect(result.again).toEqual({ sequence: 10_002, sessions: [], privateThreads: [] });
+    // Starting again at the head keeps what capture kept out.
+    expect(result.again).toEqual({
+      sequence: 10_002,
+      sessions: [],
+      exclusions: { privateThreads: [], excluded: ["attempt:a1", "message:m2"] },
+    });
   });
 
   // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
@@ -132,7 +142,7 @@ describe("MemoryCaptureLog", () => {
       yield* repo.upsertThread(new Thread({ ...campThread, private: false }));
       const publicAgain = yield* log.privacy(ask);
       const held = yield* log.hold;
-      yield* log.save(started.sequence + 1, [], [], []);
+      yield* log.save(started.sequence + 1, [], [], { privateThreads: [], excluded: [] });
       const followed = yield* log.hold;
       const none = yield* log.privacy({ threadIds: new Set(), taskIds: new Set() });
       return { privateNow, holds, started, publicAgain, held, followed, none };
@@ -145,10 +155,10 @@ describe("MemoryCaptureLog", () => {
     expect(result.privateNow).toEqual({ privateNow: new Set(["camp"]), taskThreads });
     // A turn in the camp, or on a Task of it, is in a private camp; others are not.
     expect(result.holds).toEqual([true, true, false, false]);
-    expect(result.started.privateThreads).toEqual(["camp"]);
+    expect(result.started.exclusions.privateThreads).toEqual(["camp"]);
     expect(result.publicAgain).toEqual({ privateNow: new Set(), taskThreads });
-    expect(result.held.privateThreads).toEqual(["camp"]);
-    expect(result.followed.privateThreads).toEqual([]);
+    expect(result.held.exclusions.privateThreads).toEqual(["camp"]);
+    expect(result.followed.exclusions.privateThreads).toEqual([]);
     expect(result.none).toEqual({ privateNow: new Set(), taskThreads: new Map() });
   });
 });

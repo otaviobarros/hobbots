@@ -389,13 +389,20 @@ export interface MemoryCaptureSession {
 }
 
 /**
- * Where capture stands: the last journal entry memory acknowledged, the sessions that are open, and
- * the camps that were private as of that entry (ADR 037), which capture follows along the journal.
+ * What capture keeps of private camps (ADR 037): the camps private as of its cursor, which it
+ * follows along the journal, and the units it keeps out of memory for good, each a message, an
+ * Attempt, a Quest, a backpack item or a save that had an entry written in a private camp.
  */
+export interface MemoryCaptureExclusions {
+  readonly privateThreads: ReadonlyArray<ThreadId>;
+  readonly excluded: ReadonlyArray<string>;
+}
+
+/** Where capture stands: the last journal entry memory acknowledged, the sessions that are open, and its exclusions. */
 export interface MemoryCaptureState {
   readonly sequence: number;
   readonly sessions: ReadonlyArray<MemoryCaptureSession>;
-  readonly privateThreads: ReadonlyArray<ThreadId>;
+  readonly exclusions: MemoryCaptureExclusions;
 }
 
 /** The work journal entries belong to: threads, and the Tasks worked outside any chat. */
@@ -426,7 +433,8 @@ export class MemoryCaptureLog extends Context.Service<
     /**
      * Takes the hold, so compaction keeps every entry after the cursor, and answers where capture
      * stands. A cursor that was not holding, because memory was off or never on, starts again at the
-     * journal's head with no open session and the camps private now: memory gets what happens from now on.
+     * journal's head with no open session and the camps private now, keeping the units it kept out:
+     * memory gets what happens from now on.
      */
     readonly hold: Effect.Effect<MemoryCaptureState>;
     /** Lets compaction go on as if there were no capture, for a hub whose memory is turned off. */
@@ -435,14 +443,15 @@ export class MemoryCaptureLog extends Context.Service<
     readonly readAfter: (sequence: number, limit: number) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
     /**
      * Saves, in one transaction, the cursor at `sequence`, the sessions still open (`active`, each as it now stands),
-     * the ends of the sessions in `ended`, and the camps private as of `sequence`, once memory acknowledged
+     * the ends of the sessions in `ended`, the camps private as of `sequence` and the units kept out
+     * since the last save (`exclusions.excluded`, added to those kept before), once memory acknowledged
      * everything up to there.
      */
     readonly save: (
       sequence: number,
       active: ReadonlyArray<MemoryCaptureSession>,
       ended: ReadonlyArray<MemorySessionId>,
-      privateThreads: ReadonlyArray<ThreadId>,
+      exclusions: MemoryCaptureExclusions,
     ) => Effect.Effect<void>;
     /** Of `work`, the camps private now and the thread of each Task (ADR 037), read as capture sends. */
     readonly privacy: (work: MemoryCaptureWork) => Effect.Effect<MemoryCapturePrivacy>;

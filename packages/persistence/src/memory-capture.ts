@@ -1,4 +1,10 @@
-import { MemoryCaptureLog, type MemoryCaptureSession, type MemoryCaptureWork, PrivateCamps } from "@hobbots/agents";
+import {
+  type MemoryCaptureExclusions,
+  MemoryCaptureLog,
+  type MemoryCaptureSession,
+  type MemoryCaptureWork,
+  PrivateCamps,
+} from "@hobbots/agents";
 import { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -35,10 +41,20 @@ export const MemoryCaptureLive = Layer.effect(
       (rows) => rows.map((row) => ThreadId.make(row.threadId)),
     );
 
-    const savePrivate = (threadIds: ReadonlyArray<ThreadId>) =>
+    /** The units kept out of memory for good (ADR 037). */
+    const excluded = Effect.map(
+      sql<{ readonly unit: string }>`SELECT unit FROM memory_capture_excluded ORDER BY unit`,
+      (rows) => rows.map((row) => row.unit),
+    );
+    const exclusionsAtCursor = Effect.all({ privateThreads: privateAtCursor, excluded });
+
+    const saveExclusions = ({ privateThreads, excluded: added }: MemoryCaptureExclusions) =>
       Effect.gen(function* () {
+        for (const unit of added) {
+          yield* sql`INSERT INTO memory_capture_excluded ${sql.insert({ unit })} ON CONFLICT (unit) DO NOTHING`;
+        }
         yield* sql`DELETE FROM memory_capture_private_threads`;
-        for (const threadId of threadIds)
+        for (const threadId of privateThreads)
           yield* sql`INSERT INTO memory_capture_private_threads ${sql.insert({ thread_id: threadId })}`;
       });
 
@@ -50,17 +66,17 @@ export const MemoryCaptureLive = Layer.effect(
         return {
           sequence: Number(row?.sequence),
           sessions: sessions.map(sessionOf),
-          privateThreads: yield* privateAtCursor,
+          exclusions: yield* exclusionsAtCursor,
         };
       }
       yield* sql`DELETE FROM memory_capture_sessions`;
-      // Starting at the head, capture takes the camps private now.
+      // Starting at the head, capture takes the camps private now, and keeps out what it kept out before.
       yield* sql`DELETE FROM memory_capture_private_threads`;
       yield* sql`INSERT INTO memory_capture_private_threads (thread_id) SELECT id FROM threads WHERE private = 1`;
       const [moved] = yield* sql<{ readonly sequence: unknown }>`UPDATE memory_capture
         SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1), holding = 1
         WHERE id = 1 RETURNING sequence`;
-      return { sequence: Number(moved?.sequence), sessions: [], privateThreads: yield* privateAtCursor };
+      return { sequence: Number(moved?.sequence), sessions: [], exclusions: yield* exclusionsAtCursor };
     }).pipe(sql.withTransaction, sqlOrDie);
 
     /** Of `work`, the camps private now, and the thread of each Task in one (ADR 037). */
@@ -88,10 +104,10 @@ export const MemoryCaptureLive = Layer.effect(
       hold,
       release: sqlOrDie(sql`UPDATE memory_capture SET holding = 0 WHERE id = 1`.pipe(Effect.asVoid)),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),
-      save: (sequence, active, ended, privateThreads) =>
+      save: (sequence, active, ended, exclusions) =>
         Effect.gen(function* () {
           yield* sql`UPDATE memory_capture SET sequence = ${sequence} WHERE id = 1`;
-          yield* savePrivate(privateThreads);
+          yield* saveExclusions(exclusions);
           if (ended.length > 0) yield* sql`DELETE FROM memory_capture_sessions WHERE ${sql.in("session_id", ended)}`;
           for (const session of active) {
             yield* sql`DELETE FROM memory_capture_sessions WHERE session_id = ${session.sessionId}`;
