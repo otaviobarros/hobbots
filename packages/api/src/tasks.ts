@@ -13,6 +13,7 @@ import {
   Question,
   QuestionId,
   QuestionSurface,
+  QuestSummary,
   ResponsibilityLedger,
   Task,
   TaskId,
@@ -91,6 +92,14 @@ export const HistoryQuery = {
 export const FailedTasksRead = Schema.Struct({ cursor: Schema.String, tasks: Schema.Array(FailedTask) });
 export type FailedTasksRead = typeof FailedTasksRead.Type;
 
+/**
+ * How Quests are going, as the hub publishes each (ADR 037), with the cursor as above: the sync
+ * snapshot of `QuestSummaryChanged`. A client keeps, per Quest, whichever of this and each later
+ * event has the higher revision.
+ */
+export const QuestSummariesRead = Schema.Struct({ cursor: Schema.String, summaries: Schema.Array(QuestSummary) });
+export type QuestSummariesRead = typeof QuestSummariesRead.Type;
+
 /** Tasks and Quests (ADR 018): reads only. Hobs change them through their tools; the user through `TaskControlsGroup`. */
 export class TasksGroup extends HttpApiGroup.make("tasks")
   .add(
@@ -119,6 +128,12 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
     }),
     // Members' Tasks that failed while their work goes on: a needs-you mark and a notification each.
     HttpApiEndpoint.get("failed", "/failed-tasks", { success: FailedTasksRead }),
+    // How each Quest is going: with `threadId`, every Quest followed in that chat or camp, ended ones
+    // included; without it, every Quest still active.
+    HttpApiEndpoint.get("questSummaries", "/quest-summaries", {
+      query: { threadId: Schema.optionalKey(ThreadId) },
+      success: QuestSummariesRead,
+    }),
     // What a hob does on Quests it joined as a party member: its Task, the brief and the Quest.
     HttpApiEndpoint.get("questWork", "/agents/:agentId/quest-work", {
       params: { agentId: AgentId },

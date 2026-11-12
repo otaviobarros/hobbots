@@ -173,6 +173,7 @@ describe("0040_approval_deciders", () => {
       "0095_thread_kinds",
       "0099_chapters",
       "0101_records",
+      "0103_quest_summaries",
     ]);
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(([key]) => key < "0040" || kept.has(key)),

@@ -18,7 +18,7 @@ import {
 import { EventJournal, makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
-// Camp suggestions' store (ADR 037, migration 0103): Keep in chat, the chat's open suggestions, and
+// Camp suggestions' store (ADR 037, migration 0104): Keep in chat, the chat's open suggestions, and
 // the camp drift projector's cursor and the suggestions it raises. The threshold rule raises its own
 // in the journal's transaction (`raiseCampSuggestions`).
 

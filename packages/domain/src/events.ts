@@ -32,6 +32,7 @@ import {
   TaskNote,
   TaskWait,
 } from "./quest.ts";
+import { QuestSummary } from "./quest-summary.ts";
 import { SkillFeedback, SkillProposal } from "./skill-proposals.ts";
 import { SkillUpdate } from "./skill-updates.ts";
 import {
@@ -255,6 +256,11 @@ const BriefWritten = Schema.TaggedStruct("BriefWritten", { brief: Brief });
 const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
 /** The Task that holds a Quest passed the completion gate. */
 const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
+/**
+ * How a Quest is going changed (ADR 037): a change to a Task, a question or an approval under it
+ * gave it another summary, journaled in the same transaction, after the change's own events.
+ */
+const QuestSummaryChanged = Schema.TaggedStruct("QuestSummaryChanged", { summary: QuestSummary });
 /** A backpack item was committed with the change that caused it (ADR 019). */
 const BackpackItemRecorded = Schema.TaggedStruct("BackpackItemRecorded", { item: BackpackItem });
 /** A backpack item was claimed, delivered, acknowledged, processed, put back, resolved or failed. */
@@ -475,6 +481,7 @@ export const JournaledEvent = Schema.Union([
   HandedOff,
   TaskCompleted,
   QuestCompleted,
+  QuestSummaryChanged,
   ClaimMade,
   ClaimContested,
   ClaimCleared,
@@ -595,6 +602,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
+  QuestSummaryChanged: 1,
   ClaimMade: 1,
   ClaimContested: 1,
   ClaimCleared: 1,

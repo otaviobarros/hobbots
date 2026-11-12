@@ -32,6 +32,7 @@ import type {
   QuestionOption,
   QuestionSurface,
   QuestLimits,
+  QuestSummary,
   RefusedCall,
   ReplyUsage,
   ResponsibilityLedger,
@@ -353,6 +354,11 @@ export class TaskRepository extends Context.Service<
     readonly listWaitingQuestions: Effect.Effect<ReadonlyArray<WaitingQuestion>>;
     /** Members' failed Tasks that wait on you while their top Task goes on, oldest first (ADR 027). */
     readonly listFailedTasks: Effect.Effect<ReadonlyArray<FailedTask>>;
+    /**
+     * How Quests are going, as the hub last published each (ADR 037): every Quest followed in
+     * `threadId`, ended ones included, or with none every Quest still active. Oldest Quest first.
+     */
+    readonly listQuestSummaries: (threadId: ThreadId | null) => Effect.Effect<ReadonlyArray<QuestSummary>>;
     /** Gives an artifact to another Task in its tree. Handing it to the same Task again changes nothing. */
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /**

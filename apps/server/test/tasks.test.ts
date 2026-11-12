@@ -11,10 +11,19 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { BackpackRead, HistoryRead, MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
+import {
+  BackpackRead,
+  HistoryRead,
+  MemberWorkRead,
+  QuestRead,
+  QuestSummariesRead,
+  TaskTreeRead,
+  ThreadTasksRead,
+} from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  AttemptId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
@@ -225,6 +234,62 @@ describe("Task and Quest reads", () => {
       "CheckpointRecorded",
       "BackpackItemRecorded",
     ]);
+  });
+
+  // covers ADR 037 (Quests in camps), OR-007
+  it("[TC-OR-1373-04] serves each Quest's summary as the sync snapshot, with a cursor the stream resumes from with its next change", async () => {
+    const copy = await runtime.runPromise(quest);
+
+    const response = await get(`/api/quest-summaries?threadId=${threadId}`);
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(QuestSummariesRead)(response.body);
+    expect(read.summaries).toMatchObject([
+      {
+        questId: "q1",
+        taskId: "campaign",
+        leadId: ALDRIC,
+        threadId,
+        state: "active",
+        tones: { needs: 0, working: 0, waiting: 0, done: 0, problem: 0, idle: 1 },
+        needsYou: 0,
+        readyForReview: 0,
+      },
+    ]);
+    // Without a chat, every Quest still active; another chat's are not its own.
+    const active = Schema.decodeUnknownSync(QuestSummariesRead)((await get("/api/quest-summaries")).body);
+    expect(active.summaries).toEqual(read.summaries);
+    expect(
+      Schema.decodeUnknownSync(QuestSummariesRead)((await get("/api/quest-summaries?threadId=t2")).body).summaries,
+    ).toEqual([]);
+    expect((await get("/api/quest-summaries", false)).status).toBe(401);
+
+    // Quill starts: the summary's change is what the stream replays after the read's cursor.
+    const started = await runtime.runPromise(
+      TaskRepository.use((tasks) =>
+        tasks.startAttempt(copy.value.id, copy.value.revision, {
+          id: AttemptId.make("a1"),
+          runtime: "claude-code",
+          sessionId: null,
+          configVersion: 1,
+          policyVersion: null,
+          startedAt: now,
+        }),
+      ),
+    );
+    const replayed: ReadonlyArray<EventEnvelope> = await runtime.runPromise(
+      EventJournal.use((journal) => journal.readAfter(parseCursor(read.cursor)?.sequence ?? -1)),
+    );
+    expect(replayed.map((entry) => entry.sequence)).toEqual(started.entries.map((entry) => entry.sequence));
+    const changed = replayed.at(-1);
+    expect(changed?.payload).toMatchObject({
+      _tag: "QuestSummaryChanged",
+      summary: { questId: "q1", tones: { working: 1, idle: 0 }, revision: changed?.sequence },
+    });
+    expect(changed?.correlation).toEqual({ agentId: ALDRIC, threadId, messageId: null });
+    const after = Schema.decodeUnknownSync(QuestSummariesRead)(
+      (await get(`/api/quest-summaries?threadId=${threadId}`)).body,
+    );
+    expect(after.summaries).toEqual(changed?.payload._tag === "QuestSummaryChanged" ? [changed.payload.summary] : []);
   });
 
   // covers OR-001, OR-007

@@ -38,6 +38,9 @@ export type TaskState = typeof TaskState.Type;
 export const isTerminalTask = (state: TaskState): boolean =>
   state === "completed" || state === "failed" || state === "cancelled";
 
+/** Whether a Task ended with its result. */
+export const isCompletedTask = (state: TaskState): boolean => state === "completed";
+
 /** The result a Task returned: a short summary and the Attempt that produced it. */
 export const TaskResult = Schema.Struct({
   summary: Schema.String,
@@ -306,7 +309,10 @@ export const AttemptTransitions = {
 };
 
 /** Every Task under `task` among `tree`, the Tasks of its tree, in their order in `tree`. */
-export const descendantsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task> => {
+export const descendantsOf = <T extends Pick<Task, "id" | "parentId">>(
+  task: T,
+  tree: ReadonlyArray<T>,
+): ReadonlyArray<T> => {
   const children = new Map<TaskId, Array<TaskId>>();
   for (const each of tree) {
     if (each.parentId !== null) children.set(each.parentId, [...(children.get(each.parentId) ?? []), each.id]);

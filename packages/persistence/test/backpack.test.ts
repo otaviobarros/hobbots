@@ -184,7 +184,7 @@ describe("A hob's backpack", () => {
     );
 
     // The member's Task and its backpack item commit together, the item's event right after the Task's.
-    expect(tags(result.copy.entries)).toEqual(["TaskCreated", "BackpackItemRecorded"]);
+    expect(tags(result.copy.entries)).toEqual(["TaskCreated", "BackpackItemRecorded", "QuestSummaryChanged"]);
     expect(result.replay).toEqual(result.copy.entries);
     expect(result.stored).toMatchObject({
       recipientId: QUILL,
@@ -314,6 +314,7 @@ describe("A hob's backpack", () => {
       "BackpackItemChanged",
       "BackpackItemChanged",
       "BackpackItemRecorded",
+      "QuestSummaryChanged",
     ]);
   });
 

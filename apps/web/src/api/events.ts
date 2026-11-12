@@ -223,6 +223,8 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "CampSuggestionAccepted",
   "CampSuggestionExpired",
   "BriefWritten",
+  // Quest summaries (ADR 037) are read once the screens render what the hub publishes (#1374).
+  "QuestSummaryChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -246,7 +248,8 @@ type UnappliedEvent = Extract<
       | "CampSuggestionKept"
       | "CampSuggestionAccepted"
       | "CampSuggestionExpired"
-      | "BriefWritten";
+      | "BriefWritten"
+      | "QuestSummaryChanged";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

@@ -14,7 +14,7 @@ import { Array as Arr, DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
 import { chapterRows } from "./chapters.ts";
 
-// Camp suggestions (ADR 037, migration 0103). The rule that raises one is the pure
+// Camp suggestions (ADR 037, migration 0104). The rule that raises one is the pure
 // `planCampSuggestion` in @hobbots/domain, run here in the transaction whose events grew a chat's
 // chapter, as backpack items are (STD-ARCH-016). Suggestions that no longer apply expire in the
 // transaction that merged their chapter away or closed their chat.

@@ -246,10 +246,12 @@ describe("Task records", () => {
     expect(result.sub.quests.map((quest) => quest.id)).toEqual(["q2"]);
     // Each change is journaled with its event, correlated with the Task's owner and thread. A new
     // step also lands in its owner's backpack, journaled after it (ADR 019).
-    expect(tags(result.step.entries)).toEqual(["TaskCreated", "BackpackItemRecorded"]);
+    // The step is a Task under the Quest, so the Quest's summary changes in the same transaction (ADR 037).
+    expect(tags(result.step.entries)).toEqual(["TaskCreated", "BackpackItemRecorded", "QuestSummaryChanged"]);
     expect(result.step.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
     expect(result.step.value.revision).toBe(result.step.entries[0]?.sequence);
-    expect(tags(result.nested.entries)).toEqual(["QuestStarted"]);
+    // A new Quest's summary is journaled with it; the Quest it sits in still counts the same Tasks.
+    expect(tags(result.nested.entries)).toEqual(["QuestStarted", "QuestSummaryChanged"]);
     expect(result.nested.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
   });
 
@@ -340,13 +342,23 @@ describe("Task records", () => {
     );
 
     // The hub's started checkpoint reaches Quill's lead as routine progress (ADR 019).
-    expect(tags(result.first.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded", "BackpackItemRecorded"]);
+    expect(tags(result.first.entries)).toEqual([
+      "TaskStateChanged",
+      "CheckpointRecorded",
+      "BackpackItemRecorded",
+      "QuestSummaryChanged",
+    ]);
     expect(result.first.value.task).toMatchObject({ state: "active", currentAttemptId: "a1" });
     expect(result.twice).toMatchObject({ _tag: "TaskRefused", reason: "attempt-live" });
     expect(result.running.value.attempt).toMatchObject({ state: "running", sessionId: "s1" });
     expect(result.stale).toMatchObject({ _tag: "StaleTask", taskId: "copy" });
     // Quill's failure lands in its lead's backpack (ADR 019).
-    expect(tags(result.moved.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded", "BackpackItemRecorded"]);
+    expect(tags(result.moved.entries)).toEqual([
+      "TaskStateChanged",
+      "CheckpointRecorded",
+      "BackpackItemRecorded",
+      "QuestSummaryChanged",
+    ]);
     expect(result.illegal).toMatchObject({ _tag: "IllegalTaskTransition", from: "failed", to: "waiting" });
     expect(result.unchanged).toEqual(result.head);
     // The retry is the same Task with a second Attempt; the first keeps its outcome.
@@ -518,7 +530,10 @@ describe("Task records", () => {
       // So has the routine progress no turn of Aldric's carried: its Tasks ended (#397).
       ["progress", "copy", "late"],
       ["progress", "build", "late"],
+      // Then the Quest's summary, now ended (ADR 037).
+      null,
     ]);
+    expect(tags(result.done.entries).at(-1)).toBe("QuestSummaryChanged");
     expect(result.done.value).toMatchObject({
       state: "completed",
       result: { summary: "Campaign ready", attemptId: "a-root" },
@@ -598,7 +613,13 @@ describe("Task records", () => {
     expect(result.top.value).toMatchObject({ recipientId: null, chain: [ADA, ALDRIC] });
     expect(result.byLead).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
     expect(result.answered.value).toMatchObject({ state: "answered", answer: "EU", answeredBy: { _tag: "User" } });
-    expect(tags(result.answered.entries)).toEqual(["QuestionAnswered", "BackpackItemRecorded"]);
+    // Your answer leaves nothing waiting on you: the summary of each Quest above the Task changes.
+    expect(tags(result.answered.entries)).toEqual([
+      "QuestionAnswered",
+      "BackpackItemRecorded",
+      "QuestSummaryChanged",
+      "QuestSummaryChanged",
+    ]);
     expect(result.again).toMatchObject({ _tag: "TaskRefused", reason: "question-answered" });
     // The lead of the top Task has no lead above it: its question comes straight to you.
     expect(result.topAsk.value.recipientId).toBeNull();
@@ -863,6 +884,7 @@ describe("Task records", () => {
       "CheckpointRecorded",
       "QuestionWithdrawn",
       "BackpackItemRecorded",
+      "QuestSummaryChanged",
     ]);
     expect(result.cancelled.entries[2]?.payload).toMatchObject({
       question: { id: "q-cutoff", state: "withdrawn", answer: null, recipientId: null, chain: [ALDRIC] },
@@ -914,6 +936,7 @@ describe("Task records", () => {
       "QuestionWithdrawn",
       "BackpackItemChanged",
       "BackpackItemRecorded",
+      "QuestSummaryChanged",
     ]);
     // An answered question stays answered; only the open one is withdrawn.
     expect(Object.fromEntries(result.tree.questions.map((each) => [each.id, each.state]))).toEqual({

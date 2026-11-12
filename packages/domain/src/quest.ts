@@ -30,6 +30,10 @@ export type NoteId = typeof NoteId.Type;
 export const QuestState = Schema.Literals(["active", "completed", "failed", "cancelled"]);
 export type QuestState = typeof QuestState.Type;
 
+/** Whether a Quest is still under way: its Task has not ended. */
+// standards-allow STD-ARCH-013: a Quest's state, which ends with its Task's, not a Task's own
+export const isActiveQuest = (state: QuestState): boolean => state === "active";
+
 /** How far a Quest may grow: Quests nested inside it count towards `maxDepth` (2 by default), steps never do. */
 export const QuestLimits = Schema.Struct({
   maxDepth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
