@@ -58,8 +58,10 @@ const triggerOf = (event: JournaledEvent): { thread: ThreadId | null } | { task:
     case "ChapterSplit":
     case "ChapterMerged":
       return { thread: event.threadId };
-    // A Quest's steps: it started or ended, a Task in a thread ended, or a milestone was reached.
+    // A Quest's steps: it started, its lead stopped it or it ended, a Task in a thread ended, or a
+    // milestone was reached.
     case "QuestStarted":
+    case "QuestStopRequested":
     case "QuestCompleted":
       return { thread: event.quest.threadId };
     // Any Task in the thread that ended, completed or not, a step or a member's Task included, or

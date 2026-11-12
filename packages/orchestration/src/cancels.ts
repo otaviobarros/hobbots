@@ -3,6 +3,7 @@ import {
   descendantsOf,
   isLiveAttempt,
   isTerminalTask,
+  QuestStates,
   type Task,
   type TaskId,
   type TaskTree,
@@ -38,6 +39,9 @@ export const makeCancelSettler = ({ tasks, attempt, timeoutMs, wake, scope }: Se
     Effect.gen(function* () {
       const live = tree.attempts.find((each) => each.id === task.currentAttemptId && isLiveAttempt(each.state));
       if (live === undefined) return false;
+      // A lead that stopped its own Quest at your request (#1346) is not asked to stop: its turn ends
+      // on its own, with its reply to you, so its stop is never left unresolved.
+      if (tree.quests.some((quest) => quest.taskId === task.id && QuestStates.stoppedByLead(quest))) return true;
       const now = yield* Clock.currentTimeMillis;
       const first = since.get(task.id);
       if (first === undefined) {

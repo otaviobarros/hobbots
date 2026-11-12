@@ -39,6 +39,13 @@ export const messages = {
     changes: "See what changed",
     files: "Open the files",
   },
+  /** The banner a request shows once its lead stopped it at your request (#1346), never a finish. */
+  stopped: {
+    title: "Stopped at your request",
+    stopping: "Stopping at your request",
+    stoppingHint: "Hobbots is stopping the work under it.",
+    reason: ({ reason }: { reason: string }) => `Why: ${reason}`,
+  },
   technical: {
     show: "Show technical steps",
     hide: "Hide technical steps",

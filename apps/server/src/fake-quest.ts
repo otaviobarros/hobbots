@@ -5,6 +5,7 @@ import {
   AttemptId,
   CheckpointId,
   type Committed,
+  cancelMoves,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -18,6 +19,7 @@ import {
   pickedOption,
   QuestId,
   QuestionId,
+  QuestStates,
   type Task,
   TaskId,
   type Thread,
@@ -44,6 +46,7 @@ import { EventBus } from "./event-bus.ts";
  * to wrap up the spec has the lead edit the spec itself and complete the Quest leaving it
  * uncommitted on purpose, as its hold on the top Task lets it (#665). Asking for a long brief plays
  * the Black Friday Quest with briefs of a paragraph that name a deep folder, as real ones do (#874).
+ * Asking the lead to stop the quest while it plays has it stop the Quest at your request (#1346).
  * Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime turns any of them on.
  */
 
@@ -123,6 +126,63 @@ interface Cast {
   /** Bram, for the banners, when there. */
   readonly bram: AgentId | null;
 }
+
+/** What you ask the lead of a played Quest to stop it with (#1346). */
+const STOP_ASKED = /stop the quest/i;
+
+/**
+ * The thread where you asked the lead of a played Quest to stop it, or null for any other event. The
+ * play's lead works while its chat reply runs, so it reads your message as soon as you send it, queued
+ * or not.
+ */
+const stopThread = (entry: EventEnvelope) => {
+  const { payload } = entry;
+  return (payload._tag === "MessageUpserted" || payload._tag === "MessageQueued") &&
+    payload.message.role === "user" &&
+    STOP_ASKED.test(payload.message.content)
+    ? payload.message.threadId
+    : null;
+};
+
+/**
+ * The lead of the Quest played in `threadId` stops it at your request (#1346), as its `stop_quest`
+ * call would: the Quest is stopping with its reason and summary, everything under it is cancelled,
+ * and the lead says so in your chat. The cancels end the play as yours do.
+ */
+const stopPlayed = (threadId: Thread["id"], bus: EventBus["Service"]) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const repo = yield* HobbotsRepository;
+    const tree = Option.getOrUndefined(yield* tasks.readTree(campaignOf(threadId)));
+    const top = tree?.tasks[0];
+    const quest = tree?.quests.find((each) => each.taskId === top?.id);
+    if (tree === undefined || top === undefined || quest === undefined || !QuestStates.takesWork(quest)) return;
+    const at = yield* iso;
+    const stopped = yield* tasks.stopQuest(quest.id, quest.revision, {
+      reason: "You asked to stop the campaign",
+      summary: "Quill drafted the landing copy. The launch email was not scheduled.",
+      at,
+    });
+    yield* bus.publish(stopped.entries);
+    for (const move of cancelMoves(top, tree)) {
+      const moved = yield* tasks.moveTask(move.task.id, move.task.revision, move.to, at, { cancelledBy: quest.leadId });
+      yield* bus.publish(moved.entries);
+    }
+    const said = yield* repo.upsertMessage(
+      new Message({
+        id: MessageId.make(crypto.randomUUID()),
+        threadId: top.threadId ?? threadId,
+        role: "assistant",
+        content:
+          "I stopped the Black Friday campaign as you asked. Quill drafted the landing copy; the launch email was not scheduled.",
+        status: "complete",
+        error: null,
+        configVersion: null,
+        createdAt: at,
+      }),
+    );
+    yield* bus.publish(said.entries);
+  });
 
 /** The thread of a scripted request and which script it asks for, or null for any other event. */
 const requestThread = (entry: EventEnvelope) => {
@@ -717,6 +777,12 @@ export const FakeQuestLive = (step: Duration.Input) =>
           if (event._tag !== "Journaled") return Effect.void;
           const request = requestThread(event.entry);
           if (request !== null) return start(request.threadId, request.script);
+          const stopIn = stopThread(event.entry);
+          if (stopIn !== null && played.has(campaignOf(stopIn))) {
+            return stopPlayed(stopIn, bus).pipe(
+              Effect.catchCause((cause) => Effect.logWarning("Could not stop a played Quest", cause)),
+            );
+          }
           const cancelling = cancellingTask(event.entry);
           return cancelling === null ? Effect.void : cancel(cancelling);
         }),

@@ -17,7 +17,7 @@ import { LaneNotes } from "../steer-receipt/lane-notes.tsx";
 import { WorkbenchDock } from "../workbench/workbench-dock.tsx";
 import { TaskCards } from "./lane-task.tsx";
 import { messages } from "./messages.ts";
-import { RoomFinished } from "./room-finished.tsx";
+import { RoomFinished, RoomStopped } from "./room-finished.tsx";
 import { RoomHeader } from "./room-header.tsx";
 import { litTask } from "./room-model.ts";
 import { type RoomMoves, type RoomView, useRoomMoves } from "./room-search.ts";
@@ -149,6 +149,7 @@ function OpenRoom({
         technical={technical}
       />
       <RoomFinished tree={tree} onChanges={() => moves.everyone("changes")} onFiles={() => moves.everyone("files")} />
+      <RoomStopped tree={tree} />
       <QuestLanes
         room={room}
         hobs={hobs}

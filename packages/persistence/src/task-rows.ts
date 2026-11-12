@@ -41,6 +41,7 @@ const fromRow = {
   }),
   quest: (row: Row) => ({
     ...row,
+    stop: json(row.stop),
     acceptance: json(row.acceptance),
     limits: json(row.limits),
     depth: int(row.depth),
@@ -321,7 +322,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         Effect.flatMap(decodeRows("delegation")),
       );
       if (delegations.length === 0) return [];
-      const quests = yield* sql<Row>`SELECT * FROM quests WHERE state = 'active'
+      const quests = yield* sql<Row>`SELECT * FROM quests WHERE state IN ('active', 'stopping')
         AND ${sql.in("id", [...new Set(delegations.map((each) => each.questId))])}`.pipe(
         Effect.flatMap(decodeRows("quest")),
       );

@@ -115,7 +115,8 @@ const touchedBy = (events: ReadonlyArray<JournaledEvent>): Touched => {
     } else if (event._tag === "ChapterMoved") {
       touched.landed.push(event.chapter.id);
       touched.fresh.push(event.camp.id);
-    } else if (event._tag === "QuestStarted" || event._tag === "QuestCompleted") touched.tasks.add(event.quest.taskId);
+    } else if (event._tag === "QuestStarted" || event._tag === "QuestCompleted" || event._tag === "QuestStopRequested")
+      touched.tasks.add(event.quest.taskId);
     else if ("question" in event) touched.tasks.add(event.question.taskId);
     else if ("approval" in event && event.approval.taskId !== null) touched.tasks.add(event.approval.taskId);
     else if (event._tag === "ChatStartedFresh") touched.fresh.push(event.chat.id);
@@ -222,7 +223,9 @@ const listSummaries = (sql: SqlClient.SqlClient, where: Statement.Fragment) =>
 
 /**
  * The summaries the sync snapshot serves: with a thread, every Quest followed in it, ended ones
- * included; without one, every Quest still active. Oldest Quest first.
+ * included; without one, every Quest still under way. Oldest Quest first.
  */
 export const readQuestSummaries = (sql: SqlClient.SqlClient, threadId: ThreadId | null) =>
-  listSummaries(sql, threadId === null ? sql`s.state = 'active'` : sql`s.thread_id = ${threadId}`).pipe(Effect.orDie);
+  listSummaries(sql, threadId === null ? sql`s.state IN ('active', 'stopping')` : sql`s.thread_id = ${threadId}`).pipe(
+    Effect.orDie,
+  );

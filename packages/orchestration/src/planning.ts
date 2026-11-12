@@ -8,6 +8,7 @@ import {
   liveAttemptOn,
   MilestoneId,
   pendingApprovals,
+  type Quest,
   QuestId,
   reportsOn,
   type Task,
@@ -18,7 +19,7 @@ import {
   type TaskToolRefused,
   type TaskWait,
 } from "@hobbots/domain";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { Authority, PathSeparator } from "./authority.ts";
 import { cut, planNote } from "./briefs.ts";
 import {
@@ -48,9 +49,39 @@ import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 const notDelivered = (task: Task, delivered: boolean | undefined) =>
   delivered === false
     ? `Task ${task.id} is not complete: you said its result does not deliver everything the user asked for. ` +
-      "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile."
+      "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile. If the user asked you to stop, call stop_quest instead."
     : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
       "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
+
+/**
+ * Whether the turn making a call is your request (#1346): it answers a message of yours in the chat,
+ * or carries your answer to a question its hob asked about `task`. A turn woken by a member's report,
+ * a note or a finding is neither, whatever it says.
+ */
+const askedByYou = (tasks: TaskRepository["Service"], scope: CallScope, task: Task) =>
+  Effect.gen(function* () {
+    if (scope.caller.messageId !== undefined) return true;
+    const carried = new Set<string>((scope.caller.carried ?? []).map((each) => each.itemId));
+    if (carried.size === 0) return false;
+    const ledger = yield* tasks.readLedger(task.id);
+    return Option.match(ledger, {
+      onNone: () => false,
+      onSome: (read) =>
+        read.open.some(
+          (entry) =>
+            entry._tag === "Item" &&
+            carried.has(entry.item.id) &&
+            entry.item.payload._tag === "answer" &&
+            entry.item.payload.question.askerId === scope.caller.agentId &&
+            entry.item.payload.question.answeredBy?._tag === "User",
+        ),
+    });
+  });
+
+/** What a lead is told when it tries to stop a Quest the user did not ask it to stop (#1346). */
+const notAsked = (quest: Quest) =>
+  `Quest ${quest.id} keeps going: only the user can ask you to stop it, in a message to you or in their answer to your ask, and this turn is neither. ` +
+  "If you think it should stop, ask the user with ask, and call stop_quest in the turn their answer wakes. Otherwise go on with the work, or complete it with delivered: true if it delivers what they asked for.";
 
 /**
  * The files a completion kept, as whoever reports it is told (#1219). A lead whose earlier completion
@@ -484,6 +515,55 @@ export const makePlanning = ({
         },
         entries: journal.entries,
         // The turn cancelled them itself: the failures recorded for those that ended at once are read already (#662).
+        shown: yield* outcomesShown(tasks, scope, moved),
+      };
+    }),
+
+  stop_quest: (scope: CallScope, input: Omit<TaskToolInput<"stop_quest">, "key">) =>
+    Effect.gen(function* () {
+      // The turn's own Task: a lead stops only the Quest you asked it for, never one above it.
+      const task = scope.turnTask;
+      const quest = scope.tree.quests.find((each) => each.taskId === task.id);
+      if (task.parentId !== null || quest === undefined) {
+        return yield* refuse(
+          "not-a-quest",
+          `Task ${task.id} is not a Quest the user asked you for, so there is no Quest of yours to stop here. To end work under it, cancel it with cancel_task.`,
+        );
+      }
+      if (!(yield* askedByYou(tasks, scope, task))) return yield* refuse("stop-not-asked", notAsked(quest));
+      const journal = journalOf();
+      journal.keep(
+        yield* fromRecords(
+          tasks.stopQuest(quest.id, quest.revision, {
+            reason: cut(input.reason, REASON_LIMIT),
+            summary: cut(input.summary, REASON_LIMIT),
+            at: scope.at,
+          }),
+        ),
+      );
+      // Everything under it is cancelled as Cancel Quest does; the lead's own turn ends on its own.
+      const moved: Array<Task> = [];
+      for (const { task: each, to } of cancelMoves(task, scope.tree)) {
+        moved.push(
+          journal.keep(
+            yield* fromRecords(
+              tasks.moveTask(each.id, each.revision, to, scope.at, { cancelledBy: scope.caller.agentId }),
+            ),
+          ),
+        );
+      }
+      const cancelled = moved.filter((each) => each.id !== task.id).map((each) => each.id as string);
+      return {
+        done: {
+          message:
+            `Quest ${quest.id} stops at the user's request, without delivering it. ` +
+            (cancelled.length === 0
+              ? "Nothing was open under it. "
+              : "Hobbots cancels the Tasks under it and confirms each as it stops. ") +
+            "Tell the user in a line that you stopped it, and what was and was not done, then end your turn. Do no more work on it.",
+          details: { quest_id: quest.id, cancelled },
+        },
+        entries: journal.entries,
         shown: yield* outcomesShown(tasks, scope, moved),
       };
     }),

@@ -260,6 +260,13 @@ export const TaskToolInputs = {
     key,
     task_id: id("A Task under one of yours to cancel, with everything under it."),
   }),
+  stop_quest: Schema.Struct({
+    key,
+    reason: text("Why the Quest stops, in a sentence: what the user asked for."),
+    summary: text(
+      "What was done before it stopped, in a few sentences, and what was left undone. Never claim it delivered what was asked.",
+    ),
+  }),
   claim: Schema.Struct({
     key,
     task_id: taskId,
@@ -406,6 +413,12 @@ export const TASK_TOOLS: ReadonlyArray<{
     label: "Cancelling a Task",
   },
   {
+    name: "stop_quest",
+    description:
+      "Stop the Quest you lead in this chat, without delivering it, when the user asked you to stop: in their message this turn answers, or in their answer to your ask. Every Task under it is cancelled, and the Quest shows as stopped at the user's request, with your reason and summary. Never call it on your own, and never to end work that is done: complete_task with delivered: true does that.",
+    label: "Stopping the Quest",
+  },
+  {
     name: "claim",
     description:
       "Claim what your Task needs that other hobs' work could take too, before you use it. For a new numbered file, such as a migration or an ADR, fetch first, then ask for the next number in its folder: Hobbots gives the next one free on main, as your clone last fetched it, and in every other chat and camp, and never gives it to anyone else, so use the number it gives. Claim the files, folders or branch your Task changes: when another Task holds an open claim on the same one, both leads hear of it and neither Task is stopped. Claims end when your Task ends. In a conversation with no Task yet, it starts one for this request.",
@@ -452,6 +465,10 @@ export const TaskToolRefusal = Schema.Literals([
   "artifact-unreachable",
   // A Quest's lead completing it without saying it delivered what the user asked for (#1181).
   "not-delivered",
+  // A lead stopping its Quest when the turn is neither your message nor your answer to it (#1346).
+  "stop-not-asked",
+  // A stop_quest from a turn whose Task leads no Quest you asked for (#1346).
+  "not-a-quest",
   // A Quest's lead saying it delivered while nothing is where the user asked for it (#1215).
   "not-at-destination",
   // A question with choices about a file the user named and is not there, none worded to let it go (#1219).

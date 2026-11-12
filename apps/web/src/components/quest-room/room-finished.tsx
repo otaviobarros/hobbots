@@ -1,4 +1,4 @@
-import type { TaskTree } from "@hobbots/domain";
+import { QuestStates, type TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatDuration } from "../../lib/format.ts";
 import type { QuestProgress } from "../quest/quest-progress.ts";
@@ -71,6 +71,47 @@ export function RoomFinished({
         <Button variant="outline" size="sm" onClick={onFiles}>
           {copy.files}
         </Button>
+      </span>
+    </section>
+  );
+}
+
+const stoppedCopy = messages.stopped;
+
+/**
+ * The banner under the room's header once the request's lead stopped it at your request (#1346): it
+ * says so, never that it finished, with the lead's summary of what was done, its reason, and how many
+ * Tasks were done. While the work under it is still being cancelled, it says the Quest is stopping.
+ */
+export function RoomStopped({ tree }: { tree: TaskTree }) {
+  const progress = useQuestProgress(tree);
+  const card = workCard(tree);
+  const quest = card?.quest ?? null;
+  if (card === null || quest === null || quest.stop === null || !QuestStates.stoppedByLead(quest)) return null;
+  const ended = !QuestStates.takesWork(quest) && quest.endedAt !== null;
+  const title = ended ? stoppedCopy.title : stoppedCopy.stopping;
+  const meta = [
+    stoppedCopy.reason({ reason: quest.stop.reason }),
+    ...(progress.total > 0 ? [copy.tasks({ done: progress.done, total: progress.total })] : []),
+    ...(ended ? [copy.took({ took: formatDuration(card.took ?? 0) })] : [stoppedCopy.stoppingHint]),
+  ];
+  return (
+    <section
+      aria-label={title}
+      className="mx-5 mt-3.5 flex items-center gap-4 rounded-card border-(length:--edge) border-solid border-line-2 bg-card px-4 py-3.5"
+    >
+      <span
+        aria-hidden
+        className="grid size-9 shrink-0 place-items-center rounded-dot bg-line-2 text-title font-bold text-text-strong"
+      >
+        ●
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-heading text-title font-(--heading-weight) text-text-strong">{title}</span>
+        <span className="line-clamp-3 text-ui text-text-strong wrap-anywhere" title={quest.stop.summary}>
+          {quest.stop.summary}
+        </span>
+        <span className="text-detail text-text-secondary wrap-anywhere">{meta.join(" · ")}</span>
       </span>
     </section>
   );

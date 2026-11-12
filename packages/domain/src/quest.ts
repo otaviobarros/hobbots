@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { defineMachine } from "./machine.ts";
 import { StoredPolicyLayer } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { Attempt, AttemptId, isLiveAttempt, isTerminalTask, Task, TaskId } from "./task.ts";
@@ -26,13 +27,16 @@ export type ArtifactId = typeof ArtifactId.Type;
 export const NoteId = Schema.String.pipe(Schema.brand("NoteId"));
 export type NoteId = typeof NoteId.Type;
 
-/** A Quest ends with the Task it sits on. */
-export const QuestState = Schema.Literals(["active", "completed", "failed", "cancelled"]);
+/**
+ * A Quest ends with the Task it sits on. `stopping` is a stop its lead made at your request (#1346),
+ * while the work under it is still being cancelled; it ends `stopped`, never completed.
+ */
+export const QuestState = Schema.Literals(["active", "stopping", "completed", "failed", "cancelled", "stopped"]);
 export type QuestState = typeof QuestState.Type;
 
-/** Whether a Quest is still under way: its Task has not ended. */
-// standards-allow STD-ARCH-013: a Quest's state, which ends with its Task's, not a Task's own
-export const isActiveQuest = (state: QuestState): boolean => state === "active";
+/** Whether a Quest is still under way: its Task has not ended, though its lead may be stopping it. */
+// standards-allow STD-ARCH-013: QuestStates' own question, kept as a plain function for state-only copies
+export const isActiveQuest = (state: QuestState): boolean => state === "active" || state === "stopping";
 
 /** How far a Quest may grow: Quests nested inside it count towards `maxDepth` (2 by default), steps never do. */
 export const QuestLimits = Schema.Struct({
@@ -49,6 +53,18 @@ export type QuestLimits = typeof QuestLimits.Type;
 
 export const DEFAULT_QUEST_LIMITS: QuestLimits = { maxDepth: 2, deadline: null };
 
+/**
+ * Why and how a Quest's lead stopped it at your request (#1346): the reason it gives, in a sentence,
+ * and a short summary of what was done, which the Quest room and the chat show. Never a delivery.
+ */
+export const QuestStop = Schema.Struct({
+  reason: Schema.String,
+  summary: Schema.String,
+  /** When the lead stopped it. */
+  at: Schema.String,
+});
+export type QuestStop = typeof QuestStop.Type;
+
 /** The record a Task gains when its owner first brings in another hob. The Task keeps its id; its owner is the lead. */
 export class Quest extends Schema.Class<Quest>("Quest")({
   id: QuestId,
@@ -64,11 +80,85 @@ export class Quest extends Schema.Class<Quest>("Quest")({
   limits: QuestLimits,
   /** 1 for a top Quest, one more for each Quest it sits in. */
   depth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  /** Only `QuestMachine` changes it, and code outside reads it through `QuestStates`. */
   state: QuestState,
+  /**
+   * The stop its lead made at your request (#1346), from `stopping` on; null for every other Quest,
+   * and for each one journaled before migration 0108.
+   */
+  stop: Schema.NullOr(QuestStop).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   createdAt: Schema.String,
   endedAt: Schema.NullOr(Schema.String),
   revision: Revision,
 }) {}
+
+/** What can happen to a Quest. All but `Stop` follow its Task: a Quest ends with the Task it sits on. */
+export type QuestEvent =
+  /** Its lead stops it at your request (#1346): the work under it is cancelled, never delivered. */
+  | { readonly _tag: "Stop"; readonly at: string; readonly reason: string; readonly summary: string }
+  /** Its Task completed: the lead said it delivered. */
+  | { readonly _tag: "Complete"; readonly at: string }
+  | { readonly _tag: "Fail"; readonly at: string }
+  /** Its Task's cancel was confirmed: you cancelled it, or its lead stopped it. */
+  | { readonly _tag: "Cancel"; readonly at: string }
+  /** Its failed Task was retried or given to another hob. */
+  | { readonly _tag: "Reopen"; readonly at: string };
+
+/** A change to a Quest its state does not allow. */
+export class IllegalQuestTransition extends Schema.TaggedError<IllegalQuestTransition>()("IllegalQuestTransition", {
+  questId: QuestId,
+  from: QuestState,
+  to: QuestState,
+}) {}
+
+const endedAs = (quest: Quest, state: QuestState, at: string) => new Quest({ ...quest, state, endedAt: at });
+
+/** A Quest's lifecycle (ADR 018), declared once (ADR 037). */
+export const QuestMachine = defineMachine<QuestState, QuestEvent, Quest, IllegalQuestTransition>({
+  name: "Quest",
+  states: {
+    active: "Under way: its lead works on it with its party",
+    stopping: "Its lead stopped it at your request; the work under it is being cancelled",
+    completed: "Its lead said it delivered what you asked for",
+    failed: "Its Task failed; a retry or another hob reopens it",
+    cancelled: "You cancelled it",
+    stopped: "Its lead stopped it at your request, without delivering it",
+  },
+  field: "state",
+  events: {
+    Stop: {
+      from: ["active"],
+      to: "stopping",
+      apply: (quest, e) =>
+        new Quest({ ...quest, state: "stopping", stop: { reason: e.reason, summary: e.summary, at: e.at } }),
+    },
+    Complete: { from: ["active"], to: "completed", apply: (quest, e) => endedAs(quest, "completed", e.at) },
+    Fail: { from: ["active"], to: "failed", apply: (quest, e) => endedAs(quest, "failed", e.at) },
+    // A Quest its lead was stopping ends stopped, whoever confirmed the cancel.
+    Cancel: [
+      { from: ["stopping"], to: "stopped", apply: (quest, e) => endedAs(quest, "stopped", e.at) },
+      { from: ["active"], to: "cancelled", apply: (quest, e) => endedAs(quest, "cancelled", e.at) },
+    ],
+    Reopen: {
+      from: ["failed"],
+      to: "active",
+      apply: (quest) => new Quest({ ...quest, state: "active", endedAt: null }),
+    },
+  },
+  illegal: (quest, _, to) => new IllegalQuestTransition({ questId: quest.id, from: quest.state, to }),
+});
+
+/** `QuestMachine` with the questions code outside this module asks of a Quest's state. */
+export const QuestStates = {
+  ...QuestMachine,
+  /** Whether its lead may still take work on: under way and not being stopped. */
+  takesWork: (quest: Pick<Quest, "state">): boolean => quest.state === "active",
+  /** Whether its lead stopped it at your request, whether or not the work under it has ended yet. */
+  stoppedByLead: (quest: Pick<Quest, "state">): boolean => quest.state === "stopping" || quest.state === "stopped",
+};
 
 /**
  * The authority a member works with on a delegated Task: overrides that only narrow its own
@@ -486,6 +576,7 @@ export const TaskRefusal = Schema.Literals([
   "owner-unavailable",
   "task-changed",
   "options-collide",
+  "quest-ended",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 

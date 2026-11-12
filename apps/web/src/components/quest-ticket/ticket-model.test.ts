@@ -83,6 +83,23 @@ describe("questTicket", () => {
     );
   });
 
+  it("[TC-UX-1346-06] says a Quest its lead stopped at your request was stopped, never finished or cancelled", () => {
+    const top = ended(task(CAMPAIGN, { brief: "Plan a Black Friday campaign" }), "cancelled", 6);
+    const base = withTasks(top, task(COPY, { ownerId: QUILL, state: "cancelled" }));
+    const [record] = base.quests;
+    if (record === undefined) throw new Error("no Quest");
+    const stop = { reason: "You asked to stop", summary: "The copy was drafted", at: top.updatedAt };
+    const stopped = tree({
+      ...base,
+      quests: [new Quest({ ...record, state: "stopped", stop, endedAt: top.updatedAt })],
+    });
+    const ticket = questTicket(stopped, published(0, 2));
+    expect(ticket?.progress).toEqual({ kind: "ended", end: "stopped", took: 6 * 60_000 });
+    expect(messages.progress(ticket?.progress ?? { kind: "count", done: 0, total: 0 })).toBe(
+      "Stopped at your request after 6 min",
+    );
+  });
+
   it("keeps the time the Quest ended when its lead's turn ends after it (#1007)", () => {
     const top = ended(task(CAMPAIGN, { brief: "Plan a Black Friday campaign" }), "completed", 17);
     const endedAt = top.updatedAt;
