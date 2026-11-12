@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { type CommandStart, openTools, operationDecision } from "@hobbots/agents";
-import { narrowest, redactSecrets } from "@hobbots/domain";
+import { type CommandStart, operationDecision } from "@hobbots/agents";
+import { narrowest, openTools, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
   type PolicyRequest,
@@ -45,8 +45,9 @@ export const WEB_SEARCH_TOOL = "WebSearch";
 /**
  * The tools offered to the runtime this turn. A tool whose operations are all denied is left out,
  * so the model does not try it. Bash also needs the sandbox, and since a command reads and writes
- * the folders without asking file by file, it is offered only when the hob may do both without
- * asking. Every call is still decided one by one.
+ * the folders without asking file by file, it is offered only when the hob may read them without
+ * asking and either edit them without asking or not at all, when its commands are read-only (see
+ * `openTools`). Every call is still decided one by one.
  */
 export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "restrictions" | "sandbox">) => {
   const open = openTools((operation) => operationDecision(context, operation));
@@ -63,6 +64,14 @@ export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "re
     }
   });
 };
+
+/**
+ * Whether the turn offers commands that cannot write its folders: Bash is offered and Edit files is
+ * Never, so the sandbox closes the folders, `.git` included, to every write (#1344).
+ */
+export const readOnlyCommands = (context: Pick<PolicyContext, "preset" | "hob" | "restrictions" | "sandbox">) =>
+  offeredTools(context).includes("Bash") &&
+  openTools((operation) => operationDecision(context, operation)).commandsReadOnly;
 
 const text = (input: Record<string, unknown>, key: string): string | undefined => {
   const value = input[key];

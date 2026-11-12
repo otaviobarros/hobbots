@@ -84,7 +84,7 @@ const Authority = Schema.Struct({
   decisions: Schema.optionalKey(
     PolicyLayer.annotate({
       description:
-        "allow, ask or deny for each operation, a built-in one by name or a Charm's by its id, such as github.comment. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
+        "allow, ask or deny for each operation, a built-in one by name or a Charm's by its id, such as github.comment. Each must be at least as narrow as your own. Commands, Git's included, need read-files allow and edit-files allow, or edit-files deny for read-only commands that cannot commit or write a file.",
     }),
   ),
   folders: Schema.optionalKey(

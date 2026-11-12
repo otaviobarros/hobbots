@@ -5,6 +5,7 @@ import { enforcementFixture } from "../test/enforcement.ts";
 import {
   addFolder,
   answersWithin,
+  commandsStanding,
   enforcement,
   folderName,
   foldersShared,
@@ -167,6 +168,19 @@ describe("per-hob rules", () => {
     expect(enforcement("local-git", { ...balanced, "local-git": "ask" })).toBe("checked");
     expect(enforcement("local-git", { ...balanced, "run-commands": "ask", "local-git": "ask" })).toBe("enforced");
     expect(enforcement("local-git", { ...balanced, "run-commands": "deny" })).toBe("enforced");
+  });
+
+  it("says commands are read-only under Change files Never and closed while a file answer asks (#1344)", () => {
+    const balanced = { ...PRESET_DECISIONS.balanced };
+    expect(commandsStanding(balanced)).toBe("open");
+    expect(commandsStanding({ ...balanced, "edit-files": "deny" })).toBe("read-only");
+    expect(commandsStanding({ ...balanced, "edit-files": "ask" })).toBe("closed");
+    expect(commandsStanding({ ...balanced, "read-files": "ask" })).toBe("closed");
+    expect(commandsStanding({ ...balanced, "read-files": "deny", "edit-files": "deny" })).toBe("closed");
+    expect(commandsStanding({ ...balanced, "run-commands": "deny", "local-git": "deny", "edit-files": "deny" })).toBe(
+      "off",
+    );
+    expect(commandsStanding({ ...balanced, "run-commands": "deny", "edit-files": "deny" })).toBe("read-only");
   });
 });
 

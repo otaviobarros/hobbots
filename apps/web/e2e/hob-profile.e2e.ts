@@ -442,6 +442,42 @@ test("[TC-PE-1266-04] the Permissions tab sets Search the web to Never, and offe
 });
 
 // covers AG-004, PE-005
+test("[TC-PE-1320] the Permissions tab says commands are read-only while Change files is Never, and closed while it asks", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+
+  const commands = page.getByRole("region", { name: "Commands" });
+  const readOnly = commands.getByText(/Read-only while Change files is Never/);
+  const closed = commands.getByText(/Closed while Look at files is not Allow or Change files is Ask/);
+  // Under Balanced, Change files is Allow, so commands say nothing more.
+  await expect(page.getByRole("radiogroup", { name: "Run commands and tests" })).toBeVisible();
+  await expect(readOnly).toHaveCount(0);
+  await expect(closed).toHaveCount(0);
+
+  const edit = page.getByRole("radiogroup", { name: "Change files" });
+  await edit.getByText("Never", { exact: true }).click();
+  await expect(edit.getByRole("radio", { name: "Never" })).toBeChecked();
+  // Both commands rules, Run commands and tests and Save versions with Git, say so.
+  await expect(readOnly).toHaveCount(2);
+  await expect(closed).toHaveCount(0);
+
+  await edit.getByText("Ask", { exact: true }).click();
+  await expect(edit.getByRole("radio", { name: "Ask" })).toBeChecked();
+  await expect(closed).toHaveCount(2);
+  await expect(readOnly).toHaveCount(0);
+
+  // A commands rule on Never says nothing more about the file answers.
+  const git = page.getByRole("radiogroup", { name: "Save versions with Git" });
+  await git.getByText("Never", { exact: true }).click();
+  await expect(git.getByRole("radio", { name: "Never" })).toBeChecked();
+  await expect(closed).toHaveCount(1);
+});
+
+// covers AG-004, PE-005
 test("[TC-PE-086] the Permissions tab turns commit signing with 1Password on, with its SSH warning, and off", async ({
   page,
 }) => {

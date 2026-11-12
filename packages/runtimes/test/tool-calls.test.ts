@@ -6,10 +6,12 @@ import { AgentId, EMPTY_HOB_POLICY, Grant, GrantId, ruleOperation } from "@hobbo
 import { type PolicyContext, PolicyEngine, type PolicyRequest, type PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
+import { folderAccessFor } from "../src/sandbox.ts";
 import {
   commandRequests,
   narrowestVerdict,
   offeredTools,
+  readOnlyCommands,
   simpleCommands,
   toolLabel,
   toolRequests,
@@ -482,34 +484,44 @@ describe("tools offered for a turn", () => {
     expect(offeredTools(context({ restrictions: [{ "edit-files": "ask" }] }))).toContain("Edit");
   });
 
-  it("[TC-PE-019] leaves out commands unless the hob may read and edit its folders without asking", () => {
+  it("[TC-PE-019] leaves out commands unless the hob may read its folders without asking and edit them without asking or not at all", () => {
     // covers PE-005
-    // A command reads and writes files without a call per file, so it would get past the narrower answer.
-    for (const restriction of [
-      { "edit-files": "ask" },
-      { "edit-files": "deny" },
-      { "read-files": "ask" },
-      { "read-files": "deny" },
-    ] as const)
+    // A command reads and writes files without a call per file, so it would get past an Ask.
+    for (const restriction of [{ "edit-files": "ask" }, { "read-files": "ask" }, { "read-files": "deny" }] as const)
       expect(offeredTools(context({ restrictions: [restriction] }))).not.toContain("Bash");
+    // Edit files Never leaves commands read-only, since the sandbox closes the folders to writes (#1344).
+    expect(offeredTools(context({ restrictions: [{ "edit-files": "deny" }] }))).toContain("Bash");
+    expect(readOnlyCommands(context({ restrictions: [{ "edit-files": "deny" }] }))).toBe(true);
+    expect(readOnlyCommands(context({}))).toBe(false);
   });
 
-  it("[TC-PE-430] offers each combination of file and command answers the tools it opens, and no command tool without both file answers Allow", () => {
+  it("[TC-PE-430] offers each combination of file and command answers the tools it opens, with read-only commands under Edit files Never", () => {
     // covers PE-005
     // Issue #661: Local Git Allow with Edit files Never left a member with nothing to commit with.
+    // Issue #1344: it now gets read-only commands, which the sandbox keeps from writing the folders.
     const decisions = ["allow", "ask", "deny"] as const;
     for (const read of decisions)
       for (const edit of decisions)
         for (const run of decisions)
           for (const git of decisions) {
             const overrides = { "read-files": read, "edit-files": edit, "run-commands": run, "local-git": git };
-            const tools = offeredTools(context({ preset: "trusting", hob: { ...EMPTY_HOB_POLICY, overrides } }));
+            const each = context({ preset: "trusting", hob: { ...EMPTY_HOB_POLICY, overrides } });
+            const tools = offeredTools(each);
+            const commands = read === "allow" && edit !== "ask" && (run !== "deny" || git !== "deny");
             expect(tools.includes("Read"), JSON.stringify(overrides)).toBe(read !== "deny");
             expect(tools.includes("Edit"), JSON.stringify(overrides)).toBe(edit !== "deny");
-            expect(tools.includes("Bash"), JSON.stringify(overrides)).toBe(
-              read === "allow" && edit === "allow" && (run !== "deny" || git !== "deny"),
-            );
+            expect(tools.includes("Bash"), JSON.stringify(overrides)).toBe(commands);
+            expect(readOnlyCommands(each), JSON.stringify(overrides)).toBe(commands && edit === "deny");
+            // Read-only commands come with folders the sandbox closes to every write.
+            expect(folderAccessFor(each).write, JSON.stringify(overrides)).toBe(edit !== "deny");
           }
+  });
+
+  it("offers no commands without the sandbox, read-only or not", () => {
+    expect(offeredTools(context({ sandbox: "unavailable", restrictions: [{ "edit-files": "deny" }] }))).not.toContain(
+      "Bash",
+    );
+    expect(readOnlyCommands(context({ sandbox: "unavailable", restrictions: [{ "edit-files": "deny" }] }))).toBe(false);
   });
 });
 
