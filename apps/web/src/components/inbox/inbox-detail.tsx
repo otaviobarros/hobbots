@@ -414,8 +414,8 @@ function FailedDetail({
 
 /**
  * A write a Task's session made whose answer was lost, still uncertain after the last read-back
- * (ADR 038): what it was, where, and the two ways to settle it once you have looked, as the Quest
- * room's lane offers them. Open in the Quest room shows the Task it came from.
+ * (ADR 038): what it was, where, and the two ways to settle it once you have looked, as the
+ * quest offers them. Open in the quest shows the Task it came from.
  */
 function CharmCallDetail({
   waiting,
@@ -435,7 +435,7 @@ function CharmCallDetail({
       portrait={<EntryPortrait hob={hob} device={false} waiting large />}
       row={row}
       why={lostWhat(waiting)}
-      chat={chatLink(lead, task.threadId, { taskId: task.id }, copy.detail.openRoom)}
+      chat={chatLink(lead, task.threadId, { taskId: task.id }, copy.detail.openQuest)}
     >
       <Facts
         rows={[

@@ -577,7 +577,7 @@ export const messages = {
     applied: "It went through",
     notSent: "It did not go through",
     error: "Hobbots could not settle it. It may have settled already; the step shows how.",
-    /** A write a Task's session made whose answer is still uncertain, in the Quest room and the Inbox (ADR 038). */
+    /** A write a Task's session made whose answer is still uncertain, in its quest and the Inbox (ADR 038). */
     lost: ({ name, charm }: { name: string; charm: string }) => `${name} lost ${charm}'s answer`,
     lostWhat: ({ charm, tool, site }: { charm: string; tool: string; site: string }) =>
       `The answer to ${tool} on ${site} was lost, and reading ${charm} back has not shown whether it went through.`,

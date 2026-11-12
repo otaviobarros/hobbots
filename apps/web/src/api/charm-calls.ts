@@ -40,7 +40,7 @@ const waitingKey = ["charm-calls", "waiting"] as const;
 
 /**
  * The Charm writes on Tasks whose answer is still uncertain after the last read-back, each with its
- * Task (ADR 038): they wait on the user in the Quest room and the Inbox. A call turns uncertain with
+ * Task (ADR 038): they wait on the user in their quest and the Inbox. A call turns uncertain with
  * no event to follow, so the list is read again every half minute.
  */
 export const waitingCharmCallsQuery = queryOptions({

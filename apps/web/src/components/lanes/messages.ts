@@ -1,6 +1,6 @@
 import { formatCount, formatList, plural } from "../../lib/format.ts";
 
-/** Copy for the Quest room's lanes (STD-I18N-001). */
+/** Copy for each hob's work in a quest (STD-I18N-001). */
 export const messages = {
   region: "Lanes",
   lane: ({ name }: { name: string }) => `${name}'s lane`,
