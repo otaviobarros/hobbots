@@ -1,0 +1,13 @@
+name: Fetch the memory engine
+description: Downloads the pinned ai-memory release for the memory engine's contract tests. Run it after the setup action.
+runs:
+  using: composite
+  steps:
+    # The contract tests run against the pinned ai-memory release (ADR 028), which fetch-engine
+    # downloads and checks against its pinned SHA-256; the pin names the cache.
+    - uses: actions/cache@v6
+      with:
+        path: packages/memory/engine
+        key: memory-engine-${{ runner.os }}-${{ hashFiles('packages/memory/src/engine/release.ts') }}
+    - run: pnpm --filter @hobbots/memory fetch-engine
+      shell: bash
