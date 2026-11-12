@@ -55,7 +55,8 @@ export class RecordsGroup extends HttpApiGroup.make("records")
       success: Schema.Array(Artifact),
       error: ThreadNotFound,
     }),
-    // Null until the brief projector first writes one, at a chapter end or a Quest step.
+    // Null until the brief projector first writes one, at a chapter end or a Quest step; its text
+    // is empty once nothing it said holds any more.
     HttpApiEndpoint.get("brief", "/threads/:threadId/brief", {
       params: { threadId: ThreadId },
       success: Schema.NullOr(Brief),

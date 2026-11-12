@@ -19,8 +19,12 @@ export type BriefSource = typeof BriefSource.Type;
 
 export class Brief extends Schema.Class<Brief>("Brief")({
   threadId: ThreadId,
-  /** What the brief says, already cut at its share of the context pack. */
-  text: Schema.String.check(Schema.isNonEmpty()),
+  /**
+   * What the brief says, already cut at its share of the context pack. Empty once nothing it said
+   * holds any more, such as when the last decision of a plain brief was crossed out: the pack then
+   * carries no brief.
+   */
+  text: Schema.String,
   /** The hub, which writes every brief. */
   writtenBy: Actor,
   source: BriefSource,
@@ -31,8 +35,9 @@ export class Brief extends Schema.Class<Brief>("Brief")({
 }) {}
 
 /**
- * A brief the projector would write. `source` is `fallback` when the hub's brain was asked and gave
- * no answer that decodes, or none in time: the rule's text, which stands only where no brief is yet.
+ * A brief the projector would write; an empty `text` says there is nothing to brief on. `source` is
+ * `fallback` when the hub's brain was asked and gave no answer that decodes, or none in time: the
+ * rule's text, which never replaces a brief the brain wrote.
  */
 export interface BriefDraft {
   readonly threadId: ThreadId;
@@ -46,17 +51,19 @@ export interface BriefDraft {
  * - `write` replaces it, or writes the first one;
  * - `stale` changes nothing, because the stored brief was written from as far along the journal or
  *   further, as when a round replays a page it already wrote;
- * - `kept` changes nothing, because the brain failed and a brief is already there: the last one
- *   stays in place rather than a plainer one;
- * - `unchanged` changes nothing, because the stored brief already says the same.
+ * - `kept` changes nothing, because the brain failed and the stored brief is the brain's: it stays
+ *   in place rather than a plainer one. A brief the rule wrote is replaced by the rule's new text,
+ *   so a crossed-out decision never stays in it;
+ * - `unchanged` changes nothing, because the stored brief already says the same, or there is none
+ *   and the draft says nothing.
  */
 export type BriefChange = "write" | "stale" | "kept" | "unchanged";
 
 export const briefChange = (current: Brief | null, draft: BriefDraft): BriefChange => {
-  if (current === null) return "write";
+  if (current === null) return draft.text === "" ? "unchanged" : "write";
   if (current.basis >= draft.basis) return "stale";
-  if (draft.source === "fallback") return "kept";
-  return current.text === draft.text && current.source === draft.source ? "unchanged" : "write";
+  if (draft.source === "fallback" && current.source === "brain") return "kept";
+  return current.text === draft.text && current.source === briefSourceOf(draft) ? "unchanged" : "write";
 };
 
 /** The source a written draft is kept with: a fallback is the rule's text. */

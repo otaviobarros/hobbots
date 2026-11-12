@@ -141,6 +141,8 @@ describe("what asks for a brief", () => {
       updatedAt: NOW,
     });
     const other = ThreadId.make("chat-1");
+    const failedIn = ThreadId.make("camp-2");
+    const cancelledIn = ThreadId.make("camp-3");
     const triggers = briefTriggers([
       entry(1, { _tag: "TaskCompleted", task, artifacts: [] }),
       entry(2, {
@@ -157,8 +159,18 @@ describe("what asks for a brief", () => {
       entry(4, { _tag: "ChapterSummarized", threadId: other, chapter: {} }),
       entry(5, { _tag: "MessageUpserted", message: { threadId: other } }),
       entry(6, { _tag: "ChapterStarted", threadId: other, chapter: {}, ended: null }),
+      // A step or member's Task with no Quest of its own that failed or was cancelled asks for one;
+      // one that only started asks for none.
+      entry(7, { _tag: "TaskStateChanged", task: { state: "failed", threadId: failedIn }, attempt: null, quest: null }),
+      entry(8, {
+        _tag: "TaskStateChanged",
+        task: { state: "cancelled", threadId: cancelledIn },
+        attempt: null,
+        quest: null,
+      }),
+      entry(9, { _tag: "TaskStateChanged", task: { state: "running", threadId: other }, attempt: null, quest: null }),
     ]);
-    expect([...triggers.threads]).toEqual([THREAD]);
+    expect([...triggers.threads]).toEqual([THREAD, failedIn, cancelledIn]);
     expect([...triggers.tasks]).toEqual(["t9"]);
   });
 });

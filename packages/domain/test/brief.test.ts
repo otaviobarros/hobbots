@@ -35,6 +35,8 @@ describe("a brief's rewrite rule", () => {
     // With no brief yet, the rule's text stands in for a brain that failed, so a brief still appears.
     expect(briefChange(null, draft({ source: "fallback" }))).toBe("write");
     expect(briefSourceOf(draft({ source: "fallback" }))).toBe("rule");
+    // With nothing to say and no brief yet, nothing is written.
+    expect(briefChange(null, draft({ text: "" }))).toBe("unchanged");
   });
 
   it("writes nothing from as far along the journal as the stored brief, or less", () => {
@@ -49,13 +51,24 @@ describe("a brief's rewrite rule", () => {
     expect(briefChange(brief(), draft({ text: brief().text, source: "rule" }))).toBe("write");
   });
 
+  it("replaces a brief the rule wrote with the rule's new text, an empty one included, even on a fallback", () => {
+    const plain = brief({ source: "rule" });
+    expect(briefChange(plain, draft({ source: "fallback", text: "Made:\n- launch.md (doc, version 1)" }))).toBe(
+      "write",
+    );
+    // The last decision it named was crossed out: the brief is cleared, not kept.
+    expect(briefChange(plain, draft({ source: "fallback", text: "" }))).toBe("write");
+    expect(briefChange(plain, draft({ source: "rule", text: "" }))).toBe("write");
+    expect(briefChange(brief({ source: "rule", text: "" }), draft({ source: "rule", text: "" }))).toBe("unchanged");
+  });
+
   // A store of one brief, rewritten only through the rule, by drafts in journal order, as the
   // projector reads pages.
   it("on random drafts, a brief only moves forward along the journal, and a replay writes nothing", () => {
     const drafts = fc
       .array(
         fc.record({
-          text: fc.constantFrom("a", "b", "c"),
+          text: fc.constantFrom("a", "b", "c", ""),
           basis: fc.integer({ min: 0, max: 30 }),
           source: fc.constantFrom("brain" as const, "rule" as const, "fallback" as const),
         }),
@@ -74,7 +87,8 @@ describe("a brief's rewrite rule", () => {
             if (change !== "write") continue;
             if (before !== null) {
               expect(next.basis).toBeGreaterThan(before.basis);
-              expect(next.source).not.toBe("fallback");
+              // A fallback never replaces what the brain wrote.
+              if (before.source === "brain") expect(next.source).not.toBe("fallback");
             }
             stored = brief({ text: next.text, basis: next.basis, source: briefSourceOf(next) });
             writes += 1;

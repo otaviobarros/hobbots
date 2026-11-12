@@ -4,6 +4,7 @@ import {
   type Decision,
   DecisionStates,
   type EventEnvelope,
+  isTerminalTask,
   type JournaledEvent,
   type Message,
   type TaskId,
@@ -60,8 +61,11 @@ const triggerOf = (event: JournaledEvent): { thread: ThreadId | null } | { task:
     case "QuestStarted":
     case "QuestCompleted":
       return { thread: event.quest.threadId };
+    // Any Task in the thread that ended, completed or not, a step or a member's Task included, or
+    // one whose Quest ended or reopened with it.
     case "TaskStateChanged":
-      return event.quest === null ? null : { thread: event.quest.threadId };
+      if (event.quest !== null) return { thread: event.quest.threadId };
+      return isTerminalTask(event.task.state) ? { thread: event.task.threadId } : null;
     case "TaskCompleted":
       return { thread: event.task.threadId };
     case "CheckpointRecorded":
@@ -235,8 +239,9 @@ const makeProjector = (options: CampBriefsOptions) =>
           Effect.timeoutOption(options.judgmentTimeout),
           Effect.map(Option.getOrElse(() => byFallback(judgment))),
         );
+        // An empty draft says nothing holds any more: it clears a brief that said something.
         const draft: BriefDraft = { threadId, basis, ...draftOf(decided) };
-        return draft.text === "" ? null : draft;
+        return draft;
       });
 
     // A page's drafts, one per thread it asks to brief again, written with the cursor.

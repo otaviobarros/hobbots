@@ -354,6 +354,64 @@ describe("the camp brief projector", () => {
     expect(await briefEntries()).toHaveLength(2);
   });
 
+  // covers ADR 037 (Records, Quests in camps)
+  it.each<"failed" | "cancelled">(["failed", "cancelled"])(
+    "[TC-CH-1384-14] a step with no Quest of its own that ended %s writes its thread's brief again",
+    async (end) => {
+      let said = "Drafting the emails.";
+      const id = await start(
+        "claude-code",
+        scriptedBrain(() => Effect.succeed(brain(said))),
+      );
+      const step = await run(
+        Effect.gen(function* () {
+          const tasks = yield* TaskRepository;
+          const task = (taskId: string, parentId: string | null) => ({
+            id: TaskId.make(taskId),
+            ownerId: WREN,
+            parentId: parentId === null ? null : TaskId.make(parentId),
+            threadId: id,
+            brief: taskId,
+            dependsOn: [],
+            createdAt: NOW,
+          });
+          yield* tasks.createTask({ task: task("emails", null), delegation: null, milestones: [] });
+          return (yield* tasks.createTask({ task: task("draft", "emails"), delegation: null, milestones: [] })).value;
+        }),
+      );
+      // Creating work is no step yet.
+      await projectOnce();
+      expect(await briefOf(id)).toBeNull();
+
+      said = `The draft step ${end}.`;
+      await run(TaskRepository.use((tasks) => Effect.orDie(tasks.moveTask(step.id, step.revision, end, NOW))));
+      await projectOnce();
+      expect((await briefOf(id))?.text).toBe(`The draft step ${end}.`);
+    },
+  );
+
+  // covers ADR 037 (Records, The context pack), STD-ARCH-018
+  it("[TC-CH-1384-15] under No AI, crossing out the last decision a brief named clears it, and the next session's pack has no brief", async () => {
+    const id = await start("codex", NoAi);
+    await say(id, "Plan the launch emails.");
+    const decided = await decide(id, "a", "Emails go out on Tuesdays.");
+    await startChapter(id, "chapter-2", "Sending");
+    await projectOnce();
+    expect((await briefOf(id))?.text).toBe("Decided:\n- Emails go out on Tuesdays.");
+
+    await run(Records.use((records) => records.crossOut(id, decided.recorded.id)));
+    await say(id, "Actually, not that day.");
+    await startChapter(id, "chapter-3", "Again");
+    await projectOnce();
+    expect(await briefOf(id)).toMatchObject({ text: "", source: "rule" });
+    expect(await briefEntries()).toHaveLength(2);
+
+    await say(id, "When do they go out?");
+    const told = (asked.codex.at(-1) as PromptRequest).briefing ?? "";
+    expect(told).not.toContain("## This camp's brief");
+    expect(told).not.toContain("Tuesdays");
+  });
+
   // covers ADR 037 (Records), ADR 028
   it("[TC-CH-1384-13] a private camp's brief stays in that camp: memory capture takes nothing of it, and another thread's pack never reads it", async () => {
     const chat = await start("claude-code", NoAi);
