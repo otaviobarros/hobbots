@@ -13,7 +13,13 @@ const withTasks = (...tasks: ReadonlyArray<Task>) => {
 };
 
 /** What the hub published for a Quest: `done` of `total` Tasks done, and `needs` things waiting on you. */
-const published = (done: number, total: number, needs = 0): QuestProgress => ({ segments: [], done, total, needs });
+const published = (done: number, total: number, needs = 0): QuestProgress => ({
+  segments: [],
+  done,
+  total,
+  needs,
+  review: 0,
+});
 
 /** A Task that ended `minutes` after it started. */
 const ended = (base: Task, state: Task["state"], minutes: number) =>

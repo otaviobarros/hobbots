@@ -23,6 +23,8 @@ export interface QuestProgress {
   readonly total: number;
   /** What waits on you while the work runs. */
   readonly needs: number;
+  /** What the work made that waits for your review, as the hub counts it (#1422). */
+  readonly review: number;
 }
 
 /** The strip's color for each tone of a Task. */
@@ -43,10 +45,11 @@ export const progressOfSummary = (summary: QuestSummary): QuestProgress => ({
   segments: STRIP_ORDER.flatMap((tone) => Array.from({ length: summary.tones[tone] }, () => toneSegment[tone])),
   ...summaryProgress(summary),
   needs: summary.needsYou,
+  review: summary.readyForReview,
 });
 
 /** A Quest whose summary has not been read yet shows no progress until it is. */
-const UNREAD: QuestProgress = { segments: [], done: 0, total: 0, needs: 0 };
+const UNREAD: QuestProgress = { segments: [], done: 0, total: 0, needs: 0, review: 0 };
 
 /**
  * What a Task working alone waits on you for while it runs: each question and approval that reached
@@ -72,5 +75,7 @@ export const questProgress = (tree: TaskTree, summary: QuestSummary | undefined)
     done: steps.filter((task) => task.state === "completed").length,
     total: steps.length,
     needs: isTerminalTask(top.state) ? 0 : soloNeeds(tree, steps),
+    // Only a Quest's summary counts what waits for your review.
+    review: 0,
   };
 };

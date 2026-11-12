@@ -24,7 +24,7 @@ export function QuestButtons({ trees, onOpen }: { trees: ReadonlyArray<TaskTree>
 }
 
 function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId) => void }) {
-  const { segments, needs, done, total } = useQuestProgress(tree);
+  const { segments, needs, review, done, total } = useQuestProgress(tree);
   const card = workCard(tree);
   if (card === null) return null;
   return (
@@ -43,6 +43,11 @@ function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId
       {total > 0 && (
         <span className="sr-only whitespace-nowrap text-text-secondary @4xl/header:not-sr-only">
           {copy.done({ done, total })}
+        </span>
+      )}
+      {review > 0 && (
+        <span className="sr-only whitespace-nowrap text-text-secondary @4xl/header:not-sr-only">
+          {copy.toReview({ count: review })}
         </span>
       )}
       {needs > 0 ? (

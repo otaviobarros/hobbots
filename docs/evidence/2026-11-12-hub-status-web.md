@@ -14,7 +14,7 @@
 | `[TC-UX-1374-01]` | `npx vitest run src/api/hub-status.test.ts` in `apps/web`: a status event that came while the snapshot was read is kept over the older snapshot | ✅ |
 | `[TC-UX-1374-02]` | The same file: a `Ready` drops what the window held and reads the snapshot again, so a restarted hub's low revisions still win | ✅ |
 | `[TC-UX-1374-03]` | `npx vitest run src/api/quest-summaries.test.ts`: a fast-check model of changes and reads arriving in any order ends with each Quest's newest summary | ✅ 60 runs |
-| `[TC-UX-1374-04]` | `npx vitest run src/components/quest/quest-progress.test.ts`: a Quest's pill shows the summary the hub published, never its Task states | ✅ |
+| `[TC-UX-1374-04]` | `npx vitest run src/components/quest/quest-progress.test.ts`: a Quest's pill shows the summary the hub published, ready for review included, never its Task states | ✅ |
 | `[TC-UX-1374-07]` | The same file: a failed step of a Task working alone counts as needing you while it runs, and not once it ended | ✅ |
 | `[TC-UX-1374-08]` | `npx vitest run src/api/hub-reads.test.ts`: a failed status or summaries read is told apart from an empty one, and Try again reads it again | ✅ |
 | `[TC-UX-1374-05]` | `npx playwright test e2e/hub-status.e2e.ts`: two devices show Pip working and then resting, in the sidebar and the chat header, through a full turn and through a stop | ✅ |
@@ -25,5 +25,5 @@
 
 - The browser cases ran on SQLite only; the status and summaries the hub serves are proven on PostgreSQL by the server suites, not in the browser.
 - A Task working alone has no Quest and so no summary: its pill still counts its own steps, questions and approvals in the window.
-- The "ready for review" count in a Quest's summary is not rendered yet; it changes meaning in [#1422](https://github.com/otaviobarros/hobbots/issues/1422).
+- The quest pill shows the "ready for review" count that [#1422](https://github.com/otaviobarros/hobbots/issues/1422) defined, proven by `[TC-UX-1374-04]` only: no browser case delivers a reviewable artifact.
 - Not run on the packaged Mac app.

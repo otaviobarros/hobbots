@@ -19,6 +19,8 @@ export const messages = {
     done: ({ done, total }: { done: number; total: number }) => `${formatCount(done)} of ${formatCount(total)} done`,
     needYou: ({ count }: { count: number }) =>
       plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
+    toReview: ({ count }: { count: number }) =>
+      plural(count, { one: "1 ready for review", other: `${formatCount(count)} ready for review` }),
   },
   question: {
     asks: ({ name }: { name: string }) => `${name} asks you`,
