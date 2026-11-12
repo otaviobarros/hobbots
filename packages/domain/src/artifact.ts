@@ -186,6 +186,25 @@ export const planReview = (input: {
     : new ArtifactReviewRefused({ artifactId: input.id, reason: "settled" });
 };
 
+/**
+ * The camp's artifact once a moved chapter's duplicate of it, at the same place, joins it: a review
+ * settled on the moved one is carried over to one still waiting, as the same review, at the same time
+ * and by the same actor, so moving a chapter never loses a review. One already settled keeps its own,
+ * since a settled review is final, whatever the moved one says. Null when nothing changes.
+ */
+export const carriedReview = (kept: Artifact, moved: Artifact): Artifact | null => {
+  const { reviewedAt: at, reviewedBy: by } = moved;
+  if (at === null || by === null) return null;
+  const event: ArtifactReviewEvent =
+    moved.review === "dismissed"
+      ? { _tag: "Dismiss", at, by }
+      : by.kind === GITHUB_ACTOR.kind && by.id === GITHUB_ACTOR.id
+        ? { _tag: "PullRequestEnded", at }
+        : { _tag: "Review", at, by };
+  const next = ArtifactReviews.transition(kept, event);
+  return next instanceof Artifact ? next : null;
+};
+
 /** A pull request artifact after GitHub reported it merged or closed, or null when that changes nothing. */
 export const planPullRequestEnded = (artifact: Artifact, at: string): Artifact | null => {
   const next = ArtifactReviews.transition(artifact, { _tag: "PullRequestEnded", at });

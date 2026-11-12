@@ -10,6 +10,7 @@ import {
   ArtifactReviewRefused,
   ArtifactReviews,
   ChapterId,
+  carriedReview,
   GITHUB_ACTOR,
   IllegalArtifactReviewTransition,
   OWNER_ACTOR,
@@ -146,5 +147,22 @@ describe("ArtifactReviewMachine", () => {
     const { review, reviewedAt, reviewedBy, ...before } = artifact("doc");
     const decoded = Schema.decodeUnknownSync(Artifact)({ ...before, revision: 3 });
     expect([decoded.review, decoded.reviewedAt, decoded.reviewedBy]).toEqual(["waiting", null, null]);
+  });
+
+  it("[TC-OR-1422-09] carries a moved duplicate's settled review over to one still waiting, and never over a settled one", () => {
+    const moved = (review: ArtifactReview, by: Actor = OWNER_ACTOR) =>
+      new Artifact({ ...artifact("pr", review), reviewedBy: review === "waiting" ? null : by });
+    expect(carriedReview(artifact("pr"), moved("dismissed"))).toMatchObject({
+      review: "dismissed",
+      reviewedAt: at(1),
+      reviewedBy: OWNER_ACTOR,
+    });
+    expect(carriedReview(artifact("pr"), moved("reviewed", GITHUB_ACTOR))).toMatchObject({
+      review: "reviewed",
+      reviewedBy: GITHUB_ACTOR,
+    });
+    expect(carriedReview(artifact("doc"), moved("reviewed"))).toMatchObject({ review: "reviewed" });
+    expect(carriedReview(artifact("pr"), moved("waiting"))).toBeNull();
+    expect(carriedReview(artifact("pr", "reviewed"), moved("dismissed"))).toBeNull();
   });
 });

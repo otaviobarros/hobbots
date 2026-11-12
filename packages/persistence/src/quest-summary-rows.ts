@@ -95,31 +95,51 @@ const questionRows = decodeRows(
 );
 const approvalRows = decodeRows(Schema.Struct({ taskId: Schema.NullOr(TaskId), state: ApprovalState }));
 
+/** What a change's events name that a summary reads, before the rows behind them are looked up. */
+interface Touched {
+  readonly tasks: Set<string>;
+  /** Chats started fresh, whose open Quests moved into them. */
+  readonly fresh: Array<ThreadId>;
+  /** Artifacts registered or whose review settled. */
+  readonly artifacts: Array<string>;
+  /** Chapters moved into a camp, whose artifacts may have joined the camp's own at the same place. */
+  readonly landed: Array<string>;
+}
+
+const touchedBy = (events: ReadonlyArray<JournaledEvent>): Touched => {
+  const touched: Touched = { tasks: new Set(), fresh: [], artifacts: [], landed: [] };
+  for (const event of events) {
+    if ("task" in event) touched.tasks.add(event.task.id);
+    else if (event._tag === "ArtifactRegistered" || event._tag === "ArtifactReviewSettled") {
+      touched.artifacts.push(event.artifact.id);
+    } else if (event._tag === "ChapterMoved") touched.landed.push(event.chapter.id);
+    else if (event._tag === "QuestStarted" || event._tag === "QuestCompleted") touched.tasks.add(event.quest.taskId);
+    else if ("question" in event) touched.tasks.add(event.question.taskId);
+    else if ("approval" in event && event.approval.taskId !== null) touched.tasks.add(event.approval.taskId);
+    else if (event._tag === "ChatStartedFresh") touched.fresh.push(event.chat.id);
+  }
+  return touched;
+};
+
 /**
  * The Tasks a change's events touch in a way a summary reads: a Task's state, a Quest starting or
  * ending, a question reaching you or leaving, an approval waiting or decided, an artifact a Task made
- * registered or its review settled. A chat started fresh moves the open Quests of the chat it
- * replaced into it, so the thread of each changes.
+ * registered or its review settled, or a chapter moved, whose artifacts may have joined the camp's
+ * and taken its review. A chat started fresh moves the open Quests of the chat it replaced into it,
+ * so the thread of each changes.
  */
 const touchedTasks = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEvent>) =>
   Effect.gen(function* () {
-    const ids = new Set<string>();
-    const moved: Array<ThreadId> = [];
-    const artifacts: Array<string> = [];
-    for (const event of events) {
-      if ("task" in event) ids.add(event.task.id);
-      else if (event._tag === "ArtifactRegistered" || event._tag === "ArtifactReviewSettled") {
-        artifacts.push(event.artifact.id);
-      } else if (event._tag === "QuestStarted" || event._tag === "QuestCompleted") ids.add(event.quest.taskId);
-      else if ("question" in event) ids.add(event.question.taskId);
-      else if ("approval" in event && event.approval.taskId !== null) ids.add(event.approval.taskId);
-      else if (event._tag === "ChatStartedFresh") moved.push(event.chat.id);
-    }
-    if (moved.length > 0) {
+    const { tasks: ids, fresh, artifacts, landed } = touchedBy(events);
+    if (fresh.length > 0) {
       const rows = yield* sql<{
         readonly taskId: string;
-      }>`SELECT task_id FROM quests WHERE ${sql.in("thread_id", moved)}`;
+      }>`SELECT task_id FROM quests WHERE ${sql.in("thread_id", fresh)}`;
       for (const row of rows) ids.add(row.taskId);
+    }
+    if (landed.length > 0) {
+      const rows = yield* sql<{ readonly id: string }>`SELECT id FROM artifacts WHERE ${sql.in("chapter_id", landed)}`;
+      for (const row of rows) artifacts.push(row.id);
     }
     for (const taskId of yield* tasksThatMade(sql, artifacts)) ids.add(taskId);
     return [...ids];
