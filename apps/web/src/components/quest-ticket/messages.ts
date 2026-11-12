@@ -5,6 +5,7 @@ const ENDED: Record<TicketEnd, (took: string) => string> = {
   completed: (took) => `Finished in ${took}`,
   failed: (took) => `Failed after ${took}`,
   cancelled: (took) => `Cancelled after ${took}`,
+  stopped: (took) => `Stopped at your request after ${took}`,
 };
 
 /** Copy for the Quest's ticket under the request in the chat (STD-I18N-001). */

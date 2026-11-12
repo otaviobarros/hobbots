@@ -8,6 +8,7 @@ import {
   type EventEnvelope,
   latestThreadTask,
   openThreadTask,
+  QuestStates,
   type ResponsibilityLedger,
   type Task,
   TaskId,
@@ -39,12 +40,19 @@ export interface ResolvedCaller {
   readonly readOnly?: true;
 }
 
-/** Whether `taskId` is among `trees` and you cancelled it, or asked to. */
-const cancelledIn = (trees: ReadonlyArray<TaskTree>, taskId: TaskId) =>
-  trees.some((tree) => {
-    const top = tree.tasks[0];
-    return top?.id === taskId && (top.state === "cancelled" || top.state === "cancelling");
-  });
+/**
+ * Why a turn does no more work on `taskId`, when it is among `trees` and was cancelled, or asked to
+ * be: by you, or by its lead stopping its Quest at your request (#1346). Null while it goes on.
+ */
+const cancelledIn = (trees: ReadonlyArray<TaskTree>, taskId: TaskId): string | null => {
+  const tree = trees.find((each) => each.tasks[0]?.id === taskId);
+  const top = tree?.tasks[0];
+  if (tree === undefined || top === undefined || (top.state !== "cancelled" && top.state !== "cancelling")) return null;
+  const quest = tree.quests.find((each) => each.taskId === top.id);
+  return quest !== undefined && QuestStates.stoppedByLead(quest)
+    ? `You stopped Quest ${quest.id} at the user's request, so this turn does no more work on it and starts none in its place. Tell the user in a line, then end your turn.`
+    : `Task ${taskId} was cancelled, so this turn does no more work on it and starts none in its place.`;
+};
 
 /**
  * What the message of yours a turn answers says, when it steers the work the turn was briefed on:
@@ -196,12 +204,8 @@ export const makeChatResolver = (
         const journal = journalOf();
         const trees = yield* tasks.readThreadTrees(turn.threadId);
         // A turn whose Task you cancelled does nothing more about it, and starts nothing in its place.
-        if (workingOn !== null && cancelledIn(trees, workingOn)) {
-          return yield* refuse(
-            "task-cancelling",
-            `Task ${workingOn} was cancelled, so this turn does no more work on it and starts none in its place.`,
-          );
-        }
+        const cancelled = workingOn === null ? null : cancelledIn(trees, workingOn);
+        if (cancelled !== null) return yield* refuse("task-cancelling", cancelled);
         let task: Task | undefined = openThreadTask(trees, turn.agentId)?.top;
         // Once the request has ended, its lead can still read it, never change it, to answer you about it (#666).
         const ended = task === undefined && name === "read_tasks" ? latestThreadTask(trees, turn.agentId) : undefined;

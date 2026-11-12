@@ -5,6 +5,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import stateChecks, { STATES } from "../src/migrations/0046_state_checks.ts";
+import { QUEST_STATES } from "../src/migrations/0110_quest_stops.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // A Task's, an Attempt's, a Quest's and a question's state column refuses any state outside the
@@ -108,7 +109,8 @@ const ROWS = [
 describe("0046_state_checks", () => {
   // covers DP-003
   it("[TC-DP-221] lists every state the domain has, so a new state needs a migration of its own", () => {
-    expect(STATES).toEqual({
+    // 0110 let a Quest be stopping and stopped (#1346).
+    expect({ ...STATES, quests: QUEST_STATES }).toEqual({
       tasks: TaskState.literals,
       attempts: AttemptState.literals,
       quests: QuestState.literals,

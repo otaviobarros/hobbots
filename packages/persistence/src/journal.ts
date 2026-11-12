@@ -58,6 +58,7 @@ type TaskEvent = Extract<
       | "TaskCompleted"
       | "QuestStarted"
       | "QuestCompleted"
+      | "QuestStopRequested"
       | "CheckpointRecorded"
       | "QuestionAsked"
       | "QuestionAnswered"

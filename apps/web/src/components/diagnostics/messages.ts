@@ -144,7 +144,14 @@ export const messages = {
     "claim-clash": "a claim clash",
     progress: "progress",
   },
-  questStates: { active: "Under way", completed: "Done", failed: "Failed", cancelled: "Cancelled" },
+  questStates: {
+    active: "Under way",
+    stopping: "Stopping",
+    completed: "Done",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    stopped: "Stopped",
+  },
   attemptStates: {
     starting: "starting",
     running: "running",
@@ -168,6 +175,7 @@ export const messages = {
     TaskCompleted: "Task done",
     QuestStarted: "Quest started",
     QuestCompleted: "Quest ended",
+    QuestStopRequested: "Quest stopped by its lead",
     CheckpointRecorded: "Progress noted",
     QuestionAsked: "Question asked",
     QuestionAnswered: "Question answered",

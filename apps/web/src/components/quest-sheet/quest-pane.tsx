@@ -26,7 +26,7 @@ import { messages } from "./messages.ts";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
 import { QuestThreadView } from "./quest-thread-view.tsx";
-import { RoomFinished } from "./room-finished.tsx";
+import { RoomFinished, RoomStopped } from "./room-finished.tsx";
 import { Team } from "./team.tsx";
 
 const copy = messages.sheet;
@@ -180,6 +180,7 @@ function QuestBody({
         />
       )}
       <RoomFinished tree={tree} onChanges={() => moves.everyone("changes")} onFiles={() => moves.everyone("files")} />
+      <RoomStopped tree={tree} />
       <span className="flex">
         <Button variant="outline" size="sm" title={copy.showWorkHint} onClick={() => moves.everyone("changes")}>
           {copy.showWork}

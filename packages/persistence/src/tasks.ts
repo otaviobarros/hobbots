@@ -21,6 +21,7 @@ import {
   Delegation,
   descendantsOf,
   HandOff,
+  IllegalQuestTransition,
   IllegalTaskTransition,
   isLiveAttempt,
   isTerminalTask,
@@ -31,8 +32,9 @@ import {
   noteRecipientOf,
   optionNamed,
   Quest,
+  type QuestEvent,
   Question,
-  type QuestState,
+  QuestMachine,
   questPlacement,
   StaleTask,
   Task,
@@ -69,11 +71,17 @@ const AUTOMATIC: Partial<Record<TaskState, CheckpointKind>> = {
   cancelled: "cancelled",
 };
 
-/** The Quest state a Task's terminal state ends its Quest with. */
-const QUEST_END: Partial<Record<TaskState, QuestState>> = {
-  completed: "completed",
-  failed: "failed",
-  cancelled: "cancelled",
+/** The Quest event a Task's terminal state ends its Quest with. */
+const QUEST_END: Partial<Record<TaskState, "Complete" | "Fail" | "Cancel">> = {
+  completed: "Complete",
+  failed: "Fail",
+  cancelled: "Cancel",
+};
+
+/** A Quest's change by `QuestMachine`: a change the machine refuses is a bug in the Task's own rules. */
+const questMoved = (quest: Quest, event: QuestEvent) => {
+  const next = QuestMachine.transition(quest, event);
+  return next instanceof IllegalQuestTransition ? Effect.die(next) : Effect.succeed(next);
 };
 
 /** The SQL store of Tasks, Quests and their records, for SQLite and PostgreSQL (ADR 011, ADR 018). */
@@ -174,15 +182,24 @@ export const TaskRepositoryLive = Layer.effect(
         return [{ _tag: "CheckpointRecorded", checkpoint, milestone: null } as const];
       });
 
-    /** Ends the Quest on `task`, if it has one, with the Task's terminal state. */
+    /** Writes a Quest's state, its stop and when it ended, at journal sequence `revision`. */
+    const saveQuest = (quest: Quest, revision: number) =>
+      Effect.as(
+        sql`UPDATE quests SET state = ${quest.state}, stop = ${quest.stop === null ? null : JSON.stringify(quest.stop)},
+          ended_at = ${quest.endedAt}, revision = ${revision} WHERE id = ${quest.id}`,
+        new Quest({ ...quest, revision }),
+      );
+
+    /**
+     * Ends the Quest on `task`, if it has one, with the Task's terminal state: one its lead was
+     * stopping at your request ends stopped (#1346).
+     */
     const endQuest = (task: Task, at: string, revision: number) =>
       Effect.gen(function* () {
-        const state = QUEST_END[task.state];
-        const [quest] = state === undefined ? [] : yield* read.questsOn([task.id]);
-        if (quest === undefined || state === undefined) return null;
-        const ended = new Quest({ ...quest, state, endedAt: at, revision });
-        yield* sql`UPDATE quests SET state = ${state}, ended_at = ${at}, revision = ${revision} WHERE id = ${quest.id}`;
-        return ended;
+        const event = QUEST_END[task.state];
+        const [quest] = event === undefined ? [] : yield* read.questsOn([task.id]);
+        if (quest === undefined || event === undefined) return null;
+        return yield* saveQuest(yield* questMoved(quest, { _tag: event, at }), revision);
       });
 
     interface Placement {
@@ -342,6 +359,23 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    const stopQuest: TaskRepository["Service"]["stopQuest"] = (questId, expected, stop) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const [before] = yield* read.quest(questId);
+          if (before === undefined) return yield* refuse("quest-missing", `No Quest ${questId}`);
+          if (before.revision !== expected) {
+            return yield* refuse("task-changed", `Quest ${questId} changed meanwhile`);
+          }
+          const stopped = QuestMachine.transition(before, { _tag: "Stop", ...stop });
+          if (stopped instanceof IllegalQuestTransition) {
+            return yield* refuse("quest-ended", `Quest ${questId} is ${before.state}, so it cannot be stopped`);
+          }
+          const quest = yield* saveQuest(stopped, revision);
+          return { value: quest, events: [{ _tag: "QuestStopRequested", quest } as const] };
+        }),
+      );
+
     const liveAttempt = (task: Task) =>
       Effect.gen(function* () {
         if (task.currentAttemptId === null) return false;
@@ -382,8 +416,7 @@ export const TaskRepositoryLive = Layer.effect(
         yield* notUnderCancel(task);
         const [quest] = yield* read.questsOn([task.id]);
         if (quest === undefined) return null;
-        yield* sql`UPDATE quests SET state = 'active', ended_at = NULL, revision = ${revision} WHERE id = ${quest.id}`;
-        return new Quest({ ...quest, state: "active", endedAt: null, revision });
+        return yield* saveQuest(yield* questMoved(quest, { _tag: "Reopen", at: task.updatedAt }), revision);
       });
 
     /** Whether `task` can start an Attempt, read from its tree: refused unless it is Ready (#667). */
@@ -1123,6 +1156,7 @@ export const TaskRepositoryLive = Layer.effect(
     return TaskRepository.of({
       createTask,
       startQuest,
+      stopQuest,
       startAttempt,
       updateAttempt,
       resumeAttempt,

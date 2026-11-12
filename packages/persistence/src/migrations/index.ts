@@ -109,6 +109,7 @@ import findIndex from "./0106_find_index.ts";
 import messagePins from "./0107_message_pins.ts";
 import artifactVersions from "./0108_artifact_versions.ts";
 import noteDelivery from "./0109_note_delivery.ts";
+import questStops from "./0110_quest_stops.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -225,4 +226,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0107_message_pins": messagePins,
   "0108_artifact_versions": artifactVersions,
   "0109_note_delivery": noteDelivery,
+  "0110_quest_stops": questStops,
 };

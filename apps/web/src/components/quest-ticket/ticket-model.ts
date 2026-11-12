@@ -1,11 +1,14 @@
-import type { AgentId, Task, TaskTree } from "@hobbots/domain";
+import { type AgentId, type Quest, QuestStates, type Task, type TaskTree } from "@hobbots/domain";
 import { laneRoom } from "../lanes/lane-model.ts";
 import type { RoomStatus } from "../quest/control-room.ts";
 import type { QuestProgress } from "../quest/quest-progress.ts";
 import { taskTitle, workCard } from "../quest/work-model.ts";
 
-/** How a Quest that ended came to its end, as its top Task records it. */
-export type TicketEnd = "completed" | "failed" | "cancelled";
+/**
+ * How a Quest that ended came to its end, as its top Task records it, or `stopped` when its lead
+ * stopped it at your request (#1346): its Task was cancelled, but not by you.
+ */
+export type TicketEnd = "completed" | "failed" | "cancelled" | "stopped";
 
 /** What the ticket says of the work beside its title. */
 export type TicketProgress =
@@ -37,11 +40,19 @@ export interface Ticket {
   readonly needsYou: number;
 }
 
-const endOf = (task: Task): TicketEnd | null =>
-  task.state === "completed" || task.state === "failed" || task.state === "cancelled" ? task.state : null;
+const endOf = (task: Task, quest: Quest | null): TicketEnd | null => {
+  if (task.state !== "completed" && task.state !== "failed" && task.state !== "cancelled") return null;
+  return quest !== null && QuestStates.stoppedByLead(quest) ? "stopped" : task.state;
+};
 
-const progressOf = (top: Task, done: number, total: number, took: number | null): TicketProgress => {
-  const end = endOf(top);
+const progressOf = (
+  top: Task,
+  quest: Quest | null,
+  done: number,
+  total: number,
+  took: number | null,
+): TicketProgress => {
+  const end = endOf(top, quest);
   if (end !== null) return { kind: "ended", end, took: took ?? 0 };
   return total === 0 ? { kind: "started", at: top.createdAt } : { kind: "count", done, total };
 };
@@ -57,7 +68,7 @@ export const questTicket = (tree: TaskTree, progress: QuestProgress): Ticket | n
     title: taskTitle(top),
     leadId: card.leadId,
     party,
-    progress: progressOf(top, progress.done, progress.total, card.took),
+    progress: progressOf(top, card.quest, progress.done, progress.total, card.took),
     needsYou: progress.needs,
   };
 };

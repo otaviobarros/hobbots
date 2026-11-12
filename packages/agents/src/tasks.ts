@@ -265,6 +265,16 @@ export class TaskRepository extends Context.Service<
     /** Adds a Quest to a Task; its owner becomes the lead. */
     readonly startQuest: (input: NewQuest) => Changed<Quest>;
     /**
+     * Records that a Quest's lead stopped it at your request (#1346), with its reason and summary,
+     * from the Quest's version `revision`. The Quest is stopping until its Task's cancel is
+     * confirmed, and then ends stopped. Refused for a Quest that is not under way, or that changed.
+     */
+    readonly stopQuest: (
+      questId: QuestId,
+      revision: number,
+      stop: { readonly reason: string; readonly summary: string; readonly at: string },
+    ) => Changed<Quest>;
+    /**
      * Starts the Task's next Attempt: its first, a resume or a retry. Never a new Task (EX-001). A
      * retry needs every Task above to be open, and reopens the Task's Quest.
      */

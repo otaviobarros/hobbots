@@ -273,6 +273,11 @@ const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifac
 /** The Task that holds a Quest passed the completion gate. */
 const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
 /**
+ * A Quest's lead stopped it at your request (#1346), with its reason and summary: the Quest is
+ * stopping while the work under it is cancelled, and ends stopped once its Task's cancel is confirmed.
+ */
+const QuestStopRequested = Schema.TaggedStruct("QuestStopRequested", { quest: Quest });
+/**
  * How a Quest is going changed (ADR 037): a change to a Task, a question or an approval under it
  * gave it another summary, journaled in the same transaction, after the change's own events.
  */
@@ -498,6 +503,7 @@ export const JournaledEvent = Schema.Union([
   HandedOff,
   TaskCompleted,
   QuestCompleted,
+  QuestStopRequested,
   QuestSummaryChanged,
   ClaimMade,
   ClaimContested,
@@ -607,6 +613,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   TaskCreated: 1,
   // A change's `wait` was added with a default, and its optional `control` and `reply` later, compatibly.
   TaskStateChanged: 1,
+  // A Quest's `stop`, and its `stopping` and `stopped` states (#1346), were added with a default, compatibly.
   QuestStarted: 1,
   CheckpointRecorded: 1,
   QuestionAsked: 1,
@@ -624,6 +631,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
+  QuestStopRequested: 1,
   QuestSummaryChanged: 1,
   ClaimMade: 1,
   ClaimContested: 1,

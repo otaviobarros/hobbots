@@ -56,7 +56,7 @@ const idleDetail = (quest: Quest) =>
   [
     `Quest ${quest.id} (${quest.goal}) is still active, but your turn ended with no Task open under it and nothing to wait on, so nothing moves it on.`,
     "Writing the plan starts nothing: delegate the next Tasks with delegate_task, or plan steps with plan_steps.",
-    "If the Quest's work is done and delivers what the user asked for, call complete_task with its result and delivered: true. If you need the user, ask.",
+    "If the Quest's work is done and delivers what the user asked for, call complete_task with its result and delivered: true. If you need the user, ask. If the user asked you to stop it, call stop_quest.",
   ].join(" ");
 
 /** Why the Task you asked for is blocked when its Quest stalled, for you to act on. */

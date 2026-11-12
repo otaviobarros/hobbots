@@ -48,6 +48,8 @@ export const messages = {
       completed: "Done",
       failed: "Failed",
       cancelled: "Cancelled",
+      stopping: "Stopping",
+      stopped: "Stopped at your request",
     } satisfies Record<QuestState, string>,
     chapters: "Chapters",
     live: "Live",
