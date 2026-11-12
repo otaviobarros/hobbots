@@ -134,6 +134,16 @@ describe("artifactSightings", () => {
     ]);
   });
 
+  it("drops every `/` at a path's end, and reads a path of many `/` in time", () => {
+    const locatorOf = (path: string) =>
+      artifactSightings([{ _tag: "TaskCompleted", task: undefined as never, artifacts: [ref("file", path)] }])[0]
+        ?.locator;
+    expect(locatorOf("/work/app///")).toBe("/work/app");
+    expect(locatorOf("///")).toBe("/");
+    const many = `${"/".repeat(100_000)}x`;
+    expect(locatorOf(many)).toBe(many);
+  });
+
   it("reads an Attempt's settled changes that left a file, and nothing it deleted or has not settled", () => {
     const sightings = artifactSightings([
       {

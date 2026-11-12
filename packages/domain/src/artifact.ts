@@ -133,8 +133,13 @@ const PULL_REQUEST = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+(?:[/?#
 /** What a link is: a pull request, or a page. */
 export const linkArtifactKind = (url: string): RegisteredArtifactKind => (PULL_REQUEST.test(url) ? "pr" : "page");
 
-/** A file's path with `/` between names and none at its end, so two records of one file agree. */
-const filePath = (path: string): string => path.replace(/\/+$/, "") || "/";
+/** A file's path with no `/` at its end, so two records of one file agree. */
+const filePath = (path: string): string => {
+  // A loop, not a regular expression, so a path of many `/` costs no more than its length.
+  let end = path.length;
+  while (end > 0 && path[end - 1] === "/") end--;
+  return end === 0 ? "/" : path.slice(0, end);
+};
 
 /** A Task's result as the registry sees it: a file, a link, or a text kept under its own id. */
 const refSighting = (ref: ArtifactRef): ArtifactSighting => {
