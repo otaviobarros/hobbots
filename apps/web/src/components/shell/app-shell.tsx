@@ -66,7 +66,7 @@ export function AppShell() {
           <div className="flex min-w-0 flex-1 flex-col">
             {/* A chat shows the card under its own header; every other page shows it at the top. */}
             {!inChat && <ReconnectingCard className="mx-6 mt-2.5" />}
-            <HubReadCard hidden={down} className="mx-6 mt-2.5" />
+            <HubReadCard hidden={down} />
             <div className="flex min-h-0 flex-1">
               <ShellArchive>
                 <Outlet />
