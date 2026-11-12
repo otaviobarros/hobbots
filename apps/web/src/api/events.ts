@@ -52,7 +52,7 @@ import {
   syncState,
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
-import { applyTaskEvent } from "./tasks.ts";
+import { applyTaskEvent, threadTasksMoved } from "./tasks.ts";
 import { showUnread } from "./thread-reads.ts";
 import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
@@ -265,6 +265,27 @@ const readAgain = (
   return false;
 };
 
+type ThreadEvent = Extract<HobbotsEvent, { readonly _tag: "ThreadUpserted" | "CampMade" | "ChatStartedFresh" }>;
+const THREAD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set(["ThreadUpserted", "CampMade", "ChatStartedFresh"]);
+const isThreadEvent = (event: HobbotsEvent): event is ThreadEvent => THREAD_EVENTS.has(event._tag);
+
+/** A thread changed, a camp was made, or a chat was started fresh (ADR 037). */
+const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
+  // A thread archived or restored elsewhere moves between the hob's two lists.
+  if (event._tag !== "ChatStartedFresh") {
+    recordThread(queryClient, event.thread);
+    placeThread(queryClient, event.thread);
+    return;
+  }
+  // The old chat moves to the hob's archived threads and the new one joins its list. The Tasks
+  // started there moved with it, so both chats read their work again.
+  for (const thread of [event.superseded, event.chat]) {
+    recordThread(queryClient, thread);
+    placeThread(queryClient, thread);
+    void threadTasksMoved(queryClient, thread.id);
+  }
+};
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
@@ -286,14 +307,13 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     applyMemoryEvent(queryClient, event);
     return;
   }
+  if (isThreadEvent(event)) {
+    applyThreadEvent(queryClient, event);
+    return;
+  }
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);
-      return;
-    case "ThreadUpserted":
-      recordThread(queryClient, event.thread);
-      // A thread archived or restored elsewhere moves between the hob's two lists.
-      placeThread(queryClient, event.thread);
       return;
     case "MessageUpserted":
       recordMessage(queryClient, event.message);

@@ -14,7 +14,8 @@ import { SqlClient } from "effect/sql";
 // changes nothing.
 //
 // Journaled entries get the same fields: a `ThreadUpserted` its sessions' chapter and the thread's
-// `liveChapterId` (version 5), and a `MessageUpserted` (version 5) or `MessageQueued` (version 2) its
+// `liveChapterId` (version 5), as do the threads of a `CampMade` and a `ChatStartedFresh` (version 2,
+// #1376), and a `MessageUpserted` (version 5) or `MessageQueued` (version 2) its
 // message's chapter, so every old entry decodes.
 
 const PAGE = 500;
@@ -44,6 +45,20 @@ const REWRITES: ReadonlyArray<Rewrite> = [
     type: "ThreadUpserted",
     version: 5,
     change: (payload, chapterOf) => ({ ...payload, thread: withChapters(payload.thread as Stored, chapterOf) }),
+  },
+  {
+    type: "CampMade",
+    version: 2,
+    change: (payload, chapterOf) => ({ ...payload, thread: withChapters(payload.thread as Stored, chapterOf) }),
+  },
+  {
+    type: "ChatStartedFresh",
+    version: 2,
+    change: (payload, chapterOf) => ({
+      ...payload,
+      superseded: withChapters(payload.superseded as Stored, chapterOf),
+      chat: withChapters(payload.chat as Stored, chapterOf),
+    }),
   },
   { type: "MessageUpserted", version: 5, change: inChapter },
   { type: "MessageQueued", version: 2, change: inChapter },

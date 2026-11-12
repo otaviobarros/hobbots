@@ -6,6 +6,7 @@ import {
   type ChapterPlan,
   type ChapterRefused,
   ChapterStates,
+  firstChapter,
   type IllegalChapterTransition,
   type JournaledEvent,
   type MessageId,
@@ -13,6 +14,7 @@ import {
   planSplit,
   planStart,
   type SplitPoint,
+  type Thread,
   type ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Schema } from "effect";
@@ -20,7 +22,7 @@ import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
 import { unreadExpression } from "./thread-columns.ts";
 
-// A thread's chapters (ADR 037, migration 0097). The rules of each command are the pure planners
+// A thread's chapters (ADR 037, migration 0098). The rules of each command are the pure planners
 // in @hobbots/domain; this runs them on the chapters as stored, inside the transaction that writes
 // their result and journals its event, so a crash leaves all of a change or none of it.
 
@@ -37,6 +39,23 @@ export const chapterColumns = (chapter: Chapter) => ({
   moved_to: chapter.movedTo,
   revision: chapter.revision,
 });
+
+/**
+ * Starts the first chapter of `thread` at `revision`, the sequence of the `ChapterStarted` that
+ * journals it, unless the thread has chapters already; the chapter started, or null. Every thread
+ * stored has a live chapter for its messages to join (ADR 037).
+ */
+export const startFirstChapterIn = (sql: SqlClient.SqlClient) => (thread: Thread, revision: number) =>
+  Effect.gen(function* () {
+    const chaptered = yield* sql`SELECT 1 FROM chapters WHERE thread_id = ${thread.id} LIMIT 1`;
+    if (chaptered.length > 0) return null;
+    const started = new Chapter({
+      ...firstChapter(ChapterId.make(crypto.randomUUID()), thread.id, thread.createdAt),
+      revision,
+    });
+    yield* sql`INSERT INTO chapters ${sql.insert(chapterColumns(started))}`;
+    return started;
+  });
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every number and revision fits a number.
 const decodeChapters = Schema.decodeUnknownSync(Schema.Array(Chapter));

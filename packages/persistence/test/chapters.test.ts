@@ -6,6 +6,7 @@ import {
   type ChapterRefusal,
   ChapterRefused,
   IllegalChapterTransition,
+  liveSession,
   Message,
   MessageId,
   roleFields,
@@ -18,7 +19,7 @@ import { SqlClient } from "effect/sql";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
-import chaptersMigration from "../src/migrations/0097_chapters.ts";
+import chaptersMigration from "../src/migrations/0098_chapters.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1379 (ADR 037): a thread's transcript is split into chapters. The migration gives each
@@ -60,13 +61,13 @@ const userMessage = (threadId: string, id: string, status: Message["status"] = "
     createdAt: NOW,
   });
 
-describe("0097_chapters", () => {
-  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0097")) as typeof migrations;
+describe("0098_chapters", () => {
+  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0098")) as typeof migrations;
   const layer = Layer.mergeAll(HobbotsRepositoryLive, ChapterRepositoryLive, EventJournal.layer).pipe(
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
 
-  /** A thread, its messages and their journal entries, as the hub stored them before 0097. */
+  /** A thread, its messages and their journal entries, as the hub stored them before 0098. */
   const stored = (threadId: string, sessions: ReadonlyArray<string>, messages: ReadonlyArray<[string, string]>) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
@@ -622,5 +623,56 @@ describe("chapters in the database", () => {
     // and drops it, so it is never resumed.
     expect(result.afterSplit.thread.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
     expect(result.afterMerge.thread).toMatchObject({ liveChapterId: result.first, liveChapterMerges: 1, sessions: [] });
+  });
+
+  // covers ADR 037 (Chapters), STD-ARCH-014
+  it("[TC-DP-1379-07] a thread read before a merge and written back with its session after it does not bring that session back", async () => {
+    const result = await hub.runPromise(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        const store = yield* ChapterRepository;
+        const threadId = ThreadId.make("fenced");
+        yield* repo.upsertThread(newThread(threadId));
+        yield* repo.upsertMessage(userMessage(threadId, "f1"));
+        yield* repo.upsertMessage(userMessage(threadId, "f2"));
+        yield* store.splitChapter(threadId, {
+          id: ChapterId.make("fenced-c2"),
+          messageId: MessageId.make("f2"),
+          title: "Later",
+        });
+        yield* store.mergeChapters(threadId, ChapterId.make("fenced-c2"));
+        // A turn records its session from a read of the thread, after which the chapter it read
+        // as live is split off and merged back again, before the turn's write lands.
+        const read = Option.getOrThrow(yield* repo.findThread(threadId));
+        const live = read.liveChapterId as ChapterId;
+        const session = {
+          runtime: "claude-code" as const,
+          sessionId: "s-before",
+          chapterId: live,
+          chapterMerges: read.liveChapterMerges,
+          seenThrough: MessageId.make("f2"),
+        };
+        yield* repo.upsertMessage(userMessage(threadId, "f3"));
+        yield* store.splitChapter(threadId, {
+          id: ChapterId.make("fenced-c3"),
+          messageId: MessageId.make("f3"),
+          title: "Again",
+        });
+        yield* store.mergeChapters(threadId, ChapterId.make("fenced-c3"));
+        yield* repo.upsertThread(new Thread({ ...read, sessions: [session] }));
+        const after = Option.getOrThrow(yield* repo.findThread(threadId));
+        // A session that started after the last merge is the one resumed.
+        const fresh = new Thread({
+          ...after,
+          sessions: [{ ...session, sessionId: "s-after", chapterMerges: after.liveChapterMerges }],
+        });
+        return { read, after, fresh };
+      }),
+    );
+    expect(result.read.liveChapterMerges).toBe(1);
+    expect(result.after).toMatchObject({ liveChapterId: result.read.liveChapterId, liveChapterMerges: 2 });
+    expect(result.after.sessions.map((s) => s.sessionId)).toEqual(["s-before"]);
+    expect(liveSession(result.after, "claude-code")).toBeUndefined();
+    expect(liveSession(result.fresh, "claude-code")?.sessionId).toBe("s-after");
   });
 });

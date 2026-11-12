@@ -3,6 +3,7 @@ import { CommandId, CommandRecord, FileChange, FileChangeId, FolderScan } from "
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
+import { CarriedOver } from "./carried-over.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Chapter } from "./chapter.ts";
 import { Device, PairingRequest } from "./device.ts";
@@ -51,6 +52,18 @@ const AgentUpserted = Schema.TaggedStruct("AgentUpserted", {
   actor: ChangeActor.pipe(Schema.withDecodingDefaultKey(Effect.succeed(YOU))),
 });
 const ThreadUpserted = Schema.TaggedStruct("ThreadUpserted", { thread: Thread });
+/** You made a camp for a hob, with its title, goal and whether it is private (ADR 037). */
+const CampMade = Schema.TaggedStruct("CampMade", { thread: Thread });
+/**
+ * You started a hob's chat fresh (ADR 037): `superseded` is the chat as it was left, `chat` the new
+ * one, and `carried` what moved from one to the other. The backpack items that moved are journaled
+ * after it, each as its own `BackpackItemChanged`.
+ */
+const ChatStartedFresh = Schema.TaggedStruct("ChatStartedFresh", {
+  superseded: Thread,
+  chat: Thread,
+  carried: Schema.Array(CarriedOver),
+});
 const MessageUpserted = Schema.TaggedStruct("MessageUpserted", { message: Message });
 /** A user message joined its thread's queue because a reply was running. */
 const MessageQueued = Schema.TaggedStruct("MessageQueued", { message: Message });
@@ -354,6 +367,8 @@ export type TransientEvent =
 export const JournaledEvent = Schema.Union([
   AgentUpserted,
   ThreadUpserted,
+  CampMade,
+  ChatStartedFresh,
   MessageUpserted,
   MessageQueued,
   MessageDequeued,
@@ -442,13 +457,16 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   AgentUpserted: 1,
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly. 4: its `kind`, `goal`, `private`, `origin` and `state` (ADR 037).
-  // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0097).
+  // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0098).
   ThreadUpserted: 5,
+  // 2: its threads' sessions' `chapterId` and `liveChapterId`, as `ThreadUpserted` 5 (migration 0098).
+  CampMade: 2,
+  ChatStartedFresh: 2,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
-  // `chapterId` (ADR 037, migration 0097).
+  // `chapterId` (ADR 037, migration 0098).
   MessageUpserted: 5,
-  // 2: its message's `chapterId` (migration 0097).
+  // 2: its message's `chapterId` (migration 0098).
   MessageQueued: 2,
   MessageDequeued: 1,
   ChapterStarted: 1,

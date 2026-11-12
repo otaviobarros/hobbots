@@ -8,7 +8,7 @@ Its state is in the `state` field.
 | --- | --- |
 | open | Takes messages and turns |
 | archived | Left out of thread lists and read-only until restored; search still finds it |
-| superseded | A chat that Start fresh replaced with a new one |
+| superseded | A chat that Start fresh replaced with a new one; read-only for good, and search still finds it |
 
 ```mermaid
 stateDiagram-v2

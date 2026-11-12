@@ -129,9 +129,6 @@ export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: T
       const { memory, roster } = briefs;
       const updatedAt = yield* nowIso;
       yield* changeThread(thread.id, (latest) => {
-        // A merge during the turn made its chapter live again, which starts a new session: the
-        // merge dropped the chapter's sessions, and this one is not kept either.
-        if (latest.liveChapterId === chapterId && latest.liveChapterMerges !== thread.liveChapterMerges) return null;
         const known = latest.sessions.find((s) => s.runtime === runtime);
         // Without memory, a session keeps whatever brief it was last told of.
         const memoryBrief = memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, started);
@@ -140,6 +137,8 @@ export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: T
           runtime,
           sessionId: started,
           chapterId,
+          // As the chapter stood when the turn began: a merge during the turn leaves it stale.
+          ...(thread.liveChapterMerges === 0 ? {} : { chapterMerges: thread.liveChapterMerges }),
           seenThrough,
           ...(memoryBrief === undefined ? {} : { memoryBrief }),
           ...carriedMarks(known, started),
@@ -148,6 +147,7 @@ export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: T
         if (
           known?.sessionId === session.sessionId &&
           known.chapterId === chapterId &&
+          (known.chapterMerges ?? 0) === thread.liveChapterMerges &&
           known.seenThrough === seenThrough &&
           known.memoryBrief === session.memoryBrief &&
           sameRoster(known.roster, session.roster)

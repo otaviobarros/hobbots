@@ -87,6 +87,13 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
           ),
         ),
       createThread: ({ params }) => chat.createThread(params.agentId),
+      makeCamp: ({ params, payload }) =>
+        chat.makeCamp(params.agentId, {
+          key: payload.key,
+          title: payload.title,
+          goal: payload.goal,
+          private: payload.private,
+        }),
       summonCaps: ({ params }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(foundAgent(params.agentId)),
@@ -145,6 +152,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       markRead: ({ params, payload }) => chat.markRead(params.threadId, payload.messageId, payload.revision),
       archive: ({ params }) => chat.archive(params.threadId),
       restore: ({ params }) => chat.restore(params.threadId),
+      startFresh: ({ params, payload }) => chat.startFresh(params.threadId, payload.key),
     });
   }),
 );

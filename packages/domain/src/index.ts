@@ -4,6 +4,7 @@ export * from "./approval.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./cancel.ts";
+export * from "./carried-over.ts";
 export * from "./change-actor.ts";
 export * from "./chapter.ts";
 export * from "./charm-call.ts";

@@ -52,8 +52,14 @@ export const RuntimeSession = Schema.Struct({
   runtime: RuntimeKind,
   /** The runtime's own id for the session. */
   sessionId: Schema.String,
-  /** The chapter the session belongs to; migration 0097 gave every earlier session its thread's first. */
+  /** The chapter the session belongs to; migration 0098 gave every earlier session its thread's first. */
   chapterId: ChapterId,
+  /**
+   * How many chapters had been merged into its chapter when the session started there (ADR 037).
+   * A merge into the live chapter makes it live again with a new session, so a session that started
+   * before the merge is never resumed, even one a turn under way records after it. Absent means 0.
+   */
+  chapterMerges: Schema.optionalKey(Schema.Int),
   /** The last message the session has seen, so switching back sends only what came after it. */
   seenThrough: Schema.NullOr(MessageId),
   /**
