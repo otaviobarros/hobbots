@@ -26,6 +26,14 @@ export const messages = {
   questName: ({ name }: { name: string }) => `${name}'s quest`,
   whenIn: ({ when, place }: { when: string; place: string }) => `${when} · ${place}`,
   view: { label: "Show", quest: "By quest", urgency: "By urgency" },
+  /** Needs you opened on one chat or camp from its tray (#1423): that place's entries, or everywhere. */
+  scope: {
+    label: "Show what waits",
+    everywhere: "Everywhere",
+    quietTitle: ({ place }: { place: string }) => `Nothing waits in ${place}`,
+    quietHint: "Whatever else waits on you is under Everywhere.",
+    seeEverywhere: "See everywhere",
+  },
   questGroup: ({ name, goal }: { name: string; goal: string }) => `${name}'s quest · ${goal}`,
   untitledThread: "A thread",
   unknownHob: "A hob",

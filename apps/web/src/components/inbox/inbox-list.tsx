@@ -21,8 +21,9 @@ import {
   type RowTone,
 } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
-import { INBOX_VIEWS, type InboxTab, type InboxView } from "./inbox-items.ts";
+import { INBOX_VIEWS, type InboxView } from "./inbox-items.ts";
 import { shownOrder } from "./inbox-keys.ts";
+import type { InboxSearch } from "./inbox-scope.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
 
@@ -35,7 +36,7 @@ const copy = messages;
  * filled, and it is the list's one stop for Tab: ↑ and ↓ move from there (`useListKeys`).
  */
 export function InboxList({
-  tab,
+  search,
   view,
   entries,
   questOf,
@@ -44,7 +45,8 @@ export function InboxList({
   now,
   listRef,
 }: {
-  tab: InboxTab;
+  /** Where a row's link keeps the Inbox: its tab, and the chat or camp it is on (#1423). */
+  search: InboxSearch;
   view: InboxView;
   entries: ReadonlyArray<InboxEntry>;
   questOf: (taskId: TaskId) => Quest | undefined;
@@ -58,7 +60,7 @@ export function InboxList({
   const item = (entry: InboxEntry, place?: string) => (
     <li key={entry.key}>
       <InboxItem
-        tab={tab}
+        search={search}
         entry={entry}
         place={place}
         selected={entry.key === selectedKey}
@@ -160,7 +162,7 @@ const TONE: Record<RowTone, string> = { urgent: "text-lantern", stuck: "text-ros
  * when. It opens the entry beside the list.
  */
 function InboxItem({
-  tab,
+  search,
   entry,
   place,
   selected,
@@ -168,7 +170,7 @@ function InboxItem({
   directory,
   now,
 }: {
-  tab: InboxTab;
+  search: InboxSearch;
   entry: InboxEntry;
   /** Where it belongs, named in a row of the By urgency list. */
   place?: string | undefined;
@@ -186,7 +188,7 @@ function InboxItem({
   return (
     <Link
       to="/inbox"
-      search={{ tab, request: entry.key }}
+      search={{ ...search, request: entry.key }}
       aria-current={selected ? "page" : undefined}
       tabIndex={tabStop ? 0 : -1}
       data-entry={entry.key}

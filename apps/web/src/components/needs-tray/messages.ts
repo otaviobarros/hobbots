@@ -15,5 +15,13 @@ export const messages = {
     `${[...names, "you"].join(" → ")} · about ${task} · asked ${when}`,
   /** A question the hub itself asks (#976): no lead passed it up. */
   fromHub: ({ about, when }: { about: string; when: string }) => `Your hub → you · about ${about} · asked ${when}`,
+  /** The tray's scope in a chat or camp (#1423): what waits there, or everywhere. */
+  scope: {
+    label: "Show what waits",
+    here: ({ kind }: { kind: "chat" | "camp" }) => (kind === "camp" ? "This camp" : "This chat"),
+    everywhere: "Everywhere",
+    /** Where an entry from another chat or camp waits, as a link there. */
+    waitsIn: ({ place }: { place: string }) => `Waits in ${place}`,
+  },
   details: { approval: "Why, risk and who asked", question: "Who asked", stuck: "Tries and the error" },
 } as const;

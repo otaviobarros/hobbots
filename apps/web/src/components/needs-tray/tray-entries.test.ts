@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ApprovalId,
   ApprovalRequest,
   HobProposal,
   HobProposalId,
@@ -10,7 +11,7 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ADA, ALDRIC, COPY, memberApproval, QUILL, question, stuckItem, THREAD, task } from "../../test/quests.ts";
-import { shownEntry, trayEntries } from "./tray-entries.ts";
+import { scopedTray, shownEntry, trayEntries } from "./tray-entries.ts";
 
 const pending = new ApprovalRequest({ ...memberApproval(COPY, QUILL), state: "pending" });
 const decided = new ApprovalRequest({ ...memberApproval(COPY, QUILL), state: "approved" });
@@ -109,6 +110,36 @@ describe("trayEntries with the hub's own questions", () => {
     ]);
     const chat = trayEntries({ requests: [], blockers: [], questions: [], hubQuestions, threadId: THREAD });
     expect(chat.map((entry) => entry.key)).toEqual(["hub-question:here"]);
+  });
+});
+
+describe("scopedTray", () => {
+  // covers IN-002: a camp's tray holds that camp's asks, and Everywhere holds every chat's and camp's (#1423).
+  it("keeps only what is about the chat or camp in here, and everything, in the tray's order, everywhere", () => {
+    const camp = ThreadId.make("camp-launch");
+    const inCamp = new ApprovalRequest({
+      ...memberApproval(COPY, QUILL),
+      id: ApprovalId.make("in-camp"),
+      threadId: camp,
+      state: "pending",
+    });
+    const all = trayEntries({
+      requests: [pending, inCamp],
+      blockers: [stuckItem(camp)],
+      questions: [asked],
+      hubQuestions: [fromHub("about-camp", camp), fromHub("about-nothing", null)],
+    });
+    const { here, everywhere } = scopedTray(all, camp);
+    expect(here.map((entry) => entry.key)).toEqual([
+      "in-camp",
+      `stuck:${stuckItem(camp).id}`,
+      "hub-question:about-camp",
+    ]);
+    expect(everywhere).toBe(all);
+    expect(scopedTray(all, THREAD).here.map((entry) => entry.key)).toEqual([
+      pending.id,
+      `question:${asked.question.id}`,
+    ]);
   });
 });
 

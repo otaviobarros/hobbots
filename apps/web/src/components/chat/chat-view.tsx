@@ -56,8 +56,7 @@ import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
 import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
-import { NeedsTray } from "../needs-tray/needs-tray.tsx";
-import { useThreadNeeds } from "../needs-tray/use-thread-needs.ts";
+import { ThreadTray } from "../needs-tray/thread-tray.tsx";
 import { useNoteToSelf } from "../notes/use-note-to-self.ts";
 import { BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picker.tsx";
 import { PinNotes } from "../quest/pin-notes.tsx";
@@ -133,8 +132,6 @@ export function ChatView({
   // The hob's skills, which `/` in the composer picks one of (ADR 029).
   const skills = useHobSkills(hobId, hob.data?.configVersion);
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
-  // What waits on you in this chat shows in the tray above the composer.
-  const needs = useThreadNeeds(threadId);
   const replies = useThreadReplies();
   const presence = useHobPresence();
   const navigate = useNavigate();
@@ -427,7 +424,8 @@ export function ChatView({
           )}
           <WorkHeldNotice />
           <TrialNotice thread={thread.data} />
-          <NeedsTray entries={needs} />
+          {/* What waits on you in this chat or camp, or everywhere, shows in the tray above the composer. */}
+          {thread.data && <ThreadTray key={thread.data.id} thread={thread.data} />}
           {queued.length > 0 && (
             <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
               {queued.map((message) => (
