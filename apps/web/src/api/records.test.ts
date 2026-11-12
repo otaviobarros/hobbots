@@ -10,7 +10,7 @@ import {
   RegisteredArtifactId,
   ThreadId,
 } from "@hobbots/domain";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applySuggestionEvent } from "./camp-suggestions.ts";
 import { ApiError } from "./client.ts";
@@ -153,5 +153,54 @@ describe("artifact reviews", () => {
     expect(reviewArtifactError(new ApiError("refused", "ArtifactReviewChangeRefused"))).toBe("refused");
     expect(reviewArtifactError(new ApiError("gone", "ThreadNotFound"))).toBe("unreachable");
     expect(reviewArtifactError(new Error("offline"))).toBe("unreachable");
+  });
+});
+
+describe("artifact reads (#1434)", () => {
+  /** A read the test answers when it chooses. */
+  const deferred = <A>() => {
+    let resolve: (value: A) => void = () => undefined;
+    const promise = new Promise<A>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  };
+
+  it("[TC-CH-1434-08] a new version cancels the first read of its versions on its way, so the read after the event is kept", async () => {
+    const client = new QueryClient();
+    const queryKey = recordKeys.versions(threadId, artifact.id);
+    const first = deferred<string>();
+    const answers = [() => first.promise, () => Promise.resolve("version 2")];
+    const observer = new QueryObserver(client, {
+      queryKey,
+      queryFn: () => (answers.shift() ?? (() => Promise.resolve("again")))(),
+      staleTime: Number.POSITIVE_INFINITY,
+    });
+    const stop = observer.subscribe(() => undefined);
+    await applyRecordEvent(client, { _tag: "ArtifactRegistered", artifact });
+    first.resolve("version 1");
+    await vi.waitFor(() => expect(client.getQueryData(queryKey)).toBe("version 2"));
+    await first.promise;
+    expect(client.getQueryData(queryKey)).toBe("version 2");
+    stop();
+  });
+
+  it("[TC-CH-1434-09] a chapter move drops each artifact's versions and kept contents, and reads the shown ones again", async () => {
+    const client = new QueryClient();
+    const versions = recordKeys.versions(threadId, artifact.id);
+    const kept = recordKeys.content(threadId, artifact.id, 1);
+    client.setQueryData(kept, new TextEncoder().encode("before the move"));
+    let reads = 0;
+    const observer = new QueryObserver(client, {
+      queryKey: versions,
+      queryFn: () => Promise.resolve(`read ${++reads}`),
+      staleTime: Number.POSITIVE_INFINITY,
+    });
+    const stop = observer.subscribe(() => undefined);
+    await vi.waitFor(() => expect(client.getQueryData(versions)).toBe("read 1"));
+    await recordsMoved(client, [threadId]);
+    expect(client.getQueryData(kept)).toBeUndefined();
+    await vi.waitFor(() => expect(client.getQueryData(versions)).toBe("read 2"));
+    stop();
   });
 });

@@ -22,9 +22,11 @@ export const recordKeys = {
   decisions: (threadId: ThreadId) => ["threads", threadId, "decisions"] as const,
   artifacts: (threadId: ThreadId) => ["threads", threadId, "artifacts"] as const,
   brief: (threadId: ThreadId) => ["threads", threadId, "brief"] as const,
+  /** Every artifact's versions and contents read in the thread, so a moved chapter drops them all. */
+  artifactReads: (threadId: ThreadId) => ["threads", threadId, "artifact"] as const,
   /** One artifact's versions and their contents, under one key so a new version reads them again. */
   artifact: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
-    ["threads", threadId, "artifact", artifactId] as const,
+    [...recordKeys.artifactReads(threadId), artifactId] as const,
   versions: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
     [...recordKeys.artifact(threadId, artifactId), "versions"] as const,
   content: (threadId: ThreadId, artifactId: RegisteredArtifactId, version: number) =>
@@ -57,8 +59,9 @@ export const artifactVersionsQuery = (threadId: ThreadId, artifactId: Registered
 
 /**
  * One version's contents as the hub serves them: text redacted and cut, an image as it is. What the
- * hub kept never changes, so it is never read again; the latest version read from the file now is
- * read again with the artifact. A refusal is an answer, not a failure to retry.
+ * hub kept for a version does not change while the number names it, so it is not read again until a
+ * moved chapter numbers the versions again (`forgetArtifactReads`); the latest version read from the
+ * file now is read again with the artifact. A refusal is an answer, not a failure to retry.
  */
 export const artifactContentQuery = (
   threadId: ThreadId,
@@ -105,6 +108,32 @@ export const readListAgain = async (queryClient: QueryClient, queryKey: Readonly
   await queryClient.invalidateQueries({ queryKey, exact: true });
 };
 
+/**
+ * A new version of an artifact: its versions, and the latest read from the file now, are read again.
+ * Reads already on their way may predate it, so they are cancelled first (STD-REACT-012).
+ */
+const readArtifactAgain = async (
+  queryClient: QueryClient,
+  threadId: ThreadId,
+  artifactId: RegisteredArtifactId,
+): Promise<void> => {
+  const queryKey = recordKeys.artifact(threadId, artifactId);
+  await queryClient.cancelQueries({ queryKey });
+  await queryClient.invalidateQueries({ queryKey });
+};
+
+/**
+ * A chapter moved into or out of the thread: an artifact that took another's records numbers its
+ * versions again, so a version number may now name other contents. Every artifact's versions and
+ * contents read in the thread are cancelled and dropped, kept ones too, and what is on screen reads
+ * them again.
+ */
+export const forgetArtifactReads = async (queryClient: QueryClient, threadId: ThreadId): Promise<void> => {
+  const queryKey = recordKeys.artifactReads(threadId);
+  await queryClient.cancelQueries({ queryKey });
+  await queryClient.resetQueries({ queryKey });
+};
+
 type RecordEvent = Extract<
   HobbotsEvent,
   {
@@ -133,9 +162,10 @@ export const applyRecordEvent = (queryClient: QueryClient, event: RecordEvent): 
       return readListAgain(queryClient, recordKeys.decisions(event.decision.threadId));
     case "ArtifactRegistered": {
       const { threadId, id } = event.artifact;
-      // A new version: the artifact's versions, and the latest read from the file now, are read again.
-      void queryClient.invalidateQueries({ queryKey: recordKeys.artifact(threadId, id) });
-      return readListAgain(queryClient, recordKeys.artifacts(threadId));
+      return Promise.all([
+        readArtifactAgain(queryClient, threadId, id),
+        readListAgain(queryClient, recordKeys.artifacts(threadId)),
+      ]).then(() => undefined);
     }
     case "ArtifactReviewSettled":
       return readListAgain(queryClient, recordKeys.artifacts(event.artifact.threadId));

@@ -1,3 +1,5 @@
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, test } from "./hub.ts";
@@ -34,7 +36,7 @@ const playTurn = async (page: Page, lines: ReadonlyArray<string>) => {
 test("[TC-CH-1434-07] previews each artifact once, and opens a document, code and an image drawn by kind with their versions", async ({
   page,
 }) => {
-  const { aldric, hub } = await aldricHub({ "hero.png": PIXEL });
+  const { aldric, hub, folder } = await aldricHub({ "hero.png": PIXEL });
   const camp = await campAt(hub, aldric, "Launch");
   await page.goto(camp.url);
   // A quest writes the plan and the code, and returns the plan and the image by their relative paths.
@@ -116,5 +118,30 @@ test("[TC-CH-1434-07] previews each artifact once, and opens a document, code an
   const image = sheet.getByRole("img", { name: "Hero, version 1" });
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate((each: HTMLImageElement) => each.naturalWidth)).toBe(1);
+  await expectAccessible(page, sheet);
+
+  /** Opens Hero again from a page that has read nothing yet. */
+  const openHeroAfresh = async () => {
+    await page.reload();
+    await main.getByRole("button", { name: "Open the sheet for Launch" }).click();
+    await sheet.getByRole("tab", { name: /^Artifacts/ }).click();
+    await sheet.getByRole("button", { name: "Open Hero" }).click();
+  };
+
+  // A read of the image that does not reach the hub says so, with Read again, not a broken image.
+  const heroContents = /\/artifacts\/[^/]+\/versions\/1$/;
+  await page.route(heroContents, (route) => route.abort());
+  await openHeroAfresh();
+  await expect(sheet).toContainText("Couldn't read this version.", { timeout: 15_000 });
+  await expect(image).toBeHidden();
+  await page.unroute(heroContents);
+  await sheet.getByRole("button", { name: "Read again" }).click();
+  await expect.poll(() => image.evaluate((each: HTMLImageElement) => each.naturalWidth)).toBe(1);
+
+  // An image the hub no longer serves says why.
+  rmSync(join(folder, "hero.png"));
+  await openHeroAfresh();
+  await expect(sheet).toContainText("The file isn't there any more.");
+  await expect(image).toBeHidden();
   await expectAccessible(page, sheet);
 });

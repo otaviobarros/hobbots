@@ -2,12 +2,11 @@ import type { Artifact, ArtifactShow, ArtifactVersion, ThreadId } from "@hobbots
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { useState } from "react";
-import { artifactContentUrl } from "../../api/records.ts";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { CodeDiffView } from "../workbench/changes/code-diff-view.tsx";
 import { pageDocument } from "./artifact-flow.ts";
 import { messages } from "./messages.ts";
-import { useVersionText, type VersionText } from "./use-artifact-content.ts";
+import { useVersionImage, useVersionText, type VersionRead, type VersionText } from "./use-artifact-content.ts";
 
 const copy = messages.artifacts;
 
@@ -45,7 +44,7 @@ function TextVersion({ threadId, artifact, show, version, before }: Shown) {
   const [view, setView] = useState<View>("rendered");
   const now = useVersionText(threadId, artifact.id, version);
   const was = useVersionText(threadId, artifact.id, before);
-  if (now.kind !== "text") return <ReadNote read={now} />;
+  if (now.kind !== "read") return <ReadNote read={now} />;
   const source = show === "diff" || view === "source";
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
@@ -59,12 +58,12 @@ function TextVersion({ threadId, artifact, show, version, before }: Shown) {
         </SegmentedControl>
       )}
       {source ? (
-        <SourceDiff title={artifact.title} text={now.text} was={was} before={before} />
+        <SourceDiff title={artifact.title} text={now.value} was={was} before={before} />
       ) : show === "page" ? (
         <iframe
           title={copy.pageOf({ title: artifact.title })}
           sandbox=""
-          srcDoc={pageDocument(now.text)}
+          srcDoc={pageDocument(now.value)}
           className="h-96 w-full rounded-card border border-line"
         />
       ) : (
@@ -72,7 +71,7 @@ function TextVersion({ threadId, artifact, show, version, before }: Shown) {
           aria-label={copy.preview({ title: artifact.title })}
           className="min-w-0 rounded-card border border-line bg-card px-4 pt-3 pb-3.5"
         >
-          <ReplyMarkdown content={now.text} streaming={false} caret={false} />
+          <ReplyMarkdown content={now.value} streaming={false} caret={false} />
         </article>
       )}
     </div>
@@ -91,7 +90,7 @@ function SourceDiff({
   was: VersionText;
   before: ArtifactVersion | null;
 }) {
-  const earlier = was.kind === "text" ? was.text : null;
+  const earlier = was.kind === "read" ? was.value : null;
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       {before !== null && earlier !== null && (
@@ -103,7 +102,7 @@ function SourceDiff({
 }
 
 /** What a read that holds no text yet says: reading, failed with Read again, or why it is not shown. */
-function ReadNote({ read }: { read: VersionText }) {
+function ReadNote({ read }: { read: VersionRead<unknown> }) {
   switch (read.kind) {
     case "loading":
       return <p className="m-0 text-ui text-label">{copy.reading}</p>;
@@ -123,12 +122,13 @@ function ReadNote({ read }: { read: VersionText }) {
   }
 }
 
+/** An image version, drawn once its bytes are read, or what its read says instead. */
 function ImageVersion({ threadId, artifact, version }: Shown) {
-  if (version.content === "none")
-    return <p className="m-0 text-ui text-text-secondary">{copy.unavailable["not-kept"]}</p>;
+  const image = useVersionImage(threadId, artifact.id, artifact.locator, version);
+  if (image.kind !== "read") return <ReadNote read={image} />;
   return (
     <img
-      src={artifactContentUrl(threadId, artifact.id, version.version)}
+      src={image.value}
       alt={copy.imageOf({ title: artifact.title, version: version.version })}
       className="max-h-96 max-w-full self-start rounded-card border border-line bg-panel object-contain"
     />

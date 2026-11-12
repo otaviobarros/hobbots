@@ -46,8 +46,8 @@ export function RowPreview({ threadId, artifact }: { threadId: ThreadId; artifac
     artifact.id,
     text ? { version: artifact.latestVersion, content: "unknown" } : null,
   );
-  if (read.kind !== "text") return null;
-  const lines = firstLines(read.text);
+  if (read.kind !== "read") return null;
+  const lines = firstLines(read.value);
   if (lines.length === 0) return null;
   return (
     <span className="flex min-w-0 flex-col text-meta text-text-secondary">
