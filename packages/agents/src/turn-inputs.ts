@@ -11,9 +11,8 @@ import {
   skillTitle,
   systemInstructions,
   type Thread,
-  ThreadCheckpoint,
 } from "@hobbots/domain";
-import { DateTime, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import { buildBriefing } from "./briefing.ts";
 import { turnRoster } from "./hob-directory.ts";
 import { MemoryProjects, MemoryStore } from "./memory.ts";
@@ -23,8 +22,6 @@ import type { RuntimeAdapterShape, ToolAccess } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 import { skillMounter } from "./skill-turn.ts";
 import type { HobTools } from "./tools.ts";
-
-const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 /**
  * The messages a runtime's session missed (ADR 017): everything after the last one it saw, and that
@@ -125,29 +122,20 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         return false;
       });
 
-    // What the turn's session missed, told ahead of the prompt (ADR 017), built from the stored
-    // transcript without asking the brain the thread left. `before` is the live chapter's transcript
-    // before the turn's own prompt and reply: a brain switch inside the live chapter is the only
-    // replay of the transcript (ADR 037), and a new chapter's session hears nothing of the others. `switched` when the reply itself moves from another brain, as on
-    // Continue. A summary made anew is stored for the next handoff.
+    // What a resumed session missed, told ahead of the prompt (ADR 017), built from the stored
+    // transcript without asking the brain the thread left: what other brains wrote in the live
+    // chapter since it last replied. `before` is the live chapter's transcript before the turn's own
+    // prompt and reply. `switched` when the reply itself moves from another brain, as on Continue.
+    // A new session starts from the context pack instead (ADR 037), so this is null for one.
     const brief = (thread: Thread, runtime: RuntimeKind, before: ReadonlyArray<Message>, switched: boolean) =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const session = liveSession(thread, runtime);
-        const missed = session === undefined ? before : missedBy(runtime, session.seenThrough, before);
+        if (session === undefined) return null;
+        const missed = missedBy(runtime, session.seenThrough, before);
         // Only a switch needs one: a session is told what other brains wrote that it did not see.
         const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
         if (!switched && !others) return null;
-        const briefing = buildBriefing({
-          kind: session === undefined ? "new" : "resumed",
-          messages: missed,
-          checkpoint: session === undefined ? Option.getOrNull(yield* repo.findCheckpoint(thread.id)) : null,
-        });
-        if (briefing?.checkpoint) {
-          yield* repo.saveCheckpoint(
-            new ThreadCheckpoint({ threadId: thread.id, ...briefing.checkpoint, createdAt: yield* nowIso }),
-          );
-        }
-        return briefing?.text ?? null;
+        return buildBriefing({ kind: "resumed", messages: missed, checkpoint: null })?.text ?? null;
       });
 
     return { memoryBriefFor, rosterFor, acceptedIn, skillsFor, instructionsChanged, brief } as const;

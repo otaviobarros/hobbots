@@ -244,8 +244,16 @@ type WebEvent = Extract<
 >;
 const isWebEvent = (event: HobbotsEvent): event is WebEvent => WEB_EVENTS.has(event._tag);
 
-type ChapterEvent = Extract<HobbotsEvent, { readonly _tag: "ChapterStarted" | "ChapterSplit" | "ChapterMerged" }>;
-const CHAPTER_EVENTS: ReadonlySet<string> = new Set(["ChapterStarted", "ChapterSplit", "ChapterMerged"]);
+type ChapterEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "ChapterStarted" | "ChapterSplit" | "ChapterMerged" | "ChapterSummarized" }
+>;
+const CHAPTER_EVENTS: ReadonlySet<string> = new Set([
+  "ChapterStarted",
+  "ChapterSplit",
+  "ChapterMerged",
+  "ChapterSummarized",
+]);
 const isChapterEvent = (event: HobbotsEvent): event is ChapterEvent => CHAPTER_EVENTS.has(event._tag);
 
 /** Reads again what an event changed when it patches nothing itself; whether it was such an event. */
@@ -254,9 +262,9 @@ const readAgain = (
   event: HobbotsEvent,
 ): event is WebEvent | ChapterEvent | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" }> => {
   // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
-  // again. A started chapter moves none.
+  // again. A started or summarized chapter moves none.
   if (isChapterEvent(event)) {
-    if (event._tag !== "ChapterStarted") {
+    if (event._tag === "ChapterSplit" || event._tag === "ChapterMerged") {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
     }
     return true;

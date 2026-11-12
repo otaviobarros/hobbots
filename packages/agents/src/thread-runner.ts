@@ -4,9 +4,9 @@ import {
   type AgentId,
   type BackpackTurnEnd,
   type Brain,
-  carriedOverBriefing,
   DEFAULT_THREAD_TITLE,
   isInProgress,
+  liveSession,
   Message,
   MessageId,
   type MessageStatus,
@@ -36,6 +36,7 @@ import {
   ThreadRunMachine,
 } from "./thread-run.ts";
 import type { makeTurnInputs } from "./turn-inputs.ts";
+import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
 import { workHeld } from "./work-hold.ts";
 
@@ -83,6 +84,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const { redactor, grants, inputs, saveMessage, announce, changeThread, saveStarted } = deps;
     const { brief, instructionsChanged } = inputs;
     const repo = yield* HobbotsRepository;
+    const packSources = yield* makePackSources;
     const bus = yield* EventPublisher;
     const admission = yield* HobAdmission;
     // Without a backpack, a thread starts only your queued messages.
@@ -258,9 +260,12 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // A reply continued on another brain is told too, with the text and tool steps its first
         // brain left, so the new one does not redo or contradict that work.
         const switched = continued !== null && continued.runtime !== brain.runtime;
-        // Only the live chapter is replayed, and only on a brain switch (ADR 037).
+        // A new session starts from the context pack; a resumed one hears what other brains wrote in
+        // the live chapter since. Only the live chapter is ever replayed (ADR 037).
         const inChapter = before.filter((m) => m.chapterId === thread.liveChapterId);
-        const briefed = yield* brief(thread, brain.runtime, switched ? [...inChapter, continued] : inChapter, switched);
+        const told = switched ? [...inChapter, continued] : inChapter;
+        const briefed = yield* brief(thread, brain.runtime, told, switched);
+        const pack = liveSession(thread, brain.runtime) === undefined ? yield* packSources(thread, told, before) : null;
         // Every turn hears of every call the thread left uncertain, whichever brain runs it, since a
         // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
         // Continue names the continued reply's own.
@@ -268,14 +273,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // The turn right after a reply hears of the commands you stopped while it waited (#1056).
         const lastReply = before.findLast((m) => m.role === "assistant");
         const stopped = lastReply === undefined ? null : stoppedCommands(lastReply.steps);
-        // A chat Start fresh opened hears what it carried over in its first turn (ADR 037).
-        const carried =
-          thread.origin !== null && !before.some((m) => m.role === "assistant")
-            ? carriedOverBriefing(yield* repo.listCarriedOver(thread.id))
-            : null;
         const briefing =
-          [briefed, carried, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") ||
-          null;
+          [briefed, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
         const changed = yield* instructionsChanged(
           thread,
           brain.runtime,
@@ -305,7 +304,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             thread,
             brain,
             prompt,
-            briefing,
+            { text: briefing, pack },
             reply,
             changed,
             start.carry ?? NOTHING_CARRIED,

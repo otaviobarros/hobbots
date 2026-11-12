@@ -6,6 +6,7 @@ import type {
   AgentStatus,
   CarriedOver,
   ChangeActor,
+  ChatWork,
   Committed,
   Message,
   MessageId,
@@ -131,5 +132,11 @@ export class HobbotsRepository extends Context.Service<
     }) => Effect.Effect<Option.Option<Committed<StartedFresh>>>;
     /** What Start fresh carried into the thread, in the order it recorded them; none for most threads. */
     readonly listCarriedOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOver>>;
+    /**
+     * The thread's open work, as Start fresh would carry it (ADR 037): the Tasks asked for there
+     * that are not over, with their trees, their open questions and the backpack items the
+     * thread's turns carry. The context pack names it (#1380).
+     */
+    readonly listOpenWork: (threadId: ThreadId) => Effect.Effect<ChatWork>;
   }
 >()("@hobbots/agents/HobbotsRepository") {}

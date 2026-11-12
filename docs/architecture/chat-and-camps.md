@@ -26,7 +26,7 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 | Field | Meaning |
 | --- | --- |
 | `threadId`, `number`, `title` | Where it is and what it is about |
-| `summary` | One line, written by a projector when the chapter rests |
+| `summary` | One line, written by the chapter summary projector when the chapter rests, and again after a split or a merge changes its messages |
 | `startedAt`, `endedAt` | When it ran |
 | `movedTo` | The camp it moved to, or null |
 | state | `ChapterState`: live, resting, moved |
@@ -35,7 +35,7 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 - The hob ends a chapter with `start_chapter` on every runtime ([#1381](https://github.com/otaviobarros/hobbots/issues/1381)). You can split or merge ([#1382](https://github.com/otaviobarros/hobbots/issues/1382)). A hub rule may suggest; it never splits.
 - The commands are `ChapterService.startChapter`, `splitChapter` and `mergeChapters` in `packages/agents/src/chapters.ts`, each refused on an archived or superseded thread. Their rules are the pure `planStart`, `planSplit` and `planMerge` in `@hobbots/domain`, run in the transaction that writes the result and journals one event: `ChapterStarted`, `ChapterSplit` or `ChapterMerged`. Starting and splitting take the new chapter's id as their idempotency key; a merged chapter's id is remembered, so merging it again changes nothing.
 - Start ends the live chapter, which rests, and refuses an empty title or a live chapter with no message yet. Split cuts a chapter at one of its messages, not its first: the messages from there on make a new chapter right after it, live when the one it came from was. Merge brings a chapter's messages into the chapter before it, which keeps its id and title and is live when the merged one was. Both number the chapters again from 1.
-- A runtime session belongs to one chapter: `RuntimeSession` is keyed by thread, runtime and chapter, and `liveSession` gives the one a turn resumes. A turn in a new chapter, after a start, a split of the live chapter or a merge into it, starts a new session in place of the old chapter's, which is never resumed, on Claude Code, Codex and every runtime alike. Until the context pack lands ([#1380](https://github.com/otaviobarros/hobbots/issues/1380)), a new chapter's session hears only the memory brief and the roster, and a brain switch is briefed with the live chapter's transcript alone. A merge into the live chapter makes it live again with a new session: each session records how many chapters had been merged into its chapter when it started (`chapterMerges`), and `liveSession` resumes it only while that matches `Thread.liveChapterMerges`. So a session a turn under way records after the merge, from a read before it, is never resumed, with no lock shared between the turn and the merge. The merge also drops the sessions the chapter held. A split or merge also drops the thread's briefing checkpoint, and gives the messages it moves the revision of its event, so a client holding an older version takes the new one; a thread you had read stays read.
+- A runtime session belongs to one chapter: `RuntimeSession` is keyed by thread, runtime and chapter, and `liveSession` gives the one a turn resumes. A turn in a new chapter, after a start, a split of the live chapter or a merge into it, starts a new session in place of the old chapter's, which is never resumed, on Claude Code, Codex and every runtime alike. A new chapter's session starts from the context pack ([#1380](https://github.com/otaviobarros/hobbots/issues/1380)), and a brain switch is briefed with the live chapter's transcript alone. A merge into the live chapter makes it live again with a new session: each session records how many chapters had been merged into its chapter when it started (`chapterMerges`), and `liveSession` resumes it only while that matches `Thread.liveChapterMerges`. So a session a turn under way records after the merge, from a read before it, is never resumed, with no lock shared between the turn and the merge. The merge also drops the sessions the chapter held. A split or merge also drops the thread's briefing checkpoint and the summaries of the chapters whose messages it changes, and gives the messages it moves the revision of its event, so a client holding an older version takes the new one; a thread you had read stays read.
 - Moving a chapter into a camp re-parents it with its messages, decisions, artifacts, open questions and the quests it started, in one transaction, and leaves a stub. A running quest moves whole.
 - Migration (0099): each thread gets one live chapter holding its history, started when the thread was made, with no title; every message joins it, and every session the thread keeps belongs to it and goes on being resumed.
 - Slices: [#1363](https://github.com/otaviobarros/hobbots/issues/1363), [#1364](https://github.com/otaviobarros/hobbots/issues/1364).
@@ -57,23 +57,28 @@ A note to self is a message role that never wakes the dispatcher.
 
 ## The context pack
 
-`buildPack(records, budget)` is pure and deterministic. It makes a session's starting context from:
+Built in [#1380](https://github.com/otaviobarros/hobbots/issues/1380). `buildPack(records, budget)` in `packages/agents/src/context-pack.ts` is pure and deterministic. It makes a new runtime session's starting context, on every runtime, from:
 
-1. the memory brief (its own budget, ADR 028),
-2. the camp brief,
+1. the memory brief (its own budget, ADR 028), sent beside the pack as before and counted against its budget,
+2. the camp brief (none until the brief projector lands, [#1384](https://github.com/otaviobarros/hobbots/issues/1384)),
 3. active decisions,
-4. the artifacts index,
-5. the live chapter's turns,
-6. one line per resting chapter,
-7. carried items.
+4. the thread's open work: its open Tasks with their last step, the questions in them still waiting for an answer, and the backpack items its turns carry, as Start fresh would carry them,
+5. what Start fresh carried, until the hob first replies in the new chat,
+6. the artifacts index,
+7. one line per resting chapter,
+8. the live chapter's turns before the prompt.
 
-Every part has a share of the budget, and the shares add up to it. The pack never goes over its budget.
+Each part has a share of the budget (`PACK_BUDGET`: 12,000 tokens, counted as four characters a token), and the shares add up to it. The pack never goes over its budget, even when the briefs and the active decisions alone would.
 
-- **Over budget**, it trims in this order: resting chapter lines, the oldest artifacts, the live chapter's oldest turns. Each trim leaves one line saying what was left out.
-- **Active decisions never drop silently.** Over their share, the newest stay in full and the rest are listed by title; past that, a count, and the hob reads them with find.
-- **A last turn too large for its share** is carried as its start and end with a pointer. The hob reads the rest with `read_message`, which pages a message as `web_fetch` pages a page (ADR 036).
-- **`PackReport`** records each part, its size in tokens and what was trimmed. The Focus chip shows it.
-- Transcript replay remains only for a brain switch inside a live chapter (ADR 017).
+- **Which session.** A turn with no session to resume in its live chapter starts from the pack: a new chapter's first turn, a turn after a split or merge of the live chapter, and a brain switch, whose pack replays the live chapter. A resumed session hears only what other brains wrote in the live chapter since it last replied (ADR 017).
+- **Over budget**, the parts with a fixed share are cut at it: the briefs at their share, and the parts that never drop silently fitted to theirs. What the others leave goes first to the live chapter, then the artifacts, then the resting chapter lines, so they trim in ADR 037's order: resting chapter lines, the oldest artifacts, the live chapter's oldest turns. Each trim leaves one line saying what was left out.
+- **Active decisions and open work never drop silently.** Decisions: the newest in full while every older one still fits by title, newest first; past that, the newest titles and a count. Open work: what does not fit is counted.
+- **A last turn too large for its share** is carried as its start and end with `[… N characters left out. Read the rest with read_message, message_id <id>.]` ([#1381](https://github.com/otaviobarros/hobbots/issues/1381)).
+- **Resting chapters.** Each is one line with the summary the projector wrote. Until it has, the pack writes the plain one in its place (how many messages, and the first of yours), so a new chapter's first turn never runs without the last chapter's summary.
+- **The summary projector.** `ChapterSummaries` reads the journal after its cursor in `projector_cursors`, and gives each chapter that came to rest its one-line summary (at most 280 characters), asked of the hub's brain with the plain summary as its rule, so under No AI it is the plain one. It writes each through `ChapterStateMachine`'s `Summarize`, journaled as `ChapterSummarized`, with the cursor, in one transaction.
+- **Private camps.** A camp's pack reads only its own chapters, so a private camp's summaries reach no other camp's pack, and memory capture takes nothing from `ChapterSummarized`.
+- **`PackReport`** records each part, its share and size in tokens, and what it trimmed. Each pack a turn reads is logged with it, and `PackReports` keeps the last one per thread for the Focus chip. `GET /api/dev/threads/:threadId/pack`, served only by a hub run from a checkout, shows it with the pack the next new session would read.
+- **Not built yet.** The camp brief ([#1384](https://github.com/otaviobarros/hobbots/issues/1384)), active decisions and the artifacts index, which the pack reads through `PackRecordSource` ([#1383](https://github.com/otaviobarros/hobbots/issues/1383)), and the Focus chip ([#1382](https://github.com/otaviobarros/hobbots/issues/1382)).
 - Slice: [#1363](https://github.com/otaviobarros/hobbots/issues/1363).
 
 ## Quests in camps

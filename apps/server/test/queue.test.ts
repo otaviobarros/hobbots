@@ -60,6 +60,13 @@ const leftQueued = Effect.gen(function* () {
   yield* repo.upsertMessage(message("third", "user", "queued"));
 });
 
+/**
+ * A reply in a thread whose session is not recorded, as these seeded threads' are: a new session,
+ * so the fake echoes its context pack, the live chapter so far, ahead of the prompt (ADR 037).
+ */
+const packedEcho = (prompt: string) =>
+  expect.stringMatching(new RegExp(`^Echo: ## This chapter so far\\n[\\s\\S]*\\n\\n${prompt}$`));
+
 // What a crash right after a queued message started leaves: it and its reply are saved together,
 // so the reply is still streaming, and a later message is still queued.
 const crashedAfterStart = Effect.gen(function* () {
@@ -193,7 +200,7 @@ describe("message queue", () => {
       "first:complete",
       "reply:interrupted",
       "second:complete",
-      "Echo: second:complete",
+      packedEcho("second:complete"),
       "third:complete",
       "Echo: third:complete",
     ]);
@@ -210,7 +217,7 @@ describe("message queue", () => {
       ["user", "first", "complete"],
       ["assistant", "reply", "interrupted"],
       ["user", "second", "complete"],
-      ["assistant", "Echo: second", "complete"],
+      ["assistant", packedEcho("second"), "complete"],
       ["user", "third", "complete"],
       ["assistant", "Echo: third", "complete"],
     ]);
@@ -229,7 +236,7 @@ describe("message queue", () => {
       ["user", "second", "complete"],
       ["assistant", "Ech", "interrupted"],
       ["user", "third", "complete"],
-      ["assistant", "Echo: third", "complete"],
+      ["assistant", packedEcho("third"), "complete"],
     ]);
   });
 

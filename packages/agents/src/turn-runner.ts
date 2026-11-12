@@ -54,6 +54,7 @@ import { keepToolOutput } from "./tool-output.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import type { makeTurnGrants } from "./turn-grants.ts";
 import { draftGoneText, type makeTurnInputs, withSkills } from "./turn-inputs.ts";
+import { PackReports, type PackSources, packTurn } from "./turn-pack.ts";
 import { makeTurnSession } from "./turn-session.ts";
 import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
 import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
@@ -183,6 +184,8 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
     const taskTurns = yield* Effect.serviceOption(TaskTurns);
     // Without Charms or local Git tools, turns offer only the Task tools.
     const charmsFor = yield* hubToolOffer;
+    // Without a place to keep them, a pack's report is only logged.
+    const packReports = yield* Effect.serviceOption(PackReports);
 
     // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
     // Its tools are the exception: a narrower policy stops it (reviewAuthority).
@@ -192,7 +195,9 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
       thread: Thread,
       brain: Brain,
       prompt: string,
-      briefing: string | null,
+      // What the turn tells its session ahead of the prompt, and for a new session, what its context
+      // pack is built from once the turn knows its memory brief (ADR 037).
+      told: { readonly text: string | null; readonly pack: PackSources | null },
       reply: Reply,
       changed: boolean,
       carry: Carry,
@@ -422,6 +427,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         const memory = yield* memoryBriefFor(agent, tools, expected);
         const roster = yield* rosterFor(agent, tools, expected, adapter);
         session.briefed({ memory, roster });
+        const pack = yield* packTurn(packReports, thread.id, told.pack, memory);
         const skills = yield* skillsFor(agent, config, tools, thread, yours);
         // A chat that tries a draft never runs without it: the hub lost its files, as a restore does,
         // so the reply says how to bring it back instead of answering as if it were loaded.
@@ -447,7 +453,8 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
               briefing: contextBlock(
                 [memory, roster],
                 webMarkBriefing(markedBefore),
-                briefing,
+                pack,
+                told.text,
                 taskTurn?.briefing ?? null,
                 search.note,
               ),
