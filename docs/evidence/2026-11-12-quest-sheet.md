@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-12
 - **Issue:** [#1390](https://github.com/otaviobarros/hobbots/issues/1390)
+- **Pull request:** [#1441](https://github.com/otaviobarros/hobbots/pull/1441)
+- **Commit:** the pull request branch `claude/project-thread-dpjyd2`, at `9142f19`
 - **Setup:** Linux, from a source checkout with `pnpm install --frozen-lockfile` and `pnpm build` in `apps/web`. The browser cases run in Playwright's Chromium against a hub on SQLite with the scripted quest hub (`HOBBOTS_FAKE_QUEST=black-friday`) on the fake Claude Code runtime. The unit cases run in Vitest; the hub case runs in `apps/server` on SQLite.
 - **Result:** Passed with gaps. A camp's quest pill opened its sheet, a quest opened there with Back to the camp, a message from the quest's composer got its steer receipt, the Workbench opened beside the chat and went back to the quest, and two Tasks claiming the same file showed a Heads-up in the camp until one was cancelled. No route or component renders the lanes layout. PostgreSQL in the browser and the packaged app were not part of the run.
 
