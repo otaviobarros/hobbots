@@ -24,6 +24,7 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
   TurnSkillsInUse,
+  type TurnSteers,
   trackTurn,
   webMarkBriefing,
   webSearchRequest,
@@ -88,6 +89,8 @@ export interface SessionTurn {
   readonly turns: Pick<TaskRepository["Service"], "startTurn" | "endTurn" | "readTree">;
   /** Keeps its session's read-the-web mark on its Attempt, announced for a Workbench already open (ADR 036). */
   readonly keepMark: (mark: WebReadMark) => Effect.Effect<void>;
+  /** Messages that reach the turn while it runs (#1345), such as its lead's; absent, it gets none. */
+  readonly steers?: TurnSteers;
 }
 
 /** The read-the-web mark the session a turn resumes holds (ADR 036). A fresh session holds none. */
@@ -260,6 +263,7 @@ export const runSessionTurn = (
               web.searched({ threadId: null, taskId: turn.taskId }, redactor)(event),
               webMark.read({ _tag: "Search", query: redactor.text(event.query) }),
             ),
+          ...(turn.steers === undefined || adapter.steersTurns !== true ? {} : { steers: turn.steers }),
           // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
           ...(yield* Effect.provideService(turn.offer(approvals), TurnSkillsInUse, given)),
         },
@@ -325,12 +329,13 @@ export const runSessionTurn = (
   );
 
 /** Why a running session was stopped, which decides what its Task becomes. */
-export type StopReason = "cancel" | "authority" | "hob";
+export type StopReason = "cancel" | "authority" | "hob" | "interrupt";
 
 export const STOPPED: Record<StopReason, string> = {
   cancel: "Cancelled.",
   authority: "Stopped because its hob's permissions were narrowed.",
   hob: "Stopped by Hobbots before it finished, with its hob's other work.",
+  interrupt: "Stopped by its lead's message, which the next turn starts with.",
 };
 
 /** A session the runner holds open for a Task: a step's, or a party member's turn. */
@@ -342,6 +347,11 @@ export interface Running {
   /** What the hob may do on this Task now, to compare against when its policy changes; its own access when absent. */
   readonly accessNow?: Effect.Effect<ToolAccess | null>;
   stop: StopReason | null;
+  /**
+   * Wakes the session's running turn to take the messages that wait to steer it (#1345), and says
+   * whether its runtime can; absent for a session no message steers, such as a step's.
+   */
+  steering?: { readonly wake: Effect.Effect<void>; readonly steers: boolean } | undefined;
 }
 
 /** What the session's hob may do on its Task now: read again for every Charm call (PE-008). */

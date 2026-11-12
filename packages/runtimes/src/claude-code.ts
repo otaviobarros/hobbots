@@ -78,6 +78,7 @@ import {
   runnableBinary,
 } from "./binary.ts";
 import { askedSkillPrompt, READ_TOOL, readsSkillFile, SKILL_TOOL, withSkills } from "./claude-code-skills.ts";
+import { withSteers } from "./claude-code-steers.ts";
 import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
 import { turnCommits } from "./git-config.ts";
@@ -1334,50 +1335,53 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             Effect.sync(() =>
               query({
                 prompt: start.prompt,
-                options: withHubTools(
-                  withSkills(
-                    {
-                      ...base,
-                      ...(tools
-                        ? toolOptions(
-                            tools,
-                            policyHooks(
-                              engine,
+                options: withSteers(
+                  withHubTools(
+                    withSkills(
+                      {
+                        ...base,
+                        ...(tools
+                          ? toolOptions(
                               tools,
-                              report,
-                              request.approvals,
-                              request.redaction,
-                              request.recordToolStart,
-                              background,
-                              skills?.folder ?? null,
-                              request.recordSearch,
-                            ),
-                            // Only Hobbots' script: one the hub was started with never reaches the commands.
-                            { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
-                          )
-                        : {}),
-                      abortController,
-                      spawnClaudeCodeProcess,
-                      includePartialMessages: true,
-                      systemPrompt: {
-                        type: "preset",
-                        preset: "claude_code",
-                        append: start.instructions,
+                              policyHooks(
+                                engine,
+                                tools,
+                                report,
+                                request.approvals,
+                                request.redaction,
+                                request.recordToolStart,
+                                background,
+                                skills?.folder ?? null,
+                                request.recordSearch,
+                              ),
+                              // Only Hobbots' script: one the hub was started with never reaches the commands.
+                              { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
+                            )
+                          : {}),
+                        abortController,
+                        spawnClaudeCodeProcess,
+                        includePartialMessages: true,
+                        systemPrompt: {
+                          type: "preset",
+                          preset: "claude_code",
+                          append: start.instructions,
+                        },
+                        ...(request.sessionId ? { resume: request.sessionId } : {}),
+                        // A turn of no hob's keeps no session on disk.
+                        ...(request.ephemeral ? { persistSession: false } : {}),
+                        // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
+                        ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
+                        ...brainOptions(request),
                       },
-                      ...(request.sessionId ? { resume: request.sessionId } : {}),
-                      // A turn of no hob's keeps no session on disk.
-                      ...(request.ephemeral ? { persistSession: false } : {}),
-                      // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
-                      ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
-                      ...brainOptions(request),
-                    },
-                    skills,
-                    request.skills,
+                      skills,
+                      request.skills,
+                      report,
+                    ),
+                    request.hubTools,
                     report,
+                    request.recordToolStart,
                   ),
-                  request.hubTools,
-                  report,
-                  request.recordToolStart,
+                  request.steers,
                 ),
               }),
             ),
@@ -1524,6 +1528,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       planUsage,
       // `WebSearch` returns links only, and `WebFetch` stays closed, so every page goes through `web_fetch`.
       searchOpensPages: false,
+      // A message that arrives while a turn runs is added to the result of its next tool call (#1345).
+      steersTurns: true,
       sendPrompt,
     });
   });

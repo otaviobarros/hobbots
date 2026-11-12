@@ -23,7 +23,9 @@ import {
   DispatcherHost,
   lateWorkOf,
   type ResultsIn,
+  runningTurnAsk,
   startingText,
+  steeringText,
 } from "@hobbots/inbox";
 import { TaskSignal } from "@hobbots/orchestration";
 import { DateTime, Deferred, Effect, Layer, Option, Stream } from "effect";
@@ -131,7 +133,7 @@ const makeCarrier = Effect.gen(function* () {
       return ran;
     });
 
-  return { routed, carry };
+  return { routed, carry, dispatcher };
 });
 
 /**
@@ -183,7 +185,7 @@ export const ContinuationsLive = Layer.effect(
 export const MemberContinuationsLive = Layer.effect(
   MemberContinuations,
   Effect.gen(function* () {
-    const { routed, carry } = yield* makeCarrier;
+    const { routed, carry, dispatcher } = yield* makeCarrier;
     const tasked = (scope: BackpackScope, routine = false) =>
       Effect.map(routed(scope, routine), (all) =>
         all.flatMap(({ item, tree }) => {
@@ -198,18 +200,44 @@ export const MemberContinuationsLive = Layer.effect(
       return [...seen].map(([taskId, agentId]) => ({ taskId, agentId }));
     });
 
+    /** The items waiting for the hob under the Task, routine progress among them with `routine`. */
+    const under = (taskId: TaskId, agentId: AgentId, routine = false) =>
+      Effect.map(tasked({ _tag: "Hob", agentId }, routine), (items) =>
+        items.filter((each) => each.taskId === taskId).map(({ item }) => item),
+      );
+
     const deliver: MemberContinuations["Service"]["deliver"] = (taskId, agentId, turn) =>
       Effect.gen(function* () {
-        const items = (yield* tasked({ _tag: "Hob", agentId }, true)).filter((each) => each.taskId === taskId);
+        const items = yield* under(taskId, agentId, true);
+        // A message that stopped the turn before comes first in the next one's context (#1345).
+        const interrupting = items.filter((item) => runningTurnAsk(item) === "interrupt");
         return yield* carry(
-          items.map(({ item }) => item),
+          [...interrupting, ...items.filter((item) => !interrupting.includes(item))],
           `task:${taskId}`,
           turn,
           "inline",
         );
       });
 
-    return MemberContinuations.of({ waiting, deliver });
+    const runningTurnAsks: MemberContinuations["Service"]["runningTurnAsks"] = (taskId, agentId) =>
+      Effect.map(under(taskId, agentId), (items) => {
+        const asks = items.map(runningTurnAsk);
+        return asks.includes("interrupt") ? "interrupt" : asks.includes("steer") ? "steer" : null;
+      });
+
+    const handToTurn: MemberContinuations["Service"]["handToTurn"] = (taskId, agentId, attemptId) =>
+      Effect.gen(function* () {
+        const steering = (yield* under(taskId, agentId)).filter((item) => runningTurnAsk(item) === "steer");
+        if (steering.length === 0) return null;
+        const handed = yield* dispatcher.handToLive(
+          steering.map((item) => item.id),
+          { target: `task:${taskId}`, turnId: attemptId },
+        );
+        if (handed === null) return null;
+        return { text: steeringText(handed.items), reached: handed.reached, missed: handed.missed };
+      });
+
+    return MemberContinuations.of({ waiting, deliver, runningTurnAsks, handToTurn });
   }),
 );
 

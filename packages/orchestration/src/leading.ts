@@ -5,9 +5,11 @@ import {
   detailOf,
   isTerminalTask,
   liveAttemptOn,
+  type NoteDelivery,
   NoteId,
   pendingApprovalsOn,
   type Question,
+  type RuntimeKind,
   reportsOn,
   type Task,
   TaskReadiness,
@@ -33,6 +35,8 @@ import {
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
+  /** Whether a turn on `runtime` takes a message while it runs (#1345); otherwise steering one interrupts it. */
+  readonly steersTurns: (runtime: RuntimeKind) => boolean;
 }
 
 /** How many of a Task's latest checkpoints `read_tasks` shows. */
@@ -110,35 +114,55 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
   };
 };
 
-/** Why a message to a member's Task is not read yet; undefined when no turn runs, so it wakes the member. */
+/** What a turn running on a member's Task is doing as a message arrives; undefined when none runs, so it wakes the member. */
 type Held =
-  | { readonly held: "turn-running" }
-  | { readonly held: "approval-pending"; readonly approval: ApprovalRequest };
+  | { readonly held: "turn-running"; readonly runtime: RuntimeKind | null }
+  | { readonly held: "approval-pending"; readonly runtime: RuntimeKind | null; readonly approval: ApprovalRequest };
+
+/** The turn running on a member's Task now, and the approval request it waits on, if any (#701). */
+const heldBy = (tasks: TaskRepository["Service"], task: Task, tree: TaskTree): Effect.Effect<Held | undefined> => {
+  if (!liveAttemptOn(task, tree)) return Effect.succeed(undefined);
+  const runtime = tree.attempts.find((each) => each.id === task.currentAttemptId)?.runtime ?? null;
+  return Effect.map(tasks.readLedger(task.id), (ledger): Held => {
+    const approval = Option.getOrUndefined(ledger)?.open.flatMap((entry) =>
+      entry._tag === "Approval" ? [entry.approval] : [],
+    )[0];
+    return approval === undefined ? { held: "turn-running", runtime } : { held: "approval-pending", runtime, approval };
+  });
+};
 
 /**
- * A turn running on a member's Task reads only what it was started with, so a message waits for
- * that turn to end (ADR 019), however long the user takes over an approval request it waits on (#701).
+ * How a message reaches a member's running turn (#1345): as asked, with `steer` by default, except
+ * that a runtime that cannot take input while a turn runs is interrupted instead.
  */
-const heldBy = (tasks: TaskRepository["Service"], task: Task, tree: TaskTree): Effect.Effect<Held | undefined> =>
-  !liveAttemptOn(task, tree)
-    ? Effect.succeed(undefined)
-    : Effect.map(tasks.readLedger(task.id), (ledger): Held => {
-        const approval = Option.getOrUndefined(ledger)?.open.flatMap((entry) =>
-          entry._tag === "Approval" ? [entry.approval] : [],
-        )[0];
-        return approval === undefined ? { held: "turn-running" } : { held: "approval-pending", approval };
-      });
+const deliveryFor = (asked: NoteDelivery | undefined, held: Held | undefined, steers: Deps["steersTurns"]) => {
+  const wanted = asked ?? "steer";
+  const fellBack = wanted === "steer" && held?.runtime != null && !steers(held.runtime);
+  return { stored: wanted, reaches: fellBack ? ("interrupt" as const) : wanted, fellBack };
+};
 
-/** What `message_task` tells its sender: that the member reads it next, or why it waits until then. */
-const sentText = (task: Task, held: Held | undefined) => {
+/** What `message_task` tells its sender: when the member reads it, and why then. */
+const sentText = (task: Task, held: Held | undefined, delivery: ReturnType<typeof deliveryFor>) => {
   const to = `hob ${task.ownerId} on Task ${task.id}`;
   if (held === undefined)
     return `Sent to ${to}. It reaches them in their next turn, and wakes them if they are not working.`;
+  const kept = "It is kept, so do not send it again.";
+  if (delivery.reaches === "interrupt") {
+    const why = delivery.fellBack ? " Their runtime cannot take a message while a turn runs, so" : "";
+    return `Sent to ${to}.${why}${why === "" ? " Their" : " their"} turn stops now and starts again with your message first; what it did so far is kept. ${kept}`;
+  }
+  if (delivery.reaches === "steer") {
+    const when =
+      held.held === "turn-running"
+        ? "They are in a turn, so it reaches them at its next step, between two tool calls."
+        : `Their turn waits for the user to decide their request "${held.approval.label}", so it reaches them at the turn's next step once that is decided.`;
+    return `Sent to ${to}. ${when} If the turn ends first, it reaches them as their next turn starts. ${kept}`;
+  }
   const why =
     held.held === "turn-running"
-      ? "they are in a turn now, which reads only what it started with"
+      ? "they are in a turn now, and you asked for it to wait for the next one"
       : `their turn waits for the user to decide their request "${held.approval.label}"`;
-  return `Held for ${to}: ${why}. They read your message once that turn ends, as their next turn starts. It is kept, so do not send it again.`;
+  return `Held for ${to}: ${why}. They read your message once that turn ends, as their next turn starts. ${kept}`;
 };
 
 /** The Task `read_tasks` reads under: one the caller owns, or one under a Task of its own. */
@@ -149,7 +173,7 @@ const readRoot = (scope: CallScope, id: string | undefined): Effect.Effect<Task,
  * Tools a lead keeps track of and talks to the work under it with (#574): it reads the state of
  * every Task under one of its own, at any depth, and sends a member a message that wakes it.
  */
-export const makeLeading = ({ tasks }: Deps) => ({
+export const makeLeading = ({ tasks, steersTurns }: Deps) => ({
   read_tasks: (scope: CallScope, input: Omit<TaskToolInput<"read_tasks">, "key">) =>
     Effect.gen(function* () {
       const root = yield* readRoot(scope, input.task_id);
@@ -189,6 +213,8 @@ export const makeLeading = ({ tasks }: Deps) => ({
       if (isTerminalTask(task.state)) {
         return yield* refuse("task-state", `Task ${task.id} has ended as ${task.state}, so nobody would read it.`);
       }
+      const held = yield* heldBy(tasks, task, scope.tree);
+      const delivery = deliveryFor(input.delivery, held, steersTurns);
       const journal = journalOf();
       const note = journal.keep(
         yield* fromRecords(
@@ -202,17 +228,19 @@ export const makeLeading = ({ tasks }: Deps) => ({
             ...(scope.caller.messageId !== undefined && { messageId: scope.caller.messageId }),
             // Only what the turn was given under its claims: an item a call only showed it was not picked up.
             carried: (scope.caller.carried ?? []).flatMap((item) => (item.owner === null ? [] : [item.itemId])),
+            // What the sender asked, so a turn that runs as it arrives gets it that way (#1345).
+            delivery: delivery.reaches,
           }),
         ),
       );
-      const held = yield* heldBy(tasks, task, scope.tree);
       return {
         done: {
-          message: sentText(task, held),
+          message: sentText(task, held, delivery),
           details: {
             message_id: note.id,
             recipient: note.recipientId,
-            ...(held !== undefined && { held: held.held }),
+            ...(held !== undefined && { turn_running: true, delivery: delivery.reaches }),
+            ...(held !== undefined && delivery.reaches === "next-turn" && { held: held.held }),
             ...(held?.held === "approval-pending" && { approval_id: held.approval.id }),
           },
         },

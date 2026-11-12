@@ -183,6 +183,8 @@ export const makeCodex = (config: CodexConfig) =>
       // Its search can open a page it names (`openPage`, `findInPage`), which runs on OpenAI's
       // servers and cannot pause, so the hub offers it only where every page is read without asking.
       searchOpensPages: true,
+      // A message that arrives while a turn runs is added to it with `turn/steer` (#1345).
+      steersTurns: true,
       sendPrompt: (request) => runCodexTurn(turnConfig, request),
     });
   });
