@@ -6,6 +6,7 @@ import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node
 import {
   ActivityRecorder,
   ApprovalService,
+  CampBriefs,
   CampDrift,
   CampSuggestionService,
   ChapterService,
@@ -86,6 +87,7 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  BriefLogLive,
   CampSuggestionRepositoryLive,
   ChapterRepositoryLive,
   ChapterSummaryLogLive,
@@ -361,6 +363,8 @@ const ServerLive = Layer.unwrap(
       ChapterSummaryLogLive.pipe(Layer.provide(EventJournal.layer)),
       // Camp suggestions: Keep in chat, and the camp drift projector's cursor (ADR 037).
       CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
+      // Each chat's and camp's brief, and the brief projector's cursor (ADR 037).
+      BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -549,6 +553,8 @@ const ServerLive = Layer.unwrap(
             ChapterSummaries.layer,
             // A chat chapter that comes to rest may be suggested as a camp by the hub's brain (ADR 037).
             CampDrift.layer,
+            // Each chat and camp gets its brief at chapter ends and Quest steps, which the pack reads (ADR 037).
+            CampBriefs.layer,
           ),
         ),
       )

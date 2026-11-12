@@ -31,6 +31,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  BriefLogLive,
   CampSuggestionRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
@@ -86,6 +87,7 @@ beforeEach(() => {
             TaskRepositoryLive,
             RecordRepositoryLive,
             CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
+            BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -212,7 +214,10 @@ describe("decisions over the API", () => {
       ["Launch emails go out on Tuesdays.", "superseded"],
     ]);
     expect((await request("GET", `/api/threads/${thread.id}/artifacts`)).body).toEqual([]);
+    // No chapter ended, so the hub has written no brief yet (#1384).
+    expect(await request("GET", `/api/threads/${thread.id}/brief`)).toEqual({ status: 200, body: null });
     expect((await request("GET", "/api/threads/nope/decisions")).status).toBe(404);
+    expect((await request("GET", "/api/threads/nope/brief")).status).toBe(404);
   });
 });
 

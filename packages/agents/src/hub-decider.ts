@@ -22,8 +22,12 @@ export interface Judgment<A> {
   readonly rule: A;
 }
 
-/** Who answered a judgment: the hub's brain, or the caller's rule. */
-export const DecidedBy = Schema.Literals(["brain", "rule"]);
+/**
+ * Who answered a judgment: the hub's brain; the caller's rule, as under No AI; or the rule as a
+ * `fallback`, because the brain was asked and gave no answer that decodes. A caller that keeps what
+ * the brain wrote before, such as a camp's brief, keeps it on a fallback.
+ */
+export const DecidedBy = Schema.Literals(["brain", "rule", "fallback"]);
 export type DecidedBy = typeof DecidedBy.Type;
 
 /** A judgment's answer: the choice, how sure its maker is from 0 to 1, and who made it. */
@@ -35,6 +39,9 @@ export interface Decided<A> {
 
 /** The rule's own answer, which is as sure as a rule is. */
 export const byRule = <A>(judgment: Judgment<A>): Decided<A> => ({ choice: judgment.rule, confidence: 1, by: "rule" });
+
+/** The rule's answer in place of the brain's, which was asked and gave none that decodes. */
+export const byFallback = <A>(judgment: Judgment<A>): Decided<A> => ({ ...byRule(judgment), by: "fallback" });
 
 /** What a judgment's turn tells the brain: the question and the answer's shape, and the input. */
 export interface JudgmentText {
@@ -82,7 +89,10 @@ export const decodeJudgment = <A>(
 };
 
 export interface HubDeciderShape {
-  /** The brain's answer when it gives one that decodes, else the rule's. It never fails. */
+  /**
+   * The brain's answer when it gives one that decodes, else the rule's: `rule` when no brain is
+   * chosen for the task, `fallback` when one was asked. It never fails.
+   */
   readonly decide: <A>(judgment: Judgment<A>) => Effect.Effect<Decided<A>>;
 }
 
@@ -90,15 +100,3 @@ export class HubDecider extends Context.Service<HubDecider, HubDeciderShape>()("
   /** A hub with no brain, as with No AI: every judgment is its rule's, and no model is called. */
   static readonly rules = Layer.succeed(HubDecider, { decide: (judgment) => Effect.succeed(byRule(judgment)) });
 }
-
-/** The hub's `decide` when it has a brain, else its rule's for every judgment (No AI). */
-export const hubDecide: Effect.Effect<HubDeciderShape["decide"]> = Effect.map(
-  Effect.serviceOption(HubDecider),
-  Option.match({
-    onNone:
-      () =>
-      <A>(judgment: Judgment<A>) =>
-        Effect.succeed(byRule(judgment)),
-    onSome: (decider) => decider.decide,
-  }),
-);

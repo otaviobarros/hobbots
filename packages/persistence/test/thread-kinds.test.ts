@@ -7,7 +7,7 @@ import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts
 import threadKinds from "../src/migrations/0095_thread_kinds.ts";
 import chapters from "../src/migrations/0099_chapters.ts";
 import projectorCursors from "../src/migrations/0100_projector_cursors.ts";
-import campSuggestions from "../src/migrations/0102_camp_suggestions.ts";
+import campSuggestions from "../src/migrations/0103_camp_suggestions.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1375 (ADR 037): a thread is a chat or a camp. The migration makes each hob's most recent open

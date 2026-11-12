@@ -13,12 +13,13 @@ import {
   type ThreadId,
   ThreadLifecycle,
 } from "@hobbots/domain";
-import { Context, DateTime, Effect, Layer, Option, Schedule, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { summaryInput } from "./chapter-summaries.ts";
 import { ChapterRepository } from "./chapters.ts";
-import { hubDecide, type Judgment } from "./hub-decider.ts";
+import type { Judgment } from "./hub-decider.ts";
 import { announcer, EventPublisher } from "./ports.ts";
+import { hubDecide, projectorRound, runEvery } from "./projector.ts";
 import { HobbotsRepository } from "./repository.ts";
 
 // Camp suggestions (ADR 037, #1385). A pure rule raises one in the transaction that grew a chat's
@@ -114,9 +115,6 @@ export class CampSuggestionService extends Context.Service<
   );
 }
 
-/** How many journal entries one round of the drift projector reads at a time. */
-const PAGE = 200;
-
 /** The chat chapters an entry brought to rest. */
 const restedBy = (event: JournaledEvent): ReadonlyArray<{ threadId: ThreadId; chapterId: ChapterId }> =>
   event._tag === "ChapterStarted" && event.ended !== null
@@ -172,11 +170,9 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
           return { chapterId, reasons: [{ code: "drift", count: own.length }] } satisfies DriftRaise;
         });
 
-      const page = (cursor: number) =>
+      // Each page's suggestions are written with the cursor, in one transaction.
+      const project = (entries: ReadonlyArray<EventEnvelope>, sequence: number) =>
         Effect.gen(function* () {
-          const entries = yield* store.readAfter(cursor, PAGE);
-          const last = entries.at(-1);
-          if (last === undefined) return { cursor, caughtUp: true };
           const raises: Array<DriftRaise> = [];
           for (const entry of entries) {
             for (const { threadId, chapterId } of restedBy(entry.payload as JournaledEvent)) {
@@ -184,30 +180,18 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
               if (raise !== null) raises.push(raise);
             }
           }
-          yield* announce(yield* store.recordDrift(last.sequence, raises));
-          return { cursor: last.sequence, caughtUp: entries.length < PAGE };
-        });
-
-      const round = Effect.gen(function* () {
-        let at = { cursor: yield* store.driftCursor, caughtUp: false };
-        while (!at.caughtUp) at = yield* page(at.cursor);
-        return true;
-      });
+          yield* announce(yield* store.recordDrift(sequence, raises));
+        }).pipe(Effect.orDie);
 
       return CampDrift.of({
-        // Whatever went wrong, the cursor did not move past it: the next round reads it again.
-        runOnce: round.pipe(
-          Effect.catchCause((cause) => Effect.logWarning("Camp drift stopped a round", cause).pipe(Effect.as(false))),
-        ),
+        runOnce: projectorRound("Camp drift", { cursor: store.driftCursor, readAfter: store.readAfter }, project),
       });
     }),
   );
 
   /** The projector, run every few seconds for as long as the layer's scope is open. */
-  static readonly layer = Layer.effectDiscard(
-    Effect.gen(function* () {
-      const drift = yield* CampDrift;
-      yield* drift.runOnce.pipe(Effect.repeat(Schedule.spaced("5 seconds")), Effect.forkScoped);
-    }),
-  ).pipe(Layer.provideMerge(CampDrift.make));
+  static readonly layer = runEvery(
+    CampDrift.use((drift) => drift.runOnce),
+    CampDrift.make,
+  );
 }
