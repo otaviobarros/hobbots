@@ -60,9 +60,10 @@ const tabsTriggerVariants = cva(
           // The bar under the selected tab sits on the list's line, inset from the tab's sides.
           "after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
         ],
-        // `bar` at the size that fits four tabs and their counts across a sheet.
+        // `bar` at the size that fits four tabs and their counts across a sheet; when they still don't,
+        // the tabs shrink and their labels give way, so the row never outgrows the sheet.
         tight: [
-          "gap-1 rounded-t-control px-[5px] pt-2 pb-2.5 text-ui data-[state=active]:font-semibold",
+          "min-w-0 shrink gap-1 rounded-t-control px-[5px] pt-2 pb-2.5 text-ui data-[state=active]:font-semibold",
           "after:pointer-events-none after:absolute after:inset-x-1 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
         ],
         chip: "gap-1.5 rounded-control px-2.5 py-1.5 text-ui data-[state=active]:bg-card",
