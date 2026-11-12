@@ -99,7 +99,8 @@ const artifactRows = decodeRows(Schema.Struct({ taskId: TaskId, kind: ArtifactKi
 /**
  * The Tasks a change's events touch in a way a summary reads: a Task's state, a Quest starting or
  * ending, a question reaching you or leaving, an approval waiting or decided. A chat started fresh
- * moves the open Quests of the chat it replaced into it, so the thread of each changes.
+ * moves the open Quests of the chat it replaced into it, and a chapter moved into a camp the Quests
+ * started in it (#1389), so the thread of each changes; the Quests the thread held already fold the same.
  */
 const touchedTasks = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEvent>) =>
   Effect.gen(function* () {
@@ -111,6 +112,7 @@ const touchedTasks = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledE
       else if ("question" in event) ids.add(event.question.taskId);
       else if ("approval" in event && event.approval.taskId !== null) ids.add(event.approval.taskId);
       else if (event._tag === "ChatStartedFresh") moved.push(event.chat.id);
+      else if (event._tag === "ChapterMoved") moved.push(event.camp.id);
     }
     if (moved.length > 0) {
       const rows = yield* sql<{

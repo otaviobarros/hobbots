@@ -74,13 +74,15 @@ export const makeChapterMoves = (
           Effect.map((rows) => rows.length === 0),
         );
 
-  // A reply under way or queued, or an approval waiting, holds a thread's chapters where they are.
+  // A reply under way or queued, or an approval its reply waits on, holds a thread's chapters where
+  // they are. A party member's approval waits in its own Task's session, not in the thread's reply,
+  // so it moves with its quest instead (#1389).
   const busy = (threadId: ThreadId) =>
     Effect.gen(function* () {
       const replies = yield* sql`SELECT 1 FROM messages WHERE thread_id = ${threadId}
         AND status IN ('queued', 'streaming', 'stopping') LIMIT 1`;
       const approvals = yield* sql`SELECT 1 FROM approval_requests WHERE thread_id = ${threadId}
-        AND state = 'pending' LIMIT 1`;
+        AND state = 'pending' AND message_id IS NOT NULL LIMIT 1`;
       return replies.length > 0 || approvals.length > 0;
     });
 
@@ -154,6 +156,8 @@ export const makeChapterMoves = (
 
   // The quests started in the chapter move whole: every Task of their trees, their Quests and the
   // backpack items held for them, each item journaled as its own `BackpackItemChanged` from `first` on.
+  // What their Tasks' turns asked and did outside any message moves too (`moveWork`), so a running
+  // quest's approvals, and its later updates, questions and results, are in the camp (#1389).
   const moveQuests = (from: ThreadId, plan: ChapterMovePlan, at: string, first: number) =>
     Effect.gen(function* () {
       const to = plan.landed.threadId;
