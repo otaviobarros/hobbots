@@ -3,6 +3,7 @@ import { type AgentId, type Thread, type ThreadId, ThreadLifecycle } from "@hobb
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { placeThread, queryKeys } from "./queries.ts";
+import { waitingQuestionsQuery } from "./questions.ts";
 import { recordThread } from "./sync.ts";
 import { threadTasksMoved } from "./tasks.ts";
 
@@ -35,6 +36,22 @@ const show = (queryClient: QueryClient, thread: Thread) => {
   placeThread(queryClient, thread);
 };
 
+/**
+ * A chat was started fresh, here or by its event: the old chat moves to the hob's archived threads
+ * and the new one joins its list. The Tasks started there moved with it, so both chats read their
+ * work again, and the questions waiting for you read again the chat each now belongs to.
+ */
+export const chatStartedFresh = (
+  queryClient: QueryClient,
+  { superseded, chat }: { readonly superseded: Thread; readonly chat: Thread },
+) => {
+  for (const thread of [superseded, chat]) {
+    show(queryClient, thread);
+    void threadTasksMoved(queryClient, thread.id);
+  }
+  void queryClient.invalidateQueries({ queryKey: waitingQuestionsQuery.queryKey, exact: true });
+};
+
 /** Makes a camp for the hob; it joins the hob's list at once, before its event arrives. */
 export const useMakeCamp = (agentId: AgentId) => {
   const queryClient = useQueryClient();
@@ -58,10 +75,7 @@ export const useStartFresh = () => {
     mutationFn: ({ thread, key }: { thread: Thread; key: ThreadId }) =>
       call((c) => c.threads.startFresh({ params: { threadId: thread.id }, payload: { key } })),
     onSuccess: (started) => {
-      for (const thread of [started.superseded, started.chat]) {
-        show(queryClient, thread);
-        void threadTasksMoved(queryClient, thread.id);
-      }
+      chatStartedFresh(queryClient, started);
       void queryClient.invalidateQueries({ queryKey: carryOverKey(started.superseded.id), exact: true });
     },
   });

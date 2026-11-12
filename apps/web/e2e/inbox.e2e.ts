@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -343,7 +343,7 @@ test("[TC-IN-492] Needs you works from the keyboard: ↑ ↓ and J K move, A all
   const { current } = await pipAsksToPush(page);
   // A second chat asks to push to the default branch, which is high risk and so leads the list.
   const pipId = page.url().match(/hobs\/([^/?#]+)/)?.[1] ?? "";
-  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
+  await page.goto((await campAt(current, pipId, "Ship it")).url);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Ship it\nfake:tool Bash git push origin main");
   await composer.press("Enter");

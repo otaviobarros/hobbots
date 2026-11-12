@@ -254,7 +254,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await cardRole("QA engineer");
   await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
-  await page.getByRole("link", { name: "Open your chat with Pip" }).click();
+  await page.getByRole("link", { name: "Your chat with Pip" }).click();
   await editHob(page);
 
   // A title in the user's own words keeps the QA sigil, hat and tool.
@@ -268,7 +268,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await cardRole("Bug hunter");
-  await page.getByRole("link", { name: "Open your chat with Pip" }).click();
+  await page.getByRole("link", { name: "Your chat with Pip" }).click();
   const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(
     current,
     "GET",

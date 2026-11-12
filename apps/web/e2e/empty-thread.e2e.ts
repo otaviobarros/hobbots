@@ -1,4 +1,4 @@
-import { expect, test } from "./hub.ts";
+import { campAt, expect, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #513: an empty thread shows its hob on a small stage asking "What are we making?", with
@@ -10,17 +10,12 @@ test.afterEach(stopAldricHub);
 test("[TC-CH-263] an empty thread shows the hob on its stage asking what we are making, and a starter fills the composer", async ({
   page,
 }) => {
-  const { url, aldric } = await aldricHub();
+  const { url, aldric, hub } = await aldricHub();
   const chat = page.getByRole("main", { name: "Chat" });
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
 
-  // Aldric has a chat already, so a new one is a fresh page.
-  await page.goto(`${url}/#/hobs/${aldric}/chat`);
-  await composer.fill("Draft the spring banner copy");
-  await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
-  await composer.press("Enter");
-  await expect(page.getByText("Echo: Draft the spring banner copy").first()).toBeVisible({ timeout: 20_000 });
-  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  // A camp with nothing said in it yet is a fresh page.
+  await page.goto((await campAt({ url, headers: hub.headers }, aldric, "Spring banner")).url);
 
   await expect(chat.getByText("What are we making?")).toBeVisible();
   await expect(chat.getByRole("heading", { name: "A fresh page" })).toBeVisible();

@@ -38,7 +38,7 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 // The fake runtime writes one word every 40 ms, so this reply runs for a few seconds.
 const LONG_PROMPT = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
 
-/** A finished setup with Pip, and one finished thread per title, created in order. */
+/** A finished setup with Pip, and one finished camp per title, made in order. */
 const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>, setup: Record<string, unknown> = {}) => {
   await api(current, "PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"], ...setup });
   const pip = await api<{ id: string }>(current, "POST", "/agents", {
@@ -57,7 +57,12 @@ const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>, setup
   });
   const threads: Array<string> = [];
   for (const title of titles) {
-    const thread = await api<{ id: string }>(current, "POST", `/agents/${pip.id}/threads`);
+    const thread = await api<{ id: string }>(current, "POST", `/agents/${pip.id}/camps`, {
+      key: crypto.randomUUID(),
+      title,
+      goal: null,
+      private: false,
+    });
     await api(current, "POST", `/threads/${thread.id}/messages`, { content: title });
     await expect
       .poll(async () =>

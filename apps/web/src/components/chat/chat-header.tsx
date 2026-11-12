@@ -80,20 +80,13 @@ export function ChatHeader({
       </Link>
       {/* The title keeps its room when the quest button crowds the header, and gives it up in a
           column beside the Quest room, where the buttons need it. */}
-      <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden @max-[340px]/header:min-w-0">
-        <ChatTitle
-          thread={camp}
-          title={camp?.title ?? hob.name}
-          renaming={camp !== undefined && renaming}
-          onDone={() => setRenamingIn(undefined)}
-        />
-        <HeaderLine hob={hob} camp={camp} doing={doing} />
-        {camp?.goal != null && (
-          <span className="truncate text-meta text-label" title={camp.goal}>
-            {headerCopy.goal({ goal: camp.goal })}
-          </span>
-        )}
-      </div>
+      <HeaderTitle
+        hob={hob}
+        camp={camp}
+        doing={doing}
+        renaming={camp !== undefined && renaming}
+        onDone={() => setRenamingIn(undefined)}
+      />
       {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
       {threadId && headerEnd === undefined && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
       {thread && <ChatSearchButton open={finding} onToggle={() => onFinding(!finding)} />}
@@ -108,6 +101,33 @@ export function ChatHeader({
       {sheet === "make-camp" && <MakeCampSheet hob={hob} onClose={() => setSheet(null)} />}
       {sheet === "start-fresh" && thread && <StartFreshSheet hob={hob} chat={thread} onClose={() => setSheet(null)} />}
     </header>
+  );
+}
+
+/** The title column: the camp's title or the hob's name, the line under it, and a camp's goal. */
+function HeaderTitle({
+  hob,
+  camp,
+  doing,
+  renaming,
+  onDone,
+}: {
+  hob: Agent;
+  camp: Thread | undefined;
+  doing: string;
+  renaming: boolean;
+  onDone: () => void;
+}) {
+  return (
+    <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden @max-[340px]/header:min-w-0">
+      <ChatTitle thread={camp} title={camp?.title ?? hob.name} renaming={renaming} onDone={onDone} />
+      <HeaderLine hob={hob} camp={camp} doing={doing} />
+      {camp?.goal != null && (
+        <span className="truncate text-meta text-label" title={camp.goal}>
+          {headerCopy.goal({ goal: camp.goal })}
+        </span>
+      )}
+    </div>
   );
 }
 

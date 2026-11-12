@@ -1,5 +1,15 @@
 import type { Page } from "@playwright/test";
-import { emptyDataDir, expandSidebar, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
+import {
+  campAt,
+  emptyDataDir,
+  expandSidebar,
+  expect,
+  type Hub,
+  removeDataDir,
+  sidebarThread,
+  startHub,
+  test,
+} from "./hub.ts";
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
 // thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
@@ -51,9 +61,9 @@ const summonPip = async (current: Hub) => {
 test.beforeEach(({ context }) => expandSidebar(context));
 const threadLink = sidebarThread;
 
-/** Starts a new thread with Pip from the composer and waits for its echo. */
+/** Makes a camp with Pip named by the prompt, sends the prompt there and waits for its echo. */
 const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => {
-  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
+  await page.goto((await campAt(current, pipId, prompt)).url);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(prompt);
   await composer.press("Enter");

@@ -106,7 +106,8 @@ test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question
   const sheet = page.getByRole("dialog", { name: "Start a fresh chat with Aldric" });
   await expect(sheet).toContainText("2 open items move to the new chat, so nothing is dropped.");
   await expect(sheet.getByRole("listitem")).toHaveText([
-    "Tidy the notesOpen work",
+    // An open Task reads as its brief, which is the whole message that started it.
+    /^Tidy the notes .*Open work$/,
     "Should the headings be short?A question waiting for an answer",
   ]);
   await expectAccessible(page, sheet);
@@ -116,7 +117,8 @@ test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question
   // The new chat opens with the question still waiting there, and the old one went to the Archive.
   await expect(page).not.toHaveURL(oldChat);
   await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/`));
-  await expect(main.getByText("Tidy the notes")).toBeHidden();
+  // The old messages stay behind; the Quest they started comes along with its question.
+  await expect(main.getByText(/fake:hub start_quest/)).toBeHidden();
   await expect(page.getByRole("region", { name: "Aldric asks you" })).toContainText("Should the headings be short?");
   const rail = page.getByRole("list", { name: "Aldric's chat and camps" });
   await expect(rail.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute("aria-current", "page");

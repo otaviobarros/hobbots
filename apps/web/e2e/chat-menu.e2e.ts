@@ -1,4 +1,4 @@
-import { expandSidebar, expect, sidebarThread, test } from "./hub.ts";
+import { campAt, expandSidebar, expect, sidebarThread, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #510: the chat header's ⋯ menu renames the chat in place, pins it to the top, searches it,
@@ -12,11 +12,15 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   context,
 }) => {
   await expandSidebar(context);
-  const { url, aldric } = await aldricHub();
-  // Two chats, so archiving this one moves to the other.
+  const { url, aldric, hub } = await aldricHub();
+  // The hob's chat and a camp, so archiving the camp moves to the chat. Only a camp is renamed and pinned.
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
-  for (const prompt of ["Plan the sale emails", "Draft the spring banner copy"]) {
-    await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  const camp = await campAt(hub, aldric, "Draft the spring banner copy");
+  for (const [prompt, at] of [
+    ["Plan the sale emails", `${url}/#/hobs/${aldric}/chat`],
+    ["Draft the spring banner copy", camp.url],
+  ] as const) {
+    await page.goto(at);
     await composer.fill(prompt);
     await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");
@@ -41,7 +45,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   await field.press("Enter");
   await expect(field).toBeHidden();
   await expect(header).toContainText("Spring banner");
-  // The sidebar's recent threads take the new title too.
+  // The camp's row in the sidebar takes the new title too.
   await expect(sidebarThread(page, "Spring banner")).toBeVisible();
 
   // Pin to the top shows the lantern pin beside the title; the menu then offers Unpin.

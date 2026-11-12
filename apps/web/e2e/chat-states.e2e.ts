@@ -420,7 +420,7 @@ test("[TC-CH-108] leaving a thread while its waiting message is on its way sends
   const threadHash = new URL(threadUrl).hash;
   await page.evaluate((hash) => {
     window.location.hash = hash;
-  }, `#/hobs/${pip.id}/chat`);
+  }, `#/hobs/${pip.id}/profile`);
   await expect(page.getByText("Echo: first")).toBeHidden();
   sending.release();
   const threadId = threadHash.match(/threads\/([^/?#]+)/)?.[1];

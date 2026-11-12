@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./hub.ts";
+import { campAt, expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
 import {
   cancelInLane,
@@ -24,7 +24,7 @@ const headerQuest = (page: Page, title: string) =>
 test("[TC-CH-190] the Quest room shows every lane live with its controls and keeps a pinned Quest in every thread", async ({
   page,
 }) => {
-  const { url, aldric } = await questHub();
+  const { url, headers, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
@@ -67,7 +67,7 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
   await roomMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Unpin quest" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await page.goto((await campAt({ url, headers }, aldric, "Something else")).url);
   await page.getByRole("textbox", { name: /^Message Aldric/ }).fill("Something else");
   await page.getByRole("textbox", { name: /^Message Aldric/ }).press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();

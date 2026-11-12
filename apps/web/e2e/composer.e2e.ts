@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -44,7 +44,11 @@ const openMoss = async (page: Page) => {
     instructions: "",
   });
   await page.goto(`${hub.url}/#/hobs/${moss.id}/chat`);
-  return { hobUrl: `${hub.url}/#/hobs/${moss.id}`, composer: page.getByRole("textbox", { name: /^Message Moss/ }) };
+  return {
+    hobUrl: `${hub.url}/#/hobs/${moss.id}`,
+    hobId: moss.id,
+    composer: page.getByRole("textbox", { name: /^Message Moss/ }),
+  };
 };
 
 const sentTexts = async (page: Page) => {
@@ -127,11 +131,12 @@ test("[TC-CH-133] a send the hub refuses puts its text back in the composer", as
 
 // covers CH-001, CH-003
 test("[TC-CH-132] each thread keeps its unsent draft, and a long draft grows, then scrolls", async ({ page }) => {
-  const { hobUrl, composer } = await openMoss(page);
+  const { hobUrl, hobId, composer } = await openMoss(page);
+  // A camp, so the hob's chat is still the empty one its first message would open.
+  const threadUrl = (await campAt(hub as Hub, hobId, "Start a thread")).url;
+  await page.goto(threadUrl);
   await composer.fill("Start a thread");
   await composer.press("Enter");
-  await expect(page).toHaveURL(/threads\//);
-  const threadUrl = page.url();
   await expect(page.getByText("Echo: Start a thread")).toBeVisible();
 
   await composer.fill("Half a thought");

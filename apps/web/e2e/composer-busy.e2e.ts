@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 import { openRoom } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -161,12 +161,14 @@ test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new
 }) => {
   const { current, mossId } = await openMoss(page);
   const composer = page.getByRole("textbox", { name: /^Message Moss/ });
+  // A camp, so the hob's chat is still the empty one its first message would open.
+  const threadUrl = (await campAt(current, mossId, "first")).url;
+  await page.goto(threadUrl);
   await composer.fill("first");
   await composer.press("Enter");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible({ timeout: 15_000 });
-  const threadUrl = page.url();
 
-  // A new thread: a paused hob starts none, and the draft typed before stays.
+  // The empty chat: a paused hob starts none, and the draft typed before stays.
   await page.goto(`${current.url}/#/hobs/${mossId}/chat`);
   await composer.fill("Plan the autumn page");
   await api(current, "POST", `/api/agents/${mossId}/pause`);
