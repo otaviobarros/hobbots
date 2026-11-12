@@ -44,6 +44,7 @@ export * from "./message.ts";
 export * from "./policy.ts";
 export * from "./presence.ts";
 export * from "./quest.ts";
+export * from "./quest-summary.ts";
 export * from "./readiness.ts";
 export * from "./redaction.ts";
 export * from "./remote-access.ts";

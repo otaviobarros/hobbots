@@ -232,9 +232,17 @@ describe("Start fresh", () => {
     expect(result.carried).toEqual(started.value.carried);
     // One event for the chat, then each moved item, at the revision it was written with: the
     // failure the chat carries, and the step's own Task item, which moves with its tree unnamed.
-    // Last, the new chat's first chapter (ADR 037, #1379).
+    // Then the new chat's first chapter (ADR 037, #1379), and last the moved Quest's summary, which
+    // now names the new chat (#1373).
     const tags = started.entries.map((entry) => entry.payload._tag);
-    expect(tags).toEqual(["ChatStartedFresh", "BackpackItemChanged", "BackpackItemChanged", "ChapterStarted"]);
+    expect(tags).toEqual([
+      "ChatStartedFresh",
+      "BackpackItemChanged",
+      "BackpackItemChanged",
+      "ChapterStarted",
+      "QuestSummaryChanged",
+    ]);
+    expect(started.entries[4]?.payload).toMatchObject({ summary: { threadId: FRESH } });
     expect(started.value.chat.liveChapterId).not.toBeNull();
     const [fresh, ...rest] = started.entries;
     const moved = rest.filter((entry) => entry.payload._tag === "BackpackItemChanged");

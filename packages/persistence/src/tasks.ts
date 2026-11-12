@@ -51,6 +51,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
+import { readQuestSummaries } from "./quest-summary-rows.ts";
 import { makeTaskReads, taskColumns } from "./task-rows.ts";
 
 const refuse = (reason: TaskRefusal, message: string) => Effect.fail(new TaskRefused({ reason, message }));
@@ -1126,6 +1127,7 @@ export const TaskRepositoryLive = Layer.effect(
       leaveNote,
       listWaitingQuestions: read.waitingQuestions.pipe(Effect.orDie),
       listFailedTasks: read.failedTasks.pipe(Effect.orDie),
+      listQuestSummaries: (threadId) => readQuestSummaries(sql, threadId),
       handOff,
       waitFor,
       startTurn: (turn) =>

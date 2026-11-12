@@ -216,6 +216,8 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  // Quest summaries (ADR 037) are read once the screens render what the hub publishes (#1374).
+  "QuestSummaryChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -234,7 +236,8 @@ type UnappliedEvent = Extract<
       | "ClaimReleased"
       | "DecisionRecorded"
       | "DecisionSuperseded"
-      | "ArtifactRegistered";
+      | "ArtifactRegistered"
+      | "QuestSummaryChanged";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

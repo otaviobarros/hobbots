@@ -1,4 +1,4 @@
-import type { AgentId, MemberWork, Quest, TaskState } from "@hobbots/domain";
+import type { AgentId, MemberWork, Quest } from "@hobbots/domain";
 
 /** One Quest on Home: its lead, and its party's work in the order they joined. */
 export interface QuestInProgress {
@@ -26,18 +26,4 @@ export const questsInProgress = (work: ReadonlyArray<MemberWork>): ReadonlyArray
       members: members.toSorted((a, b) => a.task.createdAt.localeCompare(b.task.createdAt)),
     }))
     .sort((a, b) => a.quest.createdAt.localeCompare(b.quest.createdAt) || a.quest.id.localeCompare(b.quest.id));
-};
-
-/** How a member's Task state reads at a glance: the tone its label and progress segment take. */
-export type WorkTone = "needs" | "working" | "waiting" | "done" | "problem" | "idle";
-
-export const workTone: Record<TaskState, WorkTone> = {
-  queued: "idle",
-  active: "working",
-  waiting: "waiting",
-  blocked: "needs",
-  cancelling: "idle",
-  completed: "done",
-  failed: "problem",
-  cancelled: "idle",
 };
