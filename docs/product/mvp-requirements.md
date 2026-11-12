@@ -9,7 +9,7 @@ These are the MVP requirements and their acceptance conditions. Numerical defaul
 | AG-001 | Create agents with name, avatar, runtime, supported model, instructions and environment. | Two agents using different installed runtimes can be configured without copying messages between them. |
 | AG-002 | Version configuration. | A running attempt retains its original configuration/policy snapshot for audit; current restrictions and revocations still govern new effects. |
 | AG-003 | Configure delegation collaborators independently of identity and class. | A disallowed destination is rejected by the server; a role label never grants access. |
-| AG-004 | Configure tools, workspace, permissions, and execution limits separately from prompts. | A prompt cannot expand the effective policy. |
+| AG-004 | Configure tools, workspace, permissions, and run limits separately from prompts. | A prompt cannot expand the effective policy. |
 | AG-005 | Show runtime installation, authentication and health. | Missing or incompatible runtimes show actionable state rather than a fabricated connected status. |
 | AG-006 | Retire hobs while preserving history. | Retire asks whether to hand active work to another hob, let it finish or stop it; new dispatch is then prevented, nothing is deleted and the hob stays inspectable in the Archive. Bring back makes it active again with all its threads. |
 
@@ -21,7 +21,7 @@ In the UI agents are called **hobs** ([ADR 008](../decisions/008-design.md)); th
 |---|---|---|
 | CH-001 | Multiple persistent threads per agent. | Messages and thread metadata remain after server restart. |
 | CH-002 | Thread identity links agent, title, session binding and timestamps. | Domain IDs remain stable when runtime sessions change. |
-| CH-003 | Switch agents and threads without canceling work. | Each agent restores its last selected thread; work stays visible from the execution panel. |
+| CH-003 | Switch agents and threads without canceling work. | Each agent restores its last selected thread; work stays visible from the Task's Workbench. |
 | CH-004 | Stream assistant output, tool activity and status. | Reconnection reconstructs a snapshot and continues from a durable cursor without duplicated messages. |
 | CH-005 | Link threads to Quests, tasks and results. | A Quest can be inspected independent of its initiating thread. |
 | CH-006 | Search thread titles and persisted messages. | Results link back to their owning agent/thread. |
@@ -55,15 +55,15 @@ Thread forking with context snapshots is an open extension.
 | IN-006 | Durable responsibility ledger and completion checks. | Required children, questions, deliverables and approvals are reconciled before success. |
 | IN-007 | Visible blocked/failure outcomes. | Exhausted retries, missing authority or an unavailable runtime produces a durable blocker and next action, not silent abandonment or endless turns. |
 
-## Execution and recovery
+## Attempts and recovery
 
 | ID | Requirement | Acceptance condition |
 |---|---|---|
-| EX-001 | Separate tasks from execution attempts. | Retrying one task produces multiple inspectable attempts with runtime, executor, session and outcome. |
+| EX-001 | Separate tasks from attempts. | Retrying one task produces multiple inspectable attempts with runtime, executor, session and outcome. |
 | EX-002 | Validated explicit transitions and typed failures. | An illegal transition or stale state version is rejected without partial status updates. |
 | EX-003 | Reconcile after restart/disconnection. | Unknown live outcomes are shown as unverified until reconciled; unsafe side effects are not blindly replayed. |
 | EX-004 | Bounded retries and timeout handling. | Failures retain evidence and retry history; irreversible uncertain actions require reconciliation. |
-| EX-005 | UI lifecycle independent of execution. | Closing a browser or the desktop window does not stop server work; only quitting the hub's background service does. A user who turns off "Keep running in the menu bar" makes closing the hub's last window a Quit, after a warning when hobs are working. |
+| EX-005 | UI lifecycle independent of running work. | Closing a browser or the desktop window does not stop server work; only quitting the hub's background service does. A user who turns off "Keep running in the menu bar" makes closing the hub's last window a Quit, after a warning when hobs are working. |
 | EX-006 | Persist result and notify parent reliably. | A crash between completion and notification cannot permanently lose the result or continuation. |
 
 ## Permissions and autonomy
@@ -88,7 +88,7 @@ The onboarding presets are Careful, Balanced (Trusted Workspace, the default) an
 | UX-001 | Home landing page plus the chat workspace: rail, hob and thread panel, chat, and a right panel with Quest, Inbox and Workshop tabs; independent side-panel collapse. | Home shows what needs you and what is running; chat opens on the last thread one click away, and parallel work and messages can be inspected without leaving the parent chat. |
 | UX-002 | On-demand Workbench for browser, computer, terminal, files and code. | Task selection opens relevant supported activity; live, screenshot, historical and unavailable states are labeled honestly. |
 | UX-003 | Hobbots visual language. | The tokens, type, pixel corners, stepped motion and components of the design specification are used; all text passes WCAG AA, every animation stops with Reduce motion, and there are no decorative left-edge accent borders. |
-| UX-004 | Durable execution visibility. | Owners, dependencies, acknowledgement, progress, artifacts, blockers and approvals agree with server records. |
+| UX-004 | Durable work visibility. | Owners, dependencies, acknowledgement, progress, artifacts, blockers and approvals agree with server records. |
 | UX-005 | Supporting screens follow the MVP design. | Welcome, Where Hobbots runs, onboarding, new device approval, Summon, hob profile and Retire, Inbox and approvals, Usage and Settings have the entry points, contents and states listed in the screen inventory. |
 | UX-006 | Preserve navigation and inspection context. | Return to the parent conversation, retain a pinned Quest, and switch Workbench views without losing relevant panel state; thread navigation supports a keyboard path. |
 | RT-001 | Provider adapters for Claude, ChatGPT (Codex), Gemini, Grok, local models and OpenAI-compatible keys; ACP-compatible foundation. | Different providers participate in the same persisted delegation loop; each provider is offered only once its adapter is verified, and an unverified one shows an honest unavailable state. |
@@ -112,7 +112,7 @@ Vendor login methods, telemetry backend and templates still require technical de
 | ID | Requirement | Acceptance condition |
 |---|---|---|
 | OP-001 | Guided local installation and runtime setup. | A new user detects installed runtimes, follows supported authentication, selects an environment, creates agents manually/from a template and starts work without manual database edits. |
-| OP-002 | Observable operations and actionable troubleshooting. | An execution/delegation can be followed across agents, tasks and runtimes; unavailable runtimes, stalled work and recovery errors expose useful diagnostics without credentials. |
+| OP-002 | Observable operations and actionable troubleshooting. | An attempt or delegation can be followed across agents, tasks and runtimes; unavailable runtimes, stalled work and recovery errors expose useful diagnostics without credentials. |
 | OP-003 | Data export and backup/restore. | Conversations, work history and referenced artifacts can be exported/backed up and restored consistently; configuration portability format remains open. |
 
 For screen behavior read the [screen and flow inventory](../design/screens-and-flows.md).

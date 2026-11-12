@@ -16,12 +16,15 @@ import {
   type CharmOperationId,
   type Committed,
   ConfigVersion,
-  everyRowDecided,
   HobProposal,
   HobProposalId,
   type HobProposalKind,
   type HobProposalRow,
+  type HobProposalRowEvent,
+  HobProposalRows,
+  HobProposalStates,
   hobProposalOutcomeText,
+  IllegalHobProposalRowTransition,
   INBOX_HISTORY,
   type MessageId,
   type SummoningDraft,
@@ -96,6 +99,13 @@ interface Stored {
   readonly waiter: Deferred.Deferred<HobProposal> | undefined;
 }
 
+/** A row after `event`. A refused event here is a bug: callers check the row's state first. */
+const rowAfter = (row: HobProposalRow, event: HobProposalRowEvent): HobProposalRow => {
+  const next = HobProposalRows.transition(row, event);
+  if (next instanceof IllegalHobProposalRowTransition) throw next;
+  return next;
+};
+
 /** A row ready to record: pending, undecided, with nothing edited yet. */
 export const pendingRow = (
   row: Omit<HobProposalRow, "state" | "outcome" | "decidedAt" | "edited">,
@@ -153,7 +163,7 @@ export class HobProposals extends Context.Service<
       /** Waits for `proposal` to settle; leaving the wait leaves its outcome to the backpack. */
       const waitFor = (proposal: HobProposal) =>
         Effect.gen(function* () {
-          if (proposal.state === "settled") return Effect.succeed(proposal);
+          if (!HobProposalStates.isOpen(proposal)) return Effect.succeed(proposal);
           const settled = waiters.get(proposal.id) ?? (yield* Deferred.make<HobProposal>());
           waiters.set(proposal.id, settled);
           return Deferred.await(settled).pipe(
@@ -164,11 +174,10 @@ export class HobProposals extends Context.Service<
 
       const viewOf = (proposal: HobProposal) =>
         Effect.gen(function* () {
-          if (proposal.state === "settled") return { proposal, changedSince: [] } satisfies HobProposalView;
+          if (!HobProposalStates.isOpen(proposal)) return { proposal, changedSince: [] } satisfies HobProposalView;
           const apply = yield* Deferred.await(applier);
-          const changed = yield* Effect.filter(
-            proposal.rows.filter((row) => row.state === "pending"),
-            (row) => apply.changedSince(row),
+          const changed = yield* Effect.filter(proposal.rows.filter(HobProposalRows.isPending), (row) =>
+            apply.changedSince(row),
           );
           return { proposal, changedSince: changed.map((row) => row.id) } satisfies HobProposalView;
         });
@@ -194,10 +203,9 @@ export class HobProposals extends Context.Service<
         Effect.gen(function* () {
           const call = yield* calls.find(proposal.agentId, [proposal.call.scope], proposal.call.key);
           if (Option.isNone(call) || (call.value.state !== "sending" && call.value.state !== "uncertain")) return;
-          const made = proposal.rows.some((row) => row.state === "allowed");
           yield* calls.settle(
             call.value,
-            made ? "applied" : "refused",
+            HobProposalStates.madeAny(proposal) ? "applied" : "refused",
             hobProposalOutcomeText(proposal),
             yield* nowIso,
           );
@@ -213,16 +221,16 @@ export class HobProposals extends Context.Service<
         alwaysAllowed = proposal.alwaysAllowed,
       ) =>
         Effect.gen(function* () {
-          const at = yield* nowIso;
-          const settles = everyRowDecided(rows);
-          const next = new HobProposal({
-            ...proposal,
+          const next = HobProposalStates.transition(proposal, {
+            _tag: "Update",
             rows,
             alwaysAllowed,
-            state: settles ? "settled" : "open",
-            updatedAt: at,
-            settledAt: settles ? at : null,
+            at: yield* nowIso,
           });
+          if (!(next instanceof HobProposal)) {
+            return yield* new HobProposalDecided({ proposalId: proposal.id, state: proposal.state });
+          }
+          const settles = !HobProposalStates.isOpen(next);
           const waiter = settles ? waiters.get(proposal.id) : undefined;
           const moved = yield* log.move(next, { unwaited: settles && waiter === undefined });
           if (Option.isNone(moved)) {
@@ -256,18 +264,13 @@ export class HobProposals extends Context.Service<
        */
       const reconciled = (proposal: HobProposal) =>
         Effect.gen(function* () {
-          const applying = proposal.rows.filter((row) => row.state === "applying");
+          const applying = proposal.rows.filter(HobProposalRows.isApplying);
           if (applying.length === 0) return proposal;
           const apply = yield* Deferred.await(applier);
           let rows = proposal.rows;
           for (const row of applying) {
             const made = yield* apply.reconcile(proposal, row);
-            rows = withRow(
-              rows,
-              made === null
-                ? { ...row, edited: null, state: "pending", outcome: null, decidedAt: null }
-                : { ...row, state: "allowed", outcome: made },
-            );
+            rows = withRow(rows, rowAfter(row, made === null ? { _tag: "Reopen" } : { _tag: "Made", outcome: made }));
           }
           return yield* save(proposal, rows);
         });
@@ -278,7 +281,7 @@ export class HobProposals extends Context.Service<
        * a hub that stopped, and reading the card is enough to settle it: no decision has to be offered.
        */
       const recovered = (proposal: HobProposal) =>
-        proposal.rows.some((row) => row.state === "applying")
+        proposal.rows.some(HobProposalRows.isApplying)
           ? // A read never fails for it: what could not be settled now is settled by the next read.
             Semaphore.withPermit(lock, Effect.flatMap(find(proposal.id), reconciled)).pipe(
               Effect.orElseSucceed(() => proposal),
@@ -288,7 +291,7 @@ export class HobProposals extends Context.Service<
       const open = (id: string) =>
         Effect.gen(function* () {
           const proposal = yield* Effect.flatMap(find(id), reconciled);
-          if (proposal.state !== "open") {
+          if (!HobProposalStates.isOpen(proposal)) {
             return yield* new HobProposalDecided({ proposalId: id, state: proposal.state });
           }
           return proposal;
@@ -297,7 +300,7 @@ export class HobProposals extends Context.Service<
       const pendingRowOf = (proposal: HobProposal, rowId: string) => {
         const row = proposal.rows.find((each) => each.id === rowId);
         if (row === undefined) return Effect.fail(new HobProposalMissing({ proposalId: proposal.id, rowId }));
-        if (row.state !== "pending") {
+        if (!HobProposalRows.isPending(row)) {
           return Effect.fail(
             new HobProposalDecided({ proposalId: proposal.id, state: proposal.state, rowId, rowState: row.state }),
           );
@@ -321,7 +324,7 @@ export class HobProposals extends Context.Service<
           if (yield* apply.changedSince(row)) {
             return yield* new HobProposalChangedSince({ proposalId: proposal.id, rowId: row.id });
           }
-          const applying: HobProposalRow = { ...row, edited: options.edited, state: "applying", decidedAt: options.at };
+          const applying = rowAfter(row, { _tag: "Allow", edited: options.edited, at: options.at });
           const marked = yield* saveDecision(approved, proposal, withRow(proposal.rows, applying));
           const made = yield* apply
             .apply(marked, row, options.edited)
@@ -329,19 +332,16 @@ export class HobProposals extends Context.Service<
               Effect.catchTag("HobProposalRefused", (refused) =>
                 options.refusedFails
                   ? Effect.succeed({ _tag: "Failed", text: refused.message } as const)
-                  : Effect.flatMap(save(marked, withRow(marked.rows, row)), () => Effect.fail(refused)),
+                  : Effect.flatMap(save(marked, withRow(marked.rows, rowAfter(applying, { _tag: "Reopen" }))), () =>
+                      Effect.fail(refused),
+                    ),
               ),
             );
-          const state = made._tag === "Applied" ? "allowed" : "failed";
-          return yield* save(marked, withRow(marked.rows, { ...applying, state, outcome: made.text }));
+          const outcome = made._tag === "Applied" ? "Made" : "Failed";
+          return yield* save(marked, withRow(marked.rows, rowAfter(applying, { _tag: outcome, outcome: made.text })));
         });
 
-      const denied = (row: HobProposalRow, at: string): HobProposalRow => ({
-        ...row,
-        state: "denied",
-        outcome: null,
-        decidedAt: at,
-      });
+      const denied = (row: HobProposalRow, at: string): HobProposalRow => rowAfter(row, { _tag: "Deny", at });
 
       const confirmedFor = (proposal: HobProposal, confirmed: boolean | undefined) =>
         proposal.highRisk && confirmed !== true
@@ -421,7 +421,7 @@ export class HobProposals extends Context.Service<
               const apply = yield* Deferred.await(applier);
               // A row whose hob changed since is never applied: Allow all leaves it for you to deny.
               for (const row of proposal.rows) {
-                if (row.state !== "pending" || (yield* apply.changedSince(row))) continue;
+                if (!HobProposalRows.isPending(row) || (yield* apply.changedSince(row))) continue;
                 proposal = yield* allowRow(approved, proposal, row, { edited: null, at, refusedFails: true });
               }
               return proposal;
@@ -435,7 +435,7 @@ export class HobProposals extends Context.Service<
               return yield* saveDecision(
                 approved,
                 proposal,
-                proposal.rows.map((row) => (row.state === "pending" ? denied(row, at) : row)),
+                proposal.rows.map((row) => (HobProposalRows.isPending(row) ? denied(row, at) : row)),
               );
             }),
           ),
@@ -459,7 +459,9 @@ export class HobProposals extends Context.Service<
                   // change it would otherwise read as "changed since" is this one.
                   const rows = proposal.rows.map(
                     (row): HobProposalRow =>
-                      row.state === "pending" && row.hobId === proposal.agentId && row.configVersion === version.before
+                      HobProposalRows.isPending(row) &&
+                      row.hobId === proposal.agentId &&
+                      row.configVersion === version.before
                         ? { ...row, configVersion: ConfigVersion.make(version.after) }
                         : row,
                   );

@@ -1,6 +1,6 @@
 import type { ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { minutesBetween, minutesSince, replyWait, shortCommand } from "./reply-wait.ts";
+import { minutesBetween, minutesSince, replyRun, replyRuns, replyWait, shortCommand } from "./reply-wait.ts";
 
 const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
 const step = (id: string, label: string, fields: Partial<ReplyStep> = {}): ReplyStep => ({
@@ -47,5 +47,29 @@ describe("replyWait (#1056)", () => {
     expect(minutesSince(null, new Date())).toBe(0);
     expect(minutesBetween("2026-11-07T10:00:00.000Z", "2026-11-07T10:03:10.000Z")).toBe(3);
     expect(minutesBetween(undefined, "2026-11-07T10:03:10.000Z")).toBeNull();
+  });
+});
+
+describe("replyRun (#1423)", () => {
+  const waited = [step("t1", "Running pnpm dev", { waitedOn: true })];
+  const wait = { commands: ["pnpm dev"], since: "2026-11-07T10:00:00.000Z" };
+
+  it("is idle with no reply in progress, whatever Stop asked", () => {
+    expect(replyRun(undefined, true)).toEqual({ mode: "idle" });
+    expect(replyRun({ status: "complete", steps: waited }, true)).toEqual({ mode: "idle" });
+    expect(replyRuns(replyRun(undefined, false))).toBe(false);
+  });
+
+  it("is replying while the hob is at work, and waiting once only commands keep the reply open", () => {
+    expect(replyRun({ status: "streaming", steps: [step("t1", "Running pnpm dev")] }, false)).toEqual({
+      mode: "replying",
+    });
+    expect(replyRun({ status: "streaming", steps: waited }, false)).toEqual({ mode: "waiting", wait });
+  });
+
+  it("is stopping from Stop until the reply ends, keeping what it waits on", () => {
+    expect(replyRun({ status: "streaming", steps: [] }, true)).toEqual({ mode: "stopping", wait: null });
+    expect(replyRun({ status: "stopping", steps: waited }, false)).toEqual({ mode: "stopping", wait });
+    expect(replyRuns(replyRun({ status: "stopping", steps: [] }, false))).toBe(true);
   });
 });

@@ -164,6 +164,6 @@ One model for the hub's own judgments, chosen in Settings and onboarding, extend
 | artifact | `Artifact` |
 | brief | `Brief` |
 | quest | `Quest` |
-| (not shown) | `Attempt`; never "execution" |
+| (not shown) | `Attempt` |
 
 The [glossary](../product/glossary.md) holds these terms.
