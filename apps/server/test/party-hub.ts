@@ -6,6 +6,8 @@ import {
   AdditionalRuntimes,
   ApprovalRepository,
   ApprovalService,
+  ChapterService,
+  ChapterToolsLive,
   ChatService,
   HobAdmission,
   HobbotsRepository,
@@ -45,6 +47,7 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  ChapterRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
   TaskRepositoryLive,
@@ -162,6 +165,8 @@ export const partyHub = (
     readonly preset?: SafetyPreset;
     /** Whether every turn sees the other hobs and is offered `read_hob` (ADR 032). */
     readonly directory?: boolean;
+    /** Whether every turn is offered the Chapter tools, `start_chapter` and `read_message` (ADR 037). */
+    readonly chapters?: boolean;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -261,6 +266,8 @@ export const partyHub = (
     Layer.provideMerge(
       options.directory === true ? Layer.mergeAll(DirectoryToolsLive, RosterReceipts.layer) : Layer.empty,
     ),
+    Layer.provideMerge(options.chapters === true ? ChapterToolsLive : Layer.empty),
+    Layer.provideMerge(ChapterService.layer.pipe(Layer.provideMerge(ChapterRepositoryLive))),
     Layer.provideMerge(party),
     Layer.provideMerge(
       Layer.mergeAll(
