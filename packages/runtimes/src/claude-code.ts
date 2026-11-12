@@ -91,7 +91,7 @@ import {
   withCommitIdentity,
 } from "./sandbox.ts";
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
-import { commandOf, offeredTools, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
+import { commandOf, offeredTools, readOnlyCommands, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
 import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
 import { claudeWebSearched, recordSearched } from "./web-search.ts";
 
@@ -151,6 +151,19 @@ export const SANDBOX_NOTE = [
 ].join(" ");
 
 /**
+ * What a sandboxed turn whose commands are read-only is told instead (#1344): Edit files is Never,
+ * so the sandbox closes its folders, `.git` included, to every write. It may still read, run Git
+ * commands that only read and run tests, and write temporary files in `TMPDIR` (#578).
+ */
+export const READ_ONLY_SANDBOX_NOTE = [
+  "Your commands run in a sandbox, and your folders are read-only for them, .git included, because you may not edit files.",
+  "Commands that only read work: git status, git diff, git log, git show, and tests or builds that write nothing in your folders.",
+  "Anything that writes in your folders fails with `Operation not permitted` or `Read-only file system`: git commit, git checkout, git stash, formatting files, or a tool that keeps a cache there. That failure is expected: do not retry it or look for another way to write, and tell the user what you could not do.",
+  "Point a tool's cache or output at $TMPDIR when it lets you.",
+  TEMP_NOTE,
+].join(" ");
+
+/**
  * What a turn that can ask the user is told about approvals: the hob never sees the request, so the
  * note on a tool result is its only record that it asked (#282).
  */
@@ -173,8 +186,8 @@ export const botCommitNote = (commitAs: CommitIdentity) =>
 
 /**
  * The text appended to Claude Code's system prompt: the hob's instructions, the approval note when
- * the turn can ask the user, the sandbox note when sandboxed, and the bot note when the hob commits
- * as its own app.
+ * the turn can ask the user, the sandbox note when sandboxed (the read-only one when its commands
+ * cannot write its folders), and the bot note when the hob commits as its own app.
  */
 export const turnInstructions = (
   instructions: string,
@@ -182,11 +195,12 @@ export const turnInstructions = (
   asks = false,
   commitAs?: CommitIdentity,
   identityNote = "",
+  readOnly = false,
 ) =>
   [
     instructions,
     asks ? APPROVAL_NOTE : "",
-    sandboxed ? SANDBOX_NOTE : "",
+    sandboxed ? (readOnly ? READ_ONLY_SANDBOX_NOTE : SANDBOX_NOTE) : "",
     commitAs ? botCommitNote(commitAs) : "",
     identityNote,
   ]
@@ -800,6 +814,7 @@ export const claudeTurnStart = (request: PromptRequest, policySandboxState: Sand
     tools !== null && Boolean(request.approvals),
     tools?.commitAs,
     commits.note,
+    tools !== null && readOnlyCommands(tools.context),
   );
   const asked = askedMount(request.askedSkill, request.skills);
   const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now), asked);

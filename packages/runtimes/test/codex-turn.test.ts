@@ -13,7 +13,7 @@ import { ApprovalId, EMPTY_HOB_POLICY } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Exit, Fiber, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { SANDBOX_NOTE } from "../src/claude-code.ts";
+import { READ_ONLY_SANDBOX_NOTE, SANDBOX_NOTE } from "../src/claude-code.ts";
 import type { AppServer, AppServerNotification } from "../src/codex/app-server.ts";
 import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, commandsEndedNotice, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
@@ -669,6 +669,19 @@ describe("a Codex turn with tools", () => {
     // Without a verified sandbox the policy decides commands as if it were missing, so Codex offers none.
     await run({ ...turnConfig, policy: { engine, sandboxState: "unavailable", sandbox } }, prompt({ tools }));
     expect(readFileSync(join(home, "config.toml"), "utf8")).toContain("shell_tool = false");
+
+    // With Edit files Never, Codex keeps its shell, the sandbox makes the folders read-only, and the
+    // turn is told its commands cannot write there (#1344).
+    const readOnly = {
+      ...tools,
+      policy: { ...tools.policy, hob: { ...EMPTY_HOB_POLICY, overrides: { "edit-files": "deny" } } },
+    } as const;
+    await run(turnConfig, prompt({ tools: readOnly }));
+    expect(readFileSync(join(home, "config.toml"), "utf8")).toContain("shell_tool = true");
+    expect(scopes.at(-1)).toMatchObject({ folders: [project], folderAccess: { read: true, write: false } });
+    expect(server.requests.filter((request) => request.method === "thread/start").at(-1)).toMatchObject({
+      params: { developerInstructions: expect.stringContaining(READ_ONLY_SANDBOX_NOTE) },
+    });
   });
 });
 

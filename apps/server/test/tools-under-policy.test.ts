@@ -190,7 +190,7 @@ describe("tools under policy, end to end", () => {
   it("[TC-PE-080] under Careful the same edit asks and no command is offered, so the preset decides, not the hob", async () => {
     const thread = await hobInProject("careful");
     await request("POST", `/api/threads/${thread.id}/messages`, {
-      // Commands need both reading and editing allowed, so under Careful the turn has none to call.
+      // Commands are closed while editing asks, so under Careful the turn has none to call.
       content: ["Fix the sum", `fake:tool Edit ${join(project, "src", "sum.ts")}`, "fake:tool Bash pnpm test"].join(
         "\n",
       ),

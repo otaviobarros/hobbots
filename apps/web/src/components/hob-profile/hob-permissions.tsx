@@ -1,6 +1,7 @@
 import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
 import {
   type Agent,
+  type AnyOperation,
   type PolicyDecision,
   type PolicyOperation,
   policySandbox,
@@ -21,6 +22,7 @@ import { permissionsQuery, useUpdatePermissions } from "../../api/queries.ts";
 import {
   ANSWER,
   answersWithin,
+  commandsStanding,
   enforcement,
   folderName,
   offeredAnswer,
@@ -485,6 +487,7 @@ export function Rule({
         <>
           {rule.note}
           {gap !== null && ` ${messages.enforcement.ruleBlocked[gap]}`}
+          {gap === null && commandsNote(rule.operation, permissions)}
         </>
       }
     >
@@ -505,6 +508,18 @@ export function Rule({
     </RuleRow>
   );
 }
+
+/**
+ * What the commands rules add when the file answers narrow them (ADR 014, #1344): read-only while
+ * Change files is Never, closed while Look at files is not Allow or Change files asks. Said only
+ * where the rule itself is not Never.
+ */
+const commandsNote = (operation: AnyOperation, permissions: HobPermissions): string | null => {
+  if (operation !== "run-commands" && operation !== "local-git") return null;
+  if (permissions.decisions[operation] === "deny") return null;
+  const standing = commandsStanding(permissions.decisions);
+  return standing === "read-only" || standing === "closed" ? ` ${messages.permissions.commands[standing]}` : null;
+};
 
 /** Allow, Ask and Never, or the answers the rule takes, with those wider than the preset dimmed. */
 function AnswerControl({

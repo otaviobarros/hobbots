@@ -30,7 +30,7 @@ import {
   withCommitIdentity,
 } from "../sandbox.ts";
 import { askedMount, holdSkillFolder, type SkillFolder, skillFolderScope } from "../skills.ts";
-import { offeredTools, toolLabel } from "../tool-calls.ts";
+import { offeredTools, readOnlyCommands, toolLabel } from "../tool-calls.ts";
 import { codexPageRead, codexWebSearched, recordSearched } from "../web-search.ts";
 import {
   type AppServer,
@@ -658,6 +658,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
           Boolean(request.approvals),
           tools.commitAs,
           commits.note,
+          readOnlyCommands(tools.context),
         ),
       ),
       commits: commits.now,

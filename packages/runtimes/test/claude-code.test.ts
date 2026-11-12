@@ -12,8 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
-import { type RuntimeEvent, RuntimeLimitReached } from "@hobbots/agents";
-import { hobAppCommitIdentity, policySandbox, type ReplyUsage } from "@hobbots/domain";
+import { type RuntimeEvent, RuntimeLimitReached, type ToolAccess } from "@hobbots/agents";
+import { EMPTY_HOB_POLICY, hobAppCommitIdentity, policySandbox, type ReplyUsage } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -33,6 +33,7 @@ import {
   makeClaudeCode as makeAdapter,
   parseVersion,
   planFromReport,
+  READ_ONLY_SANDBOX_NOTE,
   runtimePath,
   SANDBOX_NOTE,
   stderrTail,
@@ -741,6 +742,49 @@ describe("the sandbox note", () => {
     expect(turnInstructions("", true)).toBe(SANDBOX_NOTE);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(SANDBOX_NOTE).toContain("could not write config file .git/config: Operation not permitted");
+  });
+
+  // covers PE-005
+  it("[TC-PE-1319] tells a sandboxed turn whose commands are read-only that its folders and .git cannot be written, and what still works", () => {
+    expect(turnInstructions("Be brief.", true, false, undefined, "", true)).toBe(
+      `Be brief.\n\n${READ_ONLY_SANDBOX_NOTE}`,
+    );
+    expect(turnInstructions("Be brief.", false, false, undefined, "", true)).toBe("Be brief.");
+    expect(READ_ONLY_SANDBOX_NOTE).toContain("your folders are read-only for them, .git included");
+    expect(READ_ONLY_SANDBOX_NOTE).toContain("git diff, git log");
+    expect(READ_ONLY_SANDBOX_NOTE).toContain("$TMPDIR");
+    // Claude Code's turn picks the note from the hob's answers: Edit files Never with commands open.
+    const tools = (overrides: Record<string, "allow" | "ask" | "deny">): ToolAccess => ({
+      policy: {
+        preset: "balanced",
+        sharedFolders: [tmpdir()],
+        hob: { ...EMPTY_HOB_POLICY, overrides },
+        dataFolder: "/data",
+        restrictions: [],
+      },
+      folders: [tmpdir()],
+      runtimeFolder: "/runtimes/hob-1",
+      commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
+    });
+    const start = (access: ToolAccess) =>
+      claudeTurnStart(
+        {
+          prompt: "Review",
+          sessionId: null,
+          instructions: "",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+          tools: access,
+        },
+        "on",
+        true,
+      );
+    const readOnly = start(tools({ "edit-files": "deny" }));
+    expect(readOnly.tools?.tools).toContain("Bash");
+    expect(readOnly.instructions).toContain(READ_ONLY_SANDBOX_NOTE);
+    expect(readOnly.instructions).not.toContain(SANDBOX_NOTE);
+    expect(start(tools({})).instructions).toContain(SANDBOX_NOTE);
   });
 });
 
