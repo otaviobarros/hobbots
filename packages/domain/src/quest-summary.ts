@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import type { ApprovalRequest } from "./approval.ts";
-import { linkArtifactKind } from "./artifact.ts";
+import { type Artifact, ArtifactReviews, type RegisteredArtifactId } from "./artifact.ts";
 import { AgentId, ThreadId } from "./ids.ts";
-import { type ArtifactRef, isActiveQuest, type Quest, QuestId, type Question, QuestState } from "./quest.ts";
+import { isActiveQuest, type Quest, QuestId, type Question, QuestState } from "./quest.ts";
 import { Revision } from "./revision.ts";
 import { descendantsOf, isCompletedTask, type Task, TaskId, type TaskState } from "./task.ts";
 
@@ -59,7 +59,10 @@ export class QuestSummary extends Schema.Class<QuestSummary>("QuestSummary")({
    * or another hob (ADR 027). An ended Quest asks nothing more.
    */
   needsYou: Count,
-  /** The pull request links its completed Tasks, its own included, returned: each waits for your review. */
+  /**
+   * The artifacts its completed Tasks, its own included, made, of a kind you review (a pull request,
+   * doc, page or code), that still wait for your review: each once, however many Tasks made it.
+   */
   readyForReview: Count,
   /** The journal sequence of the `QuestSummaryChanged` that published it. */
   revision: Revision,
@@ -68,12 +71,21 @@ export class QuestSummary extends Schema.Class<QuestSummary>("QuestSummary")({
 /** A Quest's summary before it is published: everything but its revision. */
 export type QuestSummaryFields = Omit<QuestSummary, "revision">;
 
-/** What the fold reads of a Task tree: the Tasks' places and states, and what waits on you there. */
+/**
+ * A registered artifact a Task made, by a result it returned or its Attempt's file changes: one for
+ * each Task that made it.
+ */
+export interface DeliveredArtifact extends Pick<Artifact, "kind" | "review"> {
+  readonly artifactId: RegisteredArtifactId;
+  readonly taskId: TaskId;
+}
+
+/** What the fold reads of a Task tree: the Tasks' places and states, what waits on you there, and what they made. */
 export interface SummaryTree {
   readonly tasks: ReadonlyArray<Pick<Task, "id" | "parentId" | "state">>;
   readonly questions: ReadonlyArray<Pick<Question, "taskId" | "recipientId" | "state">>;
   readonly approvals: ReadonlyArray<Pick<ApprovalRequest, "taskId" | "state">>;
-  readonly artifacts: ReadonlyArray<Pick<ArtifactRef, "taskId" | "kind" | "value">>;
+  readonly delivered: ReadonlyArray<DeliveredArtifact>;
 }
 
 const NO_TONES: ToneCounts = { needs: 0, working: 0, waiting: 0, done: 0, problem: 0, idle: 0 };
@@ -98,11 +110,9 @@ export const questSummaryOf = (
   const completed = new Set(
     [own, ...under].flatMap((task) => (task !== undefined && isCompletedTask(task.state) ? [task.id] : [])),
   );
-  const pullRequests = new Set(
-    tree.artifacts.flatMap((artifact) =>
-      completed.has(artifact.taskId) && artifact.kind === "link" && linkArtifactKind(artifact.value) === "pr"
-        ? [artifact.value]
-        : [],
+  const ready = new Set(
+    tree.delivered.flatMap((artifact) =>
+      completed.has(artifact.taskId) && ArtifactReviews.awaitsReview(artifact) ? [artifact.artifactId] : [],
     ),
   );
   return {
@@ -114,7 +124,7 @@ export const questSummaryOf = (
     state: quest.state,
     tones,
     needsYou: running ? questions + approvals + tones.problem : 0,
-    readyForReview: pullRequests.size,
+    readyForReview: ready.size,
   };
 };
 
