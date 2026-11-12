@@ -99,6 +99,18 @@ const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string
       .run(ids.ada, threadId, JSON.stringify({ maxDepth: 2, deadline: null }), at(3));
     task("keywords", ids.pip, "build", "active", 4);
     delegation("keywords", ids.pip, 4, { quest: "q2", lead: ids.ada, parent: "build" });
+    // Each Quest's summary, as the hub folds it in the transaction that writes its Tasks (ADR 037):
+    // every Task under the Quest's own, the nested Quest's included, by tone.
+    const summary = (quest: string, task: string, lead: string, parent: string | null, working: number, idle: number) =>
+      database
+        .prepare(
+          `INSERT INTO quest_summaries (quest_id, task_id, lead_id, parent_quest_id, thread_id, state, needs, working,
+             waiting, done, problem, idle, needs_you, ready_for_review, revision)
+           VALUES (?, ?, ?, ?, ?, 'active', 0, ?, 0, 0, 0, ?, 0, 0, 1)`,
+        )
+        .run(quest, task, lead, parent, threadId, working, idle);
+    summary("q1", "campaign", ids.aldric, null, 2, 1);
+    summary("q2", "build", ids.ada, "q1", 1, 0);
   } finally {
     database.close();
   }
@@ -128,7 +140,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   // Aldric's chat follows both Quests, so it shows once per Quest and never as a chat of its own.
   await expect(quests.getByRole("listitem")).toHaveCount(2);
   const entry = quests.getByRole("link", { name: /Black Friday campaign/ });
-  await expect(entry).toContainText(/Aldric\s*·\s*0 of 2 done/);
+  await expect(entry).toContainText(/Aldric\s*·\s*0 of 3 done/);
   await entry.click();
   await expect(page).toHaveURL(questThread("campaign"));
   await expect(drawer("Brief for campaign")).toBeVisible();
@@ -238,8 +250,8 @@ test("[TC-UX-146] a chat on its hob's page shows a chip for each Quest it follow
   await expect(rows).toHaveCount(2);
   // Aldric's chat follows his Quest and Ada's nested one; his other chat follows none.
   const followed = rows.filter({ hasText: "Black Friday campaign" });
-  await expect(followed).toContainText("Black Friday campaign · 0 of 2");
+  await expect(followed).toContainText("Black Friday campaign · 0 of 3");
   await expect(followed).toContainText("Landing page keywords · 0 of 1");
-  await expect(followed.getByTitle("Black Friday campaign · 0 of 2")).toBeVisible();
+  await expect(followed.getByTitle("Black Friday campaign · 0 of 3")).toBeVisible();
   await expect(rows.filter({ hasNotText: "Black Friday campaign" })).toHaveCount(1);
 });
