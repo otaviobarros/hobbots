@@ -3,6 +3,8 @@ import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { ThreadHeaderMenu } from "../archive/thread-menu.tsx";
+import { CampSheet } from "../camp-sheet/camp-sheet.tsx";
+import { messages as sheetCopy } from "../camp-sheet/messages.ts";
 import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
 import { StartFreshSheet } from "../camps/start-fresh-sheet.tsx";
@@ -19,8 +21,8 @@ import { ChatTitle } from "./chat-title.tsx";
 const copy = messages.chat;
 const headerCopy = campCopy.header;
 
-/** Which sheet the header's menu opened. */
-type Sheet = "make-camp" | "start-fresh" | null;
+/** Which sheet the header opened: from its menu, or a camp's own sheet. */
+type Sheet = "make-camp" | "start-fresh" | "camp" | null;
 
 /**
  * The chat's header (ADR 037, A2-02). The hob's chat leads with the hob's name over "Your chat with"
@@ -93,6 +95,8 @@ export function ChatHeader({
       {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
       {threadId && headerEnd === undefined && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
       {thread && <FindButton open={finding} onToggle={() => onFinding(!finding)} />}
+      {/* A camp's brief, records and what is yours (ADR 037). */}
+      {camp && <CampSheetButton camp={camp} open={sheet === "camp"} onOpen={() => setSheet("camp")} />}
       <HeaderMenu
         hob={hob}
         thread={thread}
@@ -101,10 +105,43 @@ export function ChatHeader({
         onSheet={setSheet}
       />
       {headerEnd}
-      {sheet === "make-camp" && <MakeCampSheet hob={hob} onClose={() => setSheet(null)} />}
-      {sheet === "start-fresh" && thread && <StartFreshSheet hob={hob} chat={thread} onClose={() => setSheet(null)} />}
+      <HeaderSheet sheet={sheet} hob={hob} thread={thread} onClose={() => setSheet(null)} />
     </header>
   );
+}
+
+/** A camp's brief, records and what is yours (ADR 037), from the header. */
+function CampSheetButton({ camp, open, onOpen }: { camp: Thread; open: boolean; onOpen: () => void }) {
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      aria-label={sheetCopy.openFor({ title: camp.title })}
+      aria-expanded={open}
+      onClick={onOpen}
+    >
+      {sheetCopy.open}
+    </Button>
+  );
+}
+
+/** The sheet the header opened, if any. */
+function HeaderSheet({
+  sheet,
+  hob,
+  thread,
+  onClose,
+}: {
+  sheet: Sheet;
+  hob: Agent;
+  thread: Thread | undefined;
+  onClose: () => void;
+}) {
+  if (sheet === "make-camp") return <MakeCampSheet hob={hob} onClose={onClose} />;
+  if (thread === undefined) return null;
+  if (sheet === "start-fresh") return <StartFreshSheet hob={hob} chat={thread} onClose={onClose} />;
+  if (sheet === "camp" && thread.kind === "camp") return <CampSheet hob={hob} camp={thread} onClose={onClose} />;
+  return null;
 }
 
 /** The title column: the camp's title or the hob's name, the line under it, and a camp's goal. */

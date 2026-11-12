@@ -3,6 +3,7 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { formatDay } from "../../lib/time.ts";
+import { messages as campCopy } from "../camps/messages.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.divider;
@@ -25,22 +26,26 @@ const chapterTitleOf = (chapter: Chapter) => chapter.title ?? copy.untitled({ nu
 /**
  * Where a chapter starts in the transcript (ADR 037). A live or opened chapter shows as a line with
  * its title and the day it started; a resting chapter folds to a box with its one-line summary,
- * which opens on Show. Its ⋯ menu offers Merge with previous.
+ * which opens on Show. Its ⋯ menu offers Merge with previous and, in a chat, Make a camp from this
+ * chapter.
  */
 export function ChapterDivider({
   chapter,
   messageCount,
   fold,
   merge,
+  makeCamp,
 }: {
   chapter: Chapter;
   messageCount: number;
   /** Left out for the live chapter, which never folds. */
   fold: FoldAction | undefined;
   merge: MergeAction | undefined;
+  /** Opens Make a camp with this chapter moving into it; left out in a camp. */
+  makeCamp?: (() => void) | undefined;
 }) {
   const title = chapterTitleOf(chapter);
-  const menu = merge && <ChapterMenu title={title} merge={merge} />;
+  const menu = (merge || makeCamp) && <ChapterMenu title={title} merge={merge} makeCamp={makeCamp} />;
   if (fold?.folded) {
     return (
       <section
@@ -87,7 +92,15 @@ export function ChapterDivider({
   );
 }
 
-function ChapterMenu({ title, merge }: { title: string; merge: MergeAction }) {
+function ChapterMenu({
+  title,
+  merge,
+  makeCamp,
+}: {
+  title: string;
+  merge: MergeAction | undefined;
+  makeCamp: (() => void) | undefined;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -96,9 +109,12 @@ function ChapterMenu({ title, merge }: { title: string; merge: MergeAction }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={merge.pending} onSelect={merge.onMerge}>
-          {merge.pending ? copy.merging : copy.merge}
-        </DropdownMenuItem>
+        {makeCamp && <DropdownMenuItem onSelect={makeCamp}>{campCopy.suggestion.fromChapter}</DropdownMenuItem>}
+        {merge && (
+          <DropdownMenuItem disabled={merge.pending} onSelect={merge.onMerge}>
+            {merge.pending ? copy.merging : copy.merge}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

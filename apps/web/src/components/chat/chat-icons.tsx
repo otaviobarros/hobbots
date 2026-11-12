@@ -115,3 +115,11 @@ export const SendIcon = () => (
     <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
   </LineIcon>
 );
+
+/** A page with a folded corner, on Note to self when the chat is narrow. */
+export const NoteIcon = () => (
+  <LineIcon size="menu">
+    <path d="M3.5 2.5h6l3 3v8h-9z" />
+    <path d="M9.5 2.5v3h3M5.5 8.5h5M5.5 11h3" />
+  </LineIcon>
+);

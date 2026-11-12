@@ -79,6 +79,30 @@ export class ThreadKeyReused extends Schema.TaggedError<ThreadKeyReused>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * The key of a note to self, which becomes the note's id, already names another message, or a note
+ * with other text; nothing changed. The same note sent again is answered, not refused.
+ */
+export class MessageKeyReused extends Schema.TaggedError<MessageKeyReused>()(
+  "MessageKeyReused",
+  { messageId: MessageId },
+  { httpApiStatus: 409 },
+) {}
+
+/** The message is not in the thread: it was never there, was taken back, or moved with its chapter. */
+export class MessageNotFound extends Schema.TaggedError<MessageNotFound>()(
+  "MessageNotFound",
+  { threadId: ThreadId, messageId: MessageId },
+  { httpApiStatus: 404 },
+) {}
+
+/** Only a camp has the setting asked for, such as Private; a chat keeps no such setting. */
+export class ThreadNotCamp extends Schema.TaggedError<ThreadNotCamp>()(
+  "ThreadNotCamp",
+  { threadId: ThreadId },
+  { httpApiStatus: 409 },
+) {}
+
 /** An archived thread is read-only: it takes no new messages, replies or brain switch until it is restored. */
 export class ThreadArchived extends Schema.TaggedError<ThreadArchived>()(
   "ThreadArchived",

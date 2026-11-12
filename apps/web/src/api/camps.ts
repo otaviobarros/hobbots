@@ -3,6 +3,7 @@ import { type AgentId, type Chapter, type Thread, type ThreadId, ThreadLifecycle
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chaptersMoved } from "./chapters.ts";
 import { call } from "./client.ts";
+import { recordsMoved } from "./notes.ts";
 import { placeThread, queryKeys } from "./queries.ts";
 import { questionsMoved } from "./questions.ts";
 import { recordMovedMessages, recordThread } from "./sync.ts";
@@ -65,7 +66,7 @@ export const chatStartedFresh = (
 /**
  * A chapter moved into a camp (ADR 037): both threads take their new rows and chapters, and read
  * their transcripts and their work again, since messages and the quests started in the chapter
- * moved, as did the questions waiting in those quests.
+ * moved, as did the questions waiting in those quests, and the chapter's decisions, artifacts and pins.
  */
 export const chapterMoved = async (
   queryClient: QueryClient,
@@ -102,6 +103,7 @@ export const chapterMoved = async (
     { threadId: camp.id, chapters: campChapters },
   ]);
   void questionsMoved(queryClient);
+  void recordsMoved(queryClient, [thread.id, camp.id]);
 };
 
 /** Makes a camp for the hob; it joins the hob's list at once, before its event arrives. */

@@ -1,6 +1,7 @@
 import {
   ChapterId,
   type ChapterRefusal,
+  hobReads,
   MESSAGE_PART_CHARS,
   type Message,
   MessageId,
@@ -133,8 +134,14 @@ export const ChapterToolsLive = Layer.effect(
         );
         const found = yield* repo.findMessage(MessageId.make(input.message_id));
         const thread = Option.isNone(found) ? Option.none() : yield* repo.findThread(found.value.threadId);
-        // Another hob's message reads as one that does not exist, so its id says nothing.
-        if (Option.isNone(found) || Option.isNone(thread) || thread.value.agentId !== turn.agentId) {
+        // Another hob's message, and a note to self, which only you read (ADR 037), read as one that
+        // does not exist, so its id says nothing.
+        if (
+          Option.isNone(found) ||
+          !hobReads(found.value) ||
+          Option.isNone(thread) ||
+          thread.value.agentId !== turn.agentId
+        ) {
           return yield* new Refused({ message: unknownMessageText(input.message_id) });
         }
         const part = input.part ?? 1;

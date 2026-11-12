@@ -5,6 +5,7 @@ import {
   ChapterStates,
   chapterSummary,
   type EventEnvelope,
+  hobReads,
   type JournaledEvent,
   type Message,
   type ThreadId,
@@ -139,7 +140,7 @@ export class ChapterSummaries extends Context.Service<ChapterSummaries, ChapterS
             if (waiting.length === 0) continue;
             const messages = yield* repo.listMessages(threadId);
             for (const chapter of waiting) {
-              const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued");
+              const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued" && hobReads(m));
               written.push({
                 chapterId: chapter.id,
                 revision: chapter.revision,

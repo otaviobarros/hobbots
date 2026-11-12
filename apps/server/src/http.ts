@@ -45,6 +45,7 @@ import { Installation } from "./installation.ts";
 import { MemoryPagesHandlers } from "./memory.ts";
 import { MemoryHandlers } from "./memory-settings.ts";
 import { MemorySharesHandlers } from "./memory-shares.ts";
+import { NotesHandlers } from "./notes.ts";
 import { PairingHandlers, PairingRequestsHandlers, withRetryAfter } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { RecordsHandlers } from "./records.ts";
@@ -153,6 +154,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
       rename: ({ params, payload }) => chat.rename(params.threadId, payload.title),
       pin: ({ params, payload }) => chat.setPinned(params.threadId, payload.pinned),
+      setPrivate: ({ params, payload }) => chat.setPrivate(params.threadId, payload.private),
       markRead: ({ params, payload }) => chat.markRead(params.threadId, payload.messageId, payload.revision),
       archive: ({ params }) => chat.archive(params.threadId),
       restore: ({ params }) => chat.restore(params.threadId),
@@ -259,6 +261,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     ChaptersHandlers,
     RecordsHandlers,
     CampSuggestionsHandlers,
+    NotesHandlers,
     SystemHandlers,
     SetupHandlers,
     RuntimesHandlers,

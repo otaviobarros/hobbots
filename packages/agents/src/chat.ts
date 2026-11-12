@@ -8,6 +8,7 @@ import {
   ThreadArchived,
   type ThreadArchiveRefused,
   type ThreadKeyReused,
+  type ThreadNotCamp,
   ThreadNotFound,
 } from "@hobbots/api";
 import {
@@ -20,6 +21,7 @@ import {
   type ChapterRefused,
   type Committed,
   DEFAULT_THREAD_TITLE,
+  hobReads,
   hobStanding,
   type IllegalChapterTransition,
   isResumable,
@@ -168,6 +170,14 @@ export class ChatService extends Context.Service<
     readonly rename: (threadId: ThreadId, title: string) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
     /** Pins the thread to the top of its hob's chats, or unpins it. Refused while it is archived. */
     readonly setPinned: (threadId: ThreadId, pinned: boolean) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived>;
+    /**
+     * Makes a camp private, or public again (ADR 037): from then on, memory capture takes nothing it
+     * writes while private, and what it captured before stays. Refused for a chat and while archived.
+     */
+    readonly setPrivate: (
+      threadId: ThreadId,
+      value: boolean,
+    ) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived | ThreadNotCamp>;
     /**
      * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027), so
      * its unread dot clears on every device. The marker only moves forward: a message you had read
@@ -548,7 +558,8 @@ export class ChatService extends Context.Service<
             yield* requireAwake(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
-            const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
+            // A note to self written since does not stand in the way: the hob never reads it.
+            const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
             const message = transcript.at(-1);
             if (isBusy(yield* runOf(threadId)) || message?.id !== messageId || !isResumable(message.status)) {
               return yield* new ReplyNotResumable({ messageId });
@@ -584,7 +595,7 @@ export class ChatService extends Context.Service<
         if (Option.isSome(taskTurns)) yield* taskTurns.value.reviewAuthority(agentId);
       });
 
-      const { checkBrainSwitch, followHob, setBrain, archive, restore, rename, setPinned, markRead } =
+      const { checkBrainSwitch, followHob, setBrain, archive, restore, rename, setPinned, setPrivate, markRead } =
         yield* makeThreadCommands({
           findThread,
           requireActive,
@@ -629,7 +640,7 @@ export class ChatService extends Context.Service<
         Effect.gen(function* () {
           const thread = yield* repo.findThread(threadId);
           if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
-          const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
+          const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
           const live = transcript.filter((m) => m.chapterId === thread.value.liveChapterId);
           const sources = yield* packSources(thread.value, live, transcript);
           const agent = yield* repo.findAgent(thread.value.agentId);
@@ -663,6 +674,7 @@ export class ChatService extends Context.Service<
         archive,
         rename,
         setPinned,
+        setPrivate,
         markRead,
         restore,
         makeCamp,

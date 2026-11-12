@@ -84,7 +84,7 @@ const countsOf = (sql: SqlClient.SqlClient, chapterId: ChapterId) =>
       (SELECT COUNT(*) FROM artifacts WHERE chapter_id = ${chapterId}) AS artifacts,
       (SELECT COUNT(*) FROM quests q JOIN tasks t ON t.id = q.task_id
         WHERE t.chapter_id = ${chapterId} AND t.parent_id IS NULL) AS quests,
-      (SELECT COUNT(*) FROM messages WHERE chapter_id = ${chapterId} AND status <> 'queued') AS messages`.pipe(
+      (SELECT COUNT(*) FROM messages WHERE chapter_id = ${chapterId} AND status <> 'queued' AND role <> 'note') AS messages`.pipe(
     Effect.map(([row]) => ({
       decisions: Number(row?.decisions ?? 0),
       artifacts: Number(row?.artifacts ?? 0),
@@ -138,8 +138,9 @@ const grownChapter = (sql: SqlClient.SqlClient, event: JournaledEvent) =>
       case "ArtifactRegistered":
         return event.artifact.chapterId;
       case "MessageUpserted": {
-        const { status } = event.message;
-        return status === "queued" || isInProgress(status) ? null : event.message.chapterId;
+        // A note to self is yours alone, so it grows no chapter towards a camp (ADR 037).
+        const { status, role } = event.message;
+        return status === "queued" || isInProgress(status) || role === "note" ? null : event.message.chapterId;
       }
       case "TaskCreated":
       case "QuestStarted": {

@@ -18,6 +18,7 @@ import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { moveApproval, storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
+import { applySuggestionEvent, isSuggestionEvent } from "./camp-suggestions.ts";
 import { chapterMoved, chatStartedFresh } from "./camps.ts";
 import { applyChapterEvent } from "./chapters.ts";
 import { API_URL } from "./client.ts";
@@ -35,12 +36,14 @@ import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
 import { applyMemorySave, refreshMemorySaves } from "./memory-saves.ts";
 import { memorySharesChanged } from "./memory-shares.ts";
+import { applyPinEvent, isPinEvent } from "./notes.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { questSummaryChanged } from "./quest-summaries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
+import { applyRecordEvent, isRecordEvent } from "./records.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
 import { skillProposalsChanged } from "./skill-proposals.ts";
 import { refreshSkillUpdates } from "./skill-updates.ts";
@@ -213,17 +216,6 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ClaimContested",
   "ClaimCleared",
   "ClaimReleased",
-  // Decisions, artifacts and briefs (ADR 037) have no screen yet; the camp sheet reads them (#1387).
-  "DecisionRecorded",
-  "DecisionSuperseded",
-  "ArtifactRegistered",
-  "ArtifactReviewSettled",
-  // Camp suggestions (ADR 037) have no screen yet; the suggestion card reads them (#1387).
-  "CampSuggested",
-  "CampSuggestionKept",
-  "CampSuggestionAccepted",
-  "CampSuggestionExpired",
-  "BriefWritten",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -239,16 +231,7 @@ type UnappliedEvent = Extract<
       | "ClaimMade"
       | "ClaimContested"
       | "ClaimCleared"
-      | "ClaimReleased"
-      | "DecisionRecorded"
-      | "DecisionSuperseded"
-      | "ArtifactRegistered"
-      | "ArtifactReviewSettled"
-      | "CampSuggested"
-      | "CampSuggestionKept"
-      | "CampSuggestionAccepted"
-      | "CampSuggestionExpired"
-      | "BriefWritten";
+      | "ClaimReleased";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -282,7 +265,13 @@ const isChapterEvent = (event: HobbotsEvent): event is ChapterEvent => CHAPTER_E
 const readAgain = (
   queryClient: QueryClient,
   event: HobbotsEvent,
-): event is WebEvent | ChapterEvent | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" }> => {
+): event is
+  | WebEvent
+  | ChapterEvent
+  | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" }>
+  | Parameters<typeof applyRecordEvent>[1]
+  | Parameters<typeof applySuggestionEvent>[1]
+  | Parameters<typeof applyPinEvent>[1] => {
   // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
   // again. A started or summarized chapter moves none.
   if (isChapterEvent(event)) {
@@ -295,6 +284,19 @@ const readAgain = (
   // A search or a page recorded, or Settings › Web or a hob's limits changed (ADR 036).
   if (isWebEvent(event)) {
     void webChanged(queryClient);
+    return true;
+  }
+  // The camp sheet's records, the suggestion card and pins (ADR 037, #1387) read their list again.
+  if (isRecordEvent(event)) {
+    void applyRecordEvent(queryClient, event);
+    return true;
+  }
+  if (isSuggestionEvent(event)) {
+    void applySuggestionEvent(queryClient, event);
+    return true;
+  }
+  if (isPinEvent(event)) {
+    void applyPinEvent(queryClient, event);
     return true;
   }
   // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.

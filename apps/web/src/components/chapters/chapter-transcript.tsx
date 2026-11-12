@@ -1,9 +1,12 @@
 import { type Agent, ChapterId, ChapterStates, type Message, type Thread, ThreadLifecycle } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useReducer, useState } from "react";
 import { chaptersQuery, useMergeChapter, useSplitChapter } from "../../api/chapters.ts";
+import { CampSuggestions, chapterName } from "../camps/camp-suggestions.tsx";
+import { type CampFrom, MakeCampSheet } from "../camps/make-camp-sheet.tsx";
+import { messages as campCopy } from "../camps/messages.ts";
+import { MessageMenu } from "../notes/message-menu.tsx";
 import { ReadFailed } from "../web/read-failed.tsx";
 import { ChapterDivider } from "./chapter-divider.tsx";
 import {
@@ -29,9 +32,10 @@ import { SplitChapterSheet } from "./split-chapter-sheet.tsx";
 
 /**
  * The transcript under its chapters (ADR 037, #1382): a divider where each chapter starts, resting
- * chapters folded to their summary until you open them, Merge with previous on a divider's menu and
- * Split here on a message's. `renderMessage` draws one message, given the menu that splits there,
- * if it can. A thread that never changed topic shows no divider.
+ * chapters folded to their summary until you open them, Merge with previous and, in a chat, Make a
+ * camp from this chapter on a divider's menu, and Pin and Split here on a message's. The hub's camp
+ * suggestions follow the transcript. `renderMessage` draws one message, given its menu. A thread
+ * that never changed topic shows no divider.
  */
 export function ChapterTranscript({
   hob,
@@ -54,6 +58,8 @@ export function ChapterTranscript({
   const [choices, dispatchFold] = useReducer(foldStep, new Map());
   const [split, dispatchSplit] = useReducer(splitStep, SPLIT_CLOSED);
   const [merge, dispatchMerge] = useReducer(mergeStep, MERGE_IDLE);
+  // The chat chapter Make a camp opens with, which moves into the new camp.
+  const [campFrom, setCampFrom] = useState<CampFrom>();
   const splitting = useSplitChapter(thread.id);
   const merging = useMergeChapter(thread.id);
   // An archived chat's chapters stay as they are, so it offers neither.
@@ -112,12 +118,31 @@ export function ChapterTranscript({
               ? { pending: merge.step === "merging", onMerge: () => section.chapter && mergeInto(section.chapter.id) }
               : undefined
           }
+          makeCamp={
+            open && thread.kind === "chat" && section.chapter !== null && section.messages.length > 0
+              ? () =>
+                  section.chapter &&
+                  setCampFrom({
+                    chapter: section.chapter,
+                    title: chapterName(section.chapter),
+                    detail: campCopy.suggestion.messages({ count: section.messages.length }),
+                  })
+              : undefined
+          }
           renderMessage={(message, at) =>
             renderMessage(
               message,
-              // A chapter's first message already starts it, so it splits nothing.
-              open && at > 0 && section.chapter !== null ? (
-                <SplitHereMenu onSplit={() => dispatchSplit({ _tag: "Open", messageId: message.id })} />
+              open ? (
+                <MessageMenu
+                  threadId={thread.id}
+                  messageId={message.id}
+                  // A chapter's first message already starts it, so it splits nothing.
+                  onSplit={
+                    at > 0 && section.chapter !== null
+                      ? () => dispatchSplit({ _tag: "Open", messageId: message.id })
+                      : undefined
+                  }
+                />
               ) : undefined,
             )
           }
@@ -140,6 +165,8 @@ export function ChapterTranscript({
       {split.step !== "closed" && (
         <SplitChapterSheet hob={hob} state={split} dispatch={dispatchSplit} onSend={sendSplit} />
       )}
+      {open && <CampSuggestions hob={hob} thread={thread} chapters={chapters.data ?? []} onMake={setCampFrom} />}
+      {campFrom && <MakeCampSheet hob={hob} from={campFrom} onClose={() => setCampFrom(undefined)} />}
     </>
   );
 }
@@ -151,6 +178,7 @@ function Section({
   folded,
   onToggle,
   merge,
+  makeCamp,
   renderMessage,
 }: {
   section: ChapterSection;
@@ -160,6 +188,7 @@ function Section({
   /** Opens the chapter when `folded`, else folds it. */
   onToggle: (folded: boolean) => void;
   merge: { readonly pending: boolean; readonly onMerge: () => void } | undefined;
+  makeCamp: (() => void) | undefined;
   renderMessage: (message: Message, at: number) => ReactNode;
 }) {
   const { chapter } = section;
@@ -173,26 +202,11 @@ function Section({
           messageCount={section.messages.length}
           fold={ChapterStates.isLive(chapter) ? undefined : { folded, onToggle: () => onToggle(folded) }}
           merge={merge}
+          makeCamp={makeCamp}
         />
       )}
       {!folded &&
         section.messages.map((message, at) => <Fragment key={message.id}>{renderMessage(message, at)}</Fragment>)}
     </>
-  );
-}
-
-/** A message's ⋯ menu, with Split here. */
-function SplitHereMenu({ onSplit }: { onSplit: () => void }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="quiet" size="icon" aria-label={messages.message.more} title={messages.message.more}>
-          ⋯
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onSplit}>{messages.message.split}</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

@@ -17,6 +17,7 @@ const draft = (change: Partial<CampDraft> = {}): CampDraft => ({
   title: "2027 taxes",
   goal: "",
   private: false,
+  chapter: false,
   ...change,
 });
 const K1 = ThreadId.make("k1");
@@ -53,7 +54,7 @@ describe("Make a camp", () => {
     expect(run([{ _tag: "Leave", field: "title" }], empty)).toMatchObject({ shown: new Set(["title"]) });
     expect(run([{ _tag: "Send", key: K1 }], empty)).toMatchObject({
       step: "editing",
-      shown: new Set(["title", "goal", "private"]),
+      shown: new Set(["title", "goal", "private", "chapter"]),
     });
   });
 
@@ -76,6 +77,8 @@ describe("Make a camp", () => {
   it("tells a paused or retired hob from a request that got no answer", () => {
     expect(makeCampError(new ApiError("", "HobUnavailable"))).toBe("hob-unavailable");
     expect(makeCampError(new ApiError("", "ThreadKeyReused"))).toBe("unreachable");
+    expect(makeCampError(new ApiError("", "ChapterMoveRefused"))).toBe("chapter-refused");
+    expect(makeCampError(new ApiError("", "ChapterMissing"))).toBe("chapter-refused");
     expect(makeCampError(new TypeError("Failed to fetch"))).toBe("unreachable");
   });
 
@@ -85,12 +88,15 @@ describe("Make a camp", () => {
       title: fc.constantFrom("", "  ", "Taxes", " Lisbon trip ", "x".repeat(THREAD_TITLE_MAX + 1)),
       goal: fc.constantFrom("", "File on time", "g".repeat(501)),
       private: fc.boolean(),
+      chapter: fc.boolean(),
     });
     const anyEvent: fc.Arbitrary<MakeCampEvent> = fc.oneof(
       anyDraft.map((each) => ({ _tag: "Edit" as const, draft: each })),
       fc.constantFrom("title", "goal", "private").map((field) => ({ _tag: "Leave" as const, field })),
       fc.integer({ min: 1, max: 99 }).map((n) => ({ _tag: "Send" as const, key: ThreadId.make(`k${n}`) })),
-      fc.constantFrom("hob-unavailable", "unreachable").map((error) => ({ _tag: "Failed" as const, error })),
+      fc
+        .constantFrom("hob-unavailable", "chapter-refused", "unreachable")
+        .map((error) => ({ _tag: "Failed" as const, error })),
     );
     fc.assert(
       fc.property(fc.array(anyEvent, { maxLength: 30 }), (events) => {

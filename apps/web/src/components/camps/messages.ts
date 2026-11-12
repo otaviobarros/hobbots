@@ -1,4 +1,4 @@
-import { CAMP_GOAL_MAX, type CarriedOverRef, THREAD_TITLE_MAX } from "@hobbots/domain";
+import { CAMP_GOAL_MAX, type CampSuggestionCode, type CarriedOverRef, THREAD_TITLE_MAX } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
 import type { CampProblem, MakeCampError } from "./make-camp-flow.ts";
 import type { StartFreshError } from "./start-fresh-flow.ts";
@@ -58,9 +58,43 @@ export const messages = {
     } satisfies Record<CampProblem, string>,
     errors: {
       "hob-unavailable": ({ name }: Named) => `${name} is paused or retired, so it can't take a new camp now.`,
+      "chapter-refused": () =>
+        "Couldn't move that chapter: it changed meanwhile, or a reply is still running. Try again once it ends.",
       unreachable: () => "Couldn't make the camp. Hobbots may be reconnecting; try again in a moment.",
     } satisfies Record<MakeCampError, (named: Named) => string>,
     made: ({ title }: { readonly title: string }) => `${title} is now a camp.`,
+    /** Making a camp from a chat's chapter, which moves into it. */
+    chapter: ({ title }: { readonly title: string }) => `The ${title} chapter`,
+    chapterDetail: ({ from }: { readonly from: string }) => `From your chat: ${from}. It moves into the camp.`,
+    chapterLink: "Your chat keeps a link to the camp. Other topics stay in the chat.",
+  },
+  suggestion: {
+    eyebrow: ({ name }: Named) => `${name} suggests`,
+    heading: ({ title }: { readonly title: string }) => `Make ${title} a camp?`,
+    lead: "This topic has grown in your chat. A camp keeps its decisions, files and work together, and your chat stays light.",
+    /** Why it was suggested, one chip per reason. */
+    reason: {
+      decisions: ({ count }: { readonly count: number }) =>
+        plural(count, { one: "1 decision", other: `${formatCount(count)} decisions` }),
+      artifacts: ({ count }: { readonly count: number }) =>
+        plural(count, { one: "1 file", other: `${formatCount(count)} files` }),
+      quests: ({ count }: { readonly count: number }) =>
+        plural(count, { one: "1 quest", other: `${formatCount(count)} quests` }),
+      length: ({ count }: { readonly count: number }) =>
+        plural(count, { one: "1 message", other: `${formatCount(count)} messages` }),
+      drift: () => "A topic of its own",
+    } satisfies Record<CampSuggestionCode, (counted: { readonly count: number }) => string>,
+    make: "Make it a camp",
+    keep: "Keep it in my chat",
+    keeping: "Keeping it…",
+    why: "I suggest this when a topic has files, decisions and ongoing work.",
+    kept: ({ name, title }: Named & { readonly title: string }) =>
+      `✓ Kept in your chat. ${name} won't ask again about ${title}.`,
+    keepFailed: "Couldn't keep it in your chat. Hobbots may be reconnecting; try again in a moment.",
+    /** On a chat chapter's ⋯ menu. */
+    fromChapter: "Make a camp from this chapter",
+    messages: ({ count }: { readonly count: number }) =>
+      plural(count, { one: "1 message", other: `${formatCount(count)} messages` }),
   },
   fresh: {
     title: ({ name }: Named) => `Start a fresh chat with ${name}`,

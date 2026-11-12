@@ -9,6 +9,7 @@ import {
   CampBriefs,
   CampDrift,
   CampSuggestionService,
+  CatchUps,
   ChapterService,
   ChapterSummaries,
   ChapterToolsLive,
@@ -30,6 +31,7 @@ import {
   MemorySharesLive,
   type MemoryStore,
   type MemoryVersionAuthors,
+  Notes,
   PackReports,
   PermissionSummary,
   RecordPackSource,
@@ -91,6 +93,7 @@ import {
   BackpackLive,
   BriefLogLive,
   CampSuggestionRepositoryLive,
+  CatchUpRepositoryLive,
   ChapterRepositoryLive,
   ChapterSummaryLogLive,
   CharmCallsLive,
@@ -111,6 +114,7 @@ import {
   MemorySavesLive,
   MemoryShareLogLive,
   MemoryVersionAuthorsLive,
+  PinRepositoryLive,
   PrivateCampsLive,
   RecordRepositoryLive,
   RestoreRepository,
@@ -350,6 +354,9 @@ const ServerLive = Layer.unwrap(
       ClaimRegisterLive,
       // Decisions and the artifacts registry of every chat and camp (ADR 037).
       RecordRepositoryLive,
+      // Pins, and what catch-up reads: your read marker and the Quests of each chat and camp (ADR 037).
+      PinRepositoryLive,
+      CatchUpRepositoryLive,
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,
@@ -657,6 +664,8 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
       // Keep in chat and the chat's camp suggestions (ADR 037).
       .pipe(Layer.provideMerge(CampSuggestionService.layer))
+      // Notes to self, pins and catch-up (ADR 037).
+      .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer)))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(

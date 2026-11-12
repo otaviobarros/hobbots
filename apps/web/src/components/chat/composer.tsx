@@ -1,34 +1,25 @@
-import { Button } from "@hobbots/ui/components/button";
-import { cn } from "@hobbots/ui/lib/utils";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
 import type { ReplyWait } from "../../lib/reply-wait.ts";
 import { messages } from "../messages.ts";
+import { messages as noteCopy } from "../notes/messages.ts";
+import type { NoteMode } from "../notes/use-note-to-self.ts";
 import { SkillPickerList, UseSkillButton, useSkillPicker } from "../skill-line/skill-picker.tsx";
 import type { SkillPicking } from "../skill-line/skill-picker-model.ts";
-import { SendIcon } from "./chat-icons.tsx";
-import { BusyHint, StopButton } from "./composer-busy.tsx";
+import { ComposerActions, ComposerHint, NoteToggle, type PausedHob } from "./composer-parts.tsx";
 
 const copy = messages.composer;
 
-/**
- * A paused hob takes no new work. In a thread the composer queues messages until the hob wakes,
- * with Wake beside it; a new thread waits for Wake. While a reply runs, Send queues the message
- * behind it (CH-008).
- */
-export interface PausedHob {
-  readonly name: string;
-  readonly waking: boolean;
-  readonly onWake: () => void;
-  /** False before the thread exists: a paused hob starts no new thread. */
-  readonly canQueue: boolean;
-}
+const sendLabelOf = (noting: boolean, busy: boolean): string => {
+  if (noting) return noteCopy.save;
+  return busy ? copy.sendAfterReply : copy.send;
+};
 
-/** The paused hob's line under the input, or the keys' hint while nothing runs. */
-const restingHint = (paused: PausedHob | undefined): string => {
-  if (!paused) return copy.hint;
-  return paused.canQueue ? copy.hintPausedQueue(paused) : copy.hintPausedNew(paused);
+/** The input's placeholder: a note's, a closed paused hob's, or the thread's own. */
+const placeholderOf = (own: string, noting: boolean, closedBy: PausedHob | undefined): string => {
+  if (noting) return noteCopy.placeholder;
+  return closedBy ? copy.pausedPlaceholder(closedBy) : own;
 };
 
 /**
@@ -51,6 +42,7 @@ export function Composer({
   onStopWaiting,
   paused,
   skills,
+  note,
 }: {
   /** The hob's name, which the hint and Stop's description use. */
   name: string;
@@ -72,6 +64,8 @@ export function Composer({
   paused?: PausedHob | undefined;
   /** The hob's skills, which `/` picks one of (ADR 029); absent, `/` is plain text. */
   skills?: SkillPicking | undefined;
+  /** Notes to self (ADR 037): the composer writes one while it is on. Absent before the thread exists. */
+  note?: NoteMode | undefined;
 }) {
   const draft = useDraft(place);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -86,9 +80,11 @@ export function Composer({
     input.current.setSelectionRange(cursorAt.current, cursorAt.current);
     cursorAt.current = null;
   }, [draft]);
-  const closed = paused !== undefined && !paused.canQueue;
+  const noting = note?.on === true;
+  // A note wakes no hob, so it goes whatever the hob is doing.
+  const closed = !noting && paused !== undefined && !paused.canQueue;
   const content = sendable(draft);
-  const sendLabel = busy ? copy.sendAfterReply : copy.send;
+  const sendLabel = sendLabelOf(noting, busy);
 
   // Focus comes back to the input when a reply ends, unless the user has moved it somewhere else
   // or is selecting text to copy.
@@ -99,8 +95,10 @@ export function Composer({
   }, [busy]);
 
   const submit = () => {
-    if (!content || sending || closed) return;
-    onSend(content);
+    if (noting) {
+      if (content && !note.saving) note.onNote(content);
+    } else if (content && !sending && !closed) onSend(content);
+    else return;
     input.current?.focus();
   };
 
@@ -133,7 +131,7 @@ export function Composer({
           rows={2}
           spellCheck
           disabled={closed}
-          placeholder={paused && closed ? copy.pausedPlaceholder(paused) : placeholder}
+          placeholder={placeholderOf(placeholder, noting, closed ? paused : undefined)}
           onChange={(event) => writeDraft(place, event.target.value)}
           onKeyDown={picker.around(onKeyDown)}
           className="field-sizing-content max-h-40 min-h-12 resize-none overflow-y-auto border-0 bg-transparent py-0.5 [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong outline-none [tab-size:4] placeholder:text-label disabled:cursor-not-allowed"
@@ -141,55 +139,52 @@ export function Composer({
         <div className="flex items-center gap-2">
           <UseSkillButton
             picking={skills}
-            hidden={closed}
+            hidden={closed || noting}
             onClick={() => {
               picker.start();
               input.current?.focus();
             }}
           />
-          {busy ? (
-            <BusyHint name={name} stopping={stopping} drafting={content !== ""} wait={wait} />
-          ) : (
-            // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
-            // paused hob's hint stays.
-            <span
-              className={cn("min-w-0 flex-1 text-end text-meta text-label", !paused && "@max-[480px]/chat:invisible")}
-            >
-              {restingHint(paused)}
-            </span>
+          {note && (
+            <NoteToggle
+              note={note}
+              busy={busy}
+              onToggle={() => {
+                note.onToggle();
+                input.current?.focus();
+              }}
+            />
           )}
-          {busy && (
-            <StopButton name={name} stopping={stopping} wait={wait} onStop={onStop} onStopWaiting={onStopWaiting} />
-          )}
-          {paused && (
-            <Button
-              variant={paused.canQueue ? "outline" : "default"}
-              size="bar"
-              onClick={paused.onWake}
-              disabled={paused.waking}
-            >
-              {copy.wake(paused)}
-            </Button>
-          )}
-          {!closed &&
-            (paused ? (
-              <Button size="bar" onClick={submit} disabled={!content || sending}>
-                {copy.queue}
-              </Button>
-            ) : (
-              <Button
-                size="icon"
-                aria-label={sendLabel}
-                title={sendLabel}
-                onClick={submit}
-                disabled={!content || sending}
-                className="size-[34px]"
-              >
-                <SendIcon />
-              </Button>
-            ))}
+          <ComposerHint
+            name={name}
+            noting={noting}
+            busy={busy}
+            stopping={stopping}
+            drafting={content !== ""}
+            wait={wait}
+            paused={paused}
+          />
+          <ComposerActions
+            name={name}
+            noting={noting}
+            closed={closed}
+            busy={busy}
+            stopping={stopping}
+            wait={wait}
+            paused={paused}
+            sendLabel={sendLabel}
+            disabled={!content || (noting ? note.saving : sending)}
+            onSubmit={submit}
+            onStop={onStop}
+            onStopWaiting={onStopWaiting}
+          />
         </div>
       </div>
+      {note?.status && (
+        <p role="status" className="m-0 text-meta text-label">
+          {note.status}
+        </p>
+      )}
     </>
   );
 }

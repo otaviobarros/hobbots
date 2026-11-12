@@ -7,8 +7,26 @@ import { Revision } from "./revision.ts";
 import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";
 import { ToolOutput } from "./tool-output.ts";
 
-export const MessageRole = Schema.Literals(["user", "assistant"]);
+/**
+ * - `user`: a message you sent the hob.
+ * - `assistant`: the hob's reply.
+ * - `note`: a note to self (ADR 037): yours alone. It never wakes the hob, never reaches its turns,
+ *   its memory or its records, and leaves nothing unread.
+ */
+export const MessageRole = Schema.Literals(["user", "assistant", "note"]);
 export type MessageRole = typeof MessageRole.Type;
+
+/** The most characters a note to self takes. */
+export const NOTE_TEXT_MAX = 4_000;
+
+/** Whether the message is a note to self (ADR 037). */
+export const isNote = (message: { readonly role: MessageRole }): boolean => message.role === "note";
+
+/**
+ * Whether a hob reads the message: everything but a note to self, which only you read (ADR 037).
+ * Every read a hob's turn, its memory or a projector takes of a transcript keeps only these.
+ */
+export const hobReads = (message: { readonly role: MessageRole }): boolean => message.role !== "note";
 
 /**
  * - `queued`: a user message waiting for the thread's current turn to end.

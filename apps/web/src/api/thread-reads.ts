@@ -50,7 +50,7 @@ const onVisibility = (changed: () => void) => {
 };
 
 /** Whether the page is in front: a chat behind another window or tab is not being read. */
-const usePageShown = () =>
+export const usePageShown = () =>
   useSyncExternalStore(
     onVisibility,
     () => document.visibilityState === "visible",

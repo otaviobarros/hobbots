@@ -47,6 +47,8 @@ import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
+import { CatchUpAt } from "../catch-up/catch-up-card.tsx";
+import { type CatchUpView, useCatchUp } from "../catch-up/use-catch-up.ts";
 import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
 import { FindBox } from "../find/find-box.tsx";
 import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
@@ -56,6 +58,7 @@ import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved
 import { messages } from "../messages.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "../needs-tray/use-thread-needs.ts";
+import { useNoteToSelf } from "../notes/use-note-to-self.ts";
 import { BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picker.tsx";
 import { PinNotes } from "../quest/pin-notes.tsx";
 import { useWorkMoments } from "../quest/thread-work.tsx";
@@ -176,12 +179,17 @@ export function ChatView({
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
+  // What changed while you were away is read before the chat marks itself read (ADR 037).
+  const catchUp = useCatchUp(thread.data, inView);
   // Reading the chat clears its unread dot on every device, while it is in view (ADR 027).
-  useReadThread(hobId, thread.data, transcript, inView);
+  useReadThread(hobId, thread.data, transcript, inView && !catchUp.reading);
+  // Notes to self go from the composer too, and wake no hob (ADR 037).
+  const note = useNoteToSelf(threadId, place);
   // Up brings back the last message that went out; a queued one is still there to remove or edit.
   const lastSent = transcript?.findLast((m) => m.role === "user")?.content;
-  // Only the thread's latest reply can be continued, and only while nothing else runs.
-  const latest = transcript?.at(-1);
+  // Only the thread's latest reply can be continued, and only while nothing else runs; a note after
+  // it changes nothing.
+  const latest = transcript?.findLast((m) => m.role !== "note");
   const resumable =
     latest?.role === "assistant" && isResumable(latest.status) && !streaming && hob.data?.status === "active"
       ? latest
@@ -327,6 +335,14 @@ export function ChatView({
               focusMessageId={focusMessageId}
               focusPick={picks}
               streaming={streaming}
+              catchUp={catchUp}
+              onJump={(messageId) =>
+                void navigate({
+                  to: "/hobs/$hobId/threads/$threadId",
+                  params: { hobId, threadId: threadId ?? "" },
+                  search: { message: messageId },
+                })
+              }
               resume={(message) =>
                 message.id === resumable?.id
                   ? {
@@ -441,6 +457,7 @@ export function ChatView({
             wait={wait}
             onStopWaiting={() => stopWaiting.mutate()}
             skills={skillPicking(skills, current.name, thread.data?.skillTrial)}
+            note={note}
             paused={
               paused
                 ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
@@ -465,6 +482,8 @@ function Transcript({
   focusMessageId,
   focusPick,
   streaming,
+  catchUp,
+  onJump,
   resume,
 }: {
   transcript: ReadonlyArray<Message>;
@@ -475,6 +494,9 @@ function Transcript({
   /** How many times a search result was picked here, so each pick opens its chapter again. */
   focusPick: number;
   streaming: boolean;
+  /** What changed while you were away, shown where what you have not read starts. */
+  catchUp: CatchUpView;
+  onJump: (messageId: MessageId) => void;
   resume: (message: Message) => ContinueReply | undefined;
 }) {
   const switches = brainSwitches(transcript);
@@ -492,8 +514,13 @@ function Transcript({
   const web = repliesWeb(webUsage.data, transcript);
   // The message before each, which tells a quiet reply; chapters lay the transcript out in pieces.
   const previous = new Map(transcript.map((message, index) => [message.id, transcript[index - 1]]));
+  // Catching up shows before the first reply you have not read, or at the end when none landed.
+  const unreadFrom = (catchUp.open ?? catchUp.folded)?.firstUnread ?? null;
+  const caughtAt = transcript.some((message) => message.id === unreadFrom) ? unreadFrom : null;
+  const catchUpAt = <CatchUpAt hob={hob} view={catchUp} onJump={onJump} />;
   const row = (message: Message, split: ReactNode) => (
     <>
+      {message.id === caughtAt && catchUpAt}
       {switches.has(message.id) && message.runtime !== null && (
         <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
       )}
@@ -536,6 +563,7 @@ function Transcript({
           renderMessage={row}
         />
       )}
+      {caughtAt === null && catchUpAt}
       {saves.isError && saves.data === undefined && (
         <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
       )}

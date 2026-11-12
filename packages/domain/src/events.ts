@@ -19,6 +19,7 @@ import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
+import { MessagePin } from "./message-pin.ts";
 import { HobPresence, ThreadRunStatus } from "./presence.ts";
 import {
   ArtifactRef,
@@ -241,6 +242,10 @@ const ClaimContested = Schema.TaggedStruct("ClaimContested", { claim: Claim });
 const ClaimCleared = Schema.TaggedStruct("ClaimCleared", { claim: Claim });
 /** The claim's Task ended, so the claim was released; a released number is never handed out again. */
 const ClaimReleased = Schema.TaggedStruct("ClaimReleased", { claim: Claim });
+/** You pinned a message, so it shows under Mine (ADR 037); pinning it again journals nothing. */
+const MessagePinned = Schema.TaggedStruct("MessagePinned", { pin: MessagePin });
+/** You unpinned a message; unpinning one that is not pinned journals nothing. */
+const MessageUnpinned = Schema.TaggedStruct("MessageUnpinned", { threadId: ThreadId, messageId: MessageId });
 /** A decision was recorded in a chat or camp, by a hob's `record_decision` or by you (ADR 037). */
 const DecisionRecorded = Schema.TaggedStruct("DecisionRecorded", { decision: Decision });
 /**
@@ -503,6 +508,8 @@ export const JournaledEvent = Schema.Union([
   ArtifactRegistered,
   ArtifactReviewSettled,
   BriefWritten,
+  MessagePinned,
+  MessageUnpinned,
   BackpackItemRecorded,
   BackpackItemChanged,
   PairingRequested,
@@ -570,7 +577,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChatStartedFresh: 2,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
-  // `chapterId` (ADR 037, migration 0099). 6: its `actor` (ADR 037, migration 0101).
+  // `chapterId` (ADR 037, migration 0099). 6: its `actor` (ADR 037, migration 0101). A message's
+  // `note` role (ADR 037) was added compatibly: no stored entry holds one from before.
   MessageUpserted: 6,
   // 2: its message's `chapterId` (migration 0099). 3: its message's `actor` (migration 0101).
   MessageQueued: 3,
@@ -627,6 +635,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ArtifactRegistered: 1,
   ArtifactReviewSettled: 1,
   BriefWritten: 1,
+  MessagePinned: 1,
+  MessageUnpinned: 1,
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
   BackpackItemChanged: 1,
