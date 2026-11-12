@@ -1,10 +1,12 @@
-import { type Artifact, MessageId, type RegisteredArtifactId, type Thread } from "@hobbots/domain";
+import { type Artifact, MessageId, type RegisteredArtifactId, type Thread, type ThreadId } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { artifactsQuery } from "../../api/records.ts";
 import { formatAgo, formatCount } from "../../lib/format.ts";
+import { ReviewActions, reviewLine } from "./artifact-review.tsx";
 import { ARTIFACT_FILTERS, type ArtifactFilter, filterArtifacts, isArtifactFilter, linkOf } from "./artifact-rows.ts";
 import { messages } from "./messages.ts";
 import { ReadState } from "./sheet-parts.tsx";
@@ -26,8 +28,9 @@ const madeAt = (artifact: Artifact): MessageId | null =>
   artifact.origin.kind === "message" ? MessageId.make(artifact.origin.id) : null;
 
 /**
- * The Artifacts tab (ADR 037): one row per artifact at its latest version, filtered by kind. Open
- * shows where it is, who made it and the message it was made at.
+ * The Artifacts tab (ADR 037): one row per artifact at its latest version, filtered by kind, with
+ * To review on each one waiting for you. Open shows where it is, who made it, the message it was
+ * made at and its review, which you settle there (#1422).
  */
 export function ArtifactsTab({
   thread,
@@ -44,7 +47,15 @@ export function ArtifactsTab({
   const all = artifacts.data ?? [];
   const opened = all.find((artifact) => artifact.id === openId);
   if (opened !== undefined) {
-    return <ArtifactDetail artifact={opened} hobName={hobName} onBack={() => setOpenId(null)} onJump={onJump} />;
+    return (
+      <ArtifactDetail
+        threadId={thread.id}
+        artifact={opened}
+        hobName={hobName}
+        onBack={() => setOpenId(null)}
+        onJump={onJump}
+      />
+    );
   }
   const shown = filterArtifacts(all, filter);
   return (
@@ -83,6 +94,7 @@ export function ArtifactsTab({
                 })}
               </span>
             </span>
+            {artifact.review === "waiting" && <Badge variant="waiting">{copy.review.toReview}</Badge>}
             <Button
               variant="text"
               size="xs"
@@ -100,11 +112,13 @@ export function ArtifactsTab({
 }
 
 function ArtifactDetail({
+  threadId,
   artifact,
   hobName,
   onBack,
   onJump,
 }: {
+  threadId: ThreadId;
   artifact: Artifact;
   hobName: string;
   onBack: () => void;
@@ -127,7 +141,10 @@ function ArtifactDetail({
         <dd className="m-0 text-text">{formatCount(artifact.latestVersion)}</dd>
         <dt className="text-label">{copy.changed}</dt>
         <dd className="m-0 text-text">{formatAgo(artifact.updatedAt)}</dd>
+        <dt className="text-label">{copy.review.label}</dt>
+        <dd className="m-0 text-text">{reviewLine(artifact, hobName)}</dd>
       </dl>
+      <ReviewActions threadId={threadId} artifact={artifact} />
       <div className="flex flex-wrap gap-2">
         {link !== null && (
           <Button asChild variant="outline" size="sm">

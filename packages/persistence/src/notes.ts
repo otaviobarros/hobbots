@@ -7,7 +7,7 @@ import { makeJournaledChange } from "./journal.ts";
 import { readQuestSummaries } from "./quest-summary-rows.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
-// Pins (ADR 037, migration 0105) and what catch-up reads besides the transcript and the records: the
+// Pins (ADR 037, migration 0106) and what catch-up reads besides the transcript and the records: the
 // read marker and the Quests followed in the thread.
 
 interface PinRow {

@@ -1,7 +1,15 @@
 import type { RecordDecisionPayload } from "@hobbots/api";
-import type { Decision, DecisionId, HobbotsEvent, ThreadId } from "@hobbots/domain";
+import type {
+  Artifact,
+  ArtifactReviewOutcome,
+  Decision,
+  DecisionId,
+  HobbotsEvent,
+  RegisteredArtifactId,
+  ThreadId,
+} from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { call } from "./client.ts";
+import { ApiError, call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
 
 // A chat's or camp's records (ADR 037), as the camp sheet shows them: its decisions, its artifacts at
@@ -48,12 +56,20 @@ export const readListAgain = async (queryClient: QueryClient, queryKey: Readonly
 
 type RecordEvent = Extract<
   HobbotsEvent,
-  { readonly _tag: "DecisionRecorded" | "DecisionSuperseded" | "ArtifactRegistered" | "BriefWritten" }
+  {
+    readonly _tag:
+      | "DecisionRecorded"
+      | "DecisionSuperseded"
+      | "ArtifactRegistered"
+      | "ArtifactReviewSettled"
+      | "BriefWritten";
+  }
 >;
 const RECORD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  "ArtifactReviewSettled",
   "BriefWritten",
 ]);
 export const isRecordEvent = (event: HobbotsEvent): event is RecordEvent => RECORD_EVENTS.has(event._tag);
@@ -65,6 +81,7 @@ export const applyRecordEvent = (queryClient: QueryClient, event: RecordEvent): 
     case "DecisionSuperseded":
       return readListAgain(queryClient, recordKeys.decisions(event.decision.threadId));
     case "ArtifactRegistered":
+    case "ArtifactReviewSettled":
       return readListAgain(queryClient, recordKeys.artifacts(event.artifact.threadId));
     case "BriefWritten":
       return readListAgain(queryClient, recordKeys.brief(event.brief.threadId));
@@ -98,5 +115,32 @@ export const useCrossOutDecision = (threadId: ThreadId) => {
     mutationFn: (decisionId: DecisionId) =>
       call((c) => c.records.crossOutDecision({ params: { threadId, decisionId } })),
     onSuccess: (decision) => takeDecisions(queryClient, threadId, [decision]),
+  });
+};
+
+/** Why a review was not saved: the hub refused it (already settled the other way), or it was not reached. */
+export type ReviewArtifactError = "refused" | "unreachable";
+
+export const reviewArtifactError = (error: unknown): ReviewArtifactError =>
+  error instanceof ApiError && error.tag === "ArtifactReviewChangeRefused" ? "refused" : "unreachable";
+
+/**
+ * Marks an artifact reviewed or dismisses it (#1422), once: the hub answers the artifact as it now
+ * stands, which takes its place in the list.
+ */
+export const useReviewArtifact = (threadId: ThreadId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      artifactId,
+      outcome,
+    }: {
+      readonly artifactId: RegisteredArtifactId;
+      readonly outcome: ArtifactReviewOutcome;
+    }) => call((c) => c.records.reviewArtifact({ params: { threadId, artifactId }, payload: { outcome } })),
+    onSuccess: (artifact) =>
+      queryClient.setQueryData<ReadonlyArray<Artifact>>(recordKeys.artifacts(threadId), (old) =>
+        old?.map((each) => (each.id === artifact.id ? artifact : each)),
+      ),
   });
 };

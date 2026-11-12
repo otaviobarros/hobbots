@@ -1,18 +1,22 @@
 import {
   AgentId,
   Artifact,
+  ArtifactReview,
   type ArtifactSighting,
   artifactSightings,
   ChapterId,
+  type DeliveredArtifact,
   type JournaledEvent,
   type PlacedSighting,
   placedFromTask,
   RegisteredArtifactId,
+  RegisteredArtifactKind,
   registeredArtifact,
+  TaskId,
   ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Schema } from "effect";
-import type { SqlClient, SqlError } from "effect/sql";
+import type { SqlClient, SqlError, Statement } from "effect/sql";
 
 // The artifacts registry (ADR 037, migration 0101): one row per thing a hob made or changed in a
 // chat or camp, filled in the transaction that journals the records it indexes, as backpack items
@@ -33,13 +37,17 @@ export interface ArtifactRow {
   readonly actorId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly review: string;
+  readonly reviewedAt: string | null;
+  readonly reviewedByKind: string | null;
+  readonly reviewedById: string | null;
   readonly revision: number | string;
 }
 
 const decode = Schema.decodeUnknownEffect(Artifact);
 
 /** A stored artifact; a row that does not decode is a defect, since the hub wrote it. */
-const artifactFromRow = (row: ArtifactRow) =>
+export const artifactFromRow = (row: ArtifactRow) =>
   decode({
     id: row.id,
     threadId: row.threadId,
@@ -52,6 +60,12 @@ const artifactFromRow = (row: ArtifactRow) =>
     actor: { kind: row.actorKind, id: row.actorId },
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    review: row.review,
+    reviewedAt: row.reviewedAt,
+    reviewedBy:
+      row.reviewedByKind === null || row.reviewedById === null
+        ? null
+        : { kind: row.reviewedByKind, id: row.reviewedById },
     // PostgreSQL reads BIGINT as a bigint; every revision fits a number.
     revision: Number(row.revision),
   }).pipe(Effect.orDie);
@@ -72,8 +86,66 @@ const artifactColumns = (artifact: Artifact) => ({
   actor_id: artifact.actor.id,
   created_at: artifact.createdAt,
   updated_at: artifact.updatedAt,
+  review: artifact.review,
+  reviewed_at: artifact.reviewedAt,
+  reviewed_by_kind: artifact.reviewedBy?.kind ?? null,
+  reviewed_by_id: artifact.reviewedBy?.id ?? null,
   revision: artifact.revision,
 });
+
+/** Writes an artifact's review as it now stands, at the revision of the event that journals it. */
+export const saveReview = (sql: SqlClient.SqlClient, artifact: Artifact) => {
+  const columns = artifactColumns(artifact);
+  return sql`UPDATE artifacts SET review = ${columns.review}, reviewed_at = ${columns.reviewed_at},
+    reviewed_by_kind = ${columns.reviewed_by_kind}, reviewed_by_id = ${columns.reviewed_by_id},
+    revision = ${columns.revision} WHERE id = ${artifact.id}`;
+};
+
+/**
+ * The Tasks that made registered artifacts, by the records that saw them: a result a Task returned,
+ * or its Attempt's file changes. A reply's own files were made by no Task. `where` picks the pairs,
+ * by `a.id` (the artifact) or `t.task_id` (the Task); a pair can come back more than once.
+ */
+const madeBy = (sql: SqlClient.SqlClient, where: (column: string) => Statement.Fragment) =>
+  sql<{ readonly artifactId: string; readonly taskId: string; readonly kind: string; readonly review: string }>`
+    SELECT a.id AS artifact_id, t.task_id, a.kind, a.review FROM artifacts a
+      JOIN artifact_sightings s ON s.artifact_id = a.id
+      JOIN artifact_refs t ON s.origin_kind = 'task-artifact' AND t.id = s.origin_id
+      WHERE ${where("t.task_id")}
+    UNION ALL
+    SELECT a.id AS artifact_id, t.task_id, a.kind, a.review FROM artifacts a
+      JOIN artifact_sightings s ON s.artifact_id = a.id
+      JOIN attempts t ON s.origin_kind = 'attempt' AND t.id = s.origin_id
+      WHERE ${where("t.task_id")}`;
+
+const DeliveredRows = Schema.Array(
+  Schema.Struct({
+    artifactId: RegisteredArtifactId,
+    taskId: TaskId,
+    kind: RegisteredArtifactKind,
+    review: ArtifactReview,
+  }),
+);
+
+/** What the Tasks made that the registry holds, with each artifact's kind and review: what a Quest summary counts. */
+export const deliveredBy = (
+  sql: SqlClient.SqlClient,
+  taskIds: ReadonlyArray<TaskId>,
+): Effect.Effect<ReadonlyArray<DeliveredArtifact>, SqlError.SqlError> =>
+  taskIds.length === 0
+    ? Effect.succeed([])
+    : madeBy(sql, (column) => sql.in(column, taskIds)).pipe(
+        // Rows the hub wrote: one that does not decode is a defect.
+        Effect.flatMap((rows) => Schema.decodeUnknownEffect(DeliveredRows)(rows).pipe(Effect.orDie)),
+      );
+
+/** The Tasks that made the artifacts, each once. */
+export const tasksThatMade = (sql: SqlClient.SqlClient, artifactIds: ReadonlyArray<string>) =>
+  artifactIds.length === 0
+    ? Effect.succeed<ReadonlyArray<string>>([])
+    : madeBy(sql, () => sql.in("a.id", artifactIds)).pipe(
+        Effect.map((rows) => [...new Set(rows.map((row) => row.taskId))]),
+      );
 
 /**
  * Where a sighting lands: a reply's own thread, chapter and author, or a Task's thread, that

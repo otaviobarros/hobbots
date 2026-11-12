@@ -13,8 +13,9 @@ import {
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applySuggestionEvent } from "./camp-suggestions.ts";
+import { ApiError } from "./client.ts";
 import { applyPinEvent, catchUpQuery, recordsMoved } from "./notes.ts";
-import { applyRecordEvent, recordKeys } from "./records.ts";
+import { applyRecordEvent, recordKeys, reviewArtifactError } from "./records.ts";
 
 // Issue #1387 (ADR 037): the camp sheet's lists, the suggestion card and pins read again on their
 // events, each cancelling a read already on its way first (STD-REACT-012).
@@ -37,6 +38,21 @@ const decision = new Decision({
   revision: 3,
 });
 
+const artifact = new Artifact({
+  id: RegisteredArtifactId.make("a1"),
+  threadId,
+  chapterId: ChapterId.make("c1"),
+  kind: "doc",
+  title: "plan.md",
+  locator: "/work/plan.md",
+  latestVersion: 1,
+  origin: { kind: "message", id: "m1" },
+  actor: hob,
+  createdAt: at,
+  updatedAt: at,
+  revision: 4,
+});
+
 /** The calls each spy saw for `key`, in order. */
 const watch = (client: QueryClient, key: ReadonlyArray<unknown>) => {
   const calls: Array<string> = [];
@@ -57,23 +73,11 @@ describe("record events", () => {
       [
         {
           _tag: "ArtifactRegistered",
-          artifact: new Artifact({
-            id: RegisteredArtifactId.make("a1"),
-            threadId,
-            chapterId: ChapterId.make("c1"),
-            kind: "doc",
-            title: "plan.md",
-            locator: "/work/plan.md",
-            latestVersion: 1,
-            origin: { kind: "message", id: "m1" },
-            actor: hob,
-            createdAt: at,
-            updatedAt: at,
-            revision: 4,
-          }),
+          artifact,
         } as const,
         recordKeys.artifacts(threadId),
       ],
+      [{ _tag: "ArtifactReviewSettled", artifact } as const, recordKeys.artifacts(threadId)],
     ] as const) {
       const client = new QueryClient();
       const calls = watch(client, key);
@@ -141,5 +145,13 @@ describe("catch-up reads", () => {
     const remounted = catchUpQuery(threadId, "m2:1");
     expect(first.queryKey).not.toEqual(remounted.queryKey);
     expect(first.gcTime).toBe(0);
+  });
+});
+
+describe("artifact reviews", () => {
+  it("[TC-CH-1387-32] tells a review the hub refused from one that did not reach it", () => {
+    expect(reviewArtifactError(new ApiError("refused", "ArtifactReviewChangeRefused"))).toBe("refused");
+    expect(reviewArtifactError(new ApiError("gone", "ThreadNotFound"))).toBe("unreachable");
+    expect(reviewArtifactError(new Error("offline"))).toBe("unreachable");
   });
 });
