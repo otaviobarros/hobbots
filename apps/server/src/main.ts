@@ -8,6 +8,7 @@ import {
   ApprovalService,
   ChapterService,
   ChapterSummaries,
+  ChapterToolsLive,
   CharmCallService,
   Charms,
   ChatService,
@@ -533,8 +534,6 @@ const ServerLive = Layer.unwrap(
             HubReset.layer.pipe(Layer.provide(Legacy)),
             fakePlays(config),
             memoryPageLayer(config, PageStore),
-            // A thread's chapters: start, split and merge (ADR 037).
-            ChapterService.layer,
             // Each chapter that comes to rest gets its one-line summary, which the pack reads (ADR 037).
             ChapterSummaries.layer,
           ),
@@ -620,6 +619,9 @@ const ServerLive = Layer.unwrap(
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the
       // sessions of Tasks, whose turns offer them; after the Charms, which each hob's card names.
       .pipe(Layer.provideMerge(DirectoryToolsLive))
+      // A thread's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
+      // `start_chapter` and `read_message`, before the chat service and the sessions of Tasks.
+      .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(

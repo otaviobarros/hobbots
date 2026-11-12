@@ -82,6 +82,8 @@ export class HobbotsRepository extends Context.Service<
       revision: number,
     ) => Effect.Effect<Option.Option<Committed<Thread>>>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
+    /** The message with `id`, in whichever thread it is. */
+    readonly findMessage: (id: MessageId) => Effect.Effect<Option.Option<Message>>;
     /**
      * Saves the message with the events it produces (`messageEvents`), and in the same transaction
      * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line). A new

@@ -11,6 +11,7 @@ import {
   type PackPartName,
   type PackReport,
   type PackTrim,
+  READ_MESSAGE_TOOL,
   RUNTIME_NAMES,
   type Task,
 } from "@hobbots/domain";
@@ -288,7 +289,7 @@ const liveText = (live: ReadonlyArray<Message>, kept: number, last?: string) => 
 
 /** The marker a cut message carries in place of its middle, naming the message to page through. */
 export const cutMarker = (left: number, messageId: string) =>
-  `[… ${left.toLocaleString("en-US")} characters left out. Read the rest with read_message, message_id ${messageId}.]`;
+  `[… ${left.toLocaleString("en-US")} characters left out. Read the rest with ${READ_MESSAGE_TOOL}, message_id ${messageId}.]`;
 
 /** The last message's start and end, cut to fit `limit` with the rest of the part. */
 const cutLast = (live: ReadonlyArray<Message>, limit: number): Fitted => {

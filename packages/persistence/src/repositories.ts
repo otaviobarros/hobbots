@@ -293,6 +293,11 @@ export const HobbotsRepositoryLive = Layer.effect(
       execute: (threadId) =>
         sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`.pipe(Effect.map(messageRows)),
     });
+    const findMessage = SqlSchema.findOneOption({
+      Request: Schema.String,
+      Result: Message,
+      execute: (id) => sql`SELECT * FROM messages WHERE id = ${id}`.pipe(Effect.map(messageRows)),
+    });
     const nextQueuedMessage = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Message,
@@ -606,6 +611,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       upsertThread,
       markThreadRead,
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
+      findMessage: (id) => findMessage(id).pipe(Effect.orDie),
       upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),
       checkpointMessage: (message) =>
         sql`UPDATE messages SET content = ${message.content}
