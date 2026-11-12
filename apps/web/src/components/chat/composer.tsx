@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
-import type { ReplyWait } from "../../lib/reply-wait.ts";
+import { type ReplyRun, replyRuns } from "../../lib/reply-wait.ts";
 import { messages } from "../messages.ts";
 import { messages as noteCopy } from "../notes/messages.ts";
 import type { NoteMode } from "../notes/use-note-to-self.ts";
@@ -33,12 +33,10 @@ export function Composer({
   place,
   lastSent,
   placeholder,
-  busy,
-  stopping,
+  run,
   sending,
   onSend,
   onStop,
-  wait = null,
   onStopWaiting,
   paused,
   skills,
@@ -51,14 +49,11 @@ export function Composer({
   /** The last message sent in this thread, which Up brings back. */
   lastSent: string | undefined;
   placeholder: string;
-  busy: boolean;
-  /** Stop was pressed and the reply has not ended yet. */
-  stopping: boolean;
+  /** The thread's reply: none, at work, waiting only on commands (#1056), or stopping. */
+  run: ReplyRun;
   sending: boolean;
   onSend: (content: string) => void;
   onStop: () => void;
-  /** What the reply waits on once its hob has answered, if only commands keep it open (#1056). */
-  wait?: ReplyWait | null;
   /** Stop waiting: ends a reply that only waits on commands, keeping its text. */
   onStopWaiting?: () => void;
   paused?: PausedHob | undefined;
@@ -84,6 +79,7 @@ export function Composer({
   // A note wakes no hob, so it goes whatever the hob is doing.
   const closed = !noting && paused !== undefined && !paused.canQueue;
   const content = sendable(draft);
+  const busy = replyRuns(run);
   const sendLabel = sendLabelOf(noting, busy);
 
   // Focus comes back to the input when a reply ends, unless the user has moved it somewhere else
@@ -155,22 +151,12 @@ export function Composer({
               }}
             />
           )}
-          <ComposerHint
-            name={name}
-            noting={noting}
-            busy={busy}
-            stopping={stopping}
-            drafting={content !== ""}
-            wait={wait}
-            paused={paused}
-          />
+          <ComposerHint name={name} noting={noting} run={run} drafting={content !== ""} paused={paused} />
           <ComposerActions
             name={name}
             noting={noting}
             closed={closed}
-            busy={busy}
-            stopping={stopping}
-            wait={wait}
+            run={run}
             paused={paused}
             sendLabel={sendLabel}
             disabled={!content || (noting ? note.saving : sending)}

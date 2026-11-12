@@ -24,6 +24,7 @@ import {
   type HobProposal,
   type HobProposalKind,
   type HobProposalRow,
+  HobProposalStates,
   heldCharms,
   hobProfilePath,
   hobProposalOutcomeText,
@@ -954,7 +955,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           asked.waiting(proposal.id);
           const outcome = yield* settled;
           const text = hobProposalOutcomeText(outcome);
-          return outcome.rows.some((row) => row.state === "allowed")
+          return HobProposalStates.madeAny(outcome)
             ? ({ _tag: "Applied", text } as const)
             : ({ _tag: "Refused", text } as const);
         });

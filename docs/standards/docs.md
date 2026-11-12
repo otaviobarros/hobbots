@@ -82,3 +82,12 @@ A pull request that proves a slice end to end, or records a manual run, adds an 
 - **Enforced by:** `scripts/check-standards.mjs` in `pnpm check` (each record has its fields and the status page links it), and review.
 - **Applies to:** `docs/evidence/`, `docs/STATUS.md`, and pull requests that close a "Prove …" issue.
 
+### STD-DOCS-011 UI words and code names follow the glossary
+
+The words the UI shows and the names the code gives them are the ones the "Words and code names" table of the [glossary](../product/glossary.md) lists. Rename a word or a code name in the same pull request as its row. A message module's copy never uses a word the table says the UI never shows, and a doc never uses a word the table retires from the docs. ADRs and evidence records stay as written.
+
+- ✅ `"Chats and camps"` in copy, `Thread` in code, `"each attempt is retried"` in a doc
+- ❌ `"Open its thread"` in copy, `"each execution is retried"` in a doc
+- **Why:** one word per thing keeps the UI, the code and the docs talking about the same thing.
+- **Enforced by:** `scripts/check-glossary.mjs` in `pnpm check` (`pnpm lint:glossary`), with today's copy in `scripts/glossary-baseline.json`, a list that only shrinks, and review.
+- **Applies to:** `docs/product/glossary.md`, message modules in `apps/web` and `apps/desktop`, `docs/` outside `docs/decisions/` and `docs/evidence/`, and the names `packages/*` and `apps/server` export.

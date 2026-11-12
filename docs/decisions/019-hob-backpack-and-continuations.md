@@ -1,6 +1,6 @@
 # ADR 019 — A hob's backpack and continuations
 
-Status: **Accepted.** Refines [ADR 004](004-durable-inbox.md), the [inbox contract](../architecture/inbox.md), the [execution lifecycle](../architecture/execution-lifecycle.md) and [ADR 018](018-tasks-and-quests.md) for Slice 10 ([#11](https://github.com/otaviobarros/hobbots/issues/11)). Amended by [#1345](https://github.com/otaviobarros/hobbots/issues/1345): a lead's message can reach its member's running turn at that turn's next step, or stop the turn and start the next one with it (see [Messages to a running turn](#messages-to-a-running-turn)).
+Status: **Accepted.** Refines [ADR 004](004-durable-inbox.md), the [inbox contract](../architecture/inbox.md), the [execution lifecycle](../architecture/attempt-lifecycle.md) and [ADR 018](018-tasks-and-quests.md) for Slice 10 ([#11](https://github.com/otaviobarros/hobbots/issues/11)). Amended by [#1345](https://github.com/otaviobarros/hobbots/issues/1345): a lead's message can reach its member's running turn at that turn's next step, or stop the turn and start the next one with it (see [Messages to a running turn](#messages-to-a-running-turn)).
 
 ## Context
 
@@ -156,7 +156,7 @@ Routine progress stays out of the wake because a turn per update would spend the
 ## Consequences
 
 - The [backpack contract](../architecture/inbox.md) becomes decided, under the new word. It points here for kinds, states, keys and claims.
-- The [execution lifecycle](../architecture/execution-lifecycle.md) gains the dispatcher in its transition table and recovery sequence, and its command idempotency section is decided.
+- The [execution lifecycle](../architecture/attempt-lifecycle.md) gains the dispatcher in its transition table and recovery sequence, and its command idempotency section is decided.
 - ADR 018's out-of-scope line for continuations now points here.
 - The chat service stops starting queued messages itself. Its drain after a turn, after a restart and on wake calls the dispatcher.
 - The approval waiter becomes the dispatcher's live-turn branch. An approval request still expires at boot, as ADR 015 decides.

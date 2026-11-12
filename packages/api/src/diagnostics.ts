@@ -53,7 +53,7 @@ export const StalledWork = Schema.Struct({
 export type StalledWork = typeof StalledWork.Type;
 
 /**
- * What a step of startup recovery does (execution lifecycle): `endAttempt` ends an Attempt left live
+ * What a step of startup recovery does (attempt lifecycle): `endAttempt` ends an Attempt left live
  * by the last process as interrupted; `endStep` ends a step left open without one.
  */
 export const RecoveryStep = Schema.Literals(["endAttempt", "endStep"]);
