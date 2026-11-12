@@ -1,5 +1,5 @@
 import type { Message, Thread } from "@hobbots/domain";
-import type { Page } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, test } from "./hub.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
@@ -250,4 +250,78 @@ test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread until
   expect(asked.slice(0, pressed)).not.toContain("read");
   expect(asked.slice(pressed)).toEqual(expect.arrayContaining(["catch-up", "read"]));
   expect(asked.indexOf("read", pressed)).toBeGreaterThan(asked.indexOf("catch-up", pressed));
+});
+
+/** An element's box, which the test needs on screen. */
+const boxOf = async (locator: Locator) => {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error("The element is not on screen");
+  return box;
+};
+
+// covers UX-001, ADR 037 (camp sheet, Find)
+/** Answers a camp's list with its first row repeated `times` over, each with its own id. */
+const repeated = (times: number) => async (route: Route) => {
+  const response = await route.fetch();
+  const rows = (await response.json()) as ReadonlyArray<Record<string, unknown>>;
+  const first = rows[0];
+  const json =
+    first === undefined
+      ? rows
+      : Array.from({ length: times }, (_, index) => ({
+          ...first,
+          ...("id" in first && { id: `${first.id}-${index}` }),
+        }));
+  await route.fulfill({ response, json });
+};
+
+// covers ADR 037 (the sheet), STD-UI-005
+test("[TC-UX-1431-02] the camp sheet's tabs fit it without a sideways scroll, however large their counts, and Find's close sits inside its box", async ({
+  page,
+}) => {
+  const { aldric, hub } = await aldricHub();
+  const camp = await campAt(hub, aldric, "Search the web for hobbots.app and explore the site");
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(camp.url);
+  // A decision, an artifact and a pin, each then read back over a thousand times.
+  await page.route(/\/api\/threads\/[^/]+\/(decisions|artifacts|pins)$/, repeated(1234));
+  await say(page, /^Message Aldric in/, [
+    "Plan the launch.",
+    'fake:write plan.md "# Plan\\n"',
+    script("record_decision", { key: "fridays", text: "Ship on Fridays." }),
+  ]);
+  const reply = main.getByRole("article").filter({ hasText: "Echo: Plan the launch." });
+  await reply.getByRole("button", { name: "More for this message" }).click();
+  await page.getByRole("menuitem", { name: "Pin" }).click();
+  await expect(reply.getByRole("img", { name: "Pinned" })).toBeVisible();
+
+  await main.getByRole("button", { name: /^This camp, open the sheet for / }).click();
+  const sheet = page.getByRole("dialog", { name: /^Search the web/ });
+  const tabs = [/^Overview/, /^Decisions/, /^Artifacts/, /^Mine/];
+  await expect(sheet.getByRole("tab", { name: /^Decisions/ })).toContainText("1.2K");
+  await expect(sheet.getByRole("tab", { name: /^Artifacts/ })).toContainText("1.2K");
+  await expect(sheet.getByRole("tab", { name: /^Mine/ })).toContainText("1.2K");
+  // With the widest tab selected, and so bold, every tab still sits inside the sheet.
+  for (const selected of [/^Overview/, /^Artifacts/]) {
+    await sheet.getByRole("tab", { name: selected }).click();
+    await expect(sheet.getByRole("tab", { name: selected })).toHaveAttribute("aria-selected", "true");
+    const sideways = await sheet.evaluate((element) => element.scrollWidth - element.clientWidth);
+    expect(sideways).toBeLessThanOrEqual(0);
+    const edges = await boxOf(sheet);
+    for (const name of tabs) {
+      const tab = await boxOf(sheet.getByRole("tab", { name }));
+      expect(tab.x).toBeGreaterThanOrEqual(edges.x);
+      expect(tab.x + tab.width).toBeLessThanOrEqual(edges.x + edges.width);
+    }
+  }
+  await page.keyboard.press("Escape");
+  await page.unroute(/\/api\/threads\/[^/]+\/(decisions|artifacts|pins)$/);
+
+  // The close button keeps clear of the field's edges.
+  await page.getByRole("button", { name: "Find", exact: true }).click();
+  const field = await boxOf(page.locator("search").filter({ has: page.getByRole("searchbox", { name: "Find" }) }));
+  const close = await boxOf(page.getByRole("button", { name: "Close Find" }));
+  expect(close.x + close.width).toBeLessThanOrEqual(field.x + field.width - 4);
+  expect(close.y).toBeGreaterThanOrEqual(field.y + 2);
 });

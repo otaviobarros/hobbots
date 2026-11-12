@@ -1,5 +1,5 @@
 import { expect, test } from "./hub.ts";
-import { lane, openRoom } from "./quest-room.ts";
+import { lane, openQuest } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1004: a Running hob sat in its lane for minutes with nothing new, and the room never said
@@ -33,7 +33,7 @@ test("[TC-UX-1004-02] a running lane that goes quiet says when its hob's last st
     ].join("\n"),
   );
   await composer.press("Enter");
-  await openRoom(page, TITLE);
+  await openQuest(page, TITLE);
 
   const did = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
   const now = did.getByRole("listitem").last();
@@ -43,14 +43,13 @@ test("[TC-UX-1004-02] a running lane that goes quiet says when its hob's last st
   await expect(now).toHaveText(/^Working· last step (1 minute|2 minutes) ago$/, { timeout: 100_000 });
 
   // Allowing the push lets Quill move again: her line names the step she is on, and the age is gone.
-  await page.getByRole("button", { name: "Allow once" }).first().click();
+  // The request waits in the chat's tray, behind the sheet.
+  await page.keyboard.press("Escape");
+  await page.getByRole("region", { name: "Quill asks permission" }).getByRole("button", { name: "Allow once" }).click();
+  await openQuest(page, TITLE);
   await expect(now).not.toContainText("last step", { timeout: 30_000 });
   await expect(now).not.toHaveText("Working");
   await expect(now).not.toContainText("sleep");
-
-  // The technical steps name the exact command, and the age stays away.
-  await page.getByRole("button", { name: "Show technical steps" }).click();
-  await expect(now).toHaveText("Running sleep 600");
 });
 
 // covers UX-004, OR-001
@@ -76,15 +75,13 @@ test("[TC-UX-1004-04] a lane names the background command its hob's turn waits o
     ].join("\n"),
   );
   await composer.press("Enter");
-  await openRoom(page, TITLE);
+  await openQuest(page, TITLE);
 
   const did = lane(page, "Quill").getByRole("list", { name: "What Quill did" });
   const now = did.getByRole("listitem").last();
   await expect(now).toHaveText("Waiting for the tests to finish", { timeout: 30_000 });
-  await page.getByRole("button", { name: "Show technical steps" }).click();
-  await expect(now).toHaveText("Waiting on pnpm test");
 
   // Once the tests end, the turn finishes and the wait is gone.
-  await expect(did).not.toContainText("Waiting on", { timeout: 40_000 });
+  await expect(did).not.toContainText("Waiting for the tests", { timeout: 40_000 });
   await expect(lane(page, "Quill")).toContainText("Done", { timeout: 20_000 });
 });

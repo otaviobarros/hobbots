@@ -19,8 +19,8 @@ import { messages } from "./messages.ts";
 const room = questCopy.room;
 
 /**
- * The Task cards in a hob's lane, one per Task it owns on the Quest and each of its steps, in tree
- * order: the lane above them already tells what the hob did and who it waits on.
+ * The Task cards under a hob in a quest's sheet, one per Task it owns on the quest and each of its
+ * steps, in tree order.
  */
 export function TaskCards({
   tree,
@@ -45,7 +45,6 @@ export function TaskCards({
       tree={tree}
       row={row}
       tried={tried(row.task)}
-      titled={rows.length > 1}
       hobs={hobs}
       onOpen={onOpen}
       onWorkbench={onWorkbench}
@@ -54,10 +53,9 @@ export function TaskCards({
 }
 
 /**
- * One of a hob's Tasks in its lane: which try it shows once there is more than one, how a picked
- * earlier one went, what waits in its backpack, and everything else behind a disclosure, Show in
- * the Workbench among it. A question for you, a failure and the controls are
- * the lane's own (lane-actions), as are its beats, marks and waits (ADR 027).
+ * One of a hob's Tasks: its title and where it stands, which try it is on once there is more than
+ * one, what waits in its backpack, and everything else behind a disclosure, Show in the Workbench
+ * among it. A question for you, a failure and the controls are the hob's own (lane-actions).
  *
  * The backpack shows on the card while something waits and moves into the details once nothing
  * does. A row that had focus goes with it, so focus moves to the details' summary, which now holds
@@ -68,17 +66,14 @@ function TaskCard({
   tree,
   row,
   tried,
-  titled,
   hobs,
   onOpen,
   onWorkbench,
 }: {
   tree: TaskTree;
   row: RoomRow;
-  /** An earlier try picked in the lane, which the Task shows in place of its latest. */
+  /** An earlier try picked, which the Task shows in place of its latest. */
   tried: PickedTry | null;
-  /** Whether the lane holds more than one Task, so each says which it is. */
-  titled: boolean;
   hobs: HobLookup;
   onOpen: (taskId: TaskId) => void;
   onWorkbench: (taskId: TaskId) => void;
@@ -115,21 +110,19 @@ function TaskCard({
       }}
       className="flex min-w-0 flex-col gap-2 border-t border-line pt-2.5 text-detail wrap-anywhere"
     >
-      {titled && (
-        <span className="flex items-center gap-2">
-          <OverflowTooltip text={taskTitle(task)}>
-            <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
-          </OverflowTooltip>
-          <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
-        </span>
-      )}
+      <span className="flex items-center gap-2">
+        <OverflowTooltip text={taskTitle(task)}>
+          <h4 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h4>
+        </OverflowTooltip>
+        <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
+      </span>
       {/* Which try it is only matters once there is more than one. */}
       {(tried !== null || attempts > 1) && (
         <p className="m-0 text-meta text-label">
           {messages.taskMeta({ attempt: tried?.number ?? attempts, age: formatWhen(task.createdAt) })}
         </p>
       )}
-      {/* An earlier try picked in the lane says how it went; the lane shows the rest. */}
+      {/* An earlier try picked says how it went. */}
       {tried?.line != null && <p className="m-0 line-clamp-3 whitespace-pre-wrap text-text">{tried.line}</p>}
       <Flags row={row} hobs={hobs} />
       {onCard && <TaskBackpack task={task} waiting={waiting} hobs={hobs} onOpen={onOpen} />}

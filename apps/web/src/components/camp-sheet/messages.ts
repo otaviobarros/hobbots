@@ -4,7 +4,7 @@ import {
   type QuestState,
   type RegisteredArtifactKind,
 } from "@hobbots/domain";
-import { formatCount, plural } from "../../lib/format.ts";
+import { formatCompact, formatCount, plural } from "../../lib/format.ts";
 import type { ArtifactFilter } from "./artifact-rows.ts";
 import type { DecisionProblem, RecordDecisionError } from "./decision-flow.ts";
 
@@ -30,8 +30,8 @@ export const messages = {
     artifacts: "Artifacts",
     mine: "Mine",
   },
-  /** A tab's count, beside its name. */
-  count: ({ count }: Counted) => formatCount(count),
+  /** A tab's count, beside its name, shortened once large ("1.2K") so the tabs keep fitting the sheet. */
+  count: ({ count }: Counted) => formatCompact(count),
   readFailed: "Couldn't read this. Hobbots may be reconnecting.",
   retry: "Read again",
   overview: {
