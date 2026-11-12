@@ -41,3 +41,14 @@ export const usePinThread = () =>
     (thread, pinned) => call((c) => c.threads.pin({ params: { threadId: thread.id }, payload: { pinned } })),
     (thread, pinned) => new Thread({ ...thread, pinnedAt: pinned ? new Date().toISOString() : null }),
   );
+
+/**
+ * Makes a camp private, or not, from now on (ADR 037): what memory captured before stays. A chat has
+ * no such setting.
+ */
+export const useSetCampPrivate = () =>
+  useThreadChange<boolean>(
+    (thread, value) =>
+      call((c) => c.threads.setPrivate({ params: { threadId: thread.id }, payload: { private: value } })),
+    (thread, value) => new Thread({ ...thread, private: value }),
+  );

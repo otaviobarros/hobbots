@@ -511,8 +511,8 @@ export const HobbotsRepositoryLive = Layer.effect(
           resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.threadId)}),
-          ${author?.kind ?? (message.role === "user" ? OWNER_ACTOR.kind : "hob")},
-          COALESCE(${author?.id ?? (message.role === "user" ? OWNER_ACTOR.id : null)},
+          ${author?.kind ?? (message.role === "assistant" ? "hob" : OWNER_ACTOR.kind)},
+          COALESCE(${author?.id ?? (message.role === "assistant" ? null : OWNER_ACTOR.id)},
             (SELECT t.agent_id FROM threads t WHERE t.id = ${message.threadId})),
           ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},

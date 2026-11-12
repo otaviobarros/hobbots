@@ -19,6 +19,7 @@ export * from "./hob-proposals.ts";
 export * from "./memory.ts";
 export * from "./memory-pages.ts";
 export * from "./memory-shares.ts";
+export * from "./notes.ts";
 export * from "./permissions.ts";
 export * from "./records.ts";
 export * from "./remote-access.ts";

@@ -221,7 +221,8 @@ type RecordEvent = Extract<
       | "DecisionRecorded"
       | "DecisionSuperseded"
       | "ArtifactRegistered"
-      | "BriefWritten";
+      | "BriefWritten"
+      | "MessagePinned";
   }
 >;
 const RECORD_EVENTS: ReadonlySet<string> = new Set([
@@ -233,16 +234,18 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "DecisionSuperseded",
   "ArtifactRegistered",
   "BriefWritten",
+  "MessagePinned",
 ]);
 const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
 
 /**
  * ADR 037's records: a claim names its Task, whose owner and thread the row takes; a decision its
  * thread and the reply that recorded it; an artifact its thread, and the hob that made its latest
- * version; a brief its thread.
+ * version; a brief its thread; a pin the message it pins and its thread.
  */
 const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
   if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
+  if ("pin" in event) return { ...NONE, threadId: event.pin.threadId, messageId: event.pin.messageId };
   if ("brief" in event) return { ...NONE, threadId: event.brief.threadId };
   if ("decision" in event) {
     return { ...NONE, threadId: event.decision.threadId, messageId: event.decision.sourceMessageId };

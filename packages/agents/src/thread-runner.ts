@@ -5,6 +5,7 @@ import {
   type BackpackTurnEnd,
   type Brain,
   DEFAULT_THREAD_TITLE,
+  hobReads,
   isInProgress,
   liveSession,
   Message,
@@ -247,7 +248,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     ) =>
       Effect.gen(function* () {
         const brain = brainFor(thread, config);
-        const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued");
+        // A note to self never reaches a turn (ADR 037).
+        const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));
         const before = transcript
           .slice(
             0,

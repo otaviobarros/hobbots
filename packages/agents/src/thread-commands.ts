@@ -1,4 +1,10 @@
-import { type HobUnavailable, type ThreadArchived, ThreadArchiveRefused, type ThreadNotFound } from "@hobbots/api";
+import {
+  type HobUnavailable,
+  type ThreadArchived,
+  ThreadArchiveRefused,
+  ThreadNotCamp,
+  type ThreadNotFound,
+} from "@hobbots/api";
 import {
   type Agent,
   type ArchiveBlockers,
@@ -173,6 +179,15 @@ export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
       );
     });
 
+    // A camp's privacy is a setting, like its pin: capture follows it along the journal (ADR 037).
+    const setPrivate = Effect.fn("ChatService.setPrivate")(function* (threadId: ThreadId, value: boolean) {
+      const thread = yield* findThread(threadId);
+      if (thread.kind !== "camp") return yield* new ThreadNotCamp({ threadId });
+      return yield* changeLive(threadId, (latest) =>
+        latest.private === value ? null : new Thread({ ...latest, private: value }),
+      );
+    });
+
     // Needs no hob lock: the marker moves forward in one statement, whatever else changes the thread.
     const markRead = Effect.fn("ChatService.markRead")(function* (
       threadId: ThreadId,
@@ -184,5 +199,15 @@ export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
       return Option.isSome(marked) ? yield* announce(marked.value) : thread;
     });
 
-    return { checkBrainSwitch, followHob, setBrain, archive, restore, rename, setPinned, markRead } as const;
+    return {
+      checkBrainSwitch,
+      followHob,
+      setBrain,
+      archive,
+      restore,
+      rename,
+      setPinned,
+      setPrivate,
+      markRead,
+    } as const;
   });

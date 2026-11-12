@@ -4,6 +4,7 @@ import {
   type Decision,
   DecisionStates,
   type EventEnvelope,
+  hobReads,
   isTerminalTask,
   type JournaledEvent,
   type Message,
@@ -207,7 +208,7 @@ const makeProjector = (options: CampBriefsOptions) =>
     const recordsOf = (thread: Thread) =>
       Effect.gen(function* () {
         const stored = Option.isNone(chapters) ? [] : yield* chapters.value.listChapters(thread.id);
-        const messages = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued");
+        const messages = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));
         const work = yield* repo.listOpenWork(thread.id);
         const briefRecords: BriefRecords = {
           thread,

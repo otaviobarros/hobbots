@@ -30,10 +30,6 @@ export const messages = {
     merge: "Merge with previous",
     merging: "Merging…",
   },
-  message: {
-    more: "More for this message",
-    split: "Split here",
-  },
   split: {
     title: "Start a new chapter here",
     lead: ({ name }: Named) =>

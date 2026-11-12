@@ -10,6 +10,7 @@ import {
   claimClashText,
   type EventEnvelope,
   type HobProposal,
+  hobReads,
   isLiveAttempt,
   isTerminalTask,
   MEMORY_SAVE_TOOL,
@@ -308,7 +309,8 @@ const attemptStepsOf = (
 /** What a message adds to its thread's session: yours once it is no longer queued, a reply once its turn ends. */
 const messageOf = (entry: EventEnvelope, message: Message, redacted: Redacting): CapturedEntry | null => {
   const agentId = entry.correlation.agentId;
-  if (agentId === null) return null;
+  // A note to self is yours alone: it never reaches the hob's memory (ADR 037).
+  if (agentId === null || !hobReads(message)) return null;
   const items =
     message.role === "user"
       ? message.status === "complete"

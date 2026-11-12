@@ -9,6 +9,7 @@ import {
   ChapterStates,
   type Committed,
   type EventEnvelope,
+  hobReads,
   type JournaledEvent,
   type ThreadId,
   ThreadLifecycle,
@@ -162,7 +163,7 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
           const chapter = (yield* chapters.listChapters(threadId)).find((each) => each.id === chapterId);
           if (chapter === undefined || !ChapterStates.isInThread(chapter)) return null;
           const own = (yield* repo.listMessages(threadId)).filter(
-            (message) => message.chapterId === chapterId && message.status !== "queued",
+            (message) => message.chapterId === chapterId && message.status !== "queued" && hobReads(message),
           );
           if (own.length === 0) return null;
           const decided = yield* decide(driftJudgment(summaryInput(chapter, own)));

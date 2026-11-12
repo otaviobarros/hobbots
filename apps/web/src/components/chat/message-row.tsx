@@ -10,6 +10,7 @@ import { HobProposalStep } from "../hob-proposal/hob-proposal-card.tsx";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
 import { messages } from "../messages.ts";
+import { NoteRow } from "../notes/note-row.tsx";
 import { limitRefill, planOf, usePlans } from "../usage/plan-summary.ts";
 import { type ReplyWebParts, useReplyRowWeb } from "../web/reply-web.tsx";
 import { ReplySteps } from "./reply-steps.tsx";
@@ -82,6 +83,8 @@ export function MessageRow({
   children?: ReactNode;
 }) {
   const id = messageElementId(message.id);
+  // A note to self, which no hob reads (ADR 037).
+  if (message.role === "note") return <NoteRow message={message} id={id} focused={focused} actions={actions} />;
   if (message.role === "user") {
     return (
       <div id={id} className={cn(yourColumn, focused && focusRing)}>

@@ -48,6 +48,7 @@ import {
   ThreadArchived,
   ThreadArchiveRefused,
   ThreadKeyReused,
+  ThreadNotCamp,
   ThreadNotFound,
   ToolLogNotFound,
 } from "./errors.ts";
@@ -60,6 +61,7 @@ import { HobProposalsGroup } from "./hob-proposals.ts";
 import { MemoryGroup } from "./memory.ts";
 import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
+import { NotesGroup } from "./notes.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { RecordsGroup } from "./records.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
@@ -186,6 +188,9 @@ export type StartFreshPayload = typeof StartFreshPayload.Type;
 
 /** Whether a chat is pinned to the top of its hob's chats. */
 export const PinThreadPayload = Schema.Struct({ pinned: Schema.Boolean });
+
+/** Whether a camp is private (ADR 037): capture takes nothing it writes while private. */
+export const SetPrivatePayload = Schema.Struct({ private: Schema.Boolean });
 
 /** The last message you read in the thread (ADR 027). */
 /**
@@ -390,6 +395,13 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       success: Thread,
       error: [ThreadNotFound, ThreadArchived],
     }),
+    // A camp made private keeps what memory captured before; a chat has no such setting.
+    HttpApiEndpoint.put("setPrivate", "/threads/:threadId/private", {
+      params: { threadId: ThreadId },
+      payload: SetPrivatePayload,
+      success: Thread,
+      error: [ThreadNotFound, ThreadArchived, ThreadNotCamp],
+    }),
     // Moves how far you read the thread forward, for every device; never back (ADR 027).
     HttpApiEndpoint.put("markRead", "/threads/:threadId/read", {
       params: { threadId: ThreadId },
@@ -473,6 +485,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(ChaptersGroup)
   .add(RecordsGroup)
   .add(CampSuggestionsGroup)
+  .add(NotesGroup)
   .add(SystemGroup)
   .add(SetupGroup)
   .add(RuntimesGroup)

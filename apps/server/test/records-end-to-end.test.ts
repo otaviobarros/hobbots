@@ -5,11 +5,13 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   CampSuggestionService,
+  CatchUps,
   ChatService,
   GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
+  Notes,
   PermissionSummary,
   Records,
   RecordToolsLive,
@@ -19,10 +21,12 @@ import {
   type Agent,
   CAMP_SUGGESTION_DECISIONS,
   type CampSuggestion,
+  type CatchUp,
   type ChapterMove,
   type Decision,
   isInProgress,
   type Message,
+  type MessagePin,
   RECORD_DECISION_TOOL,
   roleFields,
   type Thread,
@@ -33,9 +37,11 @@ import {
   BackpackLive,
   BriefLogLive,
   CampSuggestionRepositoryLive,
+  CatchUpRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  PinRepositoryLive,
   RecordRepositoryLive,
   SearchIndex,
   SetupRepository,
@@ -57,6 +63,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // Decisions over the HTTP API and from a chat turn (ADR 037, #1383), with the hub's own composition:
 // a hob records one with `record_decision`, you replace it or cross it out, and every one is kept.
 // A chat chapter they grow is suggested as a camp, which you keep in the chat or move into one (#1385).
+// Notes to self, pins, catch-up and a camp's privacy setting are the camp sheet's (#1387).
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-records-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
@@ -73,6 +80,7 @@ beforeEach(() => {
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
     .pipe(Layer.provideMerge(CampSuggestionService.layer))
+    .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer)))
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
@@ -88,6 +96,8 @@ beforeEach(() => {
             RecordRepositoryLive,
             CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
             BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
+            PinRepositoryLive,
+            CatchUpRepositoryLive,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -266,5 +276,74 @@ describe("camp suggestions over the API", () => {
     expect(refused).toMatchObject({ status: 409, body: { _tag: "ChapterMoveRefused", reason: "not-a-camp" } });
     const unknown = await request("POST", `/api/threads/${thread.id}/chapters/nope/move`, into);
     expect(unknown).toMatchObject({ status: 404, body: { _tag: "ChapterMissing" } });
+  });
+});
+
+describe("the camp sheet over the API", () => {
+  // covers CH-001, ADR 037 (Mine: notes to self never wake a hob)
+  it("[TC-CH-1387-01] keeps a note to self that wakes no hob, once under its key", async () => {
+    const { thread } = await pipWithThread();
+    await exchange(thread, "Hello.");
+    const note = { key: "note-1", content: "Ask Ana about the venue." };
+    const written = await request<Message>("POST", `/api/threads/${thread.id}/notes`, note);
+    expect(written).toMatchObject({
+      status: 200,
+      body: { id: "note-1", role: "note", content: "Ask Ana about the venue.", actor: { kind: "user" } },
+    });
+    expect((await request<Message>("POST", `/api/threads/${thread.id}/notes`, note)).body.id).toBe("note-1");
+    const reused = await request("POST", `/api/threads/${thread.id}/notes`, { key: "note-1", content: "Other" });
+    expect(reused).toMatchObject({ status: 409, body: { _tag: "MessageKeyReused" } });
+    expect((await request("POST", `/api/threads/${thread.id}/notes`, { key: "n2", content: "  " })).status).toBe(400);
+    // No hob woke: the transcript ends at the note, with no reply after it.
+    expect((await messages(thread)).map((each) => each.role)).toEqual(["user", "assistant", "note"]);
+    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
+    expect(listed.body.find((each) => each.id === thread.id)?.unread).toBe(true);
+    expect((await request("POST", "/api/threads/nope/notes", note)).status).toBe(404);
+  });
+
+  // covers CH-001, ADR 037 (Mine: pins)
+  it("[TC-CH-1387-02] pins a message once, lists it, and unpins it", async () => {
+    const { thread } = await pipWithThread();
+    const reply = await exchange(thread, "Hello.");
+    const path = `/api/threads/${thread.id}/messages/${reply.id}/pinned`;
+    const pinned = await request<MessagePin>("PUT", path, { pinned: true });
+    expect(pinned.body).toMatchObject({ messageId: reply.id, threadId: thread.id });
+    expect((await request<MessagePin>("PUT", path, { pinned: true })).body).toEqual(pinned.body);
+    expect((await request("GET", `/api/threads/${thread.id}/pins`)).body).toEqual([pinned.body]);
+    expect(await request("PUT", path, { pinned: false })).toEqual({ status: 200, body: null });
+    expect((await request("GET", `/api/threads/${thread.id}/pins`)).body).toEqual([]);
+    const elsewhere = await request("PUT", `/api/threads/${thread.id}/messages/nope/pinned`, { pinned: true });
+    expect(elsewhere).toMatchObject({ status: 404, body: { _tag: "MessageNotFound" } });
+  });
+
+  // covers CH-001, ADR 037 (Catch-up)
+  it("[TC-CH-1387-03] catches you up on the replies and records since you read, and on nothing after", async () => {
+    const { thread } = await pipWithThread();
+    const first = await exchange(thread, "Hello.");
+    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: first.id, revision: first.revision });
+    const call = { key: "fridays", text: "Ship on Fridays." };
+    const reply = await exchange(thread, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
+    const catchUp = async () => (await request<CatchUp>("GET", `/api/threads/${thread.id}/catch-up`)).body;
+    const caught = await catchUp();
+    expect(caught).toMatchObject({ firstUnread: reply.id, replies: 1, more: 0, readUpTo: first.createdAt });
+    expect(caught.items).toMatchObject([{ _tag: "Decided", decision: { text: call.text }, messageId: reply.id }]);
+    const last = (await messages(thread)).at(-1);
+    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
+    expect(await catchUp()).toMatchObject({ firstUnread: null, replies: 0, items: [] });
+    expect((await request("GET", "/api/threads/nope/catch-up")).status).toBe(404);
+  });
+
+  // covers CH-001, ADR 037 (Private camps), #1377
+  it("[TC-CH-1387-04] makes a camp private later, and refuses it for a chat", async () => {
+    const { thread } = await pipWithThread();
+    const chat = await request("PUT", `/api/threads/${thread.id}/private`, { private: true });
+    expect(chat).toMatchObject({ status: 409, body: { _tag: "ThreadNotCamp" } });
+    await exchange(thread, "Let us plan the launch.");
+    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
+    const chapterId = listed.body.find((each) => each.id === thread.id)?.liveChapterId;
+    const into = { _tag: "new", key: "camp-private", title: "Launch", goal: null, private: false };
+    await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
+    const made = await request<Thread>("PUT", "/api/threads/camp-private/private", { private: true });
+    expect(made).toMatchObject({ status: 200, body: { id: "camp-private", private: true } });
   });
 });

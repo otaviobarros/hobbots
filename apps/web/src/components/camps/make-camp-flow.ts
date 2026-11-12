@@ -11,13 +11,15 @@ export interface CampDraft {
   readonly title: string;
   readonly goal: string;
   readonly private: boolean;
+  /** Whether the chapter it is made from moves into it, when it is made from one. */
+  readonly chapter: boolean;
 }
 
 /** Why a field cannot be sent yet. */
 export type CampProblem = "title-missing" | "title-long" | "goal-long";
 
 /** Why the hub did not make the camp. */
-export type MakeCampError = "hob-unavailable" | "unreachable";
+export type MakeCampError = "hob-unavailable" | "chapter-refused" | "unreachable";
 
 export type MakeCamp =
   | {
@@ -36,9 +38,10 @@ export type MakeCampEvent =
   | { readonly _tag: "Send"; readonly key: ThreadId }
   | { readonly _tag: "Failed"; readonly error: MakeCampError };
 
-export const startMakeCamp = (title = ""): MakeCamp => ({
+/** A new camp's sheet, named `title`, with the chapter it is made from moving into it when `chapter`. */
+export const startMakeCamp = (title = "", chapter = false): MakeCamp => ({
   step: "editing",
-  draft: { title, goal: "", private: false },
+  draft: { title, goal: "", private: false, chapter },
   shown: new Set(),
 });
 
@@ -63,7 +66,7 @@ export const campPayload = (draft: CampDraft, key: ThreadId): MakeCampPayload =>
   return { key, title: draft.title.trim(), goal: goal === "" ? null : goal, private: draft.private };
 };
 
-const ALL_FIELDS: ReadonlySet<keyof CampDraft> = new Set(["title", "goal", "private"]);
+const ALL_FIELDS: ReadonlySet<keyof CampDraft> = new Set(["title", "goal", "private", "chapter"]);
 
 export const makeCampStep = (state: MakeCamp, event: MakeCampEvent): MakeCamp => {
   switch (event._tag) {
@@ -87,5 +90,9 @@ export const makeCampStep = (state: MakeCamp, event: MakeCampEvent): MakeCamp =>
 };
 
 /** The failure a refused or lost request shows. */
-export const makeCampError = (error: unknown): MakeCampError =>
-  error instanceof ApiError && error.tag === "HobUnavailable" ? "hob-unavailable" : "unreachable";
+export const makeCampError = (error: unknown): MakeCampError => {
+  if (!(error instanceof ApiError)) return "unreachable";
+  if (error.tag === "HobUnavailable") return "hob-unavailable";
+  // The chapter moved, merged or started a reply meanwhile; the camp was not made.
+  return error.tag === "ChapterMoveRefused" || error.tag === "ChapterMissing" ? "chapter-refused" : "unreachable";
+};
