@@ -129,16 +129,17 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
           chat.followHob(threadId),
         );
       });
-    return handlers.handleAll({
-      messages: ({ params }) =>
-        repo.findThread(params.threadId).pipe(
+    // A read of a thread that must exist: refused with ThreadNotFound when it does not.
+    const ofThread = <A>(threadId: ThreadId, read: (threadId: ThreadId) => Effect.Effect<A>) =>
+      repo
+        .findThread(threadId)
+        .pipe(
           Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.fail(new ThreadNotFound({ threadId: params.threadId })),
-              onSome: () => repo.listMessages(params.threadId),
-            }),
+            Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: () => read(threadId) }),
           ),
-        ),
+        );
+    return handlers.handleAll({
+      messages: ({ params }) => ofThread(params.threadId, repo.listMessages),
       sendPrompt: ({ params, payload }) => chat.sendPrompt(params.threadId, payload.content, payload.skill ?? null),
       removeQueued: ({ params }) => chat.removeQueued(params.threadId, params.messageId),
       sendNow: ({ params }) => chat.sendNow(params.threadId, params.messageId),
@@ -153,6 +154,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       archive: ({ params }) => chat.archive(params.threadId),
       restore: ({ params }) => chat.restore(params.threadId),
       startFresh: ({ params, payload }) => chat.startFresh(params.threadId, payload.key),
+      carryOver: ({ params }) => ofThread(params.threadId, repo.carryOver),
     });
   }),
 );

@@ -16,7 +16,7 @@ test("[TC-RT-105] a command that exits non-zero shows as Failed with its exit co
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // The red step of test-first: the test run fails first, then passes.
   await composer.fill(
@@ -57,7 +57,7 @@ test("[TC-RT-500] a line of commands run one after another that exits 0 shows as
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

@@ -59,7 +59,7 @@ test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and
   page,
 }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "My cat is called Miso.");
   await expect(page.getByText("Echo: My cat is called Miso.")).toBeVisible();
 

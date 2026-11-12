@@ -10,7 +10,7 @@ test.afterEach(stopQuestHub);
 // covers PE-002
 test("[TC-PE-303] the Task drawer and the Workbench header show the folders each member works in", async ({ page }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Make the shop badge in our green");
   await composer.press("Enter");

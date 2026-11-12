@@ -60,7 +60,7 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   hub = party.hub;
 
   // Aldric's Quest runs until Ada asks a question, and the thread and its Tasks are saved.
-  await page.goto(`${hub.url}/#/hobs/${party.aldric}/new`);
+  await page.goto(`${hub.url}/#/hobs/${party.aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

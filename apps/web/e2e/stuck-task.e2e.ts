@@ -54,7 +54,7 @@ const stuckCopy = async (page: import("@playwright/test").Page, after: ReadonlyA
   const aldric = await hobNamed(current, "Aldric", 4000);
   await hobNamed(current, "Quill", 4821);
   await hobNamed(current, "Pip", 5150);
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

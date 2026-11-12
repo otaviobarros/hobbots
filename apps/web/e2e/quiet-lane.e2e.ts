@@ -20,7 +20,7 @@ test("[TC-UX-1004-02] a running lane that goes quiet says when its hob's last st
 
   // Quill's push asks you first, so her turn runs with nothing new until you answer; then she starts
   // a long command that keeps her turn running.
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -63,7 +63,7 @@ test("[TC-UX-1004-04] a lane names the background command its hob's turn waits o
 
   // Quill starts the tests in the background, checks something else, and her turn then waits for them.
   const tests = { command: "pnpm test", background: true, runsFor: "20 seconds", output: "7 passed\n", exitCode: 0 };
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

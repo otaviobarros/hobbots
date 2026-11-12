@@ -75,7 +75,7 @@ const openThread = async (page: Page) => {
     instructions: "",
   });
   relay = await startRelay();
-  await page.goto(`${relay.url}/#/hobs/${lark.id}/new`);
+  await page.goto(`${relay.url}/#/hobs/${lark.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Lark/ });
   await composer.fill(FIRST);
   await composer.press("Enter");

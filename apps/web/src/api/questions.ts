@@ -44,6 +44,9 @@ const readAgain = async (queryClient: QueryClient, drop?: (each: WaitingQuestion
   await queryClient.invalidateQueries({ queryKey: waitingKey, exact: true });
 };
 
+/** The questions waiting for you moved to another chat with their Tasks, as Start fresh does. */
+export const questionsMoved = (queryClient: QueryClient): Promise<void> => readAgain(queryClient);
+
 /**
  * A question changed: it reached you, or was answered. A question that reaches you comes without
  * its Task, so the list is read again; one answered leaves the list at once. A question moving

@@ -37,7 +37,7 @@ test("[TC-UX-045] a finished Task's Terminal replays its commands in a read-only
   page,
 }) => {
   const { url, aldric, folder } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // In one turn Aldric runs three commands, one failing in color, one printing a token, one printing a lot.
   await send(page, [
     "Check the notes",
@@ -107,7 +107,7 @@ test("[TC-UX-046] while a turn runs the Terminal is Live: a running command coun
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // The first turn starts the Quest, so the next turn's commands belong to its Attempt.
   await send(page, ["Watch the build", script("start_quest", { key: "quest", goal: "Watch the build" })]);
   const questTicket = ticket(page, "Watch the build");
@@ -146,7 +146,7 @@ test("[TC-UX-1018-01] a background command stays Running after its call returns,
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, ["Start the dev server", script("start_quest", { key: "quest", goal: "Start the dev server" })]);
   await expect(ticket(page, "Start the dev server")).toBeVisible({ timeout: 20_000 });
   await settled(page);
@@ -183,7 +183,7 @@ test("[TC-UX-183] a command whose runtime reports output as it comes shows it li
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, ["Ship the preview", script("start_quest", { key: "quest", goal: "Ship the preview" })]);
   await expect(ticket(page, "Ship the preview")).toBeVisible({
     timeout: 20_000,
@@ -215,7 +215,7 @@ test("[TC-UX-184] a Quest's Terminal has a tab per hob, the Task's own first, an
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // Aldric checks the status and brings in Quill, who builds the copy.
   await send(page, [
     "Write the launch copy",
@@ -273,7 +273,7 @@ test("[TC-UX-186] a Quest's Terminal says when its Workbench could not be read, 
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, [
     "Write the launch copy",
     run({ command: "git status --short", output: " M notes.md\n", exitCode: 0 }),
@@ -310,7 +310,7 @@ test("[TC-UX-186] a Quest's Terminal says when its Workbench could not be read, 
 // covers UX-006
 test("[TC-UX-185] the terminal stays dark, with its own palette, in the light themes", async ({ page }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, [
     "List the notes",
     run({ command: "ls", output: "notes.md\n", exitCode: 0 }),
@@ -373,7 +373,7 @@ test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and read
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, [
     "Count the lines",
     "fake:tool Bash seq 300",

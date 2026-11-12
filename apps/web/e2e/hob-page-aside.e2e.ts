@@ -8,7 +8,7 @@ test("[TC-UX-131] a hob's page shows the Quests it leads, its backpack, its fold
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

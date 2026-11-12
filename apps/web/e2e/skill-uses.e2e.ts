@@ -70,7 +70,7 @@ test("[TC-UI-1096-06] Use a skill keeps the draft, the keyboard picks a skill, a
   page,
 }) => {
   const { url, pip } = await hubWithSkill();
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
   await composer.fill("Ship it\nwith the notes");
 
@@ -114,7 +114,7 @@ test("[TC-UI-1096-07] when the hob's skills cannot be read, the list says so and
   const { url, pip } = await hubWithSkill();
   const hobSkills = "**/api/skills/hobs/*";
   await page.route(hobSkills, (route) => route.fulfill({ status: 500, body: "" }));
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
   await composer.fill("/");
   // The client asks again a few times before it gives up; until then the list says it is loading.
@@ -133,7 +133,7 @@ test("[TC-UI-1096-07] when the hob's skills cannot be read, the list says so and
 // covers ADR 029 (Explicit use), STD-REACT-012
 test("[TC-UI-1096-10] the list follows a skill assigned or taken off while the chat is open", async ({ page }) => {
   const { url, pip, api, addSkill, release } = await hubWithSkill();
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
   await composer.fill("/");
   await expect(pickerOf(page)).toContainText("/release-steps");
@@ -152,7 +152,7 @@ test("[TC-UI-1096-11] a long list scrolls inside its own space and keeps the hig
   const names = Array.from({ length: 30 }, (_, index) => `step-${String(index).padStart(2, "0")}`);
   const { url, pip } = await hubWithSkill(names);
   await page.setViewportSize({ width: 1280, height: 640 });
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
   await composer.fill("/");
   const picker = pickerOf(page);
@@ -174,7 +174,7 @@ test("[TC-UI-1096-12] with the list open, Shift+Enter adds a line, Shift+Tab mov
   page,
 }) => {
   const { url, pip } = await hubWithSkill(["review-notes"]);
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
   await composer.fill("/re");
   await expect(pickerOf(page)).toContainText("/release-steps");
@@ -202,7 +202,7 @@ test("[TC-UI-1096-13] the list follows own and shared folders another window cha
   await addSkill("site-a-deploy", { _tag: "Project", identity: "site-a" });
   await addSkill("site-b-deploy", { _tag: "Project", identity: "site-b" });
   await api("PATCH", `/agents/${pip.id}/permissions`, { ownFolders: [siteA] });
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
   await composer.fill("/site");
   await expect(pickerOf(page)).toContainText("/site-a-deploy");

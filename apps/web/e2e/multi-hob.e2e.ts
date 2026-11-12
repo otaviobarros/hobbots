@@ -81,7 +81,7 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
   const chats = [];
   for (const hob of [pip, moss, ash]) {
     const page = await context.newPage();
-    await page.goto(`${current.url}/#/hobs/${hob.id}/new`);
+    await page.goto(`${current.url}/#/hobs/${hob.id}/chat`);
     await send(page, hob.name, longPrompt(hob.name));
     chats.push({ hob, page });
   }

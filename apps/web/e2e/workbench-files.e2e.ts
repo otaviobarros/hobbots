@@ -42,7 +42,7 @@ const finishedTask = async (page: Page) => {
     "chart.png": PNG,
     "brief.pdf": PDF,
   });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

@@ -31,7 +31,7 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 
 /** Sends a message in Pip's new chat that asks to push, and waits for its card. */
 const askToPush = async (page: Page, current: Hub, pipId: string) => {
-  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Ship it\nfake:tool Bash git push origin feature");
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();

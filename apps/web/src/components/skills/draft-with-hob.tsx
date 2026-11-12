@@ -72,7 +72,7 @@ function DraftPicker({ labelId }: { labelId: string }) {
       {hobs.map((hob) => (
         <li key={hob.id} className="flex">
           <Link
-            to="/hobs/$hobId/new"
+            to="/hobs/$hobId/chat"
             params={{ hobId: hob.id }}
             onClick={() => startDraft(hob)}
             className="flex w-full items-center gap-2.5 rounded-card bg-card px-3 py-2.5 text-text-strong no-underline hover:bg-hover"

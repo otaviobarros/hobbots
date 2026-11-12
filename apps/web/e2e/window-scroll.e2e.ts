@@ -62,7 +62,7 @@ test("[TC-UX-1026-01] a long chat, its Quest room and Workbench, and every other
   scan,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // Enough steps, each marked for screen readers, to run the transcript well past the window.
   const steps = Array.from({ length: 24 }, (_, index) => `fake:tool Bash echo step ${index + 1}`);
   await send(page, [

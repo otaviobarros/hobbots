@@ -71,7 +71,7 @@ test("[TC-UX-1234-01] a hob's reply sees the visible hobs and reads one card wit
   scan,
 }) => {
   const { url, pip } = await hubWithTeam();
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   // The fake answers this with the roster its turn was briefed with.
   await send(page, ["/roster"]);
   const main = page.getByRole("main");
@@ -122,7 +122,7 @@ const saveQuill = async (page: Page) => {
 
 /** Asks Pip, in its chat, for the roster its turn was told, and reads the reply. */
 const pipsRoster = async (page: Page, url: string, pip: Hob) => {
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["/roster"]);
   return page.getByRole("article").last();
 };

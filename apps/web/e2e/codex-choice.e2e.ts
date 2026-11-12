@@ -191,7 +191,7 @@ test("[TC-UX-082] the profile moves a hob to Codex with its model and effort, an
       effort: "medium",
     });
 
-  await page.goto(`${hub.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${hub.url}/#/hobs/${pip.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("hello");
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
