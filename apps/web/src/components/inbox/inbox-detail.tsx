@@ -1,4 +1,10 @@
-import type { HobProposalView, SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type {
+  HobProposalView,
+  SkillProposalView,
+  WaitingCharmCall,
+  WaitingDevice,
+  WaitingQuestion,
+} from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -27,6 +33,7 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { lostWhat, SettleTaskCall } from "../charm-calls/settle-task-call.tsx";
 import { HubQuestionAnswer } from "../coding-setup/coding-setup.tsx";
 import { HobProposalCard } from "../hob-proposal/hob-proposal-card.tsx";
 import { messages as hobProposalCopy } from "../hob-proposal/messages.ts";
@@ -102,6 +109,9 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
     case "hob-proposal":
       // Keyed by the entry, so a ticked confirmation on one proposal never shows on the next.
       return <HobProposalDetail key={entry.key} view={entry.hobs} hob={hob} row={row} {...context} />;
+    case "charm-call":
+      // Keyed by the entry, so a failed settle on one write never shows on the next.
+      return <CharmCallDetail key={entry.key} waiting={entry.waiting} hob={hob} row={row} {...context} />;
     default:
       return <DeviceDetail device={entry.device} row={row} now={context.now} />;
   }
@@ -398,6 +408,44 @@ function FailedDetail({
           {controlError(retry.error, { owner, target: owner })}
         </p>
       )}
+    </DetailFrame>
+  );
+}
+
+/**
+ * A write a Task's session made whose answer was lost, still uncertain after the last read-back
+ * (ADR 038): what it was, where, and the two ways to settle it once you have looked, as the Quest
+ * room's lane offers them. Open in the Quest room shows the Task it came from.
+ */
+function CharmCallDetail({
+  waiting,
+  hob,
+  row,
+  directory,
+  questOf,
+  now,
+  targets,
+}: { waiting: WaitingCharmCall; hob: Agent | undefined; row: InboxRow } & DetailContext) {
+  const { call, task } = waiting;
+  const name = directory.hobName(call.agentId);
+  const lead = task.threadId === null ? undefined : (directory.threadHob(task.threadId) ?? task.ownerId);
+  return (
+    <DetailFrame
+      label={copy.charmCall.label({ name, charm: call.charm })}
+      portrait={<EntryPortrait hob={hob} device={false} waiting large />}
+      row={row}
+      why={lostWhat(waiting)}
+      chat={chatLink(lead, task.threadId, { taskId: task.id }, copy.detail.openRoom)}
+    >
+      <Facts
+        rows={[
+          [copy.detail.quest, questName(questOf(task.id), directory)],
+          [copy.detail.task, taskTitle(task)],
+          [copy.detail.about, call.site],
+          [copy.detail.when, formatWhen(call.updatedAt, now)],
+        ]}
+      />
+      <SettleTaskCall waiting={waiting} targets={targets} />
     </DetailFrame>
   );
 }

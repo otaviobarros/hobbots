@@ -133,6 +133,16 @@ export const CharmCallsLive = Layer.effect(
             Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
           ),
         ),
+      findSending: (scope, attempt) =>
+        sqlOrDie(
+          sql<Row>`SELECT * FROM charm_calls WHERE scope = ${scope} AND attempt = ${attempt}`.pipe(Effect.flatMap(one)),
+        ),
+      // A Task's session records no reply: its calls have no message, and their work is a Task.
+      uncertainOnTasks: sqlOrDie(
+        sql<Row>`SELECT * FROM charm_calls
+          WHERE state = 'uncertain' AND message_id IS NULL AND scope LIKE 'task:%'
+          ORDER BY created_at`.pipe(Effect.flatMap((rows) => Effect.forEach(rows, fromRow))),
+      ),
       unsettled: sqlOrDie(
         sql<Row>`SELECT * FROM charm_calls WHERE state IN ('sending', 'uncertain') ORDER BY created_at`.pipe(
           Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),

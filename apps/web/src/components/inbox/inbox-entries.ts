@@ -1,4 +1,10 @@
-import type { HobProposalView, SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type {
+  HobProposalView,
+  SkillProposalView,
+  WaitingCharmCall,
+  WaitingDevice,
+  WaitingQuestion,
+} from "@hobbots/api";
 import {
   type AgentId,
   type ApprovalRequest,
@@ -21,6 +27,7 @@ import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
 import { hobProposalWhat } from "../hob-proposal/hob-proposal-model.ts";
 import { shownHubQuestion } from "../hub-question/shown.ts";
 import { shareWhat } from "../memory/review-model.ts";
+import { messages as appCopy } from "../messages.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { proposalWhat } from "../skill-review/proposal-model.ts";
 import { expiryText, requestTitle, statusText } from "./inbox-items.ts";
@@ -32,8 +39,10 @@ const copy = messages;
  * One thing in the Inbox list. Every kind shows as the same row and opens beside the list: a
  * request to approve, a question no lead could answer, a question the hub itself asks (#976), work
  * that is stuck, a party member's Task that failed while its Quest goes on (ADR 027), a device
- * asking to pair, a hob asking to share what it learned (ADR 028), or a hob that drafted a skill (ADR 029), or a manager's proposal to summon, change or retire hobs (ADR 034). `key` names it in the address: a request by its own id, so links from Home and the chat
- * still open it, and the other kinds by their kind and id.
+ * asking to pair, a hob asking to share what it learned (ADR 028), a hob that drafted a skill
+ * (ADR 029), a manager's proposal to summon, change or retire hobs (ADR 034), or a write a Task made
+ * whose answer was lost (ADR 038). `key` names it in the address: a request by its own id, so links
+ * from Home and the chat still open it, and the other kinds by their kind and id.
  */
 export type InboxEntry =
   | { readonly kind: "approval"; readonly key: string; readonly request: ApprovalRequest }
@@ -44,7 +53,8 @@ export type InboxEntry =
   | { readonly kind: "device"; readonly key: string; readonly device: WaitingDevice }
   | { readonly kind: "memory"; readonly key: string; readonly share: MemoryShare }
   | { readonly kind: "skill"; readonly key: string; readonly view: SkillProposalView }
-  | { readonly kind: "hob-proposal"; readonly key: string; readonly hobs: HobProposalView };
+  | { readonly kind: "hob-proposal"; readonly key: string; readonly hobs: HobProposalView }
+  | { readonly kind: "charm-call"; readonly key: string; readonly waiting: WaitingCharmCall };
 
 export const approvalEntry = (request: ApprovalRequest): InboxEntry => ({ kind: "approval", key: request.id, request });
 
@@ -88,12 +98,18 @@ export const hobProposalEntry = (hobs: HobProposalView): InboxEntry => ({
   hobs,
 });
 
+export const charmCallEntry = (waiting: WaitingCharmCall): InboxEntry => ({
+  kind: "charm-call",
+  key: `charm-call:${waiting.task.id}:${waiting.call.attempt}`,
+  waiting,
+});
+
 /** Whether a key from the address names a request, which the Inbox can read on its own. */
 export const namesRequest = (key: string): boolean => !key.includes(":");
 
 /**
  * What Needs you lists, in one list: devices asking, questions for you, the hub's own, stuck work,
- * failed Tasks, the requests, then the shares and skill proposals that wait. One decided while it is
+ * failed Tasks, writes whose answer was lost, the requests, then the shares and skill proposals that wait. One decided while it is
  * open stays, so its outcome and Undo show, the way a decided request does.
  */
 export const needsEntries = ({
@@ -102,6 +118,7 @@ export const needsEntries = ({
   hubQuestions = [],
   blockers,
   failed,
+  charmCalls = [],
   requests,
   shares = [],
   proposals = [],
@@ -113,6 +130,8 @@ export const needsEntries = ({
   readonly hubQuestions?: ReadonlyArray<HubQuestion>;
   readonly blockers: ReadonlyArray<BackpackItem>;
   readonly failed: ReadonlyArray<FailedTask>;
+  /** The writes Tasks made whose answer is still uncertain (ADR 038). */
+  readonly charmCalls?: ReadonlyArray<WaitingCharmCall>;
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly shares?: ReadonlyArray<MemoryShare>;
   readonly proposals?: ReadonlyArray<SkillProposalView>;
@@ -126,6 +145,7 @@ export const needsEntries = ({
   ...hubQuestions.filter((question) => question.state === "open").map(hubQuestionEntry),
   ...blockers.filter((item) => openBlocker(item) !== undefined).map(stuckEntry),
   ...failed.map(failedEntry),
+  ...charmCalls.map(charmCallEntry),
   ...requests.map(approvalEntry),
   ...shares.filter((share) => memoryShareWaits(share) || `memory:${share.id}` === selected).map(memoryEntry),
   ...proposals
@@ -155,6 +175,8 @@ export const entryThread = (entry: InboxEntry): ThreadId | null => {
       return entry.view.proposal.threadId;
     case "hob-proposal":
       return entry.hobs.proposal.threadId;
+    case "charm-call":
+      return entry.waiting.task.threadId;
     default:
       return null;
   }
@@ -177,6 +199,8 @@ export const entryAsker = (entry: InboxEntry): AgentId | undefined => {
       return entry.view.proposal.agentId;
     case "hob-proposal":
       return entry.hobs.proposal.agentId;
+    case "charm-call":
+      return entry.waiting.call.agentId;
     default:
       return undefined;
   }
@@ -195,6 +219,8 @@ const entryTask = (entry: InboxEntry): TaskId | null => {
       return entry.failed.task.id;
     case "hob-proposal":
       return entry.hobs.proposal.taskId;
+    case "charm-call":
+      return entry.waiting.task.id;
     default:
       return null;
   }
@@ -300,6 +326,8 @@ const urgency = (entry: InboxEntry) => {
         expiresAt: null,
         since: entry.hobs.proposal.createdAt,
       };
+    case "charm-call":
+      return { closed: false, risky: false, expiresAt: null, since: entry.waiting.call.updatedAt };
     default:
       return {
         closed: false,
@@ -477,6 +505,18 @@ const hobProposalRow = ({ proposal }: HobProposalView, names: HobName): InboxRow
   tone: "plain",
 });
 
+const charmCallRow = ({ call }: WaitingCharmCall, names: HobName): InboxRow => {
+  const name = names(call.agentId);
+  return {
+    chain: [name, copy.row.youEnd],
+    kind: copy.kind.charmCall,
+    tag: "needs-you",
+    what: appCopy.charmCall.lost({ name, charm: call.charm }),
+    when: copy.row.waitingOn({ name }),
+    tone: "plain",
+  };
+};
+
 const deviceRow = ({ request }: WaitingDevice, now: Date): InboxRow => ({
   chain: [request.name, copy.row.youEnd],
   kind: copy.kind.device,
@@ -508,6 +548,8 @@ export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | unde
       return proposalRow(entry.view, names);
     case "hob-proposal":
       return hobProposalRow(entry.hobs, names);
+    case "charm-call":
+      return charmCallRow(entry.waiting, names);
     default:
       return deviceRow(entry.device, now);
   }

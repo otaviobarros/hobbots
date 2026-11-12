@@ -1,3 +1,4 @@
+import type { WaitingCharmCall } from "@hobbots/api";
 import { type Attempt, type AttemptId, type Question, saysMore, type Task, type TaskTree } from "@hobbots/domain";
 import { taskControls, topCancel } from "../quest/control-room.ts";
 import { questionForYou } from "../quest/work-model.ts";
@@ -138,3 +139,12 @@ export const laneFailures = (tree: TaskTree, tasks: ReadonlyArray<Task>): Readon
     const controls = taskControls(tree, task);
     return [{ task, reason: failureReason(tree, task), retry: controls.retry, reassign: controls.reassign }];
   });
+
+/** The uncertain Charm writes made on a lane's Tasks (ADR 038), in the order the hub lists them. */
+export const laneCharmCalls = (
+  waiting: ReadonlyArray<WaitingCharmCall>,
+  tasks: ReadonlyArray<Task>,
+): ReadonlyArray<WaitingCharmCall> => {
+  const ids = new Set(tasks.map((task) => task.id));
+  return waiting.filter((each) => ids.has(each.task.id));
+};
