@@ -35,18 +35,17 @@ export function FocusChip({ hob, thread }: { hob: Agent; thread: Thread }) {
           {copy.label(chapterFocus(chapters.data))}
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        aria-label={copy.heading({ name: hob.name })}
-        className="flex w-[400px] max-w-[calc(100vw-32px)] flex-col gap-2"
-      >
-        <span className="font-heading text-ui text-text-strong">{copy.heading({ name: hob.name })}</span>
-        {open && <FocusReport hob={hob} thread={thread} />}
-        <p className="m-0 text-meta text-text-secondary">{copy.footer({ name: hob.name })}</p>
-        <PopoverClose asChild>
-          <Button variant="quiet" size="xs" className="self-end">
-            {copy.close}
-          </Button>
-        </PopoverClose>
+      <PopoverContent aria-label={copy.heading({ name: hob.name })} className="w-[400px] max-w-[calc(100vw-32px)]">
+        <div className="flex flex-col gap-2">
+          <span className="font-heading text-ui text-text-strong">{copy.heading({ name: hob.name })}</span>
+          {open && <FocusReport hob={hob} thread={thread} />}
+          <p className="m-0 text-meta text-text-secondary">{copy.footer({ name: hob.name })}</p>
+          <PopoverClose asChild>
+            <Button variant="quiet" size="xs" className="self-end">
+              {copy.close}
+            </Button>
+          </PopoverClose>
+        </div>
       </PopoverContent>
     </Popover>
   );
