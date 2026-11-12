@@ -1,6 +1,6 @@
 import { formatList } from "../../lib/format.ts";
 
-/** Copy for steer receipts in the chat and your notes in the Quest room's lanes (ADR 027, STD-I18N-001). */
+/** Copy for steer receipts in the chat and your notes in each hob's work in a quest (ADR 027, STD-I18N-001). */
 export const messages = {
   /** The receipt's name, read before its steps. */
   label: "Where your message went",

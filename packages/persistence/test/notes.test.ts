@@ -2,7 +2,7 @@ import { CatchUpRepository, HobbotsRepository, PinRepository, TaskRepository } f
 import {
   Agent,
   AgentId,
-  ChapterId,
+  type ChapterId,
   DEFAULT_QUEST_LIMITS,
   Message,
   MessageId,
@@ -13,7 +13,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
-import { SqlClient } from "effect/sql";
+import type { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import {
   BackpackLive,

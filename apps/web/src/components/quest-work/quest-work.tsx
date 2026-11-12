@@ -23,7 +23,7 @@ const useHobs = () => {
 };
 
 /**
- * A hob's work on other hobs' Quests, on its card under what it is doing: the lead, the Quest's
+ * A hob's work on other hobs' Quests, on its page: the lead, the Quest's
  * goal and its Task's state, each opening the Quest. The goal tells two Quests of one lead apart.
  * It is never one of the hob's threads.
  */

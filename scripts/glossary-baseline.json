@@ -4,7 +4,7 @@
     "apps/web/src/components/export/messages.ts": 2,
     "apps/web/src/components/inbox/messages.ts": 2,
     "apps/web/src/components/messages.ts": 12,
-    "apps/web/src/components/quest-room/messages.ts": 1,
+    "apps/web/src/components/quest-sheet/messages.ts": 2,
     "apps/web/src/components/quest/messages.ts": 2
   }
 }

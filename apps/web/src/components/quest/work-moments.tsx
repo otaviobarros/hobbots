@@ -8,7 +8,7 @@ import type { Moment } from "./work-model.ts";
 /**
  * What the chat shows of a request's work under one message: its ticket, a question you answered
  * or that was withdrawn, or a lead's answer that spared you one. A question still open waits in the
- * Needs-you tray. Everything else lives in the Quest room (ADR 027).
+ * Needs-you tray. Everything else lives in the quest's sheet (ADR 027).
  */
 export function WorkMoments({
   moments,
@@ -17,7 +17,7 @@ export function WorkMoments({
 }: {
   moments: ReadonlyArray<Moment>;
   hobs: HobLookup;
-  /** Opens the Quest room on a Task, its lane lit, with the Workbench open on a tab if one is named. */
+  /** Opens the quest on a Task in the sheet, or its Workbench on a tab if one is named. */
   onOpen: (taskId: TaskId, options?: { readonly tab?: WorkbenchTab }) => void;
 }) {
   return moments.map((moment) =>

@@ -234,6 +234,7 @@ export const messages = {
       finished: ({ count }: { count: number }) =>
         plural(count, { one: "1 finished quest", other: `${formatCount(count)} finished quests` }),
     },
+    memberQuests: "Quests it works on",
     backpack: {
       label: "Backpack",
       intro: "What it still has to deal with. You can look; it does the work.",

@@ -48,7 +48,8 @@ export const parseGlossary = (markdown) => {
 };
 
 const KEBAB_CODE = /^[a-z0-9]+(?:-[a-z0-9]+)+$/;
-const PATH = /^[~./]|\//;
+/** A path or module specifier, such as "~/.agents/skills" or "./model.ts": one word, starting like a path. */
+const PATH = /^[~./@]\S*$/;
 
 /** Whether a literal is copy someone reads, not a code or a path. */
 const isCopy = (text) => text.trim() !== "" && !KEBAB_CODE.test(text) && !PATH.test(text.trim());

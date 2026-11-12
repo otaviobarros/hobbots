@@ -1,6 +1,6 @@
 import { formatCount } from "../../lib/format.ts";
 
-/** Copy for acting in the Quest room's lanes (STD-I18N-001). */
+/** Copy for acting in each hob's work in a quest (STD-I18N-001). */
 export const messages = {
   menu: ({ name }: { name: string }) => `${name}'s task menu`,
   menuOf: ({ name }: { name: string }) => `${name}'s task`,

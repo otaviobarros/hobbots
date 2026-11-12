@@ -4,14 +4,14 @@ import {
   dock,
   lane,
   laneTask,
-  openRoom,
+  openQuest,
   openWorkbench,
-  questRoom,
-  roomMenu,
+  questMenu,
+  questSheet,
   showInWorkbench,
   taskSummary,
   ticket,
-} from "./quest-room.ts";
+} from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -38,7 +38,7 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, coun
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // With a message left unsent, the Workbench opens from the ticket, docked in the room beside the chat.
+  // With a message left unsent, the Workbench opens from the quest, beside the chat.
   await composer.fill("A thought for later");
   await openWorkbench(page, questTicket);
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
@@ -77,16 +77,15 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, coun
   );
   await expect(page).toHaveURL(/tab=terminal/);
 
-  // Close room gives the chat back its width, with the message still unsent.
-  const room = questRoom(page, "Tidy the notes");
-  await room.getByRole("button", { name: "Close room" }).click();
+  // Close the quest gives the chat back its width, with the message still unsent.
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(bench).toBeHidden();
   await expect(composer).toHaveValue("A thought for later");
 
   // Opened again it starts on Changes.
   await openWorkbench(page, questTicket);
   await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
-  await room.getByRole("button", { name: "Close room" }).click();
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(bench).toBeHidden();
 });
 
@@ -103,16 +102,16 @@ test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in
   const questTicket = ticket(page, "Tidy the notes");
   await expect(questTicket).toBeVisible({ timeout: 20_000 });
 
-  // The quest button in the header opens the room with the Workbench folded under the lane.
+  // The quest button in the header opens the quest in the sheet, without the Workbench.
   await composer.fill("Keep the headings short");
   await page
     .getByRole("region", { name: "Work in progress" })
     .getByRole("button", { name: /Tidy the notes/ })
     .click();
-  const room = questRoom(page, "Tidy the notes");
+  const room = questSheet(page, "Tidy the notes");
   await expect(room).toBeVisible();
   const bench = dock(page);
-  await expect(bench.getByRole("button", { name: "Open the Workbench" })).toHaveAttribute("aria-expanded", "false");
+  await expect(bench).toHaveCount(0);
 
   // Show in the Workbench opens it on Changes, and the unsent message stays in the chat beside it.
   await showInWorkbench(page, "Tidy the notes");
@@ -184,7 +183,8 @@ test("[TC-UX-030] a finished Task's summary in its lane says what happened and w
   expect(new URL(page.url().replace("/#/", "/")).searchParams.get("file")).toBe(join(folder, "notes.md"));
   await bench.getByRole("tab", { name: /^Terminal/ }).click();
   await expect(page).not.toHaveURL(/file=/);
-  await made.getByRole("button", { name: "See The report in Files" }).click();
+  const again = (await taskSummary(page, "Tidy the notes")).getByRole("region", { name: "What it made" });
+  await again.getByRole("button", { name: "See The report in Files" }).click();
   await expect(bench.getByRole("tab", { name: /^Files/ })).toHaveAttribute("aria-selected", "true");
   expect(new URL(page.url().replace("/#/", "/")).searchParams.get("file")).toBe(report);
 });
@@ -213,7 +213,7 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
   await openWorkbench(page, ticket(page, "Tidy the notes"));
   const summary = await taskSummary(page, "Tidy the notes");
   const open = summary.getByRole("region", { name: "Still open" });
-  await expect(summary).toContainText("Aldric is waiting on your answer in this lane.");
+  await expect(summary).toContainText("Aldric is waiting on your answer in the quest.");
   await expect(open).not.toContainText("Should the headings be short?");
 
   // The lane holds the question, with its answer box.
@@ -245,8 +245,8 @@ test("[TC-UX-032] a Quest pinned from another thread holds its question in its l
   // Pinned, the Quest follows to another thread, where its room opens beside that thread's chat.
   const header = page.getByRole("region", { name: "Work in progress" }).getByRole("button", { name: /Tidy the notes/ });
   await header.click();
-  const room = questRoom(page, "Tidy the notes");
-  await roomMenu(page, "Tidy the notes");
+  const room = questSheet(page, "Tidy the notes");
+  await questMenu(page, "Tidy the notes");
   await page.getByRole("menuitem", { name: "Pin quest" }).click();
   await page.goto((await campAt({ url, headers: hub.headers }, aldric, "Something else")).url);
   await composer.fill("Something else");
@@ -321,7 +321,7 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await openRoom(page, "Tidy the notes");
+  await openQuest(page, "Tidy the notes");
   const sheet = laneTask(page, "Tidy the notes file");
   await expect(sheet).toContainText("Failed", { timeout: 30_000 });
   await lane(page, "Aldric")
@@ -342,13 +342,11 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   await expect(summary.getByRole("region", { name: "What happened" })).toContainText("This attempt failed.");
   await expect(page).not.toHaveURL(/attempt=/);
 
-  // Choosing the retry shows it, with nothing made, and the choice stays in the address.
+  // Choosing the retry in the Workbench shows it, and the choice stays in the address.
+  await showInWorkbench(page, "Tidy the notes file");
   await attempts.getByRole("radio", { name: "Attempt 2" }).click();
   await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
   await expect(page).toHaveURL(/attempt=/);
-  await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
   await page.reload();
   await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
-  await taskSummary(page, "Tidy the notes file");
-  await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
 });

@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  type AnyOperation,
   type AttemptId,
   type CharmDeclaration,
   GIT_INIT_TOOL,
@@ -44,6 +45,7 @@ import type {
 } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 import { SkillTools } from "./skill-proposals.ts";
+import { operationDecision } from "./tools.ts";
 
 /** The chat, Task and Attempt a turn's web records name. */
 export interface WebRecordPlace {
@@ -196,10 +198,11 @@ interface CharmIdentity {
   /** The hub's services each call runs with, its logger included, since a runtime runs it on its own. */
   readonly context?: Context.Context<never>;
   /**
-   * Whether a session outside any chat, a party member's or a step's, is offered its writes too. A
-   * write whose answer is lost is settled on the reply step it showed as (ADR 020), which such a
-   * session lacks, so only a Charm whose writes act on the hub's own records, each read back from
-   * them, offers its writes there, as the Summoning Charm does (ADR 034).
+   * Whether a session outside any chat, a party member's or a step's, is offered its writes too
+   * (ADR 034, ADR 038). Such a session has no reply step, so a write whose answer stays lost is
+   * settled on its Task instead, from the Quest room or the Inbox. A Charm opts in only when each
+   * of its writes reads back, so most lost answers settle without you, as the GitHub and Summoning
+   * Charms' do.
    */
   readonly writesOutsideChats?: boolean;
 }
@@ -217,8 +220,15 @@ export interface CharmDefinition<R extends HubRequest, V extends AskableVerdict>
 
 /** A registered Charm, with what the registry needs of it whatever its requests are. */
 export interface Charm extends CharmIdentity {
-  /** Its tools' names, and which of them write. */
-  readonly tools: ReadonlyArray<{ readonly name: string; readonly effect: HubActionEffect }>;
+  /**
+   * Its tools' names, which of them write, and the operation each write is decided as, when it
+   * declares one: outside a chat, a write the hob's policy answers Never for is not offered (ADR 038).
+   */
+  readonly tools: ReadonlyArray<{
+    readonly name: string;
+    readonly effect: HubActionEffect;
+    readonly operation?: AnyOperation | undefined;
+  }>;
   readonly readBacks: Readonly<Record<string, ReadBack>>;
   /** Its actions for a turn, run through the pipeline with the hub's one never-twice runner. */
   readonly serve: (calls: CharmCallRunner) => (turn: CharmTurn) => HubTools;
@@ -235,7 +245,7 @@ export const defineCharm = <R extends HubRequest, V extends AskableVerdict>(
   const { declaration, name } = identity;
   return {
     ...identity,
-    tools: actions.map((action) => ({ name: action.tool.name, effect: action.effect })),
+    tools: actions.map((action) => ({ name: action.tool.name, effect: action.effect, operation: action.operation })),
     readBacks: readBacksOf(actions),
     serve: (calls) =>
       makeHubActions({
@@ -293,8 +303,9 @@ export const charmsProblem = (charms: ReadonlyArray<Charm>): string | null => {
 };
 
 /**
- * What a turn is offered of the Charms: with `writes` false, none of their writes, but for a Charm
- * that offers them outside chats.
+ * What a turn is offered of the Charms: with `writes` false, as for a session outside any chat, none
+ * of their writes, but those of a Charm that offers them outside chats, each while the hob's policy
+ * does not answer Never for it (ADR 038).
  */
 export interface CharmOffer {
   readonly writes?: boolean;
@@ -339,23 +350,39 @@ export class Charms extends Context.Service<
           <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
             charm.context === undefined ? effect : Effect.provideContext(effect, charm.context);
 
-        const setFor = (charm: Charm, serve: (turn: CharmTurn) => HubTools, turn: CharmTurn, offer?: CharmOffer) => {
+        const setFor = (
+          charm: Charm,
+          serve: (turn: CharmTurn) => HubTools,
+          turn: CharmTurn,
+          access: ToolAccess,
+          offer?: CharmOffer,
+        ) => {
           const run = within(charm);
           const hub = serve(turn);
-          const writes = new Set(charm.tools.filter((tool) => tool.effect === "write").map((tool) => tool.name));
-          const tools =
-            offer?.writes === false && charm.writesOutsideChats !== true
-              ? hub.tools.filter((tool) => !writes.has(tool.name))
-              : hub.tools;
-          // A Charm steers the requests it takes over while it offers the turn any tool.
-          const takeovers = (charm.takeovers ?? []).map(
-            (takeover): Takeover => ({
-              operation: takeover.operation,
-              charm: charm.name,
-              tool: takeover.tool,
-              appliesIn: (cwd) => run(takeover.appliesIn(turn, cwd)),
-            }),
+          // Outside a chat, a write is offered only by a Charm that offers its writes there, and
+          // only while the hob's policy answers anything but Never for it (ADR 038). In a chat, a
+          // write under Never is refused on its step, in the policy's words, as before.
+          const closedOutside = (tool: Charm["tools"][number]) =>
+            charm.writesOutsideChats !== true ||
+            (tool.operation !== undefined && operationDecision(access.policy, tool.operation) === "deny");
+          const closed = new Set(
+            charm.tools
+              .filter((tool) => offer?.writes === false && tool.effect === "write" && closedOutside(tool))
+              .map((tool) => tool.name),
           );
+          const tools = hub.tools.filter((tool) => !closed.has(tool.name));
+          // A Charm steers the requests it takes over to the tools it offers the turn, and no other.
+          const offered = new Set(tools.map((tool) => tool.name));
+          const takeovers = (charm.takeovers ?? [])
+            .filter((takeover) => offered.has(takeover.tool))
+            .map(
+              (takeover): Takeover => ({
+                operation: takeover.operation,
+                charm: charm.name,
+                tool: takeover.tool,
+                appliesIn: (cwd) => run(takeover.appliesIn(turn, cwd)),
+              }),
+            );
           return {
             owner: `the ${charm.name} Charm`,
             tools:
@@ -379,7 +406,7 @@ export class Charms extends Context.Service<
               for (const { charm, serve } of served) {
                 if (!holdsCharm(access.policy.hob, charm.declaration.id)) continue;
                 if (!(yield* within(charm)(charm.connected(turn.agentId)))) continue;
-                sets.push(setFor(charm, serve, turn, offer));
+                sets.push(setFor(charm, serve, turn, access, offer));
               }
               return sets;
             }),

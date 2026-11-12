@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, openRoom } from "./quest-room.ts";
+import { lane, openQuest } from "./quest-sheet.ts";
 
 // Issue #576 in the browser: a member that started a Quest of its own and brought nobody in shows
 // "No one brought in yet" under its row on the quest sheet. The hub's side is tested in
@@ -86,7 +86,7 @@ test("[TC-OR-247] the quest sheet says a member's own Quest has no one brought i
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
 
-  await openRoom(page, "Review the project");
+  await openQuest(page, "Review the project");
   const pip = lane(page, "Pip");
   await expect(pip).toContainText("Leads a quest", { timeout: 20_000 });
   await expect(pip).toContainText("No one brought in yet");

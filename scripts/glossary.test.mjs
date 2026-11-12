@@ -66,6 +66,19 @@ test("[TC-GEN-1423-03] copy that says a word the UI never shows fails, with its 
   ]);
 });
 
+test("[TC-GEN-1423-06] copy with a slash in it is still copy, in a string and in a template", () => {
+  const text = [
+    "export const m = {",
+    '  open: "Open this thread/camp",',
+    "  move: ({ n }: { n: number }) => `Move ${n} to another thread/camp`,",
+    "};",
+  ].join("\n");
+  assert.deepEqual(
+    checkCopy("m.ts", copy(text), rows).map((problem) => problem.split(":").slice(0, 2).join(":")),
+    ["m.ts:2", "m.ts:3"],
+  );
+});
+
 test("keys, codes, paths, types and imports are not copy", () => {
   const text = [
     'import { thread } from "./thread.ts";',

@@ -1,5 +1,5 @@
 import { expect, test } from "./hub.ts";
-import { laneTask, openRoom, taskDetails, ticket } from "./quest-room.ts";
+import { laneTask, openQuest, taskDetails, ticket } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #667 in the browser: a step that stops on a finding, with no result, shows as blocked with
@@ -33,7 +33,7 @@ test("[TC-OR-402] the Quest room shows a step that stopped on a finding as block
 
   // Step 1 needs Aldric: blocked, with what it found, not done. The ticket counts both steps.
   await expect(ticket(page, "Write the docs")).toContainText("0 of 2 done");
-  await openRoom(page, "Write the docs");
+  await openQuest(page, "Write the docs");
   await expect(laneTask(page, "Write the README and SPEC")).toContainText("Blocked", { timeout: 20_000 });
   await expect(await taskDetails(page, "Write the README and SPEC")).toContainText(FINDING);
 

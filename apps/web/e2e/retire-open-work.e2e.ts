@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead, openRoom } from "./quest-room.ts";
+import { lane, laneHead, openQuest } from "./quest-sheet.ts";
 
 // Issue #408 in the browser: Retire lists a hob's open work, hands its open Tasks to another hob,
 // or lets it finish them first. The hub-level checks are in apps/server/test/task-controls.test.ts.
@@ -152,7 +152,7 @@ test("[TC-AG-1248] Retire lists a hob's open work, hands its Task to another hob
   await request.getByRole("button", { name: "Allow once" }).click();
   await expect(request.getByRole("status")).toHaveText("✓ Allowed once. Quill carries on.");
   await page.goto(thread);
-  await openRoom(page, "Build the app");
+  await openQuest(page, "Build the app");
   // Pip's Task waited on Quill's, so Quill's completed first.
   await expect(laneHead(page, "Pip")).toContainText("Done", { timeout: 20_000 });
   await expect(lane(page, "Pip")).not.toContainText("Waits on Quill");

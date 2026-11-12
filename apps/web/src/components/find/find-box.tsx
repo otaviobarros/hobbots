@@ -126,13 +126,14 @@ export function FindBox({
                 <SegmentedControlItem value="here">{copy.here({ kind: thread.kind })}</SegmentedControlItem>
                 <SegmentedControlItem value="everywhere">{copy.everywhere}</SegmentedControlItem>
               </SegmentedControl>
+              {/* Borderless and inset from the field's edge, like the field's own clear button. */}
               <Button
-                variant="icon"
+                variant="quiet"
                 size="icon"
                 aria-label={copy.close}
                 title={copy.close}
                 onClick={close}
-                className="size-hit-min"
+                className="me-1 size-hit-min"
               >
                 <CloseIcon />
               </Button>

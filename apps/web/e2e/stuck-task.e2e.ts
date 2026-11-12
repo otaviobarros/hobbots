@@ -1,8 +1,8 @@
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { cancelInLane, lane, laneHead, laneMenu, openRoom } from "./quest-room.ts";
+import { cancelInLane, lane, laneHead, laneMenu, openQuest } from "./quest-sheet.ts";
 
 // Issue #1087 in the browser: a member's Task whose work is stuck reads and acts the same on its
-// lane, its card in the Quest room and the Inbox, and its stuck work closes once nothing is left to choose.
+// lane, its card in the quest and the Inbox, and its stuck work closes once nothing is left to choose.
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -78,7 +78,7 @@ test("[TC-IN-1087-02] a stuck member's lane says Stuck with Retry, and Reassignâ
 }) => {
   const current = await stuckCopy(page);
   const thread = page.url();
-  await openRoom(page, "Plan the launch");
+  await openQuest(page, "Plan the launch");
   await expect(laneHead(page, "Quill")).toContainText("Stuck");
   const menu = await laneMenu(page, "Quill");
   await expect(menu.getByRole("menuitem", { name: "Retry" })).toBeVisible();
@@ -93,11 +93,11 @@ test("[TC-IN-1087-02] a stuck member's lane says Stuck with Retry, and Reassignâ
   await expect(page.getByText("Gave the task to Pip.", { exact: true })).toBeVisible();
   await expect(page.getByText("Nothing needs you")).toBeVisible();
 
-  // The room agrees: Pip has the Task, and Quill's lane no longer says it is stuck.
+  // The quest agrees: Pip has the Task, and Quill's lane no longer says it is stuck.
   await page.goto(thread);
-  await openRoom(page, "Plan the launch");
+  await openQuest(page, "Plan the launch");
   await expect(lane(page, "Pip")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Lanes" })).not.toContainText("Stuck");
+  await expect(page.getByRole("dialog")).not.toContainText("Stuck");
 });
 
 // covers IN-007, OR-006
@@ -105,11 +105,11 @@ test("[TC-IN-1087-03] cancelling a stuck member's Task from its lane closes its 
   page,
 }) => {
   const current = await stuckCopy(page);
-  await openRoom(page, "Plan the launch");
+  await openQuest(page, "Plan the launch");
   await expect(laneHead(page, "Quill")).toContainText("Stuck");
   await cancelInLane(page, "Quill");
   await expect(laneHead(page, "Quill")).not.toContainText("Stuck");
-  await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inbox", exact: true, includeHidden: true })).toBeVisible();
   await page.goto(`${current.url}/#/inbox`);
   await expect(page.getByText("Nothing needs you")).toBeVisible();
 });
@@ -122,7 +122,7 @@ test("[TC-IN-1087-04] says when Retry in a stuck lane is not saved, and when the
 
   // The hub does not save Retry: the menu closes, and Quill's lane says why under the Task.
   await page.route(/\/api\/blockers\/[^/]+\/decision$/, (route) => route.fulfill({ status: 500, body: "" }));
-  await openRoom(page, "Plan the launch");
+  await openQuest(page, "Plan the launch");
   const menu = await laneMenu(page, "Quill");
   await menu.getByRole("menuitem", { name: "Retry" }).click();
   await expect(lane(page, "Quill").getByRole("alert")).toContainText("Hobbots could not save that.");
@@ -155,7 +155,7 @@ test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which fin
   // Retry sends can finish the Task, so its result shows that the try ran.
   const finish = script("complete_task", { delivered: true, key: "copy-done", summary: "Three headlines." });
   const current = await stuckCopy(page, [`fake:once fake:then ${finish}`]);
-  await openRoom(page, "Plan the launch");
+  await openQuest(page, "Plan the launch");
   await expect(laneHead(page, "Quill")).toContainText("Stuck");
   // The cut-off try finished nothing: no result yet, only the failed first Attempt.
   await expect(lane(page, "Quill")).not.toContainText("Result Â· ");
@@ -169,7 +169,7 @@ test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which fin
   await expect(lane(page, "Quill")).toContainText("Result Â· Three headlines.", { timeout: 20_000 });
   await expect(laneHead(page, "Quill")).not.toContainText("Stuck");
   await expect(lane(page, "Quill").getByRole("alert")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inbox", exact: true, includeHidden: true })).toBeVisible();
   await expect((await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Retry" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto(`${current.url}/#/inbox`);

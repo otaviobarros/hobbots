@@ -85,3 +85,10 @@ export const useQuestSummary = (quest: Pick<Quest, "id" | "threadId"> | null): Q
     enabled: quest !== null,
     select: (summaries: Summaries) => (quest === null ? undefined : summaries[quest.id]),
   }).data;
+
+const NO_THREAD_SUMMARIES: ReadonlyArray<QuestSummary> = [];
+
+/** Every Quest followed in a chat or camp, ended ones included, as the hub published them. */
+export const useThreadSummaries = (threadId: ThreadId): ReadonlyArray<QuestSummary> =>
+  useQuery({ ...threadSummariesQuery(threadId), select: (summaries: Summaries) => Object.values(summaries) }).data ??
+  NO_THREAD_SUMMARIES;
