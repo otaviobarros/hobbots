@@ -401,6 +401,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             recordToolStart,
             settleCancels,
             notify: signal.notify,
+            scope,
           });
 
       /**

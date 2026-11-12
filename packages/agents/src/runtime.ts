@@ -471,6 +471,27 @@ export interface SkillMount {
   readonly set?: { readonly name: string; readonly path: string } | null;
 }
 
+/**
+ * Messages that reach a turn while it runs (ADR 019, #1345), such as a lead's correction to its
+ * member. The adapter hands them to the model at the turn's next safe point, between two tool
+ * calls and never inside one, in the runtime's own way: Claude Code with the result of the call
+ * that just ended, Codex as input added to the running turn.
+ */
+export interface TurnSteers {
+  /**
+   * Signals that messages wait for the turn. An adapter that adds input to a running turn as it
+   * arrives hands them over on each signal; one that waits for a tool call to end need not listen.
+   */
+  readonly waiting: Stream.Stream<void>;
+  /**
+   * Hands every message that waits now to `handOff` as one text, which puts it into the running
+   * turn and says whether the runtime took it. Only then are they recorded as having reached the
+   * hob; otherwise they wait for the turn's next safe point, or for its next turn. Does nothing,
+   * and never calls `handOff`, when none waits.
+   */
+  readonly deliver: (handOff: (text: string) => Effect.Effect<boolean>) => Effect.Effect<void>;
+}
+
 export interface PromptRequest {
   readonly prompt: string;
   /**
@@ -555,6 +576,11 @@ export interface PromptRequest {
    * `explicit` once the turn starts. Absent or null when you picked none.
    */
   readonly askedSkill?: string | null;
+  /**
+   * Messages that reach the turn while it runs (#1345), for an adapter that `steersTurns`. Absent
+   * or null, the turn gets none, and what arrives for its hob waits for the next turn.
+   */
+  readonly steers?: TurnSteers | null;
 }
 
 /** Why a tool call is refused when Hobbots could not record it before it ran. */
@@ -583,6 +609,11 @@ export interface RuntimeAdapterShape {
    * asking and no site is blocked (`turnWebSearch`). Absent, the hub assumes it can.
    */
   readonly searchOpensPages?: boolean;
+  /**
+   * Whether the adapter hands a turn's `steers` to the model while the turn runs (#1345). Absent,
+   * it cannot, and the hub stops the turn and starts the next one with the message instead.
+   */
+  readonly steersTurns?: boolean;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }
@@ -606,6 +637,18 @@ export const runtimeAdapters: Effect.Effect<RuntimeAdapters, never, RuntimeAdapt
   const claude = yield* RuntimeAdapter;
   const others = Option.getOrElse(yield* Effect.serviceOption(AdditionalRuntimes), () => new Map());
   return (runtime) => (runtime === "claude-code" ? claude : others.get(runtime));
+});
+
+/**
+ * Whether a turn on each runtime the hub serves takes a message while it runs (#1345). Without
+ * adapters, as in tests of the hub tools alone, every runtime is taken to.
+ */
+export const turnSteering: Effect.Effect<(runtime: RuntimeKind) => boolean> = Effect.gen(function* () {
+  const claude = yield* Effect.serviceOption(RuntimeAdapter);
+  if (Option.isNone(claude)) return () => true;
+  const others = Option.getOrElse(yield* Effect.serviceOption(AdditionalRuntimes), () => new Map());
+  return (runtime: RuntimeKind) =>
+    (runtime === "claude-code" ? claude.value : others.get(runtime))?.steersTurns === true;
 });
 
 const unsupported = { status: "unsupported", evidence: "This hub has no adapter for the runtime." } as const;

@@ -173,7 +173,12 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await composer.fill(
     [
       "Tell Pip the product is renamed",
-      hubCall("message_task", { key: "rename", task_id: asked.taskId, text: "The product is now Hobbots." }),
+      hubCall("message_task", {
+        key: "rename",
+        task_id: asked.taskId,
+        text: "The product is now Hobbots.",
+        delivery: "next-turn",
+      }),
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();

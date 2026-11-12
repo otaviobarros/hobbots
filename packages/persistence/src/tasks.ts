@@ -80,7 +80,10 @@ const QUEST_END: Partial<Record<TaskState, QuestState>> = {
 
 /** Whether a note left again with the same id is the same note: same Task, text and sender. */
 const sameNote = (left: TaskNote, input: NewNote) =>
-  left.taskId === input.taskId && left.text === input.text && (left.senderId ?? null) === (input.senderId ?? null);
+  left.taskId === input.taskId &&
+  left.text === input.text &&
+  (left.senderId ?? null) === (input.senderId ?? null) &&
+  left.delivery === (input.delivery ?? "next-turn");
 
 export const TaskRepositoryLive = Layer.effect(
   TaskRepository,
@@ -1029,7 +1032,7 @@ export const TaskRepositoryLive = Layer.effect(
           const [left] = yield* read.note(input.id);
           if (left !== undefined) {
             if (!sameNote(left, input)) {
-              return yield* refuse("note-key-reused", `Note ${input.id} was left with another Task or text`);
+              return yield* refuse("note-key-reused", `Note ${input.id} was left with another Task, text or delivery`);
             }
             return { value: left, events: [] };
           }
@@ -1049,6 +1052,7 @@ export const TaskRepositoryLive = Layer.effect(
             recipientId,
             messageId,
             fromNoteId,
+            delivery: input.delivery ?? "next-turn",
             revision,
           });
           yield* sql`INSERT INTO task_notes ${sql.insert({
@@ -1060,6 +1064,7 @@ export const TaskRepositoryLive = Layer.effect(
             created_at: note.createdAt,
             message_id: note.messageId,
             from_note_id: note.fromNoteId,
+            delivery: note.delivery,
             revision,
             left_revision: revision,
           })}`;

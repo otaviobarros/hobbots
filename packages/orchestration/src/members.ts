@@ -15,6 +15,7 @@ import {
   type TaskRepository,
   type ToolAccess,
   type ToolStartedEvent,
+  type TurnSteers,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -33,7 +34,7 @@ import {
   type TurnEnding,
   taskChat,
 } from "@hobbots/domain";
-import { DateTime, Effect, FiberMap, Option, Semaphore } from "effect";
+import { Cause, DateTime, Effect, FiberMap, Option, Queue, type Scope, Semaphore, Stream } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
 import { memberPrompt, memberReminder, sendBackPrompt } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
@@ -70,6 +71,8 @@ export interface MemberDeps {
   /** Confirms every cancel asked for that nothing runs in any more. */
   readonly settleCancels: Effect.Effect<void>;
   readonly notify: Effect.Effect<void>;
+  /** Where a stop the runner starts runs, so the runner never waits for a turn to end. */
+  readonly scope: Scope.Scope;
 }
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
@@ -273,6 +276,38 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       if (Option.isNone(hob) || hob.value.status === "retired") yield* retire(taskId, run.agentId, yield* nowIso);
     });
 
+  /**
+   * What lets a lead's messages reach the member's running turn (#1345): the runtime hands them to
+   * the model at the turn's next safe point, between two tool calls, under the dispatcher's claims,
+   * and each one is recorded as reaching the member only once the runtime took it. `session` is the
+   * session the turn runs in. The runner wakes the turn through `run.steering` as messages arrive.
+   */
+  const steersFor = (taskId: TaskId, agentId: AgentId, attemptId: AttemptId, session: () => string | null) =>
+    Effect.gen(function* () {
+      const arrived = yield* Queue.sliding<void>(1);
+      // One hand-off at a time, so two safe points never hand the same messages over twice.
+      const handing = yield* Semaphore.make(1);
+      const steers: TurnSteers = {
+        waiting: Stream.fromQueue(arrived),
+        deliver: (handOff) =>
+          handing.withPermit(
+            Effect.gen(function* () {
+              const sessionId = session();
+              if (sessionId === null) return;
+              yield* deps.continuations.handToTurn(taskId, agentId, attemptId, (text) =>
+                handOff(text).pipe(
+                  Effect.map((took) => (took ? sessionId : null)),
+                  Effect.catchCause((cause) =>
+                    Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.succeed(null),
+                  ),
+                ),
+              );
+            }),
+          ),
+      };
+      return { steers, wake: Queue.offer(arrived, undefined).pipe(Effect.asVoid) };
+    });
+
   /** One turn of the member's session on its Task, carrying the work that waits there. */
   const turnOn = (taskId: TaskId, agent: Agent, config: AgentConfiguration, run: Running): CarryingTurn<AttemptId> => ({
     // Routine progress rides along work that needs the member, and alone starts no turn (IN-005).
@@ -335,6 +370,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               );
         // The session its turns ran in, as the runtime reported it, for a turn sent back to go on in.
         let session = previous;
+        // What the lead sends while the turn runs reaches it at its next step (#1345).
+        const steering = yield* steersFor(task.id, agent.id, attemptId, () => session);
+        run.steering = { wake: steering.wake, steers: deps.adapters(config.runtime)?.steersTurns === true };
         // Only the turn that carries the work accepts it; one sent back goes on with it in the same Attempt.
         const turnWith = (prompt: string, sessionId: string | null, accepts: boolean) =>
           runSessionTurn(
@@ -377,6 +415,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               },
               turns: tasks,
               keepMark: attemptMarkKeeper(tasks, attemptId, deps.announce),
+              steers: steering.steers,
             },
             deps.recorder,
           );
@@ -398,7 +437,16 @@ export const makeMemberRunner = (deps: MemberDeps) => {
           // Its reply did not complete the Task: the same session goes on once, told to say how it ended (#1086).
           const again = yield* turnWith(sendBackPrompt(task, lead), session, false);
           return (yield* settle(task.id, attemptId, again, work, { sentBack: true, startedAt: at })) as CarriedEnd;
-        }).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
+        }).pipe(
+          Effect.ensuring(
+            Effect.andThen(
+              Effect.sync(() => {
+                run.steering = undefined;
+              }),
+              handle === null ? Effect.void : handle.close,
+            ),
+          ),
+        );
       }).pipe(
         // A bug in a turn must not leave its Attempt live, which would hold the Task from any other turn.
         Effect.catchDefect((defect) =>
@@ -469,8 +517,30 @@ export const makeMemberRunner = (deps: MemberDeps) => {
 
   const runningFor = (agentId: string) => Array.from(running.values()).filter((run) => run.agentId === agentId).length;
 
+  /**
+   * Passes what waits for each member's running turn on to it (#1345): a message that asks to
+   * interrupt stops the turn, so the next one starts with it, as does one that asks to steer a turn
+   * whose runtime cannot take input while it runs; one that asks to steer wakes the turn to take it
+   * at its next step. The stop runs apart, so the round never waits for a turn to end.
+   */
+  const steerRunning = Effect.gen(function* () {
+    for (const [taskId, run] of running) {
+      const steering = run.steering;
+      if (steering === undefined || run.stop !== null) continue;
+      const asks = yield* deps.continuations.runningTurnAsks(taskId, run.agentId);
+      if (asks === null) continue;
+      if (asks === "steer" && steering.steers) {
+        yield* steering.wake;
+        continue;
+      }
+      run.stop = "interrupt";
+      yield* Effect.forkIn(FiberMap.remove(deps.fibers, taskId), deps.scope);
+    }
+  });
+
   /** Starts a turn on each member's Task where work waits, one at a time per Task, within the per-hob limit. */
   const round = Effect.gen(function* () {
+    yield* steerRunning;
     for (const waiting of yield* deps.continuations.waiting) {
       if (running.has(waiting.taskId) || runningFor(waiting.agentId) >= deps.maxRunningPerHob) continue;
       yield* start(waiting);

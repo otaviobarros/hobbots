@@ -146,7 +146,7 @@ export const stepEnds =
   };
 
 /** Both sets of hooks, each event's in order. */
-const mergeHooks = (
+export const mergeHooks = (
   first: Options["hooks"],
   second: Options["hooks"],
 ): Partial<Record<HookEvent, Array<HookCallbackMatcher>>> => {

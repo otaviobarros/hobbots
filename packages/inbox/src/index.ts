@@ -14,7 +14,9 @@ export {
   continuationThread,
   RESULT_IN_BRIEFING,
   type ResultsIn,
+  runningTurnAsk,
   startingText,
+  steeringText,
 } from "./continuations.ts";
 export {
   BackpackTurnFailed,
@@ -25,6 +27,7 @@ export {
   Dispatcher,
   DispatcherHost,
   type DispatchLimits,
+  type GiveToLive,
   heldUnder,
   lateness,
   lateWorkOf,

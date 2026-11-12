@@ -1,5 +1,7 @@
-import { ApprovalService } from "@hobbots/agents";
+import { ApprovalService, RuntimeAdapter } from "@hobbots/agents";
 import { NoteId, TaskId } from "@hobbots/domain";
+import { makeFakeRuntime } from "@hobbots/runtimes";
+import { Layer } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   FRODO,
@@ -248,7 +250,12 @@ describe("a message to a member waiting on an approval", () => {
     await run(
       send([
         "Tell Quill the product is renamed",
-        hub("message_task", { key: "rename", task_id: quill.id, text: "The product is now Hobbots." }),
+        hub("message_task", {
+          key: "rename",
+          task_id: quill.id,
+          text: "The product is now Hobbots.",
+          delivery: "next-turn",
+        }),
       ]),
     );
     await run(messagesWhen(() => answers.has("rename")));
@@ -281,10 +288,48 @@ describe("a message to a member waiting on an approval", () => {
     const queued = (await tree()).tasks.find((task) => task.id === nettle);
     if (queued === undefined) throw new Error("no nested Task");
     await run(startTurn(nettle, queued.revision));
-    const sent = await call(PIP, pip, "message_task", { key: "go", task_id: nettle, text: "Go on." });
+    const sent = await call(PIP, pip, "message_task", {
+      key: "go",
+      task_id: nettle,
+      text: "Go on.",
+      delivery: "next-turn",
+    });
     expect(sent.message).toContain(`Held for hob nettle on Task ${nettle}: they are in a turn now`);
     expect(sent.details).toMatchObject({ recipient: NETTLE, held: "turn-running" });
     expect(sent.details).not.toHaveProperty("approval_id");
+  });
+});
+
+describe("a message to a member whose turn runs", () => {
+  // covers OR-007
+  it("[TC-OR-1345-05] a message sent with no delivery to a member whose turn runs reaches it at its next step", async () => {
+    const tools = toolsHub(party, TOP);
+    dispose = tools.dispose;
+    const { pip, nettle } = await nested(tools);
+    const { call, run, tree, startTurn } = tools;
+    const queued = (await tree()).tasks.find((task) => task.id === nettle);
+    if (queued === undefined) throw new Error("no nested Task");
+    await run(startTurn(nettle, queued.revision));
+    const sent = await call(PIP, pip, "message_task", { key: "go", task_id: nettle, text: "Go on." });
+    expect(sent.message).toContain("it reaches them at its next step, between two tool calls");
+    expect(sent.details).toMatchObject({ recipient: NETTLE, turn_running: true, delivery: "steer" });
+    expect(sent.details).not.toHaveProperty("held");
+    expect((await tree()).notes.map((note) => note.delivery)).toEqual(["steer"]);
+  });
+
+  // covers OR-007, RT-002
+  it("[TC-OR-1345-06] a steered message to a member whose runtime cannot take one while a turn runs interrupts that turn, and says why", async () => {
+    const tools = toolsHub(party, TOP, Layer.succeed(RuntimeAdapter, { ...makeFakeRuntime(), steersTurns: false }));
+    dispose = tools.dispose;
+    const { pip, nettle } = await nested(tools);
+    const { call, run, tree, startTurn } = tools;
+    const queued = (await tree()).tasks.find((task) => task.id === nettle);
+    if (queued === undefined) throw new Error("no nested Task");
+    await run(startTurn(nettle, queued.revision));
+    const sent = await call(PIP, pip, "message_task", { key: "go", task_id: nettle, text: "Go on." });
+    expect(sent.message).toContain("Their runtime cannot take a message while a turn runs, so their turn stops now");
+    expect(sent.details).toMatchObject({ turn_running: true, delivery: "interrupt" });
+    expect((await tree()).notes.map((note) => note.delivery)).toEqual(["interrupt"]);
   });
 });
 

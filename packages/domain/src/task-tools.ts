@@ -1,7 +1,15 @@
 import { Schema } from "effect";
 import { ClaimScope } from "./claim.ts";
 import { PolicyLayer } from "./policy.ts";
-import { ArtifactKind, choicesProblem, MAX_QUESTION_OPTIONS, type Quest, TaskRefusal, WaitMode } from "./quest.ts";
+import {
+  ArtifactKind,
+  choicesProblem,
+  MAX_QUESTION_OPTIONS,
+  NoteDelivery,
+  type Quest,
+  TaskRefusal,
+  WaitMode,
+} from "./quest.ts";
 import { ancestorsOf, type Task } from "./task.ts";
 
 /**
@@ -228,6 +236,12 @@ export const TaskToolInputs = {
     key,
     task_id: id("A member's Task directly under one of yours."),
     text: text("What the member needs to know, in a sentence or two."),
+    delivery: Schema.optionalKey(
+      NoteDelivery.annotate({
+        description:
+          "How it reaches a member whose turn is running now. steer (the default): at the member's next step in that turn, between two tool calls, never inside one. interrupt: its turn stops at once and starts again with your message first; use it when what the member is doing now is wrong. next-turn: only once that turn ends. A member with no turn running gets it with its next turn whichever you pick.",
+      }),
+    ),
   }),
   complete_task: Schema.Struct({
     key,
@@ -392,7 +406,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "message_task",
     description:
-      "Send a short message to a member's Task directly under one of yours, such as that an obstacle is gone. It reaches the member in its next turn and wakes it. A member in a turn reads it only once that turn ends, as when it waits for the user to decide an approval request: the result then says so and why. To reach a hob further down, message the member that leads it.",
+      "Send a short message to a member's Task directly under one of yours, such as a correction or that an obstacle is gone. A member with no turn running gets it in its next turn, which it wakes. A member in a turn gets it at its next step in that turn by default, so a correction lands before it acts on more; pick interrupt to stop that turn and restart it with your message, or next-turn to wait for it to end. The result says when it reaches them. To reach a hob further down, message the member that leads it.",
     label: "Messaging a member",
   },
   {

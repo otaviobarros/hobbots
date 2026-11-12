@@ -62,6 +62,8 @@ export interface HubCallRuntime {
    * tools and tool results among them. So a suite can see what reached the model, not only the hub.
    */
   readonly modelText: () => ReadonlyArray<string>;
+  /** Each request the turns' model was sent so far, in order, as one text: what `modelText` reads, per request. */
+  readonly modelRequests: () => ReadonlyArray<string>;
   readonly close: () => void;
 }
 
@@ -75,7 +77,7 @@ const INSTRUCTIONS = "You are Pip, a hob making scripted hub calls.";
  */
 const scripted = (
   request: Pick<PromptRequest, "hubTools" | "recordToolStart" | "approvals" | "redaction"> &
-    Partial<Pick<PromptRequest, "briefing">>,
+    Partial<Pick<PromptRequest, "briefing" | "steers">>,
 ) =>
   ({
     prompt: "Make the scripted calls.",
@@ -90,6 +92,7 @@ const scripted = (
     recordToolStart: request.recordToolStart ?? null,
     ...(request.approvals == null ? {} : { approvals: request.approvals }),
     ...(request.redaction == null ? {} : { redaction: request.redaction }),
+    ...(request.steers == null ? {} : { steers: request.steers }),
   }) satisfies PromptRequest;
 
 const base = (turn: HubCallTurn): PromptRequest =>
@@ -121,6 +124,7 @@ const hubCallRuntime = (
   events,
   turn: (turn) => collect(events(base(turn), turn.calls)),
   modelText: () => modelRequests.flatMap(strings),
+  modelRequests: () => modelRequests.map((request) => strings(request).join("\n")),
   close,
 });
 

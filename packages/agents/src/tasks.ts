@@ -24,6 +24,7 @@ import type {
   MemberWork,
   MessageId,
   MilestoneId,
+  NoteDelivery,
   NoteId,
   Quest,
   QuestId,
@@ -195,6 +196,8 @@ export interface NewNote {
    * back through the latest note among them that it picked up, as a nested lead passes one on.
    */
   readonly carried?: ReadonlyArray<BackpackItemId>;
+  /** How it reaches a turn of its recipient's that runs as it arrives (#1345); the next turn when absent. */
+  readonly delivery?: NoteDelivery;
 }
 
 /** A question that climbed every lead and waits for you, with the Task it asks about. */

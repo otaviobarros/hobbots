@@ -377,6 +377,15 @@ export const optionNamed = (options: ReadonlyArray<QuestionOption>, answer: stri
 };
 
 /**
+ * How a note reaches a hob whose turn is running (ADR 019, #1345): with the hob's next turn, at the
+ * running turn's next step between two tool calls (`steer`), or by stopping that turn and starting
+ * the next one with the note first (`interrupt`). A hob with no turn running gets it with its next
+ * turn whichever is asked.
+ */
+export const NoteDelivery = Schema.Literals(["next-turn", "steer", "interrupt"]);
+export type NoteDelivery = typeof NoteDelivery.Type;
+
+/**
  * A note you left on a Task (ADR 018). You talk only to the lead, so it goes to the Task's nearest
  * lead as a message about that Task, or to the Task's own owner when nobody leads it. Its id is the
  * idempotency key of the command that left it, so leaving it again changes nothing.
@@ -416,6 +425,14 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
   pickedUpAt: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * How its sender asked it to reach a turn of its recipient's that runs as it arrives (#1345).
+   * Notes left before this was recorded, and yours, wait for the next turn.
+   */
+  delivery: NoteDelivery.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("next-turn" as const)),
+    Schema.withConstructorDefault(Effect.succeed("next-turn" as const)),
   ),
   revision: Revision,
 }) {}
