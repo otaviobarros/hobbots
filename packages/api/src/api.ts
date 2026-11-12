@@ -33,6 +33,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { BackupGroup } from "./backup.ts";
+import { ChaptersGroup } from "./chapters.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
 import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } from "./devices.ts";
 import { DiagnosticsGroup } from "./diagnostics.ts";
@@ -483,6 +484,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(AgentsGroup)
   .add(HobChangesGroup)
   .add(ThreadsGroup)
+  .add(ChaptersGroup)
   .add(RecordsGroup)
   .add(SystemGroup)
   .add(SetupGroup)

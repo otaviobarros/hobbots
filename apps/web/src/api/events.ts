@@ -20,6 +20,7 @@ import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { chatStartedFresh } from "./camps.ts";
+import { applyChapterEvent } from "./chapters.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
@@ -272,6 +273,7 @@ const readAgain = (
   // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
   // again. A started or summarized chapter moves none.
   if (isChapterEvent(event)) {
+    void applyChapterEvent(queryClient, event);
     if (event._tag === "ChapterSplit" || event._tag === "ChapterMerged") {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
     }
