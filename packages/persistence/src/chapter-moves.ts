@@ -1,6 +1,7 @@
 import type { ChapterMoveTarget } from "@hobbots/agents";
 import type { ThreadKeyReused } from "@hobbots/api";
 import {
+  Artifact,
   type BackpackItem,
   CampSuggestion,
   CampSuggestions,
@@ -11,6 +12,7 @@ import {
   type ChapterNotFound,
   ChapterRefused,
   ChapterStates,
+  carriedReview,
   type IllegalChapterTransition,
   type JournaledEvent,
   type MessageId,
@@ -21,6 +23,7 @@ import {
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
+import { type ArtifactRow, artifactFromRow, saveReview } from "./artifact-rows.ts";
 import { makeItemReads } from "./backpack-rows.ts";
 import { settleSuggestion, suggestionOfChapter } from "./camp-suggestion-rows.ts";
 import type { makeCampWrites } from "./camps.ts";
@@ -123,9 +126,12 @@ export const makeChapterMoves = (
     });
 
   // An artifact moves with its chapter. One the camp has already, at the same place, takes the moved
-  // one's sightings and keeps whichever version is newer, so it is still one row in the camp.
+  // one's sightings and keeps whichever version is newer, so it is still one row in the camp. A review
+  // the moved one settled is carried over to one still waiting (`carriedReview`); the artifacts whose
+  // review that changed are returned, to be written and journaled after the move's other events.
   const moveArtifacts = (plan: ChapterMovePlan, revision: number) =>
     Effect.gen(function* () {
+      const carried: Array<Artifact> = [];
       const to = plan.landed.threadId;
       const clashes = yield* sql<{
         readonly id: string;
@@ -145,12 +151,32 @@ export const makeChapterMoves = (
               FROM artifacts WHERE id = ${clash.id}) WHERE id = ${clash.keptId}`;
         }
         yield* sql`UPDATE artifacts SET chapter_id = ${plan.landed.id}, revision = ${revision} WHERE id = ${clash.keptId}`;
+        const [kept, moved] = yield* Effect.forEach([clash.keptId, clash.id], (id) =>
+          sql<ArtifactRow>`SELECT * FROM artifacts WHERE id = ${id}`.pipe(
+            Effect.flatMap(([row]) =>
+              row === undefined ? Effect.die(new Error(`Artifact ${id} is gone`)) : artifactFromRow(row),
+            ),
+          ),
+        );
+        const reviewed = kept === undefined || moved === undefined ? null : carriedReview(kept, moved);
+        if (reviewed !== null) carried.push(reviewed);
         yield* sql`DELETE FROM artifact_sightings WHERE artifact_id = ${clash.id}`;
         yield* sql`DELETE FROM artifacts WHERE id = ${clash.id}`;
       }
       yield* sql`UPDATE artifacts SET thread_id = ${to}, chapter_id = ${plan.landed.id}, revision = ${revision}
         WHERE chapter_id = ${plan.stub.id}`;
+      return carried;
     });
+
+  // Each carried-over review, written at the sequence of its `ArtifactReviewSettled` from `first` on.
+  const settleCarried = (carried: ReadonlyArray<Artifact>, first: number) =>
+    Effect.forEach(carried, (artifact, index) =>
+      Effect.gen(function* () {
+        const settled = new Artifact({ ...artifact, revision: first + index });
+        yield* saveReview(sql, settled);
+        return { _tag: "ArtifactReviewSettled", artifact: settled } as const;
+      }),
+    );
 
   // The quests started in the chapter move whole: every Task of their trees, their Quests and the
   // backpack items held for them, each item journaled as its own `BackpackItemChanged` from `first` on.
@@ -244,10 +270,11 @@ export const makeChapterMoves = (
         yield* moveMessages(from.id, plan, revision);
         yield* sql`UPDATE decisions SET thread_id = ${plan.landed.threadId}, chapter_id = ${plan.landed.id},
           revision = ${revision} WHERE chapter_id = ${plan.stub.id}`;
-        yield* moveArtifacts(plan, revision);
+        const carried = yield* moveArtifacts(plan, revision);
         yield* forgetMoved(from, plan);
         const accepted = yield* acceptSuggestion(input.chapterId, made.camp.id, input.at, revision + 1);
         const items = yield* moveQuests(from.id, plan, input.at, revision + 1 + accepted.length);
+        const reviews = yield* settleCarried(carried, revision + 1 + accepted.length + items.length);
         const value = new ChapterMove({
           thread: yield* shown(from.id),
           camp: yield* shown(made.camp.id),
@@ -256,7 +283,7 @@ export const makeChapterMoves = (
           campChapters: plan.camp.chapters,
         });
         const moved: JournaledEvent = { _tag: "ChapterMoved", threadId: from.id, ...value, chapter: plan.landed };
-        return { value, events: [...made.events, moved, ...accepted, ...items] };
+        return { value, events: [...made.events, moved, ...accepted, ...items, ...reviews] };
       }),
     );
 

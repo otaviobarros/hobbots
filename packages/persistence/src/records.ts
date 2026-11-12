@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { type CrossOutRequest, type DecisionRequest, RecordRepository } from "@hobbots/agents";
+import { type CrossOutRequest, type DecisionRequest, RecordRepository, type ReviewRequest } from "@hobbots/agents";
 import { ThreadNotFound } from "@hobbots/api";
 import {
+  Artifact,
+  ArtifactReviewRefused,
   ChapterId,
   Decision,
   type DecisionId,
@@ -11,11 +13,14 @@ import {
   type JournaledEvent,
   planCrossOut,
   planDecision,
+  planPullRequestEnded,
+  planReview,
+  type RegisteredArtifactId,
   type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
-import { SqlClient } from "effect/sql";
-import { type ArtifactRow, artifactsFromRows } from "./artifact-rows.ts";
+import { SqlClient, type Statement } from "effect/sql";
+import { type ArtifactRow, artifactFromRow, artifactsFromRows, saveReview } from "./artifact-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
@@ -23,7 +28,8 @@ import { sqlOrDie } from "./sql-errors.ts";
 // @hobbots/domain; this runs them on the decisions as stored, in the transaction that writes their
 // result and journals its events, after taking the journal's head, so an archive cannot land between
 // the check of the thread and the write. The artifacts registry is written by the journal itself
-// (`registerArtifacts`); this only reads it.
+// (`registerArtifacts`); this reads it and settles each artifact's review (#1422), whose change the
+// journal folds into the summaries of the Quests whose Tasks made it.
 
 /** A row of `decisions`, as the SQL client reads it. */
 interface DecisionRow {
@@ -184,9 +190,54 @@ export const RecordRepositoryLive = Layer.effect(
         }),
       );
 
+    const findArtifact = (where: Statement.Fragment) =>
+      Effect.gen(function* () {
+        const [row] = yield* sql<ArtifactRow>`SELECT * FROM artifacts WHERE ${where}`;
+        return row === undefined ? null : yield* artifactFromRow(row);
+      });
+
+    /** The artifact at the revision of its `ArtifactReviewSettled`, written and journaled. */
+    const settle = (artifact: Artifact, first: number) =>
+      Effect.gen(function* () {
+        const settled = new Artifact({ ...artifact, revision: first });
+        yield* saveReview(sql, settled);
+        return { value: settled, events: [{ _tag: "ArtifactReviewSettled" as const, artifact: settled }] };
+      });
+
+    const reviewArtifact = (request: ReviewRequest) =>
+      change<Artifact, ArtifactReviewRefused | ThreadNotFound>((first) =>
+        Effect.gen(function* () {
+          yield* threadOpen(request.threadId);
+          const artifact = yield* findArtifact(sql`id = ${request.artifactId} AND thread_id = ${request.threadId}`);
+          const plan = planReview({ id: request.artifactId, artifact, ...request });
+          if (plan instanceof ArtifactReviewRefused) return yield* plan;
+          if (!plan.changed) return { value: plan.artifact, events: [] as ReadonlyArray<JournaledEvent> };
+          return yield* settle(plan.artifact, first);
+        }),
+      );
+
+    const endPullRequest = (artifactId: RegisteredArtifactId, at: string) =>
+      change<Artifact | null, never>((first) =>
+        Effect.gen(function* () {
+          const artifact = yield* findArtifact(sql`id = ${artifactId}`);
+          const ended = artifact === null ? null : planPullRequestEnded(artifact, at);
+          if (ended === null) return { value: null, events: [] as ReadonlyArray<JournaledEvent> };
+          return yield* settle(ended, first);
+        }),
+      );
+
     return RecordRepository.of({
       recordDecision,
       crossOutDecision,
+      reviewArtifact,
+      endPullRequest,
+      waitingPullRequests: sqlOrDie(
+        Effect.flatMap(
+          sql<ArtifactRow>`SELECT * FROM artifacts WHERE kind = 'pr' AND review = 'waiting'
+            ORDER BY updated_at, id`,
+          artifactsFromRows,
+        ),
+      ),
       listDecisions: (threadId) =>
         sqlOrDie(
           Effect.flatMap(

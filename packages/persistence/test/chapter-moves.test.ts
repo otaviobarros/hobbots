@@ -10,11 +10,14 @@ import {
 import {
   Agent,
   AgentId,
+  ArtifactId,
+  AttemptId,
   CAMP_SUGGESTION_DECISIONS,
   CAMP_SUGGESTION_QUESTS,
   type CampSuggestion,
   ChapterId,
   ChapterStates,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DecisionId,
   Message,
@@ -530,5 +533,122 @@ describe("camp suggestions", () => {
     expect(result.merged.entries.map((entry) => entry.type)).toEqual(["ChapterMerged", "CampSuggestionExpired"]);
     expect(result.beforeArchive).toHaveLength(1);
     expect(result.archived.entries.map((entry) => entry.type)).toEqual(["ThreadUpserted", "CampSuggestionExpired"]);
+  });
+
+  /**
+   * A chat whose first chapter holds a Quest whose step completed with `files`, then a camp whose own
+   * replies wrote the same files, and a second chapter in the chat, so the first rests and can move.
+   */
+  const deliveredThenCamp = (files: ReadonlyArray<string>) =>
+    Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      const tasks = yield* TaskRepository;
+      const chapters = yield* ChapterRepository;
+      yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
+      yield* repo.upsertThread(thread(CHAT, { title: "Chat", kind: "chat" }));
+      yield* repo.upsertMessage(message(CHAT, "ask-1", "user"));
+      yield* quest("ship");
+      const step = yield* tasks.createTask({ task: newTask("copy", "ship"), delegation: null, milestones: [] });
+      const attemptId = AttemptId.make("copy-attempt");
+      const started = yield* tasks.startAttempt(step.value.id, step.value.revision, {
+        id: attemptId,
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        startedAt: tick(),
+      });
+      const ledger = yield* tasks.readLedger(step.value.id);
+      yield* tasks.completeTask(step.value.id, started.value.task.revision, {
+        summary: "Done",
+        attemptId,
+        artifacts: files.map((value, n) => ({
+          id: ArtifactId.make(`copy-${n}`),
+          kind: "file" as const,
+          label: "",
+          value,
+        })),
+        at: tick(),
+        carried: Option.isSome(ledger) ? carriedFrom(ledger.value, () => true) : [],
+      });
+      const [first] = yield* chapters.listChapters(CHAT);
+      yield* chapters.startChapter(CHAT, { id: ChapterId.make("next"), title: "Next", at: tick() });
+      yield* repo.makeCamp(newCamp());
+      for (const [n, file] of files.entries()) yield* repo.upsertMessage(writing(CAMP, `camp-reply-${n}`, file));
+      return (first as { id: ChapterId }).id;
+    });
+
+  const reviewIn = (threadId: ThreadId, locator: string, outcome: "reviewed" | "dismissed") =>
+    Effect.gen(function* () {
+      const records = yield* RecordRepository;
+      const artifact = (yield* records.listArtifacts(threadId)).find((each) => each.locator === locator);
+      if (artifact === undefined) return yield* Effect.die(new Error(`No ${locator} in ${threadId}`));
+      return yield* records.reviewArtifact({ threadId, artifactId: artifact.id, outcome, by: OWNER_ACTOR, at: tick() });
+    });
+
+  const readyOf = Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const all = [...(yield* tasks.listQuestSummaries(CHAT)), ...(yield* tasks.listQuestSummaries(CAMP))];
+    return all.find((summary) => summary.questId === "ship-quest")?.readyForReview;
+  });
+
+  // covers ADR 037 (Quests in camps, Records), STD-ARCH-014
+  it("[TC-CH-1422-07] recounts a Quest's ready-for-review in the move whose artifact joins one the camp reviewed", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const first = yield* deliveredThenCamp(["/work/app/plan.md"]);
+        yield* reviewIn(CAMP, "/work/app/plan.md", "reviewed");
+        const before = yield* readyOf;
+        const moved = yield* move(first, intoCamp(CAMP));
+        const records = yield* RecordRepository;
+        return {
+          before,
+          types: moved.entries.map((entry) => entry.type),
+          after: yield* readyOf,
+          camp: (yield* records.listArtifacts(CAMP)).map((each) => [each.locator, each.review]),
+        };
+      }),
+    );
+    expect(result.before).toBe(1);
+    // The plan is one artifact in the camp now, reviewed there, so nothing waits.
+    expect(result.camp).toEqual([["/work/app/plan.md", "reviewed"]]);
+    expect(result.types).toContain("QuestSummaryChanged");
+    expect(result.after).toBe(0);
+  });
+
+  // covers ADR 037 (Records), STD-DATA-001, STD-ARCH-019
+  it("[TC-CH-1422-08] keeps a review settled in the chat when its artifact joins the camp's, and the camp's own when both settled", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const first = yield* deliveredThenCamp(["/work/app/notes.md", "/work/app/page.html"]);
+        const notes = (yield* reviewIn(CHAT, "/work/app/notes.md", "reviewed")).value;
+        yield* reviewIn(CHAT, "/work/app/page.html", "dismissed");
+        const page = (yield* reviewIn(CAMP, "/work/app/page.html", "reviewed")).value;
+        const moved = yield* move(first, intoCamp(CAMP));
+        const records = yield* RecordRepository;
+        return {
+          notes,
+          page,
+          settled: moved.entries.filter((entry) => entry.type === "ArtifactReviewSettled"),
+          camp: yield* records.listArtifacts(CAMP),
+          after: yield* readyOf,
+        };
+      }),
+    );
+    const byLocator = new Map(result.camp.map((each) => [each.locator, each]));
+    // The chat's review of the notes is carried over, as made, and journaled with the move.
+    expect(byLocator.get("/work/app/notes.md")).toMatchObject({
+      review: "reviewed",
+      reviewedAt: result.notes.reviewedAt,
+      reviewedBy: OWNER_ACTOR,
+    });
+    expect(result.settled).toHaveLength(1);
+    // Both settled: the camp's review is final and stays.
+    expect(byLocator.get("/work/app/page.html")).toMatchObject({
+      review: "reviewed",
+      reviewedAt: result.page.reviewedAt,
+    });
+    expect(result.camp).toHaveLength(2);
+    expect(result.after).toBe(0);
   });
 });

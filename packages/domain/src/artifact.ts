@@ -1,8 +1,10 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { baseName, extensionOf, isImageFile } from "./activity.ts";
-import { Actor, hobActor } from "./actor.ts";
+import { Actor, GITHUB_ACTOR, hobActor } from "./actor.ts";
 import type { JournaledEvent } from "./events.ts";
+import { pullRequestOf } from "./github.ts";
 import { type AgentId, ChapterId, type MessageId, ThreadId } from "./ids.ts";
+import { defineMachine } from "./machine.ts";
 import { isInProgress, type Message } from "./message.ts";
 import type { ArtifactRef } from "./quest.ts";
 import { Revision } from "./revision.ts";
@@ -22,6 +24,14 @@ export type RegisteredArtifactId = typeof RegisteredArtifactId.Type;
 /** What an artifact is, as the camp sheet groups them. */
 export const RegisteredArtifactKind = Schema.Literals(["code", "page", "doc", "email", "image", "pr", "file"]);
 export type RegisteredArtifactKind = typeof RegisteredArtifactKind.Type;
+
+/** Where an artifact stands with you, held by `ArtifactReviewMachine`. */
+export const ArtifactReview = Schema.Literals(["waiting", "reviewed", "dismissed"]);
+export type ArtifactReview = typeof ArtifactReview.Type;
+
+/** What you can do with an artifact waiting for you: mark it reviewed, or dismiss it. */
+export const ArtifactReviewOutcome = Schema.Literals(["reviewed", "dismissed"]);
+export type ArtifactReviewOutcome = typeof ArtifactReviewOutcome.Type;
 
 /**
  * The record that saw an artifact: an Attempt's file changes, a Task's result (a Quest artifact,
@@ -53,8 +63,153 @@ export class Artifact extends Schema.Class<Artifact>("Artifact")({
   actor: Actor,
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  /**
+   * Where it stands with you. Only `ArtifactReviewMachine` changes it, and code outside reads it
+   * through `ArtifactReviews`. Artifacts journaled before it existed decode as waiting.
+   */
+  review: ArtifactReview.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("waiting" as const)),
+    Schema.withConstructorDefault(Effect.succeed("waiting" as const)),
+  ),
+  /** When it was reviewed or dismissed, and by whom; null while it waits. */
+  reviewedAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  reviewedBy: Schema.NullOr(Actor).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   revision: Revision,
 }) {}
+
+/** What can happen to an artifact waiting for you. */
+export type ArtifactReviewEvent =
+  /** You looked at it and marked it reviewed. */
+  | { readonly _tag: "Review"; readonly at: string; readonly by: Actor }
+  /** You chose not to review it. */
+  | { readonly _tag: "Dismiss"; readonly at: string; readonly by: Actor }
+  /** GitHub reported its pull request merged or closed, so nothing is left to review. */
+  | { readonly _tag: "PullRequestEnded"; readonly at: string };
+
+/** A change to an artifact's review its state does not allow. */
+export class IllegalArtifactReviewTransition extends Schema.TaggedError<IllegalArtifactReviewTransition>()(
+  "IllegalArtifactReviewTransition",
+  { artifactId: RegisteredArtifactId, from: ArtifactReview, to: ArtifactReview },
+) {}
+
+const settled = (artifact: Artifact, review: ArtifactReview, at: string, by: Actor) =>
+  new Artifact({ ...artifact, review, reviewedAt: at, reviewedBy: by });
+
+/**
+ * An artifact's review (ADR 037, #1422), declared once. Every artifact starts waiting for you; it
+ * is reviewed or dismissed once, and only a pull request is reviewed by GitHub ending it.
+ */
+export const ArtifactReviewMachine = defineMachine<
+  ArtifactReview,
+  ArtifactReviewEvent,
+  Artifact,
+  IllegalArtifactReviewTransition
+>({
+  name: "ArtifactReview",
+  states: {
+    waiting: "Made or changed by a hob, and not reviewed yet",
+    reviewed: "You reviewed it, or GitHub reported its pull request merged or closed",
+    dismissed: "You chose not to review it",
+  },
+  field: "review",
+  events: {
+    Review: {
+      from: ["waiting"],
+      to: "reviewed",
+      apply: (artifact, e) => settled(artifact, "reviewed", e.at, e.by),
+    },
+    Dismiss: {
+      from: ["waiting"],
+      to: "dismissed",
+      apply: (artifact, e) => settled(artifact, "dismissed", e.at, e.by),
+    },
+    // Only a pull request has a pull request to end.
+    PullRequestEnded: {
+      from: ["waiting"],
+      to: "reviewed",
+      guard: (artifact) => artifact.kind === "pr",
+      apply: (artifact, e) => settled(artifact, "reviewed", e.at, GITHUB_ACTOR),
+    },
+  },
+  illegal: (artifact, _, to) =>
+    new IllegalArtifactReviewTransition({ artifactId: artifact.id, from: artifact.review, to }),
+});
+
+/** The kinds of artifact you review: what a Quest counts as ready for review. */
+const REVIEWABLE: ReadonlySet<RegisteredArtifactKind> = new Set(["pr", "doc", "page", "code"]);
+
+/** `ArtifactReviewMachine` with the questions code outside this module asks of an artifact's review. */
+export const ArtifactReviews = {
+  ...ArtifactReviewMachine,
+  /** Whether it is of a kind you review, and still waits for you. */
+  awaitsReview: (artifact: Pick<Artifact, "kind" | "review">): boolean =>
+    REVIEWABLE.has(artifact.kind) && artifact.review === "waiting",
+};
+
+/** Why a review changed nothing: the artifact is not in the chat or camp, or was settled another way. */
+export const ArtifactReviewRefusal = Schema.Literals(["not-found", "settled"]);
+export type ArtifactReviewRefusal = typeof ArtifactReviewRefusal.Type;
+
+export class ArtifactReviewRefused extends Schema.TaggedError<ArtifactReviewRefused>()("ArtifactReviewRefused", {
+  artifactId: RegisteredArtifactId,
+  reason: ArtifactReviewRefusal,
+}) {}
+
+/**
+ * The pure rule of your review: an artifact waiting for you is reviewed or dismissed; one settled
+ * that way already is answered as it is, so the same request again changes nothing; one settled the
+ * other way is refused.
+ */
+export const planReview = (input: {
+  readonly id: RegisteredArtifactId;
+  readonly artifact: Artifact | null;
+  readonly outcome: ArtifactReviewOutcome;
+  readonly by: Actor;
+  readonly at: string;
+}): { readonly artifact: Artifact; readonly changed: boolean } | ArtifactReviewRefused => {
+  const { artifact } = input;
+  if (artifact === null) return new ArtifactReviewRefused({ artifactId: input.id, reason: "not-found" });
+  const event: ArtifactReviewEvent =
+    input.outcome === "reviewed"
+      ? { _tag: "Review", at: input.at, by: input.by }
+      : { _tag: "Dismiss", at: input.at, by: input.by };
+  const next = ArtifactReviews.transition(artifact, event);
+  if (next instanceof Artifact) return { artifact: next, changed: true };
+  return artifact.review === input.outcome
+    ? { artifact, changed: false }
+    : new ArtifactReviewRefused({ artifactId: input.id, reason: "settled" });
+};
+
+/**
+ * The camp's artifact once a moved chapter's duplicate of it, at the same place, joins it: a review
+ * settled on the moved one is carried over to one still waiting, as the same review, at the same time
+ * and by the same actor, so moving a chapter never loses a review. One already settled keeps its own,
+ * since a settled review is final, whatever the moved one says. Null when nothing changes.
+ */
+export const carriedReview = (kept: Artifact, moved: Artifact): Artifact | null => {
+  const { reviewedAt: at, reviewedBy: by } = moved;
+  if (at === null || by === null) return null;
+  const event: ArtifactReviewEvent =
+    moved.review === "dismissed"
+      ? { _tag: "Dismiss", at, by }
+      : by.kind === GITHUB_ACTOR.kind && by.id === GITHUB_ACTOR.id
+        ? { _tag: "PullRequestEnded", at }
+        : { _tag: "Review", at, by };
+  const next = ArtifactReviews.transition(kept, event);
+  return next instanceof Artifact ? next : null;
+};
+
+/** A pull request artifact after GitHub reported it merged or closed, or null when that changes nothing. */
+export const planPullRequestEnded = (artifact: Artifact, at: string): Artifact | null => {
+  const next = ArtifactReviews.transition(artifact, { _tag: "PullRequestEnded", at });
+  return next instanceof Artifact ? next : null;
+};
 
 /**
  * One record's word that it made or changed an artifact, before the registry places it. A sighting
@@ -127,11 +282,8 @@ export const fileArtifactKind = (path: string): RegisteredArtifactKind => {
   return CODE_EXTENSIONS.has(extension) ? "code" : "file";
 };
 
-/** A pull request's URL on GitHub, whatever follows its number. */
-const PULL_REQUEST = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+(?:[/?#]|$)/;
-
 /** What a link is: a pull request, or a page. */
-export const linkArtifactKind = (url: string): RegisteredArtifactKind => (PULL_REQUEST.test(url) ? "pr" : "page");
+export const linkArtifactKind = (url: string): RegisteredArtifactKind => (pullRequestOf(url) === null ? "page" : "pr");
 
 /** A file's path with no `/` at its end, so two records of one file agree. */
 const filePath = (path: string): string => {
@@ -243,8 +395,9 @@ export const placedFromTask = (
 /**
  * The registry's row after `placed`, or null when it changes nothing: a record that already saw the
  * artifact never counts twice, so a replayed or repeated event leaves it as it is. A new artifact
- * starts at version 1 in the chapter it was made in; a later record moves it to its next version,
- * keeping the name a record gave it unless the new one gives another.
+ * starts at version 1 in the chapter it was made in, waiting for your review; a later record moves
+ * it to its next version, keeping the name a record gave it unless the new one gives another, and
+ * keeping its review.
  */
 export const registeredArtifact = (input: {
   readonly existing: Artifact | null;
