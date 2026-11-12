@@ -83,7 +83,7 @@ const askInBoth = async (page: Page) => {
   await chatComposer.fill(PUSH);
   await chatComposer.press("Enter");
   await expect(tray(page).getByRole("region", { name: "Aldric asks permission" })).toBeVisible({ timeout: 15_000 });
-  return { camp, chat: page.url() };
+  return { camp, chat: page.url(), current, aldric: aldric.id };
 };
 
 // covers IN-002, UX-001
@@ -154,4 +154,37 @@ test("[TC-IN-1423-02] See all from a camp's tray opens the Inbox on that camp, a
   await scan();
   await page.getByRole("link", { name: "See everywhere" }).click();
   await expect(list.getByRole("link", { name: /Approval/ })).toHaveCount(1);
+});
+
+// covers IN-002, UX-001
+test("[TC-IN-1423-03] a camp where nothing waits says what waits elsewhere, and Everywhere still opens it", async ({
+  page,
+  scan,
+}) => {
+  const { current, aldric } = await askInBoth(page);
+  const quiet = await campAt(current, aldric, "Notes");
+
+  await page.goto(quiet.url);
+  const elsewhere = page.getByRole("region", { name: "Waiting elsewhere" });
+  await expect(elsewhere).toContainText("Nothing waits in this camp. 2 things wait elsewhere.");
+  await expect(tray(page)).toHaveCount(0);
+  await scan();
+
+  await elsewhere.getByRole("radio", { name: "Everywhere" }).click();
+  await expect(tray(page)).toHaveAccessibleName(/^Needs you, \d of 2$/);
+  await expect(tray(page).getByRole("link", { name: /^Waits in / })).toBeVisible();
+  await expect(elsewhere).toHaveCount(0);
+});
+
+// covers IN-002, IN-001
+test("[TC-IN-1423-04] the Inbox on a chat stops counting a request once you decide it there", async ({ page }) => {
+  await askInBoth(page);
+  await tray(page).getByRole("link", { name: "See all in Inbox" }).click();
+  const main = page.getByRole("main");
+  await expect(page.getByText(/^1 waiting on you/)).toBeVisible();
+
+  await main.getByRole("button", { name: "Allow once" }).click();
+  // The decided request stays in view with its outcome, and no longer counts as waiting.
+  await expect(page.getByText("Nothing is waiting on you", { exact: true })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Allow once" })).toHaveCount(0);
 });

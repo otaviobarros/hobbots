@@ -1,7 +1,7 @@
 import type { Thread } from "@hobbots/domain";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { entryThread } from "../inbox/inbox-entries.ts";
 import { useInboxDirectory } from "../inbox/use-inbox-directory.ts";
 import { messages } from "./messages.ts";
@@ -14,7 +14,8 @@ const copy = messages.scope;
 /**
  * The Needs-you tray of a chat or camp (#1423): what is about this chat or camp, and with Everywhere,
  * what waits on you in every chat and camp, each item from elsewhere naming where it waits with a
- * link there. The choice shows while anything waits elsewhere, and stays while Everywhere is on.
+ * link there. The choice shows while anything waits elsewhere, and stays while Everywhere is on;
+ * when nothing waits here, a quiet line says how much waits elsewhere and keeps the choice in reach.
  * See all in Inbox opens the Inbox on this chat or camp.
  */
 export function ThreadTray({ thread }: { thread: Thread }) {
@@ -39,19 +40,30 @@ export function ThreadTray({ thread }: { thread: Thread }) {
       </Link>
     );
   };
+  const picker = (
+    <SegmentedControl size="sm" aria-label={copy.label} value={scope} onValueChange={setScope}>
+      <SegmentedControlItem value="here">{copy.here({ kind: thread.kind })}</SegmentedControlItem>
+      <SegmentedControlItem value="everywhere">{copy.everywhere}</SegmentedControlItem>
+    </SegmentedControl>
+  );
+  if (entries.length === 0) {
+    const elsewhere = needs.everywhere.length;
+    return elsewhere > 0 ? (
+      <Elsewhere line={copy.elsewhere({ kind: thread.kind, count: elsewhere })} picker={picker} />
+    ) : null;
+  }
+  return <NeedsTray entries={entries} where={where} inboxIn={thread.id} scope={widens && picker} />;
+}
+
+/** One quiet line above the composer: nothing waits here, this much waits elsewhere, and the way to it. */
+function Elsewhere({ line, picker }: { line: string; picker: ReactNode }) {
   return (
-    <NeedsTray
-      entries={entries}
-      where={where}
-      inboxIn={thread.id}
-      scope={
-        widens && (
-          <SegmentedControl size="sm" aria-label={copy.label} value={scope} onValueChange={setScope}>
-            <SegmentedControlItem value="here">{copy.here({ kind: thread.kind })}</SegmentedControlItem>
-            <SegmentedControlItem value="everywhere">{copy.everywhere}</SegmentedControlItem>
-          </SegmentedControl>
-        )
-      }
-    />
+    <section
+      aria-label={copy.elsewhereLabel}
+      className="flex flex-wrap items-center gap-2 rounded-card bg-panel px-3 py-1.5"
+    >
+      <span className="min-w-0 flex-1 text-detail text-text-secondary">{line}</span>
+      {picker}
+    </section>
   );
 }

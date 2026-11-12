@@ -61,7 +61,7 @@ import { expiryText, type InboxTab, type InboxView, isInboxView, pendingCount, t
 import { InboxKeyHints } from "./inbox-key-hints.tsx";
 import { shownOrder } from "./inbox-keys.ts";
 import { InboxList, InboxRowsSkeleton, InboxViewPicker } from "./inbox-list.tsx";
-import { type InboxIn, type InboxSearch, inScope, inSearch } from "./inbox-scope.ts";
+import { type InboxIn, type InboxSearch, inScope, inSearch, waitingIn } from "./inbox-scope.ts";
 import { InboxScopePicker, QuietHere } from "./inbox-scope-parts.tsx";
 import { InboxPanel, InboxTabList, InboxTabs } from "./inbox-tabs.tsx";
 import { messages } from "./messages.ts";
@@ -211,7 +211,7 @@ const useInbox = (tab: InboxTab, requestId: string | undefined, scope: InboxIn |
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
     waiting: scopedHere(scope)
-      ? entries.length
+      ? waitingIn(entries)
       : waitingCount(approvals, reads) +
         devices.length +
         waitingShares(shares).length +

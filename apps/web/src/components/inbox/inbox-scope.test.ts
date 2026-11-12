@@ -2,7 +2,7 @@ import { ApprovalId, ApprovalRequest, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { COPY, memberApproval, QUILL, THREAD } from "../../test/quests.ts";
 import { approvalEntry } from "./inbox-entries.ts";
-import { inScope, inSearch } from "./inbox-scope.ts";
+import { inScope, inSearch, waitingIn } from "./inbox-scope.ts";
 
 const CAMP = ThreadId.make("camp-launch");
 const inChat = approvalEntry(new ApprovalRequest({ ...memberApproval(COPY, QUILL), state: "pending" }));
@@ -40,5 +40,15 @@ describe("inSearch", () => {
     expect(inSearch(undefined)).toEqual({});
     expect(inSearch({ threadId: CAMP, scope: "here" })).toEqual({ in: CAMP });
     expect(inSearch({ threadId: CAMP, scope: "everywhere" })).toEqual({ in: CAMP, scope: "everywhere" });
+  });
+});
+
+describe("waitingIn", () => {
+  it("counts what still waits, not a decided request kept in view", () => {
+    const decided = approvalEntry(
+      new ApprovalRequest({ ...memberApproval(COPY, QUILL), id: ApprovalId.make("decided"), state: "approved" }),
+    );
+    expect(waitingIn([inChat, inCamp, decided])).toBe(2);
+    expect(waitingIn([decided])).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import type { ThreadId } from "@hobbots/domain";
+import { hobProposalOpen, memoryShareWaits, skillProposalOpen, type ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { entryThread, type InboxEntry } from "./inbox-entries.ts";
 import type { InboxTab } from "./inbox-items.ts";
@@ -32,3 +32,25 @@ export const inScope = (entries: ReadonlyArray<InboxEntry>, scope: InboxIn | und
   scope === undefined || scope.scope === "everywhere"
     ? entries
     : entries.filter((entry) => entryThread(entry) === scope.threadId);
+
+/**
+ * Whether an entry still waits on you. Needs you keeps the one you decided in view, so its outcome
+ * shows, but a decided request, share or proposal no longer counts as waiting.
+ */
+const entryWaits = (entry: InboxEntry): boolean => {
+  switch (entry.kind) {
+    case "approval":
+      return entry.request.state === "pending";
+    case "memory":
+      return memoryShareWaits(entry.share);
+    case "skill":
+      return skillProposalOpen(entry.view.proposal);
+    case "hob-proposal":
+      return hobProposalOpen(entry.hobs.proposal);
+    default:
+      return true;
+  }
+};
+
+/** How many of the entries the Inbox lists still wait on you. */
+export const waitingIn = (entries: ReadonlyArray<InboxEntry>): number => entries.filter(entryWaits).length;

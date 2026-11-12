@@ -1,4 +1,4 @@
-import { formatCount } from "../../lib/format.ts";
+import { formatCount, plural } from "../../lib/format.ts";
 
 /** User-facing copy for the Needs-you tray above the composer (STD-I18N-001). */
 export const messages = {
@@ -20,6 +20,13 @@ export const messages = {
     label: "Show what waits",
     here: ({ kind }: { kind: "chat" | "camp" }) => (kind === "camp" ? "This camp" : "This chat"),
     everywhere: "Everywhere",
+    /** The tray of a chat or camp where nothing waits while something waits elsewhere. */
+    elsewhereLabel: "Waiting elsewhere",
+    elsewhere: ({ kind, count }: { kind: "chat" | "camp"; count: number }) =>
+      plural(count, {
+        one: `Nothing waits in this ${kind}. 1 thing waits elsewhere.`,
+        other: `Nothing waits in this ${kind}. ${formatCount(count)} things wait elsewhere.`,
+      }),
     /** Where an entry from another chat or camp waits, as a link there. */
     waitsIn: ({ place }: { place: string }) => `Waits in ${place}`,
   },
