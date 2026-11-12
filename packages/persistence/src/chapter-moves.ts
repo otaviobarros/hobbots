@@ -23,7 +23,7 @@ import {
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
-import { type ArtifactRow, artifactFromRow, saveReview } from "./artifact-rows.ts";
+import { type ArtifactRow, artifactFromRow, renumberVersions, saveReview } from "./artifact-rows.ts";
 import { makeItemReads } from "./backpack-rows.ts";
 import { settleSuggestion, suggestionOfChapter } from "./camp-suggestion-rows.ts";
 import type { makeCampWrites } from "./camps.ts";
@@ -143,15 +143,17 @@ export const makeChapterMoves = (
         FROM artifacts a JOIN artifacts k ON k.thread_id = ${to} AND k.locator = a.locator
         WHERE a.chapter_id = ${plan.stub.id}`;
       for (const clash of clashes) {
-        yield* sql`INSERT INTO artifact_sightings (artifact_id, origin_kind, origin_id)
-          SELECT ${clash.keptId}, origin_kind, origin_id FROM artifact_sightings s WHERE s.artifact_id = ${clash.id}
-          AND NOT EXISTS (SELECT 1 FROM artifact_sightings e WHERE e.artifact_id = ${clash.keptId}
-            AND e.origin_kind = s.origin_kind AND e.origin_id = s.origin_id)`;
+        yield* sql`INSERT INTO artifact_sightings (artifact_id, origin_kind, origin_id, attempt_id, version, seen_at)
+          SELECT ${clash.keptId}, origin_kind, origin_id, attempt_id, version, seen_at FROM artifact_sightings s
+          WHERE s.artifact_id = ${clash.id} AND NOT EXISTS (SELECT 1 FROM artifact_sightings e
+            WHERE e.artifact_id = ${clash.keptId} AND e.origin_kind = s.origin_kind AND e.origin_id = s.origin_id)`;
         if (Number(clash.newer) === 1) {
-          yield* sql`UPDATE artifacts SET (kind, title, latest_version, origin_kind, origin_id, actor_kind, actor_id,
-              updated_at) = (SELECT kind, title, latest_version, origin_kind, origin_id, actor_kind, actor_id, updated_at
+          yield* sql`UPDATE artifacts SET (kind, title, origin_kind, origin_id, actor_kind, actor_id,
+              updated_at) = (SELECT kind, title, origin_kind, origin_id, actor_kind, actor_id, updated_at
               FROM artifacts WHERE id = ${clash.id}) WHERE id = ${clash.keptId}`;
         }
+        // Both rows' versions are now one history, in the order the hub saw them.
+        yield* renumberVersions(sql, clash.keptId);
         yield* sql`UPDATE artifacts SET chapter_id = ${plan.landed.id}, revision = ${revision} WHERE id = ${clash.keptId}`;
         const [kept, moved] = yield* Effect.forEach([clash.keptId, clash.id], (id) =>
           sql<ArtifactRow>`SELECT * FROM artifacts WHERE id = ${id}`.pipe(

@@ -18,8 +18,11 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
 
 jobs:
-  check:
-    name: Lint, typecheck and test (SQLite)
+  # `pnpm check` runs in three jobs side by side: every check but the server suite in one, and the
+  # server suite, the longest task, in two shards of its own (#1442). The check the main ruleset
+  # requires is the job after them, which passes only when all three pass.
+  check-packages:
+    name: Lint, typecheck and package tests (SQLite)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -30,20 +33,53 @@ jobs:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
-      # The memory engine's contract tests run against the pinned ai-memory release (ADR 028), which
-      # fetch-engine downloads and checks against its pinned SHA-256; the pin names the cache.
-      - uses: actions/cache@v6
-        with:
-          path: packages/memory/engine
-          key: memory-engine-${{ runner.os }}-${{ hashFiles('packages/memory/src/engine/release.ts') }}
-      - run: pnpm --filter @hobbots/memory fetch-engine
-      - run: pnpm check
+      - uses: ./.github/actions/memory-engine
+      # The server's typecheck still runs here, as the desktop app depends on it.
+      - run: pnpm check '--filter=!@hobbots/server'
         env:
           HOBBOTS_MEMORY_CONTRACT: 1
           # Turbo runs four tasks at once, and Vitest would give each one a worker for every CPU
           # but one. Two each keeps the test workers, lint and typecheck from crowding the four
           # CPUs, so a test that waits on the hub is not starved (#985).
           VITEST_MAX_WORKERS: 2
+
+  check-server:
+    name: Server tests (SQLite ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      HOBBOTS_MEMORY_CONTRACT: 1
+      # The suite has the runner to itself, and its tests mostly wait on the hub, so three
+      # workers keep the four CPUs busy without starving one (#985).
+      VITEST_MAX_WORKERS: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-${{ matrix.shard }}-
+      - uses: ./.github/actions/memory-engine
+      - run: pnpm turbo run test --filter=@hobbots/server -- --shard=${{ matrix.shard }}/2
+
+  check:
+    name: Lint, typecheck and test (SQLite)
+    needs: [check-packages, check-server]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          PACKAGES: ${{ needs.check-packages.result }}
+          SERVER: ${{ needs.check-server.result }}
+        run: |
+          echo "The checks ended: $PACKAGES; the server shards ended: $SERVER."
+          [[ "$PACKAGES" == success && "$SERVER" == success ]]
 
   # The PostgreSQL suites run in two shards side by side, each half of every suite's files, so the
   # job takes about as long as the SQLite one (#1066). The check the main ruleset requires is the

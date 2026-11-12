@@ -8,7 +8,7 @@ import { defineMachine } from "./machine.ts";
 import { isInProgress, type Message } from "./message.ts";
 import type { ArtifactRef } from "./quest.ts";
 import { Revision } from "./revision.ts";
-import type { TaskId } from "./task.ts";
+import type { AttemptId, TaskId } from "./task.ts";
 
 /**
  * The artifacts registry (ADR 037, Records): one row for each thing a hob made or changed in a chat
@@ -217,6 +217,10 @@ export const planPullRequestEnded = (artifact: Artifact, at: string): Artifact |
  * its thread, chapter and author itself.
  */
 export interface ArtifactSighting {
+  /**
+   * Where it is, canonical (`canonicalPath`): a file's absolute path once the repository resolved
+   * it, a link's URL, or `text:` and a result's id.
+   */
   readonly locator: string;
   readonly kind: RegisteredArtifactKind;
   /** The name its record gave it, or null when it gave none, such as a file a step edited. */
@@ -224,6 +228,17 @@ export interface ArtifactSighting {
   /** What it is called when no record named it. */
   readonly fallbackTitle: string;
   readonly origin: ArtifactOrigin;
+  /**
+   * The Attempt whose work the record is: its file changes, or the result its Task returned from
+   * it. Two records of one Attempt are one version of the artifact. Null for a reply's steps.
+   */
+  readonly attemptId: AttemptId | null;
+  /**
+   * The Attempt whose folder a relative file path is resolved against, before the registry places
+   * it (`resolvedSighting`); null when the locator is already where the artifact is. A result
+   * `complete_task` kept is stored absolute, so only one stored before that is relative.
+   */
+  readonly relativeTo: AttemptId | null;
   readonly from:
     | { readonly _tag: "Task"; readonly taskId: TaskId }
     | {
@@ -285,22 +300,51 @@ export const fileArtifactKind = (path: string): RegisteredArtifactKind => {
 /** What a link is: a pull request, or a page. */
 export const linkArtifactKind = (url: string): RegisteredArtifactKind => (pullRequestOf(url) === null ? "page" : "pr");
 
-/** A file's path with no `/` at its end, so two records of one file agree. */
-const filePath = (path: string): string => {
-  // A loop, not a regular expression, so a path of many `/` costs no more than its length.
-  let end = path.length;
-  while (end > 0 && path[end - 1] === "/") end--;
-  return end === 0 ? "/" : path.slice(0, end);
+/**
+ * A path as the registry compares it: `.` and empty names dropped, each `..` taking the name before
+ * it away, and no `/` at its end, so two records of one file agree however they spelled it. A loop,
+ * not a regular expression, so a path of many `/` costs no more than its length (STD-SEC-005).
+ */
+export const canonicalPath = (path: string): string => {
+  const absolute = path.startsWith("/");
+  const names: Array<string> = [];
+  for (const name of path.split("/")) {
+    if (name === "" || name === ".") continue;
+    if (name !== "..") names.push(name);
+    else if (names.length > 0 && names[names.length - 1] !== "..") names.pop();
+    else if (!absolute) names.push(name);
+  }
+  const joined = names.join("/");
+  return absolute ? `/${joined}` : joined === "" ? "." : joined;
+};
+
+/** Whether a file's path is absolute, as the hub stores a canonical one. */
+export const isAbsolutePath = (path: string): boolean => path.startsWith("/");
+
+/** A file's locator: its path inside `folder` when it is relative and a folder is known, canonical. */
+export const fileLocator = (path: string, folder: string | null): string =>
+  canonicalPath(folder === null || isAbsolutePath(path) ? path : `${folder}/${path}`);
+
+/** A sighting whose relative path is now resolved against its Attempt's `folder`. */
+export const resolvedSighting = (sighting: ArtifactSighting, folder: string): ArtifactSighting => {
+  const locator = fileLocator(sighting.locator, folder);
+  return { ...sighting, locator, relativeTo: null };
 };
 
 /** A Task's result as the registry sees it: a file, a link, or a text kept under its own id. */
 const refSighting = (ref: ArtifactRef): ArtifactSighting => {
-  const base = { label: ref.label.trim() || null, origin: { kind: "task-artifact", id: ref.id } as const };
+  const base = {
+    label: ref.label.trim() || null,
+    origin: { kind: "task-artifact", id: ref.id } as const,
+    attemptId: ref.attemptId,
+    relativeTo: null,
+  };
   const from = { _tag: "Task", taskId: ref.taskId } as const;
   switch (ref.kind) {
     case "file": {
-      const locator = filePath(ref.value);
-      return { ...base, locator, kind: fileArtifactKind(locator), fallbackTitle: baseName(locator), from };
+      const locator = canonicalPath(ref.value);
+      const relativeTo = isAbsolutePath(locator) ? null : ref.attemptId;
+      return { ...base, locator, relativeTo, kind: fileArtifactKind(locator), fallbackTitle: baseName(locator), from };
     }
     case "link":
       return { ...base, locator: ref.value, kind: linkArtifactKind(ref.value), fallbackTitle: ref.value, from };
@@ -313,7 +357,7 @@ const refSighting = (ref: ArtifactRef): ArtifactSighting => {
 const changeSightings = (event: Extract<JournaledEvent, { readonly _tag: "FileChangesRecorded" }>) =>
   event.changes.flatMap((change): ReadonlyArray<ArtifactSighting> => {
     if (!change.settled || change.after === null || change.kind === "deleted" || change.kind === "link") return [];
-    const locator = filePath(`${event.folder.replace(/\/+$/, "")}/${change.path}`);
+    const locator = fileLocator(change.path, event.folder);
     return [
       {
         locator,
@@ -321,6 +365,8 @@ const changeSightings = (event: Extract<JournaledEvent, { readonly _tag: "FileCh
         label: null,
         fallbackTitle: baseName(locator),
         origin: { kind: "attempt", id: event.attemptId },
+        attemptId: event.attemptId,
+        relativeTo: null,
         from: { _tag: "Task", taskId: event.taskId },
       },
     ];
@@ -347,13 +393,15 @@ const replySightings = (message: Message): ReadonlyArray<ArtifactSighting> => {
     ),
   );
   return [...paths].map((path) => {
-    const locator = filePath(path);
+    const locator = canonicalPath(path);
     return {
       locator,
       kind: fileArtifactKind(locator),
       label: null,
       fallbackTitle: baseName(locator),
       origin: { kind: "message", id: message.id },
+      attemptId: null,
+      relativeTo: null,
       from,
     };
   });
@@ -397,13 +445,16 @@ export const placedFromTask = (
  * artifact never counts twice, so a replayed or repeated event leaves it as it is. A new artifact
  * starts at version 1 in the chapter it was made in, waiting for your review; a later record moves
  * it to its next version, keeping the name a record gave it unless the new one gives another, and
- * keeping its review.
+ * keeping its review. A record of an Attempt whose work it already shows, such as the file a Task
+ * returned after its Attempt wrote it, is the same version: it may name it, never counts again.
  */
 export const registeredArtifact = (input: {
   readonly existing: Artifact | null;
   readonly placed: PlacedSighting;
   /** Whether the record behind the sighting saw this artifact before. */
   readonly seen: boolean;
+  /** Whether another record of the sighting's Attempt saw this artifact before. */
+  readonly sameAttempt: boolean;
   readonly id: RegisteredArtifactId;
   readonly at: string;
 }): Artifact | null => {
@@ -424,6 +475,10 @@ export const registeredArtifact = (input: {
       createdAt: input.at,
       updatedAt: input.at,
     });
+  }
+  if (input.sameAttempt) {
+    if (sighting.label === null || sighting.label === existing.title) return null;
+    return new Artifact({ ...existing, title: sighting.label });
   }
   return new Artifact({
     ...existing,

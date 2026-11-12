@@ -7,6 +7,7 @@ import { campsOf, openChatOf } from "../../api/camps.ts";
 import { threadsQuery } from "../../api/queries.ts";
 import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
+import { campList } from "./camp-list.ts";
 import { messages as copy } from "./messages.ts";
 import { sidebarItem } from "./sidebar-classes.ts";
 
@@ -16,14 +17,24 @@ const sub = cn(sidebarItem, "animate-hb-in ps-14 pe-2 text-text-secondary hover:
 const isChatAt = (pathname: string, hobId: string, chat: Thread | undefined) =>
   pathname === `/hobs/${hobId}/chat` || (chat !== undefined && pathname === `/hobs/${hobId}/threads/${chat.id}`);
 
+/** The camp the address names, if any. */
+const openCampOf = (pathname: string, hobId: string) =>
+  pathname.startsWith(`/hobs/${hobId}/threads/`) ? pathname.split("/")[4] : undefined;
+
 /**
  * Under the open hob, while the sidebar is expanded (ADR 037): its Chat first, then its camps,
- * pinned ones first, then Make a camp. A row with messages you have not read carries the lantern dot.
+ * pinned ones first, then Make a camp. Only the first five camps show, and the open one, with Show
+ * N more for the rest, so a hob with many camps never pushes the other hobs away. A row with
+ * messages you have not read carries the lantern dot, and so does Show more when it hides one.
  */
 export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }) {
   const threads = useQuery(threadsQuery(hob.id));
   const chat = openChatOf(threads.data);
   const [making, setMaking] = useState(false);
+  const [all, setAll] = useState(false);
+  const camps = campsOf(threads.data);
+  const folded = campList(camps, openCampOf(pathname, hob.id));
+  const shown = all ? camps : folded.shown;
   return (
     <>
       <ul aria-label={campCopy.sidebar.camps({ name: hob.name })} className="m-0 flex list-none flex-col gap-0.5 p-0">
@@ -40,7 +51,7 @@ export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }
             {chat?.unread && <UnreadDot />}
           </Link>
         </li>
-        {campsOf(threads.data).map((camp) => (
+        {shown.map((camp) => (
           <li key={camp.id} className="flex">
             <Link
               to="/hobs/$hobId/threads/$threadId"
@@ -56,6 +67,23 @@ export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }
             </Link>
           </li>
         ))}
+        {folded.hidden > 0 && (
+          <li className="flex">
+            <button
+              type="button"
+              aria-expanded={all}
+              aria-description={!all && folded.hiddenUnread ? copy.unreadThread : undefined}
+              className={cn(sub, "cursor-pointer border-0 bg-transparent")}
+              onClick={() => setAll(!all)}
+            >
+              <Glyph>{copy.glyph.more}</Glyph>
+              <span className="min-w-0 flex-1 truncate">
+                {all ? copy.fewerCamps : copy.moreCamps({ count: folded.hidden })}
+              </span>
+              {!all && folded.hiddenUnread && <UnreadDot />}
+            </button>
+          </li>
+        )}
         <li className="flex">
           <button
             type="button"

@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { openRoom, showInWorkbench, taskDetails } from "./quest-room.ts";
+import { openQuest, showInWorkbench, taskDetails } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -16,7 +16,7 @@ test("[TC-PE-303] the Task drawer and the Workbench header show the folders each
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await openRoom(page, "Make the shop badge");
+  await openQuest(page, "Make the shop badge");
   for (const [owner, title, folder] of [
     ["Quill", "Make the shop badge", "/fake/shop/web"],
     ["Ada", "Review the shop", "/fake/shop"],

@@ -2,15 +2,15 @@ import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { dock, lane, laneHead, laneTask, openRoom, questRoom, ticket } from "./quest-room.ts";
+import { dock, lane, laneHead, laneTask, openQuest, showHob, ticket } from "./quest-sheet.ts";
 import { hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
-// Issue #911: the Quest room's end-to-end proof (ADR 027), in the browser with the fake runtime.
-// A Black Friday Quest is followed and steered from the room alone: a question answered in a lane,
-// a failed Task retried and another reassigned, a note steered from the chat with its receipt, the
-// docked Workbench filtered by lane and by try, and the Terminal split by hob. The room then holds
-// up in all four themes at 1280, 1024 and 960 px. Each case uses the play that has its records:
+// Issue #911: the Quest room's end-to-end proof (ADR 027), in the browser with the fake runtime, now
+// on the quest's sheet (ADR 037, #1390). A Black Friday Quest is followed and steered from the sheet
+// alone: a question answered in a hob's work, a failed Task retried and another reassigned, a note
+// steered from the chat with its receipt, the Workbench filtered by hob and by try, and the Terminal
+// split by hob. The sheet then holds up in all four themes at 1280, 1024 and 960 px. Each case uses the play that has its records:
 // the hub's scripted Black Friday and spring sale plays, or a party the fake runtime plays turn by
 // turn through the hub's Task tools.
 
@@ -23,11 +23,15 @@ test.afterEach(async () => {
 
 const TITLE = "Plan the Black Friday campaign";
 
-/** The chat beside the room. */
+/** The chat, under the quest's sheet or beside its Workbench. */
 const chat = (page: Page) => page.getByRole("main", { name: "Chat" });
 
-/** Sends Aldric a message from his chat and waits until his turn on it is underway or has ended. */
+/**
+ * Sends Aldric a message from his chat and waits until his turn on it is underway or has ended. An
+ * open sheet is closed first, as the chat sits under it.
+ */
 const ask = async (page: Page, lines: ReadonlyArray<string>) => {
+  if ((await page.getByRole("dialog").count()) > 0) await page.keyboard.press("Escape");
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(lines.join("\n"));
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled({ timeout: 30_000 });
@@ -48,11 +52,11 @@ test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone,
   const { url, aldric } = await questHub({ nested: true });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await ask(page, ["Plan a Black Friday campaign for the shop"]);
-  const room = await openRoom(page, TITLE);
+  const room = await openQuest(page, TITLE);
 
   // A lane per hob, live: Rook leads a Quest of his own with Pip, under Aldric's.
   for (const name of ["Aldric", "Quill", "Ada", "Rook", "Pip"]) await expect(lane(page, name)).toBeVisible();
-  await expect(laneHead(page, "Quill")).toContainText("Draft the landing copy");
+  await expect(lane(page, "Quill")).toContainText("Draft the landing copy");
   await expect(laneHead(page, "Rook")).toContainText("Leads Pip");
   await expect(laneHead(page, "Pip")).toContainText("Done", { timeout: 30_000 });
   await expect(laneHead(page, "Rook")).toContainText("Done", { timeout: 30_000 });
@@ -88,7 +92,7 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await ask(page, ["Plan a spring sale for the shop"]);
   const quest = "Plan the spring sale";
-  await openRoom(page, quest);
+  await openQuest(page, quest);
   await expect(ticket(page, quest)).toContainText("2 need you", { timeout: 15_000 });
 
   // Quill's banner failed: Retry starts a second try of the same Task, and the lane is no longer rose.
@@ -110,6 +114,7 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
 
   // Neither waits on you any more, on the ticket or in the Inbox.
   await expect(ticket(page, quest)).not.toContainText("need you", { timeout: 15_000 });
+  await page.keyboard.press("Escape");
   await expect(
     page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox/ }),
   ).not.toHaveAccessibleName(/waiting on you/);
@@ -181,7 +186,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
     )
     .toBe(true);
 
-  const room = await openRoom(page, TITLE);
+  const room = await openQuest(page, TITLE);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 60_000 });
   await expect(laneTask(page, "Draft the landing copy")).toContainText("attempt 2");
 
@@ -195,6 +200,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   await expect(receipt).toContainText("Aldric got it →", { timeout: 45_000 });
   await expect(receipt).toContainText("Ada picked it up", { timeout: 60_000 });
   await expect(receipt.getByRole("status")).toHaveText("Aldric got your message. Ada picked it up.");
+  await openQuest(page, TITLE);
   const notes = (name: string) => lane(page, name).getByRole("list", { name: "Your notes" });
   await expect(notes("Aldric").getByRole("listitem")).toHaveText([
     /Your note: Use the blue theme/,
@@ -204,10 +210,10 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   await scan();
   await idle(page);
 
-  // The docked Workbench, unfiltered: the Terminal has a tab per hob that ran a command, and Split
+  // The quest's Workbench, unfiltered: the Terminal has a tab per hob that ran a command, and Split
   // shows them side by side.
   const bench = dock(page);
-  await bench.getByRole("button", { name: "Open the Workbench" }).click();
+  await room.getByRole("button", { name: "Show the work" }).click();
   const terminalTab = bench.getByRole("tab", { name: /^Terminal/ });
   await terminalTab.click();
   const terminal = bench.getByRole("tabpanel", { name: /^Terminal/ });
@@ -231,9 +237,10 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   const changed = bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("navigation", { name: "Changed files" });
   await expect(changed.getByRole("button", { name: /^copy\.md\s*, by Quill/ })).toHaveCount(1);
 
-  // Quill's lane filters every tab to her work; her latest try changed nothing itself, so the copy
-  // says it came from her first.
-  await laneHead(page, "Quill").click();
+  // Quill's work, shown from the quest, filters every tab to it; her latest try changed nothing
+  // itself, so the copy says it came from her first.
+  await page.getByRole("button", { name: "Back to the quest" }).click();
+  await showHob(page, "Quill");
   await expect(bench.getByRole("button", { name: /^Quill only/ })).toBeVisible();
   await expect(changesTab).toHaveText("Changes1");
   await expect(terminalTab).toHaveText("TerminalNot used in this task");
@@ -242,24 +249,20 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
     bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
   ).toContainText("Changed in attempt 1.");
 
-  // Her first try, picked in her lane, is what every tab shows: the copy it wrote, kept in the address.
-  const tries = lane(page, "Quill").getByRole("group", { name: "Quill's attempts" });
-  await expect(tries.getByRole("button")).toHaveText(["1✗", "2"]);
-  await tries.getByRole("button", { name: "Attempt 1, failed" }).click();
+  // Her first try, picked in the Workbench, is what every tab shows: the copy it wrote, kept in the address.
+  const tries = bench.getByRole("radiogroup", { name: "Attempts" });
+  await tries.getByRole("radio", { name: "Attempt 1" }).click();
   await expect(page).toHaveURL(/attempt=/);
-  await expect(
-    bench.getByRole("radiogroup", { name: "Attempts" }).getByRole("radio", { name: "Attempt 1" }),
-  ).toBeChecked();
+  await expect(tries.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
   await changesTab.click();
   await expect(changed.getByRole("button")).toHaveText([/^copy\.md/]);
   await expect(
     bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
   ).not.toContainText("Changed in attempt");
   await page.reload();
-  await expect(questRoom(page, TITLE)).toBeVisible();
-  await expect(tries.getByRole("button", { name: "Attempt 1, failed" })).toHaveAttribute("aria-pressed", "true");
+  await expect(bench).toBeVisible();
+  await expect(tries.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
   await expect(changed.getByRole("button")).toHaveText([/^copy\.md/]);
-  await expect(room).toBeVisible();
   await scan();
 });
 
@@ -270,7 +273,7 @@ const themeIds: readonly string[] = (
 ).themes.map((theme) => theme.id);
 
 // covers UX-002, UX-006
-test("[TC-UX-293] the room holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll and the chat column as each width sets it", async ({
+test("[TC-UX-293] the quest's sheet holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll", async ({
   page,
   scan,
 }) => {
@@ -281,33 +284,21 @@ test("[TC-UX-293] the room holds up in all four themes at 1280, 1024 and 960 px,
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await ask(page, ["Plan a Black Friday campaign for the shop"]);
-  const room = await openRoom(page, TITLE);
+  const room = await openQuest(page, TITLE);
   await expect(lane(page, "Ada").getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 30_000 });
 
-  for (const [width, column] of [
-    [1280, 360],
-    [1024, 300],
-    [960, null],
-  ] as const) {
+  for (const width of [1280, 1024, 960]) {
     await page.setViewportSize({ width, height: 800 });
     for (const theme of themeIds) {
       const at = `${theme} at ${width} px`;
       await page.evaluate((id) => localStorage.setItem("hobbots.theme", JSON.stringify(id)), theme);
       await page.reload();
       await expect(page.locator("html"), at).toHaveAttribute("data-theme", theme);
-      await expect(room.getByRole("heading", { name: TITLE }), at).toBeVisible();
+      await expect(room.getByRole("heading", { name: TITLE, level: 2 }), at).toBeVisible();
       for (const name of ["Aldric", "Quill", "Ada"]) await expect(lane(page, name), at).toBeVisible();
       await expect(lane(page, "Ada").getByRole("region", { name: "Ada asks you" }), at).toBeVisible();
-      await expect(dock(page).getByRole("button", { name: "Open the Workbench" }), at).toBeVisible();
-      if (column === null) {
-        // At 960 the chat starts folded to its rail.
-        await expect(page.getByRole("complementary", { name: "Chat, folded" }), at).toBeVisible();
-        await expect(chat(page), at).toBeHidden();
-      } else {
-        const box = await chat(page).boundingBox();
-        expect(Math.round(box?.width ?? 0), at).toBeGreaterThanOrEqual(column - 1);
-        expect(Math.round(box?.width ?? 0), at).toBeLessThanOrEqual(column);
-      }
+      // The sheet slides in from the window's edge, so it is measured once it has come to rest.
+      await room.evaluate((sheet) => Promise.all(sheet.getAnimations().map((each) => each.finished)));
       // The page never scrolls sideways. A failure names the outermost elements that stick out past
       // the window's right edge with nothing around them to clip or scroll them.
       const overflow = await page.evaluate(() => {

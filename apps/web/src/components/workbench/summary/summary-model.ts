@@ -77,7 +77,7 @@ interface ChangedFile {
 export type SummaryLine = (
   | { readonly kind: "result"; readonly summary: string; readonly from: number | null }
   | { readonly kind: "not-started" }
-  /** A question waits for your answer in its lane in the Quest room. */
+  /** A question waits for your answer in its hob's work in the quest's sheet. */
   | { readonly kind: "asks"; readonly asker: AgentId }
   | { readonly kind: "working"; readonly attempt: number }
   | { readonly kind: "waiting"; readonly attempt: number }

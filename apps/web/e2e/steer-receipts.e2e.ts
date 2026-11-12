@@ -1,7 +1,7 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, openRoom } from "./quest-room.ts";
+import { lane, openQuest } from "./quest-sheet.ts";
 
 // Issue #909 in the browser: a message you send the lead while work runs gets a steer receipt
 // under it, "Aldric got it → Ada picked it up", and your note shows as chips in the Quest room's
@@ -176,7 +176,7 @@ test("[TC-UX-260] a message the lead passes to one hob reads got it, then picked
   await expect(said(page)).toHaveAttribute("aria-atomic", "false");
 
   // The room's chat column shows the same receipt, and the lanes show your note where it went.
-  await openRoom(page, "Build the site");
+  await openQuest(page, "Build the site");
   await expect(receipt(page)).toContainText("Ada picked it up");
   await expect(notes(page, "Aldric").getByRole("listitem")).toHaveText([
     /Your note: Use the blue theme/,
@@ -214,7 +214,7 @@ test("[TC-UX-261] a message the lead passes to two hobs names each, and each pic
   await expect(receipt(page)).toContainText("Quill picked it up");
   await expect(receipt(page)).toContainText("Ada picked it up");
 
-  await openRoom(page, "Ship the launch");
+  await openQuest(page, "Ship the launch");
   await expect(notes(page, "Aldric").getByRole("listitem").last()).toHaveText(/Passed it to Quill and Ada$/);
   await expect(notes(page, "Quill").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
   await expect(notes(page, "Ada").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
@@ -243,7 +243,7 @@ test("[TC-UX-262] a message the lead answers without passing on stops at got it"
   await expect(receipt(page)).toContainText("Aldric got it");
   await expect(receipt(page)).not.toContainText("→");
 
-  await openRoom(page, "Build the site");
+  await openQuest(page, "Build the site");
   await expect(notes(page, "Aldric").getByRole("listitem")).toHaveText([/Your note: How is it going\?$/]);
   await expect(notes(page, "Ada")).toHaveCount(0);
 });

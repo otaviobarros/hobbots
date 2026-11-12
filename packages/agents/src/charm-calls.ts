@@ -1,14 +1,17 @@
-import { CharmCallNotFound, CharmCallSettled, UserSession } from "@hobbots/api";
+import { CharmCallNotFound, CharmCallSettled, UserSession, type WaitingCharmCall } from "@hobbots/api";
 import {
   type AgentId,
   CharmCall,
   type CharmCallState,
   type MessageId,
+  scopeWork,
   stableJson,
+  type TaskId,
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, type Duration, Effect, Layer, Option, type Scope } from "effect";
 import type { HubCallStep } from "./runtime.ts";
+import { callScope, TaskRepository } from "./tasks.ts";
 
 /** What recording a call found: it is new and may be sent, or a call already holds its key or its site. */
 export type CharmCallStart =
@@ -62,6 +65,17 @@ export class CharmCalls extends Context.Service<
     ) => Effect.Effect<Option.Option<CharmCall>>;
     /** The thread's calls, oldest first, so its steps can show how each settled. */
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CharmCall>>;
+    /**
+     * The sending `attempt` of a call made in `scope`, as it is stored now. A call a Task's session
+     * made, which has no reply step, is found this way (ADR 038).
+     */
+    readonly findSending: (scope: string, attempt: string) => Effect.Effect<Option.Option<CharmCall>>;
+    /**
+     * Every `uncertain` call made in a session outside any chat, on any Task, oldest first: the ones
+     * only you can settle, from the Quest room or the Inbox (ADR 038). A chat's call shows on its
+     * reply step instead, even after it moved to the Task its reply started (#660).
+     */
+    readonly uncertainOnTasks: Effect.Effect<ReadonlyArray<CharmCall>>;
     /** Every call still `sending` or `uncertain`, oldest first, for reading the Charm back. */
     readonly unsettled: Effect.Effect<ReadonlyArray<CharmCall>>;
   }
@@ -70,6 +84,16 @@ export class CharmCalls extends Context.Service<
 /** How the user settles an uncertain call, after looking on the Charm's side. */
 export type CharmCallSettlement = "applied" | "not-sent";
 
+/** What names an uncertain call the user settles: its reply step in a chat, or its sending on a Task (ADR 038). */
+export type CharmCallSite =
+  | {
+      readonly _tag: "Step";
+      readonly threadId: ThreadId;
+      readonly messageId: MessageId;
+      readonly stepId: string;
+    }
+  | { readonly _tag: "Task"; readonly taskId: TaskId; readonly attempt: string };
+
 /** What the hob is told once the user settled its call, which named `charm`. */
 const settledText = (charm: string, outcome: CharmCallSettlement) =>
   outcome === "applied"
@@ -77,18 +101,19 @@ const settledText = (charm: string, outcome: CharmCallSettlement) =>
     : `The user looked on ${charm} and settled this call as not sent, so it may be made again.`;
 
 /**
- * The user's side of the call records (ADR 020): the thread's calls, and settling an uncertain one
- * from its step once they have looked on the Charm's side, such as GitHub. Only the user settles a
- * call: it needs a `UserSession`, which no hob, Charm or runtime tool has (PE-006).
+ * The user's side of the call records (ADR 020, ADR 038): the thread's calls, the uncertain ones
+ * Tasks' sessions made, and settling an uncertain one once they have looked on the Charm's side,
+ * such as GitHub, from its reply step or from its Task. Only the user settles a call: it needs a
+ * `UserSession`, which no hob, Charm or runtime tool has (PE-006).
  */
 export class CharmCallService extends Context.Service<
   CharmCallService,
   {
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CharmCall>>;
+    /** The uncertain calls Tasks' sessions made, oldest first, each with its Task as it is now (ADR 038). */
+    readonly waitingOnTasks: Effect.Effect<ReadonlyArray<WaitingCharmCall>>;
     readonly settle: (
-      threadId: ThreadId,
-      messageId: MessageId,
-      stepId: string,
+      site: CharmCallSite,
       outcome: CharmCallSettlement,
     ) => Effect.Effect<CharmCall, CharmCallNotFound | CharmCallSettled, UserSession>;
   }
@@ -97,24 +122,45 @@ export class CharmCallService extends Context.Service<
     CharmCallService,
     Effect.gen(function* () {
       const calls = yield* CharmCalls;
+      // A hub without Tasks has no call waiting on one.
+      const tasks = yield* Effect.serviceOption(TaskRepository);
+
+      /** The call `site` names: the latest on a reply step, or one sending on a Task. */
+      const find = (site: CharmCallSite) =>
+        site._tag === "Step"
+          ? calls.findByStep(site.threadId, site.messageId, site.stepId)
+          : calls.findSending(callScope.task(site.taskId), site.attempt);
+      const refOf = (site: CharmCallSite) => (site._tag === "Step" ? site.stepId : site.attempt);
+
       return CharmCallService.of({
         listForThread: calls.listForThread,
-        settle: (threadId, messageId, stepId, outcome) =>
+        waitingOnTasks: Effect.gen(function* () {
+          const waiting: Array<WaitingCharmCall> = [];
+          if (Option.isNone(tasks)) return waiting;
+          for (const call of yield* calls.uncertainOnTasks) {
+            const { taskId } = scopeWork(call.scope);
+            if (taskId === null) continue;
+            const tree = yield* tasks.value.readTree(taskId);
+            const task = Option.isSome(tree) ? tree.value.tasks.find((each) => each.id === taskId) : undefined;
+            // A Task that is gone takes its calls with it: nothing is left to settle them on.
+            if (task !== undefined) waiting.push({ call, task });
+          }
+          return waiting;
+        }),
+        settle: (site, outcome) =>
           Effect.gen(function* () {
             yield* UserSession;
-            const found = yield* calls.findByStep(threadId, messageId, stepId);
-            if (Option.isNone(found)) return yield* new CharmCallNotFound({ stepId });
+            const ref = refOf(site);
+            const found = yield* find(site);
+            if (Option.isNone(found)) return yield* new CharmCallNotFound({ ref });
             const call = found.value;
-            if (call.state !== "uncertain") return yield* new CharmCallSettled({ stepId, state: call.state });
+            if (call.state !== "uncertain") return yield* new CharmCallSettled({ ref, state: call.state });
             const at = DateTime.formatIso(yield* DateTime.now);
             const settled = yield* calls.settle(call, outcome, settledText(call.charm, outcome), at);
             // Reading the Charm back may have settled it a moment before.
             if (Option.isNone(settled)) {
               const now = yield* calls.current(call);
-              return yield* new CharmCallSettled({
-                stepId,
-                state: Option.isSome(now) ? now.value.state : call.state,
-              });
+              return yield* new CharmCallSettled({ ref, state: Option.isSome(now) ? now.value.state : call.state });
             }
             return settled.value;
           }),
@@ -142,11 +188,16 @@ export type WriteOutcome =
   /** It may have taken effect. */
   | { readonly _tag: "Uncertain"; readonly text: string };
 
-/** What a hob is told for a call to `charm` that is still uncertain: never to repeat it. */
-export const uncertainNote = (charm: string, readsBack: boolean): string =>
-  readsBack
-    ? `Hobbots does not know whether this took effect. Do not repeat it: Hobbots keeps checking ${charm}, and the user can settle it from the step. Tell the user.`
-    : "Hobbots does not know whether this took effect. Do not repeat it: the user can settle it from the step. Tell the user.";
+/**
+ * What a hob is told for a call to `charm` that is still uncertain: never to repeat it. A call made
+ * in a chat is settled from its step, one made on a Task from the Quest room or the Inbox (ADR 038).
+ */
+export const uncertainNote = (charm: string, readsBack: boolean, inChat = true): string => {
+  const where = inChat ? "from the step" : "from the Quest room or the Inbox";
+  return readsBack
+    ? `Hobbots does not know whether this took effect. Do not repeat it: Hobbots keeps checking ${charm}, and the user can settle it ${where}. Tell the user.`
+    : `Hobbots does not know whether this took effect. Do not repeat it: the user can settle it ${where}. Tell the user.`;
+};
 
 const STATE: Record<WriteOutcome["_tag"], CharmCallState> = {
   Applied: "applied",
@@ -204,9 +255,9 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
     // Read-backs run in the Charm's scope, so they stop with the hub.
     const scope = yield* Effect.scope;
 
-    /** What the hob is told for a call that is still uncertain. */
-    const noteFor = (call: Pick<CharmCall, "charm" | "tool">) =>
-      uncertainNote(call.charm, Object.hasOwn(readBacks, call.tool));
+    /** What the hob is told for a call that is still uncertain: a call without a reply step is settled on its Task. */
+    const noteFor = (call: Pick<CharmCall, "charm" | "tool" | "messageId">) =>
+      uncertainNote(call.charm, Object.hasOwn(readBacks, call.tool), call.messageId !== null);
 
     /** The answer an earlier call with the same key gave, or why the key cannot be used. */
     const earlierAnswer = (call: CharmCall, input: string): string => {

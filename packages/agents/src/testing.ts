@@ -66,6 +66,15 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) => {
           ),
         ),
       listForThread: (threadId) => Effect.sync(() => [...rows.values()].filter((row) => row.threadId === threadId)),
+      findSending: (scope, attempt) =>
+        Effect.sync(() =>
+          Option.fromUndefinedOr([...rows.values()].find((row) => row.scope === scope && row.attempt === attempt)),
+        ),
+      uncertainOnTasks: Effect.sync(() =>
+        [...rows.values()].filter(
+          (row) => row.state === "uncertain" && row.messageId === null && row.scope.startsWith("task:"),
+        ),
+      ),
       unsettled: Effect.sync(() => [...rows.values()].filter((row) => !isCharmCallSettled(row.state))),
     }),
   );

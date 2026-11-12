@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { questRoom, ticket } from "./quest-room.ts";
+import { questSheet, ticket } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Where focus lands when a screen takes away the element that had it: always on a visible,
@@ -48,7 +48,7 @@ const inView = (locator: Locator) =>
   });
 
 // covers UX-002, UX-006
-test("[TC-UX-160] the room opened from the ticket by keyboard takes focus, and Close room puts it back in the chat", async ({
+test("[TC-UX-160] the quest opened from the ticket by keyboard takes focus, and Close the quest gives it back to the ticket", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -67,17 +67,17 @@ test("[TC-UX-160] the room opened from the ticket by keyboard takes focus, and C
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // By keyboard: the ticket opens the room, and focus moves to its title.
+  // By keyboard: the ticket opens the quest in the sheet, and focus moves to its title.
   await questTicket.focus();
   await page.keyboard.press("Enter");
-  const room = questRoom(page, "Tidy the notes");
-  await expect(room.getByRole("heading", { name: "Tidy the notes" })).toBeFocused();
+  const room = questSheet(page, "Tidy the notes");
+  await expect(room.getByRole("heading", { name: "Tidy the notes", level: 2 })).toBeFocused();
 
-  // Close room, by keyboard, puts focus back in the chat's message box.
-  await room.getByRole("button", { name: "Close room" }).focus();
+  // Close the quest, by keyboard, gives focus back to the ticket that opened it.
+  await page.getByRole("button", { name: "Close the quest" }).focus();
   await page.keyboard.press("Enter");
   await expect(room).toBeHidden();
-  await expect(composer).toBeFocused();
+  await expect(questTicket).toBeFocused();
   expect(await focusOnPage(page)).toBe(false);
 });
 

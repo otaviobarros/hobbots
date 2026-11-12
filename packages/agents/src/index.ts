@@ -2,6 +2,7 @@ export * from "./activity.ts";
 export * from "./activity-reads.ts";
 export * from "./admission.ts";
 export * from "./approvals.ts";
+export * from "./artifact-contents.ts";
 export * from "./asking.ts";
 export * from "./brief-log.ts";
 export { clip, contextBlock } from "./briefing.ts";

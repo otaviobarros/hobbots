@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, laneTask, openRoom, taskDetails } from "./quest-room.ts";
+import { laneHead, laneTask, openQuest, taskDetails } from "./quest-sheet.ts";
 
 // Issue #571 in the browser: Rook's Task is blocked only when its own milestone is all that keeps
 // it open, and its lane in the Quest room then says why, in the words its lead reads. The hub side is
@@ -77,7 +77,7 @@ test("[TC-OR-223] Rook's lane says why its Task is blocked, not a bare Blocked",
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  await openRoom(page, "Build the app");
+  await openQuest(page, "Build the app");
   const frontend = laneHead(page, "Rook");
   await expect(frontend).toContainText("Blocked", { timeout: 30_000 });
   // Rook's lane gives the reason.

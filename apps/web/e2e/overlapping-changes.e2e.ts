@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, openRoom, taskDetails } from "./quest-room.ts";
+import { lane, openQuest, taskDetails } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -18,7 +18,7 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
   // In the Quest room, each member's lane says whose Task changed the same file.
-  await openRoom(page, "Make the shop badge");
+  await openQuest(page, "Make the shop badge");
   const badge = lane(page, "Quill");
   const review = lane(page, "Ada");
   await expect(review).toContainText("Same file as Quill", { timeout: 15_000 });
@@ -46,7 +46,7 @@ test("[TC-OR-411] the lead's change from before it delegated shows no Same file 
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await openRoom(page, "Make the shop badge");
+  await openQuest(page, "Make the shop badge");
   // Quill and Ada wrote the badge while both were at work: each names only the other.
   const review = lane(page, "Ada");
   const badge = lane(page, "Quill");

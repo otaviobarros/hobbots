@@ -489,12 +489,12 @@ export class TaskTools extends Context.Service<
           });
 
         /**
-         * The Charms a session outside any chat offers: none of their writes, but those of a Charm
-         * whose writes all read back from the hub's own records (ADR 034). A write whose answer is
-         * lost waits for you to settle it on the reply step it showed as (ADR 020), and such a
-         * session has no reply, so its writes stay with the lead's chat until it does. A call to one
-         * is refused as a tool the session does not offer, and a `git push` is decided as a push: the
-         * session's steering takes over none of the Charms' requests.
+         * The Charms a session outside any chat offers: their reads, and the writes of a Charm that
+         * offers them outside chats, as the GitHub and Summoning Charms do (ADR 034, ADR 038). Such a
+         * session has no reply step, so a write whose answer stays lost is settled on its Task, from
+         * the Quest room or the Inbox. A call to a write it is not offered is refused as a tool the
+         * session does not offer. A `git push` is steered to a Charm's write as in a chat, but only
+         * to a write the session is offered, so a member's push to GitHub goes through `github_push`.
          */
         const anyTools = (charms: HubTools | null): HubTools | null =>
           charms === null || charms.tools.length === 0 ? null : charms;
@@ -528,7 +528,10 @@ export class TaskTools extends Context.Service<
                   { owner: "the Task tools", tools },
                   { owner: "the hub's other tools", tools: recorded },
                 ]) ?? tools,
-              steering: { takeovers: [], holdsCommit: (cwd: string) => heldCommit(caller.taskId, cwd) },
+              steering: {
+                takeovers: offer.steering?.takeovers ?? [],
+                holdsCommit: (cwd: string) => heldCommit(caller.taskId, cwd),
+              },
             };
           });
 

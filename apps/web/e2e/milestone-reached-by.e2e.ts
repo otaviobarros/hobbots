@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom, taskSummary } from "./quest-room.ts";
+import { laneHead, openQuest, taskSummary } from "./quest-sheet.ts";
 
 // Issue #743 in the browser: a member's milestone is reached by its lead's work, such as a commit
 // the member could not make. The member reports it naming the lead, and its Task shows the lead
@@ -103,7 +103,7 @@ test("[TC-OR-655] a member's milestone reached through its lead's work shows on 
   await scan();
   await composer.press("Enter");
 
-  await openRoom(page, "Ship the page");
+  await openQuest(page, "Ship the page");
   await expect(laneHead(page, "Nettle")).toContainText("Done", { timeout: 45_000 });
 
   // Its own milestone says nothing more; the one Frodo's work reached names him.

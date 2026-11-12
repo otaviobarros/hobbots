@@ -1,4 +1,4 @@
-import { type Chapter, ChapterStates, type TaskTree, type Thread } from "@hobbots/domain";
+import { type Chapter, ChapterStates, type TaskId, type TaskTree, type Thread } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { useQuery } from "@tanstack/react-query";
 import { chaptersQuery } from "../../api/chapters.ts";
@@ -18,7 +18,15 @@ const copy = messages.overview;
  * The Overview tab (ADR 037): "Where we are", the brief the hub writes from the records; the Quests
  * started here; the camp's chapters; and its settings, where a camp is made private from now on.
  */
-export function OverviewTab({ thread, hobName }: { thread: Thread; hobName: string }) {
+export function OverviewTab({
+  thread,
+  hobName,
+  onOpenQuest,
+}: {
+  thread: Thread;
+  hobName: string;
+  onOpenQuest: (taskId: TaskId) => void;
+}) {
   const brief = useQuery(briefQuery(thread.id));
   const chapters = useQuery(chaptersQuery(thread.id));
   const trees = useThreadTrees(thread.id);
@@ -38,7 +46,7 @@ export function OverviewTab({ thread, hobName }: { thread: Thread; hobName: stri
         {trees.length === 0 && <p className="m-0 text-ui text-label">{copy.noQuests}</p>}
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {trees.map((tree) => (
-            <QuestRow key={tree.tasks[0]?.id} tree={tree} />
+            <QuestRow key={tree.tasks[0]?.id} tree={tree} onOpen={onOpenQuest} />
           ))}
         </ul>
       </SheetSection>
@@ -53,25 +61,32 @@ export function OverviewTab({ thread, hobName }: { thread: Thread; hobName: stri
   );
 }
 
-function QuestRow({ tree }: { tree: TaskTree }) {
+/** A quest the camp started, opening it in the sheet. */
+function QuestRow({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId) => void }) {
   const card = workCard(tree);
   // How the Quest is going is the hub's, from its summary (#1429).
   const { segments, needs, done, total } = useQuestProgress(tree);
   if (card === null) return null;
   return (
-    <li className="flex flex-col gap-1.5 rounded-control px-2 py-2">
-      <span className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-ui font-semibold text-text-strong">
-          {card.quest?.goal ?? taskTitle(card.top)}
+    <li>
+      <button
+        type="button"
+        onClick={() => onOpen(card.top.id)}
+        className="flex w-full cursor-pointer flex-col gap-1.5 rounded-control border-0 bg-transparent px-2 py-2 text-start hover:bg-hover"
+      >
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-ui font-semibold text-text-strong">
+            {card.quest?.goal ?? taskTitle(card.top)}
+          </span>
+          {needs > 0 && <Badge variant="needs-you">{copy.needsYou({ count: needs })}</Badge>}
+          <span className="shrink-0 text-meta text-label">
+            {card.quest !== null && card.quest.state !== "active"
+              ? copy.questState[card.quest.state]
+              : copy.done({ done, total })}
+          </span>
         </span>
-        {needs > 0 && <Badge variant="needs-you">{copy.needsYou({ count: needs })}</Badge>}
-        <span className="shrink-0 text-meta text-label">
-          {card.quest !== null && card.quest.state !== "active"
-            ? copy.questState[card.quest.state]
-            : copy.done({ done, total })}
-        </span>
-      </span>
-      <StatusStrip statuses={segments} />
+        <StatusStrip statuses={segments} />
+      </button>
     </li>
   );
 }

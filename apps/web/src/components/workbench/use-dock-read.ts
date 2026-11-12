@@ -2,7 +2,7 @@ import type { TaskId, TaskTree } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { workbenchTreeQuery } from "../../api/workbench.ts";
 import { useWorkbenchStream } from "../../api/workbench-stream.ts";
-import type { RoomView } from "../quest-room/room-search.ts";
+import type { QuestView } from "../quest-sheet/quest-search.ts";
 import { type DockFilter, dockCounts, dockSources, dockStates, sameStates } from "./dock-model.ts";
 import { questRoots } from "./shown-paths.ts";
 import type { TabState } from "./workbench-model.ts";
@@ -30,7 +30,7 @@ export const useDockRead = (
   /** Whether the Quest has more than one lane, one per hob. */
   party: boolean,
   lit: TaskId | undefined,
-  view: RoomView,
+  view: QuestView,
 ) => {
   const top = tree.tasks[0];
   const topId = top?.id ?? ("" as TaskId);
