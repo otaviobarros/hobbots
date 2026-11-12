@@ -19,6 +19,7 @@ import {
   CommitIdentityQuestions,
   DataExport,
   DeviceService,
+  FindIndexer,
   GrantService,
   HobAdmission,
   HobLifecycle,
@@ -100,6 +101,7 @@ import {
   CodingSetupDismissalRepository,
   DeviceRepositoryLive,
   EventJournal,
+  FindIndexLogLive,
   GitHubAccountRepository,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -373,6 +375,8 @@ const ServerLive = Layer.unwrap(
       CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
       // Each chat's and camp's brief, and the brief projector's cursor (ADR 037).
       BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
+      // The find index's rows, and the find projector's cursor (ADR 037).
+      FindIndexLogLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -563,6 +567,8 @@ const ServerLive = Layer.unwrap(
             CampDrift.layer,
             // Each chat and camp gets its brief at chapter ends and Quest steps, which the pack reads (ADR 037).
             CampBriefs.layer,
+            // Every chat's and camp's decisions, artifacts and chapters go in the find index (ADR 037).
+            FindIndexer.layer,
             // A pull request a hob delivered is reviewed once GitHub reports it merged or closed (#1422).
             PullRequestReviews,
           ),

@@ -50,7 +50,7 @@ import { messages as campCopy } from "../camps/messages.ts";
 import { CatchUpAt } from "../catch-up/catch-up-card.tsx";
 import { type CatchUpView, useCatchUp } from "../catch-up/use-catch-up.ts";
 import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
-import { ChatSearch } from "../chat-search/chat-search.tsx";
+import { FindBox } from "../find/find-box.tsx";
 import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
@@ -296,11 +296,10 @@ export function ChatView({
         headerEnd={headerEnd}
       />
       <ReconnectingCard className="mx-6 mt-2.5" />
-      {threadId && finding && (
-        <ChatSearch
+      {thread.data && finding && (
+        <FindBox
           hob={current}
-          threadId={threadId}
-          transcript={messages.data ?? []}
+          thread={thread.data}
           onClose={() => setFinding(false)}
           onPick={() => setPicks((count) => count + 1)}
         />

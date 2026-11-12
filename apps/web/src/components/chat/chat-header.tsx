@@ -9,7 +9,7 @@ import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
 import { StartFreshSheet } from "../camps/start-fresh-sheet.tsx";
 import { FocusChip } from "../chapters/focus-chip.tsx";
-import { ChatSearchButton } from "../chat-search/chat-search.tsx";
+import { FindButton } from "../find/find-box.tsx";
 import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
 import { BrainPicker } from "../providers/brain-picker.tsx";
@@ -94,7 +94,7 @@ export function ChatHeader({
       {thread && <FocusChip hob={hob} thread={thread} />}
       {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
       {threadId && headerEnd === undefined && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
-      {thread && <ChatSearchButton open={finding} onToggle={() => onFinding(!finding)} />}
+      {thread && <FindButton open={finding} onToggle={() => onFinding(!finding)} />}
       {/* A camp's brief, records and what is yours (ADR 037). */}
       {camp && <CampSheetButton camp={camp} open={sheet === "camp"} onOpen={() => setSheet("camp")} />}
       <HeaderMenu

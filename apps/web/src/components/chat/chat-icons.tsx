@@ -54,7 +54,7 @@ export const PinMenuIcon = () => (
   </LineIcon>
 );
 
-/** A magnifier, on Search this chat. */
+/** A magnifier, on Find. */
 export const SearchMenuIcon = () => (
   <LineIcon size="menu">
     <circle cx="7" cy="7" r="4.5" />

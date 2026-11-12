@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { FindIndex } from "@hobbots/agents";
 import {
   type MessageMatch,
   MessageRole,
@@ -10,11 +11,14 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema, String as Str } from "effect";
 import { SqlClient } from "effect/sql";
+import { type FindReader, makeFind } from "./find.ts";
 import { threadRows } from "./repositories.ts";
 
 // Search over thread titles and settled messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
-// search (migration 0011). Hobs that retired are left out. On a SQLite file the query runs in a
-// worker thread with its own read-only connection, so a long search never blocks the server (ADR 011).
+// search (migration 0011). Hobs that retired are left out, and so are private camps, which are found
+// only from inside them (ADR 037). Its layers also give find (#1386), on the same connection. On a
+// SQLite file the queries run in a worker thread with its own read-only connection, so a long
+// search never blocks the server (ADR 011).
 
 /** The most threads one search returns, and the newest matching messages shown for each. */
 export const SEARCH_THREADS = 30;
@@ -27,9 +31,8 @@ export class SearchIndex extends Context.Service<
     readonly search: (query: string) => Effect.Effect<ReadonlyArray<SearchHit>>;
   }
 >()("@hobbots/persistence/SearchIndex") {
-  /** Runs the query on the server's own connection: PostgreSQL, or SQLite in tests. */
-  static readonly layer = Layer.effect(
-    SearchIndex,
+  /** Search and find on the server's own connection: PostgreSQL, or SQLite in tests. */
+  static readonly layer = Layer.effectContext(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const run: Run = (terms, words) =>
@@ -37,25 +40,31 @@ export class SearchIndex extends Context.Service<
           pg: () => sql.unsafe(PG_QUERY, [tsQuery(words)]),
           orElse: () => sql.unsafe(SQLITE_QUERY, [ftsQuery(terms)]),
         }) as Effect.Effect<ReadonlyArray<Row>, unknown>;
-      return makeSearch(run);
+      const read: FindReader = (query) =>
+        sql.onDialectOrElse({
+          pg: () => sql.unsafe(query.pg.text, query.pg.params),
+          orElse: () => sql.unsafe(query.sqlite.text, query.sqlite.params),
+        }) as Effect.Effect<ReadonlyArray<Row>, unknown>;
+      return Context.make(SearchIndex, makeSearch(run)).pipe(Context.add(FindIndex, makeFind(read)));
     }),
   );
 
   /**
-   * Runs the query in a worker thread on the SQLite database at `filename`, which the server's
-   * connection must already have migrated. The worker starts with the first search.
+   * Search and find in a worker thread on the SQLite database at `filename`, which the server's
+   * connection must already have migrated. The worker starts with the first query.
    */
   static readonly sqliteWorker = (filename: string) =>
-    Layer.effect(
-      SearchIndex,
+    Layer.effectContext(
       Effect.gen(function* () {
         const pool = yield* Effect.acquireRelease(
           Effect.sync(() => new WorkerConnection(filename)),
           (connection) => Effect.promise(() => connection.close()),
         );
-        return makeSearch((terms) =>
-          pool.all(SQLITE_QUERY, [ftsQuery(terms)]).pipe(Effect.map((rows) => rows.map(camelCaseRow))),
-        );
+        const all = (text: string, params: ReadonlyArray<unknown>) =>
+          pool.all(text, params).pipe(Effect.map((rows) => rows.map(camelCaseRow)));
+        const search = makeSearch((terms) => all(SQLITE_QUERY, [ftsQuery(terms)]));
+        const find = makeFind((query) => all(query.sqlite.text, query.sqlite.params));
+        return Context.make(SearchIndex, search).pipe(Context.add(FindIndex, find));
       }),
     );
 }
@@ -73,7 +82,7 @@ const THREADS_THEN_MATCHES = `
   found AS (
     SELECT t.*, t.id IN (SELECT id FROM titled) AS title_match, COALESCE(c.match_count, 0) AS match_count
     FROM threads t JOIN agents a ON a.id = t.agent_id LEFT JOIN counts c ON c.thread_id = t.id
-    WHERE a.status <> 'retired' AND (c.thread_id IS NOT NULL OR t.id IN (SELECT id FROM titled))
+    WHERE a.status <> 'retired' AND t.private = 0 AND (c.thread_id IS NOT NULL OR t.id IN (SELECT id FROM titled))
     ORDER BY t.updated_at DESC LIMIT ${SEARCH_THREADS}),
   ranked AS (
     SELECT matched.*, ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, seq DESC) AS match_rank

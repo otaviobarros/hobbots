@@ -13,7 +13,7 @@ import {
   SearchMenuIcon,
   SlidersIcon,
 } from "../chat/chat-icons.tsx";
-import { messages as searchCopy } from "../chat-search/messages.ts";
+import { messages as searchCopy } from "../find/messages.ts";
 import { messages as appCopy } from "../messages.ts";
 import { messages as copy } from "./messages.ts";
 

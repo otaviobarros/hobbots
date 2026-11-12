@@ -95,11 +95,11 @@ test("[TC-CH-1382-01] shows a divider after start_chapter, folds and opens a res
   await expect(main.getByText("Echo: My cat is called Miso.")).toBeHidden();
   // Picking the same result again, after you folded it once more, opens it again.
   const pickMiso = async () => {
-    await page.getByRole("button", { name: "Search this chat" }).click();
-    await page.getByRole("searchbox", { name: "Search this chat" }).fill("Miso");
+    await page.getByRole("button", { name: "Find", exact: true }).click();
+    await page.getByRole("searchbox", { name: "Find" }).fill("Miso");
     await page
-      .getByRole("list", { name: "Matches in this chat" })
-      .getByRole("button", { name: /^Y\s*You · / })
+      .getByRole("region", { name: /^Messages · / })
+      .getByRole("button", { name: /^My cat is called Miso\. Message · You · / })
       .click();
     await expect(main.getByText("My cat is called Miso.", { exact: true })).toBeInViewport();
     // It folds again as before.
