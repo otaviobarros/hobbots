@@ -16,7 +16,7 @@ test("[TC-IN-544] a member's failed Task waits in the Inbox and on the lead's ti
   // Two members' Tasks fail while the rest of the Quest goes on: each waits on you, under Aldric.
   const inbox = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox, / });
   await expect(inbox).toHaveAccessibleName(/2 waiting on you/, { timeout: 15_000 });
-  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Aldric, / });
+  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Aldric, / });
   await expect(tile).toHaveAccessibleName(/needs you/i);
 
   await inbox.click();

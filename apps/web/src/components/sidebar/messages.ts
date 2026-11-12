@@ -1,3 +1,5 @@
+import { formatCount } from "../../lib/format.ts";
+
 /** User-facing copy for the sidebar (STD-I18N-001). */
 export const messages = {
   label: "Sections",
@@ -17,15 +19,6 @@ export const messages = {
     paused: "Paused",
     resting: "Resting",
   },
-  card: {
-    close: "Close",
-    openPage: "Open page",
-    profile: "Profile",
-    backpack: "Backpack",
-    backpackEmpty: "Nothing to deal with right now.",
-    /** The backpack's list, for screen readers. */
-    backpackList: ({ name }: { name: string }) => `What ${name} still has to deal with`,
-  },
   /** A hob's accessible name, such as "Ada, needs you", and "new messages" when it wrote since you read. */
   hob: ({ name, state, unread }: { name: string; state: string; unread: boolean }) =>
     `${name}, ${state.toLowerCase()}${unread ? ", new messages" : ""}`,
@@ -33,7 +26,10 @@ export const messages = {
   hobTip: ({ name, state, unread }: { name: string; state: string; unread: boolean }) =>
     `${name} · ${state.toLowerCase()}${unread ? " · new messages" : ""}`,
   /** The marks before the open hob's chat, its camps and Make a camp. */
-  glyph: { chat: "✦", camp: "⛺", add: "+" },
+  glyph: { chat: "✦", camp: "⛺", add: "+", more: "⋯" },
   /** The dot on a chat under the open hob that has messages you have not read. */
   unreadThread: "New messages",
+  /** Under the open hob's first camps, to list the rest. */
+  moreCamps: ({ count }: { count: number }) => `Show ${formatCount(count)} more`,
+  fewerCamps: "Show fewer",
 };

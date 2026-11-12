@@ -17,12 +17,14 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
 // that already has a rule under it; `chip` is for chip tabs (see the trigger's `chip` variant), such
 // as the docked Workbench's strip, and scrolls without a scrollbar.
 //
-// `line` and `plain` never scroll: the selected tab's bar hangs over the line under the list, so a
+// `line`, `tight` and `plain` never scroll: the selected tab's bar hangs over the line under the list, so a
 // list that scrolled would scroll by the bar's height and show a scrollbar beside the tabs.
 const tabsListVariants = cva("flex shrink-0 gap-1 border-0 border-solid border-line", {
   variants: {
     variant: {
       line: "border-b-[length:var(--edge)]",
+      // `line` for `tight` tabs, which sit edge to edge, such as a sheet's tabs run out to its sides.
+      tight: "gap-0 border-b-[length:var(--edge)] px-2",
       plain: "",
       chip: "overflow-x-auto [scrollbar-width:none]",
     },
@@ -40,8 +42,9 @@ function TabsList({
   );
 }
 
-// `bar` is a plain label, the selected one bold with a lantern bar under it on the list's line; `chip`
-// is a small rounded chip, the selected one on a card, with no bar.
+// `bar` is a plain label, the selected one bold with a lantern bar under it on the list's line, and
+// `tight` the same at a smaller size; `chip` is a small rounded chip, the selected one on a card,
+// with no bar.
 const tabsTriggerVariants = cva(
   [
     "relative inline-flex shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent whitespace-nowrap text-text-secondary",
@@ -56,6 +59,12 @@ const tabsTriggerVariants = cva(
           "gap-2 rounded-t-control px-3 pt-2.5 pb-3 text-[15px] leading-[23px] data-[state=active]:font-semibold",
           // The bar under the selected tab sits on the list's line, inset from the tab's sides.
           "after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
+        ],
+        // `bar` at the size that fits four tabs and their counts across a sheet; when they still don't,
+        // the tabs shrink and their labels give way, so the row never outgrows the sheet.
+        tight: [
+          "min-w-0 shrink gap-1 rounded-t-control px-[5px] pt-2 pb-2.5 text-ui data-[state=active]:font-semibold",
+          "after:pointer-events-none after:absolute after:inset-x-1 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
         ],
         chip: "gap-1.5 rounded-control px-2.5 py-1.5 text-ui data-[state=active]:bg-card",
       },

@@ -66,7 +66,7 @@ const hirePip = async (current: Hub) => {
 const headerSays = (page: Page, doing: string) => page.getByText(new RegExp(`^Your chat with Pip · ${doing}$`));
 
 const hobTile = (page: Page, name: string) =>
-  page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: new RegExp(`^${name}, `) });
+  page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: new RegExp(`^${name}, `) });
 
 // The fake runtime writes one word every 40 ms and takes 600 ms to end a stopped turn.
 const LONG_PROMPT = Array.from({ length: 150 }, (_, i) => `word${i}`).join(" ");

@@ -110,12 +110,15 @@ function CampTabs({
       </SheetHeader>
       <SheetTitle clamped>{camp.title}</SheetTitle>
       <Tabs value={tab} onValueChange={(value) => isCampTab(value) && setTab(value)}>
-        <TabsList className="mb-3.5">
+        {/* The tabs run to the sheet's edges and stay compact, and their counts stay short, so all four fit its width. */}
+        <TabsList variant="tight" className="-mx-[18px] mb-3.5">
           {TABS.map((each) => (
-            <TabsTrigger key={each} value={each}>
-              {messages.tabs[each]}
+            <TabsTrigger key={each} value={each} variant="tight">
+              <span className="min-w-0 truncate">{messages.tabs[each]}</span>
               {counts[each] !== undefined && (
-                <span className="text-meta text-label">{messages.count({ count: counts[each] })}</span>
+                <span className="shrink-0 rounded-tag bg-line px-1.5 text-meta font-semibold text-text-secondary">
+                  {messages.count({ count: counts[each] })}
+                </span>
               )}
             </TabsTrigger>
           ))}

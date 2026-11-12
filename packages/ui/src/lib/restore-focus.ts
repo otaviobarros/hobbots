@@ -33,8 +33,8 @@ const restoreFocus = (before: HTMLElement | null) => {
  * layer opens, never when it first renders.
  *
  * A layer that animates out gives focus back only once it has gone. If focus moved somewhere else on
- * the way out, such as to a hob's card in the sidebar, it stays there: taking it back would close
- * that card the moment it opened.
+ * the way out, such as to another popover, it stays there: taking it back would close that popover
+ * the moment it opened.
  */
 export const useRestoreFocus = ({
   onOpenAutoFocus,
