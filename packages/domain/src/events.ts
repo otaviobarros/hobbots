@@ -248,6 +248,11 @@ const DecisionSuperseded = Schema.TaggedStruct("DecisionSuperseded", { decision:
  */
 const ArtifactRegistered = Schema.TaggedStruct("ArtifactRegistered", { artifact: Artifact });
 /**
+ * An artifact's review settled (#1422): you reviewed or dismissed it, or GitHub reported its pull
+ * request merged or closed. The artifact as it now stands.
+ */
+const ArtifactReviewSettled = Schema.TaggedStruct("ArtifactReviewSettled", { artifact: Artifact });
+/**
  * The brief projector wrote a chat's or camp's brief (#1384), at a chapter end or a Quest step. A
  * private camp's stays in that camp: memory capture takes nothing from it.
  */
@@ -489,6 +494,7 @@ export const JournaledEvent = Schema.Union([
   DecisionRecorded,
   DecisionSuperseded,
   ArtifactRegistered,
+  ArtifactReviewSettled,
   BriefWritten,
   BackpackItemRecorded,
   BackpackItemChanged,
@@ -609,7 +615,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ClaimReleased: 1,
   DecisionRecorded: 1,
   DecisionSuperseded: 1,
+  // An artifact's `review`, `reviewedAt` and `reviewedBy` were added with defaults, compatibly.
   ArtifactRegistered: 1,
+  ArtifactReviewSettled: 1,
   BriefWritten: 1,
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
