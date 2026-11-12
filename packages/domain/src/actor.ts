@@ -20,3 +20,6 @@ export const OWNER_ACTOR: Actor = { kind: "user", id: "owner" };
 
 /** A hob as the author of a record. */
 export const hobActor = (agentId: AgentId): Actor => ({ kind: "hob", id: agentId });
+
+/** The hub itself as the author of a record it writes, such as a camp's brief. */
+export const HUB_ACTOR: Actor = { kind: "hub", id: "hub" };

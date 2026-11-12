@@ -5,6 +5,7 @@ export * from "./approval.ts";
 export * from "./artifact.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
+export * from "./brief.ts";
 export * from "./cancel.ts";
 export * from "./carried-over.ts";
 export * from "./change-actor.ts";

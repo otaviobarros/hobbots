@@ -101,6 +101,7 @@ import claims from "./0098_claims.ts";
 import chapters from "./0099_chapters.ts";
 import projectorCursors from "./0100_projector_cursors.ts";
 import records from "./0101_records.ts";
+import briefs from "./0102_briefs.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -209,4 +210,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0099_chapters": chapters,
   "0100_projector_cursors": projectorCursors,
   "0101_records": records,
+  "0102_briefs": briefs,
 };
