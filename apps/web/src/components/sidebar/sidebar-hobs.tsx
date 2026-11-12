@@ -1,14 +1,11 @@
 import type { Agent } from "@hobbots/domain";
-import { Popover, PopoverTrigger } from "@hobbots/ui/components/popover";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { useHobPresence } from "../../api/hub-status.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { presenceState } from "../../lib/hob-state.ts";
 import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
-import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
 import { SidebarCamps } from "./sidebar-camps.tsx";
@@ -24,7 +21,7 @@ const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.e
  * Every hob, each with a still state mark: lantern when it needs you, mint while it works, and a
  * lantern dot at the top when it wrote in a chat you have not read (ADR 027). Only the lead whose
  * chat something waits in is marked as needing you, since you talk only to the lead. A hob's tile
- * opens its card. The hob whose page, chat or camp is open lists its chat, then its camps,
+ * opens its chat. The hob whose page, chat or camp is open lists its chat, then its camps,
  * under its name while the sidebar is expanded (ADR 037). Only the list scrolls: its heading and "Summon a hob" stay put.
  */
 export function SidebarHobs({ expanded }: { expanded: boolean }) {
@@ -90,61 +87,46 @@ function SidebarHob({
   const mark = MARK[state];
   const unread = threads.data?.some((thread) => thread.unread) ?? false;
   const showThreads = expanded && open;
-  const [cardOpen, setCardOpen] = useCardOpen();
 
   return (
     <div className="flex flex-none flex-col">
-      <Popover open={cardOpen} onOpenChange={setCardOpen}>
-        <SidebarTip label={copy.hobTip({ name: hob.name, state: word, unread })} expanded={expanded}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label={copy.hob({ name: hob.name, state: word, unread })}
-              aria-current={pathname === `/hobs/${hob.id}` ? "page" : undefined}
-              className={cn(sidebarItem, "cursor-pointer")}
-            >
-              <span className={sidebarIcon}>
-                <span className="relative inline-flex size-hob-tile items-center justify-center rounded-tile bg-tile">
-                  <HobSprite hob={hob} size={28} />
-                  {unread && (
-                    <span
-                      aria-hidden
-                      className="absolute -end-[3px] -top-[3px] size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern"
-                    />
+      <SidebarTip label={copy.hobTip({ name: hob.name, state: word, unread })} expanded={expanded}>
+        <Link
+          to="/hobs/$hobId/chat"
+          params={{ hobId: hob.id }}
+          aria-label={copy.hob({ name: hob.name, state: word, unread })}
+          aria-current={pathname === `/hobs/${hob.id}` ? "page" : undefined}
+          className={sidebarItem}
+        >
+          <span className={sidebarIcon}>
+            <span className="relative inline-flex size-hob-tile items-center justify-center rounded-tile bg-tile">
+              <HobSprite hob={hob} size={28} />
+              {unread && (
+                <span
+                  aria-hidden
+                  className="absolute -end-[3px] -top-[3px] size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern"
+                />
+              )}
+              {mark && (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-(length:--edge) border-panel",
+                    mark,
                   )}
-                  {mark && (
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-(length:--edge) border-panel",
-                        mark,
-                      )}
-                    />
-                  )}
-                </span>
-              </span>
-              <span className="sidebar-label flex min-w-0 flex-1 flex-col">
-                <span className="truncate font-heading font-semibold">{hob.name}</span>
-                <span className={cn("text-detail", state === "needs-you" ? "text-lantern" : "text-text-secondary")}>
-                  {word}
-                </span>
-              </span>
-            </button>
-          </PopoverTrigger>
-        </SidebarTip>
-        <HobCard hob={hob} state={full} threads={threads.data ?? []} />
-      </Popover>
+                />
+              )}
+            </span>
+          </span>
+          <span className="sidebar-label flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-heading font-semibold">{hob.name}</span>
+            <span className={cn("text-detail", state === "needs-you" ? "text-lantern" : "text-text-secondary")}>
+              {word}
+            </span>
+          </span>
+        </Link>
+      </SidebarTip>
       {showThreads && <SidebarCamps hob={hob} pathname={pathname} />}
     </div>
   );
 }
-
-/** The card's open state, closed whenever the address changes, so a link inside it never leaves it open over the page. */
-const useCardOpen = () => {
-  const href = useRouterState({ select: (s) => s.location.href });
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (href) setOpen(false);
-  }, [href]);
-  return [open, setOpen] as const;
-};

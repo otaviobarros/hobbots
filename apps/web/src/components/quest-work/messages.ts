@@ -1,6 +1,6 @@
 import type { TaskState } from "@hobbots/domain";
 
-/** Copy for a party member's work on another hob's Quest, on Home and on its card (STD-I18N-001). */
+/** Copy for a party member's work on another hob's Quest, on Home and on its page (STD-I18N-001). */
 export const messages = {
   /** The accessible name of a link to the Quest from a member's work, which the row names by its goal. */
   openQuest: ({ name, lead, goal, state }: { name: string; lead: string; goal: string; state: string }) =>

@@ -1,7 +1,7 @@
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
+import { laneHead, openQuest, taskDetails } from "./quest-sheet.ts";
 
 // Issue #566 in the browser: Rook, running alongside Quill, asks Aldric for Quill's core.py. Aldric,
 // on Quill's result, hands it off and answers, and Rook's Task finishes with core.py under Handed to
@@ -111,7 +111,7 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  await openRoom(page, "Build the app");
+  await openQuest(page, "Build the app");
   // Rook finishes only after several paced fake replies, each echoing the prompt and briefing it was given.
   await expect(laneHead(page, "Rook")).toContainText("Done", { timeout: 45_000 });
   const drawer = await taskDetails(page, "Write the frontend");

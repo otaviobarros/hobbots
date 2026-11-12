@@ -11,7 +11,7 @@ const WAIT_MARK = "◷";
 
 /**
  * While a reply runs, the hint is one line that never wraps: a blinking mint dot and who is
- * replying, or when a draft will go. Beside the Quest room it keeps only the dot and one word. The
+ * replying, or when a draft will go. beside a quest's Workbench it keeps only the dot and one word. The
  * longer sentence is Stop's description.
  */
 export function BusyHint({
@@ -47,7 +47,7 @@ const lone = (wait: ReplyWait): string | null => (wait.commands.length === 1 ? (
 /**
  * Once the hob has answered and the reply waits only on commands it started (#1056): a still mint ◷,
  * what it waits on and for how long, counted once a minute. After a long wait it adds that the
- * command may not end on its own, in the same quiet color. Beside the Quest room it keeps the mark,
+ * command may not end on its own, in the same quiet color. beside a quest's Workbench it keeps the mark,
  * one word and the time.
  */
 function WaitHint({

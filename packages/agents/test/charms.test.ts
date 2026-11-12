@@ -164,6 +164,67 @@ describe("the Charm registry (ADR 031)", () => {
     expect(answers[0]?.text).toContain("rook_read");
   });
 
+  // covers PE-005, ADR 038
+  it("[TC-PE-1343-01] offers a session outside any chat the writes of a Charm that offers them there, and steers a push only to a write it offers", async () => {
+    const pushing = (outside: boolean) =>
+      Effect.map(
+        fakeCharm({ id: "rook", name: "Rook", pushesFrom: ["/work/site"] }),
+        (rook): Charm => ({ ...rook, writesOutsideChats: outside }),
+      );
+    const outsideAChat = (charms: ReadonlyArray<Effect.Effect<Charm>>) =>
+      Effect.gen(function* () {
+        const sets = yield* (yield* Charms).forTurn(turn(["pip", "rook"]), { writes: false });
+        return sets.map((each) => ({
+          owner: each.owner,
+          tools: each.tools?.tools.map((t) => t.name) ?? [],
+          steers: (each.takeovers ?? []).map((takeover) => `${takeover.operation} to ${takeover.tool}`),
+        }));
+      }).pipe(Effect.provide(Charms.layer(charms).pipe(Layer.provide(memoryCharmCalls()))), Effect.runPromise);
+
+    // A Charm that offers its writes outside chats, as the GitHub Charm does, is offered whole, and
+    // steers a push to its write as in a chat. One that does not keeps its writes and steering to chats.
+    expect(await outsideAChat([PIP, pushing(true)])).toEqual([
+      { owner: "the Pip Charm", tools: ["pip_read"], steers: [] },
+      { owner: "the Rook Charm", tools: ["rook_read", "rook_write"], steers: ["push to rook_write"] },
+    ]);
+    expect(await outsideAChat([pushing(false)])).toEqual([
+      { owner: "the Rook Charm", tools: ["rook_read"], steers: [] },
+    ]);
+
+    // A write the hob's policy answers Never for is not offered there, and nothing is steered to it.
+    const never = await Effect.gen(function* () {
+      const policy = access(["rook"]);
+      const denied = {
+        ...turn(["rook"]),
+        currentAccess: Effect.succeed({
+          ...policy,
+          policy: {
+            ...policy.policy,
+            hob: { ...policy.policy.hob, charms: { granted: ["rook"], overrides: { "rook.write": "deny" } } },
+          },
+        }),
+      } satisfies CharmTurn;
+      const sets = yield* (yield* Charms).forTurn(denied, { writes: false });
+      return sets.map((each) => [each.tools?.tools.map((t) => t.name), each.takeovers?.length ?? 0]);
+    }).pipe(
+      Effect.provide(
+        Charms.layer([
+          Effect.map(
+            pushing(true),
+            (rook): Charm => ({
+              ...rook,
+              tools: rook.tools.map((tool) =>
+                tool.effect === "write" ? { ...tool, operation: "rook.write" as const } : tool,
+              ),
+            }),
+          ),
+        ]).pipe(Layer.provide(memoryCharmCalls())),
+      ),
+      Effect.runPromise,
+    );
+    expect(never).toEqual([[["rook_read"], 0]]);
+  });
+
   // covers PE-002, ADR 031
   it("[TC-PE-502] stops the hub on a tool name two owners share, naming both, or a name over 64 characters, naming it", async () => {
     expect(await registering([PIP, ROOK])).toBeNull();

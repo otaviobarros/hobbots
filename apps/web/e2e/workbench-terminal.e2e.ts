@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, ticket } from "./quest-sheet.ts";
 import { colored, hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -369,7 +369,7 @@ const rowsPast = (terminal: Locator) =>
 // Issue #1002: the terminal took xterm.js's default 24 rows whatever the dock's height, ran past the
 // dock and scrolled the panel, the room and the window to show its last row.
 // covers UX-002, UX-006
-test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and reading it scrolls nothing around it", async ({
+test("[TC-UX-998] the Terminal fits the Workbench at any window height, and reading it scrolls nothing around it", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -381,7 +381,7 @@ test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and read
     script("complete_task", { delivered: true, key: "done", summary: "Counted." }),
   ]);
   await settled(page);
-  const { bench, panel } = await openTerminal(page, "Count the lines");
+  const { panel } = await openTerminal(page, "Count the lines");
   const terminal = hobTerminal(panel, "Aldric");
   await expect(rows(terminal)).toContainText("300");
 
@@ -403,29 +403,14 @@ test("[TC-UX-998] the Terminal fits the docked Workbench at any height, and read
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("End");
   await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
-  await expect(page.getByRole("button", { name: "Close room" })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "Close the quest" })).toBeInViewport();
 
-  // The shortest dock still holds the terminal's tabs, Find and a couple of rows, with nothing scrolled.
-  await bench.getByRole("separator", { name: "Resize the Workbench" }).press("Home");
+  // A shorter window still holds the terminal's tabs, Find and a couple of rows, with nothing scrolled.
+  await page.setViewportSize({ width: page.viewportSize()?.width ?? 1280, height: 560 });
   await expect.poll(shownRows).toBeLessThan(docked);
   await expect.poll(shownRows).toBeGreaterThanOrEqual(2);
   await fits();
   await terminal.locator(".xterm-accessibility-tree > div").last().focus();
   await page.keyboard.press("End");
-  await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
-
-  // Expanded, the terminal grows to the taller dock and still fits.
-  await bench.getByRole("button", { name: "Make the Workbench as tall as it goes" }).click();
-  await expect.poll(shownRows).toBeGreaterThan(docked);
-  await fits();
-  await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
-
-  // A height this device kept while the dock could be shorter opens at today's least, and fits.
-  await page.evaluate(() => localStorage.setItem("room.dock", JSON.stringify({ v: 1, height: 180 })));
-  await page.reload();
-  await expect(rows(terminal)).toContainText("300");
-  await expect(bench.getByRole("separator", { name: "Resize the Workbench" })).toHaveAttribute("aria-valuenow", "288");
-  await expect.poll(shownRows).toBeGreaterThanOrEqual(2);
-  await fits();
   await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
 });

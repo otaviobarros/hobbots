@@ -343,6 +343,7 @@ export const makeGitHubPush = (repositoryFor: RepositoryFor) =>
       tool: pushTool(),
       input: GitHubWriteInputs.github_push,
       effect: "write",
+      operation: "push",
       otherwise: "nothing can be pushed",
       readBack: pushReadBack(api, git),
       plan: planPush,

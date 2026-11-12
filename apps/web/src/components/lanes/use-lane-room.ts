@@ -2,6 +2,7 @@ import type { AgentId, AttemptId, TaskId, TaskTree } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useBlockers } from "../../api/blockers.ts";
 import { workbenchTreeQuery } from "../../api/workbench.ts";
+import { useWorkbenchStream } from "../../api/workbench-stream.ts";
 import { blockersOn } from "../blockers/blocker-model.ts";
 import { type LanePicks, type LaneRoom, laneAttempts, laneRoom } from "./lane-model.ts";
 
@@ -22,9 +23,9 @@ export interface LaneReads {
 }
 
 /**
- * The room's lanes, from the Task tree and the Workbench records of the tries they show, and where
- * each hob's reads stand. The records come from the Quest's one Workbench read, which the docked
- * Workbench keeps live through the tree's stream, so a lane grows as its hob works; while that read
+ * Each hob's work on a quest, from the Task tree and the Workbench records of the tries it shows, and
+ * where each hob's reads stand. The records come from the Quest's one Workbench read, kept live
+ * through the tree's stream, so a hob's work grows as it works; while that read
  * is on its way or failed, a lane shows only what the tree says, and says why (STD-REACT-015). A
  * lane whose Task has stuck work says Stuck, as its card and the Inbox do (#1087).
  */
@@ -38,7 +39,9 @@ export const useLaneRoom = (
       item.taskId === null ? [] : [item.taskId],
     ),
   );
-  const read = useQuery({ ...workbenchTreeQuery(tree.tasks[0]?.id ?? ("" as TaskId)), enabled: tree.tasks.length > 0 });
+  const topId = tree.tasks[0]?.id ?? ("" as TaskId);
+  const read = useQuery({ ...workbenchTreeQuery(topId), enabled: tree.tasks.length > 0 });
+  useWorkbenchStream(topId, read.data?.cursor);
   const activities = (read.data?.activity.attempts ?? [])
     .map((each) => each.activity)
     .filter((each) => ids.has(each.attempt.id));

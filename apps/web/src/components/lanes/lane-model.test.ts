@@ -181,7 +181,7 @@ const handedOn = (): TaskTree => {
   });
 };
 
-describe("the Quest room's lanes", () => {
+describe("each hob's work in a quest", () => {
   it("TC-UX-905-01 gives the lead a lane and each member of its party one, side by side", () => {
     const room = laneRoom(blackFriday(), []);
     expect(room.order.map((lane) => lane.hobId)).toEqual([ALDRIC, QUILL, ADA]);

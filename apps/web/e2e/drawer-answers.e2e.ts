@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneTask, openRoom, questRoom, ticket } from "./quest-room.ts";
+import { lane, laneTask, openQuest, ticket } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -16,7 +16,7 @@ const openAdasTask = async (page: Page) => {
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
-  await openRoom(page, "Plan the Black Friday campaign");
+  await openQuest(page, "Plan the Black Friday campaign");
   const drawer = laneTask(page, "Build the campaign");
   await expect(drawer).toContainText(QUESTION);
   return { url, drawer };
@@ -39,9 +39,9 @@ test("[TC-UX-085] a question waiting for you is answered in its lane in the Ques
   // The question closes in place, and the chat shows the same answer, each saying where you gave it (#671).
   await expect(drawer).toContainText("You answered here: Yes, Dec 12 for international orders.");
   await expect(answer).toHaveCount(0);
-  await questRoom(page, "Plan the Black Friday campaign").getByRole("button", { name: "Close room" }).click();
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(page.getByRole("region", { name: "Ada asks you" })).toContainText(
-    "You answered in the Quest room: Yes, Dec 12 for international orders.",
+    "You answered in the quest: Yes, Dec 12 for international orders.",
   );
 
   // Once the question is answered, her part finishes and the Quest wraps up.

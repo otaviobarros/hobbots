@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead, ticket } from "./quest-room.ts";
+import { lane, laneHead, ticket } from "./quest-sheet.ts";
 
 // Issue #273 in the browser: a party member's request reaches you in the Inbox, under its lead's
 // thread, and never its lead. The hub-level side is apps/server/test/quests.test.ts.
@@ -165,12 +165,14 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
     .getByRole("region", { name: "Nettle asks permission" });
   await expect(inTray.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
 
-  // The ticket opens the room, where Nettle's lane says it needs you and what it waits on, while
-  // the chat's tray beside it holds the request; Allow once there decides it.
+  // The ticket opens the quest, where Nettle's work says it needs you and what it waits on, while
+  // the chat's tray under the sheet holds the request; Allow once there decides it.
   await questTicket.click();
   await expect(laneHead(page, "Nettle")).toContainText("Needs you");
   await expect(lane(page, "Nettle")).toContainText("Waits on you");
+  await page.keyboard.press("Escape");
   await inTray.getByRole("button", { name: "Allow once" }).click();
+  await questTicket.click();
 
   // Nettle goes on and finishes, and nothing waits on you any more.
   await expect(laneHead(page, "Nettle")).toContainText("Done", { timeout: 20_000 });

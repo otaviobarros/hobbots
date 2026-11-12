@@ -36,3 +36,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [034 — The Summoning Charm](034-summoning-charm.md)
 - [036 — Searching and reading the web](036-web-search-and-pages.md)
 - [037 — Chat and camps](037-chat-and-camps.md)
+- [038 — Charm writes in Task sessions](038-charm-writes-in-task-sessions.md)

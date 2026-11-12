@@ -211,22 +211,18 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
 });
 
 // covers AG-002, UX-005
-test("[TC-AG-075] changing the role in the profile updates the hob's card, page and profile at once", async ({
+test("[TC-AG-075] changing the role in the profile updates Your hobs, the hob's page and profile at once", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
-  // The hob's card, opened from its tile in the sidebar, shows its role.
-  const cardRole = async (role: string) => {
-    await page
-      .getByRole("navigation", { name: "Sections" })
-      .getByRole("button", { name: /^Pip, / })
-      .click();
-    await expect(page.getByRole("dialog", { name: "Pip" })).toContainText(role);
-    await page.keyboard.press("Escape");
+  // Your hobs shows the hob's role on its card.
+  const listedRole = async (role: string) => {
+    await page.goto(`${current.url}/#/hobs`);
+    await expect(page.getByRole("main", { name: "Your hobs" })).toContainText(role);
+    await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   };
-  await cardRole("Writer");
+  await listedRole("Writer");
 
   await editHob(page);
   const profile = page.getByRole("main", { name: "Pip's profile" });
@@ -251,8 +247,8 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
+  await listedRole("QA engineer");
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
-  await cardRole("QA engineer");
   await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
   await page.getByRole("link", { name: "Your chat with Pip" }).click();
   await editHob(page);
@@ -266,9 +262,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
   await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   await expect(chip).toHaveText("Bug hunter");
 
-  await page.goto(`${current.url}/#/hobs/${pip.id}`);
-  await cardRole("Bug hunter");
-  await page.getByRole("link", { name: "Your chat with Pip" }).click();
+  await listedRole("Bug hunter");
   const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(
     current,
     "GET",
