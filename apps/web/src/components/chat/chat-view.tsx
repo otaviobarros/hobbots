@@ -47,6 +47,7 @@ import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
+import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
 import { ChatSearch } from "../chat-search/chat-search.tsx";
 import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
@@ -481,36 +482,51 @@ function Transcript({
   // A reply's searches and pages, as step lines and sources (ADR 036).
   const webUsage = useQuery({ ...threadWebQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   const web = repliesWeb(webUsage.data, transcript);
+  // The message before each, which tells a quiet reply; chapters lay the transcript out in pieces.
+  const previous = new Map(transcript.map((message, index) => [message.id, transcript[index - 1]]));
+  const row = (message: Message, split: ReactNode) => (
+    <>
+      {switches.has(message.id) && message.runtime !== null && (
+        <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
+      )}
+      {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
+      {!isQuietReply(message, previous.get(message.id)) && (
+        <MessageRow
+          message={message}
+          hob={hob}
+          focused={message.id === focusMessageId}
+          resume={resume(message)}
+          web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
+          actions={split}
+          after={
+            <>
+              <SkillUsedLines message={message} hob={hob} />
+              <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />
+            </>
+          }
+        >
+          <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
+        </MessageRow>
+      )}
+      {receipts.of(message)}
+      {work.after(message.id)}
+    </>
+  );
   return (
     <>
       {work.before}
-      {transcript.map((message, index) => (
-        <Fragment key={message.id}>
-          {switches.has(message.id) && message.runtime !== null && (
-            <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
-          )}
-          {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
-          {!isQuietReply(message, transcript[index - 1]) && (
-            <MessageRow
-              message={message}
-              hob={hob}
-              focused={message.id === focusMessageId}
-              resume={resume(message)}
-              web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
-              after={
-                <>
-                  <SkillUsedLines message={message} hob={hob} />
-                  <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />
-                </>
-              }
-            >
-              <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
-            </MessageRow>
-          )}
-          {receipts.of(message)}
-          {work.after(message.id)}
-        </Fragment>
-      ))}
+      {/* Divided by its chapters once the thread exists (ADR 037); the empty chat has none yet. */}
+      {thread === undefined ? (
+        transcript.map((message) => <Fragment key={message.id}>{row(message, undefined)}</Fragment>)
+      ) : (
+        <ChapterTranscript
+          hob={hob}
+          thread={thread}
+          transcript={transcript}
+          focusMessageId={focusMessageId}
+          renderMessage={row}
+        />
+      )}
       {saves.isError && saves.data === undefined && (
         <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
       )}

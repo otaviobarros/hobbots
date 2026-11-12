@@ -26,6 +26,7 @@ import { ApprovalsHandlers } from "./approvals.ts";
 import { BackpackHandlers } from "./backpack.ts";
 import { BackupHandlers } from "./backup-handlers.ts";
 import { BlockersHandlers } from "./blockers.ts";
+import { ChaptersHandlers } from "./chapters.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
 import { DevicesHandlers } from "./device-handlers.ts";
 import { DeviceGate } from "./devices.ts";
@@ -253,6 +254,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     AgentsHandlers,
     HobChangesHandlers,
     ThreadsHandlers,
+    ChaptersHandlers,
     SystemHandlers,
     SetupHandlers,
     RuntimesHandlers,

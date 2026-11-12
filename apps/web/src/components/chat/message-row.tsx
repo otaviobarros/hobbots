@@ -60,6 +60,7 @@ export function MessageRow({
   resume,
   after,
   web,
+  actions,
   children,
 }: {
   message: Message;
@@ -67,6 +68,8 @@ export function MessageRow({
   focused?: boolean;
   resume?: ContinueReply | undefined;
   after?: ReactNode;
+  /** The message's own ⋯ menu, beside its time, such as Split here (ADR 037). */
+  actions?: ReactNode;
   web?: ReplyWebParts | undefined;
   children?: ReactNode;
 }) {
@@ -74,14 +77,26 @@ export function MessageRow({
   if (message.role === "user") {
     return (
       <div id={id} className={cn(yourColumn, focused && focusRing)}>
-        <span className="text-meta text-label">{copy.you({ time: formatTime(message.createdAt) })}</span>
+        <span className="flex items-center gap-1 text-meta text-label">
+          {actions}
+          {copy.you({ time: formatTime(message.createdAt) })}
+        </span>
         <div className={bubble}>{message.content}</div>
       </div>
     );
   }
 
   return (
-    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} after={after} web={web}>
+    <ReplyRow
+      message={message}
+      hob={hob}
+      id={id}
+      focused={focused}
+      resume={resume}
+      after={after}
+      web={web}
+      actions={actions}
+    >
       {children}
     </ReplyRow>
   );
@@ -95,6 +110,7 @@ function ReplyRow({
   resume,
   after,
   web,
+  actions,
   children,
 }: {
   message: Message;
@@ -104,6 +120,7 @@ function ReplyRow({
   resume: ContinueReply | undefined;
   after: ReactNode;
   web: ReplyWebParts | undefined;
+  actions: ReactNode;
   children: ReactNode;
 }) {
   const streaming = isInProgress(message.status);
@@ -123,6 +140,7 @@ function ReplyRow({
           {copy.lead}
         </span>
         <span className="text-meta text-label">{writing ? copy.writing : formatTime(message.createdAt)}</span>
+        {actions}
       </span>
       <div className="ms-10 flex min-w-0 flex-col gap-[3px]">
         {searched.lines}
