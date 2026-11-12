@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
+import { Claim } from "./claim.ts";
 import { HobProposal } from "./hob-proposals.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteId, QuestId, Question } from "./quest.ts";
@@ -23,8 +24,8 @@ export const BackpackItemId = Schema.String.pipe(Schema.brand("BackpackItemId"))
 export type BackpackItemId = typeof BackpackItemId.Type;
 
 /**
- * The kinds of ADR 019, how a skill proposal ended (ADR 029), and how a hob proposal no call waited for
- * settled (ADR 034). Every kind but `progress` and
+ * The kinds of ADR 019, how a skill proposal ended (ADR 029), how a hob proposal no call waited for
+ * settled (ADR 034), and a clash of claims (ADR 037). Every kind but `progress` and
  * `skill-proposal` is actionable and can wake its hob (IN-005): the hob hears how its proposal ended
  * in its next turn, never in a turn of its own.
  */
@@ -42,6 +43,7 @@ export const BackpackItemKind = Schema.Literals([
   "progress",
   "skill-proposal",
   "hob-proposal",
+  "claim-clash",
 ]);
 export type BackpackItemKind = typeof BackpackItemKind.Type;
 
@@ -92,6 +94,12 @@ export const BackpackPayload = Schema.Union([
    * (ADR 034). Actionable, like an approval's outcome: the manager hears what was made or denied.
    */
   Schema.TaggedStruct("hob-proposal", { proposal: HobProposal }),
+  /**
+   * A claim of a Task the recipient leads, or works on, clashes with open claims of other Tasks on
+   * the same path or branch (ADR 037). Actionable: the lead decides how to share the work; neither
+   * Task is stopped.
+   */
+  Schema.TaggedStruct("claim-clash", { claim: Claim, clashes: Schema.Array(Claim) }),
 ]);
 export type BackpackPayload = typeof BackpackPayload.Type;
 

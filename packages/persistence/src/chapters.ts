@@ -22,7 +22,7 @@ import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
 import { unreadExpression } from "./thread-columns.ts";
 
-// A thread's chapters (ADR 037, migration 0098). The rules of each command are the pure planners
+// A thread's chapters (ADR 037, migration 0099). The rules of each command are the pure planners
 // in @hobbots/domain; this runs them on the chapters as stored, inside the transaction that writes
 // their result and journals its event, so a crash leaves all of a change or none of it.
 

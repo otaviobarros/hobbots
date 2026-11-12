@@ -52,7 +52,7 @@ export const RuntimeSession = Schema.Struct({
   runtime: RuntimeKind,
   /** The runtime's own id for the session. */
   sessionId: Schema.String,
-  /** The chapter the session belongs to; migration 0098 gave every earlier session its thread's first. */
+  /** The chapter the session belongs to; migration 0099 gave every earlier session its thread's first. */
   chapterId: ChapterId,
   /**
    * How many chapters had been merged into its chapter when the session started there (ADR 037).

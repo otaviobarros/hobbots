@@ -7,6 +7,7 @@ import {
   type BackpackPayload,
   checkpointText,
   choicesText,
+  claimClashText,
   type EventEnvelope,
   type HobProposal,
   isLiveAttempt,
@@ -186,8 +187,20 @@ const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" |
       return `Approval ${payload.approval.state}: "${payload.approval.label}"`;
     case "deadline":
       return `Deadline passed at ${payload.dueAt} (Task ${payload.taskId})`;
+    default:
+      return hubArrivalText(payload);
+  }
+};
+
+/** What the hub itself sent a hob, as its memory keeps it: how a proposal ended, or a clash of claims (ADR 037). */
+const hubArrivalText = (
+  payload: Extract<BackpackPayload, { readonly _tag: "skill-proposal" | "hob-proposal" | "claim-clash" }>,
+): string => {
+  switch (payload._tag) {
     case "skill-proposal":
       return skillProposalText(payload.proposal);
+    case "claim-clash":
+      return claimClashText(payload.claim, payload.clashes);
     default:
       return hobProposalText(payload.proposal);
   }

@@ -200,6 +200,31 @@ Building the two commands settled these details.
 - **It is refused as an archive is.** A reply running or waiting, an approval waiting or a retired hob stops it, and so does a thread that is not its hob's open chat. A superseded chat is read-only for good, kept with the hob's archived threads, and has the new chat as its successor through the new chat's `origin`.
 - **The key is the new thread's id.** Both commands take a key that becomes the new thread's id, as a note's key does, so the same request sent again returns what it did, and a key that names another thread is refused.
 
+## Amendment: the claims register ([#1388](https://github.com/otaviobarros/hobbots/issues/1388))
+
+Building the claims register settled these details.
+
+- **A released number is never handed out again.** Reusing it would keep numbers dense, but a number seen in a closed branch would then mean two things. So a number is unique in its folder of a repository for good, and the next number is one past every number `main` and the register have held.
+- **Uniqueness.** A number is unique on its repository, the folder its numbers count and the number. An open path or branch claim is unique per Task, since two Tasks may claim the same one and each contests the other, and a retried Task may claim again what its failure released; "unique on scope and key" holds for numbers only.
+- **A repository is known across clones.** A claim names a folder in a Git repository, and the hub keys it by the repository's `origin` remote, as memory keys a project (ADR 028), so a checkout and a worktree share their claims. Paths are relative to the repository's top. The folder a hob names is resolved, links and `..` taken as the kernel walks them, and must be one of its folders or inside one; a hob given part of a repository claims paths and numbered folders only inside that part.
+- **Main is read, never fetched.** The hub reads the numbers on the repository's default branch as the clone last fetched it, without running Git. It makes no network call in the claim's transaction.
+- **The machine is `ClaimMachine`.** It is named after its record, like the other machines. A number is never contested. A Task's claims are released in the transaction that ends it.
+- **`claim` is a Task tool.** It needs a Task to hold the claim, so in a chat with no Task yet it starts one, as `plan_steps` does.
+- **One sequence scope.** Numbers are not only for migrations and ADRs: any folder whose files start with a number counts the same way. So the scopes are `sequence`, `path` and `branch`, and the hob names the folder. No scope names a kind of file.
+
+## Amendment: claims beyond the repository ([#1413](https://github.com/otaviobarros/hobbots/issues/1413))
+
+**Direction, not decided.** The register of #1388 serves a coding team. Hobbots is for every team, and a marketing, finance or support hob shares things that clash the same way: a post, a campaign's audience, a calendar slot, a budget tab, an invoice, a month being closed, a customer several teams write to. What can be claimed must not be a fixed list in the code. The direction, to be decided in #1413 before it is built:
+
+- **A claim is what, where and how.** *Where* is a space: a Git repository as today, a connector's space such as a Drive, a CRM or a Slack workspace, or the hub itself. *What* is a key in that space. *How* is the shape of its clash rule. A connector says what can be claimed in its space, so claims grow with connectors, not with the hub's code.
+- **Four shapes.** Same name (branches today), inside, by whole segments (paths today), sequence (numbers today, never contested) and overlapping time (a send window, an accounting period). Each is a pure rule in the claim's transaction, as today.
+- **Read or write.** Two readers never clash.
+- **How hard a clash bites.** A heads-up through the backpack, as today; wait until the other Task ends; or ask the person first. Paying an invoice twice asks; two drafts of a post only hear of each other.
+- **Claims the hub makes.** When a hob edits a doc, sends an email or opens a branch through a tool the hub knows, the hub claims it for the Task, so a person never has to say "claim". Clients show who holds what in plain words.
+- **Expiry and hand-off.** A claim can lapse after a time, and a waiting Task can take it once it is released.
+
+`ClaimMachine`, the register, clash items in the backpack and release when a Task ends stay as they are; the space and the shape replace the fixed scope list.
+
 ## Validation
 
 The scenarios that would show this decision holds. None is proven yet; each names the slice that will prove it.
@@ -215,4 +240,4 @@ The scenarios that would show this decision holds. None is proven yet; each name
 - A changed decision is kept and crossed out; find answers "where did we decide X" from records and cites them; a private camp's entries never reach memory. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - The brief and chapter summaries are written by projectors that resume from their cursor after a restart and write nothing twice. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
 - With No AI chosen for the hub's brain, briefs, chapter summaries and camp suggestions still appear from their rules, and no model is called; with a brain chosen, a `HubDecider` answer that does not decode falls back to the rule. Not proven yet ([#1364](https://github.com/otaviobarros/hobbots/issues/1364)).
-- A quest's updates land in its camp; two quests in different camps that ask for a migration number get different numbers, and two that claim the same path both get a Heads-up through the backpack. Not proven yet ([#1365](https://github.com/otaviobarros/hobbots/issues/1365)).
+- Two quests in different camps that ask for a migration number get different numbers, `[TC-OR-1388-01]`; two that claim the same path each tell their lead through the backpack and neither stops, `[TC-OR-1388-02]`; a released number is never handed out again, `[TC-OR-1388-03]`; the register agrees with a model, claims at once included, `[TC-OR-1388-04]`; a retried Task claims again what its failure released, `[TC-OR-1388-05]`; and no spelling of a folder reaches a repository outside the hob's folders, `[TC-OR-1388-06]` (all in `apps/server/test/claims.test.ts`). A quest's updates land in its camp, and the camp shows the clash as a Heads-up: not proven yet ([#1389](https://github.com/otaviobarros/hobbots/issues/1389), [#1390](https://github.com/otaviobarros/hobbots/issues/1390)).

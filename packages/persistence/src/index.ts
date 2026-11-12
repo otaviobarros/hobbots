@@ -4,6 +4,7 @@ export * from "./backpack.ts";
 export * from "./backup.ts";
 export * from "./chapters.ts";
 export * from "./charm-calls.ts";
+export * from "./claims.ts";
 export * from "./commit-identity.ts";
 export * from "./devices.ts";
 export * from "./diagnostics.ts";

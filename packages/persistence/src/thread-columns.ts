@@ -19,7 +19,7 @@ export const unreadColumn = (sql: SqlClient.SqlClient) => sql`${unreadExpression
 
 /**
  * The thread's live chapter, as `live_chapter_id`, and how many chapters were merged into it, as
- * `live_chapter_merges` (ADR 037, migration 0098).
+ * `live_chapter_merges` (ADR 037, migration 0099).
  */
 export const liveChapterColumn = (sql: SqlClient.SqlClient) =>
   sql`(SELECT c.id FROM chapters c WHERE c.thread_id = threads.id AND c.state = 'live') AS live_chapter_id,

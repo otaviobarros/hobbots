@@ -80,6 +80,7 @@ import {
   BackpackLive,
   ChapterRepositoryLive,
   CharmCallsLive,
+  ClaimRegisterLive,
   CodingSetupDismissalRepository,
   DeviceRepositoryLive,
   EventJournal,
@@ -328,6 +329,8 @@ const ServerLive = Layer.unwrap(
       GrantRepositoryLive,
       TaskRepositoryLive,
       TaskToolCallsLive,
+      // The numbers, paths and branches hobs claim across every chat and camp (ADR 037).
+      ClaimRegisterLive,
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,

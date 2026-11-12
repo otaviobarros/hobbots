@@ -36,7 +36,7 @@ const messageId = MessageId.make("m1");
 const project = "/work/project";
 const repository = "otaviobarros/hobbots";
 
-// Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095 and 0098 too: the repository that seeds the hobs writes their Charms, whether
+// Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095 and 0099 too: the repository that seeds the hobs writes their Charms, whether
 // other hobs see them, their good at and who made and summoned them, and their Summoning scope, and seeds each thread
 // with the draft it tries, its kind and state and its first chapter.
 const before = Object.fromEntries(
@@ -51,7 +51,7 @@ const before = Object.fromEntries(
         "0083_summoning",
         "0084_thread_skill_trial",
         "0095_thread_kinds",
-        "0098_chapters",
+        "0099_chapters",
       ].includes(key),
   ),
 ) as typeof migrations;

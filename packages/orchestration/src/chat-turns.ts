@@ -21,8 +21,11 @@ import { BRIEF_LIMIT, briefingShows, cut, ownerBriefingParts } from "./briefs.ts
 import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
 import { reportingRules } from "./reporting.ts";
 
-/** Calls that start work, so a chat turn with no open Task starts one for its request. */
-const STARTS_WORK: ReadonlySet<TaskToolName> = new Set(["plan_steps", "start_quest", "delegate_task"]);
+/**
+ * Calls that start work, so a chat turn with no open Task starts one for its request. A claim needs a
+ * Task to hold it (ADR 037), so it starts one too.
+ */
+const STARTS_WORK: ReadonlySet<TaskToolName> = new Set(["plan_steps", "start_quest", "delegate_task", "claim"]);
 
 /** Calls that need the turn's own Attempt: starting work, and returning the result it produced. */
 const NEEDS_ATTEMPT: ReadonlySet<TaskToolName> = new Set([...STARTS_WORK, "complete_task"]);
@@ -214,7 +217,7 @@ export const makeChatResolver = (
           if (!STARTS_WORK.has(name)) {
             return yield* refuse(
               "no-task",
-              "You are not working on a Task in this conversation. plan_steps, start_quest or delegate_task starts one for this request.",
+              "You are not working on a Task in this conversation. plan_steps, start_quest, delegate_task or claim starts one for this request.",
             );
           }
           // The request's Task counts against its hob's open Tasks, whichever call starts it.

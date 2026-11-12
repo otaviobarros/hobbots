@@ -206,6 +206,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
+  // The claims register (ADR 037) has no screen yet; a clash reaches each lead through its backpack.
+  "ClaimMade",
+  "ClaimContested",
+  "ClaimCleared",
+  "ClaimReleased",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -217,7 +222,11 @@ type UnappliedEvent = Extract<
       | "TurnEnded"
       | "ThreadRunChanged"
       | "HobPresenceChanged"
-      | "HobPresenceRemoved";
+      | "HobPresenceRemoved"
+      | "ClaimMade"
+      | "ClaimContested"
+      | "ClaimCleared"
+      | "ClaimReleased";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

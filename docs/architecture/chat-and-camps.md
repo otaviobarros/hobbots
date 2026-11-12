@@ -37,7 +37,7 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 - Start ends the live chapter, which rests, and refuses an empty title or a live chapter with no message yet. Split cuts a chapter at one of its messages, not its first: the messages from there on make a new chapter right after it, live when the one it came from was. Merge brings a chapter's messages into the chapter before it, which keeps its id and title and is live when the merged one was. Both number the chapters again from 1.
 - A runtime session belongs to one chapter: `RuntimeSession` is keyed by thread, runtime and chapter, and `liveSession` gives the one a turn resumes. A turn in a new chapter, after a start, a split of the live chapter or a merge into it, starts a new session in place of the old chapter's, which is never resumed, on Claude Code, Codex and every runtime alike. Until the context pack lands ([#1380](https://github.com/otaviobarros/hobbots/issues/1380)), a new chapter's session hears only the memory brief and the roster, and a brain switch is briefed with the live chapter's transcript alone. A merge into the live chapter makes it live again with a new session: each session records how many chapters had been merged into its chapter when it started (`chapterMerges`), and `liveSession` resumes it only while that matches `Thread.liveChapterMerges`. So a session a turn under way records after the merge, from a read before it, is never resumed, with no lock shared between the turn and the merge. The merge also drops the sessions the chapter held. A split or merge also drops the thread's briefing checkpoint, and gives the messages it moves the revision of its event, so a client holding an older version takes the new one; a thread you had read stays read.
 - Moving a chapter into a camp re-parents it with its messages, decisions, artifacts, open questions and the quests it started, in one transaction, and leaves a stub. A running quest moves whole.
-- Migration (0098): each thread gets one live chapter holding its history, started when the thread was made, with no title; every message joins it, and every session the thread keeps belongs to it and goes on being resumed.
+- Migration (0099): each thread gets one live chapter holding its history, started when the thread was made, with no title; every message joins it, and every session the thread keeps belongs to it and goes on being resumed.
 - Slices: [#1363](https://github.com/otaviobarros/hobbots/issues/1363), [#1364](https://github.com/otaviobarros/hobbots/issues/1364).
 
 ## Records
@@ -51,7 +51,7 @@ Each is written in the same transaction and journal as the message that made it,
 | Brief | threadId, text, revision, writtenBy, basis cursor | rewritten by a projector at chapter ends and quest steps |
 | CampSuggestion | threadId, chapterId, reason codes and counts | open, kept, accepted, expired; at most one per chapter |
 | CarriedOver (the ADR's CarriedItem) | fromThreadId, toThreadId, ref (Task, question, reminder or backpack item), label | written once by Start fresh |
-| Claim | scope (migration number, ADR number, path, branch), key, holder Task | held, released, contested; unique on scope and key |
+| Claim | scope (sequence, path, branch), repository, key, holder Task, actor | [Claim](machines/claim.md): held, contested, released. A number is unique in its folder of a repository for good; an open path or branch once per Task |
 
 A note to self is a message role that never wakes the dispatcher.
 
@@ -85,9 +85,15 @@ Every part has a share of the budget, and the shares add up to it. The pack neve
 
 ## The claims register
 
-- `claim` hands out the next free migration or ADR number across every hob, chat and camp, and records path and branch claims.
-- A pure rule in the claim's transaction finds clashes with every open claim. The hub settles what it can and tells each lead through the backpack; the camp shows a Heads-up. It calls no model.
-- Claims are released when their Task ends. Whether a released number may be handed out again is not decided yet; [#1388](https://github.com/otaviobarros/hobbots/issues/1388) settles it.
+Built in [#1388](https://github.com/otaviobarros/hobbots/issues/1388): `Claim` and its machine in `packages/domain/src/claim.ts`, the register in `packages/persistence/src/claims.ts` (migration 0098), and `claim` with the Task tools on every runtime.
+
+- **`claim`** is a Task tool. It records a claim for the Task the hob works on, and in a chat with no Task yet it starts one, as `plan_steps` does. A claim names a folder of the hob's, inside a Git repository. The repository is known by its `origin` remote, so two clones or worktrees share their claims. The named folder is resolved, links and `..` taken as the kernel walks them, before it is checked against the hob's folders, and a hob given part of a repository claims paths and numbered folders only inside that part.
+- **Sequences.** A `sequence` claim is the next number in a folder whose files start with one: migrations, ADRs, or any other numbered files. The hob names the folder whose files the numbers count, such as `docs/decisions`. The hub reads that folder on the repository's default branch as the clone has it (`origin`'s HEAD, else `origin/main`, else `main`), without running Git, and hands out one past every number `main` and the register hold. A number the hob already uses is kept when it is free; otherwise the hub settles on the next free one and says so. Concurrent claims take the journal's head in turn, so each gets its own number.
+- **A released number is never handed out again** (decided in #1388). Reusing it would keep numbers dense, but a number seen in a closed branch would then mean two things. A number is unique in its folder of a repository for good, released or not.
+- **Paths and branches.** A pure rule in the claim's transaction finds clashes with every other Task's open claim in the same repository: the same branch, or a path that is the other or inside it, comparing whole names. The new claim and each held claim it clashes with become contested. Each lead involved gets a `claim-clash` backpack item: the nearest lead still at work above the Task, or its owner when nobody leads it. Neither Task is stopped. A claim of the same path or branch by the same Task again changes nothing. It calls no model.
+- **Release.** A Task's claims are released in the transaction that ends it, completed, failed or cancelled, at any depth; a contested claim that clashes with nothing left goes back to held. A retry that reopens a failed Task does not bring its claims back, and the retried Task may claim the same paths and branches again.
+- **Not built yet.** The camp's Heads-up for a clash ([#1390](https://github.com/otaviobarros/hobbots/issues/1390)).
+- **Next.** Claims beyond the repository: spaces from connectors, four clash shapes, read or write, how hard a clash bites, and claims the hub makes on its own ([#1413](https://github.com/otaviobarros/hobbots/issues/1413), ADR 037 amendment).
 - Slice: [#1365](https://github.com/otaviobarros/hobbots/issues/1365).
 
 ## The hub's brain

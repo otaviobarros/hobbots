@@ -6,6 +6,7 @@ import { BackpackItem } from "./backpack.ts";
 import { CarriedOver } from "./carried-over.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Chapter } from "./chapter.ts";
+import { Claim } from "./claim.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HobProposal } from "./hob-proposals.ts";
@@ -179,6 +180,18 @@ const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
 const NotePickedUp = Schema.TaggedStruct("NotePickedUp", { note: TaskNote });
 /** A lead gave one Task's artifact to another Task. */
 const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact: ArtifactRef });
+/**
+ * A hob claimed a number, a path or a branch for its Task (ADR 037), with the open claims of other
+ * Tasks it clashes with, which the same change contested. Each lead involved hears of a clash
+ * through its backpack.
+ */
+const ClaimMade = Schema.TaggedStruct("ClaimMade", { claim: Claim, clashes: Schema.Array(Claim) });
+/** Another Task's claim on the same path or branch made this claim contested. */
+const ClaimContested = Schema.TaggedStruct("ClaimContested", { claim: Claim });
+/** The last claim this one clashed with was released, so it is held alone again. */
+const ClaimCleared = Schema.TaggedStruct("ClaimCleared", { claim: Claim });
+/** The claim's Task ended, so the claim was released; a released number is never handed out again. */
+const ClaimReleased = Schema.TaggedStruct("ClaimReleased", { claim: Claim });
 /** A Task passed the completion gate, with its result and the artifacts it made. */
 const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
 /** The Task that holds a Quest passed the completion gate. */
@@ -397,6 +410,10 @@ export const JournaledEvent = Schema.Union([
   HandedOff,
   TaskCompleted,
   QuestCompleted,
+  ClaimMade,
+  ClaimContested,
+  ClaimCleared,
+  ClaimReleased,
   BackpackItemRecorded,
   BackpackItemChanged,
   PairingRequested,
@@ -457,16 +474,16 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   AgentUpserted: 1,
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly. 4: its `kind`, `goal`, `private`, `origin` and `state` (ADR 037).
-  // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0098).
+  // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0099).
   ThreadUpserted: 5,
-  // 2: its threads' sessions' `chapterId` and `liveChapterId`, as `ThreadUpserted` 5 (migration 0098).
+  // 2: its threads' sessions' `chapterId` and `liveChapterId`, as `ThreadUpserted` 5 (migration 0099).
   CampMade: 2,
   ChatStartedFresh: 2,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
-  // `chapterId` (ADR 037, migration 0098).
+  // `chapterId` (ADR 037, migration 0099).
   MessageUpserted: 5,
-  // 2: its message's `chapterId` (migration 0098).
+  // 2: its message's `chapterId` (migration 0099).
   MessageQueued: 2,
   MessageDequeued: 1,
   ChapterStarted: 1,
@@ -503,6 +520,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
+  ClaimMade: 1,
+  ClaimContested: 1,
+  ClaimCleared: 1,
+  ClaimReleased: 1,
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
   BackpackItemChanged: 1,

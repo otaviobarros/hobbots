@@ -891,6 +891,7 @@ describe("hob tools for Tasks and Quests", () => {
       message_task: { key: "s-message", task_id: String(TOP), text: "Go on" },
       complete_task: { key: "s-complete", summary: "The copy is ready" },
       cancel_task: { key: "s-cancel", task_id: String(TOP) },
+      claim: { key: "s-claim", scope: "path", path: "README.md" },
     };
     const before = await head();
     const tasksBefore = (await tree()).tasks;

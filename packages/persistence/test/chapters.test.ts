@@ -19,7 +19,7 @@ import { SqlClient } from "effect/sql";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
-import chaptersMigration from "../src/migrations/0098_chapters.ts";
+import chaptersMigration from "../src/migrations/0099_chapters.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1379 (ADR 037): a thread's transcript is split into chapters. The migration gives each
@@ -61,13 +61,13 @@ const userMessage = (threadId: string, id: string, status: Message["status"] = "
     createdAt: NOW,
   });
 
-describe("0098_chapters", () => {
-  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0098")) as typeof migrations;
+describe("0099_chapters", () => {
+  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0099")) as typeof migrations;
   const layer = Layer.mergeAll(HobbotsRepositoryLive, ChapterRepositoryLive, EventJournal.layer).pipe(
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
 
-  /** A thread, its messages and their journal entries, as the hub stored them before 0098. */
+  /** A thread, its messages and their journal entries, as the hub stored them before 0099. */
   const stored = (threadId: string, sessions: ReadonlyArray<string>, messages: ReadonlyArray<[string, string]>) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();

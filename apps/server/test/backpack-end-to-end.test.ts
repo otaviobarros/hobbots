@@ -359,7 +359,8 @@ describe("the backpack end to end", () => {
       ["user", "complete"],
       ["assistant", "complete"],
     ]);
-    // The launch shows waiting once Aldric's turn has ended, which comes after its reply is stored.
+    // Aldric's Task waits on Quill's once his turn has ended: a write of its own, which may land just
+    // after Quill's Task starts, so wait for both.
     const working = await run(
       treeWhen((tree) => ownedBy(tree, QUILL)[0]?.state === "active" && tree.tasks[0]?.state === "waiting"),
     );

@@ -97,7 +97,8 @@ import memoryVersionAuthors from "./0094_memory_version_authors.ts";
 import threadKinds from "./0095_thread_kinds.ts";
 import memoryCapturePrivateThreads from "./0096_memory_capture_private_threads.ts";
 import carriedOver from "./0097_carried_over.ts";
-import chapters from "./0098_chapters.ts";
+import claims from "./0098_claims.ts";
+import chapters from "./0099_chapters.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -202,5 +203,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0095_thread_kinds": threadKinds,
   "0096_memory_capture_private_threads": memoryCapturePrivateThreads,
   "0097_carried_over": carriedOver,
-  "0098_chapters": chapters,
+  "0098_claims": claims,
+  "0099_chapters": chapters,
 };
