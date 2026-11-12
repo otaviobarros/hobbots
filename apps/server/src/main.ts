@@ -6,6 +6,7 @@ import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node
 import {
   ActivityRecorder,
   ApprovalService,
+  ArtifactContents,
   CampBriefs,
   CampDrift,
   CampSuggestionService,
@@ -600,6 +601,8 @@ const ServerLive = Layer.unwrap(
           Layer.mergeAll(
             ActivityRecorder.layer(),
             TaskFiles.layer,
+            // An artifact's versions and contents for the camp sheet (#1434), read like the Files tab.
+            ArtifactContents.layer,
             // Exports of your threads and work history (ADR 026), never inside a hob's folder.
             DataExport.layer(config.version).pipe(
               Layer.provide(

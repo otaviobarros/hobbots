@@ -1,7 +1,9 @@
 import {
   Artifact,
+  ArtifactContentRefusal,
   ArtifactReviewOutcome,
   ArtifactReviewRefusal,
+  ArtifactVersions,
   Brief,
   DECISION_TEXT_MAX,
   Decision,
@@ -11,7 +13,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { ThreadNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
@@ -47,6 +49,20 @@ export class ArtifactReviewChangeRefused extends Schema.TaggedError<ArtifactRevi
   "ArtifactReviewChangeRefused",
   { threadId: ThreadId, artifactId: RegisteredArtifactId, reason: ArtifactReviewRefusal },
   { httpApiStatus: 409 },
+) {}
+
+/** The chat or camp has no such artifact, or no such version of it. */
+export class ArtifactNotFound extends Schema.TaggedError<ArtifactNotFound>()(
+  "ArtifactNotFound",
+  { threadId: ThreadId, artifactId: RegisteredArtifactId },
+  { httpApiStatus: 404 },
+) {}
+
+/** A version whose contents the hub does not serve, with why (#1434). */
+export class ArtifactContentUnavailable extends Schema.TaggedError<ArtifactContentUnavailable>()(
+  "ArtifactContentUnavailable",
+  { artifactId: RegisteredArtifactId, version: Schema.Number, reason: ArtifactContentRefusal },
+  { httpApiStatus: 404 },
 ) {}
 
 /**
@@ -87,6 +103,24 @@ export class RecordsGroup extends HttpApiGroup.make("records")
       payload: ReviewArtifactPayload,
       success: Artifact,
       error: [ThreadNotFound, ArtifactReviewChangeRefused],
+    }),
+    // An artifact's versions, newest first, and how it is shown (#1434).
+    HttpApiEndpoint.get("artifactVersions", "/threads/:threadId/artifacts/:artifactId/versions", {
+      params: { threadId: ThreadId, artifactId: RegisteredArtifactId },
+      success: ArtifactVersions,
+      error: ArtifactNotFound,
+    }),
+    // One version's contents, read only: what the hub kept of it, or the latest one as it is now in
+    // the hob's folders, only inside them. Text is redacted and cut to what a preview shows; an
+    // image is served as it is, up to what the hub serves.
+    HttpApiEndpoint.get("artifactContent", "/threads/:threadId/artifacts/:artifactId/versions/:version", {
+      params: {
+        threadId: ThreadId,
+        artifactId: RegisteredArtifactId,
+        version: Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+      },
+      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array({ contentType: "application/octet-stream" })),
+      error: [ArtifactNotFound, ArtifactContentUnavailable],
     }),
     // Null until the brief projector first writes one, at a chapter end or a Quest step; its text
     // is empty once nothing it said holds any more.

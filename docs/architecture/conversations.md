@@ -1,6 +1,6 @@
 # Conversations, threads and runtime sessions
 
-**Decided.** Threads are durable discussion contexts; executions are runtime work. Each agent has multiple threads. Selecting a different thread, collapsing a panel or disconnecting the UI does not cancel tasks.
+**Decided.** Threads are durable discussion contexts; attempts are runtime work. Each agent has multiple threads. Selecting a different thread, collapsing a panel or disconnecting the UI does not cancel tasks.
 
 A thread stores title, owning agent, timestamps, messages, links to Quests and tool activity, and session bindings. Persist user input before dispatch and correlate streamed deltas with stable message/turn IDs. A partial response remains distinguishable from a completed response or interrupted turn.
 

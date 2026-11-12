@@ -1,6 +1,6 @@
 import { waitToFind } from "@hobbots/domain/testing";
 import { PolicyEngine } from "@hobbots/permissions";
-import { toolRequests, toolTurn } from "@hobbots/runtimes";
+import { folderAccessFor, READ_ONLY_SANDBOX_NOTE, readOnlyCommands, toolRequests, toolTurn } from "@hobbots/runtimes";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -17,15 +17,17 @@ import {
 } from "./dependency-hub.ts";
 
 // Issue #661: a lead gave its member Local Git and Run commands with Edit files Never, meaning "commit,
-// but touch no file". Commands run only through Bash, which a hob has only when Read files and Edit
-// files are both Allow, so the member had no tool its brief needed. The hub refuses that delegation
-// and tells the lead what the member will have; a member given Local Git with its file tools commits.
+// but touch no file", and the member had no tool its brief needed. Since #1344 Edit files Never gives
+// read-only commands: the member runs `git log` and tests but cannot write a file or commit. Edit files
+// Ask still closes commands, since a command would write without asking, so the hub refuses that
+// delegation and tells the lead what the member will have; a member given Local Git with its file
+// tools commits.
 
 const COMMIT = "git commit -m 'Add the app'";
 
 describe("a delegation whose authority leaves the member no tool for its brief", () => {
   // covers OR-002, PE-005
-  it("[TC-OR-430] is refused when it gives Local Git and Run commands but denies Edit files, and no Task is made", async () => {
+  it("[TC-OR-430] is refused when it gives Local Git and Run commands but has Edit files ask, and no Task is made", async () => {
     const { run, answers } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -36,7 +38,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
           brief: "Make the local commit",
           authority: {
             decisions: {
-              "edit-files": "deny",
+              "edit-files": "ask",
               "delete-files": "deny",
               "local-git": "allow",
               "run-commands": "allow",
@@ -50,10 +52,61 @@ describe("a delegation whose authority leaves the member no tool for its brief",
     expect(memberTask(tree, PIP)).toBeUndefined();
     const answer = answers.get("commit");
     expect(answer).toContain("Pip could not use run-commands or local-git");
-    expect(answer).toContain("commands, Git's included, need read-files and edit-files both allow");
-    expect(answer).toContain("Pip would have edit-files deny");
-    expect(answer).toContain("Give edit-files allow, or give run-commands and local-git deny");
-    expect(answer).toContain("Pip will have: file reads; no file edits, no commands, no git_init.");
+    expect(answer).toContain(
+      "commands, Git's included, need read-files allow and edit-files allow, or edit-files deny for read-only commands",
+    );
+    expect(answer).toContain("Pip would have edit-files ask");
+    expect(answer).toContain(
+      "Give edit-files allow (or edit-files deny, for read-only commands), or give run-commands and local-git deny",
+    );
+    expect(answer).toContain("Pip will have: file reads, file edits, git_init; no commands.");
+  }, 30_000);
+
+  // covers OR-002, PE-005
+  it("[TC-OR-1423] gives a member with Edit files Never read-only commands: it runs git log, and cannot write a file", async () => {
+    const { run, answers, requests } = await startHub(await sharedDatabase());
+    await run(
+      send([
+        "Review the app",
+        hub("delegate_task", {
+          key: "review",
+          hob: "Rook",
+          brief: "Review the last commit",
+          authority: {
+            decisions: { "edit-files": "deny", "delete-files": "deny", "local-git": "allow", "run-commands": "allow" },
+          },
+        }),
+      ]),
+    );
+    const rook = taskOf(await run(treeWhen((each) => memberTask(each, ROOK) !== undefined)), ROOK);
+    const answer = await run(waitToFind("the answer to the delegation", () => answers.get("review")));
+    // Named as read-only, with neither a refusal nor a warning.
+    expect(answer).toContain("Rook will have: file reads, read-only commands; no file edits, no git_init.");
+    expect(answer).toContain("Rook's commands are read-only");
+    expect(answer).not.toContain("could not use");
+    expect(answer).not.toContain("though it has them");
+
+    const request = await run(waitToFind("Rook's first prompt", () => promptsTo(requests, rook)[0]));
+    const turn = toolTurn(request.tools, "on");
+    if (turn === null) throw new Error("expected Rook's turn to have tools");
+    expect(turn.tools).toContain("Bash");
+    expect(turn.tools).not.toContain("Write");
+    expect(turn.tools).not.toContain("Edit");
+    // The sandbox closes its folders to every write, .git included, and its note says so.
+    expect(folderAccessFor(turn.context)).toEqual({ read: true, write: false });
+    expect(readOnlyCommands(turn.context)).toBe(true);
+    expect(READ_ONLY_SANDBOX_NOTE).toContain("read-only");
+    const cwd = turn.folders[0] as string;
+    const decide = (tool: string, input: Record<string, unknown>) =>
+      Effect.runPromise(
+        Effect.flatMap(Effect.service(PolicyEngine), (engine) =>
+          Effect.forEach(toolRequests(tool, input, cwd) ?? [], (each) => engine.decide(turn.context, each)),
+        ).pipe(Effect.provide(PolicyEngine.node)),
+      );
+    const log = await decide("Bash", { command: "git log --oneline -5" });
+    expect(log.map((each) => [each.operation, each.decision])).toEqual([["local-git", "allow"]]);
+    const write = await decide("Write", { file_path: `${cwd}/notes.md`, content: "Reviewed" });
+    expect(write.map((each) => [each.operation, each.decision])).toEqual([["edit-files", "deny"]]);
   }, 30_000);
 
   // covers OR-002, PE-005

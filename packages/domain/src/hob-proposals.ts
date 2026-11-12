@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { AgentStatus, ConfigVersion, RetireWork } from "./agent.ts";
 import { ChangeCall } from "./change-actor.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { defineMachine } from "./machine.ts";
 import { CharmOperationId } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SummoningChange, SummoningDraft } from "./summoning.ts";
@@ -98,12 +99,144 @@ export class HobProposal extends Schema.Class<HobProposal>("HobProposal")({
   revision: Revision,
 }) {}
 
+/**
+ * What can happen to a row. `Allow` and `Deny` are your decisions on a row that waits; `Allow` is
+ * saved as applying before the hub makes anything. `Made` and `Failed` are what came of it. `Reopen`
+ * sends a row the hub could not make back to you: one the hub refused, or one a stopped hub left
+ * applying that its hob shows was never made.
+ */
+export type HobProposalRowEvent =
+  | { readonly _tag: "Allow"; readonly edited: SummoningDraft | null; readonly at: string }
+  | { readonly _tag: "Deny"; readonly at: string }
+  | { readonly _tag: "Made"; readonly outcome: string }
+  | { readonly _tag: "Failed"; readonly outcome: string }
+  | { readonly _tag: "Reopen" };
+
+/** A change to a row its state does not allow. */
+export class IllegalHobProposalRowTransition extends Schema.TaggedError<IllegalHobProposalRowTransition>()(
+  "IllegalHobProposalRowTransition",
+  { rowId: Schema.String, from: HobProposalRowState, to: HobProposalRowState },
+) {}
+
+/** One row's lifecycle (ADR 034), declared once. A decided row stays decided. */
+export const HobProposalRowMachine = defineMachine<
+  HobProposalRowState,
+  HobProposalRowEvent,
+  HobProposalRow,
+  IllegalHobProposalRowTransition
+>({
+  name: "HobProposalRow",
+  states: {
+    pending: "It waits for you to allow or deny it",
+    applying: "You allowed it and the hub is making it; a stopped hub checks it against the hob first",
+    allowed: "What it proposes was made",
+    denied: "You said no, so nothing was done",
+    failed: "You allowed it and the hub could not make it, with why",
+  },
+  field: "state",
+  events: {
+    Allow: {
+      from: ["pending"],
+      to: "applying",
+      apply: (row, e) => ({ ...row, state: "applying", edited: e.edited, decidedAt: e.at }),
+    },
+    Deny: {
+      from: ["pending"],
+      to: "denied",
+      apply: (row, e) => ({ ...row, state: "denied", outcome: null, decidedAt: e.at }),
+    },
+    Made: { from: ["applying"], to: "allowed", apply: (row, e) => ({ ...row, state: "allowed", outcome: e.outcome }) },
+    Failed: { from: ["applying"], to: "failed", apply: (row, e) => ({ ...row, state: "failed", outcome: e.outcome }) },
+    Reopen: {
+      from: ["applying"],
+      to: "pending",
+      apply: (row) => ({ ...row, state: "pending", edited: null, outcome: null, decidedAt: null }),
+    },
+  },
+  illegal: (row, _, to) => new IllegalHobProposalRowTransition({ rowId: row.id, from: row.state, to }),
+});
+
+/** `HobProposalRowMachine` with the questions code outside this module asks of a row's state. */
+export const HobProposalRows = {
+  ...HobProposalRowMachine,
+  /** Whether a row waits for you. */
+  isPending: (row: Pick<HobProposalRow, "state">): boolean => row.state === "pending",
+  /** Whether a row was allowed and the hub is making it, or a stopped hub left it so. */
+  isApplying: (row: Pick<HobProposalRow, "state">): boolean => row.state === "applying",
+  /** Whether what a row proposes was made. */
+  isMade: (row: Pick<HobProposalRow, "state">): boolean => row.state === "allowed",
+  /** Whether a row is decided: allowed, denied or failed. */
+  isDecided: (row: Pick<HobProposalRow, "state">): boolean => row.state !== "pending" && row.state !== "applying",
+};
+
+/**
+ * What can happen to a proposal: its rows or the operations you set to Allow from it change. It
+ * settles once every row is decided.
+ */
+export type HobProposalEvent = {
+  readonly _tag: "Update";
+  readonly rows: ReadonlyArray<HobProposalRow>;
+  readonly alwaysAllowed: ReadonlyArray<CharmOperationId>;
+  readonly at: string;
+};
+
+/** A change to a proposal its state does not allow. */
+export class IllegalHobProposalTransition extends Schema.TaggedError<IllegalHobProposalTransition>()(
+  "IllegalHobProposalTransition",
+  { proposalId: HobProposalId, from: HobProposalState, to: HobProposalState },
+) {}
+
+/** A proposal's lifecycle (ADR 034), declared once: open until every row is decided, then settled for good. */
+export const HobProposalMachine = defineMachine<
+  HobProposalState,
+  HobProposalEvent,
+  HobProposal,
+  IllegalHobProposalTransition
+>({
+  name: "HobProposal",
+  states: {
+    open: "A row waits for you, or the hub is making one you allowed",
+    settled: "Every row is decided, and the manager was told how",
+  },
+  field: "state",
+  events: {
+    Update: [
+      {
+        from: ["open"],
+        to: "settled",
+        guard: (_, e) => e.rows.every(HobProposalRows.isDecided),
+        apply: (proposal, e) =>
+          new HobProposal({
+            ...proposal,
+            rows: [...e.rows],
+            alwaysAllowed: [...e.alwaysAllowed],
+            state: "settled",
+            updatedAt: e.at,
+            settledAt: e.at,
+          }),
+      },
+      {
+        from: ["open"],
+        to: "open",
+        apply: (proposal, e) =>
+          new HobProposal({ ...proposal, rows: [...e.rows], alwaysAllowed: [...e.alwaysAllowed], updatedAt: e.at }),
+      },
+    ],
+  },
+  illegal: (proposal, _, to) => new IllegalHobProposalTransition({ proposalId: proposal.id, from: proposal.state, to }),
+});
+
 /** Whether a proposal still waits for you. */
 export const hobProposalOpen = (proposal: Pick<HobProposal, "state">): boolean => proposal.state === "open";
 
-/** Whether every row of a proposal is decided, so it settles. */
-export const everyRowDecided = (rows: ReadonlyArray<HobProposalRow>): boolean =>
-  rows.every((row) => row.state !== "pending" && row.state !== "applying");
+/** `HobProposalMachine` with the questions code outside this module asks of a proposal's state. */
+export const HobProposalStates = {
+  ...HobProposalMachine,
+  /** Whether a proposal still waits for you. */
+  isOpen: hobProposalOpen,
+  /** Whether a proposal made anything: a row of it was allowed and made. */
+  madeAny: (proposal: Pick<HobProposal, "rows">): boolean => proposal.rows.some(HobProposalRows.isMade),
+};
 
 /**
  * What the manager is told once a proposal settles: row by row, what was created, changed or denied.

@@ -267,6 +267,27 @@ export const ruleEnforcement = (
   return operation === "push" && bypass ? "checked" : "enforced";
 };
 
+/**
+ * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,
+ * file edits, and commands. A command reads and writes the folders without a call per file, so
+ * commands, Git's included, need Read files Allow, and Edit files Allow or Never. With Edit files
+ * Never they are read-only: the sandbox closes the folders, `.git` included, to every write of the
+ * turn. With Edit files Ask they stay closed, since a command would write without asking. A runtime
+ * also needs its sandbox to offer them. `git_init` is decided as Local Git and Edit files.
+ */
+export const openTools = (decide: (operation: PolicyOperation) => PolicyDecision) => {
+  const open = (operation: PolicyOperation) => decide(operation) !== "deny";
+  const edit = decide("edit-files");
+  const commands = (open("run-commands") || open("local-git")) && decide("read-files") === "allow" && edit !== "ask";
+  return {
+    read: open("read-files"),
+    edit: edit !== "deny",
+    commands,
+    commandsReadOnly: commands && edit === "deny",
+    gitInit: open("local-git") && edit !== "deny",
+  };
+};
+
 /** Per-hob answers. Each may only narrow the preset; a widening needs a separately recorded user grant. */
 export const PolicyOverrides = Schema.Struct({
   "read-files": Schema.optionalKey(PolicyDecision),

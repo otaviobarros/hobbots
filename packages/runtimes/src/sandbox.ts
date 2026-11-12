@@ -345,6 +345,12 @@ const UNSIGNED: ReadonlyArray<readonly [string, string]> = [
 /** Turns commit and tag signing off for commands, through variables Claude Code's scrub keeps. */
 export const UNSIGNED_GIT = gitConfigEnv(UNSIGNED);
 
+/**
+ * What Git is told when the turn's folders are read-only (#1344): take no optional lock, so
+ * `git status` and `git diff` skip refreshing the index instead of failing to write it.
+ */
+export const READ_ONLY_GIT: Record<string, string> = { GIT_OPTIONAL_LOCKS: "0" };
+
 /** Variables that would name a commit's author or committer over any Git setting. */
 export const GIT_IDENTITY_VARIABLES = [
   "GIT_AUTHOR_NAME",
@@ -547,6 +553,9 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                       // asks for it (`commit.gpgsign`) would stop every commit. The scrub keeps these.
                       // A turn given the user's signing agent signs as the config asks.
                       ...(scope.signingAgent ? {} : UNSIGNED_GIT),
+                      // With the folders read-only, Git skips the index refresh `git status` would
+                      // write, rather than fail on it (#1344).
+                      ...(scope.folderAccess.write ? {} : READ_ONLY_GIT),
                       [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
                     },
                     scope.commitAs,

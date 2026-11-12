@@ -2,7 +2,7 @@ import type { HobbotsEvent, Message, MessageId, MessagePin, ThreadId } from "@ho
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents, queryKeys } from "./queries.ts";
-import { readListAgain, recordKeys } from "./records.ts";
+import { forgetArtifactReads, readListAgain, recordKeys } from "./records.ts";
 import { recordMessage } from "./sync.ts";
 
 // What is yours in a chat or camp (ADR 037, Mine): notes to self, which wake no hob, and pins; and
@@ -11,15 +11,17 @@ import { recordMessage } from "./sync.ts";
 /**
  * A chapter moved between `threads`: the decisions and artifacts it made, and the pins on its
  * messages, went with it, and no record or pin event says so, so each thread's lists are read again
- * (STD-REACT-012).
+ * (STD-REACT-012), and the artifacts' versions and contents, which the move may have numbered again,
+ * are dropped.
  */
 export const recordsMoved = (queryClient: QueryClient, threads: ReadonlyArray<ThreadId>): Promise<unknown> =>
   Promise.all(
-    threads.flatMap((threadId) =>
-      [recordKeys.decisions(threadId), recordKeys.artifacts(threadId), pinsKey(threadId)].map((queryKey) =>
+    threads.flatMap((threadId) => [
+      ...[recordKeys.decisions(threadId), recordKeys.artifacts(threadId), pinsKey(threadId)].map((queryKey) =>
         readListAgain(queryClient, queryKey),
       ),
-    ),
+      forgetArtifactReads(queryClient, threadId),
+    ]),
   );
 
 const pinsKey = (threadId: ThreadId) => ["threads", threadId, "pins"] as const;

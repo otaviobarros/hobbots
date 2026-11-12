@@ -1,4 +1,4 @@
-import { type FolderChecksShape, type HobbotsRepository, openTools, type TaskRepository } from "@hobbots/agents";
+import type { FolderChecksShape, HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
@@ -9,6 +9,8 @@ import {
   isTerminalTask,
   MilestoneId,
   NoteId,
+  openTools,
+  type PolicyDecision,
   type PolicyOperation,
   type PolicyOverrides,
   QuestId,
@@ -131,12 +133,20 @@ const timeoutFor = (scope: CallScope, task: Task, minutes: number | undefined) =
 };
 
 const COMMAND_OPERATIONS: ReadonlyArray<PolicyOperation> = ["run-commands", "local-git"];
-const FILE_OPERATIONS: ReadonlyArray<PolicyOperation> = ["read-files", "edit-files"];
+
+/** The file answers that close commands (ADR 014): Read files other than Allow, or Edit files Ask. */
+const closesCommands = (operation: PolicyOperation, decision: PolicyDecision): boolean =>
+  operation === "read-files" ? decision !== "allow" : operation === "edit-files" && decision === "ask";
+
+/** What the lead is told of a member whose commands are read-only (#1344). */
+const readOnlyNote = (name: string) =>
+  ` ${name}'s commands are read-only: its folders, .git included, are closed to every write, so it can run git status, git diff, git log or a test that writes only to $TMPDIR, but cannot commit or change a file.`;
 
 /**
  * What the member's tools will be under `decisions`, in words for the lead, refusing a request whose
  * own answers open commands and close the file operations they run with, so no member is given work
- * it has no tool for (#661). The same gap left by the lead's or the member's own policy is a warning.
+ * it has no tool for (#661). Commands need Read files Allow and Edit files Allow or Never, read-only
+ * under Never (#1344). The same gap left by the lead's or the member's own policy is a warning.
  * With no folder, or reading denied, the member's turns are chat-only, as `toolTurn` makes them.
  * Commands also need the member's sandbox, which is decided when its turn starts.
  */
@@ -151,26 +161,29 @@ const toolsFor = (
   const tools = [
     [open.read, "file reads"],
     [open.edit, "file edits"],
-    [open.commands, "commands"],
+    [open.commands, open.commandsReadOnly ? "read-only commands" : "commands"],
     [open.gitInit, "git_init"],
   ] as const;
   const has = tools.flatMap(([on, name]) => (on ? [name] : []));
   const lacks = tools.flatMap(([on, name]) => (on ? [] : [`no ${name}`]));
   const summary =
     chatOnly === null
-      ? ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.`
+      ? ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.${open.commandsReadOnly ? readOnlyNote(member.name) : ""}`
       : ` ${member.name} will have no tools: ${chatOnly}, so its turns are chat-only. Do the Task's file work yourself, or give it work that needs no files.`;
   const commands = COMMAND_OPERATIONS.filter((operation) => decisions[operation] !== "deny");
   if (open.commands || commands.length === 0) return Effect.succeed(summary);
-  const closing = FILE_OPERATIONS.filter((operation) => decisions[operation] !== "allow");
-  const rule = `commands, Git's included, need read-files and edit-files both allow, and ${member.name} would have ${closing.map((operation) => `${operation} ${decisions[operation]}`).join(" and ")}`;
+  const closing = (["read-files", "edit-files"] as const).filter((operation) =>
+    closesCommands(operation, decisions[operation]),
+  );
+  const rule = `commands, Git's included, need read-files allow and edit-files allow, or edit-files deny for read-only commands, and ${member.name} would have ${closing.map((operation) => `${operation} ${decisions[operation]}`).join(" and ")}`;
   // Refused only when the request's own answers make the gap; one the lead or member already has warns.
   const gives = commands.filter((operation) => asked?.[operation] !== undefined);
   const takes = closing.filter((operation) => (asked?.[operation] ?? "allow") !== "allow");
   if (gives.length > 0 && takes.length > 0) {
+    const readOnly = takes.includes("edit-files") ? " (or edit-files deny, for read-only commands)" : "";
     return refuse(
       "authority-unusable",
-      `${member.name} could not use ${gives.join(" or ")}: ${rule}. Give ${takes.join(" and ")} allow, or give ${gives.join(" and ")} deny and run the commands yourself.${summary}`,
+      `${member.name} could not use ${gives.join(" or ")}: ${rule}. Give ${takes.join(" and ")} allow${readOnly}, or give ${gives.join(" and ")} deny and run the commands yourself.${summary}`,
     );
   }
   if (chatOnly !== null) return Effect.succeed(summary);
