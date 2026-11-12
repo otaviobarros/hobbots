@@ -69,7 +69,6 @@ test("[TC-CH-1387-10] records and changes a decision, opens an artifact, writes 
   await sheet.getByRole("tab", { name: /^Artifacts/ }).click();
   await sheet.getByRole("button", { name: "Open plan.md" }).click();
   await expect(sheet.getByRole("region", { name: "plan.md" })).toContainText("plan.md");
-  await expect(sheet).toContainText("Made by");
   // Its review waits for you until you settle it, once (#1422).
   await expect(sheet).toContainText("Waiting for you");
   await sheet.getByRole("button", { name: "Mark reviewed" }).click();

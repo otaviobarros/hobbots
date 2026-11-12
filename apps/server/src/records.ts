@@ -1,5 +1,5 @@
-import { BriefLog, Records } from "@hobbots/agents";
-import { ArtifactReviewChangeRefused, DecisionChangeRefused, HobbotsApi } from "@hobbots/api";
+import { ArtifactContents, BriefLog, Records } from "@hobbots/agents";
+import { ArtifactNotFound, ArtifactReviewChangeRefused, DecisionChangeRefused, HobbotsApi } from "@hobbots/api";
 import type { DecisionRefused, ThreadId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -14,6 +14,13 @@ export const RecordsHandlers = HttpApiBuilder.group(HobbotsApi, "records", (hand
   Effect.gen(function* () {
     const found = yield* Effect.serviceOption(Records);
     const briefs = yield* Effect.serviceOption(BriefLog);
+    // A hub that keeps no activity, as in some tests, has no artifact to show.
+    const contents = Option.getOrElse(yield* Effect.serviceOption(ArtifactContents), () =>
+      ArtifactContents.of({
+        versions: (threadId, artifactId) => Effect.fail(new ArtifactNotFound({ threadId, artifactId })),
+        content: (threadId, artifactId) => Effect.fail(new ArtifactNotFound({ threadId, artifactId })),
+      }),
+    );
     const records = Option.getOrElse(found, () =>
       Records.of({
         recordYours: () => Effect.die(new Error("This hub keeps no records.")),
@@ -52,6 +59,8 @@ export const RecordsHandlers = HttpApiBuilder.group(HobbotsApi, "records", (hand
             ),
           ),
         ),
+      artifactVersions: ({ params }) => contents.versions(params.threadId, params.artifactId),
+      artifactContent: ({ params }) => contents.content(params.threadId, params.artifactId, params.version),
       brief: ({ params }) =>
         Effect.andThen(
           records.decisionsOf(params.threadId),

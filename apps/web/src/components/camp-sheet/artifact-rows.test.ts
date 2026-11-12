@@ -1,6 +1,6 @@
 import { Artifact, ChapterId, RegisteredArtifactId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { filterArtifacts, isArtifactFilter, linkOf } from "./artifact-rows.ts";
+import { filterArtifacts, filterInEffect, isArtifactFilter, linkOf, shownFilters } from "./artifact-rows.ts";
 
 const artifact = (id: string, kind: Artifact["kind"], locator = `/work/${id}`) =>
   new Artifact({
@@ -29,5 +29,15 @@ describe("the Artifacts tab's chips", () => {
     expect(isArtifactFilter("files")).toBe(false);
     expect(linkOf(artifact("e", "pr", "https://github.com/o/r/pull/1"))).toBe("https://github.com/o/r/pull/1");
     expect(linkOf(artifact("f", "doc"))).toBeNull();
+  });
+});
+
+describe("the chips a camp shows", () => {
+  it("[TC-CH-1434-06] shows All and only the kinds the camp has, and falls back to All when a kind is gone", () => {
+    const all = [artifact("a", "doc"), artifact("b", "pr")];
+    expect(shownFilters(all)).toEqual(["all", "code", "docs"]);
+    expect(shownFilters([])).toEqual(["all"]);
+    expect(filterInEffect(all, "docs")).toBe("docs");
+    expect(filterInEffect(all, "images")).toBe("all");
   });
 });
