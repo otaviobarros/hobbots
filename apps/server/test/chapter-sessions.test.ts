@@ -185,8 +185,11 @@ describe("runtime sessions keyed by chapter", () => {
       const reply = await say(id, "What should I plant?");
       const fresh = asked[runtime][2] as PromptRequest;
       expect(fresh.sessionId).toBeNull();
-      // Nothing of the first chapter is replayed into the new session (ADR 037).
-      expect(fresh.briefing ?? "").not.toContain("Miso");
+      // Nothing of the first chapter is replayed into the new session (ADR 037): its pack names the
+      // chapter in one line, and quotes none of its messages.
+      expect(fresh.briefing).toContain("- Chapter 1: 4 messages, starting with “My cat is called Miso.”");
+      expect(fresh.briefing).not.toContain("She is three.");
+      expect(fresh.briefing).not.toContain("> My cat is called Miso.");
       expect(reply).toMatchObject({ status: "complete", chapterId: "chapter-2" });
       const second = liveSession(await thread(id), runtime);
       expect(second).toMatchObject({ runtime, chapterId: "chapter-2" });
@@ -214,8 +217,10 @@ describe("runtime sessions keyed by chapter", () => {
     await say(id, "How old is she?");
     const briefed = asked.codex[0] as PromptRequest;
     expect(briefed.sessionId).toBeNull();
-    expect(briefed.briefing).toContain("She is three.");
-    expect(briefed.briefing).not.toContain("Miso");
+    expect(briefed.briefing).toContain("> She is three.");
+    // The earlier chapter is one line of the pack, never replayed.
+    expect(briefed.briefing).toContain("- Chapter 1: 2 messages, starting with “My cat is called Miso.”");
+    expect(briefed.briefing).not.toContain("> My cat is called Miso.");
   });
 
   // covers ADR 037 (Chapters)
@@ -304,20 +309,20 @@ describe("runtime sessions keyed by chapter", () => {
     const filler = "about the garden beds and what grows in them ".repeat(110);
     await say(id, `Miso is my cat. ${filler}`);
     for (let n = 1; n <= 6; n++) await say(id, `Garden note ${n}. ${filler}`);
-    // A switch summarizes the older messages, and keeps that summary as the thread's checkpoint.
+    // A switch replays the live chapter as its pack, newest first, and counts what it left out.
     await run(ChatService.use((chat) => chat.setBrain(id, { runtime: "codex", model: null, effort: null })));
     await say(id, "Where were we?");
-    expect(asked.codex[0]?.briefing).toContain("Miso");
+    expect(asked.codex[0]?.briefing).toContain("## This chapter so far");
 
-    // The split leaves the checkpoint's last message in the new live chapter, and Miso before it.
+    // The split leaves Miso in the chapter before the new live one.
     await splitAt(id, `Garden note 1. ${filler}`, "garden");
     await run(ChatService.use((chat) => chat.setBrain(id, { runtime: "claude-code", model: null, effort: null })));
     await say(id, "And now?");
     const briefed = asked["claude-code"].at(-1) as PromptRequest;
     expect(briefed.sessionId).toBeNull();
-    expect(briefed.briefing).toContain("Garden note 1.");
-    // No summary line of the first chapter. Miso is still quoted in Codex's reply, which echoed its
-    // own briefing and is in the live chapter.
+    // The first chapter is one line of the pack, no summary line of its messages. Miso is still
+    // quoted in Codex's reply, which echoed its own briefing and is in the live chapter.
+    expect(briefed.briefing).toMatch(/^- Chapter 1: 2 messages, starting with “Miso is my cat\./m);
     expect(briefed.briefing).not.toMatch(/^- User: “Miso/m);
   });
 });
