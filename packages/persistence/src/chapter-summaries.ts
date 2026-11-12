@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { chapterRows } from "./chapters.ts";
 import { EventJournal, makeJournaledChange } from "./journal.ts";
+import { moveProjectorCursor, projectorCursor } from "./projector-cursors.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
 // The chapter summary projector's cursor and summaries (migration 0100, #1380). Each summary goes
@@ -18,9 +19,6 @@ export const ChapterSummaryLogLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const journal = yield* EventJournal;
     const journaledChange = makeJournaledChange(sql);
-
-    const cursor = sql<{ readonly sequence: unknown }>`SELECT sequence FROM projector_cursors
-      WHERE name = ${PROJECTOR}`.pipe(Effect.map(([row]) => Number(row?.sequence ?? 0)));
 
     // The chapter as it stands, summarized, or null when it no longer takes one. A summary made from
     // an older revision is obsolete: a split or merge changed the chapter's messages while the brain
@@ -44,15 +42,13 @@ export const ChapterSummaryLogLive = Layer.effect(
             const chapter = yield* summarized(write, first + events.length);
             if (chapter !== null) events.push({ _tag: "ChapterSummarized", threadId: chapter.threadId, chapter });
           }
-          // Only forward: a round that read an older page never moves the cursor back.
-          yield* sql`UPDATE projector_cursors SET sequence = ${sequence}
-            WHERE name = ${PROJECTOR} AND sequence < ${sequence}`;
+          yield* moveProjectorCursor(sql, PROJECTOR, sequence);
           return { value: undefined, events };
         }),
       ).pipe(Effect.map((committed) => committed.entries));
 
     return ChapterSummaryLog.of({
-      cursor: sqlOrDie(cursor),
+      cursor: sqlOrDie(projectorCursor(sql, PROJECTOR)),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),
       record,
     });

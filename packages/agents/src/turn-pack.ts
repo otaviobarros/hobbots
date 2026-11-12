@@ -1,5 +1,6 @@
 import type { Message, PackReport, Thread, ThreadId } from "@hobbots/domain";
 import { Context, Effect, HashMap, Layer, Option, Ref } from "effect";
+import { BriefLog } from "./brief-log.ts";
 import { ChapterRepository } from "./chapters.ts";
 import { buildPack, type PackArtifact, type PackDecision, type PackRecords, packChapters } from "./context-pack.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -49,20 +50,23 @@ export class PackReports extends Context.Service<
 /**
  * Reads a thread's records for its pack: the resting chapters with their summaries, the plain one
  * for any the projector has not written yet, so a new chapter's first turn always hears of the
- * last; its open work; what Start fresh carried, until the hob first replies; and its decisions and
- * artifacts. Only the thread's own chapters are read, so a private camp's summaries reach no other
+ * last; its open work; what Start fresh carried, until the hob first replies; its brief, as the
+ * brief projector last wrote it (#1384); and its decisions and artifacts. Only the thread's own chapters are read, so a private camp's summaries reach no other
  * camp's pack.
  */
 export const makePackSources = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   const chapters = yield* Effect.serviceOption(ChapterRepository);
   const records = yield* Effect.serviceOption(PackRecordSource);
+  const briefs = yield* Effect.serviceOption(BriefLog);
   return (thread: Thread, live: ReadonlyArray<Message>, transcript: ReadonlyArray<Message>) =>
     Effect.gen(function* () {
       const stored = Option.isNone(chapters) ? [] : yield* chapters.value.listChapters(thread.id);
       const replied = transcript.some((m) => m.role === "assistant");
       const sources: PackSources = {
-        campBrief: null,
+        campBrief: Option.isNone(briefs)
+          ? null
+          : Option.match(yield* briefs.value.briefOf(thread.id), { onNone: () => null, onSome: (brief) => brief.text }),
         decisions: Option.isNone(records) ? [] : yield* records.value.activeDecisions(thread.id),
         work: yield* repo.listOpenWork(thread.id),
         carried: thread.origin === null || replied ? [] : yield* repo.listCarriedOver(thread.id),

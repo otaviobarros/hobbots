@@ -4,6 +4,7 @@ import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { Artifact } from "./artifact.ts";
 import { BackpackItem } from "./backpack.ts";
+import { Brief } from "./brief.ts";
 import { CarriedOver } from "./carried-over.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Chapter } from "./chapter.ts";
@@ -212,6 +213,11 @@ const DecisionSuperseded = Schema.TaggedStruct("DecisionSuperseded", { decision:
  * in the transaction that journaled the record, once per record.
  */
 const ArtifactRegistered = Schema.TaggedStruct("ArtifactRegistered", { artifact: Artifact });
+/**
+ * The brief projector wrote a chat's or camp's brief (#1384), at a chapter end or a Quest step. A
+ * private camp's stays in that camp: memory capture takes nothing from it.
+ */
+const BriefWritten = Schema.TaggedStruct("BriefWritten", { brief: Brief });
 /** A Task passed the completion gate, with its result and the artifacts it made. */
 const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
 /** The Task that holds a Quest passed the completion gate. */
@@ -444,6 +450,7 @@ export const JournaledEvent = Schema.Union([
   DecisionRecorded,
   DecisionSuperseded,
   ArtifactRegistered,
+  BriefWritten,
   BackpackItemRecorded,
   BackpackItemChanged,
   PairingRequested,
@@ -559,6 +566,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   DecisionRecorded: 1,
   DecisionSuperseded: 1,
   ArtifactRegistered: 1,
+  BriefWritten: 1,
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
   BackpackItemChanged: 1,

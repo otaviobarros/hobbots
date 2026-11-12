@@ -19,7 +19,7 @@ import { byteOrder } from "./order.ts";
 import { makeTaskReads } from "./task-rows.ts";
 
 /**
- * The hub's Quest summaries (ADR 037, migration 0102): one row per Quest, rewritten in the
+ * The hub's Quest summaries (ADR 037, migration 0103): one row per Quest, rewritten in the
  * transaction of every change that gives its Quest another summary, with its `QuestSummaryChanged`.
  */
 

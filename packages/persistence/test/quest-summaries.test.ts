@@ -33,7 +33,7 @@ import {
   migrations,
   TaskRepositoryLive,
 } from "../src/index.ts";
-import questSummaries from "../src/migrations/0102_quest_summaries.ts";
+import questSummaries from "../src/migrations/0103_quest_summaries.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1373 (ADR 037): the hub's QuestSummary. Every change that touches a Task tree folds the
@@ -508,7 +508,7 @@ describe("Quest summaries", () => {
           migrated: yield* tasks.listQuestSummaries(threadId),
           fold: tree.quests.map((each) => questSummaryOf(each, tree)),
           entries: yield* journal.readAfter(head.sequence),
-          known: Object.keys(migrations).includes("0102_quest_summaries"),
+          known: Object.keys(migrations).includes("0103_quest_summaries"),
         };
       }),
     );

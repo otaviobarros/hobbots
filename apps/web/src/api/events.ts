@@ -20,6 +20,7 @@ import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { chatStartedFresh } from "./camps.ts";
+import { applyChapterEvent } from "./chapters.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
@@ -212,10 +213,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ClaimContested",
   "ClaimCleared",
   "ClaimReleased",
-  // Decisions and artifacts (ADR 037) have no screen yet; the camp sheet reads them (#1387).
+  // Decisions, artifacts and briefs (ADR 037) have no screen yet; the camp sheet reads them (#1387).
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  "BriefWritten",
   // Quest summaries (ADR 037) are read once the screens render what the hub publishes (#1374).
   "QuestSummaryChanged",
 ]);
@@ -237,6 +239,7 @@ type UnappliedEvent = Extract<
       | "DecisionRecorded"
       | "DecisionSuperseded"
       | "ArtifactRegistered"
+      | "BriefWritten"
       | "QuestSummaryChanged";
   }
 >;
@@ -275,6 +278,7 @@ const readAgain = (
   // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
   // again. A started or summarized chapter moves none.
   if (isChapterEvent(event)) {
+    void applyChapterEvent(queryClient, event);
     if (event._tag === "ChapterSplit" || event._tag === "ChapterMerged") {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
     }

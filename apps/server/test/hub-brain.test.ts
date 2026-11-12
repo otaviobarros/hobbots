@@ -54,7 +54,7 @@ describe("the hub's brain on the fake runtime", () => {
     for (const provider of ["claude", "chatgpt"] as const) {
       writeFileSync(memorySettingsFile(dataDir), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, provider }));
       const { decided, usage } = await judge();
-      expect(decided).toEqual({ choice: "same", confidence: 1, by: "rule" });
+      expect(decided).toEqual({ choice: "same", confidence: 1, by: "fallback" });
       // The turn ran: the brain was asked, and its answer did not decode.
       expect(usage.calls).toBe(1);
     }
