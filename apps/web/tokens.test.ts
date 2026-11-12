@@ -107,7 +107,7 @@ describe("corners", () => {
    * through rounded-control, rounded-card, rounded-tag, rounded-dot, rounded-tile or cut.
    */
   const ALLOWED: Allowed = {
-    "apps/web/src/components/chat-search/chat-search.tsx": ["rounded-[3px]"],
+    "apps/web/src/components/find/find-rows.tsx": ["rounded-[3px]"],
     "apps/web/src/components/chat/empty-thread.tsx": ["rounded-[12px_12px_12px_2px]"],
     "apps/web/src/components/hob-page/chat-row.tsx": ["rounded-[3px]"],
     "apps/web/src/components/hob-page/hob-aside.tsx": ["rounded-[2px]"],

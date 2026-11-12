@@ -74,6 +74,8 @@ export const DecisionStateMachine = defineMachine<DecisionState, DecisionEvent, 
 export const DecisionStates = {
   ...DecisionStateMachine,
   isActive: (decision: Decision): boolean => decision.state === "active",
+  /** Whether a decision in this state holds, for a copy of a decision that carries only its state. */
+  holds: (state: DecisionState): boolean => state === "active",
 };
 
 /**
