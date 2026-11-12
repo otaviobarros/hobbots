@@ -1,15 +1,18 @@
 import type { RecordDecisionPayload } from "@hobbots/api";
-import type {
-  Artifact,
-  ArtifactReviewOutcome,
-  Decision,
-  DecisionId,
-  HobbotsEvent,
-  RegisteredArtifactId,
-  ThreadId,
+import {
+  type Artifact,
+  ArtifactContentRefusal,
+  type ArtifactReviewOutcome,
+  type ArtifactVersionContent,
+  type Decision,
+  type DecisionId,
+  type HobbotsEvent,
+  type RegisteredArtifactId,
+  type ThreadId,
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ApiError, call } from "./client.ts";
+import { Schema } from "effect";
+import { API_URL, ApiError, call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
 
 // A chat's or camp's records (ADR 037), as the camp sheet shows them: its decisions, its artifacts at
@@ -19,6 +22,13 @@ export const recordKeys = {
   decisions: (threadId: ThreadId) => ["threads", threadId, "decisions"] as const,
   artifacts: (threadId: ThreadId) => ["threads", threadId, "artifacts"] as const,
   brief: (threadId: ThreadId) => ["threads", threadId, "brief"] as const,
+  /** One artifact's versions and their contents, under one key so a new version reads them again. */
+  artifact: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
+    ["threads", threadId, "artifact", artifactId] as const,
+  versions: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
+    [...recordKeys.artifact(threadId, artifactId), "versions"] as const,
+  content: (threadId: ThreadId, artifactId: RegisteredArtifactId, version: number) =>
+    [...recordKeys.artifact(threadId, artifactId), "content", version] as const,
 };
 
 /** The thread's decisions, newest first, crossed-out ones kept. */
@@ -36,6 +46,47 @@ export const artifactsQuery = (threadId: ThreadId) =>
     queryFn: () => call((c) => c.records.artifacts({ params: { threadId } })),
     ...followsEvents,
   });
+
+/** An artifact's versions, newest first, and how it is shown (#1434). */
+export const artifactVersionsQuery = (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
+  queryOptions({
+    queryKey: recordKeys.versions(threadId, artifactId),
+    queryFn: () => call((c) => c.records.artifactVersions({ params: { threadId, artifactId } })),
+    ...followsEvents,
+  });
+
+/**
+ * One version's contents as the hub serves them: text redacted and cut, an image as it is. What the
+ * hub kept never changes, so it is never read again; the latest version read from the file now is
+ * read again with the artifact. A refusal is an answer, not a failure to retry.
+ */
+export const artifactContentQuery = (
+  threadId: ThreadId,
+  artifactId: RegisteredArtifactId,
+  version: number,
+  content: ArtifactVersionContent | "unknown",
+) =>
+  queryOptions({
+    queryKey: recordKeys.content(threadId, artifactId, version),
+    queryFn: () => call((c) => c.records.artifactContent({ params: { threadId, artifactId, version } })),
+    staleTime: content === "kept" ? Number.POSITIVE_INFINITY : 0,
+    retry: (failures: number, error: unknown) => contentRefusal(error) === null && failures < 2,
+  });
+
+const isRefusal = Schema.is(ArtifactContentRefusal);
+
+/** Why the hub does not serve a version's contents, or null when the read failed another way. */
+export const contentRefusal = (error: unknown): ArtifactContentRefusal | "not-found" | null => {
+  if (!(error instanceof ApiError)) return null;
+  if (error.tag === "ArtifactNotFound") return "not-found";
+  if (error.tag !== "ArtifactContentUnavailable") return null;
+  const { reason } = error.fields;
+  return isRefusal(reason) ? reason : "no-contents";
+};
+
+/** Where the hub serves a version's contents, for an image to load them itself. */
+export const artifactContentUrl = (threadId: ThreadId, artifactId: RegisteredArtifactId, version: number): string =>
+  `${API_URL}/api/threads/${encodeURIComponent(threadId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${version}`;
 
 /** The "Where we are" the hub writes, or null before it first writes one. */
 export const briefQuery = (threadId: ThreadId) =>
@@ -80,7 +131,12 @@ export const applyRecordEvent = (queryClient: QueryClient, event: RecordEvent): 
     case "DecisionRecorded":
     case "DecisionSuperseded":
       return readListAgain(queryClient, recordKeys.decisions(event.decision.threadId));
-    case "ArtifactRegistered":
+    case "ArtifactRegistered": {
+      const { threadId, id } = event.artifact;
+      // A new version: the artifact's versions, and the latest read from the file now, are read again.
+      void queryClient.invalidateQueries({ queryKey: recordKeys.artifact(threadId, id) });
+      return readListAgain(queryClient, recordKeys.artifacts(threadId));
+    }
     case "ArtifactReviewSettled":
       return readListAgain(queryClient, recordKeys.artifacts(event.artifact.threadId));
     case "BriefWritten":

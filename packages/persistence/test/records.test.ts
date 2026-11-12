@@ -424,7 +424,8 @@ describe("artifacts", () => {
       locator: file,
       kind: "doc",
       title: "Launch plan",
-      latestVersion: 3,
+      // The result the Task returned from the Attempt that wrote it is that Attempt's version (#1434).
+      latestVersion: 2,
       origin: { kind: "message", id: REPLY },
       actor: { kind: "hob", id: ADA },
     });

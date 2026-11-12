@@ -3,6 +3,7 @@ export * from "./actor.ts";
 export * from "./agent.ts";
 export * from "./approval.ts";
 export * from "./artifact.ts";
+export * from "./artifact-versions.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./brief.ts";

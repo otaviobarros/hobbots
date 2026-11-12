@@ -61,7 +61,7 @@ export type FilePurpose = "preview" | "download";
 const encoder = new TextEncoder();
 
 /** How much more than a preview shows is read and redacted with it: longer than any credential. */
-const REDACTION_MARGIN = 64 * 1024;
+export const REDACTION_MARGIN = 64 * 1024;
 
 /**
  * Redacted text cut to what a preview shows: at most its first MiB, ending at a line break when

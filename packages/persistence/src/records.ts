@@ -18,9 +18,9 @@ import {
   type RegisteredArtifactId,
   type ThreadId,
 } from "@hobbots/domain";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, type Statement } from "effect/sql";
-import { type ArtifactRow, artifactFromRow, artifactsFromRows, saveReview } from "./artifact-rows.ts";
+import { type ArtifactRow, artifactFromRow, artifactsFromRows, saveReview, storedVersions } from "./artifact-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
@@ -245,6 +245,14 @@ export const RecordRepositoryLive = Layer.effect(
               ORDER BY recorded_sequence DESC`,
             (rows) => Effect.forEach(rows, decisionFromRow),
           ),
+        ),
+      artifactVersions: (threadId, artifactId) =>
+        sqlOrDie(
+          Effect.gen(function* () {
+            const artifact = yield* findArtifact(sql`id = ${artifactId} AND thread_id = ${threadId}`);
+            if (artifact === null) return Option.none();
+            return Option.some({ artifact, versions: yield* storedVersions(sql, artifact) });
+          }),
         ),
       listArtifacts: (threadId) =>
         sqlOrDie(
