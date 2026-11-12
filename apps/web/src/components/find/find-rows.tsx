@@ -57,38 +57,45 @@ export function FindGroups({
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {group.rows.map((row) => (
           <li key={row.key}>
-            <button
-              type="button"
-              onClick={() => onPick(row)}
-              className="grid w-full cursor-pointer grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-start text-text-strong hover:bg-hover focus-visible:bg-hover"
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "inline-flex size-[30px] items-center justify-center rounded-tile text-ui font-bold",
-                  tile[row.glyph],
-                )}
-              >
-                {glyphs[row.glyph]}
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span
-                  className={cn(
-                    "text-ui leading-[19px] font-semibold",
-                    row.crossedOut && "font-normal text-text-secondary line-through",
-                  )}
-                >
-                  {row.crossedOut && <span className="sr-only">{`${copy.crossedOut}: `}</span>}
-                  <Marked parts={row.title} />
-                </span>
-                <span className="text-meta text-label">{metaOf(row, nameOf)}</span>
-              </span>
-            </button>
+            <FindRowButton row={row} nameOf={nameOf} onPick={onPick} />
           </li>
         ))}
       </ul>
     </section>
   ));
+}
+
+/** One row: its tile, its words, crossed out when the decision no longer holds, and who and when. */
+function FindRowButton({ row, nameOf, onPick }: { row: FindRow; nameOf: NameOf; onPick: (row: FindRow) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(row)}
+      className="grid w-full cursor-pointer grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-start text-text-strong hover:bg-hover focus-visible:bg-hover"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "inline-flex size-[30px] items-center justify-center rounded-tile text-ui font-bold",
+          tile[row.glyph],
+        )}
+      >
+        {glyphs[row.glyph]}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span
+          className={cn(
+            "text-ui leading-[19px] font-semibold",
+            row.crossedOut && "font-normal text-text-secondary line-through",
+          )}
+        >
+          {row.crossedOut && <span className="sr-only">{`${copy.crossedOut}: `}</span>}
+          <Marked parts={row.title} />
+        </span>
+        <span className="text-meta text-label">{metaOf(row, nameOf)}</span>
+      </span>
+    </button>
+  );
 }
 
 /** Words with the ones that matched marked in lantern. */
