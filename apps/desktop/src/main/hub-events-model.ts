@@ -68,6 +68,7 @@ export interface HubConnected {
 const STALE: Readonly<Record<string, "Approvals" | "Questions" | "Tasks" | "Pairing" | "Shares" | undefined>> = {
   ApprovalRequested: "Approvals",
   ApprovalResolved: "Approvals",
+  ApprovalMoved: "Approvals",
   QuestionAsked: "Questions",
   QuestionEscalated: "Questions",
   QuestionAnswered: "Questions",

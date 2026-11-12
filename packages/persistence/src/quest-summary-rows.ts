@@ -98,7 +98,7 @@ const approvalRows = decodeRows(Schema.Struct({ taskId: Schema.NullOr(TaskId), s
 /** What a change's events name that a summary reads, before the rows behind them are looked up. */
 interface Touched {
   readonly tasks: Set<string>;
-  /** Chats started fresh, whose open Quests moved into them. */
+  /** Chats started fresh, whose open Quests moved into them, and camps a chapter moved into with its Quests (#1389). */
   readonly fresh: Array<ThreadId>;
   /** Artifacts registered or whose review settled. */
   readonly artifacts: Array<string>;
@@ -112,8 +112,10 @@ const touchedBy = (events: ReadonlyArray<JournaledEvent>): Touched => {
     if ("task" in event) touched.tasks.add(event.task.id);
     else if (event._tag === "ArtifactRegistered" || event._tag === "ArtifactReviewSettled") {
       touched.artifacts.push(event.artifact.id);
-    } else if (event._tag === "ChapterMoved") touched.landed.push(event.chapter.id);
-    else if (event._tag === "QuestStarted" || event._tag === "QuestCompleted") touched.tasks.add(event.quest.taskId);
+    } else if (event._tag === "ChapterMoved") {
+      touched.landed.push(event.chapter.id);
+      touched.fresh.push(event.camp.id);
+    } else if (event._tag === "QuestStarted" || event._tag === "QuestCompleted") touched.tasks.add(event.quest.taskId);
     else if ("question" in event) touched.tasks.add(event.question.taskId);
     else if ("approval" in event && event.approval.taskId !== null) touched.tasks.add(event.approval.taskId);
     else if (event._tag === "ChatStartedFresh") touched.fresh.push(event.chat.id);
@@ -126,7 +128,7 @@ const touchedBy = (events: ReadonlyArray<JournaledEvent>): Touched => {
  * ending, a question reaching you or leaving, an approval waiting or decided, an artifact a Task made
  * registered or its review settled, or a chapter moved, whose artifacts may have joined the camp's
  * and taken its review. A chat started fresh moves the open Quests of the chat it replaced into it,
- * so the thread of each changes.
+ * and a chapter moved into a camp the Quests started in it (#1389), so the thread of each changes.
  */
 const touchedTasks = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEvent>) =>
   Effect.gen(function* () {

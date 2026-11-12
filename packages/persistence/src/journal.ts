@@ -98,21 +98,29 @@ const threadCorrelationOf = (event: ThreadEvent): RowCorrelation => {
   return { ...NONE, agentId: thread.agentId, threadId: thread.id };
 };
 
+type ApprovalEvent = Extract<
+  JournaledEventType,
+  { readonly _tag: "ApprovalRequested" | "ApprovalResolved" | "ApprovalMoved" }
+>;
+const APPROVAL_EVENTS: ReadonlySet<string> = new Set(["ApprovalRequested", "ApprovalResolved", "ApprovalMoved"]);
+const isApprovalEvent = (event: JournaledEventType): event is ApprovalEvent => APPROVAL_EVENTS.has(event._tag);
+
+/** A request names its hob, thread, reply and Task: where it is now, for one that moved with its quest. */
+const approvalCorrelationOf = (approval: ApprovalEvent["approval"]): RowCorrelation => ({
+  ...NONE,
+  agentId: approval.agentId,
+  threadId: approval.threadId,
+  messageId: approval.messageId,
+  taskId: approval.taskId,
+});
+
 const correlationOf = (event: JournaledEventType): RowCorrelation => {
   if (isWebEvent(event)) return webCorrelationOf(event);
   if (isThreadEvent(event)) return threadCorrelationOf(event);
+  if (isApprovalEvent(event)) return approvalCorrelationOf(event.approval);
   switch (event._tag) {
     case "AgentUpserted":
       return { ...NONE, agentId: event.agent.id };
-    case "ApprovalRequested":
-    case "ApprovalResolved":
-      return {
-        ...NONE,
-        agentId: event.approval.agentId,
-        threadId: event.approval.threadId,
-        messageId: event.approval.messageId,
-        taskId: event.approval.taskId,
-      };
     case "GrantCreated":
     case "GrantRevoked":
       return { ...NONE, agentId: event.grant.agentId };
@@ -268,6 +276,7 @@ const restCorrelationOf = (
         | "ChatStartedFresh"
         | "ApprovalRequested"
         | "ApprovalResolved"
+        | "ApprovalMoved"
         | "GrantCreated"
         | "GrantRevoked"
         | "BackpackItemRecorded"

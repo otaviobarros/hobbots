@@ -17,7 +17,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
-import { storeApproval } from "./approvals.ts";
+import { moveApproval, storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { applySuggestionEvent, isSuggestionEvent } from "./camp-suggestions.ts";
 import { chapterMoved, chatStartedFresh } from "./camps.ts";
@@ -484,6 +484,7 @@ const applyWorkEvent = (
           readonly _tag:
             | "ApprovalRequested"
             | "ApprovalResolved"
+            | "ApprovalMoved"
             | "GrantCreated"
             | "GrantRevoked"
             | "BackpackItemRecorded"
@@ -501,6 +502,9 @@ const applyWorkEvent = (
     case "ApprovalRequested":
     case "ApprovalResolved":
       storeApproval(queryClient, event.approval);
+      return;
+    case "ApprovalMoved":
+      moveApproval(queryClient, event.fromThreadId, event.approval);
       return;
     case "GrantCreated":
     case "GrantRevoked":

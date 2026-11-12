@@ -1,4 +1,5 @@
 import {
+  ApprovalRepository,
   CampSuggestionRepository,
   type ChapterMoveTarget,
   ChapterRepository,
@@ -10,6 +11,8 @@ import {
 import {
   Agent,
   AgentId,
+  ApprovalId,
+  ApprovalRequest,
   ArtifactId,
   AttemptId,
   CAMP_SUGGESTION_DECISIONS,
@@ -33,6 +36,7 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import {
+  ApprovalRepositoryLive,
   BackpackLive,
   CampSuggestionRepositoryLive,
   ChapterRepositoryLive,
@@ -51,6 +55,7 @@ import { TestDatabase } from "../src/testing.ts";
 
 const TestLayer = Layer.mergeAll(
   HobbotsRepositoryLive,
+  ApprovalRepositoryLive,
   TaskRepositoryLive,
   BackpackLive,
   RecordRepositoryLive,
@@ -60,6 +65,7 @@ const TestLayer = Layer.mergeAll(
 
 type Services =
   | HobbotsRepository
+  | ApprovalRepository
   | TaskRepository
   | RecordRepository
   | ChapterRepository
@@ -272,13 +278,15 @@ describe("moving a chapter into a camp", () => {
       }),
     );
     // One transaction: the camp is made, then the move, then each moved backpack item.
+    // The quest's summary names the camp now (#1389).
     expect(result.moved.entries.map((entry) => entry.type)).toEqual([
       "CampMade",
       "ChapterStarted",
       "ChapterMoved",
-      ...result.moved.entries.slice(3).map(() => "BackpackItemChanged"),
+      ...result.moved.entries.slice(3, -1).map(() => "BackpackItemChanged"),
+      "QuestSummaryChanged",
     ]);
-    expect(result.moved.entries.length).toBeGreaterThan(3);
+    expect(result.moved.entries.length).toBeGreaterThan(4);
     // The chat keeps the chapter as a stub that links to the camp; the camp's first chapter holds it.
     const stub = result.chat.find((chapter) => chapter.id === result.first);
     expect(stub).toMatchObject({ state: "moved", movedTo: CAMP, number: 1 });
@@ -427,6 +435,195 @@ describe("moving a chapter into a camp", () => {
     expect(result.running).toBe("reply-running");
     expect(result.elsewhere).toBe("moved");
     expect(result.empty).toBe("live-chapter-empty");
+  });
+});
+
+/** A request of yours from a party member's Task in the quest, asked in its own session, outside any reply. */
+const membersApproval = (taskId: TaskId, id = "member-rm", fields: Partial<ApprovalRequest> = {}) =>
+  new ApprovalRequest({
+    id: ApprovalId.make(id),
+    agentId: ALDRIC,
+    threadId: CHAT,
+    messageId: null,
+    taskId,
+    rootTaskId: TaskId.make("launch"),
+    stepId: "tool-1",
+    tool: "Bash",
+    operation: "delete-files",
+    targets: ["/work/scratch/notes.txt"],
+    arguments: { command: "rm scratch/notes.txt" },
+    label: "Running rm scratch/notes.txt",
+    reason: "Deleting files asks first.",
+    actionDigest: "d".repeat(64),
+    policyVersion: "r1",
+    state: "pending",
+    denyReason: null,
+    createdAt: NOW,
+    decidedAt: null,
+    ...fields,
+  });
+
+/** The launch quest still running: a party member's step asks you to approve a delete, and searched the web. */
+const runningQuest = Effect.gen(function* () {
+  const chapters = yield* chatWithTwoChapters;
+  const tasks = yield* TaskRepository;
+  const approvals = yield* ApprovalRepository;
+  const sql = yield* SqlClient.SqlClient;
+  const step = yield* tasks.createTask({ task: newTask("copy", "launch"), delegation: null, milestones: [] });
+  yield* approvals.insert(membersApproval(step.value.id));
+  yield* sql`INSERT INTO web_searches ${sql.insert({
+    id: "search-1",
+    agent_id: ALDRIC,
+    thread_id: CHAT,
+    message_id: null,
+    task_id: step.value.id,
+    runtime: "claude-code",
+    query: "lamp shops",
+    searched_at: NOW,
+  })}`;
+  return { ...chapters, step: step.value.id };
+});
+
+/** Where the quest's records outside the Task tree are: its approvals, web use and summary, by id. */
+const questPlaces = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const tasks = yield* TaskRepository;
+  const rows = (table: string, id: string) =>
+    sql<{ id: string; threadId: string | null }>`SELECT ${sql(id)} AS id, thread_id FROM ${sql(table)} ORDER BY id`;
+  return {
+    approvals: yield* rows("approval_requests", "id"),
+    searches: yield* rows("web_searches", "id"),
+    summaries: (yield* tasks.listQuestSummaries(null)).map((summary) => [summary.questId, summary.threadId]),
+  };
+});
+
+describe("a quest whose chapter moves into a camp", () => {
+  // covers CH-009, OR-004, ADR 037 (Quests in camps)
+  it("[TC-CH-1389-01] moves whole while it runs: a member's waiting approval and its web use go with it, and its summary names the camp", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* runningQuest;
+        const approvals = yield* ApprovalRepository;
+        const before = yield* questPlaces;
+        const moved = yield* move(first, intoNew());
+        return {
+          before,
+          moved,
+          after: yield* questPlaces,
+          camp: yield* approvals.listForThread(CAMP),
+          chat: yield* approvals.listForThread(CHAT),
+        };
+      }),
+    );
+    expect(result.before.approvals).toEqual([{ id: "member-rm", threadId: CHAT }]);
+    expect(result.before.summaries).toEqual([["launch-quest", CHAT]]);
+    // The member's request waits in its own session, not in the chat's reply, so it does not hold the move.
+    expect(result.after.approvals).toEqual([{ id: "member-rm", threadId: CAMP }]);
+    expect(result.after.searches).toEqual([{ id: "search-1", threadId: CAMP }]);
+    expect(result.camp.map((approval) => [approval.id, approval.state])).toEqual([["member-rm", "pending"]]);
+    expect(result.chat).toEqual([]);
+    // It is journaled after the move, at its new revision, naming the thread it left.
+    const movedApproval = result.moved.entries.find((entry) => entry.payload._tag === "ApprovalMoved");
+    expect(movedApproval?.payload).toMatchObject({ fromThreadId: CHAT, approval: { id: "member-rm", threadId: CAMP } });
+    expect(result.camp[0]?.revision).toBe(movedApproval?.sequence);
+    const types = result.moved.entries.map((entry) => entry.type);
+    expect(types.indexOf("ApprovalMoved")).toBeGreaterThan(types.indexOf("ChapterMoved"));
+    expect(types.indexOf("ApprovalMoved")).toBeLessThan(types.indexOf("BackpackItemChanged"));
+    // Its summary is journaled once, after the move, naming the camp.
+    const summaries = result.moved.entries.filter((entry) => entry.payload._tag === "QuestSummaryChanged");
+    expect(summaries.map((entry) => (entry.payload as { summary: { threadId: string } }).summary.threadId)).toEqual([
+      CAMP,
+    ]);
+    expect(result.moved.entries.at(-1)?.type).toBe("QuestSummaryChanged");
+    expect(result.after.summaries).toEqual([["launch-quest", CAMP]]);
+  });
+
+  // covers CH-009, ADR 037 (Quests in camps)
+  it("[TC-CH-1389-02] leaves the quest, its approvals and its summary in the chat when the move fails midway", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* runningQuest;
+        const before = { places: yield* placesOf, quest: yield* questPlaces };
+        const clear = yield* breakNextAppend;
+        const failed = yield* Effect.exit(move(first, intoNew()));
+        yield* clear;
+        return { failed, before, after: { places: yield* placesOf, quest: yield* questPlaces } };
+      }),
+    );
+    expect(Exit.isFailure(result.failed)).toBe(true);
+    expect(result.after).toEqual(result.before);
+    expect(idsIn(result.after.places.quests, CHAT)).toEqual(["launch-quest"]);
+    expect(result.after.quest.summaries).toEqual([["launch-quest", CHAT]]);
+  });
+
+  // covers CH-009, PE-006, ADR 037 (Quests in camps)
+  it("[TC-CH-1389-07] a request the member's running session asks after the move is written in the camp", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first, step } = yield* runningQuest;
+        const approvals = yield* ApprovalRepository;
+        yield* move(first, intoNew());
+        // The session started before the move, so it still names the chat it was started from.
+        const asked = yield* approvals.insert(membersApproval(step, "member-second"));
+        return { asked, camp: yield* approvals.listForThread(CAMP), chat: yield* approvals.listForThread(CHAT) };
+      }),
+    );
+    expect(result.asked.value.threadId).toBe(CAMP);
+    expect(result.asked.entries[0]?.payload).toMatchObject({
+      _tag: "ApprovalRequested",
+      approval: { id: "member-second", threadId: CAMP },
+    });
+    expect(result.camp.map((approval) => approval.id)).toEqual(["member-rm", "member-second"]);
+    expect(result.chat).toEqual([]);
+  });
+
+  // covers CH-009, PE-006, ADR 037 (Quests in camps)
+  it("[TC-CH-1389-08] a decision read before the move and saved after it names the camp the request moved to", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* runningQuest;
+        const approvals = yield* ApprovalRepository;
+        // You decide the request: it is read in the chat, then the move commits, then the decision.
+        const read = Option.getOrThrow(yield* approvals.find(ApprovalId.make("member-rm")));
+        yield* move(first, intoNew());
+        const decided = yield* approvals.resolve(
+          new ApprovalRequest({ ...read, state: "approved", lifetime: "once", decidedAt: LATER }),
+          "pending",
+        );
+        return {
+          decided: Option.getOrThrow(decided),
+          stored: Option.getOrThrow(yield* approvals.find(ApprovalId.make("member-rm"))),
+          chat: yield* approvals.listForThread(CHAT),
+        };
+      }),
+    );
+    expect(result.decided.value).toMatchObject({ state: "approved", threadId: CAMP });
+    expect(result.decided.entries[0]?.payload).toMatchObject({
+      _tag: "ApprovalResolved",
+      approval: { id: "member-rm", threadId: CAMP },
+    });
+    expect(result.stored).toMatchObject({ state: "approved", threadId: CAMP });
+    expect(result.chat).toEqual([]);
+  });
+
+  // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
+  it("[TC-CH-1389-05] still refuses while an approval the chat's reply waits on is pending", async () => {
+    const refused = await run(
+      Effect.gen(function* () {
+        const { first, step } = yield* runningQuest;
+        const approvals = yield* ApprovalRepository;
+        yield* approvals.insert(
+          membersApproval(step, "reply-rm", { messageId: MessageId.make("reply-2"), taskId: null, rootTaskId: null }),
+        );
+        return yield* move(first, intoNew()).pipe(
+          Effect.match({
+            onFailure: (error) => ("reason" in error ? error.reason : error._tag),
+            onSuccess: () => "moved",
+          }),
+        );
+      }),
+    );
+    expect(refused).toBe("reply-running");
   });
 });
 
