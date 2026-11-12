@@ -3,7 +3,7 @@ import { ApprovalRequest } from "./approval.ts";
 import { Claim } from "./claim.ts";
 import { HobProposal } from "./hob-proposals.ts";
 import { AgentId, ThreadId } from "./ids.ts";
-import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteId, QuestId, Question } from "./quest.ts";
+import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteDelivery, NoteId, QuestId, Question } from "./quest.ts";
 import { Revision } from "./revision.ts";
 import { SkillProposal } from "./skill-proposals.ts";
 import { AttemptId, Task, TaskId } from "./task.ts";
@@ -82,6 +82,8 @@ export const BackpackPayload = Schema.Union([
     aboutTaskId: Schema.optional(TaskId),
     /** The note it carries, so the turn that picks it up is recorded on the note (#900); absent on older items. */
     noteId: Schema.optionalKey(NoteId),
+    /** How the note asked to reach a running turn (#1345); absent on older items, which wait for the next turn. */
+    delivery: Schema.optionalKey(NoteDelivery),
   }),
   Schema.TaggedStruct("approval-outcome", { approval: ApprovalRequest }),
   Schema.TaggedStruct("deadline", { taskId: TaskId, dueAt: Schema.String }),

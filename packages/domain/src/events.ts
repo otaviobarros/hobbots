@@ -625,7 +625,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HubQuestionRaised: 2,
   HubQuestionAnswered: 2,
   HubQuestionWithdrawn: 2,
-  // A note's `messageId`, `fromNoteId`, `pickedUpBy` and `pickedUpAt` were added with defaults, compatibly.
+  // A note's `messageId`, `fromNoteId`, `pickedUpBy`, `pickedUpAt` and `delivery` were added with defaults, compatibly.
   NoteLeft: 1,
   NotePickedUp: 1,
   HandedOff: 1,

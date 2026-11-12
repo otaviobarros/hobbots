@@ -85,5 +85,24 @@ export class MemberContinuations extends Context.Service<
      * `Continuations.deliver` does for a thread. Returns whether any turn ran.
      */
     readonly deliver: (taskId: TaskId, agentId: AgentId, turn: CarryingTurn<AttemptId>) => Effect.Effect<boolean>;
+    /**
+     * What the messages waiting for the hob under the Task ask of its turn that runs now (#1345):
+     * `interrupt` when any asks to stop it, `steer` when any asks to reach it at its next step, or
+     * null when none waits for that turn.
+     */
+    readonly runningTurnAsks: (taskId: TaskId, agentId: AgentId) => Effect.Effect<"steer" | "interrupt" | null>;
+    /**
+     * Hands the messages that ask to steer the hob's turn under the Task to that turn, the Attempt
+     * `attemptId`, under the dispatcher's claims (ADR 019, Live turn first). `give` puts what the
+     * turn is told of them into it, and returns the session that took it, or null when the turn did
+     * not. Taken, they reached the hob in that turn and are settled; not taken, they wait for its
+     * next turn. Returns whether any was handed.
+     */
+    readonly handToTurn: (
+      taskId: TaskId,
+      agentId: AgentId,
+      attemptId: AttemptId,
+      give: (text: string) => Effect.Effect<string | null>,
+    ) => Effect.Effect<boolean>;
   }
 >()("@hobbots/agents/MemberContinuations") {}

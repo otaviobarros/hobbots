@@ -666,6 +666,9 @@ const resolveReferences = (input: unknown, details: ReadonlyMap<string, unknown>
   return input;
 };
 
+/** How the fake's reply shows a message that reached its turn between two scripted hub calls (#1345). */
+export const FAKE_STEERED = "Steered: ";
+
 /**
  * The hub tool calls a prompt scripts, each shown as a step. What the hub answers is added to
  * `answers`, one `<tool>: <answer>` each, for the reply to end with as a model would read it. The
@@ -688,12 +691,24 @@ export const scriptedHubEvents = (
         .slice(FAKE_HUB_DIRECTIVE.length + 1)
         .trim()
         .split(" ");
-      return { id: `fake-hub-${index + 1}`, name, input: parsedInput(rest.join(" ")) };
+      return { id: `fake-hub-${index + 1}`, name, input: parsedInput(rest.join(" ")), first: index === 0 };
     });
+  // What reaches the turn while it runs is taken between two calls, as a model's next step reads it
+  // (#1345), and the reply shows it in order among the calls' answers.
+  const steered = (first: boolean) =>
+    first || !request.steers
+      ? Effect.void
+      : request.steers.deliver((text) =>
+          Effect.sync(() => {
+            answers.push(`${FAKE_STEERED}${text}`);
+            return true;
+          }),
+        );
   return Stream.fromIterable(calls).pipe(
     Stream.flatMap((call) =>
       Stream.callback<RuntimeEvent>((queue) =>
         Effect.gen(function* () {
+          yield* steered(call.first);
           const report = (event: RuntimeEvent) => Queue.offerUnsafe(queue, event);
           report({
             _tag: "StepStarted",
@@ -933,6 +948,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     ...(runtime === "claude-code" ? { planUsage: fakePlanUsage } : {}),
     // As the real runtime's search: fake Codex's is offered only where every page is read without asking.
     searchOpensPages: runtime === "codex",
+    // A message that arrives while a turn runs is taken before its next scripted hub call (#1345).
+    steersTurns: true,
     sendPrompt,
   });
 };

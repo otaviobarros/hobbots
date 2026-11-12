@@ -21,25 +21,34 @@ const now = "2026-11-03T00:00:00.000Z";
 
 const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null as never) }));
 
-const Tools = TaskTools.layer(sep === "\\" ? "\\" : "/").pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      HobbotsRepositoryLive,
-      TaskRepositoryLive,
-      TaskToolCallsLive,
-      ApprovalRepositoryLive,
-      EventJournal.layer,
-    ).pipe(Layer.provideMerge(TestDatabase)),
-  ),
-  Layer.provideMerge(Layer.mergeAll(EventBus.layer, NodeFolderChecks, NoTools)),
-);
+/** The hob tools, reading which runtimes take a message while a turn runs from `runtimes` (#1345). */
+const toolsLayer = (runtimes: Layer.Layer<never> = Layer.empty) =>
+  TaskTools.layer(sep === "\\" ? "\\" : "/").pipe(
+    Layer.provide(runtimes),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        HobbotsRepositoryLive,
+        TaskRepositoryLive,
+        TaskToolCallsLive,
+        ApprovalRepositoryLive,
+        EventJournal.layer,
+      ).pipe(Layer.provideMerge(TestDatabase)),
+    ),
+    Layer.provideMerge(Layer.mergeAll(EventBus.layer, NodeFolderChecks, NoTools)),
+  );
+const Tools = toolsLayer();
 
 /**
  * Hobs named `names`, and a request to the first of them in its thread, `top`, whose turn has
  * started. `call` makes a hob's call from a turn on a Task, `refused` one the hub refuses.
  */
-export const toolsHub = (names: ReadonlyArray<readonly [AgentId, string]>, top: TaskId) => {
-  const runtime = ManagedRuntime.make(Tools);
+export const toolsHub = (
+  names: ReadonlyArray<readonly [AgentId, string]>,
+  top: TaskId,
+  /** The hub's runtime adapters; absent, as with none, every runtime takes a message while a turn runs. */
+  runtimes?: Layer.Layer<never>,
+) => {
+  const runtime = ManagedRuntime.make(runtimes === undefined ? Tools : toolsLayer(runtimes));
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<typeof Tools>>) => runtime.runPromise(effect);
   const make = (agentId: AgentId, taskId: TaskId, name: string, input: Record<string, unknown>) =>
     Effect.flatMap(Effect.service(TaskTools), (tools) => tools.call({ agentId, taskId }, name, input));

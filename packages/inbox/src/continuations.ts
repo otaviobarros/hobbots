@@ -234,6 +234,31 @@ export const arrivalsText = (
 };
 
 /**
+ * What a message waiting in the backpack asks of a turn of its recipient's that runs as it arrives
+ * (#1345): to reach it at its next step (`steer`), or to stop it so the next turn starts with the
+ * message (`interrupt`). Null for any other item, and for a message that waits for the next turn.
+ */
+export const runningTurnAsk = (item: BackpackItem): "steer" | "interrupt" | null =>
+  item.state === "pending" && item.payload._tag === "message" && item.payload.delivery !== undefined
+    ? item.payload.delivery === "next-turn"
+      ? null
+      : item.payload.delivery
+    : null;
+
+/**
+ * What a running turn is told of the messages handed to it at its next step (#1345). Hobbots writes
+ * it and says so, so the hob never takes it for a message from you.
+ */
+export const steeringText = (items: ReadonlyArray<BackpackItem>): string =>
+  [
+    "Hobbots adds this, not the user. A message arrived for you while you work, so it reaches you now, in this turn:",
+    "",
+    ...items.map((item) => `- ${describeArrival(item, "inline")}`),
+    "",
+    "Take it into account before your next step. If it changes what you should do, change course now.",
+  ].join("\n");
+
+/**
  * What a member's first turn on a Task is told of what else it carries, after its brief: a lead's
  * message, an answer or a hand-off that arrived before its session started, so none of it is
  * consumed unread (#574). The Task's own assignment is the brief itself. Empty when nothing else waits.

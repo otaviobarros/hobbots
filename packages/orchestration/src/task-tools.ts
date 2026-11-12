@@ -19,6 +19,7 @@ import {
   type TaskToolOutcome,
   type ToolAccess,
   type TurnApprovals,
+  turnSteering,
 } from "@hobbots/agents";
 import {
   type AttemptId,
@@ -174,6 +175,9 @@ export class TaskTools extends Context.Service<
         const web = yield* makeWebProvenance;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
         const heldCommit = yield* makeHeldCommits;
+        // Which runtimes take a message while a turn runs (#1345); without adapters, as in tests of the
+        // tools alone, every one is taken to.
+        const steersTurns = yield* turnSteering;
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({
             tasks,
@@ -193,7 +197,7 @@ export class TaskTools extends Context.Service<
             hobs,
             destinations: { missingAt, approvedRemovals, folderChecks, separator },
           }),
-          ...makeLeading({ tasks }),
+          ...makeLeading({ tasks, steersTurns }),
           ...(yield* makeClaiming({
             tasks,
             folders: (scope, task) => Effect.map(authority.of(scope, task), (granted) => granted.folders),

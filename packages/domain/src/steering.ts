@@ -6,8 +6,9 @@ import { ancestorsOf, isTerminalTask, type Task } from "./task.ts";
 /**
  * Where a note stands for the steer receipt that follows the chat message it came from (#900):
  * - `PickedUp`: a turn of its recipient picked it up, named by its reply or Attempt id.
- * - `Held`: its recipient's turn runs and reads only what it started with (ADR 019), or waits for
- *   you to decide an approval request (#701), so the note waits for that turn to end.
+ * - `Held`: its recipient's turn runs and has not taken it yet, or waits for you to decide an
+ *   approval request (#701). A steered note reaches that turn at its next step, and any other once
+ *   the turn ends (#1345).
  * - `Sent`: it waits for its recipient's next turn, which it wakes.
  * - `Unread`: the work it went to ended, or went to another hob, before any turn picked it up.
  */

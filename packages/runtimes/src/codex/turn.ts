@@ -11,7 +11,7 @@ import {
 } from "@hobbots/agents";
 import { type AnyOperation, redactSecrets, type SandboxState } from "@hobbots/domain";
 import type { PolicyEngine } from "@hobbots/permissions";
-import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
+import { Deferred, type Duration, Effect, Queue, type Scope, Semaphore, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
 import {
   sandboxNote,
@@ -763,6 +763,51 @@ const tellTurn =
       .request("turn/steer", { threadId, input: [{ type: "text", text, text_elements: [] }], expectedTurnId: turnId })
       .pipe(Effect.ignore);
 
+/**
+ * Hands the messages that wait for the hob to the running Codex turn with `turn/steer` (#1345). Codex
+ * adds them to the turn and the model reads them with its next request, after the call under way
+ * ends, so a call waiting for your approval keeps its card. While no Codex turn runs, as while
+ * Hobbots waits for a command that outlived one, they wait; a message Codex refuses, as when the
+ * turn ended meanwhile, waits for the next turn.
+ */
+const steerTurn = (
+  server: AppServer,
+  threadId: string,
+  now: CodexTurnNow,
+  steers: PromptRequest["steers"],
+  // One hand-off at a time, so a hub call's answer waits for one already on its way.
+  handing: Semaphore.Semaphore,
+): Effect.Effect<void> =>
+  handing.withPermit(
+    Effect.gen(function* () {
+      if (!steers || now.turnId === null || (yield* Deferred.isDone(now.ended))) return;
+      const turnId = now.turnId;
+      yield* steers.deliver((text) =>
+        server
+          .request("turn/steer", {
+            threadId,
+            input: [{ type: "text", text, text_elements: [] }],
+            expectedTurnId: turnId,
+          })
+          .pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          ),
+      );
+    }),
+  );
+
+/**
+ * The turn's hub tools, each call's answer held until the messages that wait for the hob are in the
+ * running turn (#1345): Codex then reads them with the request that carries the answer, before its
+ * next call, rather than a request later.
+ */
+const steeredHubTools = (request: PromptRequest, handOver: () => Effect.Effect<void>): PromptRequest["hubTools"] => {
+  const hub = request.hubTools;
+  if (!hub || !request.steers) return hub;
+  return { ...hub, call: (name, input, step) => Effect.tap(hub.call(name, input, step), () => handOver()) };
+};
+
 /** The turn's events, which start the turn only once `accepted` holds. */
 const turnEvents = (
   config: CodexTurnConfig,
@@ -776,11 +821,18 @@ const turnEvents = (
       const launch = yield* prepareLaunch(config, request, binary);
       // A tool gate needs the turn's events, which need its thread, which only Codex names.
       let turn: CodexToolTurn | undefined;
+      // Hands what reaches the hob while it works to the running Codex turn, once there is one (#1345).
+      let handOver: Effect.Effect<void> = Effect.void;
       // The turn's thread once Codex names it, whose searches are found as they are read.
       let thread: string | undefined;
       const server = yield* config
         .start(launch.command, {
-          handlers: requestHandlers(config, binary, request.hubTools, () => turn),
+          handlers: requestHandlers(
+            config,
+            binary,
+            steeredHubTools(request, () => handOver),
+            () => turn,
+          ),
           beforeNotification: (notification) => searchFirst(request, thread, notification),
           clientVersion: config.clientVersion,
         })
@@ -829,6 +881,10 @@ const turnEvents = (
       const signals = yield* Queue.unbounded<TurnSignal>();
       const now: CodexTurnNow = { turnId: null, ended: yield* Deferred.make<void>() };
       yield* Effect.forkScoped(follow(notifications, mapper, report, signals, now, tellTurn(server, threadId)));
+      // What reaches the hob while it works goes into the running Codex turn as it arrives (#1345).
+      handOver = steerTurn(server, threadId, now, request.steers, yield* Semaphore.make(1));
+      const turnScope = yield* Effect.scope;
+      if (request.steers) yield* Effect.forkScoped(Stream.runForEach(request.steers.waiting, () => handOver));
 
       // A follow-up turn about a command that outlived its turn carries text only.
       const startTurn = (text: string, skill: typeof asked = null) =>
@@ -846,6 +902,8 @@ const turnEvents = (
             .pipe(Effect.mapError(failed));
           mapper.follow(started.turn.id);
           now.turnId = started.turn.id;
+          // A message that arrived before this Codex turn ran goes in now.
+          yield* Effect.forkIn(handOver, turnScope);
           // Codex took the skill item with the turn, so the skill you picked is used (ADR 029).
           if (skill !== null) {
             const set = askedOne?.set ? { set: askedOne.set.name } : {};
