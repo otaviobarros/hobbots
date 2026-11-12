@@ -225,16 +225,15 @@ export const MemberContinuationsLive = Layer.effect(
         return asks.includes("interrupt") ? "interrupt" : asks.includes("steer") ? "steer" : null;
       });
 
-    const handToTurn: MemberContinuations["Service"]["handToTurn"] = (taskId, agentId, attemptId) =>
+    const handToTurn: MemberContinuations["Service"]["handToTurn"] = (taskId, agentId, attemptId, give) =>
       Effect.gen(function* () {
         const steering = (yield* under(taskId, agentId)).filter((item) => runningTurnAsk(item) === "steer");
-        if (steering.length === 0) return null;
-        const handed = yield* dispatcher.handToLive(
+        if (steering.length === 0) return false;
+        return yield* dispatcher.handToLive(
           steering.map((item) => item.id),
           { target: `task:${taskId}`, turnId: attemptId },
+          (items) => give(steeringText(items)),
         );
-        if (handed === null) return null;
-        return { text: steeringText(handed.items), reached: handed.reached, missed: handed.missed };
       });
 
     return MemberContinuations.of({ waiting, deliver, runningTurnAsks, handToTurn });

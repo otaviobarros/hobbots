@@ -34,7 +34,7 @@ import {
   type TurnEnding,
   taskChat,
 } from "@hobbots/domain";
-import { DateTime, Effect, FiberMap, Option, Queue, type Scope, Semaphore, Stream } from "effect";
+import { Cause, DateTime, Effect, FiberMap, Option, Queue, type Scope, Semaphore, Stream } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
 import { memberPrompt, memberReminder, sendBackPrompt } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
@@ -294,10 +294,14 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             Effect.gen(function* () {
               const sessionId = session();
               if (sessionId === null) return;
-              const handed = yield* deps.continuations.handToTurn(taskId, agentId, attemptId);
-              if (handed === null) return;
-              const took = yield* handOff(handed.text).pipe(Effect.catchCause(() => Effect.succeed(false)));
-              yield* took ? handed.reached(sessionId) : handed.missed;
+              yield* deps.continuations.handToTurn(taskId, agentId, attemptId, (text) =>
+                handOff(text).pipe(
+                  Effect.map((took) => (took ? sessionId : null)),
+                  Effect.catchCause((cause) =>
+                    Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.succeed(null),
+                  ),
+                ),
+              );
             }),
           ),
       };

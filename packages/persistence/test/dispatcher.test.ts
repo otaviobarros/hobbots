@@ -762,8 +762,9 @@ describe("The dispatcher", () => {
   });
 });
 
-/** A turn that ends before the runtime accepts it, every time. */
 describe("Handing items to a running turn", () => {
+  const turn = { target: "task:copy", turnId: "a1" };
+
   // covers IN-003, OR-007
   it("[TC-IN-1345-01] claims and delivers an item into a running turn, settles it once the runtime took it, and sends it back when it never did", async () => {
     const result = await run(
@@ -771,30 +772,33 @@ describe("Handing items to a running turn", () => {
         const { item } = yield* campaign;
         const backpack = yield* Backpack;
         const dispatcher = yield* Dispatcher;
-        const turn = { target: "task:copy", turnId: "a1" };
+        const given: Array<ReadonlyArray<string>> = [];
+        const giving = (session: string | null) => (items: ReadonlyArray<BackpackItem>) =>
+          Effect.sync(() => {
+            given.push(items.map((each) => each.state));
+            return session;
+          });
         // The runtime never took it, as when the turn ended first: it waits for the next turn.
-        const missed = yield* dispatcher.handToLive([item.id], turn);
-        yield* missed?.missed ?? Effect.void;
+        const missed = yield* dispatcher.handToLive([item.id], turn, giving(null));
         const back = yield* backpack.find(item.id);
         // The runtime took it: it reached the turn and is consumed by it, and nothing hands it again.
-        const handed = yield* dispatcher.handToLive([item.id], turn);
-        yield* handed?.reached("session-1") ?? Effect.void;
+        const handed = yield* dispatcher.handToLive([item.id], turn, giving("session-1"));
         const settled = yield* backpack.find(item.id);
-        const again = yield* dispatcher.handToLive([item.id], turn);
-        return { missed, back, handed, settled, again };
+        const again = yield* dispatcher.handToLive([item.id], turn, giving("session-2"));
+        return { missed, back, handed, settled, again, given };
       }),
     );
 
-    expect(result.missed?.items.map((each) => each.state)).toEqual(["delivered"]);
+    expect([result.missed, result.handed, result.again]).toEqual([true, true, false]);
+    // Each hand-off gives the runtime the item as delivered into the turn; the third gives nothing.
+    expect(result.given).toEqual([["delivered"], ["delivered"]]);
     expect(result.back).toMatchObject({ state: "pending", claim: null });
     expect(result.back.deliveries.map((each) => [each.turnId, each.acknowledgedSessionId])).toEqual([["a1", null]]);
-    expect(result.handed?.items.map((each) => each.id)).toEqual([result.settled.id]);
     expect(result.settled).toMatchObject({ state: "resolved", disposition: { _tag: "consumed", by: "a1" } });
     expect(result.settled.deliveries.map((each) => [each.turnId, each.acknowledgedSessionId])).toEqual([
       ["a1", null],
       ["a1", "session-1"],
     ]);
-    expect(result.again).toBeNull();
   });
 
   // covers IN-003, OR-006
@@ -804,18 +808,80 @@ describe("Handing items to a running turn", () => {
         const { item } = yield* campaign;
         const backpack = yield* Backpack;
         const dispatcher = yield* Dispatcher;
+        let given = 0;
+        const give = () =>
+          Effect.sync(() => {
+            given++;
+            return "session-1";
+          });
         yield* backpack.claim(item.id, "another-turn", "1 minute");
-        const held = yield* dispatcher.handToLive([item.id], { target: "task:copy", turnId: "a1" });
+        const held = yield* dispatcher.handToLive([item.id], turn, give);
         yield* backpack.expireClaims({ all: true });
         yield* cancelCopy;
-        const late = yield* dispatcher.handToLive([item.id], { target: "task:copy", turnId: "a1" });
-        return { held, late, item: yield* backpack.find(item.id) };
+        const late = yield* dispatcher.handToLive([item.id], turn, give);
+        return { held, late, given, item: yield* backpack.find(item.id) };
       }),
     );
 
-    expect(result.held).toBeNull();
-    expect(result.late).toBeNull();
+    expect([result.held, result.late, result.given]).toEqual([false, false, 0]);
     expect(result.item).toMatchObject({ state: "resolved", disposition: { _tag: "late" } });
+  });
+
+  // covers IN-003, OR-007
+  it("[TC-IN-1345-03] keeps the claim of an item handed to a running turn while the runtime is slow to take it, so it is never delivered twice", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const backpack = yield* Backpack;
+        const dispatcher = yield* Dispatcher;
+        const taking = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        // The runtime takes the item twice the lease after it was handed over, as a slow turn/steer does.
+        const slow = yield* Effect.forkChild(
+          dispatcher.handToLive([item.id], turn, () =>
+            Deferred.succeed(taking, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as("session-1")),
+          ),
+        );
+        yield* Deferred.await(taking);
+        yield* Effect.sleep("3 seconds");
+        // The sweep ran meanwhile; the claim still holds, so nothing hands the item again.
+        yield* dispatcher.expireLapsed;
+        const during = yield* backpack.find(item.id);
+        const twice = yield* dispatcher.handToLive([item.id], { ...turn, turnId: "a2" }, () =>
+          Effect.succeed("session-2"),
+        );
+        yield* Deferred.succeed(release, undefined);
+        const handed = yield* Fiber.join(slow);
+        return { during, twice, handed, settled: yield* backpack.find(item.id) };
+      }),
+      // Renewed every half second, so three seconds outlast the lease twice over.
+      { ...LIMITS, lease: "1500 millis" },
+    );
+
+    expect(result.during).toMatchObject({ state: "delivered", claim: { owner: expect.stringContaining(":a1") } });
+    expect([result.handed, result.twice]).toEqual([true, false]);
+    expect(result.settled).toMatchObject({ state: "resolved", disposition: { _tag: "consumed", by: "a1" } });
+    expect(result.settled.deliveries.map((each) => [each.turnId, each.acknowledgedSessionId])).toEqual([
+      ["a1", "session-1"],
+    ]);
+  }, 15_000);
+
+  // covers IN-003, OR-007
+  it("[TC-IN-1345-04] sends an item back to pending when its hand-off to a running turn is interrupted", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const backpack = yield* Backpack;
+        const dispatcher = yield* Dispatcher;
+        const stopped = yield* dispatcher
+          .handToLive([item.id], turn, () => Effect.never)
+          .pipe(Effect.timeoutOption("100 millis"));
+        return { stopped, item: yield* backpack.find(item.id) };
+      }),
+    );
+
+    expect(Option.isNone(result.stopped)).toBe(true);
+    expect(result.item).toMatchObject({ state: "pending", claim: null });
   });
 });
 

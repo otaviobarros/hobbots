@@ -104,18 +104,11 @@ export interface BatchTurn {
 }
 
 /**
- * Items handed to a turn that is already running (ADR 019, Live turn first; #1345): claimed and
- * recorded as delivered into it, and waiting for the runtime to take them. The runtime takes them
- * at its next safe point; `reached` then records that they reached the turn and settles them as
- * consumed by it. `missed` sends them back to pending when it never took them, as when the turn
- * ended first, so the next turn carries them.
+ * Hands items to a turn that is already running (ADR 019, Live turn first; #1345): gives the runtime
+ * the items, and returns the session of the turn they reached once it took them, or null when it did
+ * not, as when the turn ended first.
  */
-export interface LiveHandOff {
-  readonly items: ReadonlyArray<BackpackItem>;
-  /** The runtime put them into the turn, which runs in `sessionId`. */
-  readonly reached: (sessionId: string) => Effect.Effect<void>;
-  readonly missed: Effect.Effect<void>;
-}
+export type GiveToLive = (items: ReadonlyArray<BackpackItem>) => Effect.Effect<string | null>;
 
 /** How one dispatch of an item ended. */
 export type Dispatched =
@@ -254,13 +247,16 @@ export class Dispatcher extends Context.Service<
     /**
      * Hands the items still waiting to the turn `turnId` that runs in `target` now, instead of
      * waiting for its end (ADR 019, Live turn first; #1345): each is claimed for that turn, checked
-     * as a dispatch checks it, and recorded as delivered into it. Null when none could be, as when
-     * they were taken or settled meanwhile, or are late.
+     * as a dispatch checks it, recorded as delivered into it, and given to the runtime with `give`
+     * while its lease is renewed. Taken, each reached the turn and is consumed by it; not taken, or
+     * the hand-off interrupted, each goes back to pending for the next turn. Returns whether any
+     * was given: none is when they were taken or settled meanwhile, or are late.
      */
     readonly handToLive: (
       itemIds: ReadonlyArray<BackpackItemId>,
       turn: { readonly target: string; readonly turnId: string },
-    ) => Effect.Effect<LiveHandOff | null>;
+      give: GiveToLive,
+    ) => Effect.Effect<boolean>;
   }
 >()("@hobbots/inbox/Dispatcher") {
   /**
@@ -635,48 +631,73 @@ export class Dispatcher extends Context.Service<
             Effect.asVoid,
           );
 
-        const handToLive: Dispatcher["Service"]["handToLive"] = (itemIds, turn) =>
-          Effect.suspend(() => handOnce(itemIds, turn, new Map<BackpackItemId, Dispatched>()));
+        const handToLive: Dispatcher["Service"]["handToLive"] = (itemIds, turn, give) =>
+          Effect.suspend(() => handOnce(itemIds, turn, give, new Map<BackpackItemId, Dispatched>()));
+
+        /**
+         * Gives the delivered items to the runtime while their leases are renewed, as a dispatched
+         * turn's are, so a runtime slow to take them never lets the claims lapse and the items be
+         * delivered again. Returns the session that took them, null when none did, or `lost` when a
+         * claim was lost all the same: the sweep has sent its item back, so nothing is settled here.
+         */
+        const giving = (delivered: ReadonlyArray<Claimed>, give: GiveToLive) =>
+          Effect.raceFirst(
+            give(delivered.map(({ item }) => item)),
+            Effect.forEach(delivered, renewing, { concurrency: "unbounded", discard: true }).pipe(Effect.as(null)),
+          ).pipe(
+            Effect.catchTag("StaleBackpackClaim", (stale) =>
+              Effect.logWarning("A message handed to a running turn lost its claim", stale).pipe(
+                Effect.as("lost" as const),
+              ),
+            ),
+            Effect.onInterrupt(() =>
+              Effect.forEach(delivered, ({ item, held: claim }) => Effect.ignore(backpack.requeue(item.id, claim)), {
+                discard: true,
+              }),
+            ),
+          );
 
         const handOnce = (
           itemIds: ReadonlyArray<BackpackItemId>,
           turn: { readonly target: string; readonly turnId: string },
+          give: GiveToLive,
           outcomes: Map<BackpackItemId, Dispatched>,
         ) =>
           Effect.gen(function* () {
-            if (yield* held) return null;
+            if (yield* held) return false;
             const found = yield* findWaiting(itemIds, outcomes);
             const waiting = yield* settleLateWaiting(
               found.filter((item) => item.state === "pending" && item.claim === null),
               outcomes,
             );
             const live = yield* claimAll(waiting, `${hub}:${turn.turnId}`, outcomes, { ending: null });
-            if (live.length === 0) return null;
+            if (live.length === 0) return false;
             const delivered = yield* Effect.forEach(live, ({ item, held: claim }) =>
               step(backpack.deliver(item.id, claim, turn)).pipe(
                 Effect.map((next): Claimed => ({ item: next, held: claim })),
               ),
             );
-            // A claim lost meanwhile drops that item's outcome, as a dispatch does; the sweep frees it.
-            const each = (settle: (claimed: Claimed) => Effect.Effect<unknown, unknown>) =>
-              Effect.forEach(
-                delivered,
-                (claimed) =>
-                  settle(claimed).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.logWarning("Could not settle a message handed to a running turn", cause),
-                    ),
+            const sessionId = yield* giving(delivered, give);
+            if (sessionId === "lost") return true;
+            yield* Effect.forEach(
+              delivered,
+              (claimed) =>
+                (sessionId === null
+                  ? step(backpack.requeue(claimed.item.id, claimed.held))
+                  : reachedLive(claimed, turn.turnId, sessionId)
+                ).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("Could not settle a message handed to a running turn", cause),
                   ),
-                { discard: true },
-              );
-            return {
-              items: delivered.map(({ item }) => item),
-              reached: (sessionId: string) => each((claimed) => reachedLive(claimed, turn.turnId, sessionId)),
-              missed: each(({ item, held: claim }) => step(backpack.requeue(item.id, claim))),
-            } satisfies LiveHandOff;
+                ),
+              { discard: true },
+            );
+            return true;
           }).pipe(
             Effect.catchCause((cause) =>
-              Effect.logWarning("Could not hand messages to a running turn", cause).pipe(Effect.as(null)),
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.interrupt
+                : Effect.logWarning("Could not hand messages to a running turn", cause).pipe(Effect.as(false)),
             ),
           );
 

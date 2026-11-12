@@ -41,7 +41,7 @@ A turn's `PromptRequest.steers` hands it messages that arrive while it runs, suc
 - **Codex** adds them to the running turn with `turn/steer` as they arrive, and before it answers a hub call, so the model reads them with the request that carries that answer. Codex then drops a tool call it was about to make on an earlier request and samples again with the message, so no call runs after the message reached it unread. While no Codex turn runs, as while the adapter waits for a command that outlived one, they wait.
 - **The fake runtime** takes them before each scripted hub call after the first, and its reply shows them as `Steered: <text>` among the calls' answers.
 
-An adapter that can do this declares `steersTurns`. For one that cannot, the hub stops the turn and starts the next one with the message instead. The contract test `[TC-RT-1345-01]` checks each runtime: a message that arrives during one hub call reaches the model before the next. It passed with Claude Code 2.1.322 and Codex 0.166.0 and 0.167.0 against stand-in models.
+An adapter that can do this declares `steersTurns`. For one that cannot, the hub stops the turn and starts the next one with the message instead. The contract test `[TC-RT-1345-01]` checks each runtime: a message that arrives during one hub call reaches the model before the next. It passed with Claude Code 2.1.323 and Codex 0.166.0 and 0.167.0 against stand-in models ([evidence](../evidence/2026-11-12-steer-running-member.md)).
 
 ## Web search
 

@@ -93,19 +93,16 @@ export class MemberContinuations extends Context.Service<
     readonly runningTurnAsks: (taskId: TaskId, agentId: AgentId) => Effect.Effect<"steer" | "interrupt" | null>;
     /**
      * Hands the messages that ask to steer the hob's turn under the Task to that turn, the Attempt
-     * `attemptId`, under the dispatcher's claims (ADR 019, Live turn first). Null when none waits.
+     * `attemptId`, under the dispatcher's claims (ADR 019, Live turn first). `give` puts what the
+     * turn is told of them into it, and returns the session that took it, or null when the turn did
+     * not. Taken, they reached the hob in that turn and are settled; not taken, they wait for its
+     * next turn. Returns whether any was handed.
      */
-    readonly handToTurn: (taskId: TaskId, agentId: AgentId, attemptId: AttemptId) => Effect.Effect<HandedToTurn | null>;
+    readonly handToTurn: (
+      taskId: TaskId,
+      agentId: AgentId,
+      attemptId: AttemptId,
+      give: (text: string) => Effect.Effect<string | null>,
+    ) => Effect.Effect<boolean>;
   }
 >()("@hobbots/agents/MemberContinuations") {}
-
-/**
- * Messages handed to a running turn (#1345): what the turn is told of them, and recording whether
- * its runtime took them. Taken, they reached the hob in that turn and are settled; missed, as when
- * the turn ended first, they wait for its next turn.
- */
-export interface HandedToTurn {
-  readonly text: string;
-  readonly reached: (sessionId: string) => Effect.Effect<void>;
-  readonly missed: Effect.Effect<void>;
-}
