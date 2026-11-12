@@ -141,6 +141,7 @@ export const messages = {
     deadline: "a deadline",
     "skill-proposal": "a skill proposal's outcome",
     "hob-proposal": "a hob proposal's outcome",
+    "claim-clash": "a claim clash",
     progress: "progress",
   },
   questStates: { active: "Under way", completed: "Done", failed: "Failed", cancelled: "Cancelled" },

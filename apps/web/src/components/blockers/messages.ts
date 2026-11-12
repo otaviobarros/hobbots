@@ -18,6 +18,7 @@ export const messages = {
     deadline: "A deadline that passed",
     "skill-proposal": "Hearing how a skill it suggested ended",
     "hob-proposal": "Hearing how you decided its proposal",
+    "claim-clash": "Reading about a clash with another task",
     progress: "Reading progress",
   },
   why: {

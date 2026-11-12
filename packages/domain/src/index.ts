@@ -7,6 +7,7 @@ export * from "./cancel.ts";
 export * from "./carried-over.ts";
 export * from "./change-actor.ts";
 export * from "./charm-call.ts";
+export * from "./claim.ts";
 export * from "./device.ts";
 export * from "./directory.ts";
 export * from "./events.ts";

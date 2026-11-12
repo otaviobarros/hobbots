@@ -359,7 +359,11 @@ describe("the backpack end to end", () => {
       ["user", "complete"],
       ["assistant", "complete"],
     ]);
-    const working = await run(treeWhen((tree) => ownedBy(tree, QUILL)[0]?.state === "active"));
+    // Aldric's Task waits on Quill's once his turn has ended: a write of its own, which may land just
+    // after Quill's Task starts, so wait for both.
+    const working = await run(
+      treeWhen((tree) => ownedBy(tree, QUILL)[0]?.state === "active" && tree.tasks[0]?.state === "waiting"),
+    );
     expect(working.tasks[0]?.state).toBe("waiting");
     expect(continuationsIn(requests)).toEqual([]);
 
