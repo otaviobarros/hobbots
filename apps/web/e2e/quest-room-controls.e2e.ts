@@ -8,11 +8,11 @@ import {
   laneHead,
   laneMenu,
   laneTask,
-  openRoom,
-  roomMenu,
+  openQuest,
+  questMenu,
   showInWorkbench,
   ticket,
-} from "./quest-room.ts";
+} from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -33,12 +33,12 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
 
   // The room has a lane per hob, with its Task, where it stands and who it waits on.
   const title = "Plan the Black Friday campaign";
-  const room = await openRoom(page, title);
+  const room = await openQuest(page, title);
   await expect(room).toContainText("Aldric's quest");
-  await expect(laneHead(page, "Quill")).toContainText("Draft the landing copy");
+  await expect(lane(page, "Quill")).toContainText("Draft the landing copy");
   await expect(lane(page, "Ada")).toContainText("Waits on Quill");
   await expect(laneHead(page, "Ada")).toContainText("you", { timeout: 15_000 });
-  await roomMenu(page, title);
+  await questMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Cancel quest…" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(room).not.toContainText("arrive once the hub can confirm");
@@ -62,9 +62,9 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
   await page.keyboard.press("Escape");
 
   // Pinned, the Quest stays in the header of another thread, and its room opens there.
-  await roomMenu(page, title);
+  await questMenu(page, title);
   await page.getByRole("menuitem", { name: "Pin quest" }).click();
-  await roomMenu(page, title);
+  await questMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Unpin quest" })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.goto((await campAt({ url, headers }, aldric, "Something else")).url);
@@ -77,15 +77,18 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
 
   // The answer goes back from the card in the Quest's own thread, and the room follows live.
   await room.getByRole("link", { name: "Open its thread" }).click();
+  await expect(room).toBeVisible();
+  await page.keyboard.press("Escape");
   const asks = page.getByRole("main", { name: "Chat" }).getByRole("region", { name: "Ada asks you" });
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
   await asks.getByRole("button", { name: "Send answer" }).click();
+  await openQuest(page, title);
   await expect(laneHead(page, "Ada")).toContainText("Done", { timeout: 15_000 });
   // The Quest ends only once Aldric's chat has read each member's result, a paced fake reply apiece.
   await expect
     .poll(
       async () => {
-        await roomMenu(page, title);
+        await questMenu(page, title);
         const open = await page.getByRole("menuitem", { name: "Cancel quest…" }).count();
         await page.keyboard.press("Escape");
         return open;
@@ -95,12 +98,12 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
     .toBe(0);
 
   // Unpinned, it leaves the other thread's header.
-  await roomMenu(page, title);
+  await questMenu(page, title);
   await page.getByRole("menuitem", { name: "Unpin quest" }).click();
   await page.goBack();
   await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toBeVisible();
   // The room this thread had open stays until it is closed; closed, the header has no quest left.
-  if (await room.isVisible()) await room.getByRole("button", { name: "Close room" }).click();
+  if (await room.isVisible()) await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(headerQuest(page, title)).toHaveCount(0);
 
   // A pin the hub no longer has says so and can be unpinned.
@@ -121,7 +124,7 @@ test("[TC-CH-193] a lane says why a Reassign is refused, and the room cancels th
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
   const title = "Plan the Black Friday campaign";
-  const room = await openRoom(page, title);
+  const room = await openQuest(page, title);
   const copy = laneHead(page, "Quill");
   const build = laneHead(page, "Ada");
   // Quill's copy is done and Ada waits on your answer: two Tasks run when the Quest is cancelled.
@@ -156,7 +159,7 @@ test("[TC-CH-193] a lane says why a Reassign is refused, and the room cancels th
   await expect(laneHead(page, "Aldric")).toContainText("Cancelled");
   await expect(build).toContainText("Cancelled");
   await expect(copy).toContainText("Done");
-  await roomMenu(page, title);
+  await questMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Cancel quest…" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(ticket(page, title)).toContainText("Cancelled after");
@@ -178,7 +181,7 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await composer.fill("Plan a spring sale for the shop");
   await composer.press("Enter");
   const quest = "Plan the spring sale";
-  const room = await openRoom(page, quest);
+  await openQuest(page, quest);
   const signs = laneTask(page, "Order the sale signs");
   const banner = laneTask(page, "Write the sale banner");
   await expect(signs).toContainText("Running", { timeout: 15_000 });
@@ -194,7 +197,7 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await expect(bannerFailed).toContainText("The image service timed out.");
   await expect(bannerFailed.getByRole("button")).toHaveText(["Retry", "Reassign…"]);
   // Quill's lane names the signs, still running, so Reassign… on the banner opens his menu on the banner.
-  await expect(laneHead(page, "Quill")).toContainText("Order the sale signs");
+  await expect(lane(page, "Quill")).toContainText("Order the sale signs");
   await bannerFailed.getByRole("button", { name: "Reassign…" }).click();
   const quillMenu = page.getByRole("menu", { name: "Quill's task" });
   await expect(quillMenu).toContainText("Reassign “Write the sale banner” to");
@@ -219,24 +222,13 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await expect(bannerFailed).toBeHidden();
   await expect(banner.locator(":scope > span").first()).not.toContainText("Failed");
 
-  // With two tries, the picker in Quill's lane shows the first, and the Workbench follows it.
-  const tries = quill.getByRole("group", { name: "Quill's attempts" });
-  await expect(tries.getByRole("button")).toHaveText(["1✗", "2"]);
-  await expect(tries.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "true");
-  await tries.getByRole("button", { name: "Attempt 1, failed" }).click();
-  await expect(tries.getByRole("button", { name: "Attempt 1, failed" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page).toHaveURL(/attempt=/);
-  // The lane shows what the first try did: its number and how it ended.
-  await expect(banner).toContainText("attempt 1");
-  await expect(banner).toContainText("The image service timed out.");
-  await room.getByRole("tab", { name: /Changes/ }).click();
-  const bench = dock(page);
-  await expect(bench.getByRole("heading", { name: "Write the sale banner" })).toBeVisible();
+  // With two tries, the Workbench opens on the latest and picks the first, which the address keeps.
+  const bench = await showInWorkbench(page, "Write the sale banner");
+  await expect(bench.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
+  await bench.getByRole("radio", { name: "Attempt 1" }).click();
   await expect(bench.getByRole("radio", { name: "Attempt 1" })).toBeChecked();
-  // Picking the latest try again shows the Task as it stands.
-  await tries.getByRole("button", { name: "Attempt 2" }).click();
-  await expect(banner).toContainText("attempt 2");
-  await expect(banner).not.toContainText("The image service timed out.");
+  await expect(page).toHaveURL(/attempt=/);
+  await openQuest(page, quest);
 
   // Reassign… on Ada's failed Task opens her menu on the hobs it can go to: Quill is the only one.
   const emailFailed = lane(page, "Ada").getByRole("region", { name: "Ada's task failed" });
@@ -259,12 +251,12 @@ test("[TC-CH-191] a nested Quest's member gets a lane of its own, and the member
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
 
-  await openRoom(page, "Plan the Black Friday campaign");
+  await openQuest(page, "Plan the Black Friday campaign");
   const rook = laneHead(page, "Rook");
   const pip = laneHead(page, "Pip");
   await expect(rook).toContainText("Leads Pip");
-  await expect(rook).toContainText("Run the ads");
-  await expect(pip).toContainText("Research the keywords");
+  await expect(lane(page, "Rook")).toContainText("Run the ads");
+  await expect(lane(page, "Pip")).toContainText("Research the keywords");
   await expect(pip).toContainText("Done", { timeout: 30_000 });
   await expect(rook).toContainText("Done", { timeout: 30_000 });
   // Pip's work shows in the Workbench like any other lane's.
@@ -281,7 +273,7 @@ test("[TC-UX-240] a question answered in the asking hob's lane goes back to it a
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
   const title = "Plan the Black Friday campaign";
-  const room = await openRoom(page, title);
+  const room = await openQuest(page, title);
 
   // Ada's question shows lit in her lane, with who passed it up and where the answer goes.
   const ada = lane(page, "Ada");
@@ -297,8 +289,10 @@ test("[TC-UX-240] a question answered in the asking hob's lane goes back to it a
   await expect(asks).toBeHidden();
   await expect(laneHead(page, "Ada")).not.toContainText("Needs you");
   await expect(room).not.toContainText("1 needs you");
-  const inChat = page.getByRole("main", { name: "Chat" }).getByRole("region", { name: "Ada asks you" });
-  await expect(inChat).toContainText("You answered in the Quest room: Yes, Dec 12 for international orders.");
+  const inChat = page
+    .getByRole("main", { name: "Chat", includeHidden: true })
+    .getByRole("region", { name: "Ada asks you", includeHidden: true });
+  await expect(inChat).toContainText("You answered in the quest: Yes, Dec 12 for international orders.");
   await expect(laneHead(page, "Ada")).toContainText("Done", { timeout: 15_000 });
   await page.goto(`${url}/#/inbox?tab=needs`);
   await expect(page.getByRole("article", { name: "Question from Ada" })).toHaveCount(0);

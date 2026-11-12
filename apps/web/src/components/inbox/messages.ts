@@ -103,7 +103,7 @@ export const messages = {
     copyFailed: "Could not copy",
     decided: "Decided",
     openChat: "Open in the chat",
-    openRoom: "Open in the Quest room",
+    openQuest: "Open in the quest",
     deviceWhy: ({ name }: { name: string }) =>
       `Someone opened Hobbots on ${name}, a device this hub does not know. Allow it only if it shows the same code.`,
     deviceFoot: "Deny turns that device away. Decide later keeps it waiting in Settings › Devices.",

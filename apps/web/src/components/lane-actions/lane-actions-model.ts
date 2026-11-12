@@ -3,7 +3,7 @@ import { taskControls, topCancel } from "../quest/control-room.ts";
 import { questionForYou } from "../quest/work-model.ts";
 
 /**
- * What you can do from a hob's lane in the Quest room (ADR 027), from the Task tree alone: the ⋯
+ * What you can do from a hob's work in a quest (ADR 027), from the Task tree alone: the ⋯
  * menu's items, the tries in the attempt picker, the question that waits for you and why a failed
  * Task stopped. The controls act on the Task directly, never through the lead (OR-006).
  */

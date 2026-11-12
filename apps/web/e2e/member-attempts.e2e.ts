@@ -1,7 +1,7 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom, showInWorkbench } from "./quest-room.ts";
+import { laneHead, openQuest, showInWorkbench } from "./quest-sheet.ts";
 
 // Issue #668 in the browser: Pip leads a nested Quest and is woken several times on his Task. Each
 // wake is a turn of his Task's one Attempt, so his Workbench offers no Attempt to pick. The hub's
@@ -107,7 +107,7 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
     }),
     hubCall("wait_for", { key: "wait", tasks: ["$review.task_id"] }),
   ]);
-  await openRoom(page, "Review the project");
+  await openQuest(page, "Review the project");
   const pip = laneHead(page, "Pip");
   await expect(pip).toContainText("Blocked", { timeout: 30_000 });
 

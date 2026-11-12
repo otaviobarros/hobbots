@@ -48,7 +48,7 @@ export function ComposerHint({
 }) {
   if (noting) return <span className="min-w-0 flex-1 text-end text-meta text-label">{noteCopy.hint}</span>;
   if (busy) return <BusyHint name={name} stopping={stopping} drafting={drafting} wait={wait} />;
-  // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a paused
+  // beside a quest's Workbench the chat is narrow, so the keys' hint gives way to the message; a paused
   // hob's hint stays.
   return (
     <span className={cn("min-w-0 flex-1 text-end text-meta text-label", !paused && "@max-[480px]/chat:invisible")}>
@@ -120,7 +120,7 @@ export function ComposerActions({
 
 /**
  * Note to self: while it is pressed, what you send is saved under Mine and wakes no hob (ADR 037).
- * Beside the Quest room the chat is narrow, so it gives its words up for an icon, and while a reply
+ * beside a quest's Workbench the chat is narrow, so it gives its words up for an icon, and while a reply
  * runs it steps aside to leave the busy hint and Stop their room.
  */
 export function NoteToggle({ note, busy, onToggle }: { note: NoteMode; busy: boolean; onToggle: () => void }) {

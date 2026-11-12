@@ -51,6 +51,7 @@ import { CatchUpAt } from "../catch-up/catch-up-card.tsx";
 import { type CatchUpView, useCatchUp } from "../catch-up/use-catch-up.ts";
 import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
 import { FindBox } from "../find/find-box.tsx";
+import { useHeadsUps } from "../heads-up/heads-up.tsx";
 import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
@@ -119,9 +120,9 @@ export function ChatView({
   focusMessageId?: string | undefined;
   /** The Quests pinned to every thread's header. */
   pins: Pins;
-  /** What the header ends with, such as the fold button while the Quest room is open. */
+  /** What the header ends with, such as the fold button while a quest's Workbench is open. */
   headerEnd?: ReactNode;
-  /** Whether the chat is in view: not while it is folded away beside the Quest room. */
+  /** Whether the chat is in view: not while it is folded away beside a quest's Workbench. */
   inView?: boolean;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
@@ -505,6 +506,8 @@ function Transcript({
   const changes = !streaming && last !== null && (last.runtime !== next.runtime || last.model !== next.model);
   // Tasks and Quests show under the request that started them, with only the moments that matter.
   const work = useWorkMoments(hob.id, threadId, transcript);
+  // Where two quests' Tasks claim the same files or branch, at the time the hub found it (ADR 037).
+  const headsUps = useHeadsUps(threadId, transcript);
   // Under a message you sent while work ran, where it went next (ADR 027).
   const receipts = useSteerReceipts(hob.id, threadId, transcript);
   // Under a reply, what it saved to the hob's memory (ADR 028).
@@ -545,11 +548,13 @@ function Transcript({
       )}
       {receipts.of(message)}
       {work.after(message.id)}
+      {headsUps.after(message.id)}
     </>
   );
   return (
     <>
       {work.before}
+      {headsUps.before}
       {/* Divided by its chapters once the thread exists (ADR 037); the empty chat has none yet. */}
       {thread === undefined ? (
         transcript.map((message) => <Fragment key={message.id}>{row(message, undefined)}</Fragment>)
@@ -564,6 +569,7 @@ function Transcript({
         />
       )}
       {caughtAt === null && catchUpAt}
+      {headsUps.failed}
       {saves.isError && saves.data === undefined && (
         <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
       )}

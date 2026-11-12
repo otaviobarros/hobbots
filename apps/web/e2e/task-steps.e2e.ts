@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { ticket } from "./quest-room.ts";
+import { ticket } from "./quest-sheet.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";

@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
+import { laneHead, openQuest, taskDetails } from "./quest-sheet.ts";
 
 // Issue #574 in the browser: a member is stuck on something outside Hobbots; once it clears, you
 // tell its lead, who messages the member, and the member finishes with nothing cancelled. The hub's
@@ -92,11 +92,12 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
-  const tasks = await openRoom(page, "Commit the project");
+  const tasks = await openQuest(page, "Commit the project");
   const pip = laneHead(page, "Pip");
   await expect(pip).toContainText("Blocked", { timeout: 20_000 });
 
   // You ran git init yourself and tell Frodo, who reads the work and messages Pip.
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   await composer.fill(
@@ -111,6 +112,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   await expect(page.getByText("Sent to hob").first()).toBeVisible({ timeout: 45_000 });
 
   // Pip finishes; nothing on the Quest was cancelled.
+  await openQuest(page, "Commit the project");
   await expect(pip).toContainText("Done", { timeout: 20_000 });
   await expect(tasks).not.toContainText("Cancelled");
   // Pip's Task holds the message in its backpack, in its details once nothing waits.
@@ -161,12 +163,13 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
 
   // Frodo messages Pip meanwhile; his result says it is held and why.
-  await openRoom(page, "Ship the copy");
+  await openQuest(page, "Ship the copy");
   const pip = laneHead(page, "Pip");
   await expect(pip).toBeVisible();
   const approvals = await request<ReadonlyArray<{ readonly taskId: string | null }>>(current, "GET", "/api/approvals");
   const asked = approvals.find((each) => each.taskId !== null);
   if (asked?.taskId == null) throw new Error("Pip asked nothing");
+  await page.keyboard.press("Escape");
   await composer.fill(
     [
       "Tell Pip the product is renamed",
@@ -180,11 +183,13 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   });
 
   // On Pip's Task, the message waits for a turn to carry it, while Pip's request waits for you.
+  await openQuest(page, "Ship the copy");
   const room = page.getByRole("region", { name: "Backpack for Push the copy" });
   const note = room.getByRole("button", { name: /The product is now Hobbots\./ });
   await expect(note).toContainText("Waiting");
 
   // You allow the push; Pip's turn ends, and his next one carries the message.
+  await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
   await page
     .getByRole("list", { name: "Requests" })
@@ -196,7 +201,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await card.getByRole("button", { name: "Allow once" }).click();
   await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
   await page.getByRole("link", { name: "Open in the chat" }).click();
-  await openRoom(page, "Ship the copy");
+  await openQuest(page, "Ship the copy");
   await expect(pip).toContainText("Done", { timeout: 30_000 });
   // Once nothing waits, the backpack moves into the Task's details.
   await taskDetails(page, "Push the copy");

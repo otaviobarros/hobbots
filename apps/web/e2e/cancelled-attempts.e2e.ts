@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead, laneMenu, laneTask, openRoom, taskSummary } from "./quest-room.ts";
+import { lane, laneHead, laneMenu, laneTask, openQuest, taskSummary } from "./quest-sheet.ts";
 
 // Issues #669 and #674 in the browser: a member's Task and a step cancelled while their turns run
 // each end with a cancelled Attempt, and their Workbench says so. The decision is tested in
@@ -80,7 +80,7 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in their lan
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
-  await openRoom(page, "Build the project");
+  await openQuest(page, "Build the project");
 
   for (const [name, title] of [
     ["Frodo", "Run the long job"],

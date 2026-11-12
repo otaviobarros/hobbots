@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
+import { AgentId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
@@ -220,3 +221,63 @@ export const claimClashText = (claim: Claim, clashes: ReadonlyArray<Claim>): str
     .join(
       ", ",
     )}. Neither Task was stopped: agree with the other leads which Task changes it, or split the work, before both change it.`;
+
+/** One side of a clash a chat or camp shows: a claim, and who holds it for which Task and where. */
+export class ClashSide extends Schema.Class<ClashSide>("ClashSide")({
+  claim: Claim,
+  /** The hob that owns the claim's Task. */
+  ownerId: AgentId,
+  /** The Task's brief, whose first line is its title. */
+  brief: Schema.String,
+  /** The chat or camp the Task's work belongs to: the thread of its top Task. */
+  threadId: Schema.NullOr(ThreadId),
+}) {}
+
+/**
+ * An open clash on a path or a branch, as a chat or camp shows it in a Heads-up (ADR 037): the open
+ * claims that clash, oldest first, at least one of them a Task's in that thread, and when it began,
+ * which is when its newest claim was made.
+ */
+export class ClaimClash extends Schema.Class<ClaimClash>("ClaimClash")({
+  sides: Schema.Array(ClashSide),
+  since: Schema.String,
+}) {}
+
+/**
+ * The open clashes among `open` claims that touch `ours`, each once: claims that clash with one
+ * another, directly or through a third, form one clash, so two quests on one file make one Heads-up
+ * however many times either claimed it. Oldest first, by when each began.
+ */
+export const clashGroups = (
+  ours: ReadonlyArray<Claim>,
+  open: ReadonlyArray<Claim>,
+): ReadonlyArray<ReadonlyArray<Claim>> => {
+  const all = [...new Map([...open, ...ours].filter(isOpen).map((claim) => [claim.id, claim])).values()];
+  const placed = new Set<string>();
+  const groups: Array<ReadonlyArray<Claim>> = [];
+  for (const start of ours) {
+    if (placed.has(start.id) || !isOpen(start) || !all.some((other) => claimsClash(start, other))) continue;
+    const group: Array<Claim> = [];
+    const queue: Array<Claim> = [start];
+    placed.add(start.id);
+    for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+      group.push(next);
+      for (const other of all) {
+        if (placed.has(other.id) || !claimsClash(next, other)) continue;
+        placed.add(other.id);
+        queue.push(other);
+      }
+    }
+    groups.push(group.sort(byCreation));
+  }
+  return groups.sort((a, b) => sinceOf(a).localeCompare(sinceOf(b)));
+};
+
+const byCreation = (a: Claim, b: Claim): number => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+
+/** When a clash began: when its newest claim was made. */
+export const sinceOf = (group: ReadonlyArray<Claim>): string =>
+  group
+    .map((claim) => claim.createdAt)
+    .sort()
+    .at(-1) ?? "";

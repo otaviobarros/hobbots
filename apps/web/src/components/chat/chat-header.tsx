@@ -3,11 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { ThreadHeaderMenu } from "../archive/thread-menu.tsx";
-import { CampSheet } from "../camp-sheet/camp-sheet.tsx";
-import { messages as sheetCopy } from "../camp-sheet/messages.ts";
-import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
-import { StartFreshSheet } from "../camps/start-fresh-sheet.tsx";
 import { FocusChip } from "../chapters/focus-chip.tsx";
 import { FindButton } from "../find/find-box.tsx";
 import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
@@ -15,19 +11,19 @@ import { messages } from "../messages.ts";
 import { BrainPicker } from "../providers/brain-picker.tsx";
 import { ThreadQuestButton } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
+import { QuestPillButton } from "../quest-sheet/quest-pill-button.tsx";
 import { BackIcon } from "./chat-icons.tsx";
 import { ChatTitle } from "./chat-title.tsx";
+import { CampSheetButton, HeaderSheet, QuestSheets, type Sheet, useQuestInSheet } from "./header-sheets.tsx";
 
 const copy = messages.chat;
 const headerCopy = campCopy.header;
 
-/** Which sheet the header opened: from its menu, or a camp's own sheet. */
-type Sheet = "make-camp" | "start-fresh" | "camp" | null;
-
 /**
  * The chat's header (ADR 037, A2-02). The hob's chat leads with the hob's name over "Your chat with"
- * it; a camp leads with its title over who leads it, with its goal under. Then the quest button,
- * search and the ⋯ menu, where Make a camp and Start a fresh chat open their sheets.
+ * it; a camp leads with its title over who leads it, with its goal under. Then the quest buttons, or
+ * a camp's quest pill, search and the ⋯ menu, where Make a camp and Start a fresh chat open their
+ * sheets. A quest opens in the sheet: a camp's own, or one of its own in a chat.
  */
 export function ChatHeader({
   hob,
@@ -58,6 +54,7 @@ export function ChatHeader({
   const renaming = threadId !== undefined && renamingIn === threadId;
   const [sheet, setSheet] = useState<Sheet>(null);
   const camp = thread?.kind === "camp" ? thread : undefined;
+  const inSheet = useQuestInSheet(hobId, threadId);
   return (
     <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
       {/* The way back to the chat list: the hob's page, which opens on its Chats tab. */}
@@ -82,7 +79,7 @@ export function ChatHeader({
         {camp === undefined ? <HobSprite hob={hob} size={40} state={state} badge /> : <CampTile hob={hob} />}
       </Link>
       {/* The title keeps its room when the quest button crowds the header, and gives it up in a
-          column beside the Quest room, where the buttons need it. */}
+          column beside a quest's Workbench, where the buttons need it. */}
       <HeaderTitle
         hob={hob}
         camp={camp}
@@ -92,8 +89,19 @@ export function ChatHeader({
       />
       {/* What the hob reads each turn, and the chapter it is focused on (ADR 037). */}
       {thread && <FocusChip hob={hob} thread={thread} />}
-      {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
-      {threadId && headerEnd === undefined && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
+      {/* Beside the quest's Workbench, whose header is the quest's, the column keeps its width for the chat. */}
+      {threadId && headerEnd === undefined && (
+        <>
+          {camp && (
+            <QuestPillButton
+              threadId={camp.id}
+              open={sheet === "camp" || inSheet.quest !== undefined}
+              onOpen={() => setSheet("camp")}
+            />
+          )}
+          <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} camp={camp !== undefined} />
+        </>
+      )}
       {thread && <FindButton open={finding} onToggle={() => onFinding(!finding)} />}
       {/* A camp's brief, records and what is yours (ADR 037). */}
       {camp && <CampSheetButton camp={camp} open={sheet === "camp"} onOpen={() => setSheet("camp")} />}
@@ -106,42 +114,19 @@ export function ChatHeader({
       />
       {headerEnd}
       <HeaderSheet sheet={sheet} hob={hob} thread={thread} onClose={() => setSheet(null)} />
+      {threadId !== undefined && (
+        <QuestSheets
+          hob={hob}
+          threadId={threadId}
+          camp={camp}
+          campOpen={sheet === "camp"}
+          onCamp={(open) => setSheet(open ? "camp" : null)}
+          inSheet={inSheet}
+          pins={pins}
+        />
+      )}
     </header>
   );
-}
-
-/** A camp's brief, records and what is yours (ADR 037), from the header. */
-function CampSheetButton({ camp, open, onOpen }: { camp: Thread; open: boolean; onOpen: () => void }) {
-  return (
-    <Button
-      variant="outline"
-      size="xs"
-      aria-label={sheetCopy.openFor({ title: camp.title })}
-      aria-expanded={open}
-      onClick={onOpen}
-    >
-      {sheetCopy.open}
-    </Button>
-  );
-}
-
-/** The sheet the header opened, if any. */
-function HeaderSheet({
-  sheet,
-  hob,
-  thread,
-  onClose,
-}: {
-  sheet: Sheet;
-  hob: Agent;
-  thread: Thread | undefined;
-  onClose: () => void;
-}) {
-  if (sheet === "make-camp") return <MakeCampSheet hob={hob} onClose={onClose} />;
-  if (thread === undefined) return null;
-  if (sheet === "start-fresh") return <StartFreshSheet hob={hob} chat={thread} onClose={onClose} />;
-  if (sheet === "camp" && thread.kind === "camp") return <CampSheet hob={hob} camp={thread} onClose={onClose} />;
-  return null;
 }
 
 /** The title column: the camp's title or the hob's name, the line under it, and a camp's goal. */

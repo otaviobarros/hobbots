@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { openWorkbench, taskSummary, ticket } from "./quest-room.ts";
+import { openWorkbench, taskSummary, ticket } from "./quest-sheet.ts";
 import { hobTerminal, rows } from "./terminal.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -157,7 +157,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await expect(tabs.getByRole("tab", { name: /^Terminal/ })).toHaveAttribute("aria-selected", "true");
 
   // Close room leaves the Workbench for the chat, whose turn has ended.
-  await page.getByRole("button", { name: "Close room" }).click();
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(bench).toBeHidden();
   await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden();
@@ -192,6 +192,7 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
   await expect(summary.getByRole("navigation", { name: "Open the other views" }).getByRole("button")).toHaveCount(0);
 
   // Each greyed-out tab still opens, and says in a sentence why it is empty.
+  await openWorkbench(page, questTicket);
   await expect(await open("Changes")).toContainText("Aldric did not change any files in this task.");
   await expect(await open("Files")).toContainText("Aldric did not make or touch any files in this task.");
   await expect(await open("Terminal")).toContainText("Aldric did not use the terminal in this task.");

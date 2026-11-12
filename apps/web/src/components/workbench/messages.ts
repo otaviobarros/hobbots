@@ -62,7 +62,7 @@ export const messages = {
   comingSoon: "Watching a hob use a browser comes in a later update.",
   /** The docked Workbench of a whole Quest (ADR 027). */
   dock: {
-    everyone: "Everyone · click a lane to filter",
+    everyone: "Everyone's work",
     only: ({ name }: { name: string }) => `${name} only`,
     showEveryone: "Show every hob's work",
     by: ({ name }: { name: string }) => `, by ${name}`,
@@ -137,7 +137,7 @@ export const messages = {
   summary: {
     line: {
       notStarted: ({ name }: { name: string }) => `${name} has not started yet.`,
-      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in this lane.`,
+      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in the quest.`,
       working: ({ name, number }: { name: string; number: number }) => `${name} is on attempt ${formatCount(number)}.`,
       waiting: ({ name, number }: { name: string; number: number }) =>
         `${name} is on attempt ${formatCount(number)} and is waiting before going on.`,

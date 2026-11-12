@@ -79,7 +79,7 @@ export const readThrough = (
 
 /**
  * Marks the open chat read on the hub while it is in view, on a page in front, and the thread shows
- * unread, so its dot clears on every device (ADR 027). A chat folded away beside the Quest room is
+ * unread, so its dot clears on every device (ADR 027). A chat folded away beside a quest's Workbench is
  * not in view. The dot clears here at once; the hub's answer and event bring the thread's new
  * revision.
  */

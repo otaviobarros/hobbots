@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom } from "./quest-room.ts";
+import { laneHead, openQuest } from "./quest-sheet.ts";
 
 // Issue #1006 in the browser: a lead's reply to work that arrived while its Quest runs is routine
 // progress, which the room shows. The chat keeps the plan and leaves that reply out, also after a
@@ -99,7 +99,7 @@ test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine prog
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
-  await openRoom(page, "Ship the launch");
+  await openQuest(page, "Ship the launch");
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   await expect(laneHead(page, "Pip")).toContainText("Blocked", { timeout: 30_000 });
 

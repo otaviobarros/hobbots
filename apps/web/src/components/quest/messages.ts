@@ -40,7 +40,7 @@ export const messages = {
       here: ({ answer }: { answer: string }) => `You answered here: ${answer}`,
       chat: ({ answer }: { answer: string }) => `You answered in the chat: ${answer}`,
       inbox: ({ answer }: { answer: string }) => `You answered in the Inbox: ${answer}`,
-      task: ({ answer }: { answer: string }) => `You answered in the Quest room: ${answer}`,
+      task: ({ answer }: { answer: string }) => `You answered in the quest: ${answer}`,
     },
     /** A question's choices (#740): buttons that answer at once, then the box for anything else. */
     choices: ({ name }: { name: string }) => `${name}'s choices`,
@@ -57,7 +57,7 @@ export const messages = {
       here: ({ answer }: { answer: string }) => `You picked here: ${answer}`,
       chat: ({ answer }: { answer: string }) => `You picked in the chat: ${answer}`,
       inbox: ({ answer }: { answer: string }) => `You picked in the Inbox: ${answer}`,
-      task: ({ answer }: { answer: string }) => `You picked in the Quest room: ${answer}`,
+      task: ({ answer }: { answer: string }) => `You picked in the quest: ${answer}`,
     },
     inYourWords: "In your own words, not one of the choices.",
     alsoOffered: ({ labels }: { labels: string }) => `Also offered: ${labels}`,

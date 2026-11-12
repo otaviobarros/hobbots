@@ -31,7 +31,7 @@ export function FocusChip({ hob, thread }: { hob: Agent; thread: Thread }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        {/* In a narrow header, as beside the Quest room, the chip keeps only its dot. */}
+        {/* In a narrow header, as beside a quest's Workbench, the chip keeps only its dot. */}
         <Button variant="chip" className="shrink-0" aria-label={label} title={label}>
           <span aria-hidden className="size-2 rounded-full bg-mint" />
           <span className="@max-[560px]/header:hidden">{label}</span>
