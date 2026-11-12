@@ -43,5 +43,7 @@ export const messages = {
   jump: "Jump ↓",
   jumpTo: ({ text }: { readonly text: string }) => `Jump to ${text}`,
   fold: "Got it, fold this",
+  readFailed: "Couldn't read what changed while you were away. The chat stays unread until it can.",
+  skip: "Skip it and mark the chat read",
   caughtUp: ({ count }: Counted) => `Caught up · ${updates(count)} while you were away`,
 };

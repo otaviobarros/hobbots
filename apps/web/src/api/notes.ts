@@ -2,11 +2,25 @@ import type { HobbotsEvent, Message, MessageId, MessagePin, ThreadId } from "@ho
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents, queryKeys } from "./queries.ts";
-import { readListAgain } from "./records.ts";
+import { readListAgain, recordKeys } from "./records.ts";
 import { recordMessage } from "./sync.ts";
 
 // What is yours in a chat or camp (ADR 037, Mine): notes to self, which wake no hob, and pins; and
 // catch-up, what changed there since you last read it, as the hub works it out.
+
+/**
+ * A chapter moved between `threads`: the decisions and artifacts it made, and the pins on its
+ * messages, went with it, and no record or pin event says so, so each thread's lists are read again
+ * (STD-REACT-012).
+ */
+export const recordsMoved = (queryClient: QueryClient, threads: ReadonlyArray<ThreadId>): Promise<unknown> =>
+  Promise.all(
+    threads.flatMap((threadId) =>
+      [recordKeys.decisions(threadId), recordKeys.artifacts(threadId), pinsKey(threadId)].map((queryKey) =>
+        readListAgain(queryClient, queryKey),
+      ),
+    ),
+  );
 
 const pinsKey = (threadId: ThreadId) => ["threads", threadId, "pins"] as const;
 
@@ -62,14 +76,17 @@ export const useWriteNote = (threadId: ThreadId) => {
 /**
  * What changed in the thread since you last read it, read once each time you come back to it unread
  * (`visit`), before the chat marks itself read, since reading moves the marker past it. It stays as
- * it was read for the visit: catching up is about what you missed while away.
+ * it was read for the visit: catching up is about what you missed while away. `visit` is unique to
+ * the visit, even across a chat view that unmounts and mounts again, and the snapshot is dropped as
+ * soon as nothing reads it, so a later visit never shows an earlier one's news.
  */
-export const catchUpQuery = (threadId: ThreadId, visit: number) =>
+export const catchUpQuery = (threadId: ThreadId, visit: string) =>
   queryOptions({
     queryKey: ["threads", threadId, "catchUp", visit] as const,
     queryFn: () => call((c) => c.notes.catchUp({ params: { threadId } })),
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    gcTime: 0,
     retry: 1,
   });

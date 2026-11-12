@@ -3,7 +3,9 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { formatTime } from "../../lib/time.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
+import { ReadFailed } from "../web/read-failed.tsx";
 import { messages } from "./messages.ts";
+import type { CatchUpView } from "./use-catch-up.ts";
 
 /** How many updates a catch-up holds: the replies, and every change, listed or counted. */
 const updatesOf = (catchUp: CatchUp): number => catchUp.replies + catchUp.items.length + catchUp.more;
@@ -155,6 +157,21 @@ function CaughtUpLine({ catchUp }: { catchUp: CatchUp }) {
   );
 }
 
+/**
+ * The visit's catch-up could not be read (STD-REACT-015, STD-UI-009). The chat stays unread until it
+ * is read, or until you skip it.
+ */
+function CatchUpFailed({ onRetry, onSkip }: { onRetry: () => void; onSkip: () => void }) {
+  return (
+    <section aria-label={messages.heading} className="flex flex-col gap-2">
+      <ReadFailed text={messages.readFailed} onRetry={onRetry} />
+      <Button type="button" variant="quiet" size="xs" className="self-start" onClick={onSkip}>
+        {messages.skip}
+      </Button>
+    </section>
+  );
+}
+
 /** What the transcript shows of catching up, where what you have not read starts. */
 export function CatchUpAt({
   hob,
@@ -162,9 +179,10 @@ export function CatchUpAt({
   onJump,
 }: {
   hob: Agent;
-  view: { readonly open: CatchUp | null; readonly folded: CatchUp | null; readonly fold: () => void };
+  view: Pick<CatchUpView, "open" | "folded" | "fold" | "failed" | "retry">;
   onJump: (messageId: MessageId) => void;
 }) {
+  if (view.failed) return <CatchUpFailed onRetry={view.retry} onSkip={view.fold} />;
   if (view.folded !== null) return <CaughtUpLine catchUp={view.folded} />;
   if (view.open === null) return null;
   return (

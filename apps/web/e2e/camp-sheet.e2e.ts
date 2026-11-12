@@ -13,6 +13,16 @@ test.afterEach(stopAldricHub);
 
 const threadOf = (page: Page) => new URL(page.url()).hash.split("/threads/")[1]?.split("?")[0] ?? "";
 
+/** Whether the hub has `chat` unread, as the hob's list says. */
+const unreadOf =
+  (url: string, aldric: string, headers: Record<string, string>, chat: string) =>
+  async (): Promise<boolean | undefined> => {
+    const listed = (await (
+      await fetch(`${url}/api/agents/${aldric}/threads`, { headers })
+    ).json()) as ReadonlyArray<Thread>;
+    return listed.find((thread) => thread.id === chat)?.unread;
+  };
+
 /** Sends `lines` as one message and waits until the reply, which echoes them, has ended. */
 const say = async (page: Page, composerName: RegExp, lines: ReadonlyArray<string>) => {
   const composer = page.getByRole("textbox", { name: composerName });
@@ -144,12 +154,7 @@ test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async (
   await api("POST", `/threads/${chat}/messages`, {
     content: ["While you are out.", script("record_decision", { key: "fridays", text: "Ship on Fridays." })].join("\n"),
   });
-  const unread = async () => {
-    const listed = (await (
-      await fetch(`${url}/api/agents/${aldric}/threads`, { headers: hub.headers })
-    ).json()) as ReadonlyArray<Thread>;
-    return listed.find((thread) => thread.id === chat)?.unread;
-  };
+  const unread = unreadOf(url, aldric, hub.headers, chat);
   await expect.poll(unread, { timeout: 15_000 }).toBe(true);
 
   await page.goto(address);
@@ -164,4 +169,64 @@ test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async (
   await card.getByRole("button", { name: "Got it, fold this" }).click();
   await expect(card).toBeHidden();
   await expect(main.getByText("Caught up · 2 updates while you were away")).toBeVisible();
+});
+
+// covers CH-001, ADR 037 (Catch-up: each visit reads its own)
+test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on what is new since, not the first visit's news", async ({
+  page,
+}) => {
+  const { url, aldric, api, hub } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, /^Message Aldric/, ["Hello."]);
+  const chat = threadOf(page);
+  const address = page.url();
+  const unread = unreadOf(url, aldric, hub.headers, chat);
+  const away = async (decision: { key: string; text: string }) => {
+    await page.goto(`${url}/#/hobs/${aldric}`);
+    await api("POST", `/threads/${chat}/messages`, {
+      content: [`Meanwhile ${decision.key}.`, script("record_decision", decision)].join("\n"),
+    });
+    await expect.poll(unread, { timeout: 15_000 }).toBe(true);
+    await page.goto(address);
+  };
+
+  await away({ key: "fridays", text: "Ship on Fridays." });
+  const card = main.getByRole("region", { name: "While you were away" });
+  await expect(card).toContainText("Ship on Fridays.");
+  await expect.poll(unread).toBe(false);
+
+  await away({ key: "venue", text: "Book the hall." });
+  await expect(card).toContainText("Book the hall.");
+  await expect(card).not.toContainText("Ship on Fridays.");
+});
+
+// covers CH-001, ADR 037 (Catch-up), STD-REACT-015
+test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread and offers Read again", async ({ page }) => {
+  const { url, aldric, api, hub } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, /^Message Aldric/, ["Hello."]);
+  const chat = threadOf(page);
+  const address = page.url();
+  const unread = unreadOf(url, aldric, hub.headers, chat);
+  await page.goto(`${url}/#/hobs/${aldric}`);
+  await api("POST", `/threads/${chat}/messages`, {
+    content: ["While you are out.", script("record_decision", { key: "fridays", text: "Ship on Fridays." })].join("\n"),
+  });
+  await expect.poll(unread, { timeout: 15_000 }).toBe(true);
+
+  await page.route("**/catch-up", (route) => route.abort());
+  await page.goto(address);
+  const card = main.getByRole("region", { name: "While you were away" });
+  await expect(card.getByRole("alert")).toContainText("Couldn't read what changed while you were away.");
+  await expectAccessible(page, card);
+  // The chat stays unread while its catch-up cannot be read.
+  await page.waitForTimeout(1_000);
+  expect(await unread()).toBe(true);
+
+  await page.unroute("**/catch-up");
+  await card.getByRole("button", { name: "Try again" }).click();
+  await expect(card).toContainText("Ship on Fridays.");
+  await expect.poll(unread).toBe(false);
 });

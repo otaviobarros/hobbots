@@ -13,7 +13,7 @@ import {
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applySuggestionEvent } from "./camp-suggestions.ts";
-import { applyPinEvent } from "./notes.ts";
+import { applyPinEvent, catchUpQuery, recordsMoved } from "./notes.ts";
 import { applyRecordEvent, recordKeys } from "./records.ts";
 
 // Issue #1387 (ADR 037): the camp sheet's lists, the suggestion card and pins read again on their
@@ -110,5 +110,36 @@ describe("record events", () => {
       }),
     });
     expect(suggestionCalls).toEqual(["cancel", "invalidate"]);
+  });
+
+  it("[TC-CH-1387-30] reads both threads' decisions, artifacts and pins again when a chapter moves between them", async () => {
+    const camp = ThreadId.make("camp-2");
+    const client = new QueryClient();
+    const keys = [threadId, camp].flatMap((each) => [
+      recordKeys.decisions(each),
+      recordKeys.artifacts(each),
+      ["threads", each, "pins"],
+    ]);
+    const calls: Array<string> = [];
+    const record = (name: string) => (filters?: { readonly queryKey?: ReadonlyArray<unknown> }) => {
+      calls.push(`${name} ${JSON.stringify(filters?.queryKey)}`);
+      return Promise.resolve();
+    };
+    vi.spyOn(client, "cancelQueries").mockImplementation(record("cancel"));
+    vi.spyOn(client, "invalidateQueries").mockImplementation(record("invalidate"));
+    await recordsMoved(client, [threadId, camp]);
+    for (const key of keys) {
+      const own = calls.filter((call) => call.endsWith(JSON.stringify(key)));
+      expect(own.map((call) => call.split(" ")[0])).toEqual(["cancel", "invalidate"]);
+    }
+  });
+});
+
+describe("catch-up reads", () => {
+  it("[TC-CH-1387-31] keys each visit's read on its own and drops it once nothing reads it", () => {
+    const first = catchUpQuery(threadId, "m1:1");
+    const remounted = catchUpQuery(threadId, "m2:1");
+    expect(first.queryKey).not.toEqual(remounted.queryKey);
+    expect(first.gcTime).toBe(0);
   });
 });

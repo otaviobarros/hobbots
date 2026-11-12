@@ -59,10 +59,10 @@ export function CampSheet({ hob, camp, onClose }: { hob: Agent; camp: Thread; on
           <SheetCloseButton label={messages.close} />
         </SheetHeader>
         <SheetTitle clamped>{camp.title}</SheetTitle>
-        <Tabs value={tab} onValueChange={(value) => isCampTab(value) && setTab(value)} className="gap-3.5">
-          <TabsList>
+        <Tabs value={tab} onValueChange={(value) => isCampTab(value) && setTab(value)}>
+          <TabsList className="mb-3.5">
             {TABS.map((each) => (
-              <TabsTrigger key={each} value={each} className="px-2">
+              <TabsTrigger key={each} value={each}>
                 {messages.tabs[each]}
                 {counts[each] !== undefined && (
                   <span className="text-meta text-label">{messages.count({ count: counts[each] })}</span>

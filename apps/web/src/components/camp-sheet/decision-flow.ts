@@ -42,6 +42,14 @@ export const decisionProblem = (text: string): DecisionProblem | null => {
   return trimmed.length > DECISION_TEXT_MAX ? "text-long" : null;
 };
 
+const sendDecision = (state: DecisionForm, key: string): DecisionForm => {
+  if (state.step === "closed" || state.step === "saving") return state;
+  if (decisionProblem(state.text) !== null) return { ...state, step: "writing", shown: true };
+  // Sending a failed decision again, unchanged, keeps its key, so one saved before its answer was
+  // lost is not recorded twice.
+  return { step: "saving", text: state.text, replaces: state.replaces, key: state.step === "failed" ? state.key : key };
+};
+
 export const decisionFormStep = (state: DecisionForm, event: DecisionFormEvent): DecisionForm => {
   switch (event._tag) {
     case "Open":
@@ -50,14 +58,8 @@ export const decisionFormStep = (state: DecisionForm, event: DecisionFormEvent):
       // Nothing changes while it saves; an edit after a failure writes again, under a new key.
       if (state.step === "closed" || state.step === "saving") return state;
       return { step: "writing", text: event.text, replaces: state.replaces, shown: state.step === "failed" };
-    case "Send": {
-      if (state.step === "closed" || state.step === "saving") return state;
-      if (decisionProblem(state.text) !== null) return { ...state, step: "writing", shown: true };
-      // Sending a failed decision again, unchanged, keeps its key, so one saved before its answer was
-      // lost is not recorded twice.
-      const key = state.step === "failed" ? state.key : event.key;
-      return { step: "saving", text: state.text, replaces: state.replaces, key };
-    }
+    case "Send":
+      return sendDecision(state, event.key);
     case "Saved":
       return state.step === "saving" ? DECISION_FORM_CLOSED : state;
     case "Failed":
