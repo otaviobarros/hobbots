@@ -1,9 +1,10 @@
-import type { Agent, AgentId, Thread } from "@hobbots/domain";
+import type { Agent, AgentId, QuestId, QuestSummary, Thread } from "@hobbots/domain";
 import { Empty } from "@hobbots/ui/components/empty";
 import { Progress } from "@hobbots/ui/components/progress";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import type { ActivityMap } from "../../api/activity.ts";
+import type { ActivityMap } from "../../api/hub-status.ts";
+import { useSummariesByQuest } from "../../api/quest-summaries.ts";
 import type { QuestInProgress } from "../../lib/quest-work.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
@@ -33,6 +34,7 @@ export function PickUp({
   activity: ActivityMap;
 }) {
   const rows = pickUpRows(chats, quests);
+  const summaries = useSummariesByQuest();
   return (
     <section aria-label={copy.title} className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2 text-label">
@@ -55,7 +57,7 @@ export function PickUp({
               key={row.kind === "thread" ? row.thread.id : row.group.quest.id}
               className="border-t border-line first:border-t-0"
             >
-              <Row row={row} hobs={hobs} activity={activity} />
+              <Row row={row} hobs={hobs} activity={activity} summaries={summaries} />
             </li>
           ))}
         </ul>
@@ -68,10 +70,12 @@ function Row({
   row,
   hobs,
   activity,
+  summaries,
 }: {
   row: PickUpRow<Agent, Thread>;
   hobs: ReadonlyMap<AgentId, Agent>;
   activity: ActivityMap;
+  summaries: ReadonlyMap<QuestId, QuestSummary>;
 }) {
   if (row.kind === "thread") {
     const { hob, thread } = row;
@@ -94,7 +98,7 @@ function Row({
   }
   const { group } = row;
   const lead = hobs.get(group.quest.leadId);
-  const { done, total, needs } = questProgress(group);
+  const { done, total, needs } = questProgress(summaries.get(group.quest.id));
   return (
     <QuestLink quest={group.quest} threadAgentId={group.threadAgentId} taskId={group.quest.taskId} className={rowClass}>
       {lead ? <HobTile hob={lead} tile="lg" /> : <span />}

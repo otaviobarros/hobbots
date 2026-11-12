@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import type { HobState } from "../../lib/hob-state.ts";
 import { SigilBadge } from "../roles/role-sigil.tsx";
 
-export { type HobState, hobState, stateLabel, threadState } from "../../lib/hob-state.ts";
+export { type HobState, stateLabel, threadState } from "../../lib/hob-state.ts";
 
 const motion: Record<HobState, string> = {
   idle: "",

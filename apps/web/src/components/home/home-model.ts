@@ -3,15 +3,16 @@ import {
   isTerminalTask,
   type MemberWork,
   openThreadTask,
+  type QuestSummary,
   type TaskId,
   type TaskTree,
   type Thread,
   type ThreadId,
-  workTone,
 } from "@hobbots/domain";
-import type { ThreadActivity } from "../../api/activity.ts";
+import type { ActivityMap } from "../../api/hub-status.ts";
 import { groupOf } from "../../lib/crew.ts";
 import type { HobState } from "../../lib/hob-state.ts";
+import { summaryProgress } from "../../lib/led-quests.ts";
 import type { QuestInProgress } from "../../lib/quest-work.ts";
 import { filterCounts, filterOf, type HobFilter } from "../hobs-page/hobs-page-model.ts";
 import { messages } from "./messages.ts";
@@ -40,7 +41,7 @@ export const homeSummary = (
  */
 export const peekThread = <T extends Pick<Thread, "id" | "updatedAt">>(
   threads: ReadonlyArray<T>,
-  activity: Readonly<Record<string, ThreadActivity>>,
+  activity: ActivityMap,
 ): T | null =>
   threads.find((thread) => activity[thread.id] !== undefined) ??
   threads.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
@@ -125,9 +126,9 @@ export const pickUpRows = <H, T extends Pick<Thread, "id" | "updatedAt">>(
   return rows.toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, PICK_UP_LIMIT);
 };
 
-/** How far a Quest's party got, and how many of its members wait on you. */
-export const questProgress = (group: QuestInProgress) => ({
-  done: group.members.filter((each) => each.task.state === "completed").length,
-  total: group.members.length,
-  needs: group.members.filter((each) => workTone[each.task.state] === "needs").length,
-});
+/**
+ * How far a Quest got and how many things wait on you, from the summary the hub published (ADR 037);
+ * nothing before it is read.
+ */
+export const questProgress = (summary: QuestSummary | undefined) =>
+  summary === undefined ? { done: 0, total: 0, needs: 0 } : { ...summaryProgress(summary), needs: summary.needsYou };

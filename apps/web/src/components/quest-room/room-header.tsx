@@ -11,11 +11,12 @@ import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useParams } from "@tanstack/react-router";
 import { type ReactNode, type RefObject, useState } from "react";
-import { progressStrip, topCancel } from "../quest/control-room.ts";
+import { topCancel } from "../quest/control-room.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { messages as questCopy } from "../quest/messages.ts";
 import { TopControls } from "../quest/room-controls.tsx";
 import { StatusStrip } from "../quest/status-strip.tsx";
+import { useQuestProgress } from "../quest/use-quest-progress.ts";
 import type { HobLookup, Pins } from "../quest/use-work.ts";
 import { taskTitle, workCard } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
@@ -50,12 +51,11 @@ export function RoomHeader({
   technical: { readonly on: boolean; readonly toggle: () => void };
 }) {
   const [asking, setAsking] = useState(false);
+  const { segments, needs, done, total } = useQuestProgress(tree);
   const card = workCard(tree);
   if (card === null) return null;
   const { top } = card;
   const lead = hobs(card.leadId);
-  const { segments, needs } = progressStrip(tree);
-  const { done, total } = card.progress;
   const cancel = topCancel(tree);
   return (
     <>

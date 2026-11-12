@@ -14,9 +14,9 @@ import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
-import { useActivity } from "../../api/activity.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useHobSkills } from "../../api/hob-skills.ts";
+import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
 import { useConnection } from "../../api/live.ts";
 import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
@@ -132,7 +132,8 @@ export function ChatView({
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   // What waits on you in this chat shows in the tray above the composer.
   const needs = useThreadNeeds(threadId);
-  const activity = useActivity();
+  const replies = useThreadReplies();
+  const presence = useHobPresence();
   const navigate = useNavigate();
   // Messages sent while the hub is out of reach wait in the outbox, which sends them when it is back.
   const place: WaitingPlace = threadId ?? `new-${hobId}`;
@@ -225,7 +226,7 @@ export function ChatView({
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
 
-  const state = threadState(current, threadId ? activity[threadId] : undefined, streaming);
+  const state = threadState(presence[hobId], threadId ? replies[threadId] : undefined);
   const paused = current.status === "paused";
   // The composer names a camp; the hob's chat, and the empty chat before it, is just the hob's.
   const placeholder =

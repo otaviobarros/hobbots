@@ -10,9 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
-import { useActivity } from "../../api/activity.ts";
 import { ApiError } from "../../api/client.ts";
 import { settleBrain } from "../../api/first-hob.ts";
+import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
 import {
   changeCount,
   draftProblem,
@@ -35,7 +35,7 @@ import {
   useUpdateHob,
 } from "../../api/queries.ts";
 import { formatMonthDay } from "../../lib/format.ts";
-import { type HobState, hobState } from "../../lib/hob-state.ts";
+import { type HobState, presenceState } from "../../lib/hob-state.ts";
 import { ExportDialog } from "../export/export-dialog.tsx";
 import { messages as exportCopy } from "../export/messages.ts";
 import { HistoryTab, useSeeChanges } from "../hob-changes/hob-history.tsx";
@@ -167,9 +167,9 @@ function Profile({
   onRetired: (retired: Retired) => void;
 }) {
   const threads = useQuery(threadsQuery(hob.id));
-  const activity = useActivity();
-  const state = hobState(hob, threads.data, activity);
-  const running = (threads.data ?? []).filter((t) => activity[t.id] !== undefined);
+  const replies = useThreadReplies();
+  const state = presenceState(useHobPresence()[hob.id]);
+  const running = (threads.data ?? []).filter((t) => replies[t.id] !== undefined);
   const [tab, setTab] = useState<Tab>(opened);
   const [retireOpen, setRetireOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);

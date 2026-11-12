@@ -1,12 +1,11 @@
-import {
-  type Agent,
-  type AgentId,
-  type ApprovalRequest,
-  type BackpackItem,
-  leadsNeedingYou,
-  type Question,
+import type {
+  AgentId,
+  ApprovalRequest,
+  BackpackItem,
+  HobPresenceState,
+  Question,
+  ReplyActivity,
 } from "@hobbots/domain";
-import type { ThreadActivity } from "../api/activity.ts";
 
 /**
  * Sprite states from the design sprite sheet that the current build can show, plus paused. `waiting`
@@ -37,28 +36,10 @@ export const stateLabel: Record<HobState, string> = {
 };
 
 /**
- * The one place a hob's state is worked out: its lifecycle (AG-006) first, then what its threads are
- * doing. Retired hobs leave the hob list, so only active and paused hobs reach it.
- * A paused hob shows as paused even while a reply it started before the pause finishes streaming.
+ * A hob's state as the hub published its presence (ADR 037): every presence is a sprite state. A hob
+ * the hub has not published yet, as before the first snapshot arrives, rests.
  */
-export const hobState = (
-  hob: Pick<Agent, "status">,
-  threads: ReadonlyArray<{ readonly id: string }> | undefined,
-  activity: Readonly<Record<string, ThreadActivity>>,
-): HobState => {
-  if (hob.status === "paused") return "paused";
-  const states = (threads ?? []).map((t) => activity[t.id]).filter((a) => a !== undefined);
-  if (states.includes("working")) return "working";
-  if (states.includes("thinking")) return "thinking";
-  return states.length > 0 ? "on-command" : "idle";
-};
-
-/**
- * A hob with a request waiting for the user needs you, whatever its threads are doing; a paused
- * hob stays paused, since its lifecycle comes first.
- */
-export const withRequests = (state: HobState, waiting: boolean): HobState =>
-  waiting && state !== "paused" ? "needs-you" : state;
+export const presenceState = (presence: HobPresenceState | undefined): HobState => presence ?? "idle";
 
 /**
  * What a hob waits on you for, the first of its kind in the tray's order: a request to approve,
@@ -100,23 +81,13 @@ export const hobNeeds = ({
 };
 
 /**
- * The hobs whose tile in the sidebar is marked as needing you (ADR 027): the rule the hub decides
- * presence by, so the sidebar agrees with it.
+ * One thread's state for the chat header, from what the hub published: the hob's presence when it is
+ * paused, since its lifecycle comes first, then what the thread's running reply is doing.
  */
-export const leadNeeds = leadsNeedingYou;
-
-/**
- * One thread's state for the chat header. The hob's lifecycle wins here too, so the header agrees
- * with the sidebar and Home while a reply started before the pause finishes.
- */
-export const threadState = (
-  hob: Pick<Agent, "status">,
-  activity: ThreadActivity | undefined,
-  streaming: boolean,
-): HobState => {
-  if (hob.status === "paused") return "paused";
-  if (activity === "waiting") return "on-command";
-  return activity ?? (streaming ? "working" : "idle");
+export const threadState = (presence: HobPresenceState | undefined, reply: ReplyActivity | undefined): HobState => {
+  if (presence === "paused") return "paused";
+  if (reply === "waiting") return "on-command";
+  return reply ?? "idle";
 };
 
 // Who stands in front of the scene: those who need you, then the busiest, then the rest.

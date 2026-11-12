@@ -4,11 +4,10 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useActivity } from "../../api/activity.ts";
+import { useHobPresence } from "../../api/hub-status.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
-import { hobState, withRequests } from "../../lib/hob-state.ts";
-import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { useLeadsNeedingYou } from "../inbox/use-waiting-count.ts";
+import { presenceState } from "../../lib/hob-state.ts";
+import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
 import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
@@ -30,7 +29,7 @@ const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.e
  */
 export function SidebarHobs({ expanded }: { expanded: boolean }) {
   const agents = useQuery(agentsQuery);
-  const waiting = useLeadsNeedingYou();
+  const presence = useHobPresence();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const open = openHobOf(pathname);
 
@@ -54,7 +53,7 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
             hob={hob}
             expanded={expanded}
             open={hob.id === open}
-            waiting={waiting.has(hob.id)}
+            full={presenceState(presence[hob.id])}
             pathname={pathname}
           />
         ))}
@@ -75,18 +74,17 @@ function SidebarHob({
   hob,
   expanded,
   open,
-  waiting,
+  full,
   pathname,
 }: {
   hob: Agent;
   expanded: boolean;
   open: boolean;
-  waiting: boolean;
+  /** Its state as the hub published its presence. */
+  full: HobState;
   pathname: string;
 }) {
   const threads = useQuery(threadsQuery(hob.id));
-  const activity = useActivity();
-  const full = withRequests(hobState(hob, threads.data, activity), waiting);
   const state = sidebarState(full);
   const word = copy.state[state];
   const mark = MARK[state];

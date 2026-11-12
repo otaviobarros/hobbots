@@ -9,8 +9,8 @@ export type ArchiveBlock = "reply-running" | "approval-pending";
 
 /**
  * What this client knows that stops an archive: a pending approval, or a reply that runs or waits
- * in the queue. `live` is the thread's activity from live events, for a thread whose messages are
- * not loaded. The hub checks again and refuses when the client did not know.
+ * in the queue. `live` is whether the hub says the thread's run is busy, for a thread whose
+ * messages are not loaded. The hub checks again and refuses when the client did not know.
  */
 export const archiveBlock = ({
   messages,

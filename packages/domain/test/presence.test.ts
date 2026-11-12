@@ -4,6 +4,7 @@ import type { MessageStatus, ReplyStep } from "../src/message.ts";
 import {
   type HobPresence,
   hobPresenceState,
+  leadsNeedingYou,
   noStatus,
   replyActivity,
   type StatusEvent,
@@ -131,5 +132,39 @@ describe("the status a client holds", () => {
       snapshot({ presenceRevision: 3, hobs: [presence("idle", 3)] }),
     );
     expect(shownStatus(reread).hobs).toEqual([]);
+  });
+});
+
+describe("leadsNeedingYou", () => {
+  const ada = AgentId.make("ada");
+  const aldric = AgentId.make("aldric");
+  const pip = AgentId.make("pip");
+  const thread = ThreadId.make("t1");
+  const leadOf = (id: ThreadId) => (id === thread ? aldric : undefined);
+
+  // covers UX-002, OR-005
+  it("[TC-UX-191] marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
+    const needs = leadsNeedingYou({
+      approvals: [
+        { agentId: ada, threadId: thread, state: "pending" },
+        { agentId: pip, threadId: ThreadId.make("t9"), state: "approved" },
+      ],
+      blockers: [{ recipientId: ada, threadId: thread }],
+      questions: [{ question: { askerId: ada, chain: [aldric] } }],
+      failed: [{ task: { id: "build", ownerId: ada, threadId: thread } as never, leadId: aldric }],
+      leadOf,
+    });
+    expect([...needs]).toEqual([aldric]);
+  });
+
+  it("marks the hob itself when its chat is not known, and nobody for decided requests", () => {
+    const needs = leadsNeedingYou({
+      approvals: [{ agentId: pip, threadId: ThreadId.make("t9"), state: "pending" }],
+      blockers: [],
+      questions: [{ question: { askerId: ada, chain: [] } }],
+      failed: [],
+      leadOf,
+    });
+    expect([...needs].sort()).toEqual([ada, pip]);
   });
 });

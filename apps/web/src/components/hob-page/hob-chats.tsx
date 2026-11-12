@@ -6,9 +6,10 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
-import type { ActivityMap } from "../../api/activity.ts";
 import { inboxQuery } from "../../api/approvals.ts";
+import type { ActivityMap } from "../../api/hub-status.ts";
 import { agentsQuery, archivedThreadsQuery } from "../../api/queries.ts";
+import { useSummariesByQuest } from "../../api/quest-summaries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { useSearch } from "../../api/search.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
@@ -41,7 +42,7 @@ export function HobChats({
   const waiting = useQuery({ ...inboxQuery, select: waitingByThread }).data;
   const searching = query.trim() !== "";
   const hobs = useQuery(agentsQuery).data ?? [];
-  const quests = questsByThread(questsInProgress(useQuestWork(hobs.map((each) => each.id))));
+  const quests = questsByThread(questsInProgress(useQuestWork(hobs.map((each) => each.id))), useSummariesByQuest());
 
   const row = (thread: Thread, match?: Pick<Parameters<typeof ChatRow>[0], "title" | "snippet">) => (
     <ChatRow

@@ -6,19 +6,18 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useActivity } from "../../api/activity.ts";
+import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { HOME_VILLAGE, HOME_VILLAGE_PALETTE } from "../../art/home-village.ts";
 import { splitScene } from "../../lib/crew.ts";
-import { sceneOrder, withRequests } from "../../lib/hob-state.ts";
+import { presenceState, sceneOrder } from "../../lib/hob-state.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
 import { greeting } from "../../lib/time.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
-import { HobSprite, hobState } from "../hob-sprite/hob-sprite.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import type { HobFilter } from "../hobs-page/hobs-page-model.ts";
-import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { messages } from "../messages.ts";
 import { Stars } from "../scene/scene.tsx";
 import { activeFilter, homeSummary, inFilter, sceneChips } from "./home-model.ts";
@@ -33,15 +32,15 @@ export function Home() {
   const agents = useQuery(agentsQuery);
   const hobs = agents.data ?? [];
   const threadLists = useQueries({ queries: hobs.map((hob) => threadsQuery(hob.id)) });
-  const activity = useActivity();
-  const waitingHobs = useWaitingHobs();
+  const activity = useThreadReplies();
+  const presence = useHobPresence();
   const [picked, setPicked] = useState<HobFilter>("all");
   const [stageBox, setStageBox] = useState<HTMLDivElement | null>(null);
 
   const crew = sceneOrder(
     hobs.map((hob, index) => {
       const threads = threadLists[index]?.data ?? [];
-      return { hob, threads, state: withRequests(hobState(hob, threads, activity), waitingHobs.has(hob.id)) };
+      return { hob, threads, state: presenceState(presence[hob.id]) };
     }),
   );
   const { stage } = splitScene(crew);
