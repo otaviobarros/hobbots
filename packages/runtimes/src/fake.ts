@@ -30,6 +30,7 @@ import { type CallDecision, decideCall, grantedHosts, startCall } from "./approv
 import { backgroundFinished } from "./background-commands.ts";
 import { sessionPolicy, type ToolTurn, toolTurn } from "./claude-code.ts";
 import { type HookEnd, toolFinished } from "./command-exit.ts";
+import { makeFakeJudgments } from "./fake-judgments.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { mountName } from "./skills.ts";
 import { commandOf, toolLabel, toolRequests, WEB_SEARCH_TOOL } from "./tool-calls.ts";
@@ -824,6 +825,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const details = new Map<string, unknown>();
   // The `fake:once` lines already run, in any session.
   const ran = new Set<string>();
+  // The hub judgments' answers that turns scripted, for any session.
+  const judgments = makeFakeJudgments();
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
     if (availability !== "ready") {
@@ -838,7 +841,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const scripted = onceOnly([...later, request.prompt].join("\n"), ran);
     sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted) });
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
-    const echo = fakeEcho(request, followed);
+    judgments.keep(request, scripted);
+    const echo = judgments.answer(request) ?? fakeEcho(request, followed);
     const quiet = options.quietContinuations === true && request.prompt.startsWith(CONTINUATION_HEADER);
     // The turn's own prompt decides first, so a line kept from before never hides its directive.
     const own = fakeEnding(request.prompt);

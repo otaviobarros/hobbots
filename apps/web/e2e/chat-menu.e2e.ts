@@ -56,10 +56,10 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   await expect(item("Unpin")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Search this chat opens the same search box as the magnifier.
+  // Find opens the same box as the magnifier.
   await menu.click();
-  await item("Search this chat").click();
-  const box = page.getByRole("searchbox", { name: "Search this chat" });
+  await item("Find").click();
+  const box = page.getByRole("searchbox", { name: "Find" });
   await expect(box).toBeVisible();
   await box.press("Escape");
   await expect(box).toBeHidden();

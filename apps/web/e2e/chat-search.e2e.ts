@@ -1,13 +1,14 @@
 import { expect, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
-// Issue #509: the magnifier in the chat header searches this chat, marks each match, scrolls the
-// chat to the one you pick, clears on the first Escape and closes on the next; with nothing found it offers all of the hob's chats, searching for the same words.
+// Issues #509 and #1386: the magnifier in the chat header opens Find, which lists the messages of
+// this chat that match, with the words marked, and opens the one you pick; the first Escape clears
+// the words and the next closes it.
 
 test.afterEach(stopAldricHub);
 
 // covers CH-001, UX-001
-test("[TC-CH-261] Search this chat lists the messages that match, opens the one you pick, and clears then closes on Escape", async ({
+test("[TC-CH-261] Find lists the messages of this chat that match, opens the one you pick, and clears then closes on Escape", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -21,19 +22,20 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   }
 
   // The magnifier opens the box, focused; each match says who and when, with the words marked.
-  const toggle = page.getByRole("button", { name: "Search this chat" });
+  const toggle = page.getByRole("button", { name: "Find", exact: true });
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  const box = page.getByRole("searchbox", { name: "Search this chat" });
+  const box = page.getByRole("searchbox", { name: "Find" });
   await expect(box).toBeFocused();
   await box.fill("BANNER");
-  const matches = page.getByRole("list", { name: "Matches in this chat" });
-  const mine = matches.getByRole("button", { name: /^Y\s*You · / });
+  const found = page.getByRole("region", { name: "What Find found" });
+  const messages = found.getByRole("region", { name: /^Messages · / });
+  const mine = messages.getByRole("button", { name: /Message · You · / });
   await expect(mine).toContainText("Draft the spring banner copy");
   await expect(mine.locator("mark")).toHaveText("banner");
-  await expect(matches.getByRole("button", { name: /^Aldric · / }).first()).toContainText("banner");
-  await expect(matches).not.toContainText("sale emails");
-  await expect(page.getByRole("search").getByRole("status")).toHaveText(/^\d+ messages?$/);
+  await expect(messages.getByRole("button", { name: /Message · Aldric · / }).first()).toContainText("banner");
+  await expect(messages).not.toContainText("sale emails");
+  await expect(found.getByRole("button", { name: "Ask Aldric: “BANNER” Enter" })).toBeVisible();
 
   // Picking one opens it in the chat and closes the box.
   await mine.click();
@@ -41,12 +43,10 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   await expect(box).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-  // Nothing found offers a search across all of Aldric's chats.
+  // Nothing found says so, and offers to ask Aldric.
   await toggle.click();
   await box.fill("lighthouse");
-  await expect(page.getByText("Nothing in this chat says “lighthouse”.")).toBeVisible();
-  const everywhere = page.getByRole("link", { name: "Search all of Aldric's chats" });
-  await expect(everywhere).toHaveAttribute("href", `/#/hobs/${aldric}?q=lighthouse`);
+  await expect(found.getByText("No exact matches. Ask Aldric: the records may still answer it.")).toBeVisible();
 
   // The first Escape clears the words and keeps the box open; the next closes it and gives focus
   // back to the magnifier.
@@ -56,10 +56,4 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   await box.press("Escape");
   await expect(box).toBeHidden();
   await expect(toggle).toBeFocused();
-
-  // The link opens Aldric's Chats already searching for the same words.
-  await toggle.click();
-  await box.fill("lighthouse");
-  await everywhere.click();
-  await expect(page.getByRole("searchbox", { name: "Search Aldric's chats" })).toHaveValue("lighthouse");
 });

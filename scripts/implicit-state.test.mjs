@@ -9,7 +9,8 @@ ${body}
 });
 `;
 
-test("a Set keyed by an id in a service's body fails", () => {
+// covers ADR 037 (Validation), #1360
+test("[TC-GEN-1360-02] a Set keyed by an id in a service's body fails", () => {
   const problems = checkFile("a.ts", service("  const busy = new Set<ThreadId>();"));
   assert.equal(problems.length, 1);
   assert.match(problems[0], /^a\.ts:3: `busy` .*ThreadId.*\(STD-ARCH-013\)$/);
@@ -60,7 +61,8 @@ const machines = [
 /** A file that uses Task, so the Task machine's comparisons are checked in it. */
 const usingTask = (code) => `import type { Task } from "@hobbots/domain";\n${code}`;
 
-test("a comparison of a machine's state outside its module fails", () => {
+// covers ADR 037 (Validation), #1360
+test("[TC-GEN-1360-03] a comparison of a machine's state outside its module fails", () => {
   const problems = checkFile("a.ts", usingTask('const busy = task.state === "active";'), machines);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /^a\.ts:2: compares `\.state` with "active", a state of the Task machine in task\.ts/);

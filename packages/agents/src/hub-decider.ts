@@ -5,7 +5,8 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
  * The hub's judgments (ADR 037, The hub's brain). A projector asks `HubDecider` a question with a
  * schema of the choices it accepts and its own rule's answer. The hub's brain answers with a choice
  * and a confidence, decoded by `Schema`; with No AI, or an answer that does not decode, the rule
- * stands. Only projectors call it, never a command in its request path (STD-ARCH-014, STD-ARCH-016).
+ * stands. Only projectors call it, and Ask, a read that writes nothing; never a command in its
+ * request path (STD-ARCH-014, STD-ARCH-016).
  */
 
 /** One judgment the hub asks its brain for. */
@@ -43,6 +44,10 @@ export const byRule = <A>(judgment: Judgment<A>): Decided<A> => ({ choice: judgm
 /** The rule's answer in place of the brain's, which was asked and gave none that decodes. */
 export const byFallback = <A>(judgment: Judgment<A>): Decided<A> => ({ ...byRule(judgment), by: "fallback" });
 
+/** A judgment turn's instructions, the same for every judgment. */
+export const JUDGMENT_INSTRUCTIONS =
+  "You make one judgment for the Hobbots hub. Reply with one JSON object and nothing else.";
+
 /** What a judgment's turn tells the brain: the question and the answer's shape, and the input. */
 export interface JudgmentText {
   readonly instructions: string;
@@ -64,7 +69,7 @@ export const judgmentText = <A>(judgment: Judgment<A>): JudgmentText => {
   const document = Schema.toJsonSchemaDocument(answerSchema(judgment.choices));
   const definitions = Object.keys(document.definitions).length > 0 ? { $defs: document.definitions } : {};
   return {
-    instructions: "You make one judgment for the Hobbots hub. Reply with one JSON object and nothing else.",
+    instructions: JUDGMENT_INSTRUCTIONS,
     prompt: [
       judgment.question,
       `<input>\n${judgment.input}\n</input>`,

@@ -6,44 +6,10 @@
 // --check writes nothing and fails when a diagram is missing, out of date or names no machine.
 
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { diagramProblems, kebab, render } from "./machine-diagrams.mjs";
 import { loadMachines } from "./machine-registry.mjs";
 
 const DIR = new URL("../docs/architecture/machines/", import.meta.url);
-
-const kebab = (name) => name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
-
-/** The page for one machine: its diagram and its table of events. */
-export const render = ({ exportName, machine, module }) => {
-  const lines = ["stateDiagram-v2"];
-  for (const row of machine.table) {
-    for (const from of row.from) lines.push(`  ${from} --> ${row.to}: ${row.event}${row.guarded ? " (guarded)" : ""}`);
-  }
-  const leaves = machine.states.filter((state) => !machine.table.some((row) => row.from.includes(state)));
-  for (const state of leaves) lines.push(`  ${state} --> [*]`);
-  const rows = machine.table.map(
-    (row) => `| ${row.event} | ${row.from.join(", ")} | ${row.to} | ${row.guarded ? "yes" : "no"} |`,
-  );
-  return [
-    `# ${machine.name}`,
-    "",
-    `Written by \`scripts/machines.mjs\` from \`${exportName}\` in \`${module}\`. Do not edit it by hand: change the machine and run \`pnpm docs:machines\`.`,
-    "",
-    `Its state is in the \`${machine.field}\` field.`,
-    "",
-    "| State | Meaning |",
-    "| --- | --- |",
-    ...machine.states.map((state) => `| ${state} | ${machine.meanings[state]} |`),
-    "",
-    "```mermaid",
-    ...lines,
-    "```",
-    "",
-    "| Event | From | To | Guarded |",
-    "| --- | --- | --- | --- |",
-    ...rows,
-    "",
-  ].join("\n");
-};
 
 const machines = await loadMachines().catch((error) => {
   console.error(`Machines could not be read: ${error.message}`);
@@ -59,15 +25,7 @@ const existing = (() => {
 })();
 
 if (process.argv.includes("--check")) {
-  const problems = [
-    ...[...pages].flatMap(([file, text]) => {
-      if (!existing.includes(file)) return [`docs/architecture/machines/${file} is missing`];
-      return readFileSync(new URL(file, DIR), "utf8") === text
-        ? []
-        : [`docs/architecture/machines/${file} is out of date`];
-    }),
-    ...existing.filter((file) => !pages.has(file)).map((file) => `docs/architecture/machines/${file} names no machine`),
-  ];
+  const problems = diagramProblems(pages, existing, (file) => readFileSync(new URL(file, DIR), "utf8"));
   if (problems.length > 0) {
     console.error(
       `Machine diagrams check failed (run pnpm docs:machines):\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
