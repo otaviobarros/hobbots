@@ -8,7 +8,6 @@ import {
   CAMPAIGN,
   COPY,
   checkpoint,
-  delegation,
   memberApproval,
   QUILL,
   question,
@@ -16,16 +15,7 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import {
-  BEFORE_ALL,
-  liveTrees,
-  placeMoments,
-  rowStatus,
-  taskDetail,
-  taskTitle,
-  workCard,
-  workCounts,
-} from "./work-model.ts";
+import { BEFORE_ALL, liveTrees, placeMoments, rowStatus, taskDetail, taskTitle, workCard } from "./work-model.ts";
 
 describe("taskTitle", () => {
   it("cuts each folder path in a brief's first line to its last part", () => {
@@ -64,30 +54,24 @@ describe("where work stands", () => {
     const asking = tree({ ...quest, approvals: [memberApproval(COPY, QUILL)] });
     expect(rowStatus(asking, task(COPY, { ownerId: QUILL }))).toBe("needs-you");
     expect(rowStatus(asking, task(CAMPAIGN))).toBe("needs-you");
-    expect(workCounts(asking)["needs-you"]).toBe(1);
     expect(taskDetail(asking, task(COPY, { ownerId: QUILL })).approvals.map((each) => each.id)).toEqual(["ap-copy"]);
 
     // Once you decide it, the Task runs again and nothing needs you.
     const decided = tree({ ...quest, approvals: [memberApproval(COPY, QUILL, { state: "approved", revision: 2 })] });
     expect(rowStatus(decided, task(COPY, { ownerId: QUILL }))).toBe("running");
-    expect(workCounts(decided)["needs-you"]).toBe(0);
   });
 
-  it("counts every Task under the request, steps included, for the progress", () => {
-    const steps = ["outline", "draft", "edit", "publish"].map((id, index) =>
-      task(TaskId.make(id), { state: index < 2 ? "completed" : "queued", second: index + 1 }),
-    );
+  it("names who leads a request with no Quest", () => {
+    const steps = ["outline", "draft"].map((id, index) => task(TaskId.make(id), { second: index + 1 }));
     const card = workCard(tree({ tasks: [task(CAMPAIGN), ...steps] }));
-    expect(card?.progress).toEqual({ done: 2, total: 4 });
     expect(card?.quest).toBeNull();
     expect(card?.leadId).toBe(ALDRIC);
   });
 });
 
 describe("the strip", () => {
-  it("counts the work under the request and leaves once it has ended", () => {
+  it("leaves once the work has ended", () => {
     const quest = blackFriday();
-    expect(workCounts(quest)).toMatchObject({ running: 1, waiting: 1, "needs-you": 0 });
     const ended = { ...quest, tasks: [task(CAMPAIGN, { state: "completed" }), ...quest.tasks.slice(1)] };
     expect(liveTrees([quest, ended as typeof quest])).toEqual([quest]);
   });

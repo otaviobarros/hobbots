@@ -1,8 +1,8 @@
 import type { TaskId, TaskTree } from "@hobbots/domain";
-import { progressStrip } from "./control-room.ts";
 import { FlagIcon } from "./flag-icon.tsx";
 import { messages } from "./messages.ts";
 import { StatusStrip } from "./status-strip.tsx";
+import { useQuestProgress } from "./use-quest-progress.ts";
 import { taskTitle, workCard } from "./work-model.ts";
 
 const copy = messages.strip;
@@ -24,10 +24,9 @@ export function QuestButtons({ trees, onOpen }: { trees: ReadonlyArray<TaskTree>
 }
 
 function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId) => void }) {
+  const { segments, needs, review, done, total } = useQuestProgress(tree);
   const card = workCard(tree);
   if (card === null) return null;
-  const { segments, needs } = progressStrip(tree);
-  const { done, total } = card.progress;
   return (
     <button
       type="button"
@@ -44,6 +43,11 @@ function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId
       {total > 0 && (
         <span className="sr-only whitespace-nowrap text-text-secondary @4xl/header:not-sr-only">
           {copy.done({ done, total })}
+        </span>
+      )}
+      {review > 0 && (
+        <span className="sr-only whitespace-nowrap text-text-secondary @4xl/header:not-sr-only">
+          {copy.toReview({ count: review })}
         </span>
       )}
       {needs > 0 ? (

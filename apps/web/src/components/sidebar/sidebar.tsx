@@ -2,7 +2,7 @@ import { TooltipProvider } from "@hobbots/ui/components/tooltip";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { useActivity } from "../../api/activity.ts";
+import { useThreadReplies } from "../../api/hub-status.ts";
 import type { SectionName } from "../../art/icons.ts";
 import { ChiefMark, type ChiefMood } from "../chief/chief-mark.tsx";
 import { chiefLabel, chiefMood } from "../chief/chief-mood.ts";
@@ -86,7 +86,7 @@ export function Sidebar() {
 /** The chief of the hobs, whose lantern speaks for them: it leads to the Inbox while anything needs you. */
 function Chief({ waiting }: { waiting: number }) {
   const [looks, setLooks] = useState(0);
-  const activity = useActivity();
+  const activity = useThreadReplies();
   const mood = chiefMood({ waiting, working: Object.keys(activity).length > 0, preview: previewMood() });
 
   return (

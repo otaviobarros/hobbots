@@ -13,7 +13,7 @@ import {
 } from "@hobbots/domain";
 import { ApiError } from "../../api/client.ts";
 import { messages } from "./messages.ts";
-import { type RowStatus, rowStatus, waitsOnOf, workCounts } from "./work-model.ts";
+import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
 
 /**
  * The quest sheet's rows and controls (ADR 018, CH-005): a request's whole Task tree with who owns each
@@ -272,16 +272,4 @@ export const controlError = (error: unknown, names: Names): string => {
   if (error.tag !== "TaskNotControllable") return refused.other({ message: error.message });
   const known = REFUSALS[String(error.fields.reason ?? "")];
   return known?.(names) ?? refused.other({ message: String(error.fields.message ?? error.message) });
-};
-
-/**
- * What a Quest's progress strip shows: a segment per Task under the lead's, or the Task itself when
- * it works alone, in its tone, and how many Tasks need you.
- */
-export const progressStrip = (tree: TaskTree) => {
-  const rows = roomRows(tree);
-  return {
-    segments: (rows.length > 1 ? rows.slice(1) : rows).map((row) => roomTone(row.status)),
-    needs: workCounts(tree)["needs-you"],
-  };
 };

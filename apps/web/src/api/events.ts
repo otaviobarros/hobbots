@@ -16,7 +16,6 @@ import {
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
-import { recordActivity, setActivity } from "./activity.ts";
 import { moveApproval, storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { chapterMoved, chatStartedFresh } from "./camps.ts";
@@ -30,6 +29,7 @@ import { applyHobChanges } from "./hob-changes.ts";
 import { hobProposalsChanged } from "./hob-proposals.ts";
 import { hobSkillsChanged } from "./hob-skills.ts";
 import { hubQuestionChanged } from "./hub-questions.ts";
+import { applyStatusFrame, statusReady } from "./hub-status.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
@@ -38,6 +38,7 @@ import { memorySharesChanged } from "./memory-shares.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
+import { questSummaryChanged } from "./quest-summaries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
@@ -99,7 +100,6 @@ const applyDelta = (queryClient: QueryClient, event: MessageDelta) => {
     }),
   );
   if (missed) void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
-  setActivity(queryClient, event.threadId, "working");
 };
 
 const applyAgent = (queryClient: QueryClient, hob: Agent) => {
@@ -204,7 +204,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
   "TurnStarted",
   "TurnEnded",
-  // The status the hub decides comes on `status` frames, which the window does not follow yet (#1374).
+  // The status the hub decides comes on `status` frames, never as journal entries (ADR 037).
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
@@ -224,8 +224,6 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "CampSuggestionAccepted",
   "CampSuggestionExpired",
   "BriefWritten",
-  // Quest summaries (ADR 037) are read once the screens render what the hub publishes (#1374).
-  "QuestSummaryChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -250,8 +248,7 @@ type UnappliedEvent = Extract<
       | "CampSuggestionKept"
       | "CampSuggestionAccepted"
       | "CampSuggestionExpired"
-      | "BriefWritten"
-      | "QuestSummaryChanged";
+      | "BriefWritten";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -371,7 +368,6 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.message.threadId), (old) =>
         old ? upsertNewer(old, event.message, upsertMessage) : old,
       );
-      if (event.message.role === "assistant") recordActivity(queryClient, event.message);
       showLastLine(queryClient, event.message);
       return;
     // The message itself arrives as MessageUpserted just before.
@@ -387,6 +383,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
     case "MessageDelta":
       applyDelta(queryClient, event);
+      return;
+    // How a Quest is going, as the hub folded it (ADR 037).
+    case "QuestSummaryChanged":
+      questSummaryChanged(queryClient, event.summary);
       return;
     default:
       applyWorkEvent(queryClient, event);
@@ -589,6 +589,8 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         const ready = decodeReady(frame.data);
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
+        // Status events are not replayed, so even a resumed stream reads the hub's status again.
+        statusReady(queryClient);
         void refreshMemory(queryClient);
         void refreshMemorySaves(queryClient);
         // What changed while the stream was down is not replayed into the Skills page's reads.
@@ -631,6 +633,13 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     source.addEventListener(STREAM_FRAME.remoteAccess, (frame) => {
       try {
         remoteAccessChanged(queryClient, decodeRemoteAccess(frame.data).status);
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
+    source.addEventListener(STREAM_FRAME.status, (frame) => {
+      try {
+        applyStatusFrame(queryClient, frame.data);
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }

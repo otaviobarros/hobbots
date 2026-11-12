@@ -1,23 +1,27 @@
 import type { TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatDuration } from "../../lib/format.ts";
-import { progressStrip } from "../quest/control-room.ts";
+import type { QuestProgress } from "../quest/quest-progress.ts";
+import { useQuestProgress } from "../quest/use-quest-progress.ts";
 import { workCard } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.finished;
 
 /** What a finished request's banner says: what was delivered, how much was done and how long it took. */
-const finishedText = (tree: TaskTree): { readonly summary: string | null; readonly meta: string } | null => {
+const finishedText = (
+  tree: TaskTree,
+  progress: QuestProgress,
+): { readonly summary: string | null; readonly meta: string } | null => {
   const card = workCard(tree);
   if (card === null || card.top.state !== "completed") return null;
   const { top } = card;
   const took = formatDuration(card.took ?? 0);
-  const { done, total } = card.progress;
+  const { done, total, needs } = progress;
   const parts = [
     ...(total > 0 ? [copy.tasks({ done, total })] : []),
     copy.took({ took }),
-    ...(progressStrip(tree).needs === 0 ? [copy.nothingNeedsYou] : []),
+    ...(needs === 0 ? [copy.nothingNeedsYou] : []),
   ];
   return { summary: top.result?.summary ?? null, meta: parts.join(" · ") };
 };
@@ -36,7 +40,7 @@ export function RoomFinished({
   onChanges: () => void;
   onFiles: () => void;
 }) {
-  const text = finishedText(tree);
+  const text = finishedText(tree, useQuestProgress(tree));
   if (text === null) return null;
   const quest = workCard(tree)?.quest ?? null;
   const title = quest === null ? copy.taskTitle : copy.questTitle;

@@ -1,5 +1,5 @@
-import type { AgentId, ApprovalRequest, ThreadId } from "@hobbots/domain";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import type { AgentId, ApprovalRequest } from "@hobbots/domain";
+import { useQuery } from "@tanstack/react-query";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockers } from "../../api/blockers.ts";
 import { useFailedTasks } from "../../api/failed-tasks.ts";
@@ -7,10 +7,9 @@ import { useWaitingHobProposals } from "../../api/hob-proposals.ts";
 import { useHubQuestions } from "../../api/hub-questions.ts";
 import { useWaitingShares } from "../../api/memory-shares.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
-import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { useWaitingQuestions } from "../../api/questions.ts";
 import { useWaitingProposals } from "../../api/skill-proposals.ts";
-import { type HobNeed, hobNeeds, leadNeeds } from "../../lib/hob-state.ts";
+import { type HobNeed, hobNeeds } from "../../lib/hob-state.ts";
 import { pendingCount } from "./inbox-items.ts";
 
 /**
@@ -42,23 +41,3 @@ export const useWaitingHobs = (): ReadonlyMap<AgentId, HobNeed> =>
     questions: useWaitingQuestions(),
   });
 const NONE: ReadonlyArray<ApprovalRequest> = [];
-
-/**
- * The hobs the sidebar marks as needing you (ADR 027): the lead whose chat each request, question,
- * stuck work or member's failed Task waits in, since you talk only to the lead.
- */
-export const useLeadsNeedingYou = (): ReadonlySet<AgentId> => {
-  const hobs = useQuery(agentsQuery).data ?? [];
-  const owners = useQueries({
-    queries: hobs.map((hob) => threadsQuery(hob.id)),
-    combine: (results) =>
-      new Map(results.flatMap((result) => (result.data ?? []).map((thread) => [thread.id, thread.agentId] as const))),
-  });
-  return leadNeeds({
-    approvals: useQuery(inboxQuery).data ?? NONE,
-    blockers: useBlockers(),
-    questions: useWaitingQuestions(),
-    failed: useFailedTasks(),
-    leadOf: (threadId: ThreadId) => owners.get(threadId),
-  });
-};

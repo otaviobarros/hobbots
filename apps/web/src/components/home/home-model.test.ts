@@ -122,19 +122,12 @@ describe("pickUpRows", () => {
 });
 
 describe("questProgress", () => {
-  it("counts the party's finished Tasks and the members who wait on you", () => {
-    const launch = quest("q1", "aldric");
-    const members = [
-      memberWork("copy", "quill", launch, "completed"),
-      memberWork("build", "ada", launch, "blocked"),
-      memberWork("email", "pip", launch, "active"),
-    ];
-    expect(questProgress({ quest: launch, threadAgentId: launch.leadId, members })).toEqual({
-      done: 1,
-      total: 3,
-      needs: 1,
-    });
+  it("shows the Tasks done and what waits on you as the hub's summary counts them", () => {
+    const tones = { needs: 1, working: 1, waiting: 0, done: 1, problem: 0, idle: 0 };
+    expect(questProgress({ tones, needsYou: 2 } as never)).toEqual({ done: 1, total: 3, needs: 2 });
   });
+  it("shows nothing before the summary is read", () =>
+    expect(questProgress(undefined)).toEqual({ done: 0, total: 0, needs: 0 }));
 });
 
 describe("homeSummary", () => {

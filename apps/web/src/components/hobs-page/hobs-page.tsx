@@ -7,11 +7,10 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { type ActivityMap, useActivity } from "../../api/activity.ts";
+import { type ActivityMap, useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
 import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
 import { matchesHob } from "../../lib/crew.ts";
-import { type HobState, hobState, withRequests } from "../../lib/hob-state.ts";
-import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
+import { type HobState, presenceState } from "../../lib/hob-state.ts";
 import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import { HobCard, HobCardSkeleton } from "./hob-card.tsx";
 import { filterCounts, type HobFilter, isHobFilter, shownCrew } from "./hobs-page-model.ts";
@@ -70,13 +69,13 @@ function Crew({
 }) {
   const reading = hobs === undefined;
   const threadLists = useQueries({ queries: (hobs ?? []).map((hob) => threadsQuery(hob.id)) });
-  const activity = useActivity();
-  const waiting = useWaitingHobs();
+  const activity = useThreadReplies();
+  const presence = useHobPresence();
   const navigate = useNavigate();
 
   const crew = (hobs ?? []).map((hob, index) => {
     const threads = threadLists[index]?.data ?? [];
-    return { hob, threads, state: withRequests(hobState(hob, threads, activity), waiting.has(hob.id)) };
+    return { hob, threads, state: presenceState(presence[hob.id], hob.status) };
   });
   const counts = filterCounts(crew);
   const finding = query.trim() !== "";

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
+import { useSummariesByQuest } from "../../api/quest-summaries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { type LedQuest, ledQuests } from "../../lib/led-quests.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
@@ -72,7 +73,7 @@ function LedQuests({ hob }: { hob: Agent }) {
   const hobs = useQuery(agentsQuery).data ?? [];
   const work = useQuestWork(hobs.map((each) => each.id));
   const [all, setAll] = useState(false);
-  const { live, finished } = ledQuests(questsInProgress(work), hob.id);
+  const { live, finished } = ledQuests(questsInProgress(work), useSummariesByQuest(), hob.id);
   if (live.length === 0 && finished === 0) return null;
   const shown = all ? live : live.slice(0, SHOWN.quests);
   return (

@@ -3,16 +3,15 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useActivity } from "../../api/activity.ts";
 import { useIsNewHob } from "../../api/history.ts";
 import { useHobSkills } from "../../api/hob-skills.ts";
+import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
 import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
-import { hobState, withRequests } from "../../lib/hob-state.ts";
+import { presenceState } from "../../lib/hob-state.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
 import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { HobSkillsTab, SkillsTabIcon } from "../hob-skills/hob-skills-tab.tsx";
-import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { HobAside } from "./hob-aside.tsx";
 import { ChatsLoading, HobChats } from "./hob-chats.tsx";
@@ -62,12 +61,11 @@ export function HobPage({
 
 function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: HistoryFilter; query: string }) {
   const threads = useQuery(threadsQuery(hob.id));
-  const activity = useActivity();
-  const waiting = useWaitingHobs().has(hob.id);
+  const activity = useThreadReplies();
   const need = useNeedLine(hob.id);
   const navigate = useNavigate();
   const list = threads.data ?? [];
-  const state = withRequests(hobState(hob, list, activity), waiting);
+  const state = presenceState(useHobPresence()[hob.id], hob.status);
   const fresh = useIsNewHob(hob.id, threads.isSuccess ? list.length : undefined);
 
   // The tab and the History filter live in the URL; Chats and Everything are the defaults and stay out of it.

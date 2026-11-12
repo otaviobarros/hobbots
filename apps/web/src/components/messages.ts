@@ -1139,6 +1139,12 @@ export const messages = {
       "Hobbots cannot reach the hub. It may be off, or remote access may be paused. Messages you send wait here.",
     tryNow: "Try now",
   },
+  hubReads: {
+    failed:
+      "Hobbots could not read what your hobs and Quests are doing, so they may show as resting or with no progress. Your hobs keep working on the hub.",
+    tryAgain: "Try again",
+    tryingAgain: "Trying again…",
+  },
   connectionBanner: {
     tryNow: "Try now",
     openTailscale: "Open Tailscale",

@@ -6,9 +6,9 @@ import { PopoverClose, PopoverContent } from "@hobbots/ui/components/popover";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
-import { useActivity } from "../../api/activity.ts";
 import { useBackpack } from "../../api/backpack.ts";
 import { useBlockers } from "../../api/blockers.ts";
+import { useThreadReplies } from "../../api/hub-status.ts";
 import type { HobState } from "../../lib/hob-state.ts";
 import { waitingCount, waitingView } from "../backpack/backpack-model.ts";
 import { useOpenItem } from "../backpack/use-open-item.ts";
@@ -50,7 +50,7 @@ const DOT: Record<"needs-you" | "live" | "quiet", string> = {
  */
 export function HobCard({ hob, state, threads }: { hob: Agent; state: HobState; threads: ReadonlyArray<Thread> }) {
   const tag = stateTag(state);
-  const doing = doingOf(state, threads, useActivity(), useNeedLine(hob.id));
+  const doing = doingOf(state, threads, useThreadReplies(), useNeedLine(hob.id));
   return (
     <PopoverContent
       side="right"

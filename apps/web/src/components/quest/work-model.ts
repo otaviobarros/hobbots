@@ -45,8 +45,6 @@ export interface WorkCard {
   readonly quest: Quest | null;
   /** The hob you asked: the Task's owner, the Quest's lead. */
   readonly leadId: AgentId;
-  /** Done Tasks and all Tasks under the top one, for the progress line. */
-  readonly progress: { readonly done: number; readonly total: number };
   /**
    * How long the work ran, in milliseconds, once its top Task has ended, or null while it runs. It
    * ends when the Quest ended, or when a Task with no Quest ended, so every place shows one value (#1007).
@@ -111,32 +109,18 @@ export const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> =>
   ),
 ];
 
-/** What the ticket, the quest button and the room header say of a request's work: who leads it and how far it is. */
+/** What the ticket, the quest button and the room header say of a request's work: who leads it and how long it ran. */
 export const workCard = (tree: TaskTree): WorkCard | null => {
   const top = tree.tasks[0];
   if (top === undefined) return null;
   const quest = tree.quests.find((each) => each.taskId === top.id) ?? null;
-  const under = tree.tasks.filter((task) => task.id !== top.id);
   const endedAt = isTerminalTask(top.state) ? (quest?.endedAt ?? top.updatedAt) : null;
   return {
     top,
     quest,
     took: endedAt === null ? null : Math.max(0, Date.parse(endedAt) - Date.parse(top.createdAt)),
     leadId: top.ownerId,
-    progress: {
-      done: under.filter((task) => task.state === "completed").length,
-      total: under.length,
-    },
   };
-};
-
-/** How many of a tree's Tasks under the top one stand where, for the strip. */
-export const workCounts = (tree: TaskTree): Readonly<Record<RowStatus, number>> => {
-  const counts: Record<RowStatus, number> = { "needs-you": 0, failed: 0, blocked: 0, running: 0, waiting: 0, done: 0 };
-  const top = tree.tasks[0];
-  for (const task of tree.tasks) if (task !== top) counts[rowStatus(tree, task)] += 1;
-  counts["needs-you"] = questionsForYou(tree).length + pendingApprovals(tree).length;
-  return counts;
 };
 
 /** The trees whose work has not ended: the strip keeps them in view. */

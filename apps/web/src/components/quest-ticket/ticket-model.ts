@@ -1,7 +1,8 @@
-import { type AgentId, isTerminalTask, type Task, type TaskTree } from "@hobbots/domain";
+import type { AgentId, Task, TaskTree } from "@hobbots/domain";
 import { laneRoom } from "../lanes/lane-model.ts";
 import type { RoomStatus } from "../quest/control-room.ts";
-import { taskTitle, workCard, workCounts } from "../quest/work-model.ts";
+import type { QuestProgress } from "../quest/quest-progress.ts";
+import { taskTitle, workCard } from "../quest/work-model.ts";
 
 /** How a Quest that ended came to its end, as its top Task records it. */
 export type TicketEnd = "completed" | "failed" | "cancelled";
@@ -23,8 +24,8 @@ interface TicketHob {
 
 /**
  * The ticket under the request that started a Task (ADR 027): the party in lane order, the
- * title, the progress, and how many things wait on you. It is built from the Task tree alone, so it
- * stays the same size however much work the Quest does.
+ * title, the progress, and how many things wait on you. It is built from the Task tree and the
+ * progress the hub published for its Quest, so it stays the same size however much work the Quest does.
  */
 export interface Ticket {
   readonly top: Task;
@@ -45,18 +46,8 @@ const progressOf = (top: Task, done: number, total: number, took: number | null)
   return total === 0 ? { kind: "started", at: top.createdAt } : { kind: "count", done, total };
 };
 
-/**
- * What waits on you in a running Quest: each question and approval that reached you, and each failed
- * Task, which waits for a retry or another hob (ADR 027). An ended Quest asks nothing more.
- */
-const needsYouOf = (tree: TaskTree, top: Task): number => {
-  if (isTerminalTask(top.state)) return 0;
-  const counts = workCounts(tree);
-  return counts["needs-you"] + counts.failed;
-};
-
-/** The ticket for a request's Task tree, or null for a tree with no Task. */
-export const questTicket = (tree: TaskTree): Ticket | null => {
+/** The ticket for a request's Task tree and its progress, or null for a tree with no Task. */
+export const questTicket = (tree: TaskTree, progress: QuestProgress): Ticket | null => {
   const card = workCard(tree);
   if (card === null) return null;
   const { top } = card;
@@ -66,7 +57,7 @@ export const questTicket = (tree: TaskTree): Ticket | null => {
     title: taskTitle(top),
     leadId: card.leadId,
     party,
-    progress: progressOf(top, card.progress.done, card.progress.total, card.took),
-    needsYou: needsYouOf(tree, top),
+    progress: progressOf(top, progress.done, progress.total, card.took),
+    needsYou: progress.needs,
   };
 };
