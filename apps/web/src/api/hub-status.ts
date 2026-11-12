@@ -24,7 +24,7 @@ import { call } from "./client.ts";
  * whichever has the higher revision.
  */
 
-const statusKey = ["hub-status"] as const;
+export const statusKey = ["hub-status"] as const;
 
 /** How many `Ready` frames this client has seen: a snapshot read before the latest one is read again. */
 const readies = new WeakMap<QueryClient, number>();

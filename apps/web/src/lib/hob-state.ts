@@ -1,5 +1,6 @@
 import type {
   AgentId,
+  AgentStatus,
   ApprovalRequest,
   BackpackItem,
   HobPresenceState,
@@ -36,10 +37,12 @@ export const stateLabel: Record<HobState, string> = {
 };
 
 /**
- * A hob's state as the hub published its presence (ADR 037): every presence is a sprite state. A hob
- * the hub has not published yet, as before the first snapshot arrives, rests.
+ * A hob's state as the hub published its presence (ADR 037): every presence is a sprite state. Until
+ * the hub's status is read, or when the read failed, the hob's own record still says it is paused,
+ * and otherwise it rests; the window says the status could not be read (`HubReadCard`).
  */
-export const presenceState = (presence: HobPresenceState | undefined): HobState => presence ?? "idle";
+export const presenceState = (presence: HobPresenceState | undefined, status: AgentStatus): HobState =>
+  presence ?? (status === "paused" ? "paused" : "idle");
 
 /**
  * What a hob waits on you for, the first of its kind in the tray's order: a request to approve,
@@ -84,8 +87,12 @@ export const hobNeeds = ({
  * One thread's state for the chat header, from what the hub published: the hob's presence when it is
  * paused, since its lifecycle comes first, then what the thread's running reply is doing.
  */
-export const threadState = (presence: HobPresenceState | undefined, reply: ReplyActivity | undefined): HobState => {
-  if (presence === "paused") return "paused";
+export const threadState = (
+  presence: HobPresenceState | undefined,
+  reply: ReplyActivity | undefined,
+  status: AgentStatus,
+): HobState => {
+  if (presenceState(presence, status) === "paused") return "paused";
   if (reply === "waiting") return "on-command";
   return reply ?? "idle";
 };

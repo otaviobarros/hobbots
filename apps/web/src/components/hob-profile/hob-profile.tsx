@@ -168,7 +168,7 @@ function Profile({
 }) {
   const threads = useQuery(threadsQuery(hob.id));
   const replies = useThreadReplies();
-  const state = presenceState(useHobPresence()[hob.id]);
+  const state = presenceState(useHobPresence()[hob.id], hob.status);
   const running = (threads.data ?? []).filter((t) => replies[t.id] !== undefined);
   const [tab, setTab] = useState<Tab>(opened);
   const [retireOpen, setRetireOpen] = useState(false);

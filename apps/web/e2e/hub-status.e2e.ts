@@ -43,6 +43,25 @@ const secondDevice = async (
   return { page, close: () => context.close() };
 };
 
+/** A hub set up with one hob, Pip, on the fake runtime. */
+const hirePip = async (current: Hub) => {
+  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
+  return api<{ id: string }>(current, "POST", "/api/agents", {
+    name: "Pip",
+    role: "writer",
+    roleTitle: "Writer",
+    sigil: "writer",
+    hat: "pointed",
+    tool: "quill",
+    lookSeed: 4821,
+    lookColor: "violet",
+    runtime: "claude-code",
+    model: "fake-thinker",
+    effort: "medium",
+    instructions: "",
+  });
+};
+
 /** The line under the chat's title: whose chat it is and what the thread's run is doing. */
 const headerSays = (page: Page, doing: string) => page.getByText(new RegExp(`^Your chat with Pip · ${doing}$`));
 
@@ -62,21 +81,7 @@ test("[TC-UX-1374-05] two devices show the same hob and thread status through a 
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const current = hub;
-  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
-  const pip = await api<{ id: string }>(current, "POST", "/api/agents", {
-    name: "Pip",
-    role: "writer",
-    roleTitle: "Writer",
-    sigil: "writer",
-    hat: "pointed",
-    tool: "quill",
-    lookSeed: 4821,
-    lookColor: "violet",
-    runtime: "claude-code",
-    model: "fake-thinker",
-    effort: "medium",
-    instructions: "",
-  });
+  const pip = await hirePip(current);
   const thread = await api<{ id: string }>(current, "POST", `/api/agents/${pip.id}/threads`);
   const chat = `/hobs/${pip.id}/threads/${thread.id}`;
   await page.goto(`${current.url}/#${chat}`);
@@ -149,4 +154,29 @@ test("[TC-UX-1374-06] two devices show the same quest progress and the same lead
     await expect(hobTile(each, "Aldric")).toHaveAccessibleName("Aldric, resting");
   }
   await other.close();
+});
+
+// covers UX-002
+test("[TC-UX-1374-09] says when the hub's status cannot be read, keeps a paused hob paused, and reads it again", async ({
+  page,
+}) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  const current = hub;
+  const pip = await hirePip(current);
+  await api(current, "POST", `/api/agents/${pip.id}/pause`);
+  const failing = /\/api\/status$/;
+  await page.route(failing, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.goto(`${current.url}/#/`);
+
+  // The read fails after its retries: the window says so, and Pip's own record still says paused.
+  const notice = page.getByRole("alert").filter({ hasText: "could not read what your hobs and Quests are doing" });
+  await expect(notice).toBeVisible({ timeout: 20_000 });
+  await expect(hobTile(page, "Pip")).toHaveAccessibleName("Pip, paused");
+
+  // The hub answers again: Try again reads it, and the notice goes.
+  await page.unroute(failing);
+  await notice.getByRole("button", { name: "Try again" }).click();
+  await expect(notice).toBeHidden();
+  await expect(hobTile(page, "Pip")).toHaveAccessibleName("Pip, paused");
 });

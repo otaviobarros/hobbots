@@ -53,7 +53,7 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
             hob={hob}
             expanded={expanded}
             open={hob.id === open}
-            full={presenceState(presence[hob.id])}
+            full={presenceState(presence[hob.id], hob.status)}
             pathname={pathname}
           />
         ))}

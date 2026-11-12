@@ -11,9 +11,12 @@ import { syncState } from "./sync.ts";
  */
 export type Summaries = Readonly<Record<QuestId, QuestSummary>>;
 
+/** The first part of every Quest summaries key. */
+export const summariesRoot = "quest-summaries";
+
 const questSummaryKeys = {
-  active: ["quest-summaries", "active"] as const,
-  of: (threadId: ThreadId) => ["quest-summaries", "thread", threadId] as const,
+  active: [summariesRoot, "active"] as const,
+  of: (threadId: ThreadId) => [summariesRoot, "thread", threadId] as const,
 };
 
 /** How many summaries this client has taken from events: a read that missed one is made again. */

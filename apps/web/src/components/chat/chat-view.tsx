@@ -226,7 +226,7 @@ export function ChatView({
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
 
-  const state = threadState(presence[hobId], threadId ? replies[threadId] : undefined);
+  const state = threadState(presence[hobId], threadId ? replies[threadId] : undefined, current.status);
   const paused = current.status === "paused";
   // The composer names a camp; the hob's chat, and the empty chat before it, is just the hob's.
   const placeholder =

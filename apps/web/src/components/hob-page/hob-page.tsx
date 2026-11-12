@@ -65,7 +65,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
   const need = useNeedLine(hob.id);
   const navigate = useNavigate();
   const list = threads.data ?? [];
-  const state = presenceState(useHobPresence()[hob.id]);
+  const state = presenceState(useHobPresence()[hob.id], hob.status);
   const fresh = useIsNewHob(hob.id, threads.isSuccess ? list.length : undefined);
 
   // The tab and the History filter live in the URL; Chats and Everything are the defaults and stay out of it.

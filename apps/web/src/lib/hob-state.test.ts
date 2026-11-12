@@ -5,17 +5,23 @@ import { hobNeeds, presenceState, sceneOrder, threadState } from "./hob-state.ts
 describe("presenceState", () => {
   it("shows the presence the hub published", () => {
     for (const presence of ["paused", "needs-you", "working", "thinking", "on-command", "idle"] as const)
-      expect(presenceState(presence)).toBe(presence);
+      expect(presenceState(presence, "active")).toBe(presence);
   });
-  it("rests before the hub has published the hob", () => expect(presenceState(undefined)).toBe("idle"));
+  it("rests before the hub has published the hob", () => expect(presenceState(undefined, "active")).toBe("idle"));
+  it("keeps a paused hob paused while its presence is unread", () =>
+    expect(presenceState(undefined, "paused")).toBe("paused"));
 });
 
 describe("threadState", () => {
-  it("follows what the thread's reply is doing", () => expect(threadState("working", "thinking")).toBe("thinking"));
-  it("rests when no reply runs", () => expect(threadState("needs-you", undefined)).toBe("idle"));
+  it("follows what the thread's reply is doing", () =>
+    expect(threadState("working", "thinking", "active")).toBe("thinking"));
+  it("rests when no reply runs", () => expect(threadState("needs-you", undefined, "active")).toBe("idle"));
   it("waits on a command once the reply only waits on one", () =>
-    expect(threadState("on-command", "waiting")).toBe("on-command"));
-  it("shows paused over a reply still running", () => expect(threadState("paused", "working")).toBe("paused"));
+    expect(threadState("on-command", "waiting", "active")).toBe("on-command"));
+  it("shows paused over a reply still running", () =>
+    expect(threadState("paused", "working", "active")).toBe("paused"));
+  it("shows a paused hob paused while its presence is unread", () =>
+    expect(threadState(undefined, undefined, "paused")).toBe("paused"));
 });
 
 describe("sceneOrder", () => {

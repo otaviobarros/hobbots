@@ -75,7 +75,7 @@ function Crew({
 
   const crew = (hobs ?? []).map((hob, index) => {
     const threads = threadLists[index]?.data ?? [];
-    return { hob, threads, state: presenceState(presence[hob.id]) };
+    return { hob, threads, state: presenceState(presence[hob.id], hob.status) };
   });
   const counts = filterCounts(crew);
   const finding = query.trim() !== "";

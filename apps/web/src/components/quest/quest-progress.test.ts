@@ -38,6 +38,21 @@ describe("questProgress", () => {
     });
   });
 
+  it("[TC-UX-1374-07] counts a failed step of a Task working alone as needing you while it runs", () => {
+    // A failed step waits for a retry or another hob (ADR 027), as [TC-OR-033] leaves one.
+    const steps = ["outline", "draft"].map((id, index) =>
+      task(TaskId.make(id), { state: index === 0 ? "failed" : "active", second: index + 1 }),
+    );
+    expect(questProgress(tree({ tasks: [task(CAMPAIGN), ...steps] }), undefined)).toMatchObject({
+      segments: ["failed", "running"],
+      done: 0,
+      total: 2,
+      needs: 1,
+    });
+    const ended = tree({ tasks: [task(CAMPAIGN, { state: "failed" }), ...steps] });
+    expect(questProgress(ended, undefined).needs).toBe(0);
+  });
+
   it("asks nothing more once a Task working alone has ended", () => {
     const ended = tree({
       tasks: [task(CAMPAIGN, { state: "completed" })],
