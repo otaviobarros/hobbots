@@ -14,6 +14,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
+import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
@@ -199,6 +200,44 @@ const workbenchTaskOf = (event: WorkbenchRecord): string => {
   return event._tag === "FolderScanned" ? event.scan.taskId : event.taskId;
 };
 
+type RecordEvent = Extract<
+  JournaledEventType,
+  {
+    readonly _tag:
+      | "ClaimMade"
+      | "ClaimContested"
+      | "ClaimCleared"
+      | "ClaimReleased"
+      | "DecisionRecorded"
+      | "DecisionSuperseded"
+      | "ArtifactRegistered";
+  }
+>;
+const RECORD_EVENTS: ReadonlySet<string> = new Set([
+  "ClaimMade",
+  "ClaimContested",
+  "ClaimCleared",
+  "ClaimReleased",
+  "DecisionRecorded",
+  "DecisionSuperseded",
+  "ArtifactRegistered",
+]);
+const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
+
+/**
+ * ADR 037's records: a claim names its Task, whose owner and thread the row takes; a decision its
+ * thread and the reply that recorded it; an artifact its thread, and the hob that made its latest
+ * version.
+ */
+const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
+  if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
+  if ("decision" in event) {
+    return { ...NONE, threadId: event.decision.threadId, messageId: event.decision.sourceMessageId };
+  }
+  const { actor, threadId } = event.artifact;
+  return { ...NONE, threadId, agentId: actor.kind === "hob" ? AgentId.make(actor.id) : null };
+};
+
 /** Task and Workbench events, and the message events that name their thread and message. */
 const restCorrelationOf = (
   event: Exclude<
@@ -230,8 +269,7 @@ const restCorrelationOf = (
   // A hub question has no Task (#976): it names the chat it concerns, if any.
   if ("hubQuestion" in event) return hubQuestionCorrelation(event.hubQuestion);
   if (isTaskEvent(event)) return taskCorrelationOf(event);
-  // A claim names its Task, whose owner and thread the row takes (ADR 037).
-  if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
+  if (isRecordEvent(event)) return recordCorrelationOf(event);
   if (isSkillEvent(event)) return skillCorrelationOf(event);
   // The Workbench's records name their Task (ADR 023).
   if (isWorkbenchRecord(event)) return { ...NONE, taskId: workbenchTaskOf(event) };
@@ -354,14 +392,15 @@ export const lockJournal = (sql: SqlClient.SqlClient) => makeJournalWriter(sql).
 /**
  * The events a change's own events call for in the same transaction, at sequences from `first` on:
  * the backpack items they record (ADR 019), then the grants of the top Tasks they end (ADR 018), then
- * the claims of every Task they end (ADR 037).
+ * the claims of every Task they end, then the artifacts they made or changed (ADR 037).
  */
 const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEventType>, first: number) =>
   Effect.gen(function* () {
     const items = yield* recordBackpackItems(sql, events, first);
     const grants = yield* endTaskGrants(sql, events, first + items.length);
     const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
-    return [...items, ...grants, ...claims];
+    const artifacts = yield* registerArtifacts(sql, events, first + items.length + grants.length + claims.length);
+    return [...items, ...grants, ...claims, ...artifacts];
   });
 
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.

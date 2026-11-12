@@ -1,5 +1,6 @@
 import { HobbotsRepository } from "@hobbots/agents";
 import {
+  type Actor,
   Agent,
   AgentConfiguration,
   type AgentId,
@@ -15,6 +16,7 @@ import {
   Message,
   type MessageId,
   messageEvents,
+  OWNER_ACTOR,
   previewLine,
   type ReplyUsage,
   type Retiring,
@@ -214,6 +216,8 @@ const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
     skills: row.skills === null || row.skills === undefined ? null : JSON.parse(String(row.skills)),
     skillsUsed: JSON.parse(String(row.skillsUsed ?? "[]")),
     askedSkill: row.askedSkill ?? null,
+    // Its author is two columns (migration 0100).
+    actor: row.actorKind == null ? null : { kind: row.actorKind, id: row.actorId },
   }));
 
 /** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
@@ -491,14 +495,21 @@ export const HobbotsRepositoryLive = Layer.effect(
     const writeMessage = (message: Message) =>
       Effect.suspend(() => {
         const usage = usageColumns(message.usage);
+        // A new message names its author as it is stored (ADR 037): you, or its thread's hob.
+        const author = message.actor;
         return sql<{
           readonly chapterId: string;
-        }>`INSERT INTO messages (id, thread_id, chapter_id, role, content, status, error, config_version, runtime, model,
+          readonly actorKind: string;
+          readonly actorId: string;
+        }>`INSERT INTO messages (id, thread_id, chapter_id, actor_kind, actor_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
           resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.threadId)}),
+          ${author?.kind ?? (message.role === "user" ? OWNER_ACTOR.kind : "hob")},
+          COALESCE(${author?.id ?? (message.role === "user" ? OWNER_ACTOR.id : null)},
+            (SELECT t.agent_id FROM threads t WHERE t.id = ${message.threadId})),
           ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},
           ${usage.time_to_request_ms}, ${usage.time_to_first_stream_ms}, ${usage.time_to_first_token_ms},
@@ -530,8 +541,15 @@ export const HobbotsRepositoryLive = Layer.effect(
           skills = excluded.skills,
           skills_used = excluded.skills_used,
           revision = excluded.revision
-        RETURNING chapter_id`.pipe(
-          Effect.map(([row]) => new Message({ ...message, chapterId: ChapterId.make(String(row?.chapterId)) })),
+        RETURNING chapter_id, actor_kind, actor_id`.pipe(
+          Effect.map(
+            ([row]) =>
+              new Message({
+                ...message,
+                chapterId: ChapterId.make(String(row?.chapterId)),
+                actor: { kind: row?.actorKind as Actor["kind"], id: String(row?.actorId) },
+              }),
+          ),
         );
       });
 

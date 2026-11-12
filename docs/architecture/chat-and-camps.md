@@ -46,7 +46,7 @@ Each is written in the same transaction and journal as the message that made it,
 
 | Record | Key fields | States |
 | --- | --- | --- |
-| Decision | text (at most 500 characters), actor, threadId, chapterId, sourceMessageId, supersededBy | active, superseded; a changed decision is kept, crossed out |
+| Decision | text (at most 500 characters), actor, threadId, chapterId, sourceMessageId, supersededBy | [DecisionState](machines/decision-state.md): active, superseded; a changed decision is kept, crossed out |
 | Artifact | kind (code, page, doc, email, image, PR, file), title, latestVersion, origin | a registry over what Attempts and Quests record; copies nothing |
 | Brief | threadId, text, revision, writtenBy, basis cursor | rewritten by a projector at chapter ends and quest steps |
 | CampSuggestion | threadId, chapterId, reason codes and counts | open, kept, accepted, expired; at most one per chapter |
@@ -54,6 +54,18 @@ Each is written in the same transaction and journal as the message that made it,
 | Claim | scope (sequence, path, branch), repository, key, holder Task, actor | [Claim](machines/claim.md): held, contested, released. A number is unique in its folder of a repository for good; an open path or branch once per Task |
 
 A note to self is a message role that never wakes the dispatcher.
+
+### Decisions and artifacts
+
+Built in [#1383](https://github.com/otaviobarros/hobbots/issues/1383): `Decision` and its [DecisionState](machines/decision-state.md) machine in `packages/domain/src/decision.ts`, `Artifact` and the registry's rules in `artifact.ts`, the store in `packages/persistence/src/records.ts` and `artifact-rows.ts` (migration 0100), and `Records` and `record_decision` in `packages/agents/src/records.ts`.
+
+- **`record_decision`** is a hub tool on every runtime that serves hub tools, Claude Code, Codex and the fake one alike, offered to a turn that writes a reply in a chat or camp. It takes the decision's `text`, a `key` and, for a decision that changes an earlier one, `replaces` with its id. The decision is recorded by the hob, from the reply, in the reply's chapter, redacted as everything the journal holds is. A text over 500 characters, an empty one, or a closed chat or camp is refused, and nothing is written. The same key with the same input returns the first decision; with another input it is refused.
+- **Replace and cross out.** A decision is never edited. A new one that replaces an earlier one crosses the old one out in the same transaction, which points at the new one. You can record a decision in the app, replacing one or not, and cross one out with nothing in its place. The routes are `GET` and `POST /api/threads/:threadId/decisions` and `POST /api/threads/:threadId/decisions/:decisionId/cross-out`. A crossed-out decision is kept and listed, and never comes back.
+- **Artifacts.** The registry is filled in the transaction that journals what it indexes, by a pure rule as backpack items are: a Task's results as it completes (a file by its path, a link by its URL, a text by its id), an Attempt's settled changes that left a file, and the files a finished reply's tool steps wrote. Each artifact is one row in its chat or camp, by where it is, at its latest version: every record that made or changed it counts once, and the same record again changes nothing. Its kind comes from its name or URL: code, page, doc, email, image, a pull request, or another file. `GET /api/threads/:threadId/artifacts` lists them, the most recently changed first.
+- **Events.** `DecisionRecorded`, `DecisionSuperseded` and `ArtifactRegistered`, version 1, each with the whole record.
+- **Authors.** Every message names its author: you (`{ kind: "user", id: "owner" }`, the hub's one person until shared camps) or the thread's hob, set as the hub stores it. Migration 0100 gave every stored message and every journaled `MessageUpserted` and `MessageQueued` one, and the database refuses a message without one. Decisions, artifacts and claims carry theirs.
+- **The pack.** `Records.activeDecisions` and `Records.artifactsOf` are what the context pack reads ([#1380](https://github.com/otaviobarros/hobbots/issues/1380)).
+- **Not built yet.** The camp sheet's Decisions and Artifacts tabs ([#1387](https://github.com/otaviobarros/hobbots/issues/1387)), find over them ([#1386](https://github.com/otaviobarros/hobbots/issues/1386)) and moving them with a chapter ([#1385](https://github.com/otaviobarros/hobbots/issues/1385)).
 
 ## The context pack
 

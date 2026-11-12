@@ -1,6 +1,8 @@
 export * from "./activity.ts";
+export * from "./actor.ts";
 export * from "./agent.ts";
 export * from "./approval.ts";
+export * from "./artifact.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./cancel.ts";
@@ -9,6 +11,8 @@ export * from "./change-actor.ts";
 export * from "./chapter.ts";
 export * from "./charm-call.ts";
 export * from "./claim.ts";
+export * from "./decision.ts";
+export * from "./decision-tools.ts";
 export * from "./device.ts";
 export * from "./directory.ts";
 export * from "./events.ts";

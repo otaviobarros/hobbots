@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Actor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
@@ -145,6 +146,15 @@ export class Message extends Schema.Class<Message>("Message")({
    * again as it starts, so every stored message, read or journaled, carries one.
    */
   chapterId: Schema.NullOr(ChapterId).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
+  /**
+   * Who wrote it (ADR 037, Every author is an actor): you for your messages, the thread's hob for its
+   * replies. Null only on a message not stored yet, as `chapterId` is: the hub names the author as it
+   * stores it, so every stored message, read or journaled, carries one.
+   */
+  actor: Schema.NullOr(Actor).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   role: MessageRole,
   content: Schema.String,
   status: MessageStatus,

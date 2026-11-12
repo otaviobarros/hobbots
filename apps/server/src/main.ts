@@ -25,6 +25,8 @@ import {
   type MemoryStore,
   type MemoryVersionAuthors,
   PermissionSummary,
+  Records,
+  RecordToolsLive,
   RecoveryLog,
   RosterReceipts,
   SecretRedaction,
@@ -97,6 +99,7 @@ import {
   MemoryShareLogLive,
   MemoryVersionAuthorsLive,
   PrivateCampsLive,
+  RecordRepositoryLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -331,6 +334,8 @@ const ServerLive = Layer.unwrap(
       TaskToolCallsLive,
       // The numbers, paths and branches hobs claim across every chat and camp (ADR 037).
       ClaimRegisterLive,
+      // Decisions and the artifacts registry of every chat and camp (ADR 037).
+      RecordRepositoryLive,
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,
@@ -610,6 +615,8 @@ const ServerLive = Layer.unwrap(
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the
       // sessions of Tasks, whose turns offer them; after the Charms, which each hob's card names.
       .pipe(Layer.provideMerge(DirectoryToolsLive))
+      // Decisions and artifacts, and `record_decision` (ADR 037), before the chat service, whose turns offer it.
+      .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(

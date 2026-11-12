@@ -8,6 +8,7 @@ import {
   MEMORY_SEARCH_TOOL,
   type MessageId,
   READ_HOB_TOOL,
+  RECORD_DECISION_TOOL,
   SKILL_TOOL_DESCRIPTIONS,
   TASK_TOOLS,
   type TaskId,
@@ -28,6 +29,7 @@ import {
   readBacksOf,
 } from "./hub-actions.ts";
 import { MemoryTools } from "./memory.ts";
+import { RecordTools } from "./records.ts";
 import type {
   CallSteering,
   HubCallStep,
@@ -96,6 +98,7 @@ export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "Skills", names: Object.keys(SKILL_TOOL_DESCRIPTIONS) },
   { owner: "the Directory", names: [READ_HOB_TOOL] },
   { owner: "the Web tools", names: [WEB_FETCH_TOOL] },
+  { owner: "the Records", names: [RECORD_DECISION_TOOL] },
   { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
 ];
 
@@ -457,6 +460,7 @@ export const hubToolOffer = Effect.gen(function* () {
   const skills = yield* Effect.serviceOption(SkillTools);
   const directory = yield* Effect.serviceOption(DirectoryTools);
   const web = yield* Effect.serviceOption(WebTools);
+  const records = yield* Effect.serviceOption(RecordTools);
   const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn, offer?: CharmOffer): Effect.Effect<HubOffer> =>
@@ -468,10 +472,11 @@ export const hubToolOffer = Effect.gen(function* () {
         Option.isSome(skills) ? skills.value.forTurn(turn) : none,
         Option.isSome(directory) ? directory.value.forTurn(turn) : none,
         Option.isSome(web) ? web.value.forTurn(turn) : none,
+        Option.isSome(records) ? records.value.forTurn(turn) : none,
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools, webTools]) => {
+      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools, webTools, recordTools]) => {
         const sets = [
           { owner: "Local Git", tools: git },
           ...charmSets,
@@ -479,6 +484,7 @@ export const hubToolOffer = Effect.gen(function* () {
           { owner: "Skills", tools: skillTools },
           { owner: "the Directory", tools: directoryTools },
           { owner: "the Web tools", tools: webTools },
+          { owner: "the Records", tools: recordTools },
         ];
         return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
       }),

@@ -35,6 +35,7 @@ export * from "./memory-views.ts";
 export * from "./permissions.ts";
 export * from "./ports.ts";
 export * from "./questions.ts";
+export * from "./records.ts";
 export * from "./repository.ts";
 export * from "./runtime.ts";
 export * from "./secrets.ts";
