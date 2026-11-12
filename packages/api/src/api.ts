@@ -60,6 +60,7 @@ import { MemoryGroup } from "./memory.ts";
 import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
 import { PermissionsGroup } from "./permissions.ts";
+import { RecordsGroup } from "./records.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
 import { HandOverRefused, OpenWork, RetireAgentPayload } from "./retire.ts";
 import { SearchGroup } from "./search.ts";
@@ -484,6 +485,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HobChangesGroup)
   .add(ThreadsGroup)
   .add(ChaptersGroup)
+  .add(RecordsGroup)
   .add(SystemGroup)
   .add(SetupGroup)
   .add(RuntimesGroup)

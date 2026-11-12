@@ -2,11 +2,13 @@ import { Effect, Schema } from "effect";
 import { CommandId, CommandRecord, FileChange, FileChangeId, FolderScan } from "./activity.ts";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
+import { Artifact } from "./artifact.ts";
 import { BackpackItem } from "./backpack.ts";
 import { CarriedOver } from "./carried-over.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Chapter } from "./chapter.ts";
 import { Claim } from "./claim.ts";
+import { Decision } from "./decision.ts";
 import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HobProposal } from "./hob-proposals.ts";
@@ -197,6 +199,18 @@ const ClaimContested = Schema.TaggedStruct("ClaimContested", { claim: Claim });
 const ClaimCleared = Schema.TaggedStruct("ClaimCleared", { claim: Claim });
 /** The claim's Task ended, so the claim was released; a released number is never handed out again. */
 const ClaimReleased = Schema.TaggedStruct("ClaimReleased", { claim: Claim });
+/** A decision was recorded in a chat or camp, by a hob's `record_decision` or by you (ADR 037). */
+const DecisionRecorded = Schema.TaggedStruct("DecisionRecorded", { decision: Decision });
+/**
+ * A decision was crossed out: kept, no longer holding, and replaced by `supersededBy` when another
+ * decision changed it, which is journaled just before.
+ */
+const DecisionSuperseded = Schema.TaggedStruct("DecisionSuperseded", { decision: Decision });
+/**
+ * A record made or changed an artifact (ADR 037): the registry's row at its latest version, written
+ * in the transaction that journaled the record, once per record.
+ */
+const ArtifactRegistered = Schema.TaggedStruct("ArtifactRegistered", { artifact: Artifact });
 /** A Task passed the completion gate, with its result and the artifacts it made. */
 const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
 /** The Task that holds a Quest passed the completion gate. */
@@ -420,6 +434,9 @@ export const JournaledEvent = Schema.Union([
   ClaimContested,
   ClaimCleared,
   ClaimReleased,
+  DecisionRecorded,
+  DecisionSuperseded,
+  ArtifactRegistered,
   BackpackItemRecorded,
   BackpackItemChanged,
   PairingRequested,
@@ -487,10 +504,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChatStartedFresh: 2,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
-  // `chapterId` (ADR 037, migration 0099).
-  MessageUpserted: 5,
-  // 2: its message's `chapterId` (migration 0099).
-  MessageQueued: 2,
+  // `chapterId` (ADR 037, migration 0099). 6: its `actor` (ADR 037, migration 0101).
+  MessageUpserted: 6,
+  // 2: its message's `chapterId` (migration 0099). 3: its message's `actor` (migration 0101).
+  MessageQueued: 3,
   MessageDequeued: 1,
   ChapterStarted: 1,
   ChapterSplit: 1,
@@ -531,6 +548,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ClaimContested: 1,
   ClaimCleared: 1,
   ClaimReleased: 1,
+  DecisionRecorded: 1,
+  DecisionSuperseded: 1,
+  ArtifactRegistered: 1,
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
   BackpackItemChanged: 1,

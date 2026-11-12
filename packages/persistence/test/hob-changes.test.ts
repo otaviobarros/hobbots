@@ -53,6 +53,8 @@ describe("HobChanges", () => {
         id: "m1",
         thread_id: "t1",
         chapter_id: "c1",
+        actor_kind: "hob",
+        actor_id: chief,
         seq: 1,
         role: "assistant",
         content: "",

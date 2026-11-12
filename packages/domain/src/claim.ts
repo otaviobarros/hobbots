@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Actor } from "./actor.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
@@ -27,10 +28,6 @@ export const isSequenceScope = (scope: ClaimScope): boolean => scope === "sequen
 /** Where a claim stands, held by `ClaimMachine`. */
 export const ClaimState = Schema.Literals(["held", "contested", "released"]);
 export type ClaimState = typeof ClaimState.Type;
-
-/** Who wrote a record (ADR 037, Every author is an actor): you, a hob or the hub itself. */
-export const Actor = Schema.Struct({ kind: Schema.Literals(["user", "hob", "hub"]), id: Schema.String });
-export type Actor = typeof Actor.Type;
 
 export class Claim extends Schema.Class<Claim>("Claim")({
   id: ClaimId,

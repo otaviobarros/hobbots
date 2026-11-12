@@ -22,6 +22,7 @@ export * from "./memory-shares.ts";
 export * from "./memory-version-authors.ts";
 export * from "./migrations/index.ts";
 export * from "./postgres.ts";
+export { RecordRepositoryLive } from "./records.ts";
 export * from "./repositories.ts";
 export * from "./search.ts";
 export * from "./setup.ts";

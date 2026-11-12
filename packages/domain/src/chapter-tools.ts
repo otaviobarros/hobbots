@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { CHAPTER_TITLE_MAX } from "./chapter.ts";
+import { RECORD_DECISION_TOOL } from "./decision-tools.ts";
 import { toolInputJsonSchema } from "./task-tools.ts";
 
 /**
@@ -15,7 +16,7 @@ export const START_CHAPTER_LABEL = "Starting a chapter";
 export const READ_MESSAGE_LABEL = "Reading a message";
 
 /** What the hob does before it starts a chapter, so what this one decided carries over. */
-export const CHAPTER_DECISIONS_RULE = "Before you start one, save what was decided in this chapter so it carries over.";
+export const CHAPTER_DECISIONS_RULE = `Before you start one, record what was decided in this chapter with ${RECORD_DECISION_TOOL}, so it carries over.`;
 
 export const START_CHAPTER_DESCRIPTION = `End this conversation's current chapter and start the next one, with a short title for its topic. Your next turn starts a fresh session that reads the conversation's records, not its old messages. Start one when the topic changes, or when the current chapter has grown long, never every few turns. ${CHAPTER_DECISIONS_RULE} Open Tasks carry over. It works only from a chat turn, never from a Task step's session.`;
 

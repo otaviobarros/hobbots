@@ -46,6 +46,7 @@ import { MemoryHandlers } from "./memory-settings.ts";
 import { MemorySharesHandlers } from "./memory-shares.ts";
 import { PairingHandlers, PairingRequestsHandlers, withRetryAfter } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
+import { RecordsHandlers } from "./records.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
 import { openWork, retireAs } from "./retire.ts";
 import { SearchHandlers } from "./search.ts";
@@ -255,6 +256,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobChangesHandlers,
     ThreadsHandlers,
     ChaptersHandlers,
+    RecordsHandlers,
     SystemHandlers,
     SetupHandlers,
     RuntimesHandlers,
