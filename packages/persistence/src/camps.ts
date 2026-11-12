@@ -227,6 +227,13 @@ export const makeCampWrites = (
       Effect.orDie,
     );
 
+  // The thread's open work as the context pack carries it (#1380), read outside any change.
+  const listOpenWork = (threadId: ThreadId) =>
+    openWork(threadId).pipe(
+      Effect.map(({ work }) => work),
+      Effect.orDie,
+    );
+
   // What Start fresh would carry from the chat now, read with the same rule it records with.
   const carryOver = (threadId: ThreadId) =>
     openWork(threadId).pipe(
@@ -234,5 +241,5 @@ export const makeCampWrites = (
       Effect.orDie,
     );
 
-  return { makeCamp, startFresh, listCarriedOver, carryOver } as const;
+  return { makeCamp, startFresh, listCarriedOver, listOpenWork, carryOver } as const;
 };

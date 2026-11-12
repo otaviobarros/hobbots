@@ -92,7 +92,7 @@ test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and
   await send(page, "What is my cat called?");
   await expect(page.getByRole("note")).toContainText("Now thinking with Codex · Fake Coder");
   // The fake echoes its prompt, so the briefing it was given shows the earlier fact.
-  await expect(page.getByText(/This thread so far[\s\S]*My cat is called Miso\./)).toBeVisible();
+  await expect(page.getByText(/This chapter so far[\s\S]*My cat is called Miso\./)).toBeVisible();
   // Only the thread changed.
   expect((await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents"))[0]).toMatchObject({
     runtime: "claude-code",

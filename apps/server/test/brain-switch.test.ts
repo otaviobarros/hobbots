@@ -216,7 +216,8 @@ describe("switching a thread's brain", () => {
     expect(briefed.sessionId).toBeNull();
     expect(briefed.model).toBe("fake-coder");
     expect(briefed.prompt).toBe("What is my cat called?");
-    expect(briefed.briefing).toMatch(/^## This thread so far/);
+    // A new session starts from the context pack, which replays the live chapter on a switch (ADR 037).
+    expect(briefed.briefing).toMatch(/^## This chapter so far/);
     expect(briefed.briefing).toContain("My cat is called Miso.");
     expect(reply).toMatchObject({ runtime: "codex", model: "fake-coder", status: "complete" });
     // The fake echoes what it was told, so this shows the fact reached Codex's turn. A real model

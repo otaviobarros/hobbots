@@ -104,6 +104,11 @@ const ChapterMerged = Schema.TaggedStruct("ChapterMerged", {
   absorbed: ChapterId,
   chapters: Schema.Array(Chapter),
 });
+/**
+ * The chapter summary projector wrote a resting chapter's one-line summary (#1380). A private
+ * camp's stays in that camp: memory capture takes nothing from it.
+ */
+const ChapterSummarized = Schema.TaggedStruct("ChapterSummarized", { threadId: ThreadId, chapter: Chapter });
 /** The user asked to stop a reply; it shows as stopping until the runtime confirms. */
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
@@ -388,6 +393,7 @@ export const JournaledEvent = Schema.Union([
   ChapterStarted,
   ChapterSplit,
   ChapterMerged,
+  ChapterSummarized,
   TurnStopRequested,
   TurnStopped,
   ApprovalRequested,
@@ -489,6 +495,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChapterStarted: 1,
   ChapterSplit: 1,
   ChapterMerged: 1,
+  ChapterSummarized: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.

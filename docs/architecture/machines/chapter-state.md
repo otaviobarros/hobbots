@@ -18,6 +18,7 @@ stateDiagram-v2
   resting --> live: Absorb (guarded)
   resting --> resting: Absorb
   resting --> moved: Move (guarded)
+  resting --> resting: Summarize (guarded)
   moved --> [*]
 ```
 
@@ -28,3 +29,4 @@ stateDiagram-v2
 | Absorb | resting | live | yes |
 | Absorb | resting | resting | no |
 | Move | resting | moved | yes |
+| Summarize | resting | resting | yes |

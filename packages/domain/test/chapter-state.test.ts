@@ -42,22 +42,33 @@ interface ChapterView {
   readonly state: ChapterState;
   readonly endedAt: string | null;
   readonly movedTo: string | null;
+  readonly summary: string | null;
 }
 
-const view = (c: Chapter): ChapterView => ({ state: c.state, endedAt: c.endedAt, movedTo: c.movedTo });
+const view = (c: Chapter): ChapterView => ({
+  state: c.state,
+  endedAt: c.endedAt,
+  movedTo: c.movedTo,
+  summary: c.summary,
+});
 
-// What each event does to a chapter, as ADR 037 describes chapters, kept apart from the machine.
+// What each event does to a chapter, as ADR 037 and #1380 describe chapters, kept apart from the
+// machine. A split or a merge changes a chapter's messages, so its summary is written again.
 const stepModel = (m: ChapterView, e: ChapterEvent): ChapterView | "refused" => {
   switch (e._tag) {
     case "End":
       return m.state === "live" ? { ...m, state: "resting", endedAt: e.at } : "refused";
     case "Split":
-      return m.state === "moved" ? "refused" : { ...m, state: "resting", endedAt: e.at };
+      return m.state === "moved" ? "refused" : { ...m, state: "resting", endedAt: e.at, summary: null };
     case "Absorb":
       if (m.state !== "resting") return "refused";
-      return e.live ? { ...m, state: "live", endedAt: null } : { ...m, endedAt: e.endedAt };
+      return e.live
+        ? { ...m, state: "live", endedAt: null, summary: null }
+        : { ...m, endedAt: e.endedAt, summary: null };
     case "Move":
       return m.state === "resting" && e.to !== THREAD ? { ...m, state: "moved", movedTo: e.to } : "refused";
+    case "Summarize":
+      return m.state === "resting" && m.summary === null && e.summary !== "" ? { ...m, summary: e.summary } : "refused";
   }
 };
 
@@ -67,6 +78,7 @@ const events: fc.Arbitrary<ChapterEvent> = fc.oneof(
   fc.record({ _tag: fc.constant("Split" as const), at: times }),
   fc.record({ _tag: fc.constant("Absorb" as const), live: fc.boolean(), endedAt: fc.option(times, { nil: null }) }),
   fc.record({ _tag: fc.constant("Move" as const), to: fc.constantFrom(THREAD, CAMP, ThreadId.make("camp-2")) }),
+  fc.record({ _tag: fc.constant("Summarize" as const), summary: fc.constantFrom("", "Planted tomatoes", "Lamps") }),
 );
 
 describe("ChapterStateMachine", () => {
@@ -79,6 +91,7 @@ describe("ChapterStateMachine", () => {
       ["Absorb", ["resting"], "live", true],
       ["Absorb", ["resting"], "resting", false],
       ["Move", ["resting"], "moved", true],
+      ["Summarize", ["resting"], "resting", true],
     ]);
     const moved = ChapterStateMachine.transition(chapter("c1", 1, "moved"), { _tag: "End", at: at(9) });
     expect(moved).toEqual(
@@ -92,7 +105,9 @@ describe("ChapterStateMachine", () => {
   it("[TC-CH-1379-11] agrees with its model on random runs of events", () => {
     agreesWithModel({
       machine: ChapterStateMachine,
-      records: fc.constantFrom<ChapterState>("live", "resting", "moved").map((state) => chapter("c1", 1, state)),
+      records: fc
+        .tuple(fc.constantFrom<ChapterState>("live", "resting", "moved"), fc.constantFrom(null, "Old summary"))
+        .map(([state, summary]) => chapter("c1", 1, state, { summary })),
       events,
       model: { init: view, step: stepModel, view },
       isError: (result): result is IllegalChapterTransition => result instanceof IllegalChapterTransition,

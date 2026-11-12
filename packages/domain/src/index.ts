@@ -10,6 +10,7 @@ export * from "./chapter.ts";
 export * from "./chapter-tools.ts";
 export * from "./charm-call.ts";
 export * from "./claim.ts";
+export * from "./context-pack.ts";
 export * from "./device.ts";
 export * from "./directory.ts";
 export * from "./events.ts";

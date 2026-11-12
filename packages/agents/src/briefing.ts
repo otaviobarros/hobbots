@@ -121,18 +121,24 @@ const ending = (message: Message) => {
   return word === undefined ? "" : ` [${word}]`;
 };
 
-/** A message in full, as the briefing's latest messages show it. */
-const verbatim = (message: Message) => {
+/**
+ * A message as a briefing or a context pack shows it in full: who said it, its text quoted, and its
+ * tool steps. `text` stands for its content when it was cut.
+ */
+export const messageBlock = (message: Message, text: string = message.content.trim()) => {
   const steps = toolSteps(message);
   return [
     `**${speaker(message)}:**${ending(message)}`,
-    quote(clipMiddle(message.content.trim()) || "(no text)"),
+    quote(text || "(no text)"),
     ...(steps === null ? [] : [steps]),
   ].join("\n");
 };
 
-/** A message in one line, as the summary of older messages shows it. */
-const summaryLine = (message: Message): string => {
+/** A message in full, as the briefing's latest messages show it. */
+const verbatim = (message: Message) => messageBlock(message, clipMiddle(message.content.trim()));
+
+/** A message in one line, as the summary of older messages and a chapter's summary input show it. */
+export const summaryLine = (message: Message): string => {
   const steps = toolSteps(message);
   const text = clip(oneLine(message.content), BRIEFING_LIMITS.line) || "(no text)";
   return `- ${speaker(message)}:${ending(message)} “${text}”${steps === null ? "" : ` ${steps}`}`;

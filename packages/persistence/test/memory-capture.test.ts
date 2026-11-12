@@ -40,6 +40,8 @@ const seed = Effect.gen(function* () {
   );
   yield* sql`UPDATE event_journal SET occurred_at = ${old}`;
   yield* sql`UPDATE event_journal_head SET sequence = sequence + ${JOURNAL_RETENTION.entries}`;
+  // The projectors have read it all, so only capture's cursor holds the journal here.
+  yield* sql`UPDATE projector_cursors SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1)`;
 });
 
 describe("MemoryCaptureLog", () => {

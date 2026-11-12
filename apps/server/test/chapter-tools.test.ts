@@ -77,6 +77,24 @@ describe("start_chapter", () => {
     },
   );
 
+  // covers ADR 037 (Chapters, The context pack)
+  it.each<RuntimeKind>(["claude-code", "codex"])(
+    "[TC-CH-1381-08] on %s, the turn after the hob's start_chapter starts from the pack, never the old transcript",
+    async (runtime) => {
+      const { say, requests } = chapterHub(runtime);
+      await say(["My cat is called Miso."], 2);
+      await say(["Now the garden.", hub("start_chapter", { key: "chapter", title: "The garden" })], 4);
+      await say(["What should I plant?"], 6);
+      const fresh = requests[2] as PromptRequest;
+      expect(fresh.sessionId).toBeNull();
+      const told = fresh.briefing ?? "";
+      // The pack's earlier chapters carry the first chapter as one line, never its messages.
+      expect(told).toContain("## Earlier chapters");
+      expect(told).toMatch(/- Chapter 1: .*My cat is called Miso\./);
+      expect(told).not.toContain("> My cat is called Miso.");
+    },
+  );
+
   // covers ADR 037 (Chapters)
   it("[TC-CH-1381-02] a turn starts at most one chapter, and a retried call starts none", async () => {
     const { say, chapters, answers } = chapterHub();

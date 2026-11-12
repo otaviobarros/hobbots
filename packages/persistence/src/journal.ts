@@ -261,12 +261,12 @@ const restCorrelationOf = (
         messageId: event.proposal.messageId,
         taskId: event.proposal.taskId,
       };
-    // A chapter change names its thread (ADR 037); a split, the message it cut at, below.
-    case "ChapterStarted":
-    case "ChapterMerged":
-      return { ...NONE, threadId: event.threadId };
+    // A message event names its thread and message; a chapter change, its thread alone, and a
+    // split the message it cut at (ADR 037).
     default:
-      return { ...NONE, threadId: event.threadId, messageId: event.messageId };
+      return "messageId" in event
+        ? { ...NONE, threadId: event.threadId, messageId: event.messageId }
+        : { ...NONE, threadId: event.threadId };
   }
 };
 
@@ -548,11 +548,13 @@ export class EventJournal extends Context.Service<
       const compact = Effect.gen(function* () {
         const now = yield* DateTime.now;
         const cutoff = DateTime.formatIso(DateTime.subtractDuration(now, JOURNAL_RETENTION.age));
-        // While memory capture holds its cursor, every entry after it is kept, however old (ADR 028).
+        // While memory capture holds its cursor, every entry after it is kept, however old (ADR 028),
+        // and so is every entry after the cursor of a projector (STD-ARCH-016).
         const deleted = yield* sql`DELETE FROM event_journal
           WHERE sequence <= (SELECT sequence FROM event_journal_head WHERE id = 1) - ${JOURNAL_RETENTION.entries}
             AND ${occurredAt} < ${cutoff}
             AND sequence <= COALESCE((SELECT sequence FROM memory_capture WHERE id = 1 AND holding = 1), sequence)
+            AND sequence <= COALESCE((SELECT MIN(sequence) FROM projector_cursors), sequence)
           RETURNING sequence`;
         return deleted.length;
       });
