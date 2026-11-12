@@ -1,38 +1,27 @@
-import { AgentId, hobPresenceState, ThreadId } from "@hobbots/domain";
+import { AgentId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { hobNeeds, hobState, leadNeeds, sceneOrder, threadState, withRequests } from "./hob-state.ts";
+import { hobNeeds, presenceState, sceneOrder, threadState } from "./hob-state.ts";
 
-describe("hobState", () => {
-  const hob = { status: "active" } as const;
-  const threads = [{ id: "t1" }, { id: "t2" }];
-
-  it("rests when no thread streams", () => expect(hobState(hob, threads, {})).toBe("idle"));
-  it("works while any thread writes", () =>
-    expect(hobState(hob, threads, { t1: "thinking", t2: "working" })).toBe("working"));
-  it("thinks before the first words arrive", () => expect(hobState(hob, threads, { t2: "thinking" })).toBe("thinking"));
-  it("ignores activity on other hobs' threads", () => expect(hobState(hob, threads, { t9: "working" })).toBe("idle"));
-  it("shows paused over activity", () =>
-    expect(hobState({ ...hob, status: "paused" }, threads, { t1: "working" })).toBe("paused"));
-  it("rests before its threads load", () => expect(hobState(hob, undefined, {})).toBe("idle"));
-  // #1056: a hob that answered and waits only on a command it started is neither writing nor waiting on you.
-  it("waits on a command only while no thread of it writes or thinks", () => {
-    expect(hobState(hob, threads, { t1: "waiting" })).toBe("on-command");
-    expect(hobState(hob, threads, { t1: "waiting", t2: "thinking" })).toBe("thinking");
-    expect(hobState(hob, threads, { t1: "waiting", t2: "working" })).toBe("working");
+describe("presenceState", () => {
+  it("shows the presence the hub published", () => {
+    for (const presence of ["paused", "needs-you", "working", "thinking", "on-command", "idle"] as const)
+      expect(presenceState(presence, "active")).toBe(presence);
   });
+  it("rests before the hub has published the hob", () => expect(presenceState(undefined, "active")).toBe("idle"));
+  it("keeps a paused hob paused while its presence is unread", () =>
+    expect(presenceState(undefined, "paused")).toBe("paused"));
 });
 
 describe("threadState", () => {
-  const hob = { status: "active" } as const;
-
-  it("follows the thread's activity", () => expect(threadState(hob, "thinking", false)).toBe("thinking"));
-  it("works while a reply streams without live activity", () =>
-    expect(threadState(hob, undefined, true)).toBe("working"));
-  it("rests when nothing happens", () => expect(threadState(hob, undefined, false)).toBe("idle"));
+  it("follows what the thread's reply is doing", () =>
+    expect(threadState("working", "thinking", "active")).toBe("thinking"));
+  it("rests when no reply runs", () => expect(threadState("needs-you", undefined, "active")).toBe("idle"));
   it("waits on a command once the reply only waits on one", () =>
-    expect(threadState(hob, "waiting", true)).toBe("on-command"));
-  it("shows paused over a reply still streaming", () =>
-    expect(threadState({ status: "paused" }, "working", true)).toBe("paused"));
+    expect(threadState("on-command", "waiting", "active")).toBe("on-command"));
+  it("shows paused over a reply still running", () =>
+    expect(threadState("paused", "working", "active")).toBe("paused"));
+  it("shows a paused hob paused while its presence is unread", () =>
+    expect(threadState(undefined, undefined, "paused")).toBe("paused"));
 });
 
 describe("sceneOrder", () => {
@@ -48,15 +37,6 @@ describe("sceneOrder", () => {
   });
 });
 
-describe("withRequests", () => {
-  it("needs you while a request waits, whatever the hob is doing", () => {
-    expect(withRequests("working", true)).toBe("needs-you");
-    expect(withRequests("idle", true)).toBe("needs-you");
-    expect(withRequests("working", false)).toBe("working");
-  });
-  it("keeps a paused hob paused", () => expect(withRequests("paused", true)).toBe("paused"));
-});
-
 describe("hobNeeds", () => {
   const ada = AgentId.make("ada");
   const aldric = AgentId.make("aldric");
@@ -69,7 +49,6 @@ describe("hobNeeds", () => {
     const needs = hobNeeds({ approvals: [], blockers: [], questions: [asks("Which store?", ada, [aldric])] });
     expect(needs.get(ada)).toEqual({ kind: "question", text: "Which store?", askerId: ada });
     expect(needs.get(aldric)).toEqual({ kind: "question", text: "Which store?", askerId: ada });
-    expect(withRequests("idle", needs.has(ada))).toBe("needs-you");
   });
 
   it("marks a hob that asks you straight, with nobody leading it", () => {
@@ -88,59 +67,5 @@ describe("hobNeeds", () => {
     });
     expect(needs.get(ada)).toEqual({ kind: "approval", operation: "push" });
     expect(needs.has(pip)).toBe(false);
-  });
-});
-
-describe("leadNeeds", () => {
-  const ada = AgentId.make("ada");
-  const aldric = AgentId.make("aldric");
-  const pip = AgentId.make("pip");
-  const thread = ThreadId.make("t1");
-  const leadOf = (id: ThreadId) => (id === thread ? aldric : undefined);
-
-  // covers UX-002, OR-005
-  it("[TC-UX-191] marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
-    const needs = leadNeeds({
-      approvals: [
-        { agentId: ada, threadId: thread, state: "pending" },
-        { agentId: pip, threadId: ThreadId.make("t9"), state: "approved" },
-      ],
-      blockers: [{ recipientId: ada, threadId: thread }],
-      questions: [{ question: { askerId: ada, chain: [aldric] } }],
-      failed: [{ task: { id: "build", ownerId: ada, threadId: thread } as never, leadId: aldric }],
-      leadOf,
-    });
-    expect([...needs]).toEqual([aldric]);
-  });
-
-  it("marks the hob itself when its chat is not known, and nobody for decided requests", () => {
-    const needs = leadNeeds({
-      approvals: [{ agentId: pip, threadId: ThreadId.make("t9"), state: "pending" }],
-      blockers: [],
-      questions: [{ question: { askerId: ada, chain: [] } }],
-      failed: [],
-      leadOf,
-    });
-    expect([...needs].sort()).toEqual([ada, pip]);
-  });
-});
-
-// The hub decides presence by the same order this file shows it in (ADR 037), for every combination.
-describe("the hub's presence", () => {
-  const activities = ["thinking", "working", "waiting"] as const;
-  // Every set of activities a hob's threads can have at once: each bit of `mask` takes one.
-  const subsets = Array.from({ length: 2 ** activities.length }, (_, mask) =>
-    activities.filter((_, bit) => (mask >> bit) & 1),
-  );
-  it("agrees with the client's fold of lifecycle, what waits on you and its threads", () => {
-    for (const status of ["active", "paused"] as const)
-      for (const needsYou of [false, true])
-        for (const replies of subsets) {
-          const threads = replies.map((_, index) => ({ id: `t${index}` }));
-          const activity = Object.fromEntries(replies.map((reply, index) => [`t${index}`, reply]));
-          expect(hobPresenceState({ status, needsYou, replies })).toBe(
-            withRequests(hobState({ status }, threads, activity), needsYou),
-          );
-        }
   });
 });

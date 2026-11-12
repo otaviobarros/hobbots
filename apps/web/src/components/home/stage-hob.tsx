@@ -5,8 +5,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import type { ActivityMap } from "../../api/activity.ts";
 import { changesLogQuery, readChangesSeen } from "../../api/hob-changes.ts";
+import type { ActivityMap } from "../../api/hub-status.ts";
 import { useHobQuestWork } from "../../api/quest-work.ts";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import type { HobState } from "../../lib/hob-state.ts";

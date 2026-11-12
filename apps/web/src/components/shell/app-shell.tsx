@@ -11,6 +11,7 @@ import { Sidebar } from "../sidebar/sidebar.tsx";
 import { ConnectionBanner } from "./connection-banner.tsx";
 import { DeviceRemoved } from "./device-removed.tsx";
 import { HobJump } from "./hob-jump.tsx";
+import { HubReadCard } from "./hub-read-card.tsx";
 import { ReconnectingCard, ReconnectingProvider } from "./reconnecting.tsx";
 import { titleStrip, windowBody, windowFrame } from "./window-classes.ts";
 
@@ -52,6 +53,7 @@ export function AppShell() {
   const reason = reasonOf(useDesktopConnection().data);
   useOpenRequests();
   const inChat = useRouterState({ select: (s) => CHAT_PATH.test(s.location.pathname) });
+  const down = reason !== null || connection.state === "reconnecting";
 
   return (
     <>
@@ -64,6 +66,7 @@ export function AppShell() {
           <div className="flex min-w-0 flex-1 flex-col">
             {/* A chat shows the card under its own header; every other page shows it at the top. */}
             {!inChat && <ReconnectingCard className="mx-6 mt-2.5" />}
+            <HubReadCard hidden={down} />
             <div className="flex min-h-0 flex-1">
               <ShellArchive>
                 <Outlet />

@@ -1,5 +1,7 @@
 import {
   type ApprovalRequest,
+  type QuestId,
+  type QuestSummary,
   type SearchHit,
   type SnippetPart,
   searchTerms,
@@ -7,6 +9,7 @@ import {
   THREAD_TITLE_MAX,
   type Thread,
 } from "@hobbots/domain";
+import { summaryProgress } from "../../lib/led-quests.ts";
 import type { QuestInProgress } from "../../lib/quest-work.ts";
 import { messages } from "./messages.ts";
 
@@ -91,15 +94,19 @@ export const waitingByThread = (
 };
 
 /**
- * The Quests each chat follows, as its row's chips: the goal and how many of its party's Tasks are
- * done. A nested Quest followed in the same chat gets a chip of its own.
+ * The Quests each chat follows, as its row's chips: the goal and how many of its Tasks are done, as
+ * the hub's summary counts them (ADR 037). A nested Quest followed in the same chat gets a chip of
+ * its own; a Quest whose summary is not read yet waits for it.
  */
-export const questsByThread = (quests: ReadonlyArray<QuestInProgress>): ReadonlyMap<string, ReadonlyArray<string>> => {
+export const questsByThread = (
+  quests: ReadonlyArray<QuestInProgress>,
+  summaries: ReadonlyMap<QuestId, QuestSummary>,
+): ReadonlyMap<string, ReadonlyArray<string>> => {
   const chips = new Map<string, Array<string>>();
-  for (const { quest, members } of quests) {
-    if (quest.threadId === null) continue;
-    const done = members.filter((each) => each.task.state === "completed").length;
-    const chip = messages.chats.quest({ goal: quest.goal, done, total: members.length });
+  for (const { quest } of quests) {
+    const summary = summaries.get(quest.id);
+    if (quest.threadId === null || summary === undefined) continue;
+    const chip = messages.chats.quest({ goal: quest.goal, ...summaryProgress(summary) });
     chips.set(quest.threadId, [...(chips.get(quest.threadId) ?? []), chip]);
   }
   return chips;

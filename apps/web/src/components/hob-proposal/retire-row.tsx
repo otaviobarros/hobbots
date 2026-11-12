@@ -1,7 +1,7 @@
 import type { HobProposalRow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { useActivity } from "../../api/activity.ts";
+import { useThreadReplies } from "../../api/hub-status.ts";
 import { openWorkQuery, threadsQuery } from "../../api/queries.ts";
 import { OpenWorkList } from "../hob-profile/retire-parts.tsx";
 import { messages } from "./messages.ts";
@@ -16,7 +16,7 @@ const copy = messages.retire;
 export function useRetireReview(row: HobProposalRow, enabled: boolean) {
   const threads = useQuery({ ...threadsQuery(row.hobId), enabled });
   const work = useQuery({ ...openWorkQuery(row.hobId, null), enabled });
-  const activity = useActivity();
+  const activity = useThreadReplies();
   const running = (threads.data ?? []).filter((thread) => activity[thread.id] !== undefined).map((t) => t.title);
   const state = threads.isError || work.isError ? "failed" : threads.isSuccess && work.isSuccess ? "read" : "reading";
   return {

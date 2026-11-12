@@ -5,8 +5,8 @@ import { chaptersQuery } from "../../api/chapters.ts";
 import { briefQuery } from "../../api/records.ts";
 import { useSetCampPrivate } from "../../api/thread-settings.ts";
 import { AlongRow } from "../camps/camp-parts.tsx";
-import { progressStrip } from "../quest/control-room.ts";
 import { StatusStrip } from "../quest/status-strip.tsx";
+import { useQuestProgress } from "../quest/use-quest-progress.ts";
 import { useThreadTrees } from "../quest/use-work.ts";
 import { taskTitle, workCard } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
@@ -55,8 +55,9 @@ export function OverviewTab({ thread, hobName }: { thread: Thread; hobName: stri
 
 function QuestRow({ tree }: { tree: TaskTree }) {
   const card = workCard(tree);
+  // How the Quest is going is the hub's, from its summary (#1429).
+  const { segments, needs, done, total } = useQuestProgress(tree);
   if (card === null) return null;
-  const { segments, needs } = progressStrip(tree);
   return (
     <li className="flex flex-col gap-1.5 rounded-control px-2 py-2">
       <span className="flex items-center gap-2">
@@ -67,7 +68,7 @@ function QuestRow({ tree }: { tree: TaskTree }) {
         <span className="shrink-0 text-meta text-label">
           {card.quest !== null && card.quest.state !== "active"
             ? copy.questState[card.quest.state]
-            : copy.done(card.progress)}
+            : copy.done({ done, total })}
         </span>
       </span>
       <StatusStrip statuses={segments} />

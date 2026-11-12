@@ -5,6 +5,7 @@ import { blockersOn } from "../blockers/blocker-model.ts";
 import { type HobState, HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
+import { useQuestProgress } from "../quest/use-quest-progress.ts";
 import type { HobLookup } from "../quest/use-work.ts";
 import type { RowStatus } from "../quest/work-model.ts";
 import { Said } from "../said/said.tsx";
@@ -46,7 +47,7 @@ export function QuestTicket({
   /** Opens the Quest room on a Task. */
   onOpen: (taskId: TaskId) => void;
 }) {
-  const ticket = questTicket(tree);
+  const ticket = questTicket(tree, useQuestProgress(tree));
   const stuck = useStuck(tree).length > 0;
   if (ticket === null) return null;
   const ended = ticket.progress.kind === "ended";

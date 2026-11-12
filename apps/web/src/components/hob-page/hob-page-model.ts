@@ -1,6 +1,6 @@
 import { type Agent, type AgentId, type HistoryFilter, STARTER_ROLES, type Thread } from "@hobbots/domain";
 import { Schema } from "effect";
-import type { ThreadActivity } from "../../api/activity.ts";
+import type { ActivityMap } from "../../api/hub-status.ts";
 import { firstLine } from "../../lib/format.ts";
 import type { HobNeed, HobState } from "../../lib/hob-state.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
@@ -91,7 +91,7 @@ export const needLine = (need: HobNeed, hobId: AgentId, nameOf: (id: AgentId) =>
 export const doingOf = (
   state: HobState,
   threads: ReadonlyArray<Pick<Thread, "id" | "title">>,
-  activity: Readonly<Record<string, ThreadActivity>>,
+  activity: ActivityMap,
   need?: string,
 ): Doing | null => {
   if (state === "needs-you" || state === "waiting") return { kind: "needs-you", text: need ?? copy.doing.waiting };

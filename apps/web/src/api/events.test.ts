@@ -19,7 +19,6 @@ import {
 } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { activityQuery } from "./activity.ts";
 import { approvalsKey } from "./approvals.ts";
 import { applyEvent, remoteAccessChanged } from "./events.ts";
 import { queryKeys } from "./queries.ts";
@@ -262,18 +261,6 @@ describe("applyEvent", () => {
     expect(client.getQueryData(queryKeys.archivedAgents)).toEqual([older]);
   });
 
-  it("tracks what the hob is doing from the reply's events", () => {
-    const client = new QueryClient();
-    const activity = () => client.getQueryData(activityQuery.queryKey)?.[threadId];
-
-    applyEvent(client, { _tag: "MessageUpserted", message: reply("streaming", "") });
-    expect(activity()).toBe("thinking");
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 0, delta: "Hel" });
-    expect(activity()).toBe("working");
-    applyEvent(client, { _tag: "MessageUpserted", message: reply("complete", "Hello") });
-    expect(activity()).toBeUndefined();
-  });
-
   it("appends deltas to a loaded, streaming reply", () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "Hel")]);
@@ -283,7 +270,6 @@ describe("applyEvent", () => {
 
   it("keeps a stopping reply in progress until it is stopped", () => {
     const client = new QueryClient();
-    const activity = () => client.getQueryData(activityQuery.queryKey)?.[threadId];
     client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "Hel")]);
 
     applyEvent(client, { _tag: "MessageUpserted", message: reply("stopping", "Hel") });
@@ -293,12 +279,10 @@ describe("applyEvent", () => {
       content: "Hello",
       status: "stopping",
     });
-    expect(activity()).toBe("working");
 
     applyEvent(client, { _tag: "MessageUpserted", message: reply("stopped", "Hello") });
     applyEvent(client, { _tag: "TurnStopped", threadId, messageId: MessageId.make("m1") });
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.status).toBe("stopped");
-    expect(activity()).toBeUndefined();
   });
 
   it("moves a queued message that starts to the end and drops one that was removed", () => {

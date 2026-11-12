@@ -10,6 +10,7 @@ import { Link } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 import { useHobHistory } from "../../api/history.ts";
 import { agentsQuery } from "../../api/queries.ts";
+import { useSummariesByQuest } from "../../api/quest-summaries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { formatTime } from "../../lib/format.ts";
 import { ledQuests } from "../../lib/led-quests.ts";
@@ -83,7 +84,11 @@ function Filters({
 }) {
   const list = useQuery(agentsQuery).data ?? [];
   // A lead's History holds its party's work too, which the note says.
-  const { live, finished } = ledQuests(questsInProgress(useQuestWork(list.map((each) => each.id))), hob.id);
+  const { live, finished } = ledQuests(
+    questsInProgress(useQuestWork(list.map((each) => each.id))),
+    useSummariesByQuest(),
+    hob.id,
+  );
   return (
     <div className="flex flex-wrap items-center gap-3">
       <SegmentedControl aria-label={copy.filters.label} size="sm" value={filter} onValueChange={onFilter}>

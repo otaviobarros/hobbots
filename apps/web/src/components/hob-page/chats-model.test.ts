@@ -78,17 +78,20 @@ describe("waitingByThread", () => {
 });
 
 describe("questsByThread", () => {
-  const quest = (id: string, goal: string, threadId: string | null, states: ReadonlyArray<string>) =>
-    ({
-      quest: { id, goal, threadId },
-      members: states.map((state) => ({ task: { state } })),
-    }) as unknown as QuestInProgress;
-  it("gives each chat a chip per Quest it follows, with how many of its Tasks are done", () => {
-    const chips = questsByThread([
-      quest("q1", "Spring launch", "th1", ["completed", "active", "queued"]),
-      quest("q2", "Keywords", "th1", ["completed"]),
-      quest("q3", "Nowhere", null, ["active"]),
-    ]);
+  const quest = (id: string, goal: string, threadId: string | null) =>
+    ({ quest: { id, goal, threadId }, members: [] }) as unknown as QuestInProgress;
+  const summary = (questId: string, done: number, working: number) =>
+    [questId, { questId, tones: { needs: 0, working, waiting: 0, done, problem: 0, idle: 0 }, needsYou: 0 }] as never;
+  it("gives each chat a chip per Quest it follows, with how many of its Tasks the hub counts done", () => {
+    const chips = questsByThread(
+      [
+        quest("q1", "Spring launch", "th1"),
+        quest("q2", "Keywords", "th1"),
+        quest("q3", "Nowhere", null),
+        quest("q4", "Not read yet", "th1"),
+      ],
+      new Map([summary("q1", 1, 2), summary("q2", 1, 0), summary("q3", 0, 1)]),
+    );
     expect(chips.get("th1")).toEqual(["Spring launch · 1 of 3", "Keywords · 1 of 1"]);
     expect(chips.size).toBe(1);
   });
