@@ -217,6 +217,35 @@ describe("a chapter moved into a camp", () => {
   );
 });
 
+describe("a resting chapter moved into a camp", () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, RT-001
+  it.each<RuntimeKind>(["claude-code", "codex"])(
+    "[TC-CH-1385-19] on %s, the chat's live chapter, which had a session, starts afresh once an earlier chapter moves out",
+    async (runtime) => {
+      const id = await start(runtime);
+      await say(id, "What should I plant?");
+      await run(
+        Records.use((records) => records.recordYours(id, { key: "beds", text: "Raised beds", replaces: null })),
+      );
+      const [first] = await run(ChapterService.use((chapters) => chapters.listChapters(id)));
+      await startChapter(id, "miso", "Miso");
+      await say(id, "My cat is called Miso.");
+      await say(id, "She likes boxes.");
+      // The live chapter's session is resumed while nothing moves.
+      expect((asked[runtime].at(-1) as PromptRequest).sessionId).not.toBeNull();
+
+      await intoNewCamp(id, (first as { id: string }).id);
+      await say(id, "How is Miso?");
+      const inChat = asked[runtime].at(-1) as PromptRequest;
+      expect(inChat.sessionId).toBeNull();
+      // The moved chapter's decision and summary are gone from the pack (the old reply only echoed them).
+      expect(inChat.briefing ?? "").not.toMatch(/^- Raised beds/m);
+      expect(inChat.briefing ?? "").not.toMatch(/^## Earlier chapters$/m);
+      expect(inChat.briefing ?? "").toContain("She likes boxes.");
+    },
+  );
+});
+
 describe("camp suggestions", () => {
   // covers ADR 037 (Records: CampSuggestion), CH-009
   it("[TC-CH-1385-14] offers a chapter grown past a threshold once, and Keep in chat keeps it from coming back", async () => {

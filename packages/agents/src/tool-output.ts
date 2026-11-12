@@ -1,5 +1,5 @@
 import { ToolLogNotFound } from "@hobbots/api";
-import { previewToolOutput, type ToolOutput } from "@hobbots/domain";
+import { previewToolOutput, ThreadId, type ToolOutput } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { ToolLogKey, ToolLogs } from "./ports.ts";
 import type { HobbotsRepository } from "./repository.ts";
@@ -42,6 +42,7 @@ export const readToolLog = (
       .find((message) => message.id === key.messageId)
       ?.steps.find((candidate) => candidate.id === key.stepId);
     if (step?.output?.logged !== true || Option.isNone(logs)) return yield* Effect.fail(missing);
-    const text = yield* logs.value.read(key);
+    // A message that moved with its chapter keeps reading the log it was kept under.
+    const text = yield* logs.value.read({ ...key, threadId: ThreadId.make(step.output.loggedIn ?? key.threadId) });
     return yield* Option.match(text, { onNone: () => Effect.fail(missing), onSome: Effect.succeed });
   });

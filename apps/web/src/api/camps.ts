@@ -1,10 +1,10 @@
 import type { MakeCampPayload } from "@hobbots/api";
-import { type AgentId, type Thread, type ThreadId, ThreadLifecycle } from "@hobbots/domain";
+import { type AgentId, type Chapter, type Thread, type ThreadId, ThreadLifecycle } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { placeThread, queryKeys } from "./queries.ts";
 import { questionsMoved } from "./questions.ts";
-import { recordThread } from "./sync.ts";
+import { recordMovedMessages, recordThread } from "./sync.ts";
 import { threadTasksMoved } from "./tasks.ts";
 
 // Make a camp and Start fresh (ADR 037). Both take a key the client makes, which becomes the new
@@ -68,8 +68,15 @@ export const chatStartedFresh = (
  */
 export const chapterMoved = (
   queryClient: QueryClient,
-  { thread, camp }: { readonly thread: Thread; readonly camp: Thread },
+  {
+    thread,
+    camp,
+    stub,
+    chapter,
+  }: { readonly thread: Thread; readonly camp: Thread; readonly stub: Chapter; readonly chapter: Chapter },
 ) => {
+  // Messages an event brought this generation say where they are now, or a read would add them back.
+  recordMovedMessages(queryClient, { stub, chapter });
   for (const each of [thread, camp]) {
     show(queryClient, each);
     void queryClient.invalidateQueries({ queryKey: queryKeys.messages(each.id), exact: true });

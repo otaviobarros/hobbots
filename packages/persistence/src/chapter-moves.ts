@@ -15,6 +15,7 @@ import {
   type JournaledEvent,
   type MessageId,
   planMove,
+  type ReplyStep,
   type Thread,
   type ThreadId,
 } from "@hobbots/domain";
@@ -99,7 +100,7 @@ export const makeChapterMoves = (
       const to = plan.landed.threadId;
       yield* sql`UPDATE threads SET read_revision = ${revision}
         WHERE ${sql.in("id", [from, to])} AND ${unreadExpression(sql)} = 0`;
-      const moved = yield* sql<{ readonly id: MessageId }>`SELECT id FROM messages
+      const moved = yield* sql<{ readonly id: MessageId; readonly steps: unknown }>`SELECT id, steps FROM messages
         WHERE chapter_id = ${plan.stub.id} ORDER BY seq`;
       const [last] = yield* sql<{
         readonly seq: unknown;
@@ -109,7 +110,7 @@ export const makeChapterMoves = (
         moved,
         (message, index) =>
           sql`UPDATE messages SET thread_id = ${to}, chapter_id = ${plan.landed.id}, seq = ${after + index + 1},
-            revision = ${revision} WHERE id = ${message.id}`,
+            steps = ${keptLogsIn(message.steps, from)}, revision = ${revision} WHERE id = ${message.id}`,
         { discard: true },
       );
       const ids = moved.map((message) => message.id);
@@ -168,15 +169,14 @@ export const makeChapterMoves = (
       return moved;
     });
 
-  // A move changes both threads' chapters: their briefing checkpoints summed up messages that moved,
-  // and the moved chapter's sessions, which held its topic, are never resumed in the thread.
+  // A move changes what both threads hold: their briefing checkpoints summed up messages that moved,
+  // and every session of either one started from records that are no longer where they were, a
+  // resting chapter's decisions and summary included. Both threads' next turns start from their pack.
   const forgetMoved = (from: Thread, plan: ChapterMovePlan) =>
     Effect.gen(function* () {
-      yield* sql`DELETE FROM thread_checkpoints WHERE ${sql.in("thread_id", [from.id, plan.landed.threadId])}`;
-      const kept = from.sessions.filter((session) => session.chapterId !== plan.stub.id);
-      if (kept.length < from.sessions.length) {
-        yield* sql`UPDATE threads SET sessions = ${JSON.stringify(kept)} WHERE id = ${from.id}`;
-      }
+      const both = [from.id, plan.landed.threadId];
+      yield* sql`DELETE FROM thread_checkpoints WHERE ${sql.in("thread_id", both)}`;
+      yield* sql`UPDATE threads SET sessions = ${"[]"} WHERE ${sql.in("id", both)}`;
     });
 
   // The chapter's open suggestion is accepted, journaled after the move at `revision`.
@@ -262,6 +262,19 @@ export const makeChapterMoves = (
 
   return { moveChapter } as const;
 };
+
+/**
+ * A moved message's steps, each logged one naming the thread its full log was kept under, since a
+ * log's file is named by the thread it was written in.
+ */
+const keptLogsIn = (steps: unknown, from: ThreadId): string =>
+  JSON.stringify(
+    (JSON.parse(String(steps ?? "[]")) as ReadonlyArray<ReplyStep>).map((step) =>
+      step.output?.logged === true && step.output.loggedIn === undefined
+        ? { ...step, output: { ...step.output, loggedIn: from } }
+        : step,
+    ),
+  );
 
 /** The plan with every chapter it changed at `revision`, the sequence of the `ChapterMoved` that journals it. */
 const stamped = (plan: ChapterMovePlan, revision: number): ChapterMovePlan => {
