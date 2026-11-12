@@ -38,7 +38,7 @@ import { OnboardingReady } from "./components/onboarding/onboarding-summon.tsx";
 import { Welcome } from "./components/onboarding/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/onboarding/where-hobbots-runs.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
-import { RoomSearch } from "./components/quest-room/room-search.ts";
+import { QuestSearch } from "./components/quest-sheet/quest-search.ts";
 import { SetupRemoteAccess } from "./components/remote-access/setup-remote-access.tsx";
 import { AppError, PageError, ScreenError } from "./components/route-error/route-error.tsx";
 import { ConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
@@ -253,9 +253,9 @@ const archivedThreadsRoute = createRoute({
   },
 });
 
-// `?message=` names a message to scroll to, as a search result does. `?room=` opens the Quest room
-// beside the chat on a Task of its Quest, with the lit `lane`, the Workbench `tab` while its dock is
-// open, the `attempt` it shows and the `file` a tab shows first (ADR 027).
+// `?message=` names a message to scroll to, as a search result does. `?quest=` opens a quest of the
+// thread in its sheet, and with `tab` its Workbench beside the chat instead, with the `task` whose
+// hob's work it shows, the `attempt` it shows and the `file` a tab shows first (ADR 037).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
@@ -263,23 +263,23 @@ const threadRoute = createRoute({
   validateSearch: Schema.toStandardSchemaV1(
     Schema.Struct({
       message: searchParam(Schema.String),
-      ...RoomSearch,
+      ...QuestSearch,
     }),
   ),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, room, lane, tab, attempt, file, from, scope } = threadRoute.useSearch();
+    const { message, quest, task, tab, attempt, file, from, scope } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         threadId={ThreadId.make(params.threadId)}
         focusMessageId={message}
-        room={
-          room === undefined
+        quest={
+          quest === undefined
             ? undefined
             : {
-                taskId: TaskId.make(room),
-                lane: lane === undefined ? undefined : TaskId.make(lane),
+                taskId: TaskId.make(quest),
+                task: task === undefined ? undefined : TaskId.make(task),
                 tab,
                 attemptId: attempt === undefined ? undefined : AttemptId.make(attempt),
                 file,

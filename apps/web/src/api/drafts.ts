@@ -1,3 +1,4 @@
+import type { TaskId } from "@hobbots/domain";
 import { useSyncExternalStore } from "react";
 import { readStored, removeStored, writeStored } from "../lib/storage.ts";
 import type { WaitingPlace } from "./outbox.ts";
@@ -10,19 +11,22 @@ import type { WaitingPlace } from "./outbox.ts";
  * Like the outbox, it is a store outside React because it must outlive each thread's chat view
  * (ADR 016).
  */
-const drafts = new Map<WaitingPlace, string>();
-const saving = new Map<WaitingPlace, ReturnType<typeof setTimeout>>();
+/** Where a draft is typed: a thread or fresh page, or the box of a quest's thread (#1390). */
+export type DraftPlace = WaitingPlace | `quest-${TaskId}`;
+
+const drafts = new Map<DraftPlace, string>();
+const saving = new Map<DraftPlace, ReturnType<typeof setTimeout>>();
 const listeners = new Set<() => void>();
 const SAVE_DELAY_MS = 300;
 
-const storageKey = (place: WaitingPlace) => `draft.${place}`;
+const storageKey = (place: DraftPlace) => `draft.${place}`;
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);
 };
 
-export const readDraft = (place: WaitingPlace): string => {
+export const readDraft = (place: DraftPlace): string => {
   const known = drafts.get(place);
   if (known !== undefined) return known;
   const stored = readStored<unknown>(storageKey(place), "");
@@ -31,7 +35,7 @@ export const readDraft = (place: WaitingPlace): string => {
   return text;
 };
 
-const save = (place: WaitingPlace) => {
+const save = (place: DraftPlace) => {
   clearTimeout(saving.get(place));
   saving.delete(place);
   const text = drafts.get(place) ?? "";
@@ -51,7 +55,7 @@ if (typeof window !== "undefined") {
   });
 }
 
-export const writeDraft = (place: WaitingPlace, text: string) => {
+export const writeDraft = (place: DraftPlace, text: string) => {
   if (readDraft(place) === text) return;
   drafts.set(place, text);
   for (const listener of listeners) listener();
@@ -66,22 +70,22 @@ export const writeDraft = (place: WaitingPlace, text: string) => {
   );
 };
 
-export const useDraft = (place: WaitingPlace): string => useSyncExternalStore(subscribe, () => readDraft(place));
+export const useDraft = (place: DraftPlace): string => useSyncExternalStore(subscribe, () => readDraft(place));
 
 /** A send that failed puts its text back in front of anything typed since. */
-export const restoreDraft = (place: WaitingPlace, content: string) => {
+export const restoreDraft = (place: DraftPlace, content: string) => {
   const now = readDraft(place);
   writeDraft(place, now.trim() === "" ? content : `${content}\n${now}`);
 };
 
 /** A waiting message taken back to edit goes after anything typed since. */
-export const appendDraft = (place: WaitingPlace, content: string) => {
+export const appendDraft = (place: DraftPlace, content: string) => {
   const now = readDraft(place);
   writeDraft(place, now.trim() === "" ? content : `${now}\n${content}`);
 };
 
 /** A fresh page that became a thread takes its unsent text along. */
-export const moveDraft = (from: WaitingPlace, to: WaitingPlace) => {
+export const moveDraft = (from: DraftPlace, to: DraftPlace) => {
   const text = readDraft(from);
   if (text === "") return;
   writeDraft(from, "");

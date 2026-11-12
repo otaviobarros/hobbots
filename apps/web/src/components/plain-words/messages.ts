@@ -1,7 +1,7 @@
 import { formatList } from "../../lib/format.ts";
 
 /**
- * What a hob did or wants to do, in everyday words (STD-I18N-001): the Quest room's lanes and the
+ * What a hob did or wants to do, in everyday words (STD-I18N-001): each hob's work in a quest and the
  * approval cards say these, and the exact commands stay in the Workbench Terminal and the card's code.
  */
 export const messages = {

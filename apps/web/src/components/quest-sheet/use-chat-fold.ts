@@ -29,7 +29,7 @@ const FOLD_KEY = "room.chat";
 /** The fold this device remembers, versioned so a later shape can tell it apart (STD-REACT-026). */
 const StoredFold = Schema.Struct({ v: Schema.Literal(1), folded: Schema.Boolean });
 
-export const parseFold = (stored: unknown): boolean => (Schema.is(StoredFold)(stored) ? stored.folded : false);
+const parseFold = (stored: unknown): boolean => (Schema.is(StoredFold)(stored) ? stored.folded : false);
 
 /**
  * Whether the room's chat column is folded to its rail. Where the window has room for it, the device

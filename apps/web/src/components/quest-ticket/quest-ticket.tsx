@@ -33,9 +33,9 @@ const useStuck = (tree: TaskTree): ReadonlyArray<BackpackItem> =>
 /**
  * The ticket under the request that started a Task (ADR 027): one line that never grows with the
  * work, with the party's sprites, the title, how far the work is or how it ended, a tag when
- * something waits on you, and Open room. In a narrow chat column it keeps a fixed second line for
- * the state. It is one button, named for the Quest and where it stands, and opens the
- * Quest room beside the chat. It updates live as the Task tree does.
+ * something waits on you, and Open quest. In a narrow chat column it keeps a fixed second line for
+ * the state. It is one button, named for the Quest and where it stands, and opens the quest in the
+ * chat's sheet (ADR 037). It updates live as the Task tree does.
  */
 export function QuestTicket({
   tree,
@@ -44,7 +44,7 @@ export function QuestTicket({
 }: {
   tree: TaskTree;
   hobs: HobLookup;
-  /** Opens the Quest room on a Task. */
+  /** Opens the quest in the chat's sheet, on a Task. */
   onOpen: (taskId: TaskId) => void;
 }) {
   const ticket = questTicket(tree, useQuestProgress(tree));
@@ -101,7 +101,7 @@ export function QuestTicket({
           )}
         </span>
         <span className="ms-auto shrink-0 text-ui font-bold whitespace-nowrap text-lantern @max-sm/ticket:order-2">
-          <span className="@max-sm/ticket:sr-only">{messages.openRoom} </span>
+          <span className="@max-sm/ticket:sr-only">{messages.openQuest} </span>
           <span aria-hidden>→</span>
         </span>
       </span>

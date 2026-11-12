@@ -1,7 +1,7 @@
 import type { Locator } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneHead } from "./quest-room.ts";
+import { lane, laneHead } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -48,16 +48,20 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   const strip = page.getByRole("region", { name: "Work in progress" });
   expect(await lines(strip.getByText(/^Run the Black Friday campaign/))).toBe(1);
 
-  // The room's heading keeps to one line inside the room, and Ada's lane holds the long brief
+  // The quest's title keeps to three lines inside the sheet, and Ada's work holds the long brief
   // without running past its edge.
   const tray = page.getByRole("region", { name: /^Needs you/ });
   await expect(tray.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
-  const ticket = page.getByRole("button", { name: /^Run the Black Friday campaign .*: .*Open room$/ });
+  // Found beside the open sheet too, which hides the chat from assistive tech.
+  const ticket = page.getByRole("button", {
+    name: /Run the Black Friday campaign .*: .*Open quest/,
+    includeHidden: true,
+  });
   await ticket.click();
-  const room = page.getByRole("region", { name: /^Run the Black Friday campaign .*, Quest room$/ });
-  const heading = room.getByRole("heading", { name: /^Run the Black Friday campaign/ }).first();
+  const room = page.getByRole("dialog", { name: /^Run the Black Friday campaign / });
+  const heading = room.getByRole("heading", { name: /^Run the Black Friday campaign/, level: 2 }).first();
   await expect(heading).toBeFocused();
-  expect(await lines(heading)).toBe(1);
+  expect(await lines(heading)).toBeLessThanOrEqual(3);
   await expectInside(heading, room);
   const ada = lane(page, "Ada");
   await expectInside(laneHead(page, "Ada"), ada);
@@ -65,7 +69,7 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   await task.locator(":scope > details > summary").click();
   await expect(task).toContainText("hobbots_manual_tests/black_friday_campaign_full_run");
   await expectNoSideScroll(ada);
-  await room.getByRole("button", { name: "Close room" }).click();
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(room).toBeHidden();
 
   // Once answered, the question card in the chat names the Task in at most two lines, inside the card.
@@ -82,7 +86,7 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // Nothing in the chat is wider than its column, so the transcript never scrolls sideways.
   await expectNoSideScroll(chat);
 
-  // The ticket's title keeps to one line inside the chat's column, with the room shut and open beside it.
+  // The ticket's title keeps to one line inside the chat's column, with the sheet shut and open beside it.
   for (const opened of [false, true]) {
     if (opened) await ticket.click();
     await expect(room).toBeVisible({ visible: opened });

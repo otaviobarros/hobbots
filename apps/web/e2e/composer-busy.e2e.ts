@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
 import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openRoom } from "./quest-room.ts";
+import { openWorkbench, ticket } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1034 in the browser: the composer while a hob replies. The hint stays on one line, Stop
@@ -200,11 +200,11 @@ const themeIds: readonly string[] = (
   }
 ).themes.map((theme) => theme.id);
 
-test.describe("beside the Quest room", () => {
+test.describe("beside a quest's Workbench", () => {
   test.afterEach(stopAldricHub);
 
   // covers CH-007, UX-002
-  test("[TC-CH-292] beside the Quest room the busy hint keeps only the dot and Replying, on one line in every theme and at larger text", async ({
+  test("[TC-CH-292] beside a quest's Workbench the busy hint keeps only the dot and Replying, on one line in every theme and at larger text", async ({
     page,
     scan,
   }) => {
@@ -219,7 +219,7 @@ test.describe("beside the Quest room", () => {
     await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
     await composer.press("Enter");
     await expect(stopButton(page)).toBeHidden({ timeout: 30_000 });
-    await openRoom(page, "Plan the launch");
+    await openWorkbench(page, ticket(page, "Plan the launch"));
     const chat = page.getByRole("main", { name: "Chat" });
     expect((await chat.boundingBox())?.width ?? 0).toBeLessThan(480);
 

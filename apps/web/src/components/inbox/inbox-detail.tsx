@@ -1,4 +1,10 @@
-import type { HobProposalView, SkillProposalView, WaitingDevice, WaitingQuestion } from "@hobbots/api";
+import type {
+  HobProposalView,
+  SkillProposalView,
+  WaitingCharmCall,
+  WaitingDevice,
+  WaitingQuestion,
+} from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -27,6 +33,7 @@ import { ApprovalDecision } from "../approvals/approval-card.tsx";
 import { BlockerChoices, blockerChoice } from "../blockers/blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { lostWhat, SettleTaskCall } from "../charm-calls/settle-task-call.tsx";
 import { HubQuestionAnswer } from "../coding-setup/coding-setup.tsx";
 import { HobProposalCard } from "../hob-proposal/hob-proposal-card.tsx";
 import { messages as hobProposalCopy } from "../hob-proposal/messages.ts";
@@ -44,7 +51,7 @@ import { AnswerForm } from "../quest/answer-form.tsx";
 import { controlError } from "../quest/control-room.ts";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
-import { roomSearch } from "../quest-room/room-search.ts";
+import { questSearch } from "../quest-sheet/quest-search.ts";
 import { messages as skillCopy } from "../skill-review/messages.ts";
 import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.tsx";
 import { proposalFoot } from "../skill-review/proposal-model.ts";
@@ -102,6 +109,9 @@ export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob
     case "hob-proposal":
       // Keyed by the entry, so a ticked confirmation on one proposal never shows on the next.
       return <HobProposalDetail key={entry.key} view={entry.hobs} hob={hob} row={row} {...context} />;
+    case "charm-call":
+      // Keyed by the entry, so a failed settle on one write never shows on the next.
+      return <CharmCallDetail key={entry.key} waiting={entry.waiting} hob={hob} row={row} {...context} />;
     default:
       return <DeviceDetail device={entry.device} row={row} now={context.now} />;
   }
@@ -210,7 +220,7 @@ function QuestionDetail({
           ? copy.question.passedBy({ names: question.chain.map(directory.hobName) })
           : copy.question.direct
       }
-      chat={chatLink(chatHob, task.threadId, { taskId: task.id }, copy.detail.openRoom)}
+      chat={chatLink(chatHob, task.threadId, { taskId: task.id }, copy.detail.openQuest)}
     >
       <div className="flex items-start gap-3">
         <EntryPortrait hob={hob} device={false} waiting={false} />
@@ -307,7 +317,7 @@ function StuckDetail({
         item.recipientId,
         item.threadId,
         item.taskId === null ? null : { taskId: item.taskId },
-        item.taskId === null ? copy.detail.openChat : copy.detail.openRoom,
+        item.taskId === null ? copy.detail.openChat : copy.detail.openQuest,
       )}
     >
       {choice.blocker.diagnostic !== null && (
@@ -333,7 +343,7 @@ function StuckDetail({
 
 /**
  * A party member's Task that failed while its Quest goes on: Retry sends it back to its hob from
- * here, and Open the task opens the Quest room beside its lead's chat on that Task's lane, where it
+ * here, and Open the task opens the quest in its lead's chat's sheet, where it
  * can go to another hob or be cancelled. A retry the hub recorded takes the entry out of the list with its event,
  * which can land before the hub's answer does, so the toast says it went back and focus moves on (#988).
  */
@@ -385,7 +395,7 @@ function FailedDetail({
             <Link
               to="/hobs/$hobId/threads/$threadId"
               params={{ hobId: leadId, threadId: task.threadId }}
-              search={roomSearch(task.id)}
+              search={questSearch(task.id)}
               className="no-underline"
             >
               {copy.failedTask.openTask}
@@ -398,6 +408,44 @@ function FailedDetail({
           {controlError(retry.error, { owner, target: owner })}
         </p>
       )}
+    </DetailFrame>
+  );
+}
+
+/**
+ * A write a Task's session made whose answer was lost, still uncertain after the last read-back
+ * (ADR 038): what it was, where, and the two ways to settle it once you have looked, as the
+ * quest offers them. Open in the quest shows the Task it came from.
+ */
+function CharmCallDetail({
+  waiting,
+  hob,
+  row,
+  directory,
+  questOf,
+  now,
+  targets,
+}: { waiting: WaitingCharmCall; hob: Agent | undefined; row: InboxRow } & DetailContext) {
+  const { call, task } = waiting;
+  const name = directory.hobName(call.agentId);
+  const lead = task.threadId === null ? undefined : (directory.threadHob(task.threadId) ?? task.ownerId);
+  return (
+    <DetailFrame
+      label={copy.charmCall.label({ name, charm: call.charm })}
+      portrait={<EntryPortrait hob={hob} device={false} waiting large />}
+      row={row}
+      why={lostWhat(waiting)}
+      chat={chatLink(lead, task.threadId, { taskId: task.id }, copy.detail.openQuest)}
+    >
+      <Facts
+        rows={[
+          [copy.detail.quest, questName(questOf(task.id), directory)],
+          [copy.detail.task, taskTitle(task)],
+          [copy.detail.about, call.site],
+          [copy.detail.when, formatWhen(call.updatedAt, now)],
+        ]}
+      />
+      <SettleTaskCall waiting={waiting} targets={targets} />
     </DetailFrame>
   );
 }
@@ -658,7 +706,7 @@ function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string | undefi
 
 /**
  * Open in the chat, for an entry whose thread and chat are known. An entry about a Task opens the
- * Quest room beside that chat instead, with the Task's lane lit (ADR 027).
+ * quest in that chat's sheet instead (ADR 027).
  */
 const chatLink = (
   hobId: AgentId | undefined,
@@ -670,7 +718,7 @@ const chatLink = (
     <Link
       to="/hobs/$hobId/threads/$threadId"
       params={{ hobId, threadId }}
-      search={at === null ? {} : "taskId" in at ? roomSearch(at.taskId) : { message: at.messageId }}
+      search={at === null ? {} : "taskId" in at ? questSearch(at.taskId) : { message: at.messageId }}
       className="-ms-2 inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-link no-underline hover:bg-hover"
     >
       <InboxIcon name="chat" />

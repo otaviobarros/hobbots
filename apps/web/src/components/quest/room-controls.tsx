@@ -72,7 +72,7 @@ export function ConfirmCancel({
 
 /**
  * Cancel Quest for the whole request (Cancel Task while no party joined): asked first, then
- * Cancelling… until every Task confirms, then what the cancel came to. The Quest room's ⋯ menu
+ * Cancelling… until every Task confirms, then what the cancel came to. The quest's ⋯ menu
  * asks it, so the room holds whether the question is open.
  */
 export function TopControls({

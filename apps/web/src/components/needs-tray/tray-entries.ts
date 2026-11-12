@@ -20,11 +20,12 @@ import {
 /**
  * One thing the tray asks about: a request to approve, a hob proposal (ADR 034), work that is stuck,
  * or a question for you, a hob's or the hub's. A hob asking to share what it learned, or proposing a
- * skill, waits in the Inbox, never in the way of a chat.
+ * skill, waits in the Inbox, never in the way of a chat, and so does a write a Task made whose answer
+ * was lost, which also waits in its quest, under its hob (ADR 038).
  */
 export type TrayEntry = Exclude<
   InboxEntry,
-  { kind: "device" } | { kind: "failed" } | { kind: "memory" } | { kind: "skill" }
+  { kind: "device" } | { kind: "failed" } | { kind: "memory" } | { kind: "skill" } | { kind: "charm-call" }
 >;
 
 /**

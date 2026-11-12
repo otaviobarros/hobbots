@@ -643,7 +643,10 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     });
     const settled = await Effect.gen(function* () {
       const service = yield* CharmCallService;
-      return yield* service.settle(ThreadId.make("t1"), MessageId.make("m1"), "toolu_1", "not-sent");
+      return yield* service.settle(
+        { _tag: "Step", threadId: ThreadId.make("t1"), messageId: MessageId.make("m1"), stepId: "toolu_1" },
+        "not-sent",
+      );
     }).pipe(
       Effect.provide(Layer.mergeAll(CharmCallService.layer.pipe(Layer.provide(memoryCharmCalls(rows))), user)),
       Effect.runPromise,

@@ -48,6 +48,7 @@ export const messages = {
     share: "Share",
     skill: "Skill",
     hobs: "Hobs",
+    charmCall: "Unsure",
   },
   /** One row of the list: who asked, as a chain, and when. */
   row: {
@@ -111,7 +112,7 @@ export const messages = {
     copyFailed: "Could not copy",
     decided: "Decided",
     openChat: "Open in the chat",
-    openRoom: "Open in the Quest room",
+    openQuest: "Open in the quest",
     deviceWhy: ({ name }: { name: string }) =>
       `Someone opened Hobbots on ${name}, a device this hub does not know. Allow it only if it shows the same code.`,
     deviceFoot: "Deny turns that device away. Decide later keeps it waiting in Settings › Devices.",
@@ -183,6 +184,11 @@ export const messages = {
     retried: ({ name }: { name: string }) => `Sent back to ${name} for another try.`,
     openTask: "Open the task",
     loadFailed: "Hobbots could not read the failed tasks.",
+  },
+  /** A write a Task made whose answer was lost and reading it back has not settled (ADR 038), in Needs you. */
+  charmCall: {
+    label: ({ name, charm }: { name: string; charm: string }) => `Unsure ${charm} write from ${name}`,
+    loadFailed: "Hobbots could not read the writes whose answer was lost.",
   },
   /** The keycaps under the list in Needs you: A and D only while a permission request is open. */
   keys: {
