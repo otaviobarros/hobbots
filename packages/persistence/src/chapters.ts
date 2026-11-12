@@ -131,6 +131,18 @@ export const ChapterRepositoryLive = Layer.effect(
         yield* sql`UPDATE messages SET chapter_id = ${to}, revision = ${revision} WHERE ${which}`;
       });
 
+    // Decisions and artifacts go where their chapter's messages went (STD-ARCH-019), at the
+    // revision of the event that moved them: on a merge every one of the absorbed chapter's, on a
+    // split each one whose reply moved.
+    const moveRecords = (revision: number, to: ChapterId, from: ChapterId, merge: boolean) =>
+      Effect.gen(function* () {
+        const moved = sql`SELECT m.id FROM messages m WHERE m.chapter_id = ${to}`;
+        yield* sql`UPDATE decisions SET chapter_id = ${to}, revision = ${revision}
+          WHERE chapter_id = ${from} AND ${merge ? sql`1 = 1` : sql`source_message_id IN (${moved})`}`;
+        yield* sql`UPDATE artifacts SET chapter_id = ${to}, revision = ${revision}
+          WHERE chapter_id = ${from} AND ${merge ? sql`1 = 1` : sql`origin_kind = 'message' AND origin_id IN (${moved})`}`;
+      });
+
     // A change of chapter boundaries leaves nothing behind that was worked out from the old ones: the
     // briefing checkpoint summed up messages that may now be in another chapter (STD-ARCH-018), and
     // `dropped` chapters' sessions, which must not be resumed when one of them is live again.
@@ -215,6 +227,7 @@ export const ChapterRepositoryLive = Layer.effect(
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;
           yield* moveMessages(threadId, first, input.id, sql`chapter_id = ${from} AND seq >= ${Number(at?.seq)}`);
+          yield* moveRecords(first, input.id, from, false);
           yield* forgetBoundaries(threadId, []);
           const event: JournaledEvent = {
             _tag: "ChapterSplit",
@@ -236,9 +249,10 @@ export const ChapterRepositoryLive = Layer.effect(
           const chapters = yield* listChapters(threadId);
           const plan = yield* planOrFail(planMerge(threadId, chapters, chapterId), first);
           const into = chapters[chapters.findIndex((chapter) => chapter.id === chapterId) - 1] as Chapter;
-          // The messages move before their chapter goes, and it goes before the one it merged into
+          // The messages and records move before their chapter goes, and it goes before the one it merged into
           // may become live.
           yield* moveMessages(threadId, first, into.id, sql`chapter_id = ${chapterId}`);
+          yield* moveRecords(first, into.id, chapterId, true);
           yield* sql`DELETE FROM chapters WHERE id = ${chapterId}`;
           yield* sql`INSERT INTO merged_chapters ${sql.insert({
             id: chapterId,

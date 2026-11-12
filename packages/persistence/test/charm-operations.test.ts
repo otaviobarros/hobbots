@@ -52,6 +52,7 @@ const before = Object.fromEntries(
         "0084_thread_skill_trial",
         "0095_thread_kinds",
         "0099_chapters",
+        "0101_records",
       ].includes(key),
   ),
 ) as typeof migrations;

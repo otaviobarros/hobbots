@@ -310,9 +310,10 @@ export const foldLog = (text: string, limit: number = DEFAULT_ACTIVITY_LIMITS.lo
 const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
 
 /** The last name of a `/`-separated path. */
-const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+export const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-const extensionOf = (name: string) => {
+/** A file name's extension, in lower case, or "" for none. */
+export const extensionOf = (name: string) => {
   const dot = name.lastIndexOf(".");
   return dot <= 0 ? "" : name.slice(dot + 1).toLowerCase();
 };

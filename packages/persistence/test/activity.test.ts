@@ -163,8 +163,18 @@ describe("Workbench records", () => {
     );
     expect(first.value.changes.map((each) => each.path)).toEqual(["a.md", "b.md"]);
     expect(second.value.removed).toEqual([FileChangeId.make("change-a.md")]);
+    // The settled change registers the file it left as an artifact of the Task's thread (ADR 037).
     expect(second.entries.map((entry) => entry.payload)).toMatchObject([
       { _tag: "FileChangesRecorded", attemptId, taskId, folder: project, removed: ["change-a.md"] },
+      {
+        _tag: "ArtifactRegistered",
+        artifact: {
+          locator: `${project}/b.md`,
+          kind: "doc",
+          latestVersion: 1,
+          origin: { kind: "attempt", id: attemptId },
+        },
+      },
     ]);
     expect(activity.changes).toHaveLength(1);
     expect(activity.changes[0]).toMatchObject({ path: "b.md", settled: true, after: { hash: "h3" } });

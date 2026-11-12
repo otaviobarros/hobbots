@@ -12,6 +12,8 @@ import {
   PackRecordSource,
   PackReports,
   type PromptRequest,
+  RecordPackSource,
+  Records,
   RuntimeAdapter,
   type RuntimeAdapterShape,
   TaskRepository,
@@ -21,7 +23,8 @@ import {
   AgentId,
   ChapterId,
   isInProgress,
-  type Message,
+  Message,
+  MessageId,
   QuestionId,
   type RuntimeKind,
   roleFields,
@@ -33,6 +36,7 @@ import {
   ChapterSummaryLogLive,
   EventJournal,
   HobbotsRepositoryLive,
+  RecordRepositoryLive,
   TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -77,12 +81,19 @@ const Brain = Layer.succeed(
   }),
 );
 
-const hubLayer = (decider: Layer.Layer<never> | Layer.Layer<HubDecider>) =>
+/** The pack reading the hub's own Records (#1383), as the hub composes them. */
+const StoredRecords = RecordPackSource.pipe(Layer.provide(Records.layer));
+
+const hubLayer = (
+  decider: Layer.Layer<never> | Layer.Layer<HubDecider>,
+  records: typeof Decisions | typeof StoredRecords = Decisions,
+) =>
   Layer.mergeAll(
     ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
     ChapterService.layer,
     ChapterSummaries.make,
   ).pipe(
+    Layer.provideMerge(Layer.merge(records, Records.layer)),
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.mergeAll(
@@ -90,12 +101,12 @@ const hubLayer = (decider: Layer.Layer<never> | Layer.Layer<HubDecider>) =>
           ChapterRepositoryLive,
           ChapterSummaryLogLive.pipe(Layer.provide(EventJournal.layer)),
           TaskRepositoryLive,
+          RecordRepositoryLive,
           EventJournal.layer,
         ).pipe(Layer.provideMerge(TestDatabase)),
         EventBus.layer,
         HobAdmission.layer,
         NodeFolderChecks,
-        Decisions,
         PackReports.layer,
         decider,
         Layer.succeed(RuntimeAdapter, recorded("claude-code", makeFakeRuntime())),
@@ -122,9 +133,13 @@ const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<ReturnType<typeof h
   (hub as Hub).runPromise(effect);
 
 /** A hub with Wren, thinking with `runtime`, and her chat. */
-const start = async (runtime: RuntimeKind, decider: Layer.Layer<never> | Layer.Layer<HubDecider> = Layer.empty) => {
+const start = async (
+  runtime: RuntimeKind,
+  decider: Layer.Layer<never> | Layer.Layer<HubDecider> = Layer.empty,
+  records: typeof Decisions | typeof StoredRecords = Decisions,
+) => {
   asked = { "claude-code": [], codex: [] };
-  hub = ManagedRuntime.make(hubLayer(decider));
+  hub = ManagedRuntime.make(hubLayer(decider, records));
   return run(
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
@@ -230,6 +245,56 @@ describe("the context pack", () => {
       expect(pack.lastTurn?.tokens).toBeGreaterThan(0);
       expect(pack.next.text).toContain("## This chapter so far");
       expect(pack.next.report.tokens).toBeLessThanOrEqual(pack.next.report.budget);
+    },
+  );
+
+  // covers ADR 037 (The context pack, Records), CH-001
+  it.each<RuntimeKind>(["claude-code", "codex"])(
+    "[TC-CH-1383-11] on %s, a new chapter's first session gets the decisions that hold and what the thread made, and no crossed-out decision",
+    async (runtime) => {
+      const id = await start(runtime, Layer.empty, StoredRecords);
+      const reply = await say(id, "Plan the launch emails.");
+      await run(
+        Effect.gen(function* () {
+          const records = yield* Records;
+          const first = yield* records.recordYours(id, {
+            key: "a",
+            text: "Emails go out on Tuesdays.",
+            replaces: null,
+          });
+          yield* records.recordYours(id, {
+            key: "b",
+            text: "Emails go out on Wednesdays.",
+            replaces: first.recorded.id,
+          });
+          yield* records.recordYours(id, { key: "c", text: "Miso eats only wet food.", replaces: null });
+          // A reply's step wrote the launch plan, which the registry keeps.
+          yield* (yield* HobbotsRepository).upsertMessage(
+            new Message({
+              ...reply,
+              id: MessageId.make("wrote-plan"),
+              steps: [
+                {
+                  id: "s1",
+                  kind: "tool",
+                  label: "Writing launch.md",
+                  state: "done",
+                  call: { tool: "Write", operation: "edit-files", targets: ["/work/launch.md"] },
+                },
+              ],
+            }),
+          );
+        }),
+      );
+      await startChapter(id, "chapter-2", "Sending");
+
+      await say(id, "When do the emails go out?");
+      const told = (asked[runtime].at(-1) as PromptRequest).briefing ?? "";
+      expect(told).toContain("## Active decisions");
+      expect(told).toMatch(/- Miso eats only wet food\. \(decision [^)]+\)\n- Emails go out on Wednesdays\./);
+      expect(told).not.toContain("Tuesdays");
+      expect(told).toContain("## What this thread made");
+      expect(told).toContain("- doc: launch.md (version 1)");
     },
   );
 

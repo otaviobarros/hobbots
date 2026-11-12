@@ -1,5 +1,14 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { Agent, AgentId, EVENT_SCHEMA_VERSIONS, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  EVENT_SCHEMA_VERSIONS,
+  Message,
+  MessageId,
+  OWNER_ACTOR,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -128,7 +137,7 @@ describe("EventJournal", () => {
     });
     expect(queuedEntry?.payload).toEqual({
       _tag: "MessageUpserted",
-      message: new Message({ ...message("q", "queued", "user"), revision: 4, chapterId }),
+      message: new Message({ ...message("q", "queued", "user"), revision: 4, chapterId, actor: OWNER_ACTOR }),
     });
     expect(queuedEntry?.schemaVersion).toBe(EVENT_SCHEMA_VERSIONS.MessageUpserted);
     expect(queuedEntry?.causationId).toBeNull();

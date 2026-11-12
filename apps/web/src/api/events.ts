@@ -212,6 +212,10 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ClaimContested",
   "ClaimCleared",
   "ClaimReleased",
+  // Decisions and artifacts (ADR 037) have no screen yet; the camp sheet reads them (#1387).
+  "DecisionRecorded",
+  "DecisionSuperseded",
+  "ArtifactRegistered",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -227,7 +231,10 @@ type UnappliedEvent = Extract<
       | "ClaimMade"
       | "ClaimContested"
       | "ClaimCleared"
-      | "ClaimReleased";
+      | "ClaimReleased"
+      | "DecisionRecorded"
+      | "DecisionSuperseded"
+      | "ArtifactRegistered";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

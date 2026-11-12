@@ -28,6 +28,9 @@ import {
   type MemoryVersionAuthors,
   PackReports,
   PermissionSummary,
+  RecordPackSource,
+  Records,
+  RecordToolsLive,
   RecoveryLog,
   RosterReceipts,
   SecretRedaction,
@@ -101,6 +104,7 @@ import {
   MemoryShareLogLive,
   MemoryVersionAuthorsLive,
   PrivateCampsLive,
+  RecordRepositoryLive,
   RestoreRepository,
   SearchIndex,
   SetupRepository,
@@ -336,6 +340,8 @@ const ServerLive = Layer.unwrap(
       TaskToolCallsLive,
       // The numbers, paths and branches hobs claim across every chat and camp (ADR 037).
       ClaimRegisterLive,
+      // Decisions and the artifacts registry of every chat and camp (ADR 037).
+      RecordRepositoryLive,
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,
@@ -619,6 +625,11 @@ const ServerLive = Layer.unwrap(
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the
       // sessions of Tasks, whose turns offer them; after the Charms, which each hob's card names.
       .pipe(Layer.provideMerge(DirectoryToolsLive))
+      // Decisions and artifacts (ADR 037), before the chat service, whose turns offer `record_decision`
+      // and whose new sessions' context packs read them.
+      .pipe(
+        Layer.provideMerge(Layer.mergeAll(RecordToolsLive, RecordPackSource).pipe(Layer.provideMerge(Records.layer))),
+      )
       // A thread's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
       // `start_chapter` and `read_message`, before the chat service and the sessions of Tasks.
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
