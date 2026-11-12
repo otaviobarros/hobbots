@@ -417,7 +417,8 @@ describe("Quest summaries", () => {
       ),
       { numRuns: 40 },
     );
-  });
+    // Up to 1,600 changes, each read back several ways: well past the default on PostgreSQL.
+  }, 120_000);
 
   // covers ADR 037 (Quests in camps), STD-ARCH-014
   it("[TC-OR-1373-02] writes a summary only with the change that caused it: a change rolled back leaves the summary as it was", async () => {
