@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openQuest } from "./quest-sheet.ts";
+import { laneHead, openQuest, questSheet } from "./quest-sheet.ts";
 
 // Issue #1006 in the browser: a lead's reply to work that arrived while its Quest runs is routine
 // progress, which the room shows. The chat keeps the plan and leaves that reply out, also after a
@@ -116,6 +116,11 @@ test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine prog
   // The chat shows your request and Frodo's plan, and nothing of the progress, also after a reload.
   const chat = page.getByRole("main", { name: "Chat" });
   for (const _ of [0, 1]) {
+    // The quest's sheet covers the chat until it closes.
+    if (page.url().includes("quest=")) {
+      await expect(questSheet(page, "Ship the launch")).toBeVisible();
+      await page.keyboard.press("Escape");
+    }
     await expect(chat.getByText("Ship the launch").first()).toBeVisible();
     await expect(chat.getByText(/Delegated Task/).first()).toBeVisible();
     await expect(chat.getByText(CONTINUATION)).toHaveCount(0);
