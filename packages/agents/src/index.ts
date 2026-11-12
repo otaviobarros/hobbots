@@ -5,6 +5,7 @@ export * from "./approvals.ts";
 export * from "./asking.ts";
 export { clip, contextBlock } from "./briefing.ts";
 export * from "./chapter-summaries.ts";
+export * from "./chapter-tools.ts";
 export * from "./chapters.ts";
 export * from "./charm-calls.ts";
 export * from "./charms.ts";

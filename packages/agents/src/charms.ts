@@ -8,8 +8,10 @@ import {
   MEMORY_SEARCH_TOOL,
   type MessageId,
   READ_HOB_TOOL,
+  READ_MESSAGE_TOOL,
   RECORD_DECISION_TOOL,
   SKILL_TOOL_DESCRIPTIONS,
+  START_CHAPTER_TOOL,
   TASK_TOOLS,
   type TaskId,
   type ThreadId,
@@ -90,7 +92,8 @@ export interface HubToolOwner {
 
 /**
  * The hub's built-in tool sets beside the Charms (ADR 031), whose names no Charm may take: Local Git,
- * Memory, Skills, the Directory (ADR 032), the Web tools (ADR 036) and the Task tools.
+ * Memory, Skills, the Directory (ADR 032), the Web tools (ADR 036), the Chapter tools (ADR 037) and
+ * the Task tools.
  */
 export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "Local Git", names: [GIT_INIT_TOOL] },
@@ -99,6 +102,7 @@ export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "the Directory", names: [READ_HOB_TOOL] },
   { owner: "the Web tools", names: [WEB_FETCH_TOOL] },
   { owner: "the Records", names: [RECORD_DECISION_TOOL] },
+  { owner: "the Chapter tools", names: [START_CHAPTER_TOOL, READ_MESSAGE_TOOL] },
   { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
 ];
 
@@ -433,6 +437,21 @@ export class WebTools extends Context.Service<
 >()("@hobbots/agents/WebTools") {}
 
 /**
+ * The Chapter tools (ADR 037): `start_chapter`, which ends the live chapter of the chat a turn is in,
+ * and `read_message`, which pages a message of the hob's own threads, such as one the context pack
+ * cut. Neither reaches anything outside the hob's own conversations, so no policy decides them, as
+ * none decides the Task tools. Every answer is redacted with the turn's redactor. Absent, a turn
+ * offers neither.
+ */
+export class ChapterTools extends Context.Service<
+  ChapterTools,
+  {
+    /** The tools the turn offers, read at its start: none (null) for a hob without tools. */
+    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+  }
+>()("@hobbots/agents/ChapterTools") {}
+
+/**
  * A hub tool call's answer as the hob reads it: a refusal, with its reason, as a refused answer, and
  * every answer redacted, as everything a hob reads is.
  */
@@ -450,7 +469,8 @@ export const hubAnswer = <R>(
  * reads (ADR 014): a chat turn's, a party member's or a step's, each narrowed by its Delegations.
  * Every kind of turn that offers Task tools offers them this one way, so the tools a delegation
  * promises are the tools its member gets (#699), and every runtime that serves hub tools serves
- * memory (ADR 028), skills (ADR 029), the directory (ADR 032) and `web_fetch` (ADR 036). Without a service, a turn offers none of its tools. The
+ * memory (ADR 028), skills (ADR 029), the directory (ADR 032), `web_fetch` (ADR 036) and the
+ * Chapter tools (ADR 037). Without a service, a turn offers none of its tools. The
  * offer's steering holds the built-in requests its Charms take over (ADR 031).
  */
 export const hubToolOffer = Effect.gen(function* () {
@@ -461,6 +481,7 @@ export const hubToolOffer = Effect.gen(function* () {
   const directory = yield* Effect.serviceOption(DirectoryTools);
   const web = yield* Effect.serviceOption(WebTools);
   const records = yield* Effect.serviceOption(RecordTools);
+  const chapters = yield* Effect.serviceOption(ChapterTools);
   const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn, offer?: CharmOffer): Effect.Effect<HubOffer> =>
@@ -473,10 +494,11 @@ export const hubToolOffer = Effect.gen(function* () {
         Option.isSome(directory) ? directory.value.forTurn(turn) : none,
         Option.isSome(web) ? web.value.forTurn(turn) : none,
         Option.isSome(records) ? records.value.forTurn(turn) : none,
+        Option.isSome(chapters) ? chapters.value.forTurn(turn) : none,
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools, webTools, recordTools]) => {
+      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools, webTools, recordTools, chapterTools]) => {
         const sets = [
           { owner: "Local Git", tools: git },
           ...charmSets,
@@ -485,6 +507,7 @@ export const hubToolOffer = Effect.gen(function* () {
           { owner: "the Directory", tools: directoryTools },
           { owner: "the Web tools", tools: webTools },
           { owner: "the Records", tools: recordTools },
+          { owner: "the Chapter tools", tools: chapterTools },
         ];
         return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
       }),
