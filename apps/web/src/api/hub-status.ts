@@ -16,6 +16,7 @@ import {
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { call } from "./client.ts";
+import { noteRead } from "./snapshot-reads.ts";
 
 /**
  * The status the hub decides (ADR 037): each busy thread's run and each live hob's presence. The
@@ -37,7 +38,10 @@ export const hubStatusQuery = queryOptions({
       const ready = readyCount(client);
       const snapshot = await call((c) => c.system.status());
       // Taken against what the client holds now, so a status event that came while it was read wins.
-      if (readyCount(client) === ready) return withSnapshot(client.getQueryData(statusKey) ?? noStatus, snapshot);
+      if (readyCount(client) === ready) {
+        noteRead(client, statusKey);
+        return withSnapshot(client.getQueryData(statusKey) ?? noStatus, snapshot);
+      }
     }
   },
   staleTime: Number.POSITIVE_INFINITY,

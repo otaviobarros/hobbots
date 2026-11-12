@@ -2,6 +2,7 @@ import { type Query, type QueryClient, useIsFetching, useQueryClient } from "@ta
 import { useSyncExternalStore } from "react";
 import { statusKey } from "./hub-status.ts";
 import { summariesRoot } from "./quest-summaries.ts";
+import { readFailed } from "./snapshot-reads.ts";
 
 /**
  * The reads of what the hub publishes (ADR 037): its status and its Quest summaries. Every page
@@ -10,7 +11,8 @@ import { summariesRoot } from "./quest-summaries.ts";
  * STD-UI-009), so an empty view is never taken for a quiet hub.
  */
 const isHubRead = (query: Query) => query.queryKey[0] === statusKey[0] || query.queryKey[0] === summariesRoot;
-const hasFailed = (query: Query) => isHubRead(query) && query.state.status === "error";
+// Not the query's status: an event that patched it since would have cleared that (see snapshot-reads.ts).
+const hasFailed = (query: Query) => isHubRead(query) && readFailed(query);
 
 /** Whether any read of what the hub publishes failed and has not been read since. */
 export const hubReadFailed = (client: QueryClient): boolean =>

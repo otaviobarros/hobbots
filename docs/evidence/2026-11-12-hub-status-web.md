@@ -17,6 +17,7 @@
 | `[TC-UX-1374-04]` | `npx vitest run src/components/quest/quest-progress.test.ts`: a Quest's pill shows the summary the hub published, ready for review included, never its Task states | ✅ |
 | `[TC-UX-1374-07]` | The same file: a failed step of a Task working alone counts as needing you while it runs, and not once it ended | ✅ |
 | `[TC-UX-1374-08]` | `npx vitest run src/api/hub-reads.test.ts`: a failed status or summaries read is told apart from an empty one, and Try again reads it again | ✅ |
+| `[TC-UX-1374-10]` | The same file: a status read that failed stays failed when a later status frame patches what the window holds, and so does a failed summaries read when a summary event patches its set, until a read answers | ✅ |
 | `[TC-UX-1374-05]` | `npx playwright test e2e/hub-status.e2e.ts`: two devices show Pip working and then resting, in the sidebar and the chat header, through a full turn and through a stop | ✅ |
 | `[TC-UX-1374-06]` | The same file: two devices show the same pill ("1 needs you", "of 2 done"), ticket and lead needing you, and both follow the Quest to "Finished in" once one answers | ✅ |
 | `[TC-UX-1374-09]` | The same file: with `/api/status` failing, the window says it could not read the hob's status, a paused hob still shows paused, and Try again clears the notice once the hub answers | ✅ |

@@ -2,6 +2,7 @@ import type { Quest, QuestId, QuestSummary, ThreadId } from "@hobbots/domain";
 import { type QueryClient, type QueryFunctionContext, queryOptions, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
+import { noteRead } from "./snapshot-reads.ts";
 import { syncState } from "./sync.ts";
 
 /**
@@ -41,7 +42,10 @@ const summariesQuery = (queryKey: ReadonlyArray<string>, threadId: ThreadId | un
       for (;;) {
         const before = mark(client);
         const read = await call((c) => c.tasks.questSummaries({ query: threadId === undefined ? {} : { threadId } }));
-        if (mark(client) === before) return merged(client.getQueryData<Summaries>(queryKey), read.summaries);
+        if (mark(client) === before) {
+          noteRead(client, queryKey);
+          return merged(client.getQueryData<Summaries>(queryKey), read.summaries);
+        }
       }
     },
   });
