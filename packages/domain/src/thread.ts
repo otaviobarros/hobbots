@@ -63,9 +63,9 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   /**
-   * When the thread was archived, or null while it is not: a fact kept beside `state`. An archived
-   * thread is left out of thread lists, takes no new messages until it is restored, and is still
-   * found by search.
+   * When the thread was archived or superseded, or null while it is open: a fact kept beside
+   * `state`. Such a thread is left out of thread lists, takes no new messages, and is still found by
+   * search. An archived one takes them again once it is restored; a superseded chat never does.
    */
   archivedAt: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
@@ -133,7 +133,8 @@ export type ThreadLifecycleEvent =
       /** Whether the hob has another open chat, as when a new chat opened while this one was archived. */
       readonly chatOpen: boolean;
     }
-  | { readonly _tag: "Supersede"; readonly at: string };
+  /** Start fresh: what stops an archive stops it too, as the chat's open work moves in the same step. */
+  | ({ readonly _tag: "Supersede"; readonly at: string } & ArchiveBlockers);
 
 /** A change to a thread's lifecycle its state does not allow, with why when something stops it. */
 export class IllegalThreadTransition extends Schema.TaggedError<IllegalThreadTransition>()("IllegalThreadTransition", {
@@ -153,6 +154,7 @@ const archiveRefusal = (blockers: ArchiveBlockers): ThreadArchiveRefusal | null 
 /** Why an event the thread's state allows was refused, or null when its state refused it. */
 const refusalOf = (thread: Thread, event: ThreadLifecycleEvent): ThreadArchiveRefusal | null => {
   if (event._tag === "Archive" && thread.state === "open") return archiveRefusal(event);
+  if (event._tag === "Supersede" && thread.state === "open" && thread.kind === "chat") return archiveRefusal(event);
   if (event._tag === "Restore" && thread.state === "archived" && event.hobRetired) return "hob-retired";
   return null;
 };
@@ -167,7 +169,7 @@ export const ThreadLifecycleMachine = defineMachine<ThreadState, ThreadLifecycle
     states: {
       open: "Takes messages and turns",
       archived: "Left out of thread lists and read-only until restored; search still finds it",
-      superseded: "A chat that Start fresh replaced with a new one",
+      superseded: "A chat that Start fresh replaced with a new one; read-only for good, and search still finds it",
     },
     field: "state",
     events: {
@@ -191,11 +193,12 @@ export const ThreadLifecycleMachine = defineMachine<ThreadState, ThreadLifecycle
             kind: thread.kind === "chat" && e.chatOpen ? "camp" : thread.kind,
           }),
       },
+      // Only a chat is superseded, and only when nothing would stop its archive.
       Supersede: {
         from: ["open"],
         to: "superseded",
-        guard: (thread) => thread.kind === "chat",
-        apply: (thread, e) => new Thread({ ...thread, state: "superseded", updatedAt: e.at }),
+        guard: (thread, e) => thread.kind === "chat" && archiveRefusal(e) === null,
+        apply: (thread, e) => new Thread({ ...thread, state: "superseded", archivedAt: e.at, updatedAt: e.at }),
       },
     },
     illegal: (thread, event, to) =>
@@ -252,6 +255,8 @@ export const messagePreview = (message: {
 }): string | null => (message.status === "queued" || message.quiet === true ? null : previewLine(message.content));
 
 export const DEFAULT_THREAD_TITLE = "New thread";
+/** The longest goal a camp takes, as long as a decision (ADR 037). */
+export const CAMP_GOAL_MAX = 500;
 /** The longest title a thread takes. */
 export const THREAD_TITLE_MAX = 60;
 

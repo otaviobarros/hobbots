@@ -1,14 +1,15 @@
-import type { MemoryModelState, MemorySettings, RuntimeKind, RuntimeModels } from "@hobbots/domain";
+import type { MemoryModelState, MemorySettings, MemoryTask, RuntimeKind, RuntimeModels } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import { runtimesQuery } from "../../api/queries.ts";
 import { providerFix } from "../providers/provider-fix.tsx";
 import { Choice } from "./choice.tsx";
 import { messages } from "./messages.ts";
-import { effortOptions, fallbackOptions, modelOptions, shownModel, stateNotes, taskOptions } from "./model.ts";
+import { fallbackOptions, stateNotes, taskOptions } from "./model.ts";
+import { ModelSelect } from "./model-select.tsx";
 
-/** The parts of the memory model's settings below the provider. */
+/** The parts of the hub's brain's settings below its model. */
 
 const copy = messages;
 
@@ -19,42 +20,13 @@ export interface ModelChoiceProps {
   readonly save: (next: MemorySettings) => void;
 }
 
-/** The model and effort rows, offering exactly what the provider's runtime lists. */
-export function ModelRows({ shown, models, busy, save }: ModelChoiceProps) {
-  const model = shownModel(shown, models);
-  const offered = modelOptions(models, shown.model);
-  const efforts = effortOptions(models, model);
-  return (
-    <>
-      <span className="text-detail text-label">{copy.model.model}</span>
-      {offered.length === 0 ? (
-        <span className="text-detail text-text-secondary">{copy.model.noModels}</span>
-      ) : (
-        <Choice
-          label={copy.model.model}
-          value={model ?? ""}
-          options={offered}
-          disabled={busy}
-          onPick={(picked) => save({ ...shown, model: picked })}
-        />
-      )}
-      {efforts.length > 0 && (
-        <>
-          <span className="text-detail text-label">{copy.model.effort}</span>
-          <Choice
-            label={copy.model.effort}
-            value={shown.effort}
-            options={efforts}
-            disabled={busy}
-            onPick={(effort) => save({ ...shown, effort })}
-          />
-        </>
-      )}
-    </>
-  );
-}
+/** The tasks, as Settings groups them: memory's own, then the hub's for chats and camps (ADR 037). */
+const TASK_GROUPS: ReadonlyArray<{ readonly group: "memory" | "hub"; readonly tasks: ReadonlyArray<MemoryTask> }> = [
+  { group: "memory", tasks: ["summaries", "check", "answers"] },
+  { group: "hub", tasks: ["brief", "chapters", "judgments"] },
+];
 
-/** A model per task, behind a toggle. */
+/** A model per task, behind a toggle, each from the brain's own runtime. */
 export function TaskModels({ shown, models, busy, save }: ModelChoiceProps) {
   const [perTask, setPerTask] = useState(false);
   const tasksId = useId();
@@ -72,20 +44,25 @@ export function TaskModels({ shown, models, busy, save }: ModelChoiceProps) {
       </Button>
       {perTask && (
         <div id={tasksId} className="flex flex-col gap-1">
-          {(["summaries", "check", "answers"] as const).map((task) => (
-            <div key={task} className="flex items-center gap-3 rounded-control bg-ground px-3 py-2">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-ui">{copy.tasks.rows[task].title}</span>
-                <span className="text-meta text-label">{copy.tasks.rows[task].detail}</span>
-              </span>
-              <Choice
-                label={copy.tasks.rows[task].title}
-                value={shown.tasks[task]}
-                options={taskOptions(models, shown.tasks[task], task === "summaries")}
-                disabled={busy}
-                onPick={(choice) => save({ ...shown, tasks: { ...shown.tasks, [task]: choice } })}
-              />
-            </div>
+          {TASK_GROUPS.map(({ group, tasks }) => (
+            <Fragment key={group}>
+              <span className="lbl pt-1 text-label">{copy.tasks.groups[group]}</span>
+              {tasks.map((task) => (
+                <div key={task} className="flex flex-wrap items-center gap-3 rounded-control bg-ground px-3 py-2">
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-ui">{copy.tasks.rows[task].title}</span>
+                    <span className="text-meta text-label">{copy.tasks.rows[task].detail}</span>
+                  </span>
+                  <ModelSelect
+                    label={copy.tasks.rows[task].title}
+                    value={shown.tasks[task]}
+                    options={taskOptions(models, shown.tasks[task], task !== "check" && task !== "answers")}
+                    disabled={busy}
+                    onPick={(choice) => save({ ...shown, tasks: { ...shown.tasks, [task]: choice } })}
+                  />
+                </div>
+              ))}
+            </Fragment>
           ))}
           <span className="text-meta text-label">{copy.tasks.note}</span>
         </div>

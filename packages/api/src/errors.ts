@@ -55,6 +55,30 @@ export class ThreadArchiveRefused extends Schema.TaggedError<ThreadArchiveRefuse
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * Why Start fresh did nothing: the thread is not its hob's open chat (`not-open-chat`), or what
+ * stops an archive stops it too.
+ */
+export const StartFreshRefusal = Schema.Literals([...ThreadArchiveRefusal.literals, "not-open-chat"]);
+export type StartFreshRefusal = typeof StartFreshRefusal.Type;
+
+/** Start fresh was refused for `reason`; nothing changed. */
+export class StartFreshRefused extends Schema.TaggedError<StartFreshRefused>()(
+  "StartFreshRefused",
+  { threadId: ThreadId, reason: StartFreshRefusal },
+  { httpApiStatus: 409 },
+) {}
+
+/**
+ * The key of Make a camp or Start fresh, which becomes the new thread's id, already names another
+ * thread or another request; nothing changed. The same request sent again is answered, not refused.
+ */
+export class ThreadKeyReused extends Schema.TaggedError<ThreadKeyReused>()(
+  "ThreadKeyReused",
+  { threadId: ThreadId },
+  { httpApiStatus: 409 },
+) {}
+
 /** An archived thread is read-only: it takes no new messages, replies or brain switch until it is restored. */
 export class ThreadArchived extends Schema.TaggedError<ThreadArchived>()(
   "ThreadArchived",

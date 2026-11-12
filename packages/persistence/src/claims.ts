@@ -7,7 +7,7 @@ import { makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
 /**
- * The SQL claims register (ADR 037, migration 0097). A claim takes the journal's head first, so two
+ * The SQL claims register (ADR 037, migration 0098). A claim takes the journal's head first, so two
  * claims for one number, from any hub process sharing the database, take turns: the second reads
  * the first and gets the next number. Unique indexes hold each number once per folder of a
  * repository, ever, and a path or branch once per Task.

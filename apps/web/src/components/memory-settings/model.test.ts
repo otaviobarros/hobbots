@@ -1,6 +1,7 @@
 import { DEFAULT_MEMORY_SETTINGS, type MemoryEngineHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
+  effortNote,
   effortOptions,
   engineTag,
   fallbackOptions,
@@ -97,15 +98,26 @@ describe("the memory model's choices", () => {
     ]);
   });
 
-  it("says which sign-in it uses, warns about high effort, and says what memory runs with instead", () => {
-    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }, claude).warn).toBe(true);
-    expect(modelHint(DEFAULT_MEMORY_SETTINGS, claude).text).toBe(
-      "Uses your Claude Code sign-in. A small, fast model is enough for summaries.",
+  it("says which sign-in it uses, what effort it runs at, and what memory runs with instead", () => {
+    expect(modelHint(DEFAULT_MEMORY_SETTINGS, claude)).toBe(
+      "Uses your Claude Code sign-in. A small, fast model is enough for this work.",
     );
-    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt", model: "big" }, codex).text).toBe(
+    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt", model: "big" }, codex)).toBe(
       "Uses your ChatGPT sign-in through Codex. A bigger model is more careful, and uses more of your plan.",
     );
-    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }, undefined).text).toContain("no AI");
+    expect(modelHint({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }, undefined)).toContain("no AI");
+    // Effort is low by design; one chosen before shows, with the way back to low.
+    expect(effortNote({ ...DEFAULT_MEMORY_SETTINGS, model: "careful" }, claude)).toEqual({
+      text: "Runs at low effort: this work needs no more.",
+      lower: false,
+    });
+    expect(effortNote({ ...DEFAULT_MEMORY_SETTINGS, model: "careful", effort: "high" }, claude)).toEqual({
+      text: "Runs at high effort, chosen before. Low is enough for this work, and faster.",
+      lower: true,
+    });
+    // A model that takes no effort, and No AI, say nothing about it.
+    expect(effortNote(DEFAULT_MEMORY_SETTINGS, claude)).toBeNull();
+    expect(effortNote({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }, claude)).toBeNull();
     expect(stateNotes({ _tag: "Model", model: "quick", replaced: null, tasks: [] }, claude)).toEqual([]);
     expect(stateNotes({ _tag: "Model", model: "quick", replaced: "gone-1", tasks: [] }, claude)).toEqual([
       "gone-1 is no longer offered, so memory uses Quick instead.",

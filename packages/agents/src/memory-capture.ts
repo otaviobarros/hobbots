@@ -405,6 +405,11 @@ export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): Captu
         ? null
         : { sessionId: thread.id, agentId: thread.agentId, opening: null, items: [], ends: true };
     }
+    // A chat started fresh ends its session; the new chat opens its own with its first message.
+    case "ChatStartedFresh": {
+      const { superseded } = event;
+      return { sessionId: superseded.id, agentId: superseded.agentId, opening: null, items: [], ends: true };
+    }
     case "TaskStateChanged":
       return taskChangeOf(entry, event, redacted);
     case "BackpackItemChanged":
@@ -486,7 +491,10 @@ export const entryMarksOf = (entry: EventEnvelope): EntryMarks | null => {
     case "QuestStarted":
       return { threadId: event.quest.threadId, taskId: null, unit: `quest:${event.quest.id}` };
     case "ThreadUpserted":
+    case "CampMade":
       return { threadId: event.thread.id, taskId: null, unit: null };
+    case "ChatStartedFresh":
+      return { threadId: event.superseded.id, taskId: null, unit: null };
     case "TaskStateChanged": {
       const { task, attempt } = event;
       const attemptId = attempt !== null && attempt.taskId === task.id ? attempt.id : task.currentAttemptId;
@@ -544,9 +552,12 @@ const NO_PRIVACY: PagePrivacy = {
 const threadOf = (marks: EntryMarks, now: MemoryCapturePrivacy): ThreadId | null =>
   marks.threadId ?? (marks.taskId === null ? null : (now.taskThreads.get(marks.taskId) ?? null));
 
-/** Follows a camp's privacy along the journal: every change of it is a `ThreadUpserted` entry. */
+/**
+ * Follows a camp's privacy along the journal: a camp is made with it (`CampMade`), and every later
+ * change of it is a `ThreadUpserted` entry.
+ */
 const followPrivacy = (entry: EventEnvelope, privateThreads: Set<ThreadId>) => {
-  if (entry.payload._tag !== "ThreadUpserted") return;
+  if (entry.payload._tag !== "ThreadUpserted" && entry.payload._tag !== "CampMade") return;
   const { thread } = entry.payload;
   if (thread.private) privateThreads.add(thread.id);
   else privateThreads.delete(thread.id);

@@ -14,8 +14,10 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 | `origin` | The thread and chapter a camp came from, or null |
 | `state` | `ThreadLifecycle`: open, archived, superseded |
 
-- Each hob has exactly one open chat, held by a partial unique index. Built in [#1375](https://github.com/otaviobarros/hobbots/issues/1375), with the fields above and [ThreadLifecycle](machines/thread-lifecycle.md); until the rail and Start fresh land, a hob whose chat is archived has none until its next thread opens one, and a chat restored while another is open comes back as a camp.
-- Start fresh moves the chat to superseded and opens a new one. What it still owes you is recorded as `CarriedItem` rows and appears in the new chat once.
+- Each hob has exactly one open chat, held by a partial unique index. Built in [#1375](https://github.com/otaviobarros/hobbots/issues/1375), with the fields above and [ThreadLifecycle](machines/thread-lifecycle.md); until the rail lands, a hob whose chat is archived has none until its next thread opens one, and a chat restored while another is open comes back as a camp.
+- **Make a camp** (`POST /api/agents/:agentId/camps`) writes a camp with its title, goal and `private`, and journals `CampMade`, in one transaction. Built in [#1376](https://github.com/otaviobarros/hobbots/issues/1376).
+- **Start fresh** (`POST /api/threads/:threadId/start-fresh`) moves the chat to superseded and opens a new one whose `origin` is the old chat, in one transaction that journals `ChatStartedFresh`. It moves the chat's open work: the Tasks you asked for there that are not over, with their trees and Quests, and every backpack item held for it that is not resolved, each journaled as `BackpackItemChanged`. Each Task, open question in their trees, reminder and item the chat's turns carry is recorded once as a `CarriedOver` row (the ADR's `CarriedItem`). The new chat's first turn is told what was carried over, and the dispatcher delivers what waited there once. It is refused, as an archive is, while a reply runs or waits, while an approval waits, or for a retired hob, and for a thread that is not its hob's open chat. A superseded chat is read-only for good and listed with the hob's archived threads. Built in [#1376](https://github.com/otaviobarros/hobbots/issues/1376).
+- Both take a key that becomes the new thread's id: the same request sent again returns what it did, and a key that names another thread is refused (`ThreadKeyReused`). Make a camp keeps what it was asked under its key (`camp_requests`), so the request still matches after the camp is renamed.
 - Migration (0095): each hob's most recent open thread becomes its chat; its others become camps with their titles. A skill trial stays a camp.
 - Slice: [#1362](https://github.com/otaviobarros/hobbots/issues/1362).
 
@@ -45,7 +47,7 @@ Each is written in the same transaction and journal as the message that made it,
 | Artifact | kind (code, page, doc, email, image, PR, file), title, latestVersion, origin | a registry over what Attempts and Quests record; copies nothing |
 | Brief | threadId, text, revision, writtenBy, basis cursor | rewritten by a projector at chapter ends and quest steps |
 | CampSuggestion | threadId, chapterId, reason codes and counts | open, kept, accepted, expired; at most one per chapter |
-| CarriedItem | fromThreadId, toThreadId, ref | written once by Start fresh |
+| CarriedOver (the ADR's CarriedItem) | fromThreadId, toThreadId, ref (Task, question, reminder or backpack item), label | written once by Start fresh |
 | Claim | scope (sequence, path, branch), repository, key, holder Task, actor | [Claim](machines/claim.md): held, contested, released. A number is unique in its folder of a repository for good; an open path or branch once per Task |
 
 A note to self is a message role that never wakes the dispatcher.
@@ -80,7 +82,7 @@ Every part has a share of the budget, and the shares add up to it. The pack neve
 
 ## The claims register
 
-Built in [#1388](https://github.com/otaviobarros/hobbots/issues/1388): `Claim` and its machine in `packages/domain/src/claim.ts`, the register in `packages/persistence/src/claims.ts` (migration 0097), and `claim` with the Task tools on every runtime.
+Built in [#1388](https://github.com/otaviobarros/hobbots/issues/1388): `Claim` and its machine in `packages/domain/src/claim.ts`, the register in `packages/persistence/src/claims.ts` (migration 0098), and `claim` with the Task tools on every runtime.
 
 - **`claim`** is a Task tool. It records a claim for the Task the hob works on, and in a chat with no Task yet it starts one, as `plan_steps` does. A claim names a folder of the hob's, inside a Git repository. The repository is known by its `origin` remote, so two clones or worktrees share their claims. The named folder is resolved, links and `..` taken as the kernel walks them, before it is checked against the hob's folders, and a hob given part of a repository claims paths and numbered folders only inside that part.
 - **Sequences.** A `sequence` claim is the next number in a folder whose files start with one: migrations, ADRs, or any other numbered files. The hob names the folder whose files the numbers count, such as `docs/decisions`. The hub reads that folder on the repository's default branch as the clone has it (`origin`'s HEAD, else `origin/main`, else `main`), without running Git, and hands out one past every number `main` and the register hold. A number the hob already uses is kept when it is free; otherwise the hub settles on the next free one and says so. Concurrent claims take the journal's head in turn, so each gets its own number.

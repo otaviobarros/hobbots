@@ -2,7 +2,7 @@ import { Claim, type ClaimEvent, Claims, isTerminalTask, type JournaledEvent, ty
 import { DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 
-/** A row of `claims` (migration 0097), as the SQL client reads it. */
+/** A row of `claims` (migration 0098), as the SQL client reads it. */
 export interface ClaimRow {
   readonly id: string;
   readonly scope: string;

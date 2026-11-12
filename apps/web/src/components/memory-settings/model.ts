@@ -1,12 +1,10 @@
 import type { MemoryOverview } from "@hobbots/api";
 import {
   type Effort,
-  MEMORY_RUNTIMES,
   type MemoryEngineHealth,
   type MemoryModelProvider,
   type MemoryModelState,
   type MemoryModelUsage,
-  type MemoryModelVendor,
   type MemorySettings,
   NO_MEMORY_MODEL,
   offeredModels,
@@ -30,14 +28,6 @@ export interface ChoiceOption<Value extends string> {
   /** Set when the segment can't be picked. */
   readonly unavailable?: string;
 }
-
-/** The providers in the order Settings offers them. Gemini shows, waiting for a later update. */
-export const providerOptions: ReadonlyArray<ChoiceOption<MemoryModelProvider | "gemini">> = [
-  { value: "claude", label: copy.model.providers.claude },
-  { value: "chatgpt", label: copy.model.providers.chatgpt },
-  { value: "gemini", label: copy.model.providers.gemini, unavailable: copy.model.geminiLater },
-  { value: "none", label: copy.model.providers.none },
-];
 
 /** The model memory runs on: the one chosen, or the runtime's smallest while none is. */
 export const shownModel = (settings: MemorySettings, models: RuntimeModels | undefined): string | null =>
@@ -80,17 +70,26 @@ export const withProvider = (settings: MemorySettings, provider: MemoryModelProv
   };
 };
 
-/** The line under the model: what No AI means, a warning about high effort, or which sign-in it uses. */
-export const modelHint = (
-  settings: MemorySettings,
-  models: RuntimeModels | undefined,
-): { readonly text: string; readonly warn: boolean } => {
-  if (settings.provider === "none") return { text: copy.model.hints.none, warn: false };
-  if (settings.effort !== "low" && settings.effort !== "medium") return { text: copy.model.hints.high, warn: true };
+/** The line under the model: what No AI means, or which sign-in it uses and what its size costs. */
+export const modelHint = (settings: MemorySettings, models: RuntimeModels | undefined): string => {
+  if (settings.provider === "none") return copy.model.hints.none;
   const smallest = smallestModel(models)?.id;
   const size =
     settings.model === null || settings.model === smallest ? copy.model.hints.small : copy.model.hints.bigger;
-  return { text: `${copy.model.hints[settings.provider]} ${size}`, warn: false };
+  return `${copy.model.hints[settings.provider]} ${size}`;
+};
+
+/**
+ * What effort the brain runs at, for a model that takes one: low, which this work needs, or the
+ * effort chosen before, with the offer to go back to low.
+ */
+export const effortNote = (
+  settings: MemorySettings,
+  models: RuntimeModels | undefined,
+): { readonly text: string; readonly lower: boolean } | null => {
+  if (settings.provider === "none" || effortOptions(models, shownModel(settings, models)).length === 0) return null;
+  if (settings.effort === "low") return { text: copy.brain.effort.low, lower: false };
+  return { text: copy.brain.effort.other({ effort: effortWords(settings.effort).label.toLowerCase() }), lower: true };
 };
 
 /** The model's name as the runtime gives it, or its id when the runtime does not list it. */
@@ -154,9 +153,6 @@ export const fallbackOptions = (
     },
   ];
 };
-
-/** The runtime the other provider runs on, for its models. */
-export const otherRuntime = (provider: MemoryModelVendor) => MEMORY_RUNTIMES[otherMemoryProvider(provider)];
 
 /** A task's choices: the same model, each model the runtime offers, and for summaries No AI. */
 export const taskOptions = (

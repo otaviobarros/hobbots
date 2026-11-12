@@ -23,6 +23,7 @@ import {
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { makeCampWrites, threadColumns } from "./camps.ts";
 import { makeJournaled } from "./journal.ts";
 import { insertSkillUse } from "./skill-uses.ts";
 
@@ -414,25 +415,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       journaled(1, (revision) =>
         Effect.gen(function* () {
           const thread = new Thread({ ...input, revision });
-          yield* sql`INSERT INTO threads ${sql.insert({
-            id: thread.id,
-            agent_id: thread.agentId,
-            title: thread.title,
-            sessions: JSON.stringify(thread.sessions),
-            brain: thread.brain === null ? null : JSON.stringify(thread.brain),
-            kind: thread.kind,
-            goal: thread.goal,
-            private: thread.private ? 1 : 0,
-            origin_thread_id: thread.origin?.threadId ?? null,
-            origin_chapter_id: thread.origin?.chapterId ?? null,
-            state: thread.state,
-            archived_at: thread.archivedAt,
-            pinned_at: thread.pinnedAt,
-            skill_trial: thread.skillTrial === null ? null : JSON.stringify(thread.skillTrial),
-            created_at: thread.createdAt,
-            updated_at: thread.updatedAt,
-            revision,
-          })} ON CONFLICT (id) DO UPDATE SET
+          yield* sql`INSERT INTO threads ${sql.insert(threadColumns(thread))} ON CONFLICT (id) DO UPDATE SET
             title = excluded.title,
             sessions = excluded.sessions,
             brain = excluded.brain,
@@ -570,6 +553,8 @@ export const HobbotsRepositoryLive = Layer.effect(
         ),
       );
 
+    const camps = makeCampWrites(sql, (id) => findThread(id).pipe(Effect.map(Option.getOrUndefined), Effect.orDie));
+
     return HobbotsRepository.of({
       listAgents: listAgents().pipe(Effect.orDie),
       listAgentsWithStatus: (statuses) =>
@@ -600,6 +585,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       startQueuedMessage,
       removeQueuedMessage,
       findCheckpoint: (threadId) => findCheckpoint(threadId).pipe(Effect.orDie),
+      ...camps,
       // Not journaled: the summary is the hub's own record, never shown to clients.
       saveCheckpoint: (checkpoint) =>
         sql`INSERT INTO thread_checkpoints ${sql.insert({

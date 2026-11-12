@@ -166,7 +166,7 @@ const leadingDigits = (name: string): number => {
   return end;
 };
 
-/** The number each file name starts with, such as 97 for `0097_claims.ts`, for the names that start with one. */
+/** The number each file name starts with, such as 98 for `0098_claims.ts`, for the names that start with one. */
 export const numbersIn = (names: ReadonlyArray<string>): ReadonlyArray<number> =>
   names.flatMap((name) => {
     const end = leadingDigits(name);

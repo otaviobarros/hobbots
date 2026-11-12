@@ -46,33 +46,34 @@ const view = (t: Thread): ThreadView => ({
 
 // The rules as archive and restore kept them in the chat service before the machine, plus Start
 // fresh's supersede, kept apart from the machine so the two can disagree.
+const blocked = (e: {
+  readonly hobRetired: boolean;
+  readonly approvalPending: boolean;
+  readonly replyRunning: boolean;
+}) => e.hobRetired || e.approvalPending || e.replyRunning;
+
 const stepModel = (m: ThreadView, e: ThreadLifecycleEvent): ThreadView | "refused" => {
   switch (e._tag) {
     case "Archive":
-      return m.state !== "open" || e.hobRetired || e.approvalPending || e.replyRunning
-        ? "refused"
-        : { ...m, state: "archived", archivedAt: e.at };
+      return m.state !== "open" || blocked(e) ? "refused" : { ...m, state: "archived", archivedAt: e.at };
     case "Restore":
       if (m.state !== "archived" || e.hobRetired) return "refused";
       return { ...m, state: "open", archivedAt: null, kind: e.chatOpen ? "camp" : m.kind };
     case "Supersede":
-      return m.state === "open" && m.kind === "chat" ? { ...m, state: "superseded", updatedAt: e.at } : "refused";
+      return m.state !== "open" || m.kind !== "chat" || blocked(e)
+        ? "refused"
+        : { ...m, state: "superseded", archivedAt: e.at, updatedAt: e.at };
   }
 };
 
 const times = fc
   .integer({ min: 0, max: 10_000 })
   .map((minute) => new Date(Date.UTC(2026, 0, 1) + minute * 60_000).toISOString());
+const blockers = { hobRetired: fc.boolean(), approvalPending: fc.boolean(), replyRunning: fc.boolean() };
 const events: fc.Arbitrary<ThreadLifecycleEvent> = fc.oneof(
-  fc.record({
-    _tag: fc.constant("Archive" as const),
-    at: times,
-    hobRetired: fc.boolean(),
-    approvalPending: fc.boolean(),
-    replyRunning: fc.boolean(),
-  }),
+  fc.record({ _tag: fc.constant("Archive" as const), at: times, ...blockers }),
   fc.record({ _tag: fc.constant("Restore" as const), hobRetired: fc.boolean(), chatOpen: fc.boolean() }),
-  fc.record({ _tag: fc.constant("Supersede" as const), at: times }),
+  fc.record({ _tag: fc.constant("Supersede" as const), at: times, ...blockers }),
 );
 
 const refusalOf = (result: Thread | IllegalThreadTransition) =>
@@ -122,6 +123,33 @@ describe("ThreadLifecycleMachine", () => {
     expect(
       refusalOf(ThreadLifecycle.transition(thread("archived"), { _tag: "Restore", hobRetired: true, chatOpen: false })),
     ).toBe("hob-retired");
+  });
+
+  it("supersedes only an open chat, for the same reasons an archive is refused", () => {
+    const supersede = (
+      from: Thread,
+      blockers: Partial<Record<"hobRetired" | "approvalPending" | "replyRunning", boolean>> = {},
+    ) =>
+      ThreadLifecycle.transition(from, {
+        _tag: "Supersede",
+        at: "2026-01-02T00:00:00.000Z",
+        hobRetired: false,
+        approvalPending: false,
+        replyRunning: false,
+        ...blockers,
+      });
+    expect(supersede(thread("open"))).toMatchObject({
+      state: "superseded",
+      archivedAt: "2026-01-02T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    expect(refusalOf(supersede(thread("open"), { approvalPending: true, replyRunning: true }))).toBe(
+      "approval-pending",
+    );
+    expect(refusalOf(supersede(thread("open"), { replyRunning: true }))).toBe("reply-running");
+    // A camp, or a chat no longer open, is refused by what it is, with no reason to give.
+    expect(refusalOf(supersede(thread("open", "camp")))).toBeNull();
+    expect(refusalOf(supersede(thread("archived"), { hobRetired: true }))).toBeNull();
   });
 
   it("brings a chat back as a camp when its hob opened another chat while it was archived", () => {
