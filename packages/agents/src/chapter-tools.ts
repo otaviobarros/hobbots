@@ -60,9 +60,12 @@ export const turnChapterId = (messageId: MessageId): ChapterId => ChapterId.make
 /** Who wrote a message, as `read_message` names them. */
 const author = (message: Message) => (message.role === "user" ? "the user" : "you");
 
-/** What the hob is told of a message: its part `part`, and how to read the next. */
-export const messageAnswer = (message: Message, part: number): string => {
-  const parts = pageParts(message.content, MESSAGE_PART_CHARS);
+/**
+ * What the hob is told of a message: part `part` of `content`, and how to read the next. `content` is
+ * the message's text already redacted whole, since a secret split across two parts matches nowhere.
+ */
+export const messageAnswer = (message: Message, content: string, part: number): string => {
+  const parts = pageParts(content, MESSAGE_PART_CHARS);
   const where =
     parts.length === 1
       ? null
@@ -135,13 +138,15 @@ export const ChapterToolsLive = Layer.effect(
           return yield* new Refused({ message: unknownMessageText(input.message_id) });
         }
         const part = input.part ?? 1;
-        const parts = pageParts(found.value.content, MESSAGE_PART_CHARS).length;
+        // Redacted whole before it is cut into parts, so no part holds a piece of a secret.
+        const content = turn.redactor.text(found.value.content);
+        const parts = pageParts(content, MESSAGE_PART_CHARS).length;
         if (part > parts) {
           return yield* new Refused({
             message: `Message ${input.message_id} has ${parts === 1 ? "1 part" : `${parts} parts`}, so there is no part ${part}.`,
           });
         }
-        return { text: messageAnswer(found.value, part), refused: false } satisfies HubToolAnswer;
+        return { text: messageAnswer(found.value, content, part), refused: false } satisfies HubToolAnswer;
       });
 
     const forTurn = (turn: CharmTurn): Effect.Effect<HubTools | null> =>

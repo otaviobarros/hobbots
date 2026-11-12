@@ -6,7 +6,14 @@ import {
   START_CHAPTER_OUTSIDE_CHAT,
   unknownMessageText,
 } from "@hobbots/agents";
-import { liveSession, type Message, READ_MESSAGE_TOOL, type RuntimeKind, START_CHAPTER_TOOL } from "@hobbots/domain";
+import {
+  liveSession,
+  MESSAGE_PART_CHARS,
+  type Message,
+  READ_MESSAGE_TOOL,
+  type RuntimeKind,
+  START_CHAPTER_TOOL,
+} from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hub, messagesWhen, PIP, partyHub, send, threadId } from "./party-hub.ts";
@@ -144,6 +151,26 @@ describe("read_message", () => {
     expect(two).toContain("Part 2 of 2, the last.");
     expect(two).toContain("The plan ends here.");
     expect(answers.get("three")).toBe(`Message ${id} has 2 parts, so there is no part 3.`);
+  });
+
+  // covers ADR 037 (The context pack), STD-SEC
+  it("[TC-CH-1381-07] a secret across a part boundary is redacted whole, in neither part", async () => {
+    const { say, answers } = chapterHub();
+    // No line break, so the parts are cut at exactly MESSAGE_PART_CHARS, through the secret.
+    const long = `${"a".repeat(MESSAGE_PART_CHARS - 11)} ${SECRET} ${"b".repeat(1_000)}`;
+    const [prompt] = await say([long], 2);
+    const id = (prompt as Message).id;
+    await say(
+      [
+        hub("read_message", { key: "one", message_id: id }),
+        hub("read_message", { key: "two", message_id: id, part: 2 }),
+      ],
+      4,
+    );
+    const both = `${answers.get("one") ?? ""}\n${answers.get("two") ?? ""}`;
+    expect(both).toContain("Part 1 of 2.");
+    expect(both).not.toContain(SECRET.slice(0, 10));
+    expect(both).not.toContain(SECRET.slice(10));
   });
 
   // covers ADR 037 (The context pack), PE-001
