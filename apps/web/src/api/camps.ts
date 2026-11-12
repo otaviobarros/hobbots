@@ -3,7 +3,7 @@ import { type AgentId, type Thread, type ThreadId, ThreadLifecycle } from "@hobb
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { placeThread, queryKeys } from "./queries.ts";
-import { waitingQuestionsQuery } from "./questions.ts";
+import { questionsMoved } from "./questions.ts";
 import { recordThread } from "./sync.ts";
 import { threadTasksMoved } from "./tasks.ts";
 
@@ -27,9 +27,17 @@ export const carryOverQuery = (threadId: ThreadId) =>
 export const openChatOf = (threads: ReadonlyArray<Thread> | undefined): Thread | undefined =>
   threads?.find(ThreadLifecycle.isOpenChat);
 
-/** The hob's camps, in the order of its thread list: pinned first, then by last activity. */
-export const campsOf = (threads: ReadonlyArray<Thread> | undefined): ReadonlyArray<Thread> =>
-  threads?.filter((thread) => thread.kind === "camp") ?? [];
+/**
+ * The hob's camps, pinned first, the most recently pinned on top, then the rest in the order of its
+ * thread list, by last activity.
+ */
+export const campsOf = (threads: ReadonlyArray<Thread> | undefined): ReadonlyArray<Thread> => {
+  const camps = threads?.filter((thread) => thread.kind === "camp") ?? [];
+  const pinned = camps
+    .filter((camp) => camp.pinnedAt !== null)
+    .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
+  return [...pinned, ...camps.filter((camp) => camp.pinnedAt === null)];
+};
 
 const show = (queryClient: QueryClient, thread: Thread) => {
   recordThread(queryClient, thread);
@@ -49,7 +57,8 @@ export const chatStartedFresh = (
     show(queryClient, thread);
     void threadTasksMoved(queryClient, thread.id);
   }
-  void queryClient.invalidateQueries({ queryKey: waitingQuestionsQuery.queryKey, exact: true });
+  // A read already on its way may predate the move, so it is cancelled first (STD-REACT-012).
+  void questionsMoved(queryClient);
 };
 
 /** Makes a camp for the hob; it joins the hob's list at once, before its event arrives. */

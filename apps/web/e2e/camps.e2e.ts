@@ -1,5 +1,5 @@
 import { expectAccessible } from "./accessibility.ts";
-import { expandSidebar, expect, test } from "./hub.ts";
+import { campAt, expandSidebar, expect, test } from "./hub.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1378 (ADR 037): the hob's chat and its camps in the browser, on the fake runtime. The
@@ -127,4 +127,70 @@ test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question
   ).json()) as ReadonlyArray<{ readonly id: string; readonly state: string }>;
   expect(archived.map((thread) => thread.state)).toEqual(["superseded"]);
   expect(oldChat).toContain(archived[0]?.id);
+});
+
+// covers CH-009
+test("[TC-CH-1378-04] a pinned camp stays above a camp with newer messages in the sidebar", async ({ page }) => {
+  const { url, aldric, hub } = await aldricHub();
+  const rail = page.getByRole("list", { name: "Aldric's chat and camps" });
+  const kept = await campAt({ url, headers: hub.headers }, aldric, "Kitchen plans");
+  const busy = await campAt({ url, headers: hub.headers }, aldric, "Garden");
+
+  // Pin the older camp from its menu.
+  await page.goto(kept.url);
+  await page.getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: "Pin to the top" }).click();
+  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺Kitchen plans", "⛺Garden"]);
+
+  // A message in the other camp makes it the newest, and the pinned one still leads.
+  await page.goto(busy.url);
+  const composer = page.getByRole("textbox", { name: "Message Aldric in “Garden”…" });
+  await composer.fill("tomatoes");
+  await expect(page.getByRole("button", { name: AWAY })).toBeEnabled();
+  await composer.press("Enter");
+  await expect(page.getByRole("main", { name: "Chat" }).getByText("Echo: tomatoes")).toBeVisible();
+  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺Kitchen plans", "⛺Garden"]);
+  await page.reload();
+  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺Kitchen plans", "⛺Garden"]);
+});
+
+// covers CH-009
+test("[TC-CH-1378-05] a long Start fresh list scrolls inside the sheet, which keeps its title and buttons in the window", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 600 });
+  const { url, aldric } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  const header = main.locator("header").first();
+
+  // Twelve questions wait in the chat, so Start fresh has thirteen items to carry.
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  const composer = page.getByRole("textbox", { name: "Message Aldric…" });
+  await composer.fill(
+    [
+      "Sort the attic",
+      script("start_quest", { key: "quest", goal: "Sort the attic" }),
+      ...Array.from({ length: 12 }, (_, index) =>
+        script("ask", { key: `ask-${index}`, question: `Keep box ${index + 1}?` }),
+      ),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+
+  await header.getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: "Start a fresh chat" }).click();
+  const sheet = page.getByRole("dialog", { name: "Start a fresh chat with Aldric" });
+  await expect(sheet).toContainText("13 open items move to the new chat, so nothing is dropped.");
+  await expect(sheet.getByRole("heading", { name: "Start a fresh chat with Aldric" })).toBeInViewport();
+  const box = await sheet.boundingBox();
+  expect(box?.y).toBeGreaterThanOrEqual(0);
+  expect((box?.y ?? 0) + (box?.height ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(600);
+
+  // The list scrolls inside the sheet, and its buttons are reached there.
+  const start = sheet.getByRole("button", { name: "Archive and start fresh" });
+  await start.scrollIntoViewIfNeeded();
+  await expect(start).toBeInViewport();
+  await expect(sheet.getByRole("listitem").last()).toContainText("Keep box 12?");
 });

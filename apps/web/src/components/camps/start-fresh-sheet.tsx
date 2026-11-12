@@ -47,7 +47,8 @@ export function StartFreshSheet({ hob, chat, onClose }: { hob: Agent; chat: Thre
 
   return (
     <Dialog open onOpenChange={(open) => !open && !starting && onClose()}>
-      <DialogContent variant="sheet" className="max-w-bubble-max">
+      {/* A long list of what comes along scrolls inside the sheet, which stays inside the window. */}
+      <DialogContent variant="sheet" className="max-h-[calc(100vh-32px)] max-w-bubble-max">
         <DialogTitle variant="heading">{copy.title({ name: hob.name })}</DialogTitle>
         <DialogDescription variant="lead">{copy.lead}</DialogDescription>
         <section aria-label={copy.comesAlong} className="flex flex-col gap-1.5">
