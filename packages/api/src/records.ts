@@ -1,4 +1,4 @@
-import { Artifact, DECISION_TEXT_MAX, Decision, DecisionId, DecisionRefusal, ThreadId } from "@hobbots/domain";
+import { Artifact, Brief, DECISION_TEXT_MAX, Decision, DecisionId, DecisionRefusal, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { ThreadNotFound } from "./errors.ts";
@@ -25,8 +25,8 @@ export class DecisionChangeRefused extends Schema.TaggedError<DecisionChangeRefu
 ) {}
 
 /**
- * A chat's or camp's records (ADR 037): its decisions, crossed-out ones kept, and its artifacts, each
- * once at its latest version. You record a decision or cross one out; a changed decision is a new one
+ * A chat's or camp's records (ADR 037): its decisions, crossed-out ones kept, its artifacts, each
+ * once at its latest version, and its brief, which the hub writes. You record a decision or cross one out; a changed decision is a new one
  * that replaces it, never an edit.
  */
 export class RecordsGroup extends HttpApiGroup.make("records")
@@ -53,6 +53,12 @@ export class RecordsGroup extends HttpApiGroup.make("records")
     HttpApiEndpoint.get("artifacts", "/threads/:threadId/artifacts", {
       params: { threadId: ThreadId },
       success: Schema.Array(Artifact),
+      error: ThreadNotFound,
+    }),
+    // Null until the brief projector first writes one, at a chapter end or a Quest step.
+    HttpApiEndpoint.get("brief", "/threads/:threadId/brief", {
+      params: { threadId: ThreadId },
+      success: Schema.NullOr(Brief),
       error: ThreadNotFound,
     }),
   )

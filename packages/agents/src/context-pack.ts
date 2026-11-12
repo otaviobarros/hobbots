@@ -99,6 +99,15 @@ export interface Pack {
 
 const SEPARATOR = "\n\n";
 
+const CAMP_BRIEF_HEADING = "## This camp's brief";
+
+/**
+ * The most characters a camp's brief takes: its share of the default budget, less its heading and
+ * separators. The brief projector cuts it there (ADR 037), so the pack carries it whole.
+ */
+export const CAMP_BRIEF_MAX =
+  PACK_BUDGET.shares["camp-brief"] * CHARS_PER_TOKEN - CAMP_BRIEF_HEADING.length - 2 * SEPARATOR.length;
+
 /** A part as fitted: its text, or null when it says nothing, and what it trimmed. */
 interface Fitted {
   readonly text: string | null;
@@ -336,7 +345,7 @@ const fitFixed = (records: PackRecords, budget: PackBudget) => {
   const share = (part: PackPartName) => characters(budget.shares[part]);
   return {
     "memory-brief": fitText(null, records.memoryBrief, share("memory-brief")),
-    "camp-brief": fitText("## This camp's brief", records.campBrief, share("camp-brief")),
+    "camp-brief": fitText(CAMP_BRIEF_HEADING, records.campBrief, share("camp-brief")),
     decisions: fitDecisions(records.decisions, share("decisions")),
     "open-work": fitWork(records.work, share("open-work")),
     carried: fitCarried(records.carried, share("carried")),

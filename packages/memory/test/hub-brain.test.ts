@@ -72,7 +72,7 @@ describe("the hub's brain", () => {
       settings = { ...DEFAULT_MEMORY_SETTINGS, provider };
       for (const text of ['{"choice":"maybe","confidence":0.9}', "They clash.", '{"choice":"clash","confidence":7}']) {
         runtime.answer({ _tag: "Reply", text });
-        expect(await decide()).toEqual({ choice: "apart", confidence: 1, by: "rule" });
+        expect(await decide()).toEqual({ choice: "apart", confidence: 1, by: "fallback" });
       }
       expect(runtime.turns).toHaveLength(3);
     }
@@ -91,7 +91,7 @@ describe("the hub's brain", () => {
   // covers ADR 037
   it("[TC-GEN-1367-04] passes a judgment its runtime cannot run to the fallback, or keeps the rule", async () => {
     claude.answer({ _tag: "Fail", error: new RuntimeError({ message: "Claude Code is not signed in." }) });
-    expect(await decide()).toEqual({ choice: "apart", confidence: 1, by: "rule" });
+    expect(await decide()).toEqual({ choice: "apart", confidence: 1, by: "fallback" });
     expect(codex.turns).toHaveLength(0);
 
     settings = { ...DEFAULT_MEMORY_SETTINGS, fallback: "other" };

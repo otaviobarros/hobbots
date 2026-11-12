@@ -9,12 +9,12 @@ import {
   type Message,
   type ThreadId,
 } from "@hobbots/domain";
-import { Context, Effect, Layer, Option, Schedule, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import { clip, summaryLine } from "./briefing.ts";
 import { ChapterRepository } from "./chapters.ts";
 import { plainChapterSummary } from "./context-pack.ts";
-import { byRule, HubDecider, type Judgment } from "./hub-decider.ts";
 import { announcer, EventPublisher } from "./ports.ts";
+import { hubDecide, projectorRound, runEvery } from "./projector.ts";
 import { HobbotsRepository } from "./repository.ts";
 
 // The chapter summary projector (ADR 037, #1380, STD-ARCH-016). It reads the journal after its
@@ -23,9 +23,6 @@ import { HobbotsRepository } from "./repository.ts";
 // with its `ChapterSummarized` and the cursor, in one transaction, so a restart resumes from the
 // cursor and writes nothing twice. A private camp's summaries stay in that camp: only its own pack
 // reads them, and memory capture takes nothing from `ChapterSummarized`.
-
-/** How many journal entries one round reads at a time. */
-const PAGE = 200;
 
 /** The most of a chapter's lines the brain is shown, in characters: its start and its end. */
 export const SUMMARY_INPUT_MAX = 12_000;
@@ -116,13 +113,7 @@ export class ChapterSummaries extends Context.Service<ChapterSummaries, ChapterS
       const chapters = yield* ChapterRepository;
       const repo = yield* HobbotsRepository;
       // Without the hub's brain, every summary is the plain one (No AI).
-      const decide = Option.match(yield* Effect.serviceOption(HubDecider), {
-        onNone:
-          () =>
-          <A>(judgment: Judgment<A>) =>
-            Effect.succeed(byRule(judgment)),
-        onSome: (decider) => decider.decide,
-      });
+      const decide = yield* hubDecide;
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a chapter summary");
 
       // A chapter's summary, by the hub's brain with the plain summary as its rule (No AI).
@@ -159,38 +150,20 @@ export class ChapterSummaries extends Context.Service<ChapterSummaries, ChapterS
           return written;
         });
 
-      const page = (cursor: number) =>
-        Effect.gen(function* () {
-          const entries = yield* log.readAfter(cursor, PAGE);
-          const last = entries.at(-1);
-          if (last === undefined) return { cursor, caughtUp: true };
-          const summaries = yield* summariesFor(restedIn(entries));
-          yield* announce(yield* log.record(last.sequence, summaries));
-          return { cursor: last.sequence, caughtUp: entries.length < PAGE };
-        });
-
-      const round = Effect.gen(function* () {
-        let at = { cursor: yield* log.cursor, caughtUp: false };
-        while (!at.caughtUp) at = yield* page(at.cursor);
-        return true;
-      });
-
       return ChapterSummaries.of({
-        // Whatever went wrong, the cursor did not move past it: the next round reads it again.
-        runOnce: round.pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("Chapter summaries stopped a round", cause).pipe(Effect.as(false)),
-          ),
+        runOnce: projectorRound("Chapter summaries", log, (entries, sequence) =>
+          Effect.gen(function* () {
+            const summaries = yield* summariesFor(restedIn(entries));
+            yield* announce(yield* log.record(sequence, summaries));
+          }),
         ),
       });
     }),
   );
 
   /** The projector, run every few seconds for as long as the layer's scope is open. */
-  static readonly layer = Layer.effectDiscard(
-    Effect.gen(function* () {
-      const summaries = yield* ChapterSummaries;
-      yield* summaries.runOnce.pipe(Effect.repeat(Schedule.spaced("5 seconds")), Effect.forkScoped);
-    }),
-  ).pipe(Layer.provideMerge(ChapterSummaries.make));
+  static readonly layer = runEvery(
+    ChapterSummaries.use((summaries) => summaries.runOnce),
+    ChapterSummaries.make,
+  );
 }

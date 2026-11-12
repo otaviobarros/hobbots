@@ -6,6 +6,7 @@ import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node
 import {
   ActivityRecorder,
   ApprovalService,
+  CampBriefs,
   ChapterService,
   ChapterSummaries,
   ChapterToolsLive,
@@ -84,6 +85,7 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  BriefLogLive,
   ChapterRepositoryLive,
   ChapterSummaryLogLive,
   CharmCallsLive,
@@ -356,6 +358,8 @@ const ServerLive = Layer.unwrap(
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       // The chapter summary projector's cursor and summaries (ADR 037).
       ChapterSummaryLogLive.pipe(Layer.provide(EventJournal.layer)),
+      // Each chat's and camp's brief, and the brief projector's cursor (ADR 037).
+      BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -542,6 +546,8 @@ const ServerLive = Layer.unwrap(
             memoryPageLayer(config, PageStore),
             // Each chapter that comes to rest gets its one-line summary, which the pack reads (ADR 037).
             ChapterSummaries.layer,
+            // Each chat and camp gets its brief at chapter ends and Quest steps, which the pack reads (ADR 037).
+            CampBriefs.layer,
           ),
         ),
       )

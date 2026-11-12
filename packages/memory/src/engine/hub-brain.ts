@@ -1,4 +1,4 @@
-import { byRule, decodeJudgment, HubDecider, type Judgment, judgmentText } from "@hobbots/agents";
+import { byFallback, byRule, decodeJudgment, HubDecider, type Judgment, judgmentText } from "@hobbots/agents";
 import {
   hubTaskModel,
   MEMORY_RUNTIMES,
@@ -33,7 +33,7 @@ export const judgmentRuntimes = (settings: MemorySettings, judgment: Judgment<un
  * endpoint, on the sign-in its runtime already has, as a memory task is. `settings` is read on every
  * judgment, so a change in Settings applies to the next one without a restart. A runtime that cannot
  * run the turn passes it to the fallback; a reply that does not decode, or none at all, leaves the
- * caller's rule standing.
+ * caller's rule standing as a `fallback`.
  */
 export const HubBrainDecider = (settings: Effect.Effect<MemorySettings>) =>
   Layer.effect(
@@ -45,7 +45,10 @@ export const HubBrainDecider = (settings: Effect.Effect<MemorySettings>) =>
           Effect.gen(function* () {
             const chosen = yield* settings;
             const text = judgmentText(judgment);
-            for (const { runtime, model } of judgmentRuntimes(chosen, judgment)) {
+            const asked = judgmentRuntimes(chosen, judgment);
+            // No AI, for the brain or for this task: the rule answers, and no model is called.
+            if (asked.length === 0) return byRule(judgment);
+            for (const { runtime, model } of asked) {
               const reply = yield* endpoint.ask(runtime, model, chosen.effort, text);
               if (Option.isNone(reply)) continue;
               const decoded = decodeJudgment(judgment, reply.value);
@@ -54,9 +57,9 @@ export const HubBrainDecider = (settings: Effect.Effect<MemorySettings>) =>
               yield* Effect.logWarning(
                 `The hub's brain answered a ${judgment.task} judgment out of shape on ${runtime}`,
               );
-              return byRule(judgment);
+              return byFallback(judgment);
             }
-            return byRule(judgment);
+            return byFallback(judgment);
           }),
       });
     }),
