@@ -65,6 +65,7 @@ import {
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
   LocalGitToolsLive,
+  PullRequestReviews,
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
@@ -561,6 +562,8 @@ const ServerLive = Layer.unwrap(
             CampBriefs.layer,
             // Every chat's and camp's decisions, artifacts and chapters go in the find index (ADR 037).
             FindIndexer.layer,
+            // A pull request a hob delivered is reviewed once GitHub reports it merged or closed (#1422).
+            PullRequestReviews,
           ),
         ),
       )

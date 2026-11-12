@@ -15,7 +15,7 @@ import { EventJournal } from "./journal.ts";
 import { moveProjectorCursor, projectorCursor } from "./projector-cursors.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
-// The find index (migration 0105, ADR 037, #1386): the find projector's rows and cursor, and find's
+// The find index (migration 0106, ADR 037, #1386): the find projector's rows and cursor, and find's
 // reads over them and the messages' index (0011). Hobs that retired are left out, and a private
 // camp is found only when it is the scope.
 

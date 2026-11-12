@@ -1,7 +1,6 @@
 import {
   type AgentId,
   type ApprovalState,
-  type ArtifactKind,
   type QuestId,
   type QuestionState,
   type QuestState,
@@ -19,7 +18,7 @@ import { SqlClient } from "effect/sql";
 //
 // Every Quest already stored gets its summary now, folded from its tree as the hub folds it, at the
 // journal's head: no `QuestSummaryChanged` is journaled for it, since nothing changed, and the
-// revision of its next change is higher.
+// revision of its next change is higher. Its ready-for-review count is 0105's.
 
 type Row = Record<string, unknown>;
 
@@ -72,12 +71,8 @@ export default Effect.gen(function* () {
         taskId: String(row.task_id) as TaskId,
         state: String(row.state) as ApprovalState,
       })),
-      artifacts: (yield* sql<Row>`SELECT task_id, kind, value FROM artifact_refs
-        WHERE ${inTree} AND kind = 'link'`).map((row) => ({
-        taskId: String(row.task_id) as TaskId,
-        kind: String(row.kind) as ArtifactKind,
-        value: String(row.value),
-      })),
+      // What is ready for review is counted by 0105, once artifacts have a review (#1422).
+      delivered: [],
     };
     for (const quest of quests) {
       const summary = questSummaryOf(

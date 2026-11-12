@@ -58,6 +58,7 @@ const CHANGES_HISTORY = new Set<HobbotsEvent["_tag"]>([
   "QuestCompleted",
   "ApprovalRequested",
   "ApprovalResolved",
+  "ApprovalMoved",
   "QuestionAsked",
   "QuestionAnswered",
   "QuestionEscalated",

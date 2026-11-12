@@ -1,4 +1,15 @@
-import { Artifact, Brief, DECISION_TEXT_MAX, Decision, DecisionId, DecisionRefusal, ThreadId } from "@hobbots/domain";
+import {
+  Artifact,
+  ArtifactReviewOutcome,
+  ArtifactReviewRefusal,
+  Brief,
+  DECISION_TEXT_MAX,
+  Decision,
+  DecisionId,
+  DecisionRefusal,
+  RegisteredArtifactId,
+  ThreadId,
+} from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { ThreadNotFound } from "./errors.ts";
@@ -21,6 +32,20 @@ export type RecordedDecision = typeof RecordedDecision.Type;
 export class DecisionChangeRefused extends Schema.TaggedError<DecisionChangeRefused>()(
   "DecisionChangeRefused",
   { threadId: ThreadId, reason: DecisionRefusal, message: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
+/** Your review of an artifact: you looked at it, or you chose not to. */
+export const ReviewArtifactPayload = Schema.Struct({ outcome: ArtifactReviewOutcome });
+export type ReviewArtifactPayload = typeof ReviewArtifactPayload.Type;
+
+/**
+ * A review that changed nothing: the artifact is not in the chat or camp (`not-found`), or was
+ * settled the other way, by you or by GitHub ending its pull request (`settled`).
+ */
+export class ArtifactReviewChangeRefused extends Schema.TaggedError<ArtifactReviewChangeRefused>()(
+  "ArtifactReviewChangeRefused",
+  { threadId: ThreadId, artifactId: RegisteredArtifactId, reason: ArtifactReviewRefusal },
   { httpApiStatus: 409 },
 ) {}
 
@@ -54,6 +79,14 @@ export class RecordsGroup extends HttpApiGroup.make("records")
       params: { threadId: ThreadId },
       success: Schema.Array(Artifact),
       error: ThreadNotFound,
+    }),
+    // Marks an artifact reviewed or dismisses it (#1422), which lowers what its Quest has ready for
+    // review. The same review again returns it unchanged.
+    HttpApiEndpoint.post("reviewArtifact", "/threads/:threadId/artifacts/:artifactId/review", {
+      params: { threadId: ThreadId, artifactId: RegisteredArtifactId },
+      payload: ReviewArtifactPayload,
+      success: Artifact,
+      error: [ThreadNotFound, ArtifactReviewChangeRefused],
     }),
     // Null until the brief projector first writes one, at a chapter end or a Quest step; its text
     // is empty once nothing it said holds any more.

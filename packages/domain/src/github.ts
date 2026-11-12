@@ -48,6 +48,24 @@ export const githubRepositoryOf = (remote: string): GitHubRepository | null => {
   return url ? fromPath(url[1] as string) : null;
 };
 
+/** A pull request on github.com: its repository and number. */
+export interface GitHubPullRequestRef {
+  readonly repository: GitHubRepository;
+  readonly number: number;
+}
+
+/** A pull request's URL on GitHub, whatever follows its number. */
+const PULL_REQUEST_URL = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)(?:[/?#]|$)/;
+
+/** The pull request a URL names, such as `https://github.com/owner/name/pull/12/files`, or null. */
+export const pullRequestOf = (url: string): GitHubPullRequestRef | null => {
+  const found = PULL_REQUEST_URL.exec(url);
+  if (found === null) return null;
+  const repository = fromPath(`${found[1]}/${found[2]}`);
+  const number = Number(found[3]);
+  return repository === null || !Number.isSafeInteger(number) || number < 1 ? null : { repository, number };
+};
+
 const folder = Schema.optionalKey(
   Schema.String.check(Schema.isNonEmpty()).annotate({
     description:

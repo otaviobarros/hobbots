@@ -98,21 +98,29 @@ const threadCorrelationOf = (event: ThreadEvent): RowCorrelation => {
   return { ...NONE, agentId: thread.agentId, threadId: thread.id };
 };
 
+type ApprovalEvent = Extract<
+  JournaledEventType,
+  { readonly _tag: "ApprovalRequested" | "ApprovalResolved" | "ApprovalMoved" }
+>;
+const APPROVAL_EVENTS: ReadonlySet<string> = new Set(["ApprovalRequested", "ApprovalResolved", "ApprovalMoved"]);
+const isApprovalEvent = (event: JournaledEventType): event is ApprovalEvent => APPROVAL_EVENTS.has(event._tag);
+
+/** A request names its hob, thread, reply and Task: where it is now, for one that moved with its quest. */
+const approvalCorrelationOf = (approval: ApprovalEvent["approval"]): RowCorrelation => ({
+  ...NONE,
+  agentId: approval.agentId,
+  threadId: approval.threadId,
+  messageId: approval.messageId,
+  taskId: approval.taskId,
+});
+
 const correlationOf = (event: JournaledEventType): RowCorrelation => {
   if (isWebEvent(event)) return webCorrelationOf(event);
   if (isThreadEvent(event)) return threadCorrelationOf(event);
+  if (isApprovalEvent(event)) return approvalCorrelationOf(event.approval);
   switch (event._tag) {
     case "AgentUpserted":
       return { ...NONE, agentId: event.agent.id };
-    case "ApprovalRequested":
-    case "ApprovalResolved":
-      return {
-        ...NONE,
-        agentId: event.approval.agentId,
-        threadId: event.approval.threadId,
-        messageId: event.approval.messageId,
-        taskId: event.approval.taskId,
-      };
     case "GrantCreated":
     case "GrantRevoked":
       return { ...NONE, agentId: event.grant.agentId };
@@ -221,6 +229,7 @@ type RecordEvent = Extract<
       | "DecisionRecorded"
       | "DecisionSuperseded"
       | "ArtifactRegistered"
+      | "ArtifactReviewSettled"
       | "BriefWritten";
   }
 >;
@@ -232,6 +241,7 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  "ArtifactReviewSettled",
   "BriefWritten",
 ]);
 const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
@@ -263,6 +273,7 @@ const restCorrelationOf = (
         | "ChatStartedFresh"
         | "ApprovalRequested"
         | "ApprovalResolved"
+        | "ApprovalMoved"
         | "GrantCreated"
         | "GrantRevoked"
         | "BackpackItemRecorded"
@@ -418,7 +429,11 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
     const artifacts = yield* registerArtifacts(sql, events, first + items.length + grants.length + claims.length);
     const before = [...items, ...grants, ...claims, ...artifacts];
-    const summarized = [...before, ...(yield* refreshQuestSummaries(sql, events, first + before.length))];
+    // A summary counts what Tasks made, so it reads the artifacts registered just now too.
+    const summarized = [
+      ...before,
+      ...(yield* refreshQuestSummaries(sql, [...events, ...artifacts], first + before.length)),
+    ];
     const raised = yield* raiseCampSuggestions(sql, [...events, ...artifacts], first + summarized.length);
     const expired = yield* expireCampSuggestions(sql, events, first + summarized.length + raised.length);
     return [...summarized, ...raised, ...expired];

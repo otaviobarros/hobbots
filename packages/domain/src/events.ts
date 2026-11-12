@@ -155,6 +155,12 @@ const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, mes
 const ApprovalRequested = Schema.TaggedStruct("ApprovalRequested", { approval: ApprovalRequest });
 /** A pending approval was approved, denied or expired; `approval.state` says which. */
 const ApprovalResolved = Schema.TaggedStruct("ApprovalResolved", { approval: ApprovalRequest });
+/**
+ * A request a party member's Task asked moved to another thread with its quest, as a chapter moved
+ * into a camp or a chat started fresh takes it (ADR 037, #1389): `approval` names its new thread at
+ * the revision of the move, and `fromThreadId` the thread it left.
+ */
+const ApprovalMoved = Schema.TaggedStruct("ApprovalMoved", { fromThreadId: ThreadId, approval: ApprovalRequest });
 /** A decision with a lifetime saved a standing grant for its hob (ADR 015). */
 const GrantCreated = Schema.TaggedStruct("GrantCreated", { grant: Grant });
 /** A grant stopped applying: the user removed it, or a change took away the authority it relied on. */
@@ -247,6 +253,11 @@ const DecisionSuperseded = Schema.TaggedStruct("DecisionSuperseded", { decision:
  * in the transaction that journaled the record, once per record.
  */
 const ArtifactRegistered = Schema.TaggedStruct("ArtifactRegistered", { artifact: Artifact });
+/**
+ * An artifact's review settled (#1422): you reviewed or dismissed it, or GitHub reported its pull
+ * request merged or closed. The artifact as it now stands.
+ */
+const ArtifactReviewSettled = Schema.TaggedStruct("ArtifactReviewSettled", { artifact: Artifact });
 /**
  * The brief projector wrote a chat's or camp's brief (#1384), at a chapter end or a Quest step. A
  * private camp's stays in that camp: memory capture takes nothing from it.
@@ -463,6 +474,7 @@ export const JournaledEvent = Schema.Union([
   TurnStopped,
   ApprovalRequested,
   ApprovalResolved,
+  ApprovalMoved,
   GrantCreated,
   GrantRevoked,
   TaskCreated,
@@ -489,6 +501,7 @@ export const JournaledEvent = Schema.Union([
   DecisionRecorded,
   DecisionSuperseded,
   ArtifactRegistered,
+  ArtifactReviewSettled,
   BriefWritten,
   BackpackItemRecorded,
   BackpackItemChanged,
@@ -577,6 +590,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   ApprovalRequested: 1,
   ApprovalResolved: 1,
+  ApprovalMoved: 1,
   // A grant's `taskId` replaced its unused `questId`, read as null when absent, compatibly.
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   GrantCreated: 1,
@@ -609,7 +623,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ClaimReleased: 1,
   DecisionRecorded: 1,
   DecisionSuperseded: 1,
+  // An artifact's `review`, `reviewedAt` and `reviewedBy` were added with defaults, compatibly.
   ArtifactRegistered: 1,
+  ArtifactReviewSettled: 1,
   BriefWritten: 1,
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,

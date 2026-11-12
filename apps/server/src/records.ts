@@ -1,5 +1,5 @@
 import { BriefLog, Records } from "@hobbots/agents";
-import { DecisionChangeRefused, HobbotsApi } from "@hobbots/api";
+import { ArtifactReviewChangeRefused, DecisionChangeRefused, HobbotsApi } from "@hobbots/api";
 import type { DecisionRefused, ThreadId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -22,6 +22,9 @@ export const RecordsHandlers = HttpApiBuilder.group(HobbotsApi, "records", (hand
         decisionsOf: () => Effect.succeed([]),
         activeDecisions: () => Effect.succeed([]),
         artifactsOf: () => Effect.succeed([]),
+        review: () => Effect.die(new Error("This hub keeps no records.")),
+        waitingPullRequests: Effect.succeed([]),
+        pullRequestEnded: () => Effect.succeed(null),
       }),
     );
     return handlers.handleAll({
@@ -37,6 +40,18 @@ export const RecordsHandlers = HttpApiBuilder.group(HobbotsApi, "records", (hand
       // Read once the thread is known, so a thread that is not there is refused.
       artifacts: ({ params }) =>
         Effect.andThen(records.decisionsOf(params.threadId), records.artifactsOf(params.threadId)),
+      reviewArtifact: ({ params, payload }) =>
+        records.review(params.threadId, params.artifactId, payload.outcome).pipe(
+          Effect.catchTag("ArtifactReviewRefused", (refused) =>
+            Effect.fail(
+              new ArtifactReviewChangeRefused({
+                threadId: params.threadId,
+                artifactId: refused.artifactId,
+                reason: refused.reason,
+              }),
+            ),
+          ),
+        ),
       brief: ({ params }) =>
         Effect.andThen(
           records.decisionsOf(params.threadId),

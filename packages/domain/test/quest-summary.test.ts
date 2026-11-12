@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentId,
+  type ArtifactReview,
   QuestId,
   type QuestState,
   questSummaryOf,
+  RegisteredArtifactId,
+  type RegisteredArtifactKind,
   type SummaryTree,
   sameSummary,
   TaskId,
@@ -26,7 +29,7 @@ const quest = (id: string, taskId: string, state: QuestState = "active") => ({
   state,
 });
 
-const EMPTY: SummaryTree = { tasks: [], questions: [], approvals: [], artifacts: [] };
+const EMPTY: SummaryTree = { tasks: [], questions: [], approvals: [], delivered: [] };
 
 // Aldric leads the campaign; Quill drafts copy (with a step of its own) and Ada builds, leading a nested Quest with Pip.
 const tree: SummaryTree = {
@@ -41,7 +44,17 @@ const tree: SummaryTree = {
   ],
 };
 
-const link = (taskId: string, value: string) => ({ taskId: TaskId.make(taskId), kind: "link" as const, value });
+const made = (
+  artifactId: string,
+  taskId: string,
+  kind: RegisteredArtifactKind,
+  review: ArtifactReview = "waiting",
+) => ({
+  artifactId: RegisteredArtifactId.make(artifactId),
+  taskId: TaskId.make(taskId),
+  kind,
+  review,
+});
 
 describe("questSummaryOf", () => {
   it("counts every Task under the Quest's own by tone, steps and nested Quests included", () => {
@@ -81,20 +94,30 @@ describe("questSummaryOf", () => {
     expect(questSummaryOf(quest("q1", "campaign", "completed"), asks).needsYou).toBe(0);
   });
 
-  it("counts the pull requests completed Tasks returned as ready for review, each once", () => {
-    const returned: SummaryTree = {
+  // covers #1422
+  it("counts each reviewable artifact completed Tasks made that still waits for you, once", () => {
+    const delivered: SummaryTree = {
       ...tree,
-      artifacts: [
-        link("copy", "https://github.com/acme/shop/pull/12"),
-        link("copy-step", "https://github.com/acme/shop/pull/12"),
-        link("copy-step", "https://github.com/acme/shop/pull/13/files"),
-        // A page, a text that names a pull request, and a pull request from a Task still blocked.
-        link("copy", "https://github.com/acme/shop/issues/9"),
-        { taskId: TaskId.make("copy"), kind: "text", value: "https://github.com/acme/shop/pull/14" },
-        link("build", "https://github.com/acme/shop/pull/15"),
+      delivered: [
+        // One pull request two Tasks made counts once; a doc, a page and code count too.
+        made("pr-12", "copy", "pr"),
+        made("pr-12", "copy-step", "pr"),
+        made("plan", "copy-step", "doc"),
+        made("landing", "copy", "page"),
+        made("cart", "copy", "code"),
+        // Reviewed, dismissed, of a kind you do not review, or from a Task still blocked or another tree.
+        made("pr-13", "copy", "pr", "reviewed"),
+        made("draft", "copy", "doc", "dismissed"),
+        made("hero", "copy", "image"),
+        made("mail", "copy", "email"),
+        made("export", "copy", "file"),
+        made("pr-15", "build", "pr"),
+        made("pr-16", "other", "pr"),
       ],
     };
-    expect(questSummaryOf(quest("q1", "campaign"), returned).readyForReview).toBe(2);
+    expect(questSummaryOf(quest("q1", "campaign"), delivered).readyForReview).toBe(4);
+    // A nested Quest counts only what its own tree made, once its Tasks complete.
+    expect(questSummaryOf(quest("q2", "build"), delivered).readyForReview).toBe(0);
     expect(questSummaryOf(quest("q1", "campaign"), tree).readyForReview).toBe(0);
   });
 
