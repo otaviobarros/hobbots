@@ -189,18 +189,21 @@ export function ChatView({
   // A search match opens with its message in view and holds it there while a reply streams, until
   // the user scrolls back down to the end or sends a message.
   const [released, setReleased] = useState<string>();
+  // Each pick of a search result counts, so picking the same one again opens and scrolls to it again.
+  const [picks, setPicks] = useState(0);
+  const focusKey = focusMessageId === undefined ? undefined : `${focusMessageId}#${picks}`;
   // The search box under the header, opened from its magnifier, belongs to the thread it opened in.
   const [findingIn, setFindingIn] = useState<string>();
   const finding = threadId !== undefined && findingIn === threadId;
   const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
-  const holding = focusMessageId !== undefined && released !== focusMessageId;
-  const follow = () => setReleased(focusMessageId);
+  const holding = focusKey !== undefined && released !== focusKey;
+  const follow = () => setReleased(focusKey);
 
   useEffect(() => {
     if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
   }, [lastContent, holding]);
 
-  useScrollToMessage(messages.data, focusMessageId);
+  useScrollToMessage(messages.data, focusMessageId, picks);
 
   // When a waiting message starts this page's thread, the page follows it there with its draft.
   useEffect(() => {
@@ -291,6 +294,7 @@ export function ChatView({
           threadId={threadId}
           transcript={messages.data ?? []}
           onClose={() => setFinding(false)}
+          onPick={() => setPicks((count) => count + 1)}
         />
       )}
       {threadId && <PinNotes threadId={threadId} pins={pins} />}
@@ -321,6 +325,7 @@ export function ChatView({
               threadId={threadId}
               thread={thread.data}
               focusMessageId={focusMessageId}
+              focusPick={picks}
               streaming={streaming}
               resume={(message) =>
                 message.id === resumable?.id
@@ -458,6 +463,7 @@ function Transcript({
   threadId,
   thread,
   focusMessageId,
+  focusPick,
   streaming,
   resume,
 }: {
@@ -466,6 +472,8 @@ function Transcript({
   threadId: ThreadId | undefined;
   thread: Thread | undefined;
   focusMessageId: string | undefined;
+  /** How many times a search result was picked here, so each pick opens its chapter again. */
+  focusPick: number;
   streaming: boolean;
   resume: (message: Message) => ContinueReply | undefined;
 }) {
@@ -524,6 +532,7 @@ function Transcript({
           thread={thread}
           transcript={transcript}
           focusMessageId={focusMessageId}
+          focusPick={focusPick}
           renderMessage={row}
         />
       )}

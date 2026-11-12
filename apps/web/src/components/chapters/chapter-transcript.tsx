@@ -38,12 +38,15 @@ export function ChapterTranscript({
   thread,
   transcript,
   focusMessageId,
+  focusPick = 0,
   renderMessage,
 }: {
   hob: Agent;
   thread: Thread;
   transcript: ReadonlyArray<Message>;
   focusMessageId: string | undefined;
+  /** Counts each pick of a search result, so picking the same one again opens its chapter again. */
+  focusPick?: number;
   renderMessage: (message: Message, split: ReactNode) => ReactNode;
 }) {
   const chapters = useQuery(chaptersQuery(thread.id));
@@ -57,10 +60,12 @@ export function ChapterTranscript({
   const open = ThreadLifecycle.isOpen(thread);
   const focused = chapterOf(sections, focusMessageId);
   const shown = shownWithoutOpening(sections, focused);
-  // A search result you just chose opens its chapter, even one you folded, so it can scroll to it.
+  // Each pick of a search result opens its chapter, even one you folded, so it can scroll to it; a
+  // pick of the same result again counts as a new one.
+  const pick = `${focusMessageId}#${focusPick}`;
   const [revealed, setRevealed] = useState<string>();
-  if (focused !== null && focusMessageId !== revealed) {
-    setRevealed(focusMessageId);
+  if (focused !== null && pick !== revealed) {
+    setRevealed(pick);
     dispatchFold({ _tag: "Reveal", chapterId: focused });
   }
 

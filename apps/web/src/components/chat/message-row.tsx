@@ -20,12 +20,20 @@ const copy = messages.reply;
 /** The element id of a message's row, for scrolling to it. */
 const messageElementId = (id: string) => `message-${id}`;
 
-/** Scrolls the message a search opened into the middle of the view once a transcript holds it. */
-export const useScrollToMessage = (messages: ReadonlyArray<{ readonly id: string }> | undefined, id?: string) => {
+/**
+ * Scrolls the message a search opened into the middle of the view once a transcript holds it, and
+ * again on each new `pick` of it.
+ */
+export const useScrollToMessage = (
+  messages: ReadonlyArray<{ readonly id: string }> | undefined,
+  id?: string,
+  pick = 0,
+) => {
   const loaded = messages?.some((message) => message.id === id) ?? false;
   useEffect(() => {
-    if (loaded && id) document.getElementById(messageElementId(id))?.scrollIntoView({ block: "center" });
-  }, [loaded, id]);
+    // `pick` only runs this again; any count scrolls.
+    if (loaded && id && pick >= 0) document.getElementById(messageElementId(id))?.scrollIntoView({ block: "center" });
+  }, [loaded, id, pick]);
 };
 
 // A message opened from search wears a lantern outline, so the eye finds it.

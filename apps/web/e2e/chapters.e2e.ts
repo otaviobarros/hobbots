@@ -93,16 +93,21 @@ test("[TC-CH-1382-01] shows a divider after start_chapter, folds and opens a res
   await main.getByRole("button", { name: "Show Chapter 1" }).click();
   await main.getByRole("button", { name: "Fold Chapter 1" }).click();
   await expect(main.getByText("Echo: My cat is called Miso.")).toBeHidden();
-  await page.getByRole("button", { name: "Search this chat" }).click();
-  await page.getByRole("searchbox", { name: "Search this chat" }).fill("Miso");
-  await page
-    .getByRole("list", { name: "Matches in this chat" })
-    .getByRole("button", { name: /^Y\s*You · / })
-    .click();
-  await expect(main.getByText("My cat is called Miso.", { exact: true })).toBeInViewport();
-  // It folds again as before.
-  await main.getByRole("button", { name: "Fold Chapter 1" }).click();
-  await expect(main.getByText("Echo: My cat is called Miso.")).toBeHidden();
+  // Picking the same result again, after you folded it once more, opens it again.
+  const pickMiso = async () => {
+    await page.getByRole("button", { name: "Search this chat" }).click();
+    await page.getByRole("searchbox", { name: "Search this chat" }).fill("Miso");
+    await page
+      .getByRole("list", { name: "Matches in this chat" })
+      .getByRole("button", { name: /^Y\s*You · / })
+      .click();
+    await expect(main.getByText("My cat is called Miso.", { exact: true })).toBeInViewport();
+    // It folds again as before.
+    await main.getByRole("button", { name: "Fold Chapter 1" }).click();
+    await expect(main.getByText("Echo: My cat is called Miso.")).toBeHidden();
+  };
+  await pickMiso();
+  await pickMiso();
 });
 
 // covers ADR 037 (Chapters, Focus chip), STD-REACT-015
