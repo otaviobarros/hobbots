@@ -61,6 +61,23 @@ export const chatStartedFresh = (
   void questionsMoved(queryClient);
 };
 
+/**
+ * A chapter moved into a camp (ADR 037): both threads take their new rows, and read their
+ * transcripts and their work again, since messages and the quests started in the chapter moved, as
+ * did the questions waiting in those quests.
+ */
+export const chapterMoved = (
+  queryClient: QueryClient,
+  { thread, camp }: { readonly thread: Thread; readonly camp: Thread },
+) => {
+  for (const each of [thread, camp]) {
+    show(queryClient, each);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.messages(each.id), exact: true });
+    void threadTasksMoved(queryClient, each.id);
+  }
+  void questionsMoved(queryClient);
+};
+
 /** Makes a camp for the hob; it joins the hob's list at once, before its event arrives. */
 export const useMakeCamp = (agentId: AgentId) => {
   const queryClient = useQueryClient();

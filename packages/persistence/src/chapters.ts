@@ -57,6 +57,27 @@ export const startFirstChapterIn = (sql: SqlClient.SqlClient) => (thread: Thread
     return started;
   });
 
+/**
+ * Writes the chapters a plan changed, in its order: a chapter that stops being live comes before
+ * the one that becomes live, which the one-live index needs.
+ */
+export const writeChapters = (sql: SqlClient.SqlClient, plan: ChapterPlan) =>
+  Effect.forEach(
+    plan.changed,
+    (chapter) =>
+      sql`INSERT INTO chapters ${sql.insert(chapterColumns(chapter))} ON CONFLICT (id) DO UPDATE SET
+        thread_id = excluded.thread_id,
+        number = excluded.number,
+        title = excluded.title,
+        summary = excluded.summary,
+        state = excluded.state,
+        started_at = excluded.started_at,
+        ended_at = excluded.ended_at,
+        moved_to = excluded.moved_to,
+        revision = excluded.revision`,
+    { discard: true },
+  );
+
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every number and revision fits a number.
 const decodeChapters = Schema.decodeUnknownSync(Schema.Array(Chapter));
 export const chapterRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
@@ -104,23 +125,7 @@ export const ChapterRepositoryLive = Layer.effect(
         ),
       );
 
-    // Writes the chapters a plan changed, in its order: a chapter that stops being live comes before
-    // the one that becomes live, which the one-live index needs.
-    const writeChanged = (plan: ChapterPlan) =>
-      Effect.forEach(
-        plan.changed,
-        (chapter) =>
-          sql`INSERT INTO chapters ${sql.insert(chapterColumns(chapter))} ON CONFLICT (id) DO UPDATE SET
-            number = excluded.number,
-            title = excluded.title,
-            summary = excluded.summary,
-            state = excluded.state,
-            started_at = excluded.started_at,
-            ended_at = excluded.ended_at,
-            moved_to = excluded.moved_to,
-            revision = excluded.revision`,
-        { discard: true },
-      );
+    const writeChanged = (plan: ChapterPlan) => writeChapters(sql, plan);
 
     // Moves messages to another chapter at `revision`, the sequence of the event that moves them, so a
     // client holding an earlier version of one takes this one. A thread you had read stays read.
@@ -133,14 +138,18 @@ export const ChapterRepositoryLive = Layer.effect(
 
     // Decisions and artifacts go where their chapter's messages went (STD-ARCH-019), at the
     // revision of the event that moved them: on a merge every one of the absorbed chapter's, on a
-    // split each one whose reply moved.
-    const moveRecords = (revision: number, to: ChapterId, from: ChapterId, merge: boolean) =>
+    // split each one whose reply moved. So do the top Tasks started in it: on a split, the ones
+    // started from the message it cuts at on (`since`).
+    const moveRecords = (revision: number, to: ChapterId, from: ChapterId, since: string | null) =>
       Effect.gen(function* () {
+        const merge = since === null;
         const moved = sql`SELECT m.id FROM messages m WHERE m.chapter_id = ${to}`;
         yield* sql`UPDATE decisions SET chapter_id = ${to}, revision = ${revision}
           WHERE chapter_id = ${from} AND ${merge ? sql`1 = 1` : sql`source_message_id IN (${moved})`}`;
         yield* sql`UPDATE artifacts SET chapter_id = ${to}, revision = ${revision}
           WHERE chapter_id = ${from} AND ${merge ? sql`1 = 1` : sql`origin_kind = 'message' AND origin_id IN (${moved})`}`;
+        yield* sql`UPDATE tasks SET chapter_id = ${to}
+          WHERE chapter_id = ${from} AND ${merge ? sql`1 = 1` : sql`created_at >= ${since}`}`;
       });
 
     // A change of chapter boundaries leaves nothing behind that was worked out from the old ones: the
@@ -227,7 +236,7 @@ export const ChapterRepositoryLive = Layer.effect(
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;
           yield* moveMessages(threadId, first, input.id, sql`chapter_id = ${from} AND seq >= ${Number(at?.seq)}`);
-          yield* moveRecords(first, input.id, from, false);
+          yield* moveRecords(first, input.id, from, point?.createdAt ?? null);
           yield* forgetBoundaries(threadId, []);
           const event: JournaledEvent = {
             _tag: "ChapterSplit",
@@ -252,7 +261,7 @@ export const ChapterRepositoryLive = Layer.effect(
           // The messages and records move before their chapter goes, and it goes before the one it merged into
           // may become live.
           yield* moveMessages(threadId, first, into.id, sql`chapter_id = ${chapterId}`);
-          yield* moveRecords(first, into.id, chapterId, true);
+          yield* moveRecords(first, into.id, chapterId, null);
           yield* sql`DELETE FROM chapters WHERE id = ${chapterId}`;
           yield* sql`INSERT INTO merged_chapters ${sql.insert({
             id: chapterId,

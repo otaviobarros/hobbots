@@ -7,8 +7,13 @@ import type {
   CarriedOver,
   CarriedOverEntry,
   ChangeActor,
+  ChapterId,
+  ChapterMove,
+  ChapterNotFound,
+  ChapterRefused,
   ChatWork,
   Committed,
+  IllegalChapterTransition,
   Message,
   MessageId,
   Retiring,
@@ -19,6 +24,11 @@ import type {
   ThreadId,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
+
+/** The camp a chapter moves into: an open camp of the hob's, or `camp`, made in the same transaction under its id as key. */
+export type ChapterMoveTarget =
+  | { readonly _tag: "camp"; readonly campId: ThreadId }
+  | { readonly _tag: "new"; readonly camp: Thread };
 
 /** Where hobs, their configuration versions, threads and messages are stored. Each write journals its events. */
 export class HobbotsRepository extends Context.Service<
@@ -123,6 +133,22 @@ export class HobbotsRepository extends Context.Service<
      * journaled, and a different thread under it is refused.
      */
     readonly makeCamp: (camp: Thread) => Effect.Effect<Committed<Thread>, ThreadKeyReused>;
+    /**
+     * Moves a chapter into a camp, in one transaction (ADR 037, #1385): re-parents its messages,
+     * decisions, artifacts and the quests started in it with their open questions and backpack
+     * items, leaves a stub in the thread, and journals `ChapterMoved`, after `CampMade` for a new
+     * camp and before the suggestion it accepts and each moved backpack item. The same move asked
+     * again returns what it did and journals nothing.
+     */
+    readonly moveChapter: (input: {
+      readonly threadId: ThreadId;
+      readonly chapterId: ChapterId;
+      readonly target: ChapterMoveTarget;
+      readonly at: string;
+    }) => Effect.Effect<
+      Committed<ChapterMove>,
+      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused
+    >;
     /**
      * Start fresh, in one transaction (ADR 037): writes `superseded`, the chat after its Supersede,
      * at the revision it was read at, and the new `chat`; moves the chat's open work to the new one,

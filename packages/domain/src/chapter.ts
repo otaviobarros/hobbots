@@ -130,6 +130,9 @@ export const ChapterStates = {
  * first message of its chapter, which would leave an empty chapter. `first-chapter`: the chapter
  * to merge has no chapter before it. `moved`: a chapter it touches moved into a camp.
  * `thread-closed`: the thread is archived or superseded, so its chapters stay as they are.
+ * `same-thread`: a chapter moves only into another thread. `not-a-camp`: a chapter moves only into
+ * an open camp of the same hob. `reply-running`: a reply runs or waits in the thread, or an approval
+ * waits there, so its chapters stay put until it ends.
  */
 export const ChapterRefusal = Schema.Literals([
   "thread-closed",
@@ -139,6 +142,9 @@ export const ChapterRefusal = Schema.Literals([
   "chapter-start",
   "first-chapter",
   "moved",
+  "same-thread",
+  "not-a-camp",
+  "reply-running",
 ]);
 export type ChapterRefusal = typeof ChapterRefusal.Type;
 
@@ -200,7 +206,8 @@ const changedIn = (before: ReadonlyArray<Chapter>, after: ReadonlyArray<Chapter>
   return after.filter((chapter) => known.get(chapter.id) !== chapter);
 };
 
-const planned = (before: ReadonlyArray<Chapter>, after: ReadonlyArray<Chapter>): ChapterPlan => {
+/** A thread's chapters after a change, numbered again from 1, with the ones it wrote or made. */
+export const chapterPlan = (before: ReadonlyArray<Chapter>, after: ReadonlyArray<Chapter>): ChapterPlan => {
   const chapters = renumbered(after);
   return { chapters, changed: changedIn(before, chapters) };
 };
@@ -228,7 +235,7 @@ export const planStart = (
     number: chapters.length + 1,
     title,
   });
-  return planned(chapters, [...chapters.map((chapter) => (chapter === live ? ended : chapter)), started]);
+  return chapterPlan(chapters, [...chapters.map((chapter) => (chapter === live ? ended : chapter)), started]);
 };
 
 /** The message a split starts its new chapter at, as the thread stores it. */
@@ -270,7 +277,7 @@ export const planSplit = (
     endedAt: from.endedAt,
     movedTo: null,
   });
-  return planned(chapters, [...chapters.slice(0, index), cut, after, ...chapters.slice(index + 1)]);
+  return chapterPlan(chapters, [...chapters.slice(0, index), cut, after, ...chapters.slice(index + 1)]);
 };
 
 /** Merges chapter `chapterId` into the chapter before it, which keeps its id, title and start. */
@@ -291,5 +298,5 @@ export const planMerge = (
     endedAt: absorbed.endedAt,
   });
   if (merged instanceof IllegalChapterTransition) return merged;
-  return planned(chapters, [...chapters.slice(0, index - 1), merged, ...chapters.slice(index + 1)]);
+  return chapterPlan(chapters, [...chapters.slice(0, index - 1), merged, ...chapters.slice(index + 1)]);
 };

@@ -16,6 +16,7 @@ import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from
 import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
+import { expireCampSuggestions, raiseCampSuggestions } from "./camp-suggestion-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
 
@@ -392,7 +393,8 @@ export const lockJournal = (sql: SqlClient.SqlClient) => makeJournalWriter(sql).
 /**
  * The events a change's own events call for in the same transaction, at sequences from `first` on:
  * the backpack items they record (ADR 019), then the grants of the top Tasks they end (ADR 018), then
- * the claims of every Task they end, then the artifacts they made or changed (ADR 037).
+ * the claims of every Task they end, then the artifacts they made or changed (ADR 037), then the camp
+ * suggestions what they grew raises, with the artifacts', and the ones they end (#1385).
  */
 const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEventType>, first: number) =>
   Effect.gen(function* () {
@@ -400,7 +402,10 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     const grants = yield* endTaskGrants(sql, events, first + items.length);
     const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
     const artifacts = yield* registerArtifacts(sql, events, first + items.length + grants.length + claims.length);
-    return [...items, ...grants, ...claims, ...artifacts];
+    const before = [...items, ...grants, ...claims, ...artifacts];
+    const raised = yield* raiseCampSuggestions(sql, [...events, ...artifacts], first + before.length);
+    const expired = yield* expireCampSuggestions(sql, events, first + before.length + raised.length);
+    return [...before, ...raised, ...expired];
   });
 
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.

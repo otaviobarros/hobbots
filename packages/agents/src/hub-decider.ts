@@ -90,3 +90,15 @@ export class HubDecider extends Context.Service<HubDecider, HubDeciderShape>()("
   /** A hub with no brain, as with No AI: every judgment is its rule's, and no model is called. */
   static readonly rules = Layer.succeed(HubDecider, { decide: (judgment) => Effect.succeed(byRule(judgment)) });
 }
+
+/** The hub's `decide` when it has a brain, else its rule's for every judgment (No AI). */
+export const hubDecide: Effect.Effect<HubDeciderShape["decide"]> = Effect.map(
+  Effect.serviceOption(HubDecider),
+  Option.match({
+    onNone:
+      () =>
+      <A>(judgment: Judgment<A>) =>
+        Effect.succeed(byRule(judgment)),
+    onSome: (decider) => decider.decide,
+  }),
+);

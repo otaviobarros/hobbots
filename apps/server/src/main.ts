@@ -6,6 +6,8 @@ import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node
 import {
   ActivityRecorder,
   ApprovalService,
+  CampDrift,
+  CampSuggestionService,
   ChapterService,
   ChapterSummaries,
   ChapterToolsLive,
@@ -84,6 +86,7 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  CampSuggestionRepositoryLive,
   ChapterRepositoryLive,
   ChapterSummaryLogLive,
   CharmCallsLive,
@@ -356,6 +359,8 @@ const ServerLive = Layer.unwrap(
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
       // The chapter summary projector's cursor and summaries (ADR 037).
       ChapterSummaryLogLive.pipe(Layer.provide(EventJournal.layer)),
+      // Camp suggestions: Keep in chat, and the camp drift projector's cursor (ADR 037).
+      CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -542,6 +547,8 @@ const ServerLive = Layer.unwrap(
             memoryPageLayer(config, PageStore),
             // Each chapter that comes to rest gets its one-line summary, which the pack reads (ADR 037).
             ChapterSummaries.layer,
+            // A chat chapter that comes to rest may be suggested as a camp by the hub's brain (ADR 037).
+            CampDrift.layer,
           ),
         ),
       )
@@ -633,6 +640,8 @@ const ServerLive = Layer.unwrap(
       // A thread's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
       // `start_chapter` and `read_message`, before the chat service and the sessions of Tasks.
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
+      // Keep in chat and the chat's camp suggestions (ADR 037).
+      .pipe(Layer.provideMerge(CampSuggestionService.layer))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(

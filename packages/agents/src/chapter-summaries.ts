@@ -9,11 +9,11 @@ import {
   type Message,
   type ThreadId,
 } from "@hobbots/domain";
-import { Context, Effect, Layer, Option, Schedule, Schema } from "effect";
+import { Context, Effect, Layer, Schedule, Schema } from "effect";
 import { clip, summaryLine } from "./briefing.ts";
 import { ChapterRepository } from "./chapters.ts";
 import { plainChapterSummary } from "./context-pack.ts";
-import { byRule, HubDecider, type Judgment } from "./hub-decider.ts";
+import { hubDecide } from "./hub-decider.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
@@ -116,13 +116,7 @@ export class ChapterSummaries extends Context.Service<ChapterSummaries, ChapterS
       const chapters = yield* ChapterRepository;
       const repo = yield* HobbotsRepository;
       // Without the hub's brain, every summary is the plain one (No AI).
-      const decide = Option.match(yield* Effect.serviceOption(HubDecider), {
-        onNone:
-          () =>
-          <A>(judgment: Judgment<A>) =>
-            Effect.succeed(byRule(judgment)),
-        onSome: (decider) => decider.decide,
-      });
+      const decide = yield* hubDecide;
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a chapter summary");
 
       // A chapter's summary, by the hub's brain with the plain summary as its rule (No AI).

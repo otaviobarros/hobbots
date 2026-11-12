@@ -4,6 +4,7 @@ export * from "./admission.ts";
 export * from "./approvals.ts";
 export * from "./asking.ts";
 export { clip, contextBlock } from "./briefing.ts";
+export * from "./camp-suggestions.ts";
 export * from "./chapter-summaries.ts";
 export * from "./chapter-tools.ts";
 export * from "./chapters.ts";

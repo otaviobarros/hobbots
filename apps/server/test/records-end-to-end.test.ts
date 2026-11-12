@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  CampSuggestionService,
   ChatService,
   GrantService,
   HobAdmission,
@@ -16,6 +17,9 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  CAMP_SUGGESTION_DECISIONS,
+  type CampSuggestion,
+  type ChapterMove,
   type Decision,
   isInProgress,
   type Message,
@@ -27,6 +31,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  CampSuggestionRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -50,6 +55,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Decisions over the HTTP API and from a chat turn (ADR 037, #1383), with the hub's own composition:
 // a hob records one with `record_decision`, you replace it or cross it out, and every one is kept.
+// A chat chapter they grow is suggested as a camp, which you keep in the chat or move into one (#1385).
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-records-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
@@ -65,6 +71,7 @@ beforeEach(() => {
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
+    .pipe(Layer.provideMerge(CampSuggestionService.layer))
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
@@ -78,6 +85,7 @@ beforeEach(() => {
             GrantRepositoryLive,
             TaskRepositoryLive,
             RecordRepositoryLive,
+            CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -205,5 +213,53 @@ describe("decisions over the API", () => {
     ]);
     expect((await request("GET", `/api/threads/${thread.id}/artifacts`)).body).toEqual([]);
     expect((await request("GET", "/api/threads/nope/decisions")).status).toBe(404);
+  });
+});
+
+describe("camp suggestions over the API", () => {
+  // covers CH-009, ADR 037 (Records: CampSuggestion, Moving a chapter into a camp moves it)
+  it("[TC-CH-1385-18] offers a grown chat chapter, keeps it in the chat, and moves it into a new camp once", async () => {
+    const { thread } = await pipWithThread();
+    await exchange(thread, "Let us plan the launch.");
+    for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) {
+      await request("POST", `/api/threads/${thread.id}/decisions`, {
+        key: `d${n}`,
+        text: `Decision ${n}`,
+        replaces: null,
+      });
+    }
+    const suggestions = async () =>
+      (await request<ReadonlyArray<CampSuggestion>>("GET", `/api/threads/${thread.id}/camp-suggestions`)).body;
+    const [open] = await suggestions();
+    expect(open).toMatchObject({ state: "open", reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }] });
+    const keep = `/api/threads/${thread.id}/camp-suggestions/${open?.id}/keep`;
+    expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
+    expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
+    expect(await suggestions()).toEqual([]);
+    const missing = await request("POST", `/api/threads/${thread.id}/camp-suggestions/nope/keep`);
+    expect(missing).toMatchObject({ status: 409, body: { _tag: "CampSuggestionChangeRefused", reason: "not-found" } });
+
+    // The chat's live chapter moves into a new camp, with its messages and decisions.
+    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
+    const chapterId = listed.body.find((each) => each.id === thread.id)?.liveChapterId;
+    const into = { _tag: "new", key: "camp-launch", title: "Launch", goal: null, private: false };
+    const moved = await request<ChapterMove>("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
+    expect(moved.status).toBe(200);
+    expect(moved.body.stub).toMatchObject({ id: chapterId, state: "moved", movedTo: "camp-launch" });
+    const again = await request<ChapterMove>("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
+    expect(again.body.stub).toEqual(moved.body.stub);
+    expect((await request<ReadonlyArray<Message>>("GET", "/api/threads/camp-launch/messages")).body).toHaveLength(2);
+    expect((await request<ReadonlyArray<Decision>>("GET", "/api/threads/camp-launch/decisions")).body).toHaveLength(
+      CAMP_SUGGESTION_DECISIONS,
+    );
+    expect(await messages(thread)).toEqual([]);
+
+    const refused = await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, {
+      _tag: "camp",
+      campId: "nowhere",
+    });
+    expect(refused).toMatchObject({ status: 409, body: { _tag: "ChapterMoveRefused", reason: "not-a-camp" } });
+    const unknown = await request("POST", `/api/threads/${thread.id}/chapters/nope/move`, into);
+    expect(unknown).toMatchObject({ status: 404, body: { _tag: "ChapterMissing" } });
   });
 });

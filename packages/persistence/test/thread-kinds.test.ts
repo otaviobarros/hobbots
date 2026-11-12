@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import threadKinds from "../src/migrations/0095_thread_kinds.ts";
 import chapters from "../src/migrations/0099_chapters.ts";
+import projectorCursors from "../src/migrations/0100_projector_cursors.ts";
+import campSuggestions from "../src/migrations/0102_camp_suggestions.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1375 (ADR 037): a thread is a chat or a camp. The migration makes each hob's most recent open
@@ -174,8 +176,11 @@ describe("0095_thread_kinds", () => {
       yield* storedHob("bo");
       yield* storedThread({ id: "ada-chat", agentId: "ada", title: "Lamps", updatedAt: at(1) });
       yield* threadKinds;
-      // The repository reads each thread's live chapter, which 0099 adds.
+      // The repository reads each thread's live chapter, which 0099 adds, and a closed thread's
+      // camp suggestions expire, which 0102 keeps (after 0100's projector cursors).
       yield* chapters;
+      yield* projectorCursors;
+      yield* campSuggestions;
 
       const repo = yield* HobbotsRepository;
       const thread = (id: string, agentId: string, fields: Partial<Thread> = {}) =>
