@@ -62,6 +62,8 @@ export const messages = {
     unreachable: () => "Couldn't change the chapters. Hobbots may be reconnecting; try again in a moment.",
   } satisfies Record<ChapterChangeError, () => string>,
   dismiss: "Dismiss",
+  /** When the thread's chapters could not be read; the transcript still shows, undivided. */
+  unread: "Couldn't read this chat's chapters, so it shows without them.",
   focus: {
     /** The chip's label: the live chapter's title, and how many chapters rest. */
     label: ({ title, resting }: { readonly title: string | null; readonly resting: number }) =>

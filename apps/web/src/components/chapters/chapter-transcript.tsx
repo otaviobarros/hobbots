@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useReducer, useState } from "react";
 import { chaptersQuery, useMergeChapter, useSplitChapter } from "../../api/chapters.ts";
+import { ReadFailed } from "../web/read-failed.tsx";
 import { ChapterDivider } from "./chapter-divider.tsx";
 import {
   canRetry,
@@ -18,7 +19,7 @@ import {
   type ChapterSection,
   chapterOf,
   chapterSections,
-  type FoldChoice,
+  foldStep,
   isFolded,
   shownWithoutOpening,
   showsChapters,
@@ -47,16 +48,21 @@ export function ChapterTranscript({
 }) {
   const chapters = useQuery(chaptersQuery(thread.id));
   const sections = chapterSections(transcript, chapters.data);
-  const [choices, setChoices] = useState<ReadonlyMap<ChapterId, FoldChoice>>(new Map());
+  const [choices, dispatchFold] = useReducer(foldStep, new Map());
   const [split, dispatchSplit] = useReducer(splitStep, SPLIT_CLOSED);
   const [merge, dispatchMerge] = useReducer(mergeStep, MERGE_IDLE);
   const splitting = useSplitChapter(thread.id);
   const merging = useMergeChapter(thread.id);
   // An archived chat's chapters stay as they are, so it offers neither.
   const open = ThreadLifecycle.isOpen(thread);
-  const shown = shownWithoutOpening(sections, chapterOf(sections, focusMessageId));
-  const toggle = (id: ChapterId, folded: boolean) =>
-    setChoices((was) => new Map(was).set(id, folded ? "open" : "folded"));
+  const focused = chapterOf(sections, focusMessageId);
+  const shown = shownWithoutOpening(sections, focused);
+  // A search result you just chose opens its chapter, even one you folded, so it can scroll to it.
+  const [revealed, setRevealed] = useState<string>();
+  if (focused !== null && focusMessageId !== revealed) {
+    setRevealed(focusMessageId);
+    dispatchFold({ _tag: "Reveal", chapterId: focused });
+  }
 
   const sendSplit = () => {
     // The reducer decides whether it sends and under which key; the request follows its answer.
@@ -84,6 +90,8 @@ export function ChapterTranscript({
   const dividers = showsChapters(sections);
   return (
     <>
+      {/* Without its chapters the transcript still reads, undivided; this says why and reads again. */}
+      {chapters.isError && <ReadFailed text={messages.unread} onRetry={() => void chapters.refetch()} />}
       {sections.map((section, index) => (
         <Section
           key={section.chapter?.id ?? "transcript"}
@@ -91,7 +99,9 @@ export function ChapterTranscript({
           first={index === 0}
           dividers={dividers}
           folded={section.chapter !== null && isFolded(section.chapter, choices, shown)}
-          onToggle={(folded) => section.chapter && toggle(section.chapter.id, folded)}
+          onToggle={(folded) =>
+            section.chapter && dispatchFold({ _tag: "Toggle", chapterId: section.chapter.id, folded })
+          }
           merge={
             open && section.chapter !== null && index > 0
               ? { pending: merge.step === "merging", onMerge: () => section.chapter && mergeInto(section.chapter.id) }

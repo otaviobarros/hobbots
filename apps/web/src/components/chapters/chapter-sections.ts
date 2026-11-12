@@ -59,6 +59,26 @@ export const shownWithoutOpening = (
 export type FoldChoice = "open" | "folded";
 
 /**
+ * What you did to the chapters' folds: opened or folded one (`Toggle`, from how it showed), or chose
+ * a search result in one (`Reveal`), which opens it again even after you folded it.
+ */
+export type FoldEvent =
+  | { readonly _tag: "Toggle"; readonly chapterId: ChapterId; readonly folded: boolean }
+  | { readonly _tag: "Reveal"; readonly chapterId: ChapterId };
+
+/** How you left each chapter after `event`. */
+export const foldStep = (
+  choices: ReadonlyMap<ChapterId, FoldChoice>,
+  event: FoldEvent,
+): ReadonlyMap<ChapterId, FoldChoice> => {
+  if (event._tag === "Toggle") return new Map(choices).set(event.chapterId, event.folded ? "open" : "folded");
+  if (choices.get(event.chapterId) !== "folded") return choices;
+  const next = new Map(choices);
+  next.delete(event.chapterId);
+  return next;
+};
+
+/**
  * Whether a chapter shows folded to its summary: never the live one; a resting one as you left it,
  * else folded unless it shows anyway.
  */

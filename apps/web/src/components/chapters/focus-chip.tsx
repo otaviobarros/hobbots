@@ -27,12 +27,14 @@ const TONE: Readonly<Record<FocusGroup, "waiting" | "done">> = {
 export function FocusChip({ hob, thread }: { hob: Agent; thread: Thread }) {
   const [open, setOpen] = useState(false);
   const chapters = useQuery(chaptersQuery(thread.id));
+  const label = copy.label(chapterFocus(chapters.data));
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="chip" className="shrink-0 @max-[560px]/header:hidden">
+        {/* In a narrow header, as beside the Quest room, the chip keeps only its dot. */}
+        <Button variant="chip" className="shrink-0" aria-label={label} title={label}>
           <span aria-hidden className="size-2 rounded-full bg-mint" />
-          {copy.label(chapterFocus(chapters.data))}
+          <span className="@max-[560px]/header:hidden">{label}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent aria-label={copy.heading({ name: hob.name })} className="w-[400px] max-w-[calc(100vw-32px)]">

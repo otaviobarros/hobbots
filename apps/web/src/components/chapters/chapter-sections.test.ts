@@ -4,6 +4,7 @@ import {
   chapterFocus,
   chapterOf,
   chapterSections,
+  foldStep,
   isFolded,
   shownWithoutOpening,
   showsChapters,
@@ -95,6 +96,18 @@ describe("chapterSections", () => {
     expect([...shownWithoutOpening(busy, one.id)]).toEqual([one.id]);
     const ended = chapterSections([message("a", "c1"), message("c", "c2")], [one, two, three]);
     expect([...shownWithoutOpening(ended, null)]).toEqual([two.id]);
+  });
+
+  it("opens a chapter you folded when you choose a search result in it, and lets you fold it again", () => {
+    const focused = new Set([one.id]);
+    const folded = foldStep(new Map(), { _tag: "Toggle", chapterId: one.id, folded: false });
+    expect(isFolded(one, folded, focused)).toBe(true);
+    const revealed = foldStep(folded, { _tag: "Reveal", chapterId: one.id });
+    expect(isFolded(one, revealed, focused)).toBe(false);
+    expect(isFolded(one, foldStep(revealed, { _tag: "Toggle", chapterId: one.id, folded: false }), focused)).toBe(true);
+    // One you opened, or never touched, stays as it is.
+    const opened = foldStep(new Map(), { _tag: "Toggle", chapterId: one.id, folded: true });
+    expect(foldStep(opened, { _tag: "Reveal", chapterId: one.id })).toBe(opened);
   });
 
   it("tells the Focus chip the live chapter's title and how many rest", () => {

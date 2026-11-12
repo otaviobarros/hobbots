@@ -88,6 +88,52 @@ test("[TC-CH-1382-01] shows a divider after start_chapter, folds and opens a res
     [null, "resting"],
     ["Planting", "live"],
   ]);
+
+  // A search result in a chapter you folded opens that chapter, so the chat can scroll to it.
+  await main.getByRole("button", { name: "Show Chapter 1" }).click();
+  await main.getByRole("button", { name: "Fold Chapter 1" }).click();
+  await expect(main.getByText("Echo: My cat is called Miso.")).toBeHidden();
+  await page.getByRole("button", { name: "Search this chat" }).click();
+  await page.getByRole("searchbox", { name: "Search this chat" }).fill("Miso");
+  await page
+    .getByRole("list", { name: "Matches in this chat" })
+    .getByRole("button", { name: /^Y\s*You · / })
+    .click();
+  await expect(main.getByText("My cat is called Miso.", { exact: true })).toBeInViewport();
+  // It folds again as before.
+  await main.getByRole("button", { name: "Fold Chapter 1" }).click();
+  await expect(main.getByText("Echo: My cat is called Miso.")).toBeHidden();
+});
+
+// covers ADR 037 (Chapters, Focus chip), STD-REACT-015
+test("[TC-CH-1382-05] a chat whose chapters can't be read says so and reads them again, and a narrow header keeps the Focus chip", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, ["Now the garden.", script("start_chapter", { key: "garden", title: "The garden" })]);
+  await expect(main.getByRole("region", { name: "The garden" })).toBeVisible();
+
+  // The chapters read fails: the transcript still shows, undivided, and says why.
+  const list = "**/api/threads/*/chapters";
+  await page.route(list, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.reload();
+  const failed = main.getByText("Couldn't read this chat's chapters, so it shows without them.");
+  await expect(failed).toBeVisible({ timeout: 20_000 });
+  await expect(main.getByRole("article").filter({ hasText: "Now the garden." }).first()).toBeVisible();
+  await page.unroute(list);
+  await main.getByRole("button", { name: "Try again" }).click();
+  await expect(failed).toBeHidden();
+  await expect(main.getByRole("region", { name: "The garden" })).toBeVisible();
+
+  // In a narrow header the chip keeps only its dot, and still opens what the hob reads.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const chip = main.getByRole("button", { name: "Focused on The garden · 1 resting" });
+  await expect(chip).toBeVisible();
+  await expect(chip.getByText("Focused on The garden · 1 resting")).toBeHidden();
+  await chip.click();
+  await expect(page.getByRole("dialog", { name: "What Aldric reads each turn" })).toBeVisible();
 });
 
 /** The size the chip shows for a number of tokens. */
