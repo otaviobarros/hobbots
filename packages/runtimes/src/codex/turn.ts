@@ -14,6 +14,7 @@ import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
 import {
+  sandboxNote,
   sessionPolicy,
   type ToolTurn,
   toolTurn,
@@ -640,6 +641,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
         skills,
         instructions: codexInstructions(turnInstructions(request.instructions, false)),
         commits: "",
+        sandboxNote: "",
         gate: refuseTools,
         session: {},
         webSearch,
@@ -647,6 +649,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
     }
     const { tools, sandbox, policy, commits } = governed;
     const prepared = yield* sandboxFor(config, governed, request, command, runtimeFolder, skills);
+    const readOnly = readOnlyCommands(tools.context);
     return {
       command: sandboxedCommand(command, prepared, tools.commitAs, commits.env),
       cwd,
@@ -658,10 +661,12 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
           Boolean(request.approvals),
           tools.commitAs,
           commits.note,
-          readOnlyCommands(tools.context),
+          readOnly,
         ),
       ),
       commits: commits.now,
+      // A resumed thread keeps its first developer instructions, so the turn says this again (#1344).
+      sandboxNote: sandboxNote(sandbox !== null, readOnly),
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
       session: sessionPolicy(tools),
       webSearch,
@@ -867,7 +872,7 @@ const turnEvents = (
         }),
       );
 
-      yield* startTurn(turnPrompt(request, launch.instructions, launch.commits), asked);
+      yield* startTurn(turnPrompt(request, launch.instructions, launch.commits, launch.sandboxNote), asked);
       return yield* finish(yield* settle(signals, mapper, now, startTurn, report), mapper, report, Queue.end(queue));
     }),
   );

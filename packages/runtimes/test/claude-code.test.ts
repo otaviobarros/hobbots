@@ -786,6 +786,52 @@ describe("the sandbox note", () => {
     expect(readOnly.instructions).not.toContain(SANDBOX_NOTE);
     expect(start(tools({})).instructions).toContain(SANDBOX_NOTE);
   });
+
+  // covers PE-005, RT-001
+  it("[TC-PE-1321] tells a resumed session the sandbox it runs in now, into read-only and back out, since its system prompt stays", () => {
+    const tools = (overrides: Record<string, "allow" | "ask" | "deny">): ToolAccess => ({
+      policy: {
+        preset: "balanced",
+        sharedFolders: [tmpdir()],
+        hob: { ...EMPTY_HOB_POLICY, overrides },
+        dataFolder: "/data",
+        restrictions: [],
+      },
+      folders: [tmpdir()],
+      runtimeFolder: "/runtimes/hob-1",
+      commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
+    });
+    const start = (access: ToolAccess, sessionId: string | null, instructionsChanged = false) =>
+      claudeTurnStart(
+        {
+          prompt: "Review",
+          sessionId,
+          instructions: "",
+          instructionsChanged,
+          model: null,
+          effort: null,
+          tools: access,
+        },
+        "on",
+        true,
+      ).prompt;
+    // Edit files changed to Never: the hob's instructions did not, so only this block carries it.
+    const intoReadOnly = start(tools({ "edit-files": "deny" }), "session-1");
+    expect(intoReadOnly).toContain("<current-sandbox>");
+    expect(intoReadOnly).toContain(READ_ONLY_SANDBOX_NOTE);
+    expect(intoReadOnly).not.toContain("<current-instructions>");
+    expect(intoReadOnly.endsWith("Review")).toBe(true);
+    // And back to Allow: the read-only note is replaced by the usual one.
+    const outOfReadOnly = start(tools({}), "session-1");
+    expect(outOfReadOnly).toContain("<current-sandbox>");
+    expect(outOfReadOnly).toContain(SANDBOX_NOTE);
+    expect(outOfReadOnly).not.toContain(READ_ONLY_SANDBOX_NOTE);
+    // A new session has it in its system prompt, and changed instructions already carry it.
+    expect(start(tools({ "edit-files": "deny" }), null)).not.toContain("<current-sandbox>");
+    const changed = start(tools({ "edit-files": "deny" }), "session-1", true);
+    expect(changed).not.toContain("<current-sandbox>");
+    expect(changed).toContain(READ_ONLY_SANDBOX_NOTE);
+  });
 });
 
 describe("the runtime settings", () => {
