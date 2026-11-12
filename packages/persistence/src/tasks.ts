@@ -249,6 +249,11 @@ export const TaskRepositoryLive = Layer.effect(
             revision,
           });
           yield* sql`INSERT INTO tasks ${sql.insert(taskColumns(task))}`;
+          // A top Task started in a chat or camp belongs to the chapter it was started in, and moves with it (ADR 037).
+          if (task.parentId === null && task.threadId !== null) {
+            yield* sql`UPDATE tasks SET chapter_id = (SELECT c.id FROM chapters c
+              WHERE c.thread_id = ${task.threadId} AND c.state = 'live') WHERE id = ${task.id}`;
+          }
           const delegation =
             brief === null || placed.quest === null
               ? null

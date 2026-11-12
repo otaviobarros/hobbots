@@ -17,6 +17,11 @@ export const ToolOutput = Schema.Struct({
   totalBytes: Schema.Number,
   /** Whether the hub kept the whole output in a log the user can open from the step. */
   logged: Schema.Boolean,
+  /**
+   * The thread the log was kept under, set when the step's message moved to another thread with its
+   * chapter (ADR 037). Absent, the log is under the message's own thread.
+   */
+  loggedIn: Schema.optionalKey(Schema.String),
 });
 export type ToolOutput = typeof ToolOutput.Type;
 

@@ -14,9 +14,14 @@ import {
   type Agent,
   type AgentId,
   type Brain,
+  type ChapterId,
+  type ChapterMove,
+  type ChapterNotFound,
+  type ChapterRefused,
   type Committed,
   DEFAULT_THREAD_TITLE,
   hobStanding,
+  type IllegalChapterTransition,
   isResumable,
   Message,
   MessageId,
@@ -35,7 +40,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import { HobAdmission } from "./admission.ts";
-import { type CampRequest, makeCampCommands } from "./camp-commands.ts";
+import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
 import { EventPublisher } from "./ports.ts";
@@ -193,6 +198,20 @@ export class ChatService extends Context.Service<
       threadId: ThreadId,
       key: ThreadId,
     ) => Effect.Effect<StartedFresh, ThreadNotFound | StartFreshRefused | ThreadKeyReused>;
+    /**
+     * Moves a chapter into a camp (ADR 037, #1385): an open camp of the hob's, or a new one made from
+     * it under `key`, whose origin is the thread and chapter. Its messages, decisions, artifacts and
+     * the quests started in it go along, and the thread keeps a stub. Refused while a reply runs or
+     * an approval waits in either thread. The same move asked again returns what it did.
+     */
+    readonly moveChapter: (
+      threadId: ThreadId,
+      chapterId: ChapterId,
+      request: MoveRequest,
+    ) => Effect.Effect<
+      ChapterMove,
+      ThreadNotFound | HobUnavailable | ThreadKeyReused | ChapterRefused | ChapterNotFound | IllegalChapterTransition
+    >;
     /**
      * The context pack the thread's next new session would start from, and the report of the pack
      * its last such turn read, if the hub kept one (ADR 037, #1380). The dev-only endpoint shows both.
@@ -575,7 +594,12 @@ export class ChatService extends Context.Service<
           announce,
           drainThreads,
         });
-      const { makeCamp, startFresh } = yield* makeCampCommands({ requireActive, withHob, withThreadHob, announce });
+      const { makeCamp, startFresh, moveChapter } = yield* makeCampCommands({
+        requireActive,
+        withHob,
+        withThreadHob,
+        announce,
+      });
 
       // The threads with your queued messages or backpack work waiting: of one hob, or of every hob.
       const threadsWaiting = (agentId?: AgentId) =>
@@ -643,6 +667,7 @@ export class ChatService extends Context.Service<
         restore,
         makeCamp,
         startFresh,
+        moveChapter,
         contextPack,
         drainAgent,
         wake,

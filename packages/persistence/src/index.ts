@@ -3,6 +3,7 @@ export * from "./approvals.ts";
 export * from "./backpack.ts";
 export * from "./backup.ts";
 export * from "./briefs.ts";
+export { CampSuggestionRepositoryLive } from "./camp-suggestions.ts";
 export * from "./chapter-summaries.ts";
 export * from "./chapters.ts";
 export * from "./charm-calls.ts";

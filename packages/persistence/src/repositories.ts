@@ -6,10 +6,8 @@ import {
   type AgentId,
   AgentStatus,
   type ChangeActor,
-  Chapter,
   ChapterId,
   type Committed,
-  firstChapter,
   type HobPolicy,
   heldCharms,
   type JournaledEvent,
@@ -29,6 +27,7 @@ import {
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { makeCampWrites, threadColumns } from "./camps.ts";
+import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { insertSkillUse } from "./skill-uses.ts";
@@ -610,7 +609,9 @@ export const HobbotsRepositoryLive = Layer.effect(
         ),
       );
 
-    const camps = makeCampWrites(sql, (id) => findThread(id).pipe(Effect.map(Option.getOrUndefined), Effect.orDie));
+    const readThread = (id: ThreadId) => findThread(id).pipe(Effect.map(Option.getOrUndefined), Effect.orDie);
+    const camps = makeCampWrites(sql, readThread);
+    const moves = makeChapterMoves(sql, readThread, camps);
 
     return HobbotsRepository.of({
       listAgents: listAgents().pipe(Effect.orDie),
@@ -643,7 +644,8 @@ export const HobbotsRepositoryLive = Layer.effect(
       startQueuedMessage,
       removeQueuedMessage,
       findCheckpoint: (threadId) => findCheckpoint(threadId).pipe(Effect.orDie),
-      ...camps,
+      ...camps.writes,
+      moveChapter: moves.moveChapter,
       // Not journaled: the summary is the hub's own record, never shown to clients.
       saveCheckpoint: (checkpoint) =>
         sql`INSERT INTO thread_checkpoints ${sql.insert({

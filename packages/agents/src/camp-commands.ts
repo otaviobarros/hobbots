@@ -2,6 +2,7 @@ import { type AgentNotFound, StartFreshRefused, ThreadKeyReused } from "@hobbots
 import {
   type Agent,
   type AgentId,
+  type ChapterId,
   DEFAULT_THREAD_TITLE,
   StartedFresh,
   Thread,
@@ -9,7 +10,7 @@ import {
   ThreadLifecycle,
 } from "@hobbots/domain";
 import { Data, DateTime, Effect, Option, Schedule } from "effect";
-import { HobbotsRepository } from "./repository.ts";
+import { type ChapterMoveTarget, HobbotsRepository } from "./repository.ts";
 import { archiveBlockersOf, type ThreadCommandsDeps } from "./thread-commands.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376). Each is a command: it reads under the hob's lock,
@@ -36,6 +37,11 @@ export interface CampCommandsDeps extends Pick<ThreadCommandsDeps, "requireActiv
     body: (agent: Agent) => Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | AgentNotFound, R>;
 }
+
+/** Where you move a chapter: into an open camp of the hob's, or into a new camp made with it. */
+export type MoveRequest =
+  | { readonly _tag: "camp"; readonly campId: ThreadId }
+  | ({ readonly _tag: "new" } & CampRequest);
 
 // The chat changed between its read and the write, as a turn that recorded its session would; read again.
 class StaleChat extends Data.TaggedError("StaleChat") {}
@@ -128,5 +134,40 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
       );
     });
 
-    return { makeCamp, startFresh } as const;
+    // A new camp comes from the thread and chapter it is made from (ADR 037).
+    const targetOf = (thread: Thread, agent: Agent, chapterId: ChapterId, request: MoveRequest) =>
+      Effect.gen(function* () {
+        if (request._tag === "camp") return { _tag: "camp", campId: request.campId } satisfies ChapterMoveTarget;
+        // The same camp asked for again is answered as it is, whatever the hob does now.
+        if (Option.isNone(yield* repo.findThread(request.key))) yield* requireActive(agent);
+        const now = yield* nowIso;
+        const camp = new Thread({
+          id: request.key,
+          agentId: thread.agentId,
+          title: request.title,
+          kind: "camp",
+          goal: request.goal,
+          private: request.private,
+          origin: { threadId: thread.id, chapterId },
+          createdAt: now,
+          updatedAt: now,
+        });
+        return { _tag: "new", camp } satisfies ChapterMoveTarget;
+      });
+
+    const moveChapter = Effect.fn("ChatService.moveChapter")(function* (
+      threadId: ThreadId,
+      chapterId: ChapterId,
+      request: MoveRequest,
+    ) {
+      return yield* withThreadHob(threadId, (thread, agent) =>
+        Effect.gen(function* () {
+          const target = yield* targetOf(thread, agent, chapterId, request);
+          const at = yield* nowIso;
+          return yield* repo.moveChapter({ threadId, chapterId, target, at }).pipe(Effect.flatMap(announce));
+        }),
+      );
+    });
+
+    return { makeCamp, startFresh, moveChapter } as const;
   });

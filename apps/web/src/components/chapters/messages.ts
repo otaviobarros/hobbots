@@ -59,6 +59,10 @@ export const messages = {
     "first-chapter": () => "This is the first chapter, so there is nothing before it to merge with.",
     moved: () => "That chapter moved into a camp, so it can't change here.",
     "chapter-not-found": () => "That chapter was already merged.",
+    // Refusals of a move into a camp (#1385), whose sheet is #1387.
+    "same-thread": () => "That chapter is already here.",
+    "not-a-camp": () => "Pick one of this hob's open camps.",
+    "reply-running": () => "Wait for the reply to finish, then try again.",
     unreachable: () => "Couldn't change the chapters. Hobbots may be reconnecting; try again in a moment.",
   } satisfies Record<ChapterChangeError, () => string>,
   dismiss: "Dismiss",

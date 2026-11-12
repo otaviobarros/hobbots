@@ -103,22 +103,27 @@ export const makeCampWrites = (
   // A thread this change just wrote is there to read.
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
 
-  const makeCamp = (camp: Thread) =>
-    change<Thread, ThreadKeyReused>((first) =>
-      Effect.gen(function* () {
-        const stored = yield* readThread(camp.id);
-        if (stored !== undefined) {
-          const [request] = yield* sql<Row>`SELECT * FROM camp_requests WHERE key = ${camp.id}`;
-          if (request !== undefined && sameRequest(request, camp)) return { value: stored, events: [] };
-          return yield* new ThreadKeyReused({ threadId: camp.id });
-        }
-        yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
-        yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
-        const started = yield* firstChapterOf(camp, first + 1);
-        const thread = yield* shown(camp.id);
-        return { value: thread, events: [{ _tag: "CampMade", thread } as const, ...started] };
-      }),
-    );
+  /**
+   * Makes `camp` at `first`, journaled as `CampMade` and its first chapter's `ChapterStarted`; the
+   * camp stored under its key already, with no events, when the same camp was asked for before.
+   */
+  const insertCamp = (camp: Thread, first: number) =>
+    Effect.gen(function* () {
+      const stored = yield* readThread(camp.id);
+      if (stored !== undefined) {
+        const [request] = yield* sql<Row>`SELECT * FROM camp_requests WHERE key = ${camp.id}`;
+        if (request !== undefined && sameRequest(request, camp)) return { value: stored, events: [] };
+        return yield* new ThreadKeyReused({ threadId: camp.id });
+      }
+      yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
+      yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
+      const started = yield* firstChapterOf(camp, first + 1);
+      const thread = yield* shown(camp.id);
+      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started];
+      return { value: thread, events };
+    });
+
+  const makeCamp = (camp: Thread) => change<Thread, ThreadKeyReused>((first) => insertCamp(camp, first));
 
   // The open work in a chat, as it stands before it moves: the Tasks you asked for there that are not
   // over, with their trees, the questions in them still open, and the backpack items held for the
@@ -207,6 +212,11 @@ export const makeCampWrites = (
         const roots = work.tasks.map((task) => task.id);
         const moved = yield* moveWork(from.id, input.chat.id, roots, held, at, first + 1);
         const started = yield* firstChapterOf(input.chat, first + 1 + moved.length);
+        // The moved Tasks now belong to the new chat's first chapter, and move with it (ADR 037).
+        if (roots.length > 0) {
+          yield* sql`UPDATE tasks SET chapter_id = (SELECT c.id FROM chapters c
+            WHERE c.thread_id = ${input.chat.id} AND c.state = 'live') WHERE ${sql.in("id", roots)}`;
+        }
         const value = new StartedFresh({
           superseded: yield* shown(from.id),
           chat: yield* shown(input.chat.id),
@@ -241,5 +251,6 @@ export const makeCampWrites = (
       Effect.orDie,
     );
 
-  return { makeCamp, startFresh, listCarriedOver, listOpenWork, carryOver } as const;
+  const writes = { makeCamp, startFresh, listCarriedOver, listOpenWork, carryOver } as const;
+  return { writes, insertCamp, moveWork } as const;
 };

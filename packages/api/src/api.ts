@@ -3,7 +3,6 @@ import {
   AgentId,
   AgentStatus,
   Brain,
-  CAMP_GOAL_MAX,
   CarriedOverEntry,
   Effort,
   HOB_LABEL_MAX,
@@ -33,6 +32,8 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { BackupGroup } from "./backup.ts";
+import { MakeCampPayload, ThreadKey } from "./camp-payloads.ts";
+import { CampSuggestionsGroup } from "./camp-suggestions.ts";
 import { ChaptersGroup } from "./chapters.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
 import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } from "./devices.ts";
@@ -178,21 +179,6 @@ export type SetBrainPayload = typeof SetBrainPayload.Type;
 export const RenameThreadPayload = Schema.Struct({
   title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
 });
-
-/**
- * The key of Make a camp or Start fresh: the command's idempotency key, which becomes the new
- * thread's id, so sending the same request again changes nothing.
- */
-const ThreadKey = ThreadId.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(100));
-
-/** A camp to make for a hob (ADR 037): its title, its goal, if any, and whether it is private. */
-export const MakeCampPayload = Schema.Struct({
-  key: ThreadKey,
-  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
-  goal: Schema.NullOr(Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(CAMP_GOAL_MAX))),
-  private: Schema.Boolean,
-});
-export type MakeCampPayload = typeof MakeCampPayload.Type;
 
 /** Start fresh on a hob's chat (ADR 037); `key` becomes the new chat's id. */
 export const StartFreshPayload = Schema.Struct({ key: ThreadKey });
@@ -486,6 +472,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(ThreadsGroup)
   .add(ChaptersGroup)
   .add(RecordsGroup)
+  .add(CampSuggestionsGroup)
   .add(SystemGroup)
   .add(SetupGroup)
   .add(RuntimesGroup)

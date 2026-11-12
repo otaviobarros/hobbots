@@ -3,8 +3,9 @@ import {
   type AgentId,
   type ApprovalRequest,
   type BackpackItem,
+  type Chapter,
   leavesUnread,
-  type Message,
+  Message,
   openBlocker,
   Thread,
   type ThreadId,
@@ -78,6 +79,27 @@ export const recordApproval = (client: QueryClient, approval: ApprovalRequest) =
   record(client, `approval:${approval.id}`, { kind: "approval", revision: approval.revision, value: approval });
 export const recordBackpackItem = (client: QueryClient, item: BackpackItem) =>
   record(client, `backpack:${item.id}`, { kind: "backpack", revision: item.revision, value: item });
+/**
+ * A chapter moved into a camp (ADR 037): every message of it the overlay holds now belongs to the
+ * camp's chapter it landed as, at the move's revision, so a read of either thread places it where it
+ * is and never adds it back to the thread it left.
+ */
+export const recordMovedMessages = (
+  client: QueryClient,
+  { stub, chapter }: { readonly stub: Chapter; readonly chapter: Chapter },
+) => {
+  const moved = [...syncState(client).overlay.values()].flatMap((entry) =>
+    isEntry(entry, "message") && entry.value.threadId === stub.threadId && entry.value.chapterId === stub.id
+      ? [entry.value]
+      : [],
+  );
+  for (const message of moved) {
+    recordMessage(
+      client,
+      new Message({ ...message, threadId: chapter.threadId, chapterId: chapter.id, revision: chapter.revision }),
+    );
+  }
+};
 /** A removed message never returns (IDs are not reused), so its tombstone outranks every version. */
 export const recordRemovedMessage = (client: QueryClient, messageId: string) =>
   record(client, `message:${messageId}`, { kind: "removed", revision: Number.POSITIVE_INFINITY });

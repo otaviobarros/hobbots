@@ -303,6 +303,29 @@ describe("long tool output", () => {
     expect(await logOf(thread, reply, step as ReplyStep)).toEqual({ status: 200, text: full });
   });
 
+  // covers ADR 037 (Moving a chapter into a camp moves it)
+  it("[TC-CH-1385-20] serves a long output's full log from the camp its chapter moved to, and no longer from the chat", async () => {
+    const thread = await hobInProject("balanced");
+    const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
+    const [step] = toolSteps(reply);
+    const full = `${Array.from({ length: 20000 }, (_, i) => i + 1).join("\n")}\n`;
+    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
+    const chapterId = listed.body.find((each) => each.id === thread.id)?.liveChapterId;
+    const moved = await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, {
+      _tag: "new",
+      key: "camp-count",
+      title: "Counting",
+      goal: null,
+      private: false,
+    });
+    expect(moved.status).toBe(200);
+    const camp = { ...thread, id: "camp-count" } as Thread;
+    const [inCamp] = toolSteps((await lastReply(camp)) as Message);
+    expect(inCamp?.output).toMatchObject({ logged: true, loggedIn: thread.id });
+    expect(await logOf(camp, reply, step as ReplyStep)).toEqual({ status: 200, text: full });
+    expect((await logOf(thread, reply, step as ReplyStep)).status).toBe(404);
+  });
+
   it("[#168] redacts output in the step and in the full log", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, [

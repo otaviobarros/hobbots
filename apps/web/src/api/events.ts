@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
-import { chatStartedFresh } from "./camps.ts";
+import { chapterMoved, chatStartedFresh } from "./camps.ts";
 import { applyChapterEvent } from "./chapters.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
@@ -217,6 +217,11 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  // Camp suggestions (ADR 037) have no screen yet; the suggestion card reads them (#1387).
+  "CampSuggested",
+  "CampSuggestionKept",
+  "CampSuggestionAccepted",
+  "CampSuggestionExpired",
   "BriefWritten",
   // Quest summaries (ADR 037) are read once the screens render what the hub publishes (#1374).
   "QuestSummaryChanged",
@@ -239,6 +244,10 @@ type UnappliedEvent = Extract<
       | "DecisionRecorded"
       | "DecisionSuperseded"
       | "ArtifactRegistered"
+      | "CampSuggested"
+      | "CampSuggestionKept"
+      | "CampSuggestionAccepted"
+      | "CampSuggestionExpired"
       | "BriefWritten"
       | "QuestSummaryChanged";
   }
@@ -297,19 +306,31 @@ const readAgain = (
   return false;
 };
 
-type ThreadEvent = Extract<HobbotsEvent, { readonly _tag: "ThreadUpserted" | "CampMade" | "ChatStartedFresh" }>;
-const THREAD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set(["ThreadUpserted", "CampMade", "ChatStartedFresh"]);
+type ThreadEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "ThreadUpserted" | "CampMade" | "ChatStartedFresh" | "ChapterMoved" }
+>;
+const THREAD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "ThreadUpserted",
+  "CampMade",
+  "ChatStartedFresh",
+  "ChapterMoved",
+]);
 const isThreadEvent = (event: HobbotsEvent): event is ThreadEvent => THREAD_EVENTS.has(event._tag);
 
-/** A thread changed, a camp was made, or a chat was started fresh (ADR 037). */
+/** A thread changed, a camp was made, a chat was started fresh or a chapter moved into a camp (ADR 037). */
 const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
-  // A thread archived or restored elsewhere moves between the hob's two lists.
-  if (event._tag !== "ChatStartedFresh") {
-    recordThread(queryClient, event.thread);
-    placeThread(queryClient, event.thread);
+  if (event._tag === "ChatStartedFresh") {
+    chatStartedFresh(queryClient, event);
     return;
   }
-  chatStartedFresh(queryClient, event);
+  if (event._tag === "ChapterMoved") {
+    void chapterMoved(queryClient, event);
+    return;
+  }
+  // A thread archived or restored elsewhere moves between the hob's two lists.
+  recordThread(queryClient, event.thread);
+  placeThread(queryClient, event.thread);
 };
 
 /**

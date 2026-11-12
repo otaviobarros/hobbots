@@ -1,6 +1,6 @@
-import { Message, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, Chapter, ChapterId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { applyEvent } from "./events.ts";
 import { connectionQuery, setConnection } from "./live.ts";
 import { queryKeys, upsertMessage } from "./queries.ts";
@@ -153,6 +153,101 @@ describe("query responses during a sync generation", () => {
     await settle();
 
     expect(client.getQueryData(connectionQuery.queryKey)).toBe("live");
+    watching();
+  });
+});
+
+describe("a chapter moved into a camp", () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, STD-REACT-028
+  it("[TC-CH-1385-21] shows a message an event brought in the camp it moved to, and never again in the chat", async () => {
+    const client = new QueryClient();
+    const campId = ThreadId.make("camp-1");
+    const chapter = (id: string, thread: ThreadId, state: "moved" | "live", revision: number) =>
+      new Chapter({
+        id: ChapterId.make(id),
+        threadId: thread,
+        number: 1,
+        title: null,
+        summary: null,
+        state,
+        startedAt: now,
+        endedAt: state === "moved" ? now : null,
+        movedTo: state === "moved" ? campId : null,
+        revision,
+      });
+    const thread = (id: ThreadId, kind: "chat" | "camp") =>
+      new Thread({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
+    const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
+    // The reply arrived live, so the overlay holds it, in the chat.
+    applyEvent(client, { _tag: "MessageUpserted", message: inChat });
+    applyEvent(client, {
+      _tag: "ChapterMoved",
+      threadId,
+      thread: thread(threadId, "chat"),
+      camp: thread(campId, "camp"),
+      stub: chapter("c1", threadId, "moved", 9),
+      chapter: chapter("k1", campId, "live", 9),
+      chapters: [],
+      campChapters: [],
+    });
+
+    // The chat's read no longer has it, and nothing adds it back.
+    expect(await load(client, () => Promise.resolve([]))).toEqual([]);
+    const inCamp = await client.fetchQuery({
+      queryKey: queryKeys.messages(campId),
+      queryFn: syncedMessages(campId, () => Promise.resolve([]), upsertMessage),
+    });
+    expect(inCamp.map((each) => [each.id, each.threadId, each.chapterId, each.revision])).toEqual([
+      ["m1", campId, "k1", 9],
+    ]);
+  });
+
+  // covers ADR 037 (Moving a chapter into a camp moves it), STD-REACT-012
+  it("[TC-CH-1385-22] drops a first transcript read that began before the move, which no event told about the message", async () => {
+    const client = new QueryClient();
+    const campId = ThreadId.make("camp-1");
+    const chapter = (id: string, thread: ThreadId, state: "moved" | "live") =>
+      new Chapter({
+        id: ChapterId.make(id),
+        threadId: thread,
+        number: 1,
+        title: null,
+        summary: null,
+        state,
+        startedAt: now,
+        endedAt: state === "moved" ? now : null,
+        movedTo: state === "moved" ? campId : null,
+        revision: 9,
+      });
+    const thread = (id: ThreadId, kind: "chat" | "camp") =>
+      new Thread({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
+    const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
+    // The chat opens and reads its transcript; the read is slow, and nothing is cached yet.
+    const { fetch, answer, pending } = pendingFetch();
+    const watching = new QueryObserver(client, {
+      queryKey: queryKeys.messages(threadId),
+      queryFn: syncedMessages(threadId, fetch, upsertMessage),
+    }).subscribe(() => undefined);
+    await settle();
+    expect(pending()).toBe(1);
+
+    // Another device moves the chapter while the read is on its way; no MessageUpserted came before.
+    applyEvent(client, {
+      _tag: "ChapterMoved",
+      threadId,
+      thread: thread(threadId, "chat"),
+      camp: thread(campId, "camp"),
+      stub: chapter("c1", threadId, "moved"),
+      chapter: chapter("k1", campId, "live"),
+      chapters: [],
+      campChapters: [],
+    });
+    await settle();
+    // The read from before the move answers with the message, then the read after it without.
+    answer([inChat]);
+    await settle();
+    answer([]);
+    await vi.waitFor(() => expect(messages(client)).toEqual([]));
     watching();
   });
 });

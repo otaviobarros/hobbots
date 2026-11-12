@@ -1,10 +1,11 @@
 import type { MakeCampPayload } from "@hobbots/api";
-import { type AgentId, type Thread, type ThreadId, ThreadLifecycle } from "@hobbots/domain";
+import { type AgentId, type Chapter, type Thread, type ThreadId, ThreadLifecycle } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { chaptersMoved } from "./chapters.ts";
 import { call } from "./client.ts";
 import { placeThread, queryKeys } from "./queries.ts";
 import { questionsMoved } from "./questions.ts";
-import { recordThread } from "./sync.ts";
+import { recordMovedMessages, recordThread } from "./sync.ts";
 import { threadTasksMoved } from "./tasks.ts";
 
 // Make a camp and Start fresh (ADR 037). Both take a key the client makes, which becomes the new
@@ -58,6 +59,48 @@ export const chatStartedFresh = (
     void threadTasksMoved(queryClient, thread.id);
   }
   // A read already on its way may predate the move, so it is cancelled first (STD-REACT-012).
+  void questionsMoved(queryClient);
+};
+
+/**
+ * A chapter moved into a camp (ADR 037): both threads take their new rows and chapters, and read
+ * their transcripts and their work again, since messages and the quests started in the chapter
+ * moved, as did the questions waiting in those quests.
+ */
+export const chapterMoved = async (
+  queryClient: QueryClient,
+  {
+    thread,
+    camp,
+    stub,
+    chapter,
+    chapters,
+    campChapters,
+  }: {
+    readonly thread: Thread;
+    readonly camp: Thread;
+    readonly stub: Chapter;
+    readonly chapter: Chapter;
+    readonly chapters: ReadonlyArray<Chapter>;
+    readonly campChapters: ReadonlyArray<Chapter>;
+  },
+): Promise<void> => {
+  // Messages an event brought this generation say where they are now, or a read would add them back.
+  recordMovedMessages(queryClient, { stub, chapter });
+  for (const each of [thread, camp]) show(queryClient, each);
+  // A transcript read already on its way may predate the move, and messages it read before any event
+  // brought them are in no overlay, so it is cancelled before both are read again (STD-REACT-012).
+  await Promise.all(
+    [thread, camp].map((each) => queryClient.cancelQueries({ queryKey: queryKeys.messages(each.id), exact: true })),
+  );
+  for (const each of [thread, camp]) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.messages(each.id), exact: true });
+    void threadTasksMoved(queryClient, each.id);
+  }
+  void chaptersMoved(queryClient, [
+    { threadId: thread.id, chapters },
+    { threadId: camp.id, chapters: campChapters },
+  ]);
   void questionsMoved(queryClient);
 };
 

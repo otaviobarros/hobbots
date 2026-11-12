@@ -81,6 +81,24 @@ export const applyChapterEvent = async (queryClient: QueryClient, event: Chapter
   }
 };
 
+/**
+ * A chapter moved into a camp (ADR 037): each thread takes its chapters as the move left them. A read
+ * already on its way may predate the move, so it is cancelled first (STD-REACT-012).
+ */
+export const chaptersMoved = async (
+  queryClient: QueryClient,
+  lists: ReadonlyArray<{ readonly threadId: ThreadId; readonly chapters: ReadonlyArray<Chapter> }>,
+): Promise<void> => {
+  await Promise.all(
+    lists.map(({ threadId }) => queryClient.cancelQueries({ queryKey: chaptersKey(threadId), exact: true })),
+  );
+  for (const { threadId, chapters } of lists) {
+    if (queryClient.getQueryData(chaptersKey(threadId)) === undefined) {
+      void queryClient.invalidateQueries({ queryKey: chaptersKey(threadId), exact: true });
+    } else takeList(queryClient, threadId, chapters);
+  }
+};
+
 /** After a split or a merge, the thread's chapters as the hub answered, and its messages read again. */
 const changed = (queryClient: QueryClient, threadId: ThreadId, chapters: ReadonlyArray<Chapter>) => {
   takeList(queryClient, threadId, chapters);

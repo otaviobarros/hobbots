@@ -5,6 +5,7 @@ import { ApprovalRequest } from "./approval.ts";
 import { Artifact } from "./artifact.ts";
 import { BackpackItem } from "./backpack.ts";
 import { Brief } from "./brief.ts";
+import { CampSuggestion } from "./camp-suggestion.ts";
 import { CarriedOver } from "./carried-over.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
 import { Chapter } from "./chapter.ts";
@@ -113,6 +114,39 @@ const ChapterMerged = Schema.TaggedStruct("ChapterMerged", {
  * camp's stays in that camp: memory capture takes nothing from it.
  */
 const ChapterSummarized = Schema.TaggedStruct("ChapterSummarized", { threadId: ThreadId, chapter: Chapter });
+/**
+ * A chapter of thread `threadId` moved into `camp` (ADR 037, #1385), with its messages, decisions,
+ * artifacts and the quests started in it, whose open questions go with them. The thread keeps
+ * `stub`, moved, and the camp holds them in `chapter`, its live chapter. `thread` and `camp` are the
+ * two threads afterwards, and `chapters` and `campChapters` their chapters, in order. The backpack
+ * items that moved are journaled after it, each as its own `BackpackItemChanged`.
+ */
+const ChapterMoved = Schema.TaggedStruct("ChapterMoved", {
+  threadId: ThreadId,
+  thread: Thread,
+  camp: Thread,
+  stub: Chapter,
+  chapter: Chapter,
+  chapters: Schema.Array(Chapter),
+  campChapters: Schema.Array(Chapter),
+});
+/** The hub suggested making a chat's chapter a camp (ADR 037, #1385): a threshold rule or the hub's brain raised it. */
+const CampSuggested = Schema.TaggedStruct("CampSuggested", { threadId: ThreadId, suggestion: CampSuggestion });
+/** You kept a suggested chapter in the chat; it is never suggested again. */
+const CampSuggestionKept = Schema.TaggedStruct("CampSuggestionKept", {
+  threadId: ThreadId,
+  suggestion: CampSuggestion,
+});
+/** A suggested chapter moved into a camp, journaled after its `ChapterMoved`. */
+const CampSuggestionAccepted = Schema.TaggedStruct("CampSuggestionAccepted", {
+  threadId: ThreadId,
+  suggestion: CampSuggestion,
+});
+/** A suggestion no longer applies: its chapter was merged away, or its chat closed. */
+const CampSuggestionExpired = Schema.TaggedStruct("CampSuggestionExpired", {
+  threadId: ThreadId,
+  suggestion: CampSuggestion,
+});
 /** The user asked to stop a reply; it shows as stopping until the runtime confirms. */
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
@@ -420,6 +454,11 @@ export const JournaledEvent = Schema.Union([
   ChapterSplit,
   ChapterMerged,
   ChapterSummarized,
+  ChapterMoved,
+  CampSuggested,
+  CampSuggestionKept,
+  CampSuggestionAccepted,
+  CampSuggestionExpired,
   TurnStopRequested,
   TurnStopped,
   ApprovalRequested,
@@ -527,6 +566,11 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChapterSplit: 1,
   ChapterMerged: 1,
   ChapterSummarized: 1,
+  ChapterMoved: 1,
+  CampSuggested: 1,
+  CampSuggestionKept: 1,
+  CampSuggestionAccepted: 1,
+  CampSuggestionExpired: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
