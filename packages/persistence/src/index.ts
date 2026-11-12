@@ -11,6 +11,7 @@ export * from "./claims.ts";
 export * from "./commit-identity.ts";
 export * from "./devices.ts";
 export * from "./diagnostics.ts";
+export { FindIndexLogLive } from "./find.ts";
 export * from "./github-account.ts";
 export * from "./grants.ts";
 export * from "./hob-changes.ts";
