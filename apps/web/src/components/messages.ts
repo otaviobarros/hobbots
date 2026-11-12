@@ -1186,6 +1186,12 @@ export const messages = {
     },
     checked: "Checked",
     checkedHint: "Hobbots decides this rule, but a command the hob may run could still do it another way.",
+    commands: {
+      "read-only":
+        "Read-only while Change files is Never: its commands can look at its folders, show Git's status, diff and log and run tests, but cannot write there, .git included, so they cannot commit.",
+      closed:
+        "Closed while Look at files is not Allow or Change files is Ask, since a command reads and writes without asking. Pick Allow, or Never on Change files for read-only commands.",
+    },
     moreCareful: "More careful",
     reset: ({ preset, answer }: { preset: string; answer: string }) => `${preset} says ${answer} · reset`,
     wider: "Wider than your safety level allows. Change it in Settings › Safety.",

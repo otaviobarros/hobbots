@@ -10,7 +10,7 @@ flowchart TB
   Domain --> Policy[Permission broker]
   Domain --> Durable[Inbox, responsibilities and event journal]
   Durable --> Supervisor[Continuation and recovery supervisor]
-  Supervisor --> Scheduler[Execution scheduler]
+  Supervisor --> Scheduler[Attempt scheduler]
   Scheduler --> Adapter[Codex, Claude Code and ACP adapters]
   Adapter --> Engines[Existing runtime engines on the hub]
   Engines --> MCP[Scoped Hobbots MCP tools]
@@ -28,11 +28,11 @@ Domain schemas, identity and transition rules are independent of transport and r
 
 Use one scheduler, one durable event model, and one lifecycle definition per domain process. Effect fibers and scoped resources handle live concurrency and cleanup. Ordinary Queue/PubSub/Schedule values are not durable jobs. Durable state and recovery determine work after a crash.
 
-Effect Workflow or persistent execution services may implement long waits and resumptions. Keep unstable workflow APIs behind internal interfaces so Quest, Task and Inbox services retain their own domain contracts. Do not make every configuration update or UI panel a Workflow.
+Effect Workflow or persistent workflow services may implement long waits and resumptions. Keep unstable workflow APIs behind internal interfaces so Quest, Task and Inbox services retain their own domain contracts. Do not make every configuration update or UI panel a Workflow.
 
 ## Module map
 
-`apps/web` renders the UI described in the [design specification](../design/ui-ux.md). `apps/desktop` owns Electron lifecycle, the background server service and connection setup. `apps/server` assembles Effect Layers and serves the browser/API. Packages separate domain, API, agents, runtimes, orchestration, inbox, supervision, permissions, execution, workbench and persistence. Packages without code yet contain boundary descriptions only.
+`apps/web` renders the UI described in the [design specification](../design/ui-ux.md). `apps/desktop` owns Electron lifecycle, the background server service and connection setup. `apps/server` assembles Effect Layers and serves the browser/API. Packages separate domain, API, agents, runtimes, orchestration, inbox, supervision, permissions, `execution`, workbench and persistence. Packages without code yet contain boundary descriptions only.
 
 `packages/agents` holds the hob and thread use cases and defines the ports they use: `HobbotsRepository`, `InstallationSettings`, `RuntimeAdapter`, `EventPublisher` and `FolderChecks`. `packages/persistence` and `packages/runtimes` implement those ports, so they depend on `packages/agents`. `apps/server` implements the event and folder ports, holds the HTTP handlers and the event stream, and composes the Layers.
 

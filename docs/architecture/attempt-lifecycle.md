@@ -1,13 +1,13 @@
-# Execution lifecycle and recovery
+# Attempt lifecycle and recovery
 
 **Decided:** explicit domain states, pure validated transitions, transactional Effect services, durable recovery, task/attempt separation, and one dispatcher for every turn you did not start ([ADR 019](../decisions/019-hob-backpack-and-continuations.md)). The transition contract below is conceptual; finalize schema names and exhaustive transition tables before implementation.
 
-**Explicit machines** ([ADR 037](../decisions/037-chat-and-camps.md), being built). Every lifecycle is declared with `defineMachine` in `@hobbots/domain`, with one owner and one journal event per transition. The thread run loop in `agents/src/thread-runner.ts` is the [`ThreadRun` machine](machines/thread-run.md): idle, dispatching, running, carrying and draining, with `held` and `wakePending` flags, as ADR 037's amendment records. Next, the hub publishes thread, hob and Quest status for clients to render ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)). The [state and events contract](state-and-events.md) says how every machine, command, event and projector is written. This document says *attempt* for what it used to call an execution.
+**Explicit machines** ([ADR 037](../decisions/037-chat-and-camps.md), being built). Every lifecycle is declared with `defineMachine` in `@hobbots/domain`, with one owner and one journal event per transition. The thread run loop in `agents/src/thread-runner.ts` is the [`ThreadRun` machine](machines/thread-run.md): idle, dispatching, running, carrying and draining, with `held` and `wakePending` flags, as ADR 037's amendment records. Next, the hub publishes thread, hob and Quest status for clients to render ([#1361](https://github.com/otaviobarros/hobbots/issues/1361)). The [state and events contract](state-and-events.md) says how every machine, command, event and projector is written. One try at a Task's work is an *attempt*, as the [glossary](../product/glossary.md) says.
 
 ## Independent dimensions
 
 - Task responsibility: queued, active, waiting on dependency/approval/input, blocked, completed, failed or cancelled.
-- Execution attempt: queued, starting, running, completed, failed, interrupted, cancelled or unresolved, when a cancel asked it to stop and its stop could not be confirmed in time.
+- Attempt: queued, starting, running, completed, failed, interrupted, cancelled or unresolved, when a cancel asked it to stop and its stop could not be confirmed in time.
 - Communication: the backpack item states (pending, delivered, acknowledged, processing, resolved, failed) defined by the [backpack contract](inbox.md) and [ADR 019](../decisions/019-hob-backpack-and-continuations.md).
 - Observation certainty: verified or unverified/reconciling after lost contact.
 
@@ -42,7 +42,7 @@ Success includes required outputs/artifacts, handled or explicitly disposed chil
 
 ## Verification cases
 
-Illegal/stale transition; two workers claiming the same task; cancel racing completion; result arriving during parent execution; crash after result commit but before parent notification; UI disconnect; executor loss; unsupported resume; duplicate approval; late message to canceled work. Verify expected durable state and user-visible explanation in each case.
+Illegal/stale transition; two workers claiming the same task; cancel racing completion; result arriving while the parent attempt runs; crash after result commit but before parent notification; UI disconnect; executor loss; unsupported resume; duplicate approval; late message to canceled work. Verify expected durable state and user-visible explanation in each case.
 
 
 ## Explicit command idempotency

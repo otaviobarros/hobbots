@@ -84,7 +84,7 @@ export class Quest extends Schema.Class<Quest>("Quest")({
   state: QuestState,
   /**
    * The stop its lead made at your request (#1346), from `stopping` on; null for every other Quest,
-   * and for each one journaled before migration 0110.
+   * and for each one journaled before migration 0109.
    */
   stop: Schema.NullOr(QuestStop).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),

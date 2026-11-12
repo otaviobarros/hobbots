@@ -23,10 +23,11 @@
     "lint:frontend": "node scripts/check-frontend.mjs",
     "lint:state": "node scripts/check-implicit-state.mjs",
     "lint:machines": "node scripts/machines.mjs --check",
+    "lint:glossary": "node scripts/check-glossary.mjs",
     "docs:machines": "node scripts/machines.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "turbo run check:standards lint:layers lint:complexity lint:frontend lint:state lint:machines test:scripts lint:unused lint:dup lint typecheck test --concurrency=4"
+    "check": "turbo run check:standards lint:layers lint:complexity lint:frontend lint:state lint:machines lint:glossary test:scripts lint:unused lint:dup lint typecheck test --concurrency=4"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {

@@ -106,7 +106,7 @@ The parent may continue while children execute and may await any/all/a selected 
 
 ## Scheduling and limits
 
-Bound active executions per executor, agent and Quest and enforce supported runtime session concurrency. Prevent delegation cycles and unlimited depth. Apply bounded retries, task deadlines and cost/usage limits where the runtime provides reliable usage data. Missing cost telemetry must be visible rather than presented as a precise budget guarantee.
+Bound active attempts per executor, agent and Quest and enforce supported runtime session concurrency. Prevent delegation cycles and unlimited depth. Apply bounded retries, task deadlines and cost/usage limits where the runtime provides reliable usage data. Missing cost telemetry must be visible rather than presented as a precise budget guarantee.
 
 The depth limit is 2 by default ([ADR 018](../decisions/018-tasks-and-quests.md)). Concurrency, per-agent active tasks and task timeout defaults are open (for example three parallel tasks, two active tasks per agent, a fifteen-minute timeout). Exact fairness, batching and timeout policies require resolution; make them configurable rather than hard-coded.
 

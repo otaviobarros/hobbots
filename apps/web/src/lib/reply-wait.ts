@@ -1,4 +1,4 @@
-import { type Message, stepCommand, waitedSteps } from "@hobbots/domain";
+import { isInProgress, type Message, stepCommand, waitedSteps } from "@hobbots/domain";
 
 /** How long a wait may run before the hint says the command may never end on its own (#1056). */
 export const LONG_WAIT_MS = 10 * 60_000;
@@ -26,6 +26,35 @@ export const replyWait = (message: Pick<Message, "status" | "steps"> | undefined
   const starts = steps.flatMap((step) => (step.startedAt === undefined ? [] : [step.startedAt])).sort();
   return { commands: steps.map((step) => shortCommand(stepCommand(step))), since: starts[0] ?? null };
 };
+
+/**
+ * What the composer shows for the thread's reply, one type per mode (STD-REACT-029), so no screen can
+ * pass a combination that cannot happen, such as stopping while no reply runs. `replying` while the
+ * hob is at work; `waiting` once it has answered and only commands it started keep the reply open
+ * (#1056); `stopping` from Stop until the runtime confirms the turn ended, with what it still waits
+ * on.
+ */
+export type ReplyRun =
+  | { readonly mode: "idle" }
+  | { readonly mode: "replying" }
+  | { readonly mode: "waiting"; readonly wait: ReplyWait }
+  | { readonly mode: "stopping"; readonly wait: ReplyWait | null };
+
+const NO_REPLY: ReplyRun = { mode: "idle" };
+
+/**
+ * The composer's mode from the thread's reply in progress, as the hub recorded it, and whether you
+ * asked to stop it and the hub has not answered yet.
+ */
+export const replyRun = (reply: Pick<Message, "status" | "steps"> | undefined, stopAsked: boolean): ReplyRun => {
+  if (reply === undefined || !isInProgress(reply.status)) return NO_REPLY;
+  const wait = replyWait(reply);
+  if (stopAsked || reply.status === "stopping") return { mode: "stopping", wait };
+  return wait === null ? { mode: "replying" } : { mode: "waiting", wait };
+};
+
+/** Whether a reply runs, so Send queues behind it and Stop shows. */
+export const replyRuns = (run: ReplyRun): boolean => run.mode !== "idle";
 
 /** Whole minutes from `since` to `now`, never below zero. */
 export const minutesSince = (since: string | null, now: Date): number =>

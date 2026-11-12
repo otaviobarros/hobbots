@@ -1,6 +1,6 @@
 import { Button } from "@hobbots/ui/components/button";
 import { useId } from "react";
-import { LONG_WAIT_MS, minutesSince, type ReplyWait } from "../../lib/reply-wait.ts";
+import { LONG_WAIT_MS, minutesSince, type ReplyRun, type ReplyWait } from "../../lib/reply-wait.ts";
 import { useNow } from "../inbox/use-now.ts";
 import { messages } from "../messages.ts";
 
@@ -9,22 +9,20 @@ const copy = messages.composer;
 /** The still mark of a reply that waits on a command. */
 const WAIT_MARK = "◷";
 
+/** A reply that runs: every mode of `ReplyRun` but idle. */
+export type RunningReply = Exclude<ReplyRun, { readonly mode: "idle" }>;
+
+/** What the reply waits on, in a mode that can wait. */
+const waitOf = (run: RunningReply): ReplyWait | null => (run.mode === "replying" ? null : run.wait);
+
 /**
  * While a reply runs, the hint is one line that never wraps: a blinking mint dot and who is
  * replying, or when a draft will go. beside a quest's Workbench it keeps only the dot and one word. The
  * longer sentence is Stop's description.
  */
-export function BusyHint({
-  name,
-  stopping,
-  drafting,
-  wait,
-}: {
-  name: string;
-  stopping: boolean;
-  drafting: boolean;
-  wait: ReplyWait | null;
-}) {
+export function BusyHint({ name, run, drafting }: { name: string; run: RunningReply; drafting: boolean }) {
+  const stopping = run.mode === "stopping";
+  const wait = waitOf(run);
   if (wait !== null) return <WaitHint name={name} stopping={stopping} drafting={drafting} wait={wait} />;
   const full = stopping ? copy.hintStopping({ name }) : drafting ? copy.hintSendsAfter : copy.hintReplying({ name });
   return (
@@ -105,18 +103,18 @@ function WaitHint({
  */
 export function StopButton({
   name,
-  stopping,
-  wait,
+  run,
   onStop,
   onStopWaiting,
 }: {
   name: string;
-  stopping: boolean;
-  wait: ReplyWait | null;
+  run: RunningReply;
   onStop: () => void;
   onStopWaiting: (() => void) | undefined;
 }) {
   const stopWhat = useId();
+  const stopping = run.mode === "stopping";
+  const wait = waitOf(run);
   const waiting = wait !== null && onStopWaiting !== undefined;
   const description = waiting
     ? copy.stopWaitingDescription({ name, command: lone(wait) ?? copy.theCommands })
