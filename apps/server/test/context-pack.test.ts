@@ -264,6 +264,67 @@ describe("the context pack", () => {
     expect(asked["claude-code"].at(-1)?.briefing).toContain("- Chapter 1: Talked about Miso the cat.");
   });
 
+  // covers ADR 037 (The context pack), STD-ARCH-014, STD-ARCH-016
+  it("[TC-CH-1380-13] a summary the brain wrote while a split changed its chapter is never kept: the chapter is summarized again from what it now holds", async () => {
+    // The brain's first answer waits until the split has landed, and says it is stale.
+    let reached = () => {};
+    const atBrain = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const slowBrain = Layer.succeed(
+      HubDecider,
+      HubDecider.of({
+        decide: (judgment) =>
+          Effect.gen(function* () {
+            calls += 1;
+            if (calls === 1) {
+              reached();
+              yield* Effect.promise(() => gate);
+              return { choice: "Stale summary." as typeof judgment.rule, confidence: 0.9, by: "brain" as const };
+            }
+            return { choice: "Fresh summary." as typeof judgment.rule, confidence: 0.9, by: "brain" as const };
+          }),
+      }),
+    );
+    const id = await start("claude-code", slowBrain);
+    await say(id, "My cat is called Miso.");
+    await say(id, "Now the garden.");
+    await startChapter(id, "chapter-2", "Plans");
+
+    const round = run(ChapterSummaries.use((projector) => projector.runOnce));
+    await atBrain;
+    const prompt = (await run(HobbotsRepository.use((repo) => repo.listMessages(id)))).find(
+      (m) => m.role === "user" && m.content === "Now the garden.",
+    ) as Message;
+    await run(
+      ChapterService.use((chapters) =>
+        chapters.splitChapter(id, { id: ChapterId.make("garden"), messageId: prompt.id, title: "The garden" }),
+      ),
+    );
+    release();
+    expect(await round).toBe(true);
+    // The stale summary was not kept; the split's own journal entry brings both chapters to the next round.
+    expect((await run(ChapterService.use((service) => service.listChapters(id)))).map((c) => c.summary)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    await run(ChapterSummaries.use((projector) => projector.runOnce));
+
+    const chapters = await run(ChapterService.use((service) => service.listChapters(id)));
+    expect(chapters.map((c) => [c.number, c.state, c.summary])).toEqual([
+      [1, "resting", "Fresh summary."],
+      [2, "resting", "Fresh summary."],
+      [3, "live", null],
+    ]);
+    expect(await summarizedEntries()).toHaveLength(2);
+  });
+
   // covers ADR 037 (The context pack), ADR 028
   it("[TC-CH-1380-12] a private camp's chapter summary stays in that camp: memory capture takes nothing of it, and another camp's pack never reads it", async () => {
     const chat = await start("claude-code");

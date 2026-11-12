@@ -117,8 +117,18 @@ const trim = (fields: Partial<PackTrim>): PackTrim => ({
   ...fields,
 });
 
-/** `text` cut to `limit` characters, with its separator; never longer. */
-const within = (text: string, limit: number) => clip(text, Math.max(0, limit - SEPARATOR.length));
+/** The fewest characters a cut text takes: one kept character and the ellipsis. */
+const SHORTEST_CUT = 2;
+
+/**
+ * `text` cut to `limit` characters, with its separator; never longer. Null when the limit holds not
+ * even a cut text, as a share of zero does: the part then says nothing.
+ */
+const within = (text: string, limit: number) => {
+  const room = limit - SEPARATOR.length;
+  if (text.length <= room) return text;
+  return room < SHORTEST_CUT ? null : clip(text, room);
+};
 
 /**
  * The most of `count` items `render` can show within `limit`: `render(k)` shows the first `k` in
@@ -141,7 +151,7 @@ const fitText = (heading: string | null, text: string | null, limit: number): Fi
   const whole = heading === null ? text : `${heading}\n\n${text}`;
   if (whole.length + SEPARATOR.length <= limit) return { text: whole, trimmed: null };
   const kept = within(whole, limit);
-  return { text: kept, trimmed: trim({ cutCharacters: whole.length - kept.length }) };
+  return { text: kept, trimmed: trim({ cutCharacters: whole.length - (kept?.length ?? 0) }) };
 };
 
 const decisionTitle = (decision: PackDecision) => clip(oneLine(decision.text.split("\n")[0] ?? ""), DECISION_TITLE_MAX);

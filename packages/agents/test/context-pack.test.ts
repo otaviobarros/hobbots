@@ -302,6 +302,50 @@ describe("buildPack", () => {
       { numRuns: 60 },
     );
   });
+
+  // covers ADR 037 (The context pack), STD-ARCH-018
+  it("[TC-CH-1380-09] a part with a share of zero says nothing, and any split of the budget is never exceeded", () => {
+    // The camp brief's share moved to the live chapter: a long brief keeps none of its text.
+    const shares = { ...PACK_BUDGET.shares, "camp-brief": 0, "live-chapter": PACK_BUDGET.shares["live-chapter"] + 500 };
+    const zero = buildPack({ ...empty, campBrief: "Plan the party. ".repeat(4_000) }, { ...PACK_BUDGET, shares });
+    expect(zero.text).toBeNull();
+    expect(zero.report.tokens).toBe(0);
+    expect(zero.report.parts.find((part) => part.part === "camp-brief")?.trimmed?.cutCharacters).toBe(64_000 + 22);
+
+    // On random records, any split of the same total keeps the pack within it.
+    const names = Object.keys(PACK_BUDGET.shares) as ReadonlyArray<keyof PackBudget["shares"]>;
+    const split = fc.array(fc.nat({ max: 10 }), { minLength: names.length, maxLength: names.length });
+    const records = fc.record({
+      campBrief: fc.option(fc.string({ maxLength: 6_000 }), { nil: null }),
+      decisions: fc.array(fc.string({ maxLength: 500 }), { maxLength: 40 }),
+      chapters: fc.array(fc.string({ maxLength: 280 }), { maxLength: 30 }),
+      live: fc.array(fc.string({ maxLength: 20_000 }), { maxLength: 10 }),
+    });
+    fc.assert(
+      fc.property(split, records, (weights, r) => {
+        const sum = weights.reduce((a, b) => a + b, 0) || 1;
+        const budget: PackBudget = {
+          total: PACK_BUDGET.total,
+          shares: Object.fromEntries(
+            names.map((name, n) => [name, Math.floor(((weights[n] ?? 0) * PACK_BUDGET.total) / sum)]),
+          ) as PackBudget["shares"],
+        };
+        const pack = buildPack(
+          {
+            ...empty,
+            campBrief: r.campBrief,
+            decisions: r.decisions.map((t, n) => decision(n, t || "d")),
+            chapters: r.chapters.map((summary, n) => ({ number: n + 1, title: null, summary })),
+            live: r.live.map((content, n) => message(n, n % 2 === 0 ? "user" : "assistant", content)),
+          },
+          budget,
+        );
+        expect(pack.text?.length ?? 0).toBeLessThanOrEqual(budget.total * CHARS_PER_TOKEN);
+        expect(pack.report.tokens).toBeLessThanOrEqual(budget.total);
+      }),
+      { numRuns: 60 },
+    );
+  });
 });
 
 describe("chapter summaries in the pack", () => {

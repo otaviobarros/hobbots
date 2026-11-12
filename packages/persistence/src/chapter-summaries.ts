@@ -22,15 +22,17 @@ export const ChapterSummaryLogLive = Layer.effect(
     const cursor = sql<{ readonly sequence: unknown }>`SELECT sequence FROM projector_cursors
       WHERE name = ${PROJECTOR}`.pipe(Effect.map(([row]) => Number(row?.sequence ?? 0)));
 
-    // The chapter as it stands, summarized, or null when it no longer takes one.
+    // The chapter as it stands, summarized, or null when it no longer takes one. A summary made from
+    // an older revision is obsolete: a split or merge changed the chapter's messages while the brain
+    // wrote it, and the journal entry of that change brings the chapter back to the projector.
     const summarized = (write: ChapterSummaryWrite, revision: number) =>
       Effect.gen(function* () {
         const [chapter] = chapterRows(yield* sql`SELECT * FROM chapters WHERE id = ${write.chapterId}`);
-        if (chapter === undefined) return null;
+        if (chapter === undefined || chapter.revision !== write.revision) return null;
         const next = ChapterStateMachine.transition(chapter, { _tag: "Summarize", summary: write.summary });
         if (next instanceof IllegalChapterTransition) return null;
         const written = yield* sql`UPDATE chapters SET summary = ${next.summary}, revision = ${revision}
-          WHERE id = ${chapter.id} AND summary IS NULL RETURNING id`;
+          WHERE id = ${chapter.id} AND summary IS NULL AND revision = ${write.revision} RETURNING id`;
         return written.length === 0 ? null : new Chapter({ ...next, revision });
       });
 

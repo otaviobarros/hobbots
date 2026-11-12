@@ -33,6 +33,8 @@ export const SUMMARY_INPUT_MAX = 12_000;
 /** A summary the projector writes for a chapter. */
 export interface ChapterSummaryWrite {
   readonly chapterId: ChapterId;
+  /** The chapter's revision the summary was made from: a split or merge since then makes it obsolete. */
+  readonly revision: number;
   readonly summary: string;
 }
 
@@ -147,7 +149,11 @@ export class ChapterSummaries extends Context.Service<ChapterSummaries, ChapterS
             const messages = yield* repo.listMessages(threadId);
             for (const chapter of waiting) {
               const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued");
-              written.push({ chapterId: chapter.id, summary: yield* summarize(chapter, own) });
+              written.push({
+                chapterId: chapter.id,
+                revision: chapter.revision,
+                summary: yield* summarize(chapter, own),
+              });
             }
           }
           return written;
