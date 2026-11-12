@@ -8,13 +8,13 @@ import {
   FolderChecks,
   HobGitHubApps,
   HobTools,
-  openTools,
   operationDecision,
 } from "@hobbots/agents";
 import {
   type CommitsAs,
   declaredOperations,
   hobAppCommitIdentity,
+  openTools,
   settleCommitsAs,
   withSummoningForEveryHob,
 } from "@hobbots/domain";
@@ -71,11 +71,10 @@ export const HobToolsLive = Layer.effect(
             charmOperations,
           };
           const turnFolders = holder === undefined ? folders : [];
-          // Only a turn whose commands may run can commit, so only then is who it commits as settled.
-          const commits =
-            app === null &&
-            turnFolders.length > 0 &&
-            openTools((operation) => operationDecision(policy, operation)).commands;
+          // Only a turn whose commands may run and write can commit, so only then is who it commits
+          // as settled: read-only commands (Edit files Never, #1344) never commit.
+          const open = openTools((operation) => operationDecision(policy, operation));
+          const commits = app === null && turnFolders.length > 0 && open.commands && !open.commandsReadOnly;
           // Who the turn commits as is settled here, and every runtime applies it as given (#586, #741).
           const commitsAs: CommitsAs =
             app !== null

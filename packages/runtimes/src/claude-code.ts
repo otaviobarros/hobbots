@@ -91,7 +91,7 @@ import {
   withCommitIdentity,
 } from "./sandbox.ts";
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
-import { commandOf, offeredTools, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
+import { commandOf, offeredTools, readOnlyCommands, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
 import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
 import { claudeWebSearched, recordSearched } from "./web-search.ts";
 
@@ -151,6 +151,19 @@ export const SANDBOX_NOTE = [
 ].join(" ");
 
 /**
+ * What a sandboxed turn whose commands are read-only is told instead (#1344): Edit files is Never,
+ * so the sandbox closes its folders, `.git` included, to every write. It may still read, run Git
+ * commands that only read and run tests, and write temporary files in `TMPDIR` (#578).
+ */
+export const READ_ONLY_SANDBOX_NOTE = [
+  "Your commands run in a sandbox, and your folders are read-only for them, .git included, because you may not edit files.",
+  "Commands that only read work: git status, git diff, git log, git show, and tests or builds that write nothing in your folders.",
+  "Anything that writes in your folders fails with `Operation not permitted` or `Read-only file system`: git commit, git checkout, git stash, formatting files, or a tool that keeps a cache there. That failure is expected: do not retry it or look for another way to write, and tell the user what you could not do.",
+  "Point a tool's cache or output at $TMPDIR when it lets you.",
+  TEMP_NOTE,
+].join(" ");
+
+/**
  * What a turn that can ask the user is told about approvals: the hob never sees the request, so the
  * note on a tool result is its only record that it asked (#282).
  */
@@ -171,10 +184,14 @@ export const botCommitNote = (commitAs: CommitIdentity) =>
     "When your commits are pushed, GitHub recreates them as your bot and signs them, so they show as Verified on GitHub. A local commit shows no signature until then; that is expected.",
   ].join(" ");
 
+/** The sandbox note a turn gets: none unsandboxed, the read-only one when its commands cannot write. */
+export const sandboxNote = (sandboxed: boolean, readOnly: boolean): string =>
+  sandboxed ? (readOnly ? READ_ONLY_SANDBOX_NOTE : SANDBOX_NOTE) : "";
+
 /**
  * The text appended to Claude Code's system prompt: the hob's instructions, the approval note when
- * the turn can ask the user, the sandbox note when sandboxed, and the bot note when the hob commits
- * as its own app.
+ * the turn can ask the user, the sandbox note when sandboxed (the read-only one when its commands
+ * cannot write its folders), and the bot note when the hob commits as its own app.
  */
 export const turnInstructions = (
   instructions: string,
@@ -182,11 +199,12 @@ export const turnInstructions = (
   asks = false,
   commitAs?: CommitIdentity,
   identityNote = "",
+  readOnly = false,
 ) =>
   [
     instructions,
     asks ? APPROVAL_NOTE : "",
-    sandboxed ? SANDBOX_NOTE : "",
+    sandboxNote(sandboxed, readOnly),
     commitAs ? botCommitNote(commitAs) : "",
     identityNote,
   ]
@@ -758,16 +776,20 @@ export const wholeTurn = (asked: string | null = null, askedSet: string | null =
 };
 
 /**
- * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
- * with, so instructions it may not follow come first in the turn itself. The block may repeat on
- * later turns, so it states the current instructions rather than announcing a change. A briefing on
- * what the session missed (ADR 017) comes next, then the user's prompt. `instructions` is the
+ * The prompt a runtime receives. On resume Claude Code and Codex keep the system prompt the session
+ * started with, so instructions it may not follow come first in the turn itself. The block may repeat
+ * on later turns, so it states the current instructions rather than announcing a change. A briefing
+ * on what the session missed (ADR 017) comes next, then the user's prompt. `instructions` is the
  * whole text the system prompt would append, notes included, so a resumed session gets them too.
+ * `sandbox` is the turn's sandbox note: a permission change, such as Edit files to or from Never,
+ * changes it without changing the hob's instructions, so a resumed session is told it on every turn
+ * the instructions block does not already carry it (#1344).
  */
 export const turnPrompt = (
   request: Pick<PromptRequest, "prompt" | "briefing" | "sessionId" | "instructions" | "instructionsChanged">,
   instructions: string = request.instructions,
   commits = "",
+  sandbox = "",
 ) => {
   const current =
     request.sessionId && request.instructionsChanged
@@ -780,10 +802,20 @@ export const turnPrompt = (
           "",
         ]
       : [];
+  const sandboxNow =
+    request.sessionId && !request.instructionsChanged && sandbox !== ""
+      ? [
+          "<current-sandbox>",
+          "This is how your commands run now, in place of anything earlier in this session:",
+          sandbox,
+          "</current-sandbox>",
+          "",
+        ]
+      : [];
   const briefing = request.briefing ? [request.briefing, ""] : [];
   // A resumed session keeps its first system prompt, so who it commits as now is said again (#741).
   const identity = request.sessionId && commits !== "" ? ["<commit-identity>", commits, "</commit-identity>", ""] : [];
-  return [...current, ...identity, ...briefing, request.prompt].join("\n");
+  return [...current, ...sandboxNow, ...identity, ...briefing, request.prompt].join("\n");
 };
 
 /**
@@ -794,15 +826,18 @@ export const turnPrompt = (
 export const claudeTurnStart = (request: PromptRequest, policySandboxState: SandboxState, sandboxOn: boolean) => {
   const tools = toolTurn(request.tools, policySandboxState, request);
   const commits = turnCommits(tools);
+  const readOnly = tools !== null && readOnlyCommands(tools.context);
   const instructions = turnInstructions(
     request.instructions,
     tools !== null && sandboxOn,
     tools !== null && Boolean(request.approvals),
     tools?.commitAs,
     commits.note,
+    readOnly,
   );
   const asked = askedMount(request.askedSkill, request.skills);
-  const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now), asked);
+  const sandbox = sandboxNote(tools !== null && sandboxOn, readOnly);
+  const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now, sandbox), asked);
   return { tools, commits, instructions, prompt, asked: asked?.name ?? null, askedSet: asked?.set?.name ?? null };
 };
 

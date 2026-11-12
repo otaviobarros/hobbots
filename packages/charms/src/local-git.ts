@@ -6,7 +6,6 @@ import {
   hubAction,
   LocalGitTools,
   makeHubActions,
-  openTools,
   operationDecision,
   type ToolAccess,
 } from "@hobbots/agents";
@@ -17,6 +16,7 @@ import {
   GitInitInput,
   gitInitToolJsonSchema,
   narrowest,
+  openTools,
 } from "@hobbots/domain";
 
 import { decideHubCall, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";

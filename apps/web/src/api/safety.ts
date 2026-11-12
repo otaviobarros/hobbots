@@ -5,6 +5,7 @@ import {
   heldCharms,
   isCharmOperation,
   isNarrowerOrEqual,
+  openTools,
   type PolicyDecision,
   type PolicyOperation,
   PRESET_DECISIONS,
@@ -262,6 +263,20 @@ export const enforcement = (
   sandbox: SandboxState = "on",
 ) =>
   isCharmOperation(operation) ? "enforced" : ruleEnforcement(operation, (other) => decisions[other] ?? "deny", sandbox);
+
+/**
+ * How the hob's commands stand under these answers (ADR 014, #1344): `off` when Run commands and
+ * Local Git are both Never, `read-only` when Change files is Never, `closed` when Look at files is
+ * not Allow or Change files asks, and `open` otherwise.
+ */
+export const commandsStanding = (
+  decisions: Readonly<Record<AnyOperation, PolicyDecision>>,
+): "off" | "open" | "read-only" | "closed" => {
+  const answer = (operation: PolicyOperation) => decisions[operation] ?? "deny";
+  if (answer("run-commands") === "deny" && answer("local-git") === "deny") return "off";
+  const open = openTools(answer);
+  return open.commandsReadOnly ? "read-only" : open.commands ? "open" : "closed";
+};
 
 /** A folder's last part for its row; the root folder keeps its slash. */
 export const folderName = (folder: string): string => {
