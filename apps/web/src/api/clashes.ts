@@ -32,5 +32,8 @@ export const isClaimEvent = (event: HobbotsEvent): event is ClaimEvent => CLAIM_
  * A claim was made, contested, cleared or released. A claim names its Task, not the thread, and a
  * clash can touch two camps, so every thread's clashes are read again (STD-REACT-012).
  */
-export const applyClaimEvent = (queryClient: QueryClient): Promise<void> =>
-  queryClient.invalidateQueries({ queryKey: ["clashes"] });
+export const applyClaimEvent = async (queryClient: QueryClient): Promise<void> => {
+  // A first read still on its way may have been taken before the change, so it is dropped.
+  await queryClient.cancelQueries({ queryKey: ["clashes"] });
+  await queryClient.invalidateQueries({ queryKey: ["clashes"] });
+};

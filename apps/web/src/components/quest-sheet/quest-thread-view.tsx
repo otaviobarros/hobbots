@@ -1,16 +1,16 @@
 import type { AgentId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Textarea } from "@hobbots/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
-import { type FormEvent, type ReactNode, useState } from "react";
-import { messagesQuery, useSendPrompt } from "../../api/queries.ts";
+import type { ReactNode } from "react";
+import { messagesQuery } from "../../api/queries.ts";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { enterSends } from "../quest/enter-sends.ts";
+import { HubWait } from "../loading/hub-wait.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { messages } from "./messages.ts";
+import { QuestComposer } from "./quest-composer.tsx";
 import { type QuestEntry, questThread } from "./quest-thread.ts";
 
 const copy = messages.sheet;
@@ -33,14 +33,27 @@ export function QuestThreadView({
   hobs: HobLookup;
 }) {
   // The quest's own thread: the chat or camp it belongs to, which a pinned quest from elsewhere names.
-  const home = tree.tasks[0]?.threadId ?? threadId;
-  const transcript = useQuery(messagesQuery(home)).data ?? [];
+  const top = tree.tasks[0];
+  const home = top?.threadId ?? threadId;
+  const read = useQuery(messagesQuery(home));
+  const transcript = read.data ?? [];
   const receipts = useSteerReceipts(lead, home, transcript);
   const entries = questThread(tree, transcript);
+  // Until the chat is read, the thread says it waits or why it could not, never that nothing was said.
+  const empty = entries.length === 0 && read.isSuccess;
   return (
     <section aria-label={copy.thread} className="flex flex-col gap-3">
       <h3 className="m-0 text-meta font-semibold text-label">{copy.thread}</h3>
-      {entries.length === 0 && <p className="m-0 text-ui text-label">{copy.nothingYet}</p>}
+      {empty && <p className="m-0 text-ui text-label">{copy.nothingYet}</p>}
+      {read.isPending && <HubWait pending onRetry={() => void read.refetch()} />}
+      {read.isError && (
+        <p role="alert" className="m-0 flex items-center gap-2 text-detail text-rose">
+          {copy.threadUnread}
+          <Button variant="ghost" size="xs" onClick={() => void read.refetch()}>
+            {messages.tryAgain}
+          </Button>
+        </p>
+      )}
       <ol className="m-0 flex list-none flex-col gap-3 p-0">
         {entries.map((entry) => (
           <li key={entry.key}>
@@ -48,7 +61,9 @@ export function QuestThreadView({
           </li>
         ))}
       </ol>
-      {home === threadId && <QuestComposer threadId={threadId} leadName={hobs(lead).name} />}
+      {home === threadId && top !== undefined && (
+        <QuestComposer threadId={threadId} questId={top.id} leadName={hobs(lead).name} />
+      )}
     </section>
   );
 }
@@ -129,44 +144,4 @@ function Entry({ entry, hobs, receipt }: { entry: QuestEntry; hobs: HobLookup; r
         </Said>
       );
   }
-}
-
-/** The box at the thread's end: a message to the lead about the quest, sent to the chat it belongs to. */
-function QuestComposer({ threadId, leadName }: { threadId: ThreadId; leadName: string }) {
-  const [text, setText] = useState("");
-  const send = useSendPrompt(threadId);
-  const submit = () => {
-    const content = text.trim();
-    if (content === "" || send.isPending) return;
-    send.mutate(content, { onSuccess: () => setText("") });
-  };
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    submit();
-  };
-  const label = copy.compose({ name: leadName });
-  return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-1.5">
-      <span className="flex items-end gap-2">
-        <Textarea
-          aria-label={label}
-          placeholder={label}
-          rows={2}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={enterSends(submit)}
-          className="min-h-0 flex-1"
-        />
-        <Button type="submit" size="sm" disabled={text.trim() === "" || send.isPending}>
-          {send.isPending ? copy.sending : copy.send}
-        </Button>
-      </span>
-      <span className="text-meta text-label">{copy.composeHint}</span>
-      {send.isError && (
-        <p role="alert" className="m-0 text-meta text-rose">
-          {copy.sendFailed}
-        </p>
-      )}
-    </form>
-  );
 }

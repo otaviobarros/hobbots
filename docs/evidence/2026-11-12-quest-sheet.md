@@ -3,7 +3,7 @@
 - **Date:** 2026-11-12
 - **Issue:** [#1390](https://github.com/otaviobarros/hobbots/issues/1390)
 - **Pull request:** [#1441](https://github.com/otaviobarros/hobbots/pull/1441)
-- **Commit:** the pull request branch `claude/project-thread-dpjyd2`, at `9142f19`
+- **Commit:** the pull request branch `claude/project-thread-dpjyd2`, from `9142f19` to its review fixes
 - **Setup:** Linux, from a source checkout with `pnpm install --frozen-lockfile` and `pnpm build` in `apps/web`. The browser cases run in Playwright's Chromium against a hub on SQLite with the scripted quest hub (`HOBBOTS_FAKE_QUEST=black-friday`) on the fake Claude Code runtime. The unit cases run in Vitest; the hub case runs in `apps/server` on SQLite.
 - **Result:** Passed with gaps. A camp's quest pill opened its sheet, a quest opened there with Back to the camp, a message from the quest's composer got its steer receipt, the Workbench opened beside the chat and went back to the quest, and two Tasks claiming the same file showed a Heads-up in the camp until one was cancelled. No route or component renders the lanes layout. PostgreSQL in the browser and the packaged app were not part of the run.
 
@@ -17,7 +17,9 @@
 | `[TC-UX-1390-04]` to `[TC-UX-1390-07]` | `npx vitest run src/components/quest-sheet/quest-thread.test.ts` in `apps/web`: the quest's thread holds your request and the lead's plan, what you sent while it ran, the lead's replies while it ran but not a quiet one, notes passed on, and each member's result or failure, oldest first | ✅ |
 | `[TC-UX-1390-08]`, `[TC-UX-1390-09]` | `npx vitest run src/components/quest-sheet/quest-pill.test.ts`: the pill counts the camp's own quests under way, sums what is ready for review and what needs you, and hides with none | ✅ |
 | `[TC-UX-1390-10]`, `[TC-UX-1390-11]` | `npx vitest run src/components/heads-up/heads-up-model.test.ts`: a clash names each side and who claimed last, marks a side whose work is in another chat or camp, and sits under the last message written before the clash began | ✅ |
-| `[TC-UX-1390-12]` | `npx playwright test e2e/quest-sheet.e2e.ts`: the pill opens the camp's sheet, a quest row opens the quest in it with each hob's work, a message from its composer reads "Aldric got it", Show the work opens the Workbench and Back to the quest returns, and Back to the camp and Escape close it | ✅ |
+| `[TC-UX-1390-12]` | `npx playwright test e2e/quest-sheet.e2e.ts`: the pill opens the camp's sheet, a quest row opens the quest in it with each hob's work, a message from its composer reads "Aldric got it", Show the work opens the Workbench and Back to the quest returns with the unsent text still in the box, and Back to the camp and Escape close it | ✅ |
+| `[TC-UX-1390-14]` | `npx vitest run src/api/clashes.test.ts` in `apps/web`: a claim event drops a first read of the clashes taken before it, so the new Heads-up shows | ✅ |
+| `[TC-UX-1390-15]` | `npx playwright test e2e/quest-sheet.e2e.ts`: a pinned quest whose chat cannot be read says so with Try again, never "Nothing said yet", and Try again shows the request | ✅ |
 | `[TC-UX-1390-13]` | The same file: Quill and Ada both claiming `checkout/payments.ts` show "Heads-up: 2 tasks change the same files" in the camp, and it goes once Quill's Task is cancelled | ✅ |
 
 ## Gaps

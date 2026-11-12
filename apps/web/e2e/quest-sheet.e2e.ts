@@ -20,7 +20,7 @@ const giftCards = async (page: import("@playwright/test").Page) => {
   const composer = page.getByRole("textbox", { name: /^Message Aldric in/ });
   await composer.fill("Take gift cards at checkout, please");
   await composer.press("Enter");
-  return { camp };
+  return { url, headers, aldric, camp };
 };
 
 // covers ADR 037 (quests in the camp)
@@ -55,11 +55,14 @@ test("[TC-UX-1390-12] opens a quest from the camp's pill, steers it from the she
     timeout: 30_000,
   });
 
-  // The Workbench opens beside the chat from the quest, and goes back to it.
+  // The Workbench opens beside the chat from the quest, and goes back to it with what you were
+  // typing still in the box, as it is after the sheet closes and opens again.
+  await composer.fill("Ship it behind a flag");
   await quest.getByRole("button", { name: "Show the work" }).click();
   await expect(dock(page)).toBeVisible();
   await page.getByRole("button", { name: "Back to the quest" }).click();
   await expect(questSheet(page, TITLE)).toBeVisible();
+  await expect(composer).toHaveValue("Ship it behind a flag");
 
   // Back leads to the camp's sheet; closing it closes both.
   await questSheet(page, TITLE).getByRole("button", { name: "Back to Checkout" }).click();
@@ -91,4 +94,45 @@ test("[TC-UX-1390-13] a path clash between two tasks shows a Heads-up in the cam
   await lane(page, "Quill").getByRole("button", { name: "Yes, cancel" }).click();
   await page.keyboard.press("Escape");
   await expect(headsUp).toHaveCount(0, { timeout: 15_000 });
+});
+
+// covers ADR 037 (quests in the camp), STD-REACT-015
+test("[TC-UX-1390-15] a pinned quest whose chat could not be read says so, never that nothing was said, and Try again reads it", async ({
+  page,
+}) => {
+  const { url, headers, aldric, camp } = await giftCards(page);
+  await expect(page.getByRole("main", { name: "Chat" }).getByRole("button", { name: /^1 quest/ })).toBeVisible({
+    timeout: 15_000,
+  });
+  const read = await fetch(`${url}/api/threads/${camp.id}/tasks`, { headers });
+  const { trees } = (await read.json()) as {
+    readonly trees: ReadonlyArray<{ readonly tasks: ReadonlyArray<{ readonly id: string }> }>;
+  };
+  const quest = trees[0]?.tasks[0]?.id;
+  if (quest === undefined) throw new Error("expected the gift cards quest");
+
+  // Pinned, the quest opens from another camp, where its own chat's messages cannot be read yet.
+  let failing = true;
+  await page.route(new RegExp(`/api/threads/${camp.id}/messages$`), async (route) => {
+    if (failing && route.request().method() === "GET") await route.fulfill({ status: 500, body: "" });
+    else await route.continue();
+  });
+  await page.evaluate((id) => localStorage.setItem("quest.pinned", JSON.stringify([id])), quest);
+  const other = await campAt({ url, headers }, aldric, "Payments");
+  await page.goto(other.url);
+  await page.reload();
+  await page
+    .getByRole("region", { name: "Work in progress" })
+    .getByRole("button", { name: new RegExp(TITLE) })
+    .click();
+
+  const thread = questSheet(page, TITLE).getByRole("region", { name: "Thread" });
+  const unread = thread.getByRole("alert");
+  await expect(unread).toContainText("What was said in this quest could not be read.", { timeout: 20_000 });
+  await expect(thread).not.toContainText("Nothing said yet");
+
+  failing = false;
+  await unread.getByRole("button", { name: "Try again" }).click();
+  await expect(thread).toContainText("Take gift cards at checkout, please");
+  await expect(unread).toHaveCount(0);
 });
