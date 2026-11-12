@@ -43,11 +43,14 @@ export function ChatSearch({
   threadId,
   transcript,
   onClose,
+  onPick,
 }: {
   hob: Agent;
   threadId: ThreadId;
   transcript: ReadonlyArray<Message>;
   onClose: () => void;
+  /** Told of each pick, even of the message already open, which the address alone would not say. */
+  onPick?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
@@ -61,11 +64,12 @@ export function ChatSearch({
   };
   const pick = (message: Message) => {
     onClose();
+    // Told once the address names the message, so the pick never acts on the one open before it.
     void navigate({
       to: "/hobs/$hobId/threads/$threadId",
       params: { hobId: hob.id, threadId },
       search: { message: message.id },
-    });
+    }).then(() => onPick?.());
   };
   return (
     <div className="relative z-10 animate-hb-in px-6 pt-2.5">

@@ -34,6 +34,7 @@ import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { BackupGroup } from "./backup.ts";
 import { MakeCampPayload, ThreadKey } from "./camp-payloads.ts";
 import { CampSuggestionsGroup } from "./camp-suggestions.ts";
+import { ChaptersGroup } from "./chapters.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
 import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } from "./devices.ts";
 import { DiagnosticsGroup } from "./diagnostics.ts";
@@ -469,6 +470,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(AgentsGroup)
   .add(HobChangesGroup)
   .add(ThreadsGroup)
+  .add(ChaptersGroup)
   .add(RecordsGroup)
   .add(CampSuggestionsGroup)
   .add(SystemGroup)

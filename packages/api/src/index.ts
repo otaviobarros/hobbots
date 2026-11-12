@@ -4,6 +4,7 @@ export * from "./backpack.ts";
 export * from "./backup.ts";
 export * from "./camp-payloads.ts";
 export * from "./camp-suggestions.ts";
+export * from "./chapters.ts";
 export * from "./charm-calls.ts";
 export * from "./connect.ts";
 export * from "./devices.ts";

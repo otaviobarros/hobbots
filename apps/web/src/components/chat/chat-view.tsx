@@ -47,6 +47,7 @@ import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
+import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
 import { ChatSearch } from "../chat-search/chat-search.tsx";
 import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
@@ -188,18 +189,21 @@ export function ChatView({
   // A search match opens with its message in view and holds it there while a reply streams, until
   // the user scrolls back down to the end or sends a message.
   const [released, setReleased] = useState<string>();
+  // Each pick of a search result counts, so picking the same one again opens and scrolls to it again.
+  const [picks, setPicks] = useState(0);
+  const focusKey = focusMessageId === undefined ? undefined : `${focusMessageId}#${picks}`;
   // The search box under the header, opened from its magnifier, belongs to the thread it opened in.
   const [findingIn, setFindingIn] = useState<string>();
   const finding = threadId !== undefined && findingIn === threadId;
   const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
-  const holding = focusMessageId !== undefined && released !== focusMessageId;
-  const follow = () => setReleased(focusMessageId);
+  const holding = focusKey !== undefined && released !== focusKey;
+  const follow = () => setReleased(focusKey);
 
   useEffect(() => {
     if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
   }, [lastContent, holding]);
 
-  useScrollToMessage(messages.data, focusMessageId);
+  useScrollToMessage(messages.data, focusMessageId, picks);
 
   // When a waiting message starts this page's thread, the page follows it there with its draft.
   useEffect(() => {
@@ -290,6 +294,7 @@ export function ChatView({
           threadId={threadId}
           transcript={messages.data ?? []}
           onClose={() => setFinding(false)}
+          onPick={() => setPicks((count) => count + 1)}
         />
       )}
       {threadId && <PinNotes threadId={threadId} pins={pins} />}
@@ -320,6 +325,7 @@ export function ChatView({
               threadId={threadId}
               thread={thread.data}
               focusMessageId={focusMessageId}
+              focusPick={picks}
               streaming={streaming}
               resume={(message) =>
                 message.id === resumable?.id
@@ -457,6 +463,7 @@ function Transcript({
   threadId,
   thread,
   focusMessageId,
+  focusPick,
   streaming,
   resume,
 }: {
@@ -465,6 +472,8 @@ function Transcript({
   threadId: ThreadId | undefined;
   thread: Thread | undefined;
   focusMessageId: string | undefined;
+  /** How many times a search result was picked here, so each pick opens its chapter again. */
+  focusPick: number;
   streaming: boolean;
   resume: (message: Message) => ContinueReply | undefined;
 }) {
@@ -481,36 +490,52 @@ function Transcript({
   // A reply's searches and pages, as step lines and sources (ADR 036).
   const webUsage = useQuery({ ...threadWebQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   const web = repliesWeb(webUsage.data, transcript);
+  // The message before each, which tells a quiet reply; chapters lay the transcript out in pieces.
+  const previous = new Map(transcript.map((message, index) => [message.id, transcript[index - 1]]));
+  const row = (message: Message, split: ReactNode) => (
+    <>
+      {switches.has(message.id) && message.runtime !== null && (
+        <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
+      )}
+      {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
+      {!isQuietReply(message, previous.get(message.id)) && (
+        <MessageRow
+          message={message}
+          hob={hob}
+          focused={message.id === focusMessageId}
+          resume={resume(message)}
+          web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
+          actions={split}
+          after={
+            <>
+              <SkillUsedLines message={message} hob={hob} />
+              <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />
+            </>
+          }
+        >
+          <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
+        </MessageRow>
+      )}
+      {receipts.of(message)}
+      {work.after(message.id)}
+    </>
+  );
   return (
     <>
       {work.before}
-      {transcript.map((message, index) => (
-        <Fragment key={message.id}>
-          {switches.has(message.id) && message.runtime !== null && (
-            <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
-          )}
-          {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
-          {!isQuietReply(message, transcript[index - 1]) && (
-            <MessageRow
-              message={message}
-              hob={hob}
-              focused={message.id === focusMessageId}
-              resume={resume(message)}
-              web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
-              after={
-                <>
-                  <SkillUsedLines message={message} hob={hob} />
-                  <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />
-                </>
-              }
-            >
-              <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
-            </MessageRow>
-          )}
-          {receipts.of(message)}
-          {work.after(message.id)}
-        </Fragment>
-      ))}
+      {/* Divided by its chapters once the thread exists (ADR 037); the empty chat has none yet. */}
+      {thread === undefined ? (
+        transcript.map((message) => <Fragment key={message.id}>{row(message, undefined)}</Fragment>)
+      ) : (
+        <ChapterTranscript
+          hob={hob}
+          thread={thread}
+          transcript={transcript}
+          focusMessageId={focusMessageId}
+          focusPick={focusPick}
+          renderMessage={row}
+        />
+      )}
       {saves.isError && saves.data === undefined && (
         <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
       )}
