@@ -6,13 +6,13 @@ The primary user is an individual operating multiple specialized agents on user-
 
 ## Defining experience
 
-A user asks Aldric to investigate a problem. Aldric works directly while Rook and Sage investigate in parallel. Rook can ask Pip for tests. Sage can ask Aldric a question, and Aldric answers or asks the user. The execution panel shows owners, progress, unanswered messages, and exactly who is waiting for whom. Tool activity opens in the Workbench while the central conversation stays accessible. Results activate the responsible agent, which reconciles its commitments, continues authorized work, verifies the outcome, and reports back.
+A user asks Aldric to investigate a problem. Aldric works directly while Rook and Sage investigate in parallel. Rook can ask Pip for tests. Sage can ask Aldric a question, and Aldric answers or asks the user. The Task's Workbench shows owners, progress, unanswered messages, and exactly who is waiting for whom. Tool activity opens in the Workbench while the central conversation stays accessible. Results activate the responsible agent, which reconciles its commitments, continues authorized work, verifies the outcome, and reports back.
 
-The durable unit of work is a Task, and a Task that brings in other hobs is a Quest ([ADR 018](../decisions/018-tasks-and-quests.md)). A thread organizes discussion; Tasks and Quests organize responsibility and execution. A completed runtime turn does not by itself complete a Task or consume a delegated result.
+The durable unit of work is a Task, and a Task that brings in other hobs is a Quest ([ADR 018](../decisions/018-tasks-and-quests.md)). A thread organizes discussion; Tasks and Quests organize responsibility and attempts. A completed runtime turn does not by itself complete a Task or consume a delegated result.
 
 ## Product principles
 
-1. Focused chat with clear navigation and contextual execution visibility.
+1. Focused chat with clear navigation and contextual work visibility.
 2. Every agent can execute, delegate, receive, communicate, and coordinate.
 3. Autonomous ordinary work inside explicit, enforceable trusted scopes.
 4. Durable inbox and proactive closure as platform behavior.

@@ -5,12 +5,12 @@ These choices are not decided yet. They do not reopen decided product direction.
 | Area | Open choice / required evidence |
 |---|---|
 | Runtime support | Exact installed Codex/Claude/Gemini CLI/Ollama/ACP versions, integration routes, auth, sandbox/approval hooks, resume/cancel/concurrency/preview capabilities. |
-| Effect v4 | Exact compatible pins, SQL drivers and unstable Workflow/HttpApi integration; evaluate native durable Workflow versus persistent execution services behind the domain interfaces. |
+| Effect v4 | Exact compatible pins, SQL drivers and unstable Workflow/HttpApi integration; evaluate native durable Workflow versus persistent workflow services behind the domain interfaces. |
 | Toolchain | Package manager, workspace/build/test tooling, supported Node/Electron versions. Decided for the validation slice in ADR 009. |
 | Configuration | Canonical app database versus portable JSON/YAML definitions versus both; import and versioning details. The export of threads and work history is decided in [ADR 026](../decisions/026-backup-export-diagnostics.md); it is not a configuration format. |
 | Delegation default | Explicit collaborator allowlist versus all configured hobs by default; automatic dynamic agent creation is not assumed. |
 | Limits | Final concurrency, timeout, fairness, batching, retry and cost-limit defaults. The depth limit defaults to 2 ([ADR 018](../decisions/018-tasks-and-quests.md)). |
-| Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, execution-grant transport and revocation. No silent privilege expansion. |
+| Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, grant transport and revocation. No silent privilege expansion. |
 | Policies | The preset mapping, folders and the sandbox are decided in ADR 014; what sandbox-runtime's credential masking hides and whether its live configuration updates work need evidence (#131). Grant matching, precedence, expiry and revocation are decided in ADR 015. |
 | Lifecycle | Exhaustive task/attempt/approval transition tables, late-result and reassignment rules, partial completion semantics. |
 | Deployment | OS/architecture support, app-data paths, per-platform service installation, routes after Tailscale. Device tokens, pairing and the Tailscale route are decided in [ADR 021](../decisions/021-devices-and-remote-access.md). |

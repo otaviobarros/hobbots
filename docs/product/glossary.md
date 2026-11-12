@@ -25,11 +25,11 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Checkpoint | A short record of where a Task stands: a planned milestone, a finding, blocker or question, or an automatic state. | [ADR 018](../decisions/018-tasks-and-quests.md) |
 | Hand-off | A lead giving one Task's result to another Task as context. The only way results move between party members. | [ADR 018](../decisions/018-tasks-and-quests.md) |
 | Delegation | An explicit request/result relationship from a lead to a party member, with a brief and narrowed authority. | [Orchestration](../architecture/orchestration.md) |
-| Attempt | One attempt to perform task work; retries create new attempts, not new tasks. The docs no longer say *execution* ([ADR 037](../decisions/037-chat-and-camps.md)). | [Execution lifecycle](../architecture/execution-lifecycle.md) |
+| Attempt | One attempt to perform task work; retries create new attempts, not new tasks. The docs no longer say *execution* ([ADR 037](../decisions/037-chat-and-camps.md)). | [Attempt lifecycle](../architecture/attempt-lifecycle.md) |
 | Backpack / backpack item | A hob's durable queue of what it still has to deal with: Tasks, results, failures, questions, answers, hand-offs, messages, approval outcomes and deadlines, with separate delivery and processing states. Not your Inbox. | [Backpack contract](../architecture/inbox.md), [ADR 019](../decisions/019-hob-backpack-and-continuations.md) |
 | Inbox | Your page for what needs you: approval requests and questions no lead could answer. | [Screen inventory](../design/screens-and-flows.md), [ADR 015](../decisions/015-approval-lifetimes-and-grants.md) |
 | Continuation | A turn the dispatcher starts for a hob when an actionable backpack item arrives, without a prompt from you. | [ADR 019](../decisions/019-hob-backpack-and-continuations.md) |
-| Responsibility | An outstanding promise, reply, deliverable or dependency that must be reconciled before success. | [Agent model](../architecture/agent-model.md), [Execution lifecycle](../architecture/execution-lifecycle.md) |
+| Responsibility | An outstanding promise, reply, deliverable or dependency that must be reconciled before success. | [Agent model](../architecture/agent-model.md), [Attempt lifecycle](../architecture/attempt-lifecycle.md) |
 | Proactive closure | Agents continue and close outstanding work when results arrive, without a user prompt. | [ADR 004](../decisions/004-durable-inbox.md) |
 | Approval | A human decision for one bounded action, with a lifetime (once, this Task or Quest, always for this site). | [Permissions](../architecture/permissions.md), [ADR 008](../decisions/008-design.md) |
 | Trusted Workspace | The default autonomy level; the *Balanced* onboarding preset, between *Careful* and *Trusting*. | [ADR 003](../decisions/003-autonomy.md), [Permissions](../architecture/permissions.md) |
@@ -51,3 +51,24 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Device / client | Another desktop app or browser connected to the hub, approved once and holding a revocable token. | [ADR 010](../decisions/010-desktop-hub.md), [Deployment](../architecture/deployment.md) |
 | Home | The landing page: an animated dashboard of hob activity, what needs you, Quests and usage. | [ADR 008](../decisions/008-design.md), [Design specification](../design/ui-ux.md) |
 | Workbench | One Task's full view: Summary, Changes, Files, Terminal and (later) Browser, labeled by what the hub recorded. | [ADR 023](../decisions/023-workbench.md), [design specification](../design/ui-ux.md), [`packages/workbench`](../../packages/workbench/README.md) |
+
+## Words and code names
+
+What the UI calls a thing, and the name the code gives it. `pnpm lint:glossary` (`scripts/check-glossary.mjs`, STD-DOCS-011) reads this table and fails when they drift apart:
+
+- a code name that no package or the server exports any more,
+- a UI word that no message module of the web or desktop app uses any more,
+- a word the UI never shows in a message module's copy, or a word the docs no longer use in a doc. ADRs and evidence records stay as written, and the phrases after "except" in a cell may still use it.
+
+Change a row here in the same pull request that renames the word or the code.
+
+| UI | Code | Never in the UI | Never in the docs |
+| --- | --- | --- | --- |
+| hob | `Agent` | | |
+| chat, camp | `Thread` | `thread` | |
+| chapter | `Chapter` | | |
+| decision | `Decision` | | |
+| artifact | `Artifact` | | |
+| brief | `Brief` | | |
+| quest | `Quest` | | |
+| (not shown) | `Attempt` | `execution` | `execution` except "execution environment", "execution rules" |

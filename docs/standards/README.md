@@ -177,3 +177,4 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DOCS-008 | Work stays inside the requested scope | Active |
 | STD-DOCS-009 | An ADR ends with the scenarios that validate it | Active |
 | STD-DOCS-010 | A proof leaves a dated evidence record | Active |
+| STD-DOCS-011 | UI words and code names follow the glossary | Active |

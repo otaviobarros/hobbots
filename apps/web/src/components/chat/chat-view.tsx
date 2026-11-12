@@ -41,7 +41,7 @@ import { useReadThread } from "../../api/thread-reads.ts";
 import { threadWebQuery } from "../../api/web.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
-import { minutesSince, type ReplyWait, replyWait } from "../../lib/reply-wait.ts";
+import { minutesSince, type ReplyWait, replyRun, replyRuns, replyWait } from "../../lib/reply-wait.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
@@ -161,12 +161,12 @@ export function ChatView({
   const resume = useContinueReply(threadId ?? ("" as ThreadId));
   const continueOn = useContinueOn(hobId, threadId ?? ("" as ThreadId), runtime, resume);
 
-  const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
+  const reply = messages.data?.find((m) => isInProgress(m.status));
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
-  const stopping =
-    interrupt.isPending || stopWaiting.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
+  const run = replyRun(reply, interrupt.isPending || stopWaiting.isPending);
+  const streaming = replyRuns(run);
   // What the reply waits on once its hob has answered, while only commands keep it open (#1056).
-  const wait = replyWait(messages.data?.find((m) => isInProgress(m.status)));
+  const wait = replyWait(reply);
   const waitCommand = wait?.commands.length === 1 ? (wait.commands[0] ?? null) : null;
   const waitsFor =
     wait === null
@@ -449,12 +449,10 @@ export function ChatView({
             placeholder={placeholder}
             place={place}
             lastSent={lastSent}
-            busy={streaming}
-            stopping={stopping}
+            run={run}
             sending={start.isPending || send.isPending}
             onSend={sendDraft}
             onStop={() => interrupt.mutate()}
-            wait={wait}
             onStopWaiting={() => stopWaiting.mutate()}
             skills={skillPicking(skills, current.name, thread.data?.skillTrial)}
             note={note}

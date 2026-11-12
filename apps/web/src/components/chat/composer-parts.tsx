@@ -1,6 +1,6 @@
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import type { ReplyWait } from "../../lib/reply-wait.ts";
+import type { ReplyRun } from "../../lib/reply-wait.ts";
 import { messages } from "../messages.ts";
 import { messages as noteCopy } from "../notes/messages.ts";
 import type { NoteMode } from "../notes/use-note-to-self.ts";
@@ -32,22 +32,18 @@ const restingHint = (paused: PausedHob | undefined): string => {
 export function ComposerHint({
   name,
   noting,
-  busy,
-  stopping,
+  run,
   drafting,
-  wait,
   paused,
 }: {
   name: string;
   noting: boolean;
-  busy: boolean;
-  stopping: boolean;
+  run: ReplyRun;
   drafting: boolean;
-  wait: ReplyWait | null;
   paused: PausedHob | undefined;
 }) {
   if (noting) return <span className="min-w-0 flex-1 text-end text-meta text-label">{noteCopy.hint}</span>;
-  if (busy) return <BusyHint name={name} stopping={stopping} drafting={drafting} wait={wait} />;
+  if (run.mode !== "idle") return <BusyHint name={name} run={run} drafting={drafting} />;
   // Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a paused
   // hob's hint stays.
   return (
@@ -62,9 +58,7 @@ export function ComposerActions({
   name,
   noting,
   closed,
-  busy,
-  stopping,
-  wait,
+  run,
   paused,
   sendLabel,
   disabled,
@@ -76,9 +70,7 @@ export function ComposerActions({
   noting: boolean;
   /** A paused hob's new thread: nothing can be sent until it wakes. */
   closed: boolean;
-  busy: boolean;
-  stopping: boolean;
-  wait: ReplyWait | null;
+  run: ReplyRun;
   paused: PausedHob | undefined;
   sendLabel: string;
   disabled: boolean;
@@ -89,8 +81,8 @@ export function ComposerActions({
   const hob = noting ? undefined : paused;
   return (
     <>
-      {busy && !noting && (
-        <StopButton name={name} stopping={stopping} wait={wait} onStop={onStop} onStopWaiting={onStopWaiting} />
+      {run.mode !== "idle" && !noting && (
+        <StopButton name={name} run={run} onStop={onStop} onStopWaiting={onStopWaiting} />
       )}
       {hob && (
         <Button variant={hob.canQueue ? "outline" : "default"} size="bar" onClick={hob.onWake} disabled={hob.waking}>

@@ -19,7 +19,7 @@ export const AttemptId = Schema.String.pipe(Schema.brand("AttemptId"));
 export type AttemptId = typeof AttemptId.Type;
 
 /**
- * Where a Task stands (execution lifecycle). `waiting` is on a dependency, approval or answer;
+ * Where a Task stands (attempt lifecycle). `waiting` is on a dependency, approval or answer;
  * `blocked` waits for a decision from outside its turn: its lead's, or for a step its owner's;
  * `cancelling` is a cancel requested and not yet confirmed. `completed`, `failed` and `cancelled` are terminal; only a retry reopens a failed Task.
  */
