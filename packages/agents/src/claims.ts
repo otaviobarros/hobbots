@@ -1,4 +1,4 @@
-import type { Actor, Claim, ClaimId, ClaimScope, Committed, TaskId } from "@hobbots/domain";
+import type { Actor, Claim, ClaimClash, ClaimId, ClaimScope, Committed, TaskId, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
 /** A claim to record (ADR 037): what it is on, which Task holds it and who made it. */
@@ -45,5 +45,10 @@ export class ClaimRegister extends Context.Service<
     readonly claim: (request: ClaimRequest) => Effect.Effect<Committed<ClaimOutcome>>;
     /** A Task's claims, oldest first, released ones included. */
     readonly ofTask: (taskId: TaskId) => Effect.Effect<ReadonlyArray<Claim>>;
+    /**
+     * The open clashes a chat or camp shows as a Heads-up (#1390): each group of open claims that
+     * clash, one of them contested by a Task whose work belongs to the thread, oldest first.
+     */
+    readonly clashesIn: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ClaimClash>>;
   }
 >()("@hobbots/agents/ClaimRegister") {}

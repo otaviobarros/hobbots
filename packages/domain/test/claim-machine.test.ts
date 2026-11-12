@@ -12,6 +12,7 @@ import {
   claimBranch,
   claimPath,
   claimsClash,
+  clashGroups,
   IllegalClaimTransition,
   numberLike,
   numbersIn,
@@ -175,5 +176,52 @@ describe("claim rules", () => {
   it("splits a long path in linear time", () => {
     const long = `${"a/".repeat(50_000)}b`;
     expect(claimPath(long)?.endsWith("/b")).toBe(true);
+  });
+});
+
+describe("Heads-up clashes (#1390)", () => {
+  const paths = fc.constantFrom("web", "web/badge.png", "web/shop.css", "docs", "docs/a.md");
+  const claims = fc
+    .array(
+      fc.record({
+        key: paths,
+        taskId: fc.constantFrom("task-1", "task-2", "task-3"),
+        state: fc.constantFrom<ClaimState>("held", "contested", "released"),
+      }),
+      { maxLength: 8 },
+    )
+    .map((fields) => fields.map((each, index) => claim({ ...each, id: `claim-${index}` })));
+
+  it("[TC-OR-1390-01] puts each clash touching the thread's claims in one group, once, and nothing else", () => {
+    fc.assert(
+      fc.property(claims, fc.integer({ min: 0, max: 8 }), (open, cut) => {
+        const ours = open.slice(0, cut);
+        const groups = clashGroups(ours, open);
+        const seen = groups.flat().map((each) => each.id);
+        // Each claim is in one group at most, and every group is open claims that all connect.
+        expect(new Set(seen).size).toBe(seen.length);
+        for (const group of groups) {
+          expect(group.length).toBeGreaterThanOrEqual(2);
+          expect(group.every(Claims.isOpen)).toBe(true);
+          expect(group.some((each) => ours.some((mine) => mine.id === each.id))).toBe(true);
+          for (const each of group) expect(group.some((other) => claimsClash(each, other))).toBe(true);
+        }
+        // Every open claim of ours that clashes with any open claim is in a group.
+        for (const mine of ours) {
+          if (open.some((other) => claimsClash(mine, other))) expect(seen).toContain(mine.id);
+        }
+      }),
+    );
+  });
+
+  it("[TC-OR-1390-02] makes one clash of two Tasks on one file, and one of a folder and the files inside it", () => {
+    const badge = claim({ id: "a", taskId: "task-1", key: "web/badge.png", state: "contested" });
+    const review = claim({ id: "b", taskId: "task-2", key: "web", state: "contested" });
+    const css = claim({ id: "c", taskId: "task-3", key: "web/shop.css", state: "contested" });
+    const docs = claim({ id: "d", taskId: "task-3", key: "docs" });
+    expect(clashGroups([badge], [badge, review, css, docs]).map((group) => group.map((each) => each.id))).toEqual([
+      ["a", "b", "c"],
+    ]);
+    expect(clashGroups([docs], [badge, review, css, docs])).toEqual([]);
   });
 });

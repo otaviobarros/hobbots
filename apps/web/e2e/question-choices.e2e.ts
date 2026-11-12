@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneTask, openRoom } from "./quest-room.ts";
+import { lane, laneTask, openQuest } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -38,14 +38,14 @@ test("[TC-UX-908] a member asks with choices, the question climbs to you, you pi
 
   // In the fake Quest, Ada then says which choice she goes on with. That the answer reaches a member's
   // own turn through the tools is checked at hub level, in [TC-OR-580].
-  await openRoom(page, "Plan the Black Friday campaign");
+  await openQuest(page, "Plan the Black Friday campaign");
   await expect(lane(page, "Ada")).toContainText("Going with Dec 12 for international", { timeout: 30_000 });
 });
 
 // covers UX-001
 test("[TC-UX-909] in Ada's lane the choices are chips, and a choice's number key picks it", async ({ page }) => {
   await startQuest(page);
-  await openRoom(page, "Plan the Black Friday campaign");
+  await openQuest(page, "Plan the Black Friday campaign");
   const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });
   const chips = asks.getByRole("list", { name: "Ada's choices" });
   const first = chips.getByRole("button", { name: /^Dec 12 for international, recommended/ });

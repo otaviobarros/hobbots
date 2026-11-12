@@ -47,7 +47,7 @@ export function SettleCharmCall({
 }
 
 /**
- * The two ways to settle an uncertain Charm call, the same under a chat step, in a Quest room lane
+ * The two ways to settle an uncertain Charm call, the same under a chat step, in a hob's work in a quest
  * and in the Inbox (ADR 038): it went through, or it did not.
  */
 export function SettleChoices({

@@ -21,6 +21,7 @@ import { storeBackpackItem } from "./backpack.ts";
 import { applySuggestionEvent, isSuggestionEvent } from "./camp-suggestions.ts";
 import { chapterMoved, chatStartedFresh } from "./camps.ts";
 import { applyChapterEvent } from "./chapters.ts";
+import { applyClaimEvent, type ClaimEvent, isClaimEvent } from "./clashes.ts";
 import { API_URL } from "./client.ts";
 import { devicesChanged } from "./devices.ts";
 import { failedTaskChanged } from "./failed-tasks.ts";
@@ -211,11 +212,6 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
-  // The claims register (ADR 037) has no screen yet; a clash reaches each lead through its backpack.
-  "ClaimMade",
-  "ClaimContested",
-  "ClaimCleared",
-  "ClaimReleased",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -227,11 +223,7 @@ type UnappliedEvent = Extract<
       | "TurnEnded"
       | "ThreadRunChanged"
       | "HobPresenceChanged"
-      | "HobPresenceRemoved"
-      | "ClaimMade"
-      | "ClaimContested"
-      | "ClaimCleared"
-      | "ClaimReleased";
+      | "HobPresenceRemoved";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -271,7 +263,8 @@ const readAgain = (
   | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" }>
   | Parameters<typeof applyRecordEvent>[1]
   | Parameters<typeof applySuggestionEvent>[1]
-  | Parameters<typeof applyPinEvent>[1] => {
+  | Parameters<typeof applyPinEvent>[1]
+  | ClaimEvent => {
   // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
   // again. A started or summarized chapter moves none.
   if (isChapterEvent(event)) {
@@ -299,6 +292,11 @@ const readAgain = (
     void applyPinEvent(queryClient, event);
     return true;
   }
+  // A claim made, contested, cleared or released changes the Heads-ups (#1390).
+  if (isClaimEvent(event)) {
+    void applyClaimEvent(queryClient);
+    return true;
+  }
   // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.
   if (event._tag === "SkillUsed") {
     void refreshSkillUses(queryClient);
@@ -321,12 +319,15 @@ const isThreadEvent = (event: HobbotsEvent): event is ThreadEvent => THREAD_EVEN
 
 /** A thread changed, a camp was made, a chat was started fresh or a chapter moved into a camp (ADR 037). */
 const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
+  // The quests a fresh chat or a moved chapter took along take their clashes with them (#1390).
   if (event._tag === "ChatStartedFresh") {
     chatStartedFresh(queryClient, event);
+    void applyClaimEvent(queryClient);
     return;
   }
   if (event._tag === "ChapterMoved") {
     void chapterMoved(queryClient, event);
+    void applyClaimEvent(queryClient);
     return;
   }
   // A thread archived or restored elsewhere moves between the hob's two lists.
@@ -342,7 +343,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applyQuestWork(queryClient, event);
   applyHistory(queryClient, event);
   applyHobChanges(queryClient, event);
-  // An open Quest room's Workbench follows its tree's records on the tree's own stream (ADR 027).
+  // An open quest's Workbench follows its tree's records on the tree's own stream (ADR 027).
   // A running command's output is transient and kept as it comes, whichever stream brings it.
   if (isWorkbenchEvent(event)) {
     if (event._tag === "CommandOutput") applyCommandOutput(queryClient, event);

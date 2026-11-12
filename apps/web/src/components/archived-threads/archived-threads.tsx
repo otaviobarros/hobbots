@@ -9,7 +9,7 @@ import { messages } from "./messages.ts";
 
 /**
  * What the chat workspace gives whatever fills its middle: the hob, the thread, the side panels' state
- * and whether the Quest room is open beside it.
+ * and whether the quest's Workbench is open beside it.
  */
 export type WorkspaceMainProps = ComponentProps<typeof ChatView> & { readonly room?: boolean };
 
@@ -29,7 +29,7 @@ export function ThreadMain({ room = false, ...props }: WorkspaceMainProps) {
   });
 
   // An archived thread is read in the Archive, with Restore, never as a chat here, on the message a
-  // search matched. While its Quest room is open, the room keeps its recap and Workbench (ADR 027)
+  // search matched. While its quest's Workbench is open, it keeps its recap and Workbench (ADR 027)
   // and the chat beside it says where to read the chat; Close room then moves to the Archive.
   if (archived.data) {
     if (room) return <ArchivedBeside hobId={hobId} threadId={archived.data.id} />;
@@ -79,7 +79,7 @@ export function ThreadMain({ room = false, ...props }: WorkspaceMainProps) {
   return <ChatView key={threadId} {...props} />;
 }
 
-/** The chat beside an archived thread's Quest room: read-only, so it points to the Archive. */
+/** The chat beside an archived thread's quest Workbench: read-only, so it points to the Archive. */
 function ArchivedBeside({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
   return (
     <ThreadLookup>

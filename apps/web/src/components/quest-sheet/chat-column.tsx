@@ -21,7 +21,7 @@ const placeOf = (room: boolean, folded: boolean, width: RoomWidth) => {
 };
 
 /**
- * The thread beside the Quest room (ADR 027): the same chat, never mounted again, so it keeps its
+ * The thread beside a quest's Workbench (ADR 027): the same chat, never mounted again, so it keeps its
  * scroll position and unsent message as the room opens and closes. Folded, it stays in the page out
  * of sight and out of focus, and a rail with the lead's tile takes its place, with a dot once the
  * lead writes while it is folded.

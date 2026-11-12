@@ -1,9 +1,9 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { dock, laneHead, laneTask, openRoom, taskSummary } from "./quest-room.ts";
+import { dock, laneHead, laneTask, openQuest, showHob } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
-// Issue #907 in the browser: one Workbench docked under the lanes for the whole Quest. Changes and
+// Issue #907 in the browser: one Workbench for the whole Quest, beside the chat (#1390). Changes and
 // Files list every hob's work in one list, each row with its hob; a lane filters every tab; and a
 // try picked for a lane's Task changes what the tabs show.
 
@@ -37,12 +37,14 @@ const startParty = async (page: Page, quillBrief: ReadonlyArray<string>) => {
   // When Quill finishes before Aldric's reply does, the hub wakes him twice more, with her result and
   // then with the Quest left open, each reply paced a word at a time: under load that runs past 30s.
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
-  return openRoom(page, TITLE);
+  return openQuest(page, TITLE);
 };
 
-/** The dock's Changes and Files lists. */
-const lists = (page: Page) => {
+/** The quest's Workbench, opened from the quest if need be, with its Changes and Files lists. */
+const lists = async (page: Page) => {
   const bench = dock(page);
+  if ((await bench.count()) === 0)
+    await page.getByRole("dialog").getByRole("button", { name: "Show the work" }).click();
   return {
     bench,
     changes: bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("navigation", { name: "Changed files" }),
@@ -62,23 +64,14 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
     script("complete_task", { delivered: true, key: "drafted", summary: "Drafted." }),
   ]);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
-  const { bench, changes, files } = lists(page);
+  const { bench, changes, files } = await lists(page);
 
-  // Folded, the strip counts what each tab lists across the party.
+  // The strip counts what each tab lists across the party.
   await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveText("Changes2");
   await expect(bench.getByRole("tab", { name: /^Files/ })).toHaveText("Files2");
 
   // Changes lists both hobs' files in one list, in the Quest's order, each saying whose it is.
   await bench.getByRole("tab", { name: /^Changes/ }).click();
-  // Expand makes the open dock as tall as the room lets it be, and takes it back again.
-  const expand = bench.getByRole("button", { name: "Make the Workbench as tall as it goes" });
-  const before = (await bench.boundingBox())?.height ?? 0;
-  await expand.click();
-  await expect(expand).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(async () => (await bench.boundingBox())?.height ?? 0).toBeGreaterThan(before);
-  await expand.click();
-  await expect(expand).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(async () => (await bench.boundingBox())?.height ?? 0).toBe(before);
   await expect(changes.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
   await changes.getByRole("button", { name: /^copy\.md/ }).click();
   await expect(
@@ -95,8 +88,9 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
   await expect(files.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
 
   // Quill's lane filters every tab to her work, and says so on the strip.
-  await laneHead(page, "Quill").click();
+  await showHob(page, "Quill");
   await expect(bench.getByRole("button", { name: /^Quill only/ })).toBeVisible();
+  await bench.getByRole("tab", { name: /^Files/ }).click();
   await expect(files.getByRole("button")).toHaveText([/^copy\.md/]);
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   await expect(changes.getByRole("button")).toHaveText([/^copy\.md/]);
@@ -124,7 +118,7 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with t
   const sheet = laneTask(page, "Draft the copy");
   await expect(sheet).toContainText("attempt 2", { timeout: 30_000 });
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
-  const { bench, changes, files } = lists(page);
+  const { bench, changes, files } = await lists(page);
 
   // With no try picked, Quill's work is her latest try's, which works on what her first left: her
   // copy from the first try is still listed (#1218).
@@ -133,7 +127,7 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with t
 
   // Lit, her lane's Task names its tries, the latest checked: it changed nothing itself, so the
   // copy says which try changed it.
-  await laneHead(page, "Quill").click();
+  await showHob(page, "Quill");
   const attempts = bench.getByRole("radiogroup", { name: "Attempts" });
   await expect(attempts.getByRole("radio", { name: "Attempt 2" })).toBeChecked();
   await expect(changes.getByRole("button")).toHaveText([/^copy\.md/]);
@@ -152,15 +146,6 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with t
   await expect(
     bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
   ).not.toContainText("Changed in attempt");
-
-  // Her lane's summary opens the copy on the same try, which the address keeps.
-  const picked = new URL(page.url()).hash.match(/attempt=([^&]+)/)?.[1];
-  expect(picked).toBeDefined();
-  await (await taskSummary(page, "Draft the copy"))
-    .getByRole("button", { name: "See the change to copy.md in Changes" })
-    .click();
-  await expect(page).toHaveURL(new RegExp(`attempt=${picked}`));
-  await expect(changes.getByRole("button", { name: /^copy\.md/ })).toHaveAttribute("aria-pressed", "true");
 });
 
 // covers UX-002, OR-007
@@ -182,7 +167,7 @@ test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added w
   ]);
   await expect(laneTask(page, "Write the check script")).toContainText("attempt 2", { timeout: 30_000 });
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
-  const { bench, changes } = lists(page);
+  const { bench, changes } = await lists(page);
 
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   const row = changes.getByRole("button", { name: /^check\.sh\s*, by Quill/ });
@@ -225,9 +210,9 @@ test("[TC-UX-1146] a file reads under the same path for a lead and for a member 
   );
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
-  await openRoom(page, TITLE);
+  await openQuest(page, TITLE);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
-  const { bench, changes, files } = lists(page);
+  const { bench, changes, files } = await lists(page);
 
   // Both changes read from the Quest's folder, so both sit under test/docs/.
   await bench.getByRole("tab", { name: /^Changes/ }).click();
@@ -251,7 +236,7 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
     script("complete_task", { delivered: true, key: "drafted", summary: "Drafted." }),
   ]);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
-  const { bench, changes, files } = lists(page);
+  const { bench, changes, files } = await lists(page);
 
   // Both hobs changed the notes, and each change is listed with its hob.
   await bench.getByRole("tab", { name: /^Changes/ }).click();
@@ -318,7 +303,7 @@ test("[TC-UX-283] a member's History opens an archived Quest's room in its lead'
   );
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
-  await openRoom(page, TITLE);
+  await openQuest(page, TITLE);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const threadId = /threads\/([^?/]+)/.exec(page.url())?.[1] ?? "";
   // Aldric's turn on Quill's result has to end before the hub lets the thread be archived.
@@ -347,6 +332,6 @@ test("[TC-UX-283] a member's History opens an archived Quest's room in its lead'
   await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toHaveCount(0);
 
   // Closing the room reads the chat in the Archive.
-  await page.getByRole("button", { name: "Close room" }).click();
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(page).toHaveURL(new RegExp(`#/archive/chats/${aldric}/${threadId}`));
 });

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, ticket } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1268: the read-the-web mark shows on an open Workbench as the session reads the web.

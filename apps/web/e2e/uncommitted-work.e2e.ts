@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { laneHead, openRoom, taskSummary, ticket } from "./quest-room.ts";
+import { laneHead, openQuest, taskSummary, ticket } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -18,7 +18,7 @@ test("[TC-OR-288] a Task that completed with uncommitted changes shows them unde
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  await openRoom(page, "Make the shop badge");
+  await openQuest(page, "Make the shop badge");
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 15_000 });
   const open = (await taskSummary(page, "Make the shop badge", "Quill")).getByRole("region", { name: "Still open" });
   await expect(open).toContainText("Uncommitted changes");
@@ -42,7 +42,7 @@ test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Stil
   // Aldric brings nobody in, so his ticket opens a room with his lane alone.
   const questTicket = ticket(page, "Wrap up the spec");
   await expect(questTicket).toContainText("Finished in", { timeout: 15_000 });
-  await openRoom(page, "Wrap up the spec");
+  await openQuest(page, "Wrap up the spec");
   const open = (await taskSummary(page, "Wrap up the spec")).getByRole("region", { name: "Still open" });
   await expect(open).toContainText("Uncommitted changes");
   await expect(open).toContainText("Left 1 file uncommitted since the last commit: docs/SPEC.md in /fake/shop.");

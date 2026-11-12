@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Page } from "@playwright/test";
 import { expect, startHub, test } from "./hub.ts";
-import { openWorkbench, taskSummary, ticket } from "./quest-room.ts";
+import { openWorkbench, taskSummary, ticket } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);

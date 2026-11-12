@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expectAccessible } from "./accessibility.ts";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, openRoom } from "./quest-room.ts";
+import { lane, openQuest } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -32,7 +32,7 @@ const recordUncertainComment = (dataDir: string, agentId: string, taskId: string
 };
 
 // covers EX-003, EX-004, IN-007
-test("[TC-OR-1343-04] a Task's write whose answer was lost waits in the Quest room and the Inbox, and settles once from the lane", async ({
+test("[TC-OR-1343-04] a Task's write whose answer was lost waits in its quest and the Inbox, and settles once from the lane", async ({
   page,
 }) => {
   const { url, headers, dataDir, aldric } = await questHub();
@@ -41,7 +41,7 @@ test("[TC-OR-1343-04] a Task's write whose answer was lost waits in the Quest ro
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
   const title = "Plan the Black Friday campaign";
-  const room = await openRoom(page, title);
+  const room = await openQuest(page, title);
   await expect(lane(page, "Quill")).toContainText("Draft the landing copy");
 
   // Quill's Task posted a comment, and GitHub's answer was lost.
@@ -53,7 +53,9 @@ test("[TC-OR-1343-04] a Task's write whose answer was lost waits in the Quest ro
   recordUncertainComment(dataDir, draft.ownerId, draft.id);
   await page.reload();
 
-  // It waits in the Inbox, under the Quest, with the way to the Quest room.
+  // It waits in the Inbox, under the Quest, with the way to the quest.
+  await expect(room).toBeVisible();
+  await page.keyboard.press("Escape");
   const inbox = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox, / });
   await inbox.click();
   const entry = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Quill lost GitHub's answer/ });
@@ -63,16 +65,17 @@ test("[TC-OR-1343-04] a Task's write whose answer was lost waits in the Quest ro
   await expect(detail.getByRole("button", { name: "It went through" })).toBeEnabled();
   await expectAccessible(page, detail);
 
-  // In the Quest room it waits in Quill's lane, lit like a question, and settles from the keyboard.
-  await detail.getByRole("link", { name: "Open in the Quest room" }).click();
+  // In the quest it waits in Quill's work, lit like a question, and settles from the keyboard.
+  await detail.getByRole("link", { name: "Open in the quest" }).click();
   const card = lane(page, "Quill").getByRole("region", { name: "Quill lost GitHub's answer" });
   await expect(room).toBeVisible();
   await expect(card).toContainText("Look on GitHub to see whether it went through");
   await expectAccessible(page, card);
   await card.getByRole("button", { name: "It went through" }).focus();
   await page.keyboard.press("Enter");
+  // The toast sits outside the open sheet, which hides the rest of the page from assistive tech.
   await expect(
-    page.getByRole("region", { name: /^Notifications/ }).getByText("Settled: it went through."),
+    page.getByRole("region", { name: /^Notifications/, includeHidden: true }).getByText("Settled: it went through."),
   ).toBeVisible();
   await expect(card).toBeHidden();
 

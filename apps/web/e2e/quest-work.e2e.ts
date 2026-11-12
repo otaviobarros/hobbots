@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneTask } from "./quest-room.ts";
+import { laneTask } from "./quest-sheet.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -132,7 +132,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
   campaign(ids, thread.id);
   // Every link opens Aldric's thread, with the Quest room on the Task it names.
-  const questThread = (task: string) => new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?room=${task}$`);
+  const questThread = (task: string) => new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?quest=${task}$`);
   const drawer = (brief: string) => laneTask(page, brief);
 
   await page.goto(hub.url);
@@ -170,6 +170,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
     .click();
   await expect(page).toHaveURL(questThread("copy"));
   await expect(drawer("Brief for copy")).toBeVisible();
+  await page.keyboard.press("Escape");
 
   // Ada leads Pip's nested Quest, but it is followed in Aldric's thread, so the link opens his chat.
   await (await card("Pip"))
@@ -177,6 +178,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
     .click();
   await expect(page).toHaveURL(questThread("keywords"));
   await expect(drawer("Brief for keywords")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");
   await page.goto(hub.url);
   const keywords = quests.getByRole("link", { name: /Landing page keywords/ });
@@ -192,7 +194,9 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
     .getByRole("button", { name: /^Quill, / })
     .click();
   await page.getByRole("dialog", { name: "Quill" }).getByRole("link", { name: "Open Workbench" }).click();
-  await expect(page).toHaveURL(new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?room=copy&tab=changes$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?quest=copy&tab=changes&task=copy$`),
+  );
 });
 
 // covers UX-001, OR-001

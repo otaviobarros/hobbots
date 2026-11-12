@@ -211,6 +211,11 @@ const hub = () => {
       ),
     );
   const claimsOf = (taskId: TaskId) => run(Effect.flatMap(Effect.service(ClaimRegister), (r) => r.ofTask(taskId)));
+  /** The Heads-ups a camp shows: each open clash, by who holds each side and on what. */
+  const clashesIn = (threadId: string) =>
+    run(Effect.flatMap(Effect.service(ClaimRegister), (r) => r.clashesIn(ThreadId.make(threadId)))).then((clashes) =>
+      clashes.map((clash) => clash.sides.map((side) => [side.ownerId, side.claim.key, side.threadId])),
+    );
   /** Ends a Task that never started a turn: you cancelled it. */
   const end = (taskId: TaskId) =>
     run(
@@ -253,6 +258,7 @@ const hub = () => {
     seed,
     clashItems,
     claimsOf,
+    clashesIn,
     end,
     failAndRetry,
     taskOf,
@@ -325,6 +331,33 @@ describe("the claims register", () => {
       const again = await h.call(SAM, B, { key: "p-again", scope: "path", path: "packages/domain" });
       expect(again.message).toContain("already holds");
       expect(await h.clashItems()).toHaveLength(2);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers OR-004
+  it("[TC-OR-1390-03] shows a path clash in each camp it touches, once, until a Task that holds it ends", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      // Frodo's request never started a turn, so it can be cancelled below.
+      await h.request(FRODO, A, false);
+      await h.request(SAM, B);
+      await h.call(FRODO, A, { key: "p", scope: "path", path: "web/badge.png" });
+      expect(await h.clashesIn(`camp-${A}`)).toEqual([]);
+      await h.call(SAM, B, { key: "p", scope: "path", path: "web" });
+      const clash = [
+        [FRODO, "web/badge.png", `camp-${A}`],
+        [SAM, "web", `camp-${B}`],
+      ];
+      expect(await h.clashesIn(`camp-${A}`)).toEqual([clash]);
+      expect(await h.clashesIn(`camp-${B}`)).toEqual([clash]);
+      // A number is never a clash, and a camp with none of the Tasks shows nothing.
+      await h.call(FRODO, A, { key: "m", scope: "sequence", directory: MIGRATIONS });
+      expect(await h.clashesIn("camp-elsewhere")).toEqual([]);
+      await h.end(A);
+      expect(await h.clashesIn(`camp-${B}`)).toEqual([]);
     } finally {
       await h.dispose();
     }

@@ -1,5 +1,5 @@
 import { expect, test } from "./hub.ts";
-import { lane, laneMenu, laneTask, openRoom, taskSummary } from "./quest-room.ts";
+import { lane, laneMenu, laneTask, openQuest, taskSummary } from "./quest-sheet.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #892 in the browser: a planned step's turn runs outside any chat, so the summary in its lane
@@ -28,7 +28,7 @@ test("[TC-UX-165] a step's summary in its lane shows its tool calls live, a refu
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
 
-  await openRoom(page, "Tidy the notes");
+  await openQuest(page, "Tidy the notes");
   const sheet = laneTask(page, TITLE);
   await expect(sheet).toContainText("Running", { timeout: 30_000 });
   const happened = (await taskSummary(page, TITLE)).getByRole("region", { name: "What happened" });
