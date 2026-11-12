@@ -10,7 +10,7 @@ import {
   planCampSuggestion,
   ThreadLifecycle,
 } from "@hobbots/domain";
-import { DateTime, Effect, Schema } from "effect";
+import { Array as Arr, DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
 import { chapterRows } from "./chapters.ts";
 
@@ -164,12 +164,12 @@ export const raiseCampSuggestions = (
   first: number,
 ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
   Effect.gen(function* () {
-    const grown = new Set<ChapterId>();
-    for (const event of events) {
-      const chapterId = yield* grownChapter(sql, event);
-      if (chapterId !== null) grown.add(chapterId);
-    }
-    if (grown.size === 0) return [];
+    const grown = Arr.dedupe(
+      (yield* Effect.forEach(events, (event) => grownChapter(sql, event))).filter(
+        (chapterId): chapterId is ChapterId => chapterId !== null,
+      ),
+    );
+    if (grown.length === 0) return [];
     const at = DateTime.formatIso(yield* DateTime.now);
     const raised: Array<JournaledEvent> = [];
     for (const chapterId of grown) {
@@ -207,14 +207,14 @@ export const expireCampSuggestions = (
   first: number,
 ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
   Effect.gen(function* () {
-    const ended = new Map<CampSuggestionId, CampSuggestion>();
-    for (const event of events) {
-      for (const suggestion of yield* endedSuggestions(sql, event)) ended.set(suggestion.id, suggestion);
-    }
-    if (ended.size === 0) return [];
+    const ended = Arr.dedupeWith(
+      (yield* Effect.forEach(events, (event) => endedSuggestions(sql, event))).flat(),
+      (a, b) => a.id === b.id,
+    );
+    if (ended.length === 0) return [];
     const at = DateTime.formatIso(yield* DateTime.now);
     const expired: Array<JournaledEvent> = [];
-    for (const suggestion of ended.values()) {
+    for (const suggestion of ended) {
       const next = CampSuggestions.transition(suggestion, { _tag: "Expire", at });
       if (!(next instanceof CampSuggestion)) continue;
       const written = new CampSuggestion({ ...next, revision: first + expired.length });
