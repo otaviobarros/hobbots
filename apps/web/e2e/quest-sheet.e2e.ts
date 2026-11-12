@@ -136,3 +136,42 @@ test("[TC-UX-1390-15] a pinned quest whose chat could not be read says so, never
   await expect(thread).toContainText("Take gift cards at checkout, please");
   await expect(unread).toHaveCount(0);
 });
+
+// covers ADR 016, ADR 037 (quests in the camp)
+test("[TC-UX-1390-16] a quest message refused after its sheet closed comes back in the quest's box", async ({
+  page,
+}) => {
+  const { camp } = await giftCards(page);
+  const main = page.getByRole("main", { name: "Chat" });
+  const pill = main.getByRole("button", { name: /^1 quest.*Open the camp's quests$/ });
+  const openQuest = async () => {
+    await pill.click();
+    await page
+      .getByRole("dialog", { name: "Checkout" })
+      .getByRole("button", { name: /Shoppers can pay with a gift card at checkout/ })
+      .click();
+    return questSheet(page, TITLE).getByRole("textbox", { name: "Message Aldric about this quest" });
+  };
+  await expect(pill).toBeVisible({ timeout: 15_000 });
+
+  // The hub holds the send until the sheet has closed, then refuses it.
+  let refuse: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    refuse = resolve;
+  });
+  await page.route(new RegExp(`/api/threads/${camp.id}/messages$`), async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await held;
+    await route.fulfill({ status: 500, body: "" });
+  });
+  const composer = await openQuest();
+  await composer.fill("Keep the old card form");
+  await composer.press("Enter");
+  await expect(composer).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  refuse();
+
+  // Opened again, the box holds the message that did not go.
+  await expect(await openQuest()).toHaveValue("Keep the old card form", { timeout: 15_000 });
+});

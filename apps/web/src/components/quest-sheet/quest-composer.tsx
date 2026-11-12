@@ -31,7 +31,9 @@ export function QuestComposer({
     const content = sendable(text);
     if (content === "" || send.isPending) return;
     writeDraft(place, "");
-    send.mutate(content, { onError: () => restoreDraft(place, content) });
+    // The send's own promise puts the text back, so a refusal that comes after the sheet closed
+    // still restores it, as the chat's composer does.
+    void send.mutateAsync(content).catch(() => restoreDraft(place, content));
   };
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();

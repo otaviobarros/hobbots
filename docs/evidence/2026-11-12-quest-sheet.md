@@ -20,6 +20,7 @@
 | `[TC-UX-1390-12]` | `npx playwright test e2e/quest-sheet.e2e.ts`: the pill opens the camp's sheet, a quest row opens the quest in it with each hob's work, a message from its composer reads "Aldric got it", Show the work opens the Workbench and Back to the quest returns with the unsent text still in the box, and Back to the camp and Escape close it | ✅ |
 | `[TC-UX-1390-14]` | `npx vitest run src/api/clashes.test.ts` in `apps/web`: a claim event drops a first read of the clashes taken before it, so the new Heads-up shows | ✅ |
 | `[TC-UX-1390-15]` | `npx playwright test e2e/quest-sheet.e2e.ts`: a pinned quest whose chat cannot be read says so with Try again, never "Nothing said yet", and Try again shows the request | ✅ |
+| `[TC-UX-1390-16]` | `npx playwright test e2e/quest-sheet.e2e.ts`: a quest message the hub refuses after its sheet closed comes back in the quest's box when it opens again | ✅ |
 | `[TC-UX-1390-13]` | The same file: Quill and Ada both claiming `checkout/payments.ts` show "Heads-up: 2 tasks change the same files" in the camp, and it goes once Quill's Task is cancelled | ✅ |
 
 ## Gaps
