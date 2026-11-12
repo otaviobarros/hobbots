@@ -39,6 +39,7 @@ import {
   type TaskToolLimits,
 } from "./call-scope.ts";
 import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
+import type { Delivery } from "./delivery.ts";
 import { type DestinationDeps, missingDestinations, notThere } from "./destinations.ts";
 import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 
@@ -112,11 +113,14 @@ interface Deps {
   readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
   readonly missingAt: DestinationDeps["missingAt"];
   readonly approvedRemovals: DestinationDeps["approvedRemovals"];
-  /** Why the file artifacts a Task returns could not be opened once it completes, or null (see `delivery.ts`). */
+  /**
+   * Why the file artifacts a Task returns could not be opened once it completes, or null, and where
+   * each is kept (see `delivery.ts`).
+   */
   readonly delivered: (
     folders: ReadonlyArray<string>,
     artifacts: NonNullable<TaskToolInput<"complete_task">["artifacts"]>,
-  ) => Effect.Effect<string | null>;
+  ) => Effect.Effect<Delivery>;
   readonly folderChecks: FolderChecksShape;
   /** The caller's authority on a Task: its own, narrowed by every Delegation on the way down. */
   readonly authority: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
@@ -130,7 +134,8 @@ const isQuestTop = (scope: CallScope, task: Task) =>
 /**
  * Refuses a completion that would read done without the delivery: a Quest whose lead does not say
  * it delivered what the user asked for (#1181), a file no one could open afterwards (#1180), or a
- * Quest with nothing where the user asked for it (#1215).
+ * Quest with nothing where the user asked for it (#1215). Otherwise returns each artifact's value as
+ * its result keeps it: a file at its canonical place (#1434).
  */
 const deliveredOrRefused = (
   deps: Pick<Deps, "delivered" | "authority" | "missingAt" | "approvedRemovals" | "folderChecks" | "separator">,
@@ -143,13 +148,15 @@ const deliveredOrRefused = (
     if (questTop && input.delivered !== true) {
       return yield* refuse("not-delivered", notDelivered(task, input.delivered));
     }
-    const undelivered = yield* deps.delivered((yield* deps.authority(scope, task)).folders, input.artifacts ?? []);
-    if (undelivered !== null) {
-      return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${undelivered}`);
+    const delivery = yield* deps.delivered((yield* deps.authority(scope, task)).folders, input.artifacts ?? []);
+    if (delivery.refused !== null) {
+      return yield* refuse("artifact-unreachable", `Task ${task.id} is not complete yet. ${delivery.refused}`);
     }
-    if (!questTop) return;
-    const missing = yield* missingDestinations(deps, scope, task);
-    if (missing.length > 0) return yield* refuse("not-at-destination", notThere(task, missing));
+    if (questTop) {
+      const missing = yield* missingDestinations(deps, scope, task);
+      if (missing.length > 0) return yield* refuse("not-at-destination", notThere(task, missing));
+    }
+    return delivery.values;
   });
 
 /**
@@ -444,14 +451,18 @@ export const makePlanning = ({
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const questTop = isQuestTop(scope, task);
-      yield* deliveredOrRefused(
+      const values = yield* deliveredOrRefused(
         { delivered, authority, missingAt, approvedRemovals, folderChecks, separator },
         scope,
         task,
         questTop,
         input,
       );
-      const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
+      const artifacts = (input.artifacts ?? []).map((artifact, index) => ({
+        ...artifact,
+        value: values[index] ?? artifact.value,
+        id: ArtifactId.make(newId()),
+      }));
       // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
       const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);
       const left = yield* wrapUp(task, attempts, {

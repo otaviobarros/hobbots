@@ -1,9 +1,17 @@
-import { ActivityRepository, HobbotsRepository, type NewQuestion, TaskRepository, TaskTurns } from "@hobbots/agents";
+import {
+  ActivityRepository,
+  ClaimRegister,
+  HobbotsRepository,
+  type NewQuestion,
+  TaskRepository,
+  TaskTurns,
+} from "@hobbots/agents";
 import {
   type AgentId,
   ArtifactId,
   AttemptId,
   CheckpointId,
+  ClaimId,
   type Committed,
   cancelMoves,
   carriedFrom,
@@ -47,6 +55,8 @@ import { EventBus } from "./event-bus.ts";
  * uncommitted on purpose, as its hold on the top Task lets it (#665). Asking for a long brief plays
  * the Black Friday Quest with briefs of a paragraph that name a deep folder, as real ones do (#874).
  * Asking the lead to stop the quest while it plays has it stop the Quest at your request (#1346).
+ * Asking for gift cards has Quill and Ada both claim the checkout's payments file and stay at work,
+ * so the camp shows a Heads-up on the clash (#1390).
  * Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime turns any of them on.
  */
 
@@ -63,6 +73,7 @@ const SCRIPTS = {
   "shop-badge": /shop badge/i,
   "spec-wrap": /wrap up the spec/i,
   "long-brief": /long brief/i,
+  "gift-cards": /gift cards/i,
 } as const;
 type Script = keyof typeof SCRIPTS;
 
@@ -74,6 +85,7 @@ const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> 
   "spring-sale": { title: "Plan the spring sale", goal: "A spring sale: a banner, an email and window signs" },
   "shop-badge": { title: "Make the shop badge", goal: "A badge on the shop's page, in the agreed colour" },
   "spec-wrap": { title: "Wrap up the spec", goal: "The shop's spec, final and committed" },
+  "gift-cards": { title: "Take gift cards at checkout", goal: "Shoppers can pay with a gift card at checkout" },
   "long-brief": {
     title: `Run the Black Friday campaign end to end for the shop in ${LONG_FOLDER}, working only inside that folder: install nothing, use no network, start no web server and never push.`,
     goal: "A Black Friday campaign: landing copy and a launch email, live by Friday",
@@ -514,6 +526,34 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         null,
         `Left 1 file uncommitted since the last commit: web/badge.png in ${SHOP}.`,
       );
+      return;
+    }
+    // Gift cards stop with Quill and Ada both at work and both holding the checkout's payments
+    // file, so the camp shows the hub's Heads-up on the clash (#1390).
+    if (script === "gift-cards") {
+      const claims = yield* Effect.serviceOption(ClaimRegister);
+      const holding = (name: string, owner: AgentId, brief: string) =>
+        Effect.gen(function* () {
+          const task = yield* member(name, owner, brief, [], []);
+          if (Option.isNone(claims)) return;
+          yield* claims.value
+            .claim({
+              id: ClaimId.make(id(`claim-${name}`)),
+              scope: "path",
+              repository: SHOP,
+              directory: null,
+              key: "checkout/payments.ts",
+              onMain: [],
+              asked: null,
+              taskId: task.id,
+              actor: { kind: "hob", id: owner },
+              at: yield* iso,
+            })
+            .pipe(Effect.flatMap(announce));
+          yield* pause;
+        });
+      yield* holding("gift", cast.quill, "Take gift cards\nAccept gift cards in the checkout's payments.");
+      yield* holding("rounding", cast.ada, "Fix the rounding\nRound card payments to the cent at checkout.");
       return;
     }
     const copy = yield* member(

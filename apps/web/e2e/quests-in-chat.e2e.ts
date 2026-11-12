@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { cancelInLane, laneHead, laneTask, openRoom, questRoom, taskDetails, ticket } from "./quest-room.ts";
+import { cancelInLane, laneHead, laneTask, openQuest, questSheet, taskDetails, ticket } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -28,15 +28,15 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   // The ticket opens the room beside the chat, by keyboard too, and Close room closes it.
   await questTicket.focus();
   await page.keyboard.press("Enter");
-  const room = questRoom(page, "Plan the Black Friday campaign");
-  await expect(room.getByRole("heading", { name: "Plan the Black Friday campaign" })).toBeFocused();
+  const room = questSheet(page, "Plan the Black Friday campaign");
+  await expect(room.getByRole("heading", { name: "Plan the Black Friday campaign", level: 2 })).toBeFocused();
   await expect(laneHead(page, "Ada")).toContainText("Needs you");
   const drawer = await taskDetails(page, "Build the campaign");
   await expect(drawer).toContainText("Aldric gave it");
   await expect(drawer).toContainText("Keyword research done");
   await expect(drawer).toContainText("Doorbuster and early access lead what shoppers search for.");
   await expect(drawer).toContainText("Black Friday: 20% off everything, this weekend only.");
-  await room.getByRole("button", { name: "Close room" }).click();
+  await page.getByRole("button", { name: "Close the quest" }).click();
   await expect(room).toBeHidden();
 
   // Your answer goes back; the Quest finishes and Aldric wraps up in the chat.
@@ -56,7 +56,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(replies.nth(2)).toContainText("Quill wrote the copy and Ada scheduled the email");
 
   // Once it ends, the ticket still opens the room, and the lead's own Task shows its output.
-  await openRoom(page, "Plan the Black Friday campaign");
+  await openQuest(page, "Plan the Black Friday campaign");
   await expect(laneTask(page, "Plan the Black Friday campaign", "Aldric")).toContainText("Black Friday campaign ready");
 });
 
@@ -111,7 +111,7 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   const chat = page.url();
 
   // You cancel Ada's Task from her lane before answering her.
-  await openRoom(page, "Plan the Black Friday campaign");
+  await openQuest(page, "Plan the Black Friday campaign");
   const drawer = await taskDetails(page, "Build the campaign");
   const ada = await cancelInLane(page, "Ada");
   await expect(ada.getByRole("status").filter({ hasText: "Cancelled: the task confirmed it stopped." })).toBeVisible({
@@ -120,13 +120,20 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
 
   // Nobody is left to hear the answer: the question says so instead of asking, and so does the drawer.
   const withdrawn = "Withdrawn: the work it was about ended before anyone answered.";
-  const inChat = page.getByRole("main", { name: "Chat" }).getByRole("region", { name: "Ada asks you" });
+  const inChat = page
+    .getByRole("main", { name: "Chat", includeHidden: true })
+    .getByRole("region", { name: "Ada asks you", includeHidden: true });
   await expect(inChat).toContainText(withdrawn);
   await expect(answer).toHaveCount(0);
   await expect(drawer).toContainText("Withdrawn when this task ended.");
 
   // The question no longer holds Aldric's work open: he wraps up without Ada's part.
-  await expect(page.getByText("The Black Friday campaign is wrapped up without Ada's part")).toBeVisible({
+  // The quest's own thread in the sheet holds his reply too.
+  await expect(
+    page
+      .getByRole("region", { name: "Thread" })
+      .getByText("The Black Friday campaign is wrapped up without Ada's part"),
+  ).toBeVisible({
     timeout: 30_000,
   });
 

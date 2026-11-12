@@ -5,13 +5,14 @@ import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
 import { useSummariesByQuest } from "../../api/quest-summaries.ts";
-import { useQuestWork } from "../../api/quest-work.ts";
+import { useHobQuestWork, useQuestWork } from "../../api/quest-work.ts";
 import { type LedQuest, ledQuests } from "../../lib/led-quests.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
 import { useHobWaiting } from "../backpack/use-hob-waiting.ts";
 import { WaitingList } from "../backpack/waiting-list.tsx";
 import { useHobPermissions } from "../hob-profile/hob-permissions.tsx";
 import { QuestLink } from "../quest-work/quest-link.tsx";
+import { HobQuestWork } from "../quest-work/quest-work.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.aside;
@@ -20,13 +21,14 @@ const copy = messages.aside;
 const SHOWN = { quests: 3, backpack: 4, folders: 3 } as const;
 
 /**
- * The side column of a hob's page: the Quests it leads (those that need you first), its backpack,
- * the folders it works in and what it thinks with. Each long block shows a few, then Show more.
+ * The side column of a hob's page: the Quests it leads (those that need you first), those it works
+ * on as a party member, its backpack, the folders it works in and what it thinks with. Each long block shows a few, then Show more.
  */
 export function HobAside({ hob }: { hob: Agent }) {
   return (
     <aside aria-label={copy.label({ name: hob.name })} className="flex min-w-0 flex-col gap-3">
       <LedQuests hob={hob} />
+      <MemberQuests hob={hob} />
       <Backpack hob={hob} />
       <Setup hob={hob} />
     </aside>
@@ -101,6 +103,17 @@ function LedQuests({ hob }: { hob: Agent }) {
           {copy.quests.finished({ count: finished })}
         </span>
       )}
+    </Card>
+  );
+}
+
+/** The Quests other hobs lead that this hob works on, each with its Task's state, opening the Quest. */
+function MemberQuests({ hob }: { hob: Agent }) {
+  if (useHobQuestWork(hob.id).length === 0) return null;
+  return (
+    <Card label={copy.memberQuests}>
+      <Heading icon={<FlagIcon />} label={copy.memberQuests} />
+      <HobQuestWork hob={hob} />
     </Card>
   );
 }

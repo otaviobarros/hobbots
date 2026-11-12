@@ -32,7 +32,7 @@ const refusalReason = (reason: string): string =>
   Object.hasOwn(messages.refusal, reason) ? messages.refusal[reason as keyof typeof messages.refusal] : "";
 
 /**
- * The Quest room's lanes (ADR 027): one per hob on the Quest, built from the Task tree and the
+ * Each hob's work in a quest (ADR 027): one per hob on the Quest, built from the Task tree and the
  * Workbench records of its Attempts. Nothing here calls a model or reads what a hob wrote about its
  * own state, so a lane cannot show a step that did not happen (STD-UI-008).
  */
@@ -132,7 +132,7 @@ export interface Lane {
 }
 
 /** A lane, with the lanes of the party its hob leads when it leads a Quest of its own. */
-export interface LaneNode {
+interface LaneNode {
   readonly lane: Lane;
   readonly party: ReadonlyArray<LaneNode>;
 }
@@ -607,6 +607,3 @@ export const laneRoom = (
   const flatten = (each: LaneNode): ReadonlyArray<Lane> => [each.lane, ...each.party.flatMap(flatten)];
   return { lanes, order: lanes.flatMap(flatten) };
 };
-
-/** The element id of a hob's lane, which the lineup scrolls to. */
-export const laneDomId = (hobId: AgentId): string => `lane-${hobId}`;

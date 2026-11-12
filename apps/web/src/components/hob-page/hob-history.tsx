@@ -16,7 +16,7 @@ import { formatTime } from "../../lib/format.ts";
 import { ledQuests } from "../../lib/led-quests.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
 import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
-import { roomSearch } from "../quest-room/room-search.ts";
+import { questSearch } from "../quest-sheet/quest-search.ts";
 import { dayLabel, type HistoryMark, type HistoryRow, historyRow } from "./history-model.ts";
 import { HISTORY_FILTERS as FILTERS } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
@@ -259,7 +259,7 @@ function EventActions({ row }: { row: HistoryRow }) {
         <Link
           to="/hobs/$hobId/threads/$threadId"
           params={{ hobId: row.bench.hobId, threadId: row.bench.threadId }}
-          search={roomSearch(row.bench.taskId, { tab: "changes", attemptId: row.bench.attemptId })}
+          search={questSearch(row.bench.taskId, { tab: "changes", attemptId: row.bench.attemptId })}
           className={linkClass}
         >
           {copy.workbench}

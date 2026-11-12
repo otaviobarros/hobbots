@@ -20,6 +20,7 @@ import {
   RecordDecisionInput,
   type RegisteredArtifactId,
   recordDecisionJsonSchema,
+  type StoredVersion,
   stableJson,
   type ThreadId,
 } from "@hobbots/domain";
@@ -57,6 +58,12 @@ export interface DecisionRequest {
   /** What the request asked, as the record compares a retry with it. */
   readonly input: string;
   readonly at: string;
+}
+
+/** An artifact and its versions as the registry keeps them. */
+export interface StoredArtifact {
+  readonly artifact: Artifact;
+  readonly versions: ReadonlyArray<StoredVersion>;
 }
 
 /** A decision to cross out with nothing in its place. */
@@ -100,6 +107,14 @@ export class RecordRepository extends Context.Service<
     readonly listDecisions: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>>;
     /** The thread's artifacts, each once at its latest version, the most recently changed first. */
     readonly listArtifacts: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Artifact>>;
+    /**
+     * One of the thread's artifacts with its versions, oldest first, each with where its contents
+     * are (#1434); none when the thread has no such artifact.
+     */
+    readonly artifactVersions: (
+      threadId: ThreadId,
+      artifactId: RegisteredArtifactId,
+    ) => Effect.Effect<Option.Option<StoredArtifact>>;
     /**
      * Reviews or dismisses an artifact waiting for you, journaled as `ArtifactReviewSettled` with the
      * summaries of the Quests whose Tasks made it. One settled that way already is returned as it is,

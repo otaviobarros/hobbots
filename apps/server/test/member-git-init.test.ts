@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { Charms, type PromptRequest } from "@hobbots/agents";
-import { GIT_INIT_TOOL, GITHUB_PUSH_TOOL, type Task, type TaskTree } from "@hobbots/domain";
+import { type Charm, Charms, type PromptRequest } from "@hobbots/agents";
+import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
+import { type CharmCall, EMPTY_HOB_POLICY, GIT_INIT_TOOL, type Task, type TaskTree } from "@hobbots/domain";
 import { waitToFind } from "@hobbots/domain/testing";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import {
+  givePolicy,
   hub,
   memberTask,
   PIP,
@@ -120,42 +122,30 @@ describe("member and step sessions offer git_init", () => {
     ]);
   }, 30_000);
 
-  // covers PE-005, ADR 020
-  it("[TC-OR-497] a member is offered the GitHub Charm's reads but not its writes, which have no reply to be settled on", async () => {
-    const called: Array<string> = [];
-    const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object" }, label: name });
-    // The registry leaves a Charm's writes out of a turn that has no reply to settle them on.
-    const charms = Layer.succeed(
-      Charms,
-      Charms.of({
-        charms: [],
-        forTurn: (_turn, offer) =>
-          Effect.succeed([
-            {
-              owner: "the GitHub Charm",
-              tools: {
-                tools: offer?.writes === false ? [tool("github_item")] : [tool("github_item"), tool(GITHUB_PUSH_TOOL)],
-                call: (name) =>
-                  Effect.sync(() => {
-                    called.push(name);
-                    return { text: "Done.", refused: false };
-                  }),
-              },
-            },
-          ]),
-      }),
-    );
+  // covers PE-005, ADR 020, ADR 038
+  it("[TC-OR-497] a member is offered the writes of a Charm that offers them outside chats, and only the reads of one that does not", async () => {
+    const rows = new Map<string, CharmCall>();
+    // The Ledger Charm offers its writes outside chats, as the GitHub Charm does; the Shelf Charm does not.
+    const charms = Charms.layer([
+      fakeCharm({ id: "shelf", name: "Shelf" }),
+      Effect.map(
+        fakeCharm({ id: "ledger", name: "Ledger" }),
+        (ledger): Charm => ({ ...ledger, writesOutsideChats: true }),
+      ),
+    ]).pipe(Layer.provide(memoryCharmCalls(rows)));
     const { run, requests } = await startHub(await sharedDatabase(), [], charms);
+    await run(givePolicy({ ...EMPTY_HOB_POLICY, charms: { granted: ["shelf", "ledger"] } }));
     await run(
       send([
-        "Publish the app",
+        "Keep the books",
         hub("delegate_task", {
-          key: "push",
+          key: "books",
           hob: "Rook",
           brief: [
-            "Push the app",
-            hub(GITHUB_PUSH_TOOL, { key: "push-it", folder: project }),
-            hub("complete_task", { delivered: true, key: "push-done", summary: "Could not push" }),
+            "Write it down",
+            hub("shelf_write", { key: "shelf-1" }),
+            hub("ledger_write", { key: "ledger-1" }),
+            hub("complete_task", { delivered: true, key: "books-done", summary: "Written in the ledger" }),
           ].join("\n"),
           authority: OPENS,
         }),
@@ -165,14 +155,16 @@ describe("member and step sessions offer git_init", () => {
     const rook = taskOf(tree, ROOK);
 
     const offeredToRook = offered(await run(firstPrompt(requests, rook)));
-    expect(offeredToRook).toContain("github_item");
-    expect(offeredToRook).not.toContain(GITHUB_PUSH_TOOL);
-    // The lead's chat turn, whose reply a lost answer is settled on, still offers it.
-    expect(offered(requests[0] as PromptRequest)).toContain(GITHUB_PUSH_TOOL);
-    // Rook's push never reached the Charm, and its refusal is on Rook's Task.
-    expect(called).toEqual([]);
+    expect(offeredToRook).toEqual(expect.arrayContaining(["shelf_read", "ledger_read", "ledger_write"]));
+    expect(offeredToRook).not.toContain("shelf_write");
+    // The lead's chat turn, whose reply a lost answer is settled on, offers both writes.
+    expect(offered(requests[0] as PromptRequest)).toEqual(expect.arrayContaining(["shelf_write", "ledger_write"]));
+    // Rook's Ledger write ran once on its Task; its Shelf write never reached the Charm, and its refusal is on Rook's Task.
+    expect([...rows.values()].map((call) => [call.tool, call.scope, call.messageId])).toEqual([
+      ["ledger_write", `task:${rook.id}`, null],
+    ]);
     expect(tree.refusals).toEqual([
-      expect.objectContaining({ agentId: ROOK, taskId: rook.id, tool: GITHUB_PUSH_TOOL, reason: "unknown-tool" }),
+      expect.objectContaining({ agentId: ROOK, taskId: rook.id, tool: "shelf_write", reason: "unknown-tool" }),
     ]);
   }, 30_000);
 });

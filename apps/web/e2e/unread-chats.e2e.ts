@@ -58,7 +58,7 @@ test("[TC-UX-193] a reply that lands while you are elsewhere leaves a dot on the
   const chats = other.getByRole("main", { name: "Pip's page" }).getByRole("tabpanel", { name: /^Chats/ });
   await expect(chats).toContainText("Echo: Plan the launch");
   await expect(chats.getByRole("img", { name: "New messages" })).toBeVisible();
-  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Pip, / });
+  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Pip, / });
   await expect(tile).toHaveAccessibleName(/new messages$/);
 
   // Reading the chat here clears the dot here and on the other device.

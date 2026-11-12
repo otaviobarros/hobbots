@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -96,13 +96,11 @@ test("[TC-UX-141] every hob shows in the sidebar from any page, and the open hob
   const { url, ids } = await hubWithHobs();
   await page.goto(`${url}/#/usage`);
   const nav = sidebar(page);
-  await expect(nav.getByRole("button", { name: "Aldric, resting" })).toBeVisible();
-  await expect(nav.getByRole("button", { name: "Ada, resting" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Aldric, resting" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Ada, resting" })).toBeVisible();
 
   await nav.getByRole("button", { name: "Expand the sidebar" }).click();
-  await nav.getByRole("button", { name: "Aldric, resting" }).click();
-  await page.getByRole("dialog", { name: "Aldric" }).getByRole("link", { name: "Open page" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Aldric}$`));
+  await page.goto(`${url}/#/hobs/${ids.Aldric}`);
   const thread = nav.getByRole("link", { name: "Plan the spring launch" });
   await expect(thread).toBeVisible();
   await expect(nav.getByRole("link", { name: "Draft the release notes" })).toBeVisible();
@@ -130,33 +128,62 @@ test("[TC-UX-142] the Hobs label above the sidebar's hobs opens Your hobs", asyn
 });
 
 // covers UX-001
-test("[TC-UX-143] a hob's tile opens its card, whose name, Open page and Profile go to the right places", async ({
+test("[TC-UX-143] a hob's tile opens its chat, with no card in between, and lists its chat and camps", async ({
   page,
 }) => {
   const { url, ids } = await hubWithHobs();
   await page.goto(`${url}/#/usage`);
   const nav = sidebar(page);
-  const tile = nav.getByRole("button", { name: "Ada, resting" });
+  await nav.getByRole("button", { name: "Expand the sidebar" }).click();
 
-  await tile.click();
-  const card = page.getByRole("dialog", { name: "Ada" });
-  await expect(card).toContainText("Resting");
-  await expect(card.getByRole("region", { name: "Backpack" })).toContainText("Nothing to deal with right now.");
-  await page.keyboard.press("Escape");
-  await expect(card).toBeHidden();
-  await expect(tile).toBeFocused();
+  await nav.getByRole("link", { name: "Aldric, resting" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Aldric}/(chat|threads/[^/?]+)$`));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const list = nav.getByRole("list", { name: "Aldric's chat and camps" });
+  await expect(list.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(list.getByRole("link", { name: "Plan the spring launch" })).toBeVisible();
+  await expect(nav.getByRole("list", { name: "Ada's chat and camps" })).toHaveCount(0);
 
-  await tile.click();
-  await card.getByRole("link", { name: "Ada", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Ada}$`));
+  // Collapsed, the tile still goes straight to the chat.
+  await nav.getByRole("button", { name: "Collapse the sidebar" }).click();
+  await nav.getByRole("link", { name: "Ada, resting" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Ada}/(chat|threads/[^/?]+)$`));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
 
-  await tile.click();
-  await card.getByRole("link", { name: "Profile" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Ada}/profile$`));
+// covers UX-001
+test("[TC-UX-1431-01] the open hob lists five camps, then Show more, and always shows its open camp", async ({
+  page,
+}) => {
+  const { url, ids } = await hubWithHobs();
+  // Aldric has two camps already; five more make seven.
+  const titles = ["Camp three", "Camp four", "Camp five", "Camp six", "Camp seven"];
+  for (const title of titles) await campAt(hub as Hub, ids.Aldric ?? "", title);
+  await page.goto(`${url}/#/hobs/${ids.Aldric}`);
+  const nav = sidebar(page);
+  await nav.getByRole("button", { name: "Expand the sidebar" }).click();
+  const list = nav.getByRole("list", { name: "Aldric's chat and camps" });
+  const camps = list.getByRole("link").filter({ hasNotText: "Chat" });
 
-  await tile.click();
-  await card.getByRole("button", { name: "Close" }).click();
-  await expect(card).toBeHidden();
+  await expect(camps).toHaveCount(5);
+  const more = list.getByRole("button", { name: "Show 2 more" });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+
+  await more.click();
+  await expect(camps).toHaveCount(7);
+  await list.getByRole("button", { name: "Show fewer" }).click();
+  await expect(camps).toHaveCount(5);
+
+  // A hidden camp that is open shows in its place, and Show more counts one fewer.
+  const shown = await camps.allTextContents();
+  const target = ["Plan the spring launch", "Draft the release notes", ...titles].find(
+    (title) => !shown.some((text) => text.includes(title)),
+  ) as string;
+  await list.getByRole("button", { name: "Show 2 more" }).click();
+  await list.getByRole("link", { name: target }).click();
+  await list.getByRole("button", { name: "Show fewer" }).click();
+  await expect(list.getByRole("link", { name: target })).toHaveAttribute("aria-current", "page");
+  await expect(list.getByRole("button", { name: "Show 1 more" })).toBeVisible();
 });
 
 // covers UX-001
@@ -167,7 +194,7 @@ test("[TC-UX-161] with many hobs only the hob list scrolls: the sections and the
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(url);
   const nav = sidebar(page);
-  const last = nav.getByRole("button", { name: /^Hob 24, / });
+  const last = nav.getByRole("link", { name: /^Hob 24, / });
   await expect(last).toBeAttached();
 
   for (const control of [
@@ -195,7 +222,7 @@ test("[TC-UX-164] in the collapsed sidebar a hob's row is as wide as a section's
   await page.goto(url);
   const nav = sidebar(page);
   const section = await nav.getByRole("link", { name: "Home", exact: true }).boundingBox();
-  const row = nav.getByRole("button", { name: /^Ada, / });
+  const row = nav.getByRole("link", { name: /^Ada, / });
   const rowBox = await row.boundingBox();
   const tile = await row.locator(".size-hob-tile").boundingBox();
   if (!section || !rowBox || !tile) throw new Error("the sidebar rows did not render");

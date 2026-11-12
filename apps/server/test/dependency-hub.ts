@@ -21,8 +21,10 @@ import { LocalGitToolsLive } from "@hobbots/charms";
 import {
   Agent,
   AgentId,
-  EMPTY_HOB_POLICY,
+  type CharmOperation,
+  type HobPolicy,
   type Message,
+  type SafetyPreset,
   type Task,
   type TaskTree,
   Thread,
@@ -42,8 +44,10 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect";
+import { FAKE_HUB_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
+import type { HubCallRuntime, ScriptedHubCall } from "@hobbots/runtimes/testing";
+import { Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Scope, Stream } from "effect";
+import type { SqlClient } from "effect/sql";
 import { afterAll, afterEach } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
@@ -88,25 +92,33 @@ const hob = (id: AgentId, name: string) =>
     createdAt: now,
   });
 
-/** Every hob works in the project folder under the Balanced preset. */
-const ProjectTools = Layer.succeed(
-  HobTools,
-  HobTools.of({
-    access: (agent) =>
-      Effect.succeed({
-        policy: {
-          preset: "balanced",
-          sharedFolders: [project],
-          hob: EMPTY_HOB_POLICY,
-          dataFolder: join(temp, "data"),
-          restrictions: [],
-        },
-        folders: [project],
-        runtimeFolder: join(temp, "runtime", agent.id),
-        commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
-      }),
-  }),
-);
+/** What a test sets of the hub's policy: its safety preset, Balanced unless given, and the Charm operations it declares (ADR 031). */
+export interface HubPolicy {
+  readonly preset?: SafetyPreset;
+  readonly charmOperations?: ReadonlyArray<CharmOperation>;
+}
+
+/** Every hob works in the project folder under the hub's preset, with its own policy. */
+const ProjectTools = (policy: HubPolicy) =>
+  Layer.succeed(
+    HobTools,
+    HobTools.of({
+      access: (agent) =>
+        Effect.succeed({
+          policy: {
+            preset: policy.preset ?? "balanced",
+            sharedFolders: [project],
+            hob: agent.policy,
+            dataFolder: join(temp, "data"),
+            restrictions: [],
+            ...(policy.charmOperations === undefined ? {} : { charmOperations: policy.charmOperations }),
+          },
+          folders: [project],
+          runtimeFolder: join(temp, "runtime", agent.id),
+          commitsAs: { _tag: "UserConfig", config: { name: "Ada", email: "ada@example.com" } },
+        }),
+    }),
+  );
 
 /** The hub creates a repository for a hob, in its own data folder first, as the hub does (ADR 014). */
 const LocalGit = LocalGitToolsLive({ stagingFolder: join(temp, "data", "charms", "local-git") }).pipe(
@@ -126,6 +138,8 @@ interface Script {
   readonly reactions: Array<Reaction>;
   /** The hub has stopped, as a process killed mid-turn: its backpack never answers again. */
   stopped: boolean;
+  /** Runs the members' Task sessions instead of the fake runtime, such as an installed Claude Code or Codex. */
+  readonly members: HubCallRuntime | null;
 }
 
 const gateOf = (script: Script, name: string) => {
@@ -156,6 +170,19 @@ const reacted = (prompt: string, script: Script) => {
   return index === -1 ? prompt : [prompt, ...(script.reactions.splice(index, 1)[0]?.lines ?? [])].join("\n");
 };
 
+/** Whether a prompt starts or continues a member's Task session, as `promptsTo` reads it. */
+const toTask = (prompt: string) =>
+  /Task id: \S+\.$/.test(prompt) || /^You work on Task \S+ /.test(prompt.split("\n\n").at(-1) ?? "");
+
+/** The hub calls a prompt scripts, one `fake:hub <tool> <JSON input>` a line, for another runtime to make. */
+const hubCalls = (prompt: string): ReadonlyArray<ScriptedHubCall> =>
+  prompt.split("\n").flatMap((line) => {
+    const call = line.trim();
+    if (!call.startsWith(`${FAKE_HUB_DIRECTIVE} `)) return [];
+    const [tool = "", ...input] = call.slice(FAKE_HUB_DIRECTIVE.length + 1).split(" ");
+    return [{ tool, input: JSON.parse(input.join(" ")) as Record<string, unknown> }];
+  });
+
 const named = (lines: ReadonlyArray<string>, prefix: string) =>
   lines.find((line) => line.startsWith(`${prefix} `))?.slice(prefix.length + 1);
 
@@ -169,6 +196,9 @@ const scripted = (script: Script) =>
         sendPrompt: (sent) => {
           const request = answering({ ...sent, prompt: reacted(sent.prompt, script) }, script.answers);
           script.requests.push(request);
+          if (script.members !== null && toTask(request.prompt)) {
+            return script.members.events(request, hubCalls(request.prompt));
+          }
           const stream = fake.sendPrompt(request);
           const lines = request.prompt.split("\n").map((line) => line.trim());
           const started = named(lines, "fake:hold-started");
@@ -217,10 +247,10 @@ const party = Effect.gen(function* () {
 
 type Database = Layer.Layer<Layer.Success<typeof TestDatabase>>;
 
-/** Charms a test offers its hobs, beside the local Git tools; none by default. */
-type Charms = Layer.Layer<CharmRegistry> | typeof Layer.empty;
+/** Charms a test offers its hobs, beside the local Git tools, over the hub's database; none by default. */
+type Charms = Layer.Layer<CharmRegistry, never, SqlClient.SqlClient> | typeof Layer.empty;
 
-const makeHub = (database: Database, script: Script, charms: Charms) =>
+const makeHub = (database: Database, script: Script, charms: Charms, policy: HubPolicy) =>
   Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
@@ -243,7 +273,7 @@ const makeHub = (database: Database, script: Script, charms: Charms) =>
         EventJournal.layer,
         EventBus.layer,
         NodeFolderChecks,
-        ProjectTools,
+        ProjectTools(policy),
         LocalGit,
         charms,
         HobAdmission.layer,
@@ -276,6 +306,17 @@ afterEach(async () => {
   databaseScope = undefined;
 });
 
+/** Gives every hob of the party `policy`, as a new configuration version of each. */
+export const givePolicy = (policy: HobPolicy) =>
+  HobbotsRepository.use((repo) =>
+    Effect.forEach([ALDRIC, QUILL, ROOK, PIP], (id) =>
+      Effect.gen(function* () {
+        const agent = Option.getOrThrow(yield* repo.findAgent(id));
+        yield* repo.updateAgentConfig(new Agent({ ...agent, policy, configVersion: agent.configVersion + 1 }));
+      }),
+    ),
+  );
+
 /** One database that outlives the hubs started over it, with the party stored. */
 export const sharedDatabase = async (): Promise<Database> => {
   const scope = await Effect.runPromise(Scope.make());
@@ -285,11 +326,16 @@ export const sharedDatabase = async (): Promise<Database> => {
   return database;
 };
 
-/** Starts a hub over `database`, its hobs reacting as `reactions` say. */
+/**
+ * Starts a hub over `database`, its hobs reacting as `reactions` say, under `policy`. With
+ * `members`, the members' Task sessions run on that runtime, making the hub calls their prompts script.
+ */
 export const startHub = async (
   database: Database,
   reactions: ReadonlyArray<Reaction> = [],
   charms: Charms = Layer.empty,
+  policy: HubPolicy = {},
+  members: HubCallRuntime | null = null,
 ) => {
   const script: Script = {
     requests: [],
@@ -297,8 +343,9 @@ export const startHub = async (
     gates: new Map(),
     reactions: [...reactions],
     stopped: false,
+    members,
   };
-  const runtime = ManagedRuntime.make(makeHub(database, script, charms));
+  const runtime = ManagedRuntime.make(makeHub(database, script, charms, policy));
   open.push(runtime);
   scripts.push(script);
   await runtime.runPromise(Effect.void);

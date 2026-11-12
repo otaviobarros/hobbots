@@ -8,9 +8,11 @@ import {
   AttemptId,
   artifactSightings,
   ChapterId,
+  canonicalPath,
   FileChange,
   FileChangeId,
   fileArtifactKind,
+  fileLocator,
   hobActor,
   linkArtifactKind,
   Message,
@@ -18,6 +20,7 @@ import {
   placedFromTask,
   RegisteredArtifactId,
   registeredArtifact,
+  resolvedSighting,
   TaskId,
   ThreadId,
 } from "../src/index.ts";
@@ -134,14 +137,43 @@ describe("artifactSightings", () => {
     ]);
   });
 
-  it("drops every `/` at a path's end, and reads a path of many `/` in time", () => {
+  it("spells a path one way, and reads a path of many `/` in time", () => {
     const locatorOf = (path: string) =>
       artifactSightings([{ _tag: "TaskCompleted", task: undefined as never, artifacts: [ref("file", path)] }])[0]
         ?.locator;
     expect(locatorOf("/work/app///")).toBe("/work/app");
     expect(locatorOf("///")).toBe("/");
-    const many = `${"/".repeat(100_000)}x`;
-    expect(locatorOf(many)).toBe(many);
+    expect(locatorOf("/work//app/./docs/../social.md")).toBe("/work/app/social.md");
+    expect(locatorOf("/../social.md")).toBe("/social.md");
+    expect(locatorOf(`${"/".repeat(100_000)}x`)).toBe("/x");
+    expect(locatorOf(`/a${"/.".repeat(100_000)}`)).toBe("/a");
+  });
+
+  // #1434: a Task that returned `social.md` and an Attempt that wrote `<folder>/social.md` were two rows.
+  it("keeps a relative result to resolve against its Attempt's folder, where its file change is", () => {
+    const [result] = artifactSightings([
+      { _tag: "TaskCompleted", task: undefined as never, artifacts: [ref("file", "./docs/../social.md")] },
+    ]);
+    const [written] = artifactSightings([
+      {
+        _tag: "FileChangesRecorded",
+        attemptId: ATTEMPT,
+        taskId: TASK,
+        folder: "/work/app/",
+        changes: [change("social.md")],
+        removed: [],
+      },
+    ]);
+    expect(result).toMatchObject({ locator: "social.md", relativeTo: ATTEMPT, attemptId: ATTEMPT });
+    expect(written).toMatchObject({ locator: "/work/app/social.md", relativeTo: null, attemptId: ATTEMPT });
+    expect(result && resolvedSighting(result, "/work/app/")).toMatchObject({
+      locator: written?.locator,
+      relativeTo: null,
+    });
+    expect(fileLocator("../up.md", "/work/app")).toBe("/work/up.md");
+    expect(fileLocator("/elsewhere/x.md", "/work/app")).toBe("/elsewhere/x.md");
+    expect(canonicalPath("a/../../b")).toBe("../b");
+    expect(canonicalPath("./")).toBe(".");
   });
 
   it("reads an Attempt's settled changes that left a file, and nothing it deleted or has not settled", () => {
@@ -188,6 +220,8 @@ describe("registeredArtifact", () => {
     label,
     fallbackTitle: "launch.md",
     origin,
+    attemptId: origin.kind === "message" ? null : ATTEMPT,
+    relativeTo: null,
     from: { _tag: "Task", taskId: TASK },
   });
   const placed = (s: ArtifactSighting) => placedFromTask(s, { threadId: THREAD, chapterId: CHAPTER, ownerId: HOB });
@@ -198,6 +232,7 @@ describe("registeredArtifact", () => {
       existing: null,
       placed: placed(sighting({ kind: "attempt", id: "a1" })),
       seen: false,
+      sameAttempt: false,
       id,
       at,
     });
@@ -209,6 +244,7 @@ describe("registeredArtifact", () => {
       existing: null,
       placed: placed(sighting({ kind: "task-artifact", id: "r1" }, "Launch plan")),
       seen: false,
+      sameAttempt: false,
       id,
       at,
     }) as Artifact;
@@ -216,6 +252,7 @@ describe("registeredArtifact", () => {
       existing: first,
       placed: placed(sighting({ kind: "attempt", id: "a2" })),
       seen: false,
+      sameAttempt: false,
       id: RegisteredArtifactId.make("ignored"),
       at: "2026-11-12T01:00:00.000Z",
     });
@@ -229,11 +266,42 @@ describe("registeredArtifact", () => {
     });
   });
 
+  it("keeps one version for two records of one Attempt, taking the name a later one gives", () => {
+    const written = registeredArtifact({
+      existing: null,
+      placed: placed(sighting({ kind: "attempt", id: "a1" })),
+      seen: false,
+      sameAttempt: false,
+      id,
+      at,
+    }) as Artifact;
+    const returned = registeredArtifact({
+      existing: written,
+      placed: placed(sighting({ kind: "task-artifact", id: "r1" }, "Launch plan")),
+      seen: false,
+      sameAttempt: true,
+      id,
+      at: "2026-11-12T01:00:00.000Z",
+    });
+    expect(returned).toMatchObject({ latestVersion: 1, title: "Launch plan", updatedAt: at });
+    expect(
+      registeredArtifact({
+        existing: written,
+        placed: placed(sighting({ kind: "task-artifact", id: "r1" })),
+        seen: false,
+        sameAttempt: true,
+        id,
+        at,
+      }),
+    ).toBeNull();
+  });
+
   it("changes nothing for a record that saw it before", () => {
     const first = registeredArtifact({
       existing: null,
       placed: placed(sighting({ kind: "attempt", id: "a1" })),
       seen: false,
+      sameAttempt: false,
       id,
       at,
     }) as Artifact;
@@ -242,6 +310,7 @@ describe("registeredArtifact", () => {
         existing: first,
         placed: placed(sighting({ kind: "attempt", id: "a1" })),
         seen: true,
+        sameAttempt: false,
         id,
         at,
       }),

@@ -1,5 +1,10 @@
-import { DECISION_TEXT_MAX, type QuestState, type RegisteredArtifactKind } from "@hobbots/domain";
-import { formatCount, plural } from "../../lib/format.ts";
+import {
+  type ArtifactContentRefusal,
+  DECISION_TEXT_MAX,
+  type QuestState,
+  type RegisteredArtifactKind,
+} from "@hobbots/domain";
+import { formatCompact, formatCount, plural } from "../../lib/format.ts";
 import type { ArtifactFilter } from "./artifact-rows.ts";
 import type { DecisionProblem, RecordDecisionError } from "./decision-flow.ts";
 
@@ -25,8 +30,8 @@ export const messages = {
     artifacts: "Artifacts",
     mine: "Mine",
   },
-  /** A tab's count, beside its name. */
-  count: ({ count }: Counted) => formatCount(count),
+  /** A tab's count, beside its name, shortened once large ("1.2K") so the tabs keep fitting the sheet. */
+  count: ({ count }: Counted) => formatCompact(count),
   readFailed: "Couldn't read this. Hobbots may be reconnecting.",
   retry: "Read again",
   overview: {
@@ -100,7 +105,6 @@ export const messages = {
     } satisfies Record<ArtifactFilter, string>,
     filterLabel: "Show artifacts",
     empty: "Nothing made here yet.",
-    emptyFilter: "Nothing of this kind yet.",
     kind: {
       code: "Code",
       page: "Page",
@@ -116,13 +120,48 @@ export const messages = {
     openOf: ({ title }: { readonly title: string }) => `Open ${title}`,
     back: "Back to artifacts",
     where: "Where it is",
-    madeBy: "Made by",
     you: "You",
-    version: "Version",
-    changed: "Changed",
     openLink: "Open the link",
     jump: "Show where it was made",
     footnote: "One row per artifact at its latest version. Older versions live inside it.",
+    versions: "Versions",
+    versionChip: ({ version }: { readonly version: number }) => `v${formatCount(version)}`,
+    versionName: ({
+      version,
+      when,
+      latest,
+    }: {
+      readonly version: number;
+      readonly when: string;
+      readonly latest: boolean;
+    }) => (latest ? `v${formatCount(version)}, the latest, ${when}` : `v${formatCount(version)}, ${when}`),
+    showing: ({ version, total }: { readonly version: number; readonly total: number }) =>
+      `Version ${formatCount(version)} of ${formatCount(total)}`,
+    comparedWith: ({ version }: { readonly version: number }) => `Changes since version ${formatCount(version)}`,
+    fullView: "Full view",
+    fullViewOf: ({ title }: { readonly title: string }) => `Full view of ${title}`,
+    closeFull: "Close the full view",
+    preview: ({ title }: { readonly title: string }) => `A preview of ${title}`,
+    pageOf: ({ title }: { readonly title: string }) => `The page ${title}, without its scripts`,
+    imageOf: ({ title, version }: { readonly title: string; readonly version: number }) =>
+      `${title}, version ${formatCount(version)}`,
+    rendered: "Rendered",
+    source: "Source",
+    showAs: "Show as",
+    reading: "Reading it…",
+    readAgain: "Read again",
+    unread: "Couldn't read this version. Hobbots may be reconnecting.",
+    linkNote: "A link. It opens in your browser.",
+    cannotShow: "Hobbots can't show this kind of file here.",
+    unavailable: {
+      "not-kept": "Hobbots didn't keep this version. Only the latest one is read from the file now.",
+      "outside-folders": "This file is outside the hob's folders now, so Hobbots doesn't read it.",
+      secret: "Its name marks it as one that may hold secrets, so Hobbots doesn't show it.",
+      "too-large": "It's too large to show here.",
+      gone: "The file isn't there any more.",
+      "no-contents": "Hobbots can't show this kind of file here.",
+      "not-found": "This version isn't here any more.",
+    } satisfies Record<ArtifactContentRefusal | "not-found", string>,
     review: {
       label: "Review",
       toReview: "To review",

@@ -39,16 +39,33 @@ const instead = (folders: ReadonlyArray<string>) => {
 };
 
 /**
- * Reads, for a completion, the file artifacts no one could open afterwards. A hub that does not
- * read the hob's folders, as in tests of the tools alone, checks nothing.
+ * What a completion keeps: why its file artifacts could not be opened afterwards, or null, and each
+ * artifact's value as the Task's result stores it. A file is kept at its canonical place in the hob's
+ * folders, the folder and path joined, so every record of it names it one way (#1434): a Task that
+ * returned `social.md` and the Attempt that wrote it in its folder are one artifact.
+ */
+export interface Delivery {
+  readonly refused: string | null;
+  readonly values: ReadonlyArray<string>;
+}
+
+/** A canonical folder and a path inside it with `/`, as one absolute path. */
+const placedAt = (at: { readonly folder: string; readonly path: string }) =>
+  `${at.folder.endsWith("/") ? at.folder : `${at.folder}/`}${at.path}`;
+
+/**
+ * Reads, for a completion, the file artifacts no one could open afterwards, and where each one it
+ * keeps is. A hub that does not read the hob's folders, as in tests of the tools alone, checks
+ * nothing and keeps each value as given.
  */
 export const makeDeliveryCheck = Effect.gen(function* () {
   const files = yield* Effect.serviceOption(HobFiles);
-  return (folders: ReadonlyArray<string>, artifacts: ReadonlyArray<Returned>): Effect.Effect<string | null> =>
+  return (folders: ReadonlyArray<string>, artifacts: ReadonlyArray<Returned>): Effect.Effect<Delivery> =>
     Effect.gen(function* () {
-      if (Option.isNone(files)) return null;
+      const values = artifacts.map((artifact) => artifact.value);
+      if (Option.isNone(files)) return { refused: null, values };
       const problems: Array<string> = [];
-      for (const artifact of artifacts) {
+      for (const [index, artifact] of artifacts.entries()) {
         if (artifact.kind !== "file") continue;
         const placed = yield* files.value.place(folders, artifact.value);
         if (Option.isNone(placed)) {
@@ -57,8 +74,9 @@ export const makeDeliveryCheck = Effect.gen(function* () {
         }
         const found = yield* files.value.look(placed.value.folder, placed.value.path);
         if (Option.isNone(found)) problems.push(unreachable(artifact, "missing"));
+        values[index] = placedAt(placed.value);
       }
-      return problems.length === 0 ? null : `${problems.join(" ")} ${instead(folders)}`;
+      return { refused: problems.length === 0 ? null : `${problems.join(" ")} ${instead(folders)}`, values };
     });
 });
 
