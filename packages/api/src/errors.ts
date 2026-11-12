@@ -314,16 +314,19 @@ export class NoteRefused extends Schema.TaggedError<NoteRefused>()(
   { httpApiStatus: 409 },
 ) {}
 
-/** No Charm call shows as this reply step. */
+/**
+ * No Charm call shows as this reply step, or was sent so on this Task (ADR 038). `ref` is the step's
+ * id, or the call's sending.
+ */
 export class CharmCallNotFound extends Schema.TaggedError<CharmCallNotFound>()(
   "CharmCallNotFound",
-  { stepId: Schema.String },
+  { ref: Schema.String },
   { httpApiStatus: 404 },
 ) {}
 
-/** The Charm call is no longer uncertain, so there is nothing to settle (ADR 020). */
+/** The Charm call is no longer uncertain, so there is nothing to settle (ADR 020, ADR 038). */
 export class CharmCallSettled extends Schema.TaggedError<CharmCallSettled>()(
   "CharmCallSettled",
-  { stepId: Schema.String, state: CharmCallState },
+  { ref: Schema.String, state: CharmCallState },
   { httpApiStatus: 409 },
 ) {}
