@@ -66,7 +66,7 @@ const escalatedToYou = async (page: Page) => {
   await summon(current, "Rook", 4821);
 
   // Rook asks Frodo, and Frodo passes the question up to you in the turn it starts.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

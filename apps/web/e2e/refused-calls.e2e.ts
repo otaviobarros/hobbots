@@ -9,7 +9,7 @@ test("[TC-OR-306] a Task tool call the hub refused shows as a failed step in the
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // Aldric starts the Task, then tries to hand part of it to a hob that does not exist.
   await composer.fill(

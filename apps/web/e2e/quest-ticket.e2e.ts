@@ -25,7 +25,7 @@ test("[TC-UX-220] a Quest's ticket stays one line under the request and follows 
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
@@ -63,7 +63,7 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -132,7 +132,7 @@ test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing fro
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -171,7 +171,7 @@ test("[TC-UX-224] a finished Quest's ticket and finish banner show one duration,
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // The reply streams its words after complete_task, so the lead's turn ends seconds after the Quest.
   await composer.fill(
@@ -213,7 +213,7 @@ test("[TC-UX-223] at 1024 wide, beside the room, a party of five's ticket keeps 
 }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   const { url, aldric } = await questHub({ nested: true });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

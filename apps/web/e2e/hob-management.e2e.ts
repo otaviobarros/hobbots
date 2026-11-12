@@ -51,7 +51,7 @@ test("[TC-UX-412-01] once you allow a summon in the chat, each hob it made opens
   const bram = await api("POST", "/agents", hobPayload("Bram", 4121));
   await api("PATCH", `/agents/${bram.id}/permissions`, { charms: { granted: ["summoning"] } });
 
-  await page.goto(`${url}/#/hobs/${bram.id}/new`);
+  await page.goto(`${url}/#/hobs/${bram.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Bram/ });
   const call = {
     key: "hire-pair",

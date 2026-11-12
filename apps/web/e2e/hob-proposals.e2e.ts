@@ -60,7 +60,7 @@ test("[TC-UX-409-01] a summon card in the chat and the Inbox: Deny one row, Edit
   page,
 }) => {
   const { url, bram } = await managerHub();
-  await page.goto(`${url}/#/hobs/${bram.id}/new`);
+  await page.goto(`${url}/#/hobs/${bram.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Bram/ });
   await composer.fill(summon("hire-trio", ["Flo", "Gus", "Hedda"]));
   await composer.press("Enter");

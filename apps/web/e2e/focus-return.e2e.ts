@@ -52,7 +52,7 @@ test("[TC-UX-160] the room opened from the ticket by keyboard takes focus, and C
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

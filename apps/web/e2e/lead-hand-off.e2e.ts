@@ -71,7 +71,7 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
   await hobNamed(current, "Quill", 4821);
   await hobNamed(current, "Rook", 5732);
 
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // Aldric delegates Rook's Task only on Quill's result, so core.py exists when Rook asks; on the
   // question, Aldric's next turn hands it off and answers.

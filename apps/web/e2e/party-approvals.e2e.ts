@@ -67,7 +67,7 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
   await hobNamed(current, "Quill", 4821);
 
   // Aldric brings in Quill, whose Task pushes, which Balanced asks you about.
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -138,7 +138,7 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
   await hobNamed(current, "Nettle", 4821);
 
   // Aldric brings in Nettle, whose Task deletes a file, which Balanced asks you about.
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

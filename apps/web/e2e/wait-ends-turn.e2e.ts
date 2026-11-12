@@ -79,7 +79,7 @@ test("[TC-OR-242] the quest sheet shows the lead Running while the turn that wai
   await summon(current, "Quill", 4821);
 
   // Frodo brings in Quill, waits for her, checks the wait again, and goes on writing his reply.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

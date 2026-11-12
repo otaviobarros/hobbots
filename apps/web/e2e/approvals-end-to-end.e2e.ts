@@ -80,7 +80,7 @@ const pipsChat = async (page: Page) => {
     effort: "medium",
     instructions: "",
   });
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   return current;
 };
 

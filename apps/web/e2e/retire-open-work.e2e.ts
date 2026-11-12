@@ -74,7 +74,7 @@ test("[TC-AG-1248] Retire lists a hob's open work, hands its Task to another hob
   await hobNamed(current, "Pip", 6643);
 
   // Aldric brings in Quill, whose push waits for you, and Rook, whose Task waits on Quill's.
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

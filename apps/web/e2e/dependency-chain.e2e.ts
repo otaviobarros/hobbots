@@ -72,7 +72,7 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
   // the continuation that brings the last result; until then wrapping up is refused.
   const wrap = (key: string) =>
     script("complete_task", { delivered: true, key, summary: "The app is built and reviewed." });
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

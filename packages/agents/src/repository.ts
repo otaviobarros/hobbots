@@ -5,6 +5,7 @@ import type {
   AgentId,
   AgentStatus,
   CarriedOver,
+  CarriedOverEntry,
   ChangeActor,
   ChatWork,
   Committed,
@@ -138,5 +139,10 @@ export class HobbotsRepository extends Context.Service<
      * thread's turns carry. The context pack names it (#1380).
      */
     readonly listOpenWork: (threadId: ThreadId) => Effect.Effect<ChatWork>;
+    /**
+     * What Start fresh would carry out of the thread if it ran now, in the order it would record
+     * them, read with the same rule; it changes nothing.
+     */
+    readonly carryOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOverEntry>>;
   }
 >()("@hobbots/agents/HobbotsRepository") {}

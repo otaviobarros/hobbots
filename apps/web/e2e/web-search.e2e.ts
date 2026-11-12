@@ -37,7 +37,7 @@ test("[TC-UX-1271-01] a reply that searched and read pages shows its steps, its 
   scan,
 }) => {
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, [
     "How big can a launch email be?",
     "fake:search gmail size limit",
@@ -95,7 +95,7 @@ test("[TC-UX-1271-02] a page on the local network and an address Aldric wrote as
   scan,
 }) => {
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     ["Where are the launch images kept?", fetchPage("http://nas.hobbots.test/docs/shares")].join("\n"),
@@ -136,7 +136,7 @@ test("[TC-UX-1271-03] Permissions, Charms, Settings › Web and Usage show the w
 }) => {
   test.setTimeout(180_000);
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     ["Read the NAS docs", "fake:search gmail size limit", fetchPage("http://nas.hobbots.test/docs/shares")].join("\n"),
@@ -375,7 +375,7 @@ test("[TC-UX-1272-01] under Careful, Aldric searches, asks once for the new site
 }) => {
   const { url, aldric, api } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
   await api("PATCH", "/setup", { safetyPreset: "careful" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

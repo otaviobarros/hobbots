@@ -9,7 +9,7 @@ const TITLE = "Plan the Black Friday campaign";
 
 /** Asks Aldric for a scripted request on a fresh page and opens the room on it. */
 const startRoom = async (page: Page, url: string, aldric: string, ask: string, title: string) => {
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(ask);
   await composer.press("Enter");

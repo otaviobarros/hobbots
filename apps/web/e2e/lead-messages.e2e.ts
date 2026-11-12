@@ -70,7 +70,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
 
   // Pip can't commit until git init runs, and ends his turn blocked. His next turn is the one
   // Frodo's message starts.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [
@@ -138,7 +138,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await summon(current, "Pip", 4821);
 
   // Pip's push asks you first, under Balanced, so his turn waits on your decision.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

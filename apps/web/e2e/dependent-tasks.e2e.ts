@@ -68,7 +68,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
   await hobNamed(current, "Rook", 5732);
 
   // Aldric brings in Quill, whose push waits for you, and Rook, whose Task depends on Quill's.
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

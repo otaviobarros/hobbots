@@ -133,7 +133,7 @@ test("[TC-CH-130] a reply's headings, lists, tables and code show formatted whil
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, FORMATTED);
 
   const reply = await replyRow(current, page);
@@ -155,7 +155,7 @@ test("[TC-CH-130] a reply's headings, lists, tables and code show formatted whil
 // covers CH-004
 test("[TC-CH-181] HTML in a reply shows as text and never runs", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(
     page,
     'Look: <b>bold</b>\n\n<script>window.hobbotsRan = true</script>\n\n<img src="x" onerror="window.hobbotsRan = true">',
@@ -175,7 +175,7 @@ test("[TC-CH-181] HTML in a reply shows as text and never runs", async ({ page }
 // covers CH-004
 test("[TC-CH-182] a reply's links show where they go and its images load only when asked", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(
     page,
     [

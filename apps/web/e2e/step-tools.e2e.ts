@@ -15,7 +15,7 @@ test("[TC-UX-165] a step's summary in its lane shows its tool calls live, a refu
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // The step edits the notes, tries a write it may not make, then starts a job that keeps running.
   const brief = [

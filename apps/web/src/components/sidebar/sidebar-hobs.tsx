@@ -1,4 +1,4 @@
-import type { Agent, AgentId } from "@hobbots/domain";
+import type { Agent } from "@hobbots/domain";
 import { Popover, PopoverTrigger } from "@hobbots/ui/components/popover";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -12,11 +12,9 @@ import { useLeadsNeedingYou } from "../inbox/use-waiting-count.ts";
 import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
+import { SidebarCamps } from "./sidebar-camps.tsx";
 import { sidebarDivider, sidebarIcon, sidebarItem } from "./sidebar-classes.ts";
 import { SidebarTip } from "./sidebar-item.tsx";
-
-/** How many of the open hob's threads show under its name. */
-const RECENT_THREADS = 5;
 
 const MARK: Partial<Record<SidebarState, string>> = { "needs-you": "bg-lantern", working: "bg-mint" };
 
@@ -27,8 +25,8 @@ const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.e
  * Every hob, each with a still state mark: lantern when it needs you, mint while it works, and a
  * lantern dot at the top when it wrote in a chat you have not read (ADR 027). Only the lead whose
  * chat something waits in is marked as needing you, since you talk only to the lead. A hob's tile
- * opens its card. The hob whose page or chat is open lists its recent threads under its name
- * while the sidebar is expanded. Only the list scrolls: its heading and "Summon a hob" stay put.
+ * opens its card. The hob whose page, chat or camp is open lists its chat, then its camps,
+ * under its name while the sidebar is expanded (ADR 037). Only the list scrolls: its heading and "Summon a hob" stay put.
  */
 export function SidebarHobs({ expanded }: { expanded: boolean }) {
   const agents = useQuery(agentsQuery);
@@ -138,36 +136,8 @@ function SidebarHob({
         </SidebarTip>
         <HobCard hob={hob} state={full} threads={threads.data ?? []} />
       </Popover>
-      {showThreads && <RecentThreads hobId={hob.id} pathname={pathname} />}
+      {showThreads && <SidebarCamps hob={hob} pathname={pathname} />}
     </div>
-  );
-}
-
-function RecentThreads({ hobId, pathname }: { hobId: AgentId; pathname: string }) {
-  const threads = useQuery(threadsQuery(hobId));
-  return (
-    <>
-      {threads.data?.slice(0, RECENT_THREADS).map((thread) => {
-        const current = pathname === `/hobs/${hobId}/threads/${thread.id}`;
-        return (
-          <Link
-            key={thread.id}
-            to="/hobs/$hobId/threads/$threadId"
-            params={{ hobId, threadId: thread.id }}
-            aria-current={current ? "page" : undefined}
-            // The link keeps the chat's title as its name, so the dot is told as its description.
-            aria-description={thread.unread ? copy.unreadThread : undefined}
-            className={cn(
-              sidebarItem,
-              "animate-hb-in ps-14 pe-2 text-text-secondary hover:text-text-strong aria-[current=page]:text-text-strong",
-            )}
-          >
-            <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-            {thread.unread && <span aria-hidden className="size-2 flex-none rounded-dot bg-lantern" />}
-          </Link>
-        );
-      })}
-    </>
   );
 }
 

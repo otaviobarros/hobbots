@@ -86,7 +86,7 @@ const editHob = async (page: Page) => {
 test("[TC-AG-070] editing instructions in the profile changes the next reply", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
 
   await editHob(page);
@@ -131,7 +131,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
 }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
 
   await editHob(page);
@@ -216,7 +216,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
 }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   // The hob's card, opened from its tile in the sidebar, shows its role.
   const cardRole = async (role: string) => {
     await page
@@ -254,7 +254,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await cardRole("QA engineer");
   await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
-  await page.getByRole("link", { name: "New chat with Pip" }).click();
+  await page.getByRole("link", { name: "Your chat with Pip" }).click();
   await editHob(page);
 
   // A title in the user's own words keeps the QA sigil, hat and tool.
@@ -268,7 +268,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob's card, page 
 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await cardRole("Bug hunter");
-  await page.getByRole("link", { name: "New chat with Pip" }).click();
+  await page.getByRole("link", { name: "Your chat with Pip" }).click();
   const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(
     current,
     "GET",

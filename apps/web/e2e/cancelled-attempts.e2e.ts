@@ -69,7 +69,7 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in their lan
 
   // Frodo runs a long job as a step of his Task and brings in Pip for another; both keep running.
   const LONG = "fake:tool Bash sleep 600";
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

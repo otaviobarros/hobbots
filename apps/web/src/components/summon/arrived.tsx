@@ -72,7 +72,7 @@ function Arrived({ hob, skillsNotGiven }: { hob: Agent; skillsNotGiven: boolean 
             {startersFor(hob.role).map((question) => (
               <li key={question} className="border-line not-first:border-t">
                 <Link
-                  to="/hobs/$hobId/new"
+                  to="/hobs/$hobId/chat"
                   params={{ hobId: hob.id }}
                   onClick={() => writeDraft(place, question)}
                   className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover focus-ring focus-inset"
@@ -90,7 +90,7 @@ function Arrived({ hob, skillsNotGiven }: { hob: Agent; skillsNotGiven: boolean 
 
         <div className="flex max-w-full flex-wrap justify-center gap-2 pt-2">
           <Button asChild className="max-w-[320px]">
-            <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }}>
+            <Link to="/hobs/$hobId/chat" params={{ hobId: hob.id }}>
               <span className="truncate">{copy.chat({ name })}</span>
             </Link>
           </Button>

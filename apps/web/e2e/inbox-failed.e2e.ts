@@ -9,7 +9,7 @@ test("[TC-IN-544] a member's failed Task waits in the Inbox and on the lead's ti
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a spring sale for the shop");
   await composer.press("Enter");

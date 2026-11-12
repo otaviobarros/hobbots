@@ -7,7 +7,7 @@ test.afterEach(stopQuestHub);
 // covers OR-001, OR-004, CH-005, UX-001, UX-002
 test("[TC-OR-013] the Black Friday Quest can be followed end to end from the chat with its lead", async ({ page }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
@@ -65,7 +65,7 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
@@ -101,7 +101,7 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

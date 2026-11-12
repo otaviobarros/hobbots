@@ -126,7 +126,7 @@ function ProfileWaiting({ hobId }: { hobId: AgentId }) {
           </span>
           <span className="flex flex-none items-center gap-2">
             <Button asChild>
-              <Link to="/hobs/$hobId/new" params={{ hobId }}>
+              <Link to="/hobs/$hobId/chat" params={{ hobId }}>
                 {messages.profile.openChat}
               </Link>
             </Button>
@@ -294,7 +294,7 @@ function ProfileHero({
       </span>
       <span className="flex flex-none items-center gap-2">
         <Button asChild>
-          <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }}>
+          <Link to="/hobs/$hobId/chat" params={{ hobId: hob.id }}>
             {messages.profile.openChat}
           </Link>
         </Button>
