@@ -1,10 +1,11 @@
-import { type DecisionRequest, HobbotsRepository, RecordRepository } from "@hobbots/agents";
+import { ChapterRepository, type DecisionRequest, HobbotsRepository, RecordRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  ChapterId,
   DECISION_TEXT_MAX,
   DecisionId,
   DecisionStates,
@@ -23,7 +24,13 @@ import {
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, migrations, RecordRepositoryLive } from "../src/index.ts";
+import {
+  ChapterRepositoryLive,
+  EventJournal,
+  HobbotsRepositoryLive,
+  migrations,
+  RecordRepositoryLive,
+} from "../src/index.ts";
 import { makeJournaledChange } from "../src/journal.ts";
 import recordsMigration from "../src/migrations/0100_records.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
@@ -67,12 +74,16 @@ const message = (id: string, role: Message["role"], fields: Partial<Message> = {
     ...fields,
   });
 
-const layer = Layer.mergeAll(HobbotsRepositoryLive, RecordRepositoryLive, EventJournal.layer).pipe(
-  Layer.provideMerge(TestDatabase),
-);
+const layer = Layer.mergeAll(
+  HobbotsRepositoryLive,
+  RecordRepositoryLive,
+  ChapterRepositoryLive,
+  EventJournal.layer,
+).pipe(Layer.provideMerge(TestDatabase));
 
-const run = <A, E>(effect: Effect.Effect<A, E, HobbotsRepository | RecordRepository | SqlClient.SqlClient>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.scoped) as Effect.Effect<A, E>);
+const run = <A, E>(
+  effect: Effect.Effect<A, E, HobbotsRepository | RecordRepository | ChapterRepository | SqlClient.SqlClient>,
+) => Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.scoped) as Effect.Effect<A, E>);
 
 /** A hob, its camp, a message of yours and the hob's reply, stored as the hub stores them. */
 const seed = Effect.gen(function* () {
@@ -209,6 +220,92 @@ describe("decisions", () => {
     expect(result.again.entries).toEqual([]);
     expect(result.missing).toMatchObject(Exit.fail({ _tag: "DecisionRefused", reason: "not-found" }));
     expect(result.closed).toMatchObject(Exit.fail({ _tag: "DecisionRefused", reason: "thread-closed" }));
+  });
+
+  // covers CH-001, ADR 037 (Records), STD-ARCH-014
+  it("[TC-CH-1383-09] takes the same key in another thread as a new request, recording a decision there too", async () => {
+    const other = ThreadId.make("t2");
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* HobbotsRepository;
+        const records = yield* RecordRepository;
+        yield* repo.upsertThread(
+          new Thread({ id: other, agentId: ADA, title: "Other", createdAt: NOW, updatedAt: NOW }),
+        );
+        yield* repo.upsertMessage(message("ask-2", "user", { threadId: other }));
+        const yours = { sourceMessageId: null, actor: OWNER_ACTOR, key: "app:same" };
+        const here = yield* records.recordDecision(request(yours));
+        const there = yield* records.recordDecision(request({ ...yours, id: DecisionId.make("d2"), threadId: other }));
+        return { here, there, inOther: yield* records.listDecisions(other) };
+      }),
+    );
+    expect(result.here.value.recorded).toMatchObject({ id: "d1", threadId: THREAD });
+    expect(result.there.value.recorded).toMatchObject({ id: "d2", threadId: other });
+    expect(result.there.entries.map((entry) => entry.type)).toEqual(["DecisionRecorded"]);
+    expect(result.inOther.map((decision) => decision.id)).toEqual(["d2"]);
+  });
+
+  // covers ADR 037 (Chapters, Records), STD-ARCH-019
+  it("[TC-CH-1383-10] moves a chapter's decisions and artifacts with its messages when it is split or merged", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { reply } = yield* seed;
+        const repo = yield* HobbotsRepository;
+        const records = yield* RecordRepository;
+        const chapters = yield* ChapterRepository;
+        const first = reply.chapterId as ChapterId;
+        const [c2, c3] = [ChapterId.make("c2"), ChapterId.make("c3")];
+        yield* chapters.startChapter(THREAD, { id: c2, title: "Emails", at: NOW });
+        yield* repo.upsertMessage(message("ask-2", "user"));
+        const later = (yield* repo.upsertMessage(message("reply-2", "assistant", { status: "streaming" }))).value;
+        yield* records.recordDecision(request({ id: DecisionId.make("d-hob"), sourceMessageId: later.id }));
+        yield* records.recordDecision(
+          request({ id: DecisionId.make("d-app"), sourceMessageId: null, actor: OWNER_ACTOR, key: "app:d" }),
+        );
+        yield* repo.upsertMessage(
+          new Message({
+            ...later,
+            status: "complete",
+            steps: [
+              {
+                id: "s1",
+                kind: "tool",
+                label: "Writing launch.md",
+                state: "done",
+                call: { tool: "Write", operation: "edit-files", targets: ["/work/app/launch.md"] },
+              },
+            ],
+          }),
+        );
+        const where = Effect.gen(function* () {
+          const decisions = yield* records.listDecisions(THREAD);
+          const artifacts = yield* records.listArtifacts(THREAD);
+          return [
+            ...decisions.map((decision) => [decision.id, decision.chapterId]),
+            ...artifacts.map((artifact) => [artifact.locator, artifact.chapterId]),
+          ];
+        });
+        const before = yield* where;
+        yield* chapters.splitChapter(THREAD, { id: c3, messageId: later.id, title: "Reply" });
+        const split = yield* where;
+        yield* chapters.mergeChapters(THREAD, c3);
+        const mergedBack = yield* where;
+        yield* chapters.mergeChapters(THREAD, c2);
+        return { first, before, split, mergedBack, merged: yield* where };
+      }),
+    );
+    const placed = (hob: string, app: string, artifact: string) => [
+      ["d-app", app],
+      ["d-hob", hob],
+      ["/work/app/launch.md", artifact],
+    ];
+    expect(result.before).toEqual(placed("c2", "c2", "c2"));
+    // A split takes the records of the replies it moves, and leaves the rest.
+    expect(result.split).toEqual(placed("c3", "c2", "c3"));
+    // A merge takes all of the absorbed chapter's records, which no longer blocks it.
+    expect(result.mergedBack).toEqual(placed("c2", "c2", "c2"));
+    expect(result.merged).toEqual(placed(result.first, result.first, result.first));
   });
 });
 

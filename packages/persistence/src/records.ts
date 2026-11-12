@@ -118,7 +118,8 @@ export const RecordRepositoryLive = Layer.effect(
       change<DecisionPlan, DecisionRefused | ThreadNotFound>((first) =>
         Effect.gen(function* () {
           const open = yield* threadOpen(request.threadId);
-          const key = digestOf("key", request.key);
+          // A key is the thread's own: the same key in another thread is another request.
+          const key = digestOf("key", `${request.threadId}\0${request.key}`);
           const input = digestOf("input", request.input);
           const [earlier] = yield* sql<DecisionRow>`SELECT * FROM decisions WHERE request_key = ${key}`;
           if (earlier !== undefined) return yield* recordedBefore(earlier, input);
