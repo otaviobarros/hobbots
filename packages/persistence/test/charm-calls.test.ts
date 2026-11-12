@@ -1,15 +1,15 @@
 import { CharmCallService, CharmCalls, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
-import { Agent, AgentId, CharmCall, MessageId, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { Agent, AgentId, CharmCall, MessageId, TaskId, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
+import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations, TaskRepositoryLive } from "../src/index.ts";
 import charmCallValues from "../src/migrations/0075_charm_call_values.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const TestLayer = CharmCallService.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, EventJournal.layer)),
+  Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, TaskRepositoryLive, EventJournal.layer)),
   Layer.provideMerge(TestDatabase),
 );
 const run = <A, E>(effect: Effect.Effect<A, E, HobbotsRepository | CharmCalls | CharmCallService>) =>
@@ -174,13 +174,14 @@ describe("Charm call records", () => {
         yield* seed;
         const calls = yield* CharmCalls;
         const service = yield* CharmCallService;
-        const step = (stepId: string) => [ThreadId.make("t1"), MessageId.make("m1"), stepId] as const;
+        const step = (stepId: string) =>
+          ({ _tag: "Step", threadId: ThreadId.make("t1"), messageId: MessageId.make("m1"), stepId }) as const;
         yield* calls.begin(call("k1"));
-        const sending = yield* service.settle(...step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
+        const sending = yield* service.settle(step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
         yield* calls.settle(call("k1"), "uncertain", "Unclear.", later);
-        const settled = yield* service.settle(...step("toolu_1"), "not-sent").pipe(Effect.provide(user));
-        const again = yield* service.settle(...step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
-        const missing = yield* service.settle(...step("toolu_9"), "applied").pipe(Effect.flip, Effect.provide(user));
+        const settled = yield* service.settle(step("toolu_1"), "not-sent").pipe(Effect.provide(user));
+        const again = yield* service.settle(step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
+        const missing = yield* service.settle(step("toolu_9"), "applied").pipe(Effect.flip, Effect.provide(user));
         // Not sent frees the key: the same call may be made again.
         const retried = yield* calls.begin(call("k1"));
         return { sending, settled, again, missing, retried, listed: yield* service.listForThread(ThreadId.make("t1")) };
@@ -192,6 +193,70 @@ describe("Charm call records", () => {
     expect(result.missing._tag).toBe("CharmCallNotFound");
     expect(result.retried._tag).toBe("Started");
     expect(result.listed.map((c) => c.key)).toEqual(["k1"]);
+  });
+
+  // covers EX-003, PE-006, ADR 038
+  it("[TC-PE-1343-02] lists the uncertain calls Tasks' sessions made, and settles one from its Task once, racing a read-back", async () => {
+    const user = Layer.succeed(UserSession, {
+      deviceId: WINDOW_DEVICE_ID,
+      name: "This computer's Hobbots window",
+      kind: "window",
+      whileApproved: (write) => write,
+    });
+    const onTask = (key: string, overrides: Partial<CharmCall> = {}) =>
+      call(key, { scope: "task:t1", threadId: null, messageId: null, site: `site ${key}`, ...overrides });
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const calls = yield* CharmCalls;
+        const service = yield* CharmCallService;
+        const task = (attempt: string) => ({ _tag: "Task", taskId: TaskId.make("t1"), attempt }) as const;
+        // A chat's call, even one that moved to the Task its reply started, shows on its step instead.
+        yield* calls.begin(call("chat", { scope: "task:t1", site: "site chat" }));
+        yield* calls.settle(call("chat"), "uncertain", "Unclear.", later);
+        yield* calls.begin(onTask("sending"));
+        for (const key of ["k1", "k2"]) {
+          yield* calls.begin(onTask(key));
+          yield* calls.settle(onTask(key), "uncertain", "Unclear.", later);
+        }
+        const waiting = yield* calls.uncertainOnTasks;
+        const found = yield* calls.findSending("task:t1", "k1-1");
+        const elsewhere = yield* calls.findSending("task:t2", "k1-1");
+        // The user and a read-back race to settle k1: only one lands.
+        const raced = yield* Effect.all(
+          [
+            service.settle(task("k1-1"), "not-sent").pipe(Effect.provide(user), Effect.result),
+            calls.settle(onTask("k1"), "applied", "GitHub shows it.", later),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const k1 = yield* calls.findSending("task:t1", "k1-1");
+        const settled = yield* service.settle(task("k2-1"), "applied").pipe(Effect.provide(user));
+        const again = yield* service.settle(task("k2-1"), "not-sent").pipe(Effect.flip, Effect.provide(user));
+        const sending = yield* service.settle(task("sending-1"), "applied").pipe(Effect.flip, Effect.provide(user));
+        const missing = yield* service.settle(task("k9-1"), "applied").pipe(Effect.flip, Effect.provide(user));
+        // A Task that is not on the hub has nothing to place its calls under.
+        const listed = yield* service.waitingOnTasks;
+        return { waiting, found, elsewhere, raced, k1, settled, again, sending, missing, listed };
+      }),
+    );
+    expect(result.waiting.map((c) => c.key)).toEqual(["k1", "k2"]);
+    expect(Option.getOrThrow(result.found)).toMatchObject({ key: "k1", state: "uncertain" });
+    expect(Option.isNone(result.elsewhere)).toBe(true);
+    const [byUser, byReadBack] = result.raced;
+    const userWon = byUser._tag === "Success";
+    expect(Option.isSome(byReadBack)).toBe(!userWon);
+    if (byUser._tag === "Failure")
+      expect(byUser.failure).toMatchObject({ _tag: "CharmCallSettled", ref: "k1-1", state: "applied" });
+    expect(Option.getOrThrow(result.k1).state).toBe(userWon ? "not-sent" : "applied");
+    expect(result.settled).toMatchObject({
+      state: "applied",
+      result: expect.stringContaining("settled this call as applied"),
+    });
+    expect(result.again).toMatchObject({ _tag: "CharmCallSettled", ref: "k2-1", state: "applied" });
+    expect(result.sending).toMatchObject({ _tag: "CharmCallSettled", state: "sending" });
+    expect(result.missing).toMatchObject({ _tag: "CharmCallNotFound", ref: "k9-1" });
+    expect(result.listed).toEqual([]);
   });
 
   // covers DP-003, ADR 031

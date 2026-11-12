@@ -1,14 +1,19 @@
+import type { WaitingCharmCall } from "@hobbots/api";
 import type { AgentId, Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef } from "react";
+import { useWaitingCharmCalls } from "../../api/charm-calls.ts";
 import { blockerError } from "../blockers/blocker-choices.tsx";
+import { lostWhat, SettleTaskCall } from "../charm-calls/settle-task-call.tsx";
+import { laneTargets } from "../lanes/lane-focus.ts";
+import { messages as appCopy } from "../messages.ts";
 import { WAITS } from "../move-on/places.ts";
 import { controlError } from "../quest/control-room.ts";
 import { messages as questCopy } from "../quest/messages.ts";
 import { ConfirmCancel, Outcome, Refusal, taskLine } from "../quest/room-controls.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
-import { type LaneFailure, laneFailures, laneQuestions } from "./lane-actions-model.ts";
+import { type LaneFailure, laneCharmCalls, laneFailures, laneQuestions } from "./lane-actions-model.ts";
 import { LaneAsk } from "./lane-ask.tsx";
 import { messages } from "./messages.ts";
 import type { LaneActions } from "./use-lane-actions.ts";
@@ -17,7 +22,8 @@ const room = questCopy.room;
 
 /**
  * What waits on you in a hob's lane (ADR 027), at the end of its body: a question for you lit in
- * lantern, a failed Task in rose with Retry and Reassign…, the question a cancel asks first, and
+ * lantern, a write whose answer was lost to settle (ADR 038), a failed Task in rose with Retry and
+ * Reassign…, the question a cancel asks first, and
  * what each control came to as the hub recorded it, or why it refused.
  */
 export function LaneCards({
@@ -39,10 +45,14 @@ export function LaneCards({
 }) {
   const questions = laneQuestions(tree, tasks);
   const failures = laneFailures(tree, tasks);
+  const uncertain = laneCharmCalls(useWaitingCharmCalls(), tasks);
   return (
     <div className="flex flex-col gap-2 empty:hidden">
       {questions.map(({ question }) => (
         <LaneAsk key={question.id} question={question} hobs={hobs} />
+      ))}
+      {uncertain.map((waiting) => (
+        <LaneSettle key={`${waiting.task.id}:${waiting.call.attempt}`} waiting={waiting} hobs={hobs} />
       ))}
       {failures.map((failure) => (
         <FailCard
@@ -61,6 +71,28 @@ export function LaneCards({
           <TaskOutcome key={task.id} tree={tree} task={task} hobs={hobs} actions={actions} />
         ))}
     </div>
+  );
+}
+
+/**
+ * A write the hob's Task session made whose answer is still lost after the last read-back (ADR 038),
+ * lit in lantern like a question: what it was, and the two ways to settle it once you have looked.
+ */
+function LaneSettle({ waiting, hobs }: { waiting: WaitingCharmCall; hobs: HobLookup }) {
+  const title = appCopy.charmCall.lost({ name: hobs(waiting.call.agentId).name, charm: waiting.call.charm });
+  return (
+    <section
+      {...WAITS}
+      aria-label={title}
+      className="flex flex-col gap-2 rounded-control border-(length:--edge) border-solid border-lantern bg-[color-mix(in_srgb,var(--color-lantern)_12%,var(--color-card))] p-2.5"
+    >
+      <span className="text-meta font-bold text-lantern">
+        <span aria-hidden>{messages.asksMark} </span>
+        {title}
+      </span>
+      <p className="m-0 text-ui whitespace-pre-wrap text-text-strong [overflow-wrap:anywhere]">{lostWhat(waiting)}</p>
+      <SettleTaskCall waiting={waiting} targets={laneTargets} />
+    </section>
   );
 }
 

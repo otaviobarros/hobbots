@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { SETTINGS_SECTIONS } from "../src/components/settings/sections.ts";
 import type { SetAside } from "./accessibility.ts";
 import { expect, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, ticket } from "./quest-sheet.ts";
 import type { WindowWatch } from "./window-still.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 

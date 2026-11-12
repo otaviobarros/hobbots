@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { lane, laneHead, openRoom } from "./quest-room.ts";
+import { lane, laneHead, openQuest } from "./quest-sheet.ts";
 
 // Issue #572 in the browser: a lead that waits on a member's Task shows Running in the quest sheet
 // while its turn still runs, and Waiting once the turn has ended. The hub's side is tested in
@@ -97,14 +97,16 @@ test("[TC-OR-242] the quest sheet shows the lead Running while the turn that wai
 
   // Both waits are made while his turn still runs: his Task shows Running, not Waiting.
   await expect(page.getByRole("list", { name: "Reply steps" }).getByText("Waiting on Tasks")).toHaveCount(2);
-  await openRoom(page, "Ship the backend");
+  await openQuest(page, "Ship the backend");
   const lead = laneHead(page, "Frodo");
   await expect(lead).toContainText("Running");
-  await expect(stop).toBeVisible();
   await expect(lane(page, "Frodo")).not.toContainText("Waits on");
+  await page.keyboard.press("Escape");
+  await expect(stop).toBeVisible();
 
   // His turn ends, and only now his Task waits, on Quill's one Task.
   await expect(stop).toBeHidden({ timeout: 30_000 });
+  await openQuest(page, "Ship the backend");
   await expect(lead).toContainText("Lead");
   await expect(lead).toContainText("Waiting");
   await expect(lane(page, "Frodo")).toContainText("Waits on Quill");

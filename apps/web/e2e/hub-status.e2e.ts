@@ -1,7 +1,7 @@
 import type { Browser, Page } from "@playwright/test";
 import { admit, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { ticket } from "./quest-room.ts";
+import { ticket } from "./quest-sheet.ts";
 
 // Two devices following the same hub show the status it publishes (ADR 037), never one they work
 // out themselves: a hob's presence in the sidebar, a thread's run in the chat header, and a Quest's

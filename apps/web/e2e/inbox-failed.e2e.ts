@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { laneTask } from "./quest-room.ts";
+import { laneTask } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -59,6 +59,6 @@ test("[TC-IN-544] a member's failed Task waits in the Inbox and on the lead's ti
   const email = page.getByRole("article", { name: "Failed task from Ada: Schedule the sale email" });
   await expect(email.getByRole("button", { name: "Retry" })).toBeEnabled();
   await email.getByRole("link", { name: "Open the task" }).click();
-  await expect(page).toHaveURL(new RegExp(`/hobs/${aldric}/threads/[^?]+\\?room=`));
+  await expect(page).toHaveURL(new RegExp(`/hobs/${aldric}/threads/[^?]+\\?quest=`));
   await expect(laneTask(page, "Schedule the sale email", "Ada")).toContainText("Failed");
 });

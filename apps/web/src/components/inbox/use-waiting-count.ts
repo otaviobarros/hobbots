@@ -2,6 +2,7 @@ import type { AgentId, ApprovalRequest } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockers } from "../../api/blockers.ts";
+import { useWaitingCharmCalls } from "../../api/charm-calls.ts";
 import { useFailedTasks } from "../../api/failed-tasks.ts";
 import { useWaitingHobProposals } from "../../api/hob-proposals.ts";
 import { useHubQuestions } from "../../api/hub-questions.ts";
@@ -15,7 +16,7 @@ import { pendingCount } from "./inbox-items.ts";
 /**
  * How many things wait for the user, kept live by the journal: pending requests, questions no lead
  * could answer (ADR 018), questions the hub itself asks (#976), stuck work (IN-007), party members'
- * failed Tasks (ADR 027), devices asking to pair (ADR 021), hobs asking to share what they
+ * failed Tasks (ADR 027), writes whose answer was lost (ADR 038), devices asking to pair (ADR 021), hobs asking to share what they
  * learned (ADR 028), skills hobs drafted (ADR 029) and what managers propose for hobs (ADR 034).
  * 0 until the Inbox is read.
  */
@@ -25,6 +26,7 @@ export const useWaitingCount = (): number =>
   useHubQuestions().length +
   useBlockers().length +
   useFailedTasks().length +
+  useWaitingCharmCalls().length +
   usePromptedDevices().length +
   useWaitingShares().length +
   useWaitingProposals().length +

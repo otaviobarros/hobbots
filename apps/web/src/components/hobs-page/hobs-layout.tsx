@@ -6,10 +6,10 @@ import { threadsQuery } from "../../api/queries.ts";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
 import { usePins } from "../quest/use-work.ts";
-import { ChatColumn, FoldButton } from "../quest-room/chat-column.tsx";
-import { QuestRoom } from "../quest-room/quest-room.tsx";
-import type { RoomView } from "../quest-room/room-search.ts";
-import { useChatFold, useRoomWidth } from "../quest-room/use-chat-fold.ts";
+import { ChatColumn, FoldButton } from "../quest-sheet/chat-column.tsx";
+import type { QuestView } from "../quest-sheet/quest-search.ts";
+import { QuestWorkbench } from "../quest-sheet/quest-workbench.tsx";
+import { useChatFold, useRoomWidth } from "../quest-sheet/use-chat-fold.ts";
 
 interface WorkspaceProps {
   hobId: AgentId;
@@ -17,14 +17,15 @@ interface WorkspaceProps {
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
-  /** The Quest room to open beside the chat (ADR 027). */
-  room?: RoomView | undefined;
+  /** The quest the address opens: in the chat's sheet, or its Workbench beside the chat (ADR 037). */
+  quest?: QuestView | undefined;
   /** What sits at the end, such as a hob page's side column. */
   aside?: ReactNode | null;
 }
 
 /**
- * The chat workspace, where the Quest room opens beside the chat. The middle is the thread's chat
+ * The chat workspace, where a quest's Workbench opens beside the chat; the quest itself opens in the
+ * chat's sheet, which the chat's header holds. The middle is the thread's chat
  * unless the route fills it with `main`, such as the hob's archived threads. Threads are archived
  * from their menus or with ⌃⌘A, with Undo in a toast that the app shell holds, so it stays when
  * archiving the last chat opens the hob's fresh page.
@@ -34,21 +35,21 @@ export function HobsLayout({
   threadId,
   focusMessageId,
   main = (props) => <ThreadMain {...props} />,
-  room,
+  quest,
   aside,
 }: WorkspaceProps) {
-  // Pinned Quests show in every thread's header and open in its room.
+  // Pinned Quests show in every thread's header and open in its sheet.
   const pins = usePins();
   useThreadKeys(hobId, threadId);
   const width = useRoomWidth();
   const fold = useChatFold(width);
-  const open = threadId !== undefined && room !== undefined;
+  const open = threadId !== undefined && quest?.tab !== undefined;
 
   return (
     <div className="flex min-w-0 flex-1">
-      {/* The chat reads data-room to give up its minimum width in the room's column. */}
+      {/* The chat reads data-room to give up its minimum width in the column beside the Workbench. */}
       <div className="group/room relative flex min-w-0 flex-1" data-room={open ? "open" : undefined}>
-        {open && <QuestRoom hobId={hobId} threadId={threadId} view={room} pins={pins} width={width} />}
+        {open && <QuestWorkbench hobId={hobId} threadId={threadId} view={quest} pins={pins} />}
         <ChatColumn
           hobId={hobId}
           threadId={threadId}
@@ -63,12 +64,12 @@ export function HobsLayout({
             focusMessageId,
             pins,
             headerEnd: open ? <FoldButton onFold={() => fold.setFolded(true)} /> : undefined,
-            // Folded away beside the room, the chat is out of view and reads nothing (ADR 027).
+            // Folded away beside the Workbench, the chat is out of view and reads nothing (ADR 027).
             inView: !(open && fold.folded),
             room: open,
           })}
         </ChatColumn>
-        {/* With the chat folded away, a toast shows over the room, such as after you answer in a lane. */}
+        {/* With the chat folded away, a toast shows over the Workbench. */}
         {open && fold.folded && (
           <div className="absolute inset-x-0 bottom-6 z-10 mx-auto w-full max-w-[520px] empty:hidden">
             <ArchiveToastViewport />
