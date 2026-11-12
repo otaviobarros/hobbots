@@ -67,7 +67,7 @@ const expectReplies = (page: Page, expected: ReadonlyArray<string>) =>
 test("[TC-CH-011] messages sent during a reply queue and run in order, also after a restart", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
 
   await type(page, LONG);
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
@@ -89,7 +89,7 @@ test("[TC-CH-011] messages sent during a reply queue and run in order, also afte
 test("[TC-CH-012] a queued message can be removed, and Send now stops the reply and runs it next", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
 
   await type(page, LONG);
   // The first message opens its thread; text typed before the thread is open stays on the fresh page.
@@ -111,7 +111,7 @@ test("[TC-CH-012] a queued message can be removed, and Send now stops the reply 
 test("[TC-CH-014] messages sent to a paused hob queue and run once it wakes", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
   await type(page, "two");
   await expectReplies(page, ["Echo: two"]);
 

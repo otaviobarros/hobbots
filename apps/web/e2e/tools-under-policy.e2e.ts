@@ -69,7 +69,7 @@ test("[TC-PE-083] under Balanced Pip edits and runs tests without a card, and a 
   page,
 }) => {
   const { current, pip } = await pipInShared();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(
     [
@@ -93,7 +93,7 @@ test("[TC-PE-083] under Balanced Pip edits and runs tests without a card, and a 
 
 /** Sends `lines` to Pip on a fresh page and waits for its reply's steps. */
 const askPip = async (page: Page, current: Hub, pipId: string, lines: ReadonlyArray<string>) => {
-  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(lines.join("\n"));
   await composer.press("Enter");

@@ -10,7 +10,7 @@ const TITLE = "Plan the Black Friday campaign";
 
 /** Starts the Black Friday Quest from Aldric's fresh page and waits for its ticket. */
 const startQuest = async (page: Page, url: string, aldric: string) => {
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

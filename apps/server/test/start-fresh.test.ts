@@ -225,6 +225,31 @@ describe("Start fresh", () => {
     expect(turn?.briefing).toContain("Still to deal with: failure about Brief for pass");
   });
 
+  // covers CH-009 (#1378: the Start fresh sheet lists what comes along before you choose it)
+  it("[TC-CH-1378-01] lists what Start fresh would carry over, as it then carries it, and changes nothing", async () => {
+    const { run } = setUp();
+    const result = await run(
+      Effect.gen(function* () {
+        const lifecycle = yield* HobLifecycle;
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        yield* lifecycle.pause(FRODO);
+        yield* failedStep;
+        const before = yield* repo.carryOver(SHIRE);
+        const again = yield* repo.carryOver(SHIRE);
+        const started = yield* chat.startFresh(SHIRE, FRESH);
+        return { before, again, started, old: yield* repo.carryOver(SHIRE), fresh: yield* repo.carryOver(FRESH) };
+      }),
+    );
+    const listed = result.started.carried.map(({ ref, label }) => ({ ref, label }));
+    expect(result.before).toEqual(listed);
+    expect(result.before.map((item) => item.label)).toEqual(["Brief for quest", "failure about Brief for pass"]);
+    // Reading it twice changes nothing; once carried, the work is in the new chat and the old one owes none.
+    expect(result.again).toEqual(result.before);
+    expect(result.old).toEqual([]);
+    expect(result.fresh).toEqual(listed);
+  });
+
   // covers CH-009
   it("[TC-CH-1376-06] refuses a camp, a chat no longer open, a reused key, and a chat whose reply is running", async () => {
     const { run } = setUp();

@@ -48,7 +48,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
     "src/app.ts": 'export const greet = () => "hi";\nexport const count = 1;\n',
     "old.txt": "Nobody reads this.\n",
   });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // In one turn Aldric edits the notes with a file tool, and a command rewrites the code, adds a
   // file and deletes another, as a formatter or a script would.
   await playTurn(page, [
@@ -143,7 +143,7 @@ test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the
   page,
 }) => {
   const { url, aldric } = await aldricHub({ "notes.md": "# Notes\n" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // Aldric starts the Task in one turn; in the next he writes the notes and then runs a long
   // command, so the turn stays open while the Task's Attempt runs.
   await playTurn(page, ["Draft the notes", script("start_quest", { key: "quest", goal: "Draft the notes" })]);
@@ -179,7 +179,7 @@ test("[TC-UX-037] an image the Task deleted shows its earlier version, and one p
     // Past the 10 MiB kept for an image.
     "poster.png": new Uint8Array(11 * 1024 * 1024),
   });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await playTurn(page, [
     "Clear out the images",
     run("npm run clean", { "logo.png": null, "poster.png": null }),
@@ -205,7 +205,7 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
   page,
 }) => {
   const started = await aldricHub({ "notes.md": "# Notes\n" });
-  await page.goto(`${started.url}/#/hobs/${started.aldric}/new`);
+  await page.goto(`${started.url}/#/hobs/${started.aldric}/chat`);
   await playTurn(page, [
     "Tidy the notes",
     'fake:write notes.md "# Notes\\n\\nTidied.\\n"',
@@ -244,7 +244,7 @@ test("[TC-UX-148] in the room at 1024, with the chat column beside it, Changes a
   // At 1024 the chat column beside the room leaves the docked Workbench under 720px.
   await page.setViewportSize({ width: 1024, height: 800 });
   const { url, aldric } = await aldricHub({ "a.txt": "one\n", "b.txt": "two\n" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await playTurn(page, [
     "Touch two files",
     run("npm run touch", { "a.txt": "one!\n", "b.txt": "two!\n", "c.txt": "three\n" }),

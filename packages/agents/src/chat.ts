@@ -22,6 +22,7 @@ import {
   MessageId,
   MessageTransitions,
   openThreadTask,
+  type PackReport,
   type SkillMention,
   type SkillTrial,
   type StartedFresh,
@@ -35,6 +36,7 @@ import {
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { type CampRequest, makeCampCommands } from "./camp-commands.ts";
+import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -49,6 +51,7 @@ import { brainFor, makeThreadRunner } from "./thread-runner.ts";
 import { HobTools } from "./tools.ts";
 import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
+import { makePackSources, PackReports } from "./turn-pack.ts";
 
 /** How much of a cut-off reply the runtime is shown when asked to continue it. */
 const CONTINUE_CONTEXT = 4_000;
@@ -190,6 +193,13 @@ export class ChatService extends Context.Service<
       threadId: ThreadId,
       key: ThreadId,
     ) => Effect.Effect<StartedFresh, ThreadNotFound | StartFreshRefused | ThreadKeyReused>;
+    /**
+     * The context pack the thread's next new session would start from, and the report of the pack
+     * its last such turn read, if the hub kept one (ADR 037, #1380). The dev-only endpoint shows both.
+     */
+    readonly contextPack: (
+      threadId: ThreadId,
+    ) => Effect.Effect<{ readonly next: Pack; readonly lastTurn: PackReport | null }, ThreadNotFound>;
     /** Starts the hob's queued messages and the work waiting in its backpack, in threads with no turn running, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /**
@@ -589,6 +599,26 @@ export class ChatService extends Context.Service<
       const wake = (threadId: ThreadId) => drainThreads([threadId]);
       const resume = (threadId: ThreadId) => step(threadId, { _tag: "Release" }).pipe(Effect.andThen(wake(threadId)));
 
+      const packSources = yield* makePackSources;
+      const packReports = yield* Effect.serviceOption(PackReports);
+      const contextPack = (threadId: ThreadId) =>
+        Effect.gen(function* () {
+          const thread = yield* repo.findThread(threadId);
+          if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
+          const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
+          const live = transcript.filter((m) => m.chapterId === thread.value.liveChapterId);
+          const sources = yield* packSources(thread.value, live, transcript);
+          const agent = yield* repo.findAgent(thread.value.agentId);
+          const memory = Option.isNone(agent)
+            ? null
+            : yield* inputs.memoryBriefFor(agent.value, yield* hobTools.access(agent.value), undefined);
+          const lastTurn = Option.isNone(packReports) ? Option.none() : yield* packReports.value.last(threadId);
+          return {
+            next: buildPack({ ...sources, memoryBrief: memory?.text ?? null }),
+            lastTurn: Option.getOrNull(lastTurn),
+          };
+        });
+
       // Messages queued and work left waiting before a restart start again, through the same path
       // as any other.
       yield* drainThreads(yield* threadsWaiting());
@@ -613,6 +643,7 @@ export class ChatService extends Context.Service<
         restore,
         makeCamp,
         startFresh,
+        contextPack,
         drainAgent,
         wake,
         resume,

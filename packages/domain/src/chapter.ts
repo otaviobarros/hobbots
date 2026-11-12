@@ -10,6 +10,9 @@ export type ChapterState = typeof ChapterState.Type;
 /** The longest title a chapter takes, as a thread's (`THREAD_TITLE_MAX`). */
 export const CHAPTER_TITLE_MAX = 60;
 
+/** The longest one-line summary a resting chapter keeps (#1380). */
+export const CHAPTER_SUMMARY_MAX = 280;
+
 /**
  * One topic of a thread's transcript (ADR 037). Every message belongs to exactly one chapter, and a
  * thread has exactly one live chapter, its last, which the database holds. A runtime session belongs
@@ -22,7 +25,10 @@ export class Chapter extends Schema.Class<Chapter>("Chapter")({
   number: Schema.Int,
   /** What the chapter is about, or null for one nobody named, such as a thread's first. */
   title: Schema.NullOr(Schema.String),
-  /** A one-line summary, written once the chapter rests (#1380); null until then. */
+  /**
+   * A one-line summary, written by the chapter summary projector once the chapter rests (#1380);
+   * null until then, and again after a split or a merge changes the chapter's messages.
+   */
   summary: Schema.NullOr(Schema.String),
   /** Only `ChapterStateMachine` changes it, and code outside reads it through `ChapterStates`. */
   state: ChapterState,
@@ -46,7 +52,9 @@ export type ChapterEvent =
    */
   | { readonly _tag: "Absorb"; readonly live: boolean; readonly endedAt: string | null }
   /** The chapter moves into a camp, leaving a stub (#1364). */
-  | { readonly _tag: "Move"; readonly to: ThreadId };
+  | { readonly _tag: "Move"; readonly to: ThreadId }
+  /** The chapter summary projector wrote the resting chapter's one-line summary (#1380). */
+  | { readonly _tag: "Summarize"; readonly summary: string };
 
 /** A change to a chapter its state does not allow. */
 export class IllegalChapterTransition extends Schema.TaggedError<IllegalChapterTransition>()(
@@ -69,23 +77,25 @@ export const ChapterStateMachine = defineMachine<ChapterState, ChapterEvent, Cha
       to: "resting",
       apply: (chapter, e) => new Chapter({ ...chapter, state: "resting", endedAt: e.at }),
     },
-    // Splitting the live chapter makes its second half the live one.
+    // Splitting the live chapter makes its second half the live one. It keeps fewer messages, so
+    // its summary is written again.
     Split: {
       from: ["live", "resting"],
       to: "resting",
-      apply: (chapter, e) => new Chapter({ ...chapter, state: "resting", endedAt: e.at }),
+      apply: (chapter, e) => new Chapter({ ...chapter, state: "resting", endedAt: e.at, summary: null }),
     },
     Absorb: [
       {
         from: ["resting"],
         to: "live",
         guard: (_, e) => e.live,
-        apply: (chapter) => new Chapter({ ...chapter, state: "live", endedAt: null }),
+        apply: (chapter) => new Chapter({ ...chapter, state: "live", endedAt: null, summary: null }),
       },
+      // The merged messages join it, so its summary is written again.
       {
         from: ["resting"],
         to: "resting",
-        apply: (chapter, e) => new Chapter({ ...chapter, endedAt: e.endedAt }),
+        apply: (chapter, e) => new Chapter({ ...chapter, endedAt: e.endedAt, summary: null }),
       },
     ],
     Move: {
@@ -93,6 +103,13 @@ export const ChapterStateMachine = defineMachine<ChapterState, ChapterEvent, Cha
       to: "moved",
       guard: (chapter, e) => e.to !== chapter.threadId,
       apply: (chapter, e) => new Chapter({ ...chapter, state: "moved", movedTo: e.to }),
+    },
+    // Written once: a replay of the projector's journal finds it written and leaves it.
+    Summarize: {
+      from: ["resting"],
+      to: "resting",
+      guard: (chapter, e) => chapter.summary === null && e.summary.length > 0,
+      apply: (chapter, e) => new Chapter({ ...chapter, summary: e.summary }),
     },
   },
   illegal: (chapter, _, to) => new IllegalChapterTransition({ chapterId: chapter.id, from: chapter.state, to }),
@@ -135,12 +152,18 @@ export class ChapterNotFound extends Schema.TaggedError<ChapterNotFound>()("Chap
   chapterId: ChapterId,
 }) {}
 
-/** A title as a chapter keeps it: one line, cut at `CHAPTER_TITLE_MAX`; null when it has no text. */
-export const chapterTitle = (title: string): string | null => {
-  const line = title.replace(/\s+/g, " ").trim();
+/** `text` as one line cut at `max` characters, marked with an ellipsis when cut; null when it has no text. */
+const oneLineUpTo = (text: string, max: number): string | null => {
+  const line = text.replace(/\s+/g, " ").trim();
   if (line.length === 0) return null;
-  return line.length > CHAPTER_TITLE_MAX ? `${line.slice(0, CHAPTER_TITLE_MAX - 1).trimEnd()}…` : line;
+  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 };
+
+/** A title as a chapter keeps it: one line, cut at `CHAPTER_TITLE_MAX`; null when it has no text. */
+export const chapterTitle = (title: string): string | null => oneLineUpTo(title, CHAPTER_TITLE_MAX);
+
+/** A summary as a chapter keeps it: one line, cut at `CHAPTER_SUMMARY_MAX`; null when it has no text. */
+export const chapterSummary = (summary: string): string | null => oneLineUpTo(summary, CHAPTER_SUMMARY_MAX);
 
 /** The first chapter of a new thread, which takes its history. */
 export const firstChapter = (id: ChapterId, threadId: ThreadId, startedAt: string): Chapter =>

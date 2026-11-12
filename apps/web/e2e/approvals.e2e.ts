@@ -65,7 +65,7 @@ const pipAsks = async (page: Page, prompt: string, safetyPreset = "balanced") =>
     effort: "medium",
     instructions: "",
   });
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(prompt);
   await composer.press("Enter");

@@ -30,7 +30,7 @@ const groundStyle: CSSProperties = {
 
 /**
  * The top of a hob's page: the hob standing on its ground strip, its name and state tag, role and a
- * quiet stats line, a speech bubble with what it is doing, then New chat and Profile.
+ * quiet stats line, a speech bubble with what it is doing, then Open chat and Profile.
  */
 export function HobHero({
   hob,
@@ -81,9 +81,8 @@ export function HobHero({
         </div>
         <div className="flex flex-none items-center gap-2 pb-[18px]">
           <Button asChild>
-            <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }} aria-label={copy.newChatWith({ name: hob.name })}>
-              <span aria-hidden>+</span>
-              {copy.newChat}
+            <Link to="/hobs/$hobId/chat" params={{ hobId: hob.id }} aria-label={copy.openChatWith({ name: hob.name })}>
+              {copy.openChat}
             </Link>
           </Button>
           <Button asChild variant="outline">

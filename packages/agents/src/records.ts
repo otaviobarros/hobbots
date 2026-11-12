@@ -25,6 +25,7 @@ import type { CharmTurn } from "./charms.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
+import { PackRecordSource } from "./turn-pack.ts";
 
 /**
  * Decisions and the artifacts registry (ADR 037, Records). Decisions are recorded by a hob's
@@ -265,5 +266,31 @@ export const RecordToolsLive = Layer.effect(
     };
 
     return RecordTools.of({ forTurn: (turn) => Effect.succeed(offer(turn)) });
+  }),
+);
+
+/**
+ * What the context pack reads from the Records (ADR 037): the decisions that hold and the artifacts
+ * index, newest first, so a new chapter's first session starts from them.
+ */
+export const RecordPackSource = Layer.effect(
+  PackRecordSource,
+  Effect.gen(function* () {
+    const records = yield* Records;
+    return PackRecordSource.of({
+      activeDecisions: (threadId) =>
+        Effect.map(records.activeDecisions(threadId), (decisions) =>
+          decisions.map((decision) => ({ id: decision.id, text: decision.text, recordedAt: decision.recordedAt })),
+        ),
+      artifactsIndex: (threadId) =>
+        Effect.map(records.artifactsOf(threadId), (artifacts) =>
+          artifacts.map((artifact) => ({
+            kind: artifact.kind,
+            title: artifact.title,
+            latestVersion: artifact.latestVersion,
+            updatedAt: artifact.updatedAt,
+          })),
+        ),
+    });
   }),
 );

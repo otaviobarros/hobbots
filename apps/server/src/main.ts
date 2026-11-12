@@ -7,6 +7,7 @@ import {
   ActivityRecorder,
   ApprovalService,
   ChapterService,
+  ChapterSummaries,
   CharmCallService,
   Charms,
   ChatService,
@@ -24,7 +25,9 @@ import {
   MemorySharesLive,
   type MemoryStore,
   type MemoryVersionAuthors,
+  PackReports,
   PermissionSummary,
+  RecordPackSource,
   Records,
   RecordToolsLive,
   RecoveryLog,
@@ -81,6 +84,7 @@ import {
   ApprovalRepositoryLive,
   BackpackLive,
   ChapterRepositoryLive,
+  ChapterSummaryLogLive,
   CharmCallsLive,
   ClaimRegisterLive,
   CodingSetupDismissalRepository,
@@ -129,6 +133,7 @@ import { HubBackups } from "./backups.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ConnectedGitHubUserLive, UserGitIdentityLive } from "./commit-identity.ts";
 import { ServerConfig } from "./config.ts";
+import { DevRoutes } from "./context-pack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
 import { SaveDestinationsLive } from "./destination.ts";
 import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
@@ -348,6 +353,8 @@ const ServerLive = Layer.unwrap(
       SkillProposalLogLive,
       HobProposalLogLive,
       MemoryCaptureLive.pipe(Layer.provide(EventJournal.layer)),
+      // The chapter summary projector's cursor and summaries (ADR 037).
+      ChapterSummaryLogLive.pipe(Layer.provide(EventJournal.layer)),
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
@@ -534,10 +541,14 @@ const ServerLive = Layer.unwrap(
             memoryPageLayer(config, PageStore),
             // A thread's chapters: start, split and merge (ADR 037).
             ChapterService.layer,
+            // Each chapter that comes to rest gets its one-line summary, which the pack reads (ADR 037).
+            ChapterSummaries.layer,
           ),
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before the chat service: the report of the context pack each thread's last new session read (ADR 037).
+      .pipe(Layer.provideMerge(PackReports.layer))
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))
@@ -615,8 +626,11 @@ const ServerLive = Layer.unwrap(
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the
       // sessions of Tasks, whose turns offer them; after the Charms, which each hob's card names.
       .pipe(Layer.provideMerge(DirectoryToolsLive))
-      // Decisions and artifacts, and `record_decision` (ADR 037), before the chat service, whose turns offer it.
-      .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
+      // Decisions and artifacts (ADR 037), before the chat service, whose turns offer `record_decision`
+      // and whose new sessions' context packs read them.
+      .pipe(
+        Layer.provideMerge(Layer.mergeAll(RecordToolsLive, RecordPackSource).pipe(Layer.provideMerge(Records.layer))),
+      )
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(
@@ -698,6 +712,8 @@ const ServerLive = Layer.unwrap(
             EventStreamRoute,
             WorkbenchStreamRoute,
             TaskFileRoute,
+            // The pack a thread's next new session would read, in a checkout only (ADR 037).
+            DevRoutes(config.version),
             HobGitHubAppPages,
             WebClientRoutes(config.webDir),
             OwnHostsOnly,

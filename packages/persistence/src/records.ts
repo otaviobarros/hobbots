@@ -19,7 +19,7 @@ import { type ArtifactRow, artifactsFromRows } from "./artifact-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
-// Decisions (ADR 037, migration 0100). The rules are the pure `planDecision` and `planCrossOut` in
+// Decisions (ADR 037, migration 0101). The rules are the pure `planDecision` and `planCrossOut` in
 // @hobbots/domain; this runs them on the decisions as stored, in the transaction that writes their
 // result and journals its events, after taking the journal's head, so an archive cannot land between
 // the check of the thread and the write. The artifacts registry is written by the journal itself

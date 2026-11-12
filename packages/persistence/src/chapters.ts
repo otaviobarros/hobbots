@@ -59,7 +59,7 @@ export const startFirstChapterIn = (sql: SqlClient.SqlClient) => (thread: Thread
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every number and revision fits a number.
 const decodeChapters = Schema.decodeUnknownSync(Schema.Array(Chapter));
-const chapterRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
+export const chapterRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
   decodeChapters(rows.map((row) => ({ ...row, number: Number(row.number), revision: Number(row.revision) })));
 
 /** What a command writes: its plan, and the events that journal it. */

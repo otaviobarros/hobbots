@@ -75,7 +75,7 @@ test("[TC-UX-971] a save shows a quiet line under its reply, Open reads the page
   page,
 }) => {
   const { url, pip } = await hubWithMemory("empty");
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["Hello Pip."]);
   await send(page, [
     "Remember that launch emails go out on Tuesday at 9 AM.",
@@ -111,11 +111,11 @@ test("[TC-UX-971] a save shows a quiet line under its reply, Open reads the page
 // covers ADR 028 (The memory brief), through the whole server rather than a hub built for the test
 test("[TC-UX-978] a page a hob saved reaches its next thread's brief", async ({ page }) => {
   const { url, pip } = await hubWithMemory("empty");
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["Remember this.", saveLine("brief", "# Launch day\n\nLaunch emails go out Tuesday at 9 AM.")]);
   await expect(savedLines(page)).toHaveCount(1);
 
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["What day do launch emails go out?"]);
   // The fake echoes what the session was told ahead of the prompt.
   await expect(page.getByRole("article").last()).toContainText("Launch emails go out Tuesday at 9 AM.");
@@ -125,7 +125,7 @@ test("[TC-UX-972] Undo puts back the version a save replaced, and refuses an old
   page,
 }) => {
   const { url, pip } = await hubWithMemory("empty");
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["Launch emails go out on Monday.", saveLine("monday", "# Launch emails go out Monday")]);
   await send(page, ["No, Tuesday at 9 AM.", saveLine("tuesday", "# Launch emails go out Tuesday at 9 AM")]);
   const [monday, tuesday] = [
@@ -188,7 +188,7 @@ test("[TC-UX-977] when a chat's saves cannot be read, it says so and Try again b
   page,
 }) => {
   const { url, pip } = await hubWithMemory("empty");
-  await page.goto(`${url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, [
     "Remember that launch emails go out on Tuesday at 9 AM.",
     saveLine("tuesday", "# Launch emails go out Tuesday at 9 AM"),

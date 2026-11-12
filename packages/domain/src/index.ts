@@ -11,6 +11,7 @@ export * from "./change-actor.ts";
 export * from "./chapter.ts";
 export * from "./charm-call.ts";
 export * from "./claim.ts";
+export * from "./context-pack.ts";
 export * from "./decision.ts";
 export * from "./decision-tools.ts";
 export * from "./device.ts";

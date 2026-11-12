@@ -46,7 +46,12 @@ const hubWithHobs = async (more: ReadonlyArray<string> = []) => {
     ids[name] = hob.id;
   }
   for (const title of ["Plan the spring launch", "Draft the release notes"]) {
-    const thread = await api("POST", `/agents/${ids.Aldric}/threads`);
+    const thread = await api("POST", `/agents/${ids.Aldric}/camps`, {
+      key: crypto.randomUUID(),
+      title,
+      goal: null,
+      private: false,
+    });
     await api("POST", `/threads/${thread.id}/messages`, { content: title });
   }
   return { url: current.url, ids };

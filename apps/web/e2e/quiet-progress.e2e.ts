@@ -72,7 +72,7 @@ test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine prog
   await summon(current, "Pip", 4821);
 
   // Quill finishes and Pip stops on a blocker, so Frodo is woken while the Quest still runs.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

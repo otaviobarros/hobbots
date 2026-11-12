@@ -11,7 +11,7 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   for (const prompt of ["Draft the spring banner copy", "Plan the sale emails"]) {
     await composer.fill(prompt);

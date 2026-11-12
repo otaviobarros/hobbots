@@ -124,7 +124,7 @@ function HobPeek({
       <div className="flex flex-wrap gap-1.5">
         <Button asChild variant="outline" size="xs">
           {thread === null ? (
-            <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }}>
+            <Link to="/hobs/$hobId/chat" params={{ hobId: hob.id }}>
               {copy.openChat}
             </Link>
           ) : (

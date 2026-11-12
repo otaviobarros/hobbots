@@ -4,6 +4,7 @@ import {
   AgentStatus,
   Brain,
   CAMP_GOAL_MAX,
+  CarriedOverEntry,
   Effort,
   HOB_LABEL_MAX,
   HobColor,
@@ -427,6 +428,12 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       payload: StartFreshPayload,
       success: StartedFresh,
       error: [ThreadNotFound, StartFreshRefused, ThreadKeyReused],
+    }),
+    // What Start fresh would carry over from the thread now (ADR 037), so its sheet can list it; it changes nothing.
+    HttpApiEndpoint.get("carryOver", "/threads/:threadId/carry-over", {
+      params: { threadId: ThreadId },
+      success: Schema.Array(CarriedOverEntry),
+      error: ThreadNotFound,
     }),
   )
   .middleware(DeviceSession)

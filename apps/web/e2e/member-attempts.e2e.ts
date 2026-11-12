@@ -81,7 +81,7 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
   // Pip starts a Quest of his own and rests on his milestone; each of Frodo's messages wakes him,
   // and the third turn they start reports it and finishes.
   const later = (turns: number, line: string) => `${"fake:then ".repeat(turns)}${line}`;
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   await tellFrodo(page, [
     "Review the project",
     hubCall("delegate_task", {

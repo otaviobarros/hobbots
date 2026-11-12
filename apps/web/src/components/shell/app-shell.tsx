@@ -15,7 +15,7 @@ import { ReconnectingCard, ReconnectingProvider } from "./reconnecting.tsx";
 import { titleStrip, windowBody, windowFrame } from "./window-classes.ts";
 
 /** A hob's chat or its fresh page, whose header holds the reconnecting card. */
-const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
+const CHAT_PATH = /^\/hobs\/[^/]+\/(chat|threads\/[^/]+)$/;
 
 /**
  * The desktop window's title bar, which macOS draws the traffic lights over and the window drags by.

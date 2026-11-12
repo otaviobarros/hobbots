@@ -142,7 +142,7 @@ test("[TC-UX-091] clicking a hob in the Home scene opens a peek whose Open chat 
 
   await hob.click();
   await page.getByRole("dialog", { name: "Hob 2" }).getByRole("link", { name: "Open chat" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids["Hob 2"]}/new$`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids["Hob 2"]}/chat$`));
 });
 
 // covers UX-001

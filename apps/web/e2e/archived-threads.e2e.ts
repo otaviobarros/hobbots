@@ -24,9 +24,14 @@ const api = async <T>(current: Hub, method: string, path: string, body?: unknown
   return (await response.json()) as T;
 };
 
-/** Starts a thread with one prompt and waits for the fake runtime's echo to finish. */
+/** Makes a camp named by one prompt, sends it there and waits for the fake runtime's echo to finish. */
 const thread = async (current: Hub, hobId: string, content: string) => {
-  const created = await api<{ id: string }>(current, "POST", `/agents/${hobId}/threads`);
+  const created = await api<{ id: string }>(current, "POST", `/agents/${hobId}/camps`, {
+    key: crypto.randomUUID(),
+    title: content,
+    goal: null,
+    private: false,
+  });
   await api(current, "POST", `/threads/${created.id}/messages`, { content });
   await expect
     .poll(async () => {

@@ -197,17 +197,22 @@ describe("EventJournal", () => {
       yield* sql`UPDATE event_journal SET occurred_at = ${old} WHERE sequence = 1`;
       // Within the latest 10,000, an old entry stays.
       const keptRecent = yield* journal.compact;
-      // Once 10,000 newer entries exist, only the old one goes.
+      // Once 10,000 newer entries exist, only the old one goes, but not while a projector has still
+      // to read it (STD-ARCH-016).
       yield* sql`UPDATE event_journal_head SET sequence = sequence + ${JOURNAL_RETENTION.entries}`;
+      yield* sql`UPDATE projector_cursors SET sequence = 0`;
+      const keptForProjector = yield* journal.compact;
+      yield* sql`UPDATE projector_cursors SET sequence = 1`;
       const deleted = yield* journal.compact;
       return {
         keptRecent,
+        keptForProjector,
         deleted,
         remaining: (yield* journal.readAfter(0)).map((e) => e.sequence),
         oldest: yield* journal.oldest,
       };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    expect(result).toEqual({ keptRecent: 0, deleted: 1, remaining: [2, 3], oldest: 2 });
+    expect(result).toEqual({ keptRecent: 0, keptForProjector: 0, deleted: 1, remaining: [2, 3], oldest: 2 });
   });
 });

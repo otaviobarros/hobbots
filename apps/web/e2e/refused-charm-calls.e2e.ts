@@ -10,7 +10,7 @@ test("[TC-PE-425] a git_init the hub refused shows as a failed step in the reply
 }) => {
   // Aldric's folder already holds a repository's `.git`, so creating a repository there is refused (#664).
   const { url, aldric, folder } = await aldricHub({ ".git/HEAD": "ref: refs/heads/main\n" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

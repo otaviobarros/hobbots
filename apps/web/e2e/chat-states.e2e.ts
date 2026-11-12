@@ -68,7 +68,7 @@ const LONG_PROMPT = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
 // covers CH-004
 test("[TC-CH-090] a streaming reply shows the steps the runtime reports and says it is writing", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, LONG_PROMPT);
 
   const steps = page.getByRole("list", { name: "Reply steps" });
@@ -90,7 +90,7 @@ test("[TC-CH-111] a reply shows the tools it used, a refused one with its reason
   try {
     const { current, pip } = await hubWithPip();
     await api(current, "PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [work] });
-    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
     await send(
       page,
       [
@@ -132,7 +132,7 @@ test("[TC-EX-013] a tool call cut off by a hub crash comes back uncertain, with 
   try {
     const { current, pip } = await hubWithPip();
     await api(current, "PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [work] });
-    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
     await send(page, ["Run the long job", "fake:tool Bash sleep 600"].join("\n"));
     const steps = page.getByRole("list", { name: "Reply steps" });
     await expect(steps.getByRole("button", { name: "Running sleep 600… in progress" })).toBeVisible();
@@ -160,7 +160,7 @@ test("[TC-CH-091] a reply the provider cut off says why, and Continue resumes it
   page,
 }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "fake:cut-off please");
 
   await expect(
@@ -182,7 +182,7 @@ test("[TC-CH-091] a reply the provider cut off says why, and Continue resumes it
 // covers CH-004
 test("[TC-CH-092] a provider limit says when the allowance refills and can be continued", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "fake:limit please");
 
   await expect(page.getByText(/Pip used up the Claude allowance for now\. Refills in 1 hour, at .+\./)).toBeVisible();
@@ -196,7 +196,7 @@ test("[TC-CH-093] a brain that cannot think says so in the chat, and Fix it open
   page,
 }) => {
   const { current, pip } = await hubWithPip({ HOBBOTS_FAKE_AVAILABILITY: "signedOut" });
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
 
   const banner = page.getByRole("region", { name: "Brain unavailable" });
   await expect(banner).toHaveText(/Pip can't think right now: Claude Code is signed out\./);
@@ -210,7 +210,7 @@ test("[TC-CH-093] a brain that cannot think says so in the chat, and Fix it open
 // covers CH-004
 test("[TC-CH-094] while the hub is out of reach a message waits, then goes out when it is back", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
@@ -231,7 +231,7 @@ test("[TC-CH-094] while the hub is out of reach a message waits, then goes out w
 // covers CH-004
 test("[TC-CH-102] messages sent while the hub is away all go out, in the order they were sent", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();
 
   await current.stop();
@@ -254,7 +254,7 @@ test("[TC-CH-102] messages sent while the hub is away all go out, in the order t
 // covers CH-004
 test("[TC-CH-103] a waiting message the hub refuses stays until it is sent again or edited", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
@@ -286,7 +286,7 @@ test("[TC-CH-103] a waiting message the hub refuses stays until it is sent again
 // covers CH-004
 test("[TC-CH-104] a refused waiting message can be edited back into the composer", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
@@ -331,7 +331,7 @@ const goOffline = async (current: Hub, page: Page) => {
 // covers CH-004
 test("[TC-CH-106] a message edited while the one before it starts the thread stays edited", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();
 
   await goOffline(current, page);
@@ -368,7 +368,7 @@ test("[TC-CH-107] waiting messages survive a full resync and still go out", asyn
     };
   });
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
@@ -405,7 +405,7 @@ test("[TC-CH-107] waiting messages survive a full resync and still go out", asyn
 // covers CH-004
 test("[TC-CH-108] leaving a thread while its waiting message is on its way sends it only once", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
   const threadUrl = page.url();
@@ -420,7 +420,7 @@ test("[TC-CH-108] leaving a thread while its waiting message is on its way sends
   const threadHash = new URL(threadUrl).hash;
   await page.evaluate((hash) => {
     window.location.hash = hash;
-  }, `#/hobs/${pip.id}/new`);
+  }, `#/hobs/${pip.id}/profile`);
   await expect(page.getByText("Echo: first")).toBeHidden();
   sending.release();
   const threadId = threadHash.match(/threads\/([^/?#]+)/)?.[1];
@@ -442,7 +442,7 @@ test("[TC-CH-108] leaving a thread while its waiting message is on its way sends
 // covers CH-001
 test("[TC-CH-095] a new hob with no threads says hello", async ({ page }) => {
   const { current, pip } = await hubWithPip();
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();
   await expect(page.getByText("Tell me my first chore.", { exact: false })).toBeVisible();
 });

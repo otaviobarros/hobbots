@@ -23,7 +23,7 @@ test("[TC-UX-1268-01] a Workbench left open shows Read the web as soon as the ru
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, ["Look into lamp oil", script("start_quest", { key: "quest", goal: "Look into lamp oil" })]);
   await expect(ticket(page, "Look into lamp oil")).toBeVisible({ timeout: 20_000 });
   await settled(page);

@@ -46,7 +46,7 @@ test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone,
   await page.setViewportSize({ width: 1280, height: 900 });
   stop = stopQuestHub;
   const { url, aldric } = await questHub({ nested: true });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await ask(page, ["Plan a Black Friday campaign for the shop"]);
   const room = await openRoom(page, TITLE);
 
@@ -85,7 +85,7 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
   await page.setViewportSize({ width: 1280, height: 900 });
   stop = stopQuestHub;
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await ask(page, ["Plan a spring sale for the shop"]);
   const quest = "Plan the spring sale";
   await openRoom(page, quest);
@@ -129,7 +129,7 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   stop = stopAldricHub;
   const { url, aldric, members, api, hub, folder } = await aldricHub(undefined, ["Quill", "Ada"]);
   for (const member of members) await api("PATCH", `/agents/${member}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
 
   // Aldric checks the folder and brings in the party. Quill's first try writes the copy and fails, so
   // a second try finishes it; Ada runs the build, then reports she is stuck until she hears more.
@@ -279,7 +279,7 @@ test("[TC-UX-293] the room holds up in all four themes at 1280, 1024 and 960 px,
   await page.setViewportSize({ width: 1280, height: 800 });
   stop = stopQuestHub;
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await ask(page, ["Plan a Black Friday campaign for the shop"]);
   const room = await openRoom(page, TITLE);
   await expect(lane(page, "Ada").getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 30_000 });

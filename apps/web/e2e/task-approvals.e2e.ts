@@ -60,7 +60,7 @@ const aldricsChat = async (page: Page) => {
   });
   const aldric = await hobNamed(current, "Aldric", 4000);
   await hobNamed(current, "Quill", 4821);
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   return { current, composer: page.getByRole("textbox", { name: /^Message Aldric/ }) };
 };
 

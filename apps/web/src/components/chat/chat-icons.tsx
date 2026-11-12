@@ -30,6 +30,22 @@ export const RenameIcon = () => (
   </LineIcon>
 );
 
+/** A tent, on Make a camp. */
+export const CampMenuIcon = () => (
+  <LineIcon size="menu">
+    <path d="M2 13.5h12L8 3z" />
+    <path d="M8 8.5 6 13.5M8 8.5l2 5" />
+  </LineIcon>
+);
+
+/** A page with a spark, on Start a fresh chat. */
+export const FreshMenuIcon = () => (
+  <LineIcon size="menu">
+    <path d="M9 2.5H4.5v11h7V6.5" />
+    <path d="M12 1.5v3M10.5 3h3" />
+  </LineIcon>
+);
+
 /** A pin, on Pin to the top and Unpin. */
 export const PinMenuIcon = () => (
   <LineIcon size="menu">

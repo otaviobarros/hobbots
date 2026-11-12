@@ -14,7 +14,7 @@ import {
 import { DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 
-// The artifacts registry (ADR 037, migration 0100): one row per thing a hob made or changed in a
+// The artifacts registry (ADR 037, migration 0101): one row per thing a hob made or changed in a
 // chat or camp, filled in the transaction that journals the records it indexes, as backpack items
 // are. It copies nothing: a row holds where the thing is and which record saw its latest version.
 

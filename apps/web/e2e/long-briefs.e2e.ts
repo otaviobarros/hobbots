@@ -39,7 +39,7 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan the campaign from a long brief");
   await composer.press("Enter");

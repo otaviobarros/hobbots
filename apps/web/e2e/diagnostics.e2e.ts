@@ -11,7 +11,7 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   const request = "Plan a Black Friday campaign for the shop";
   await composer.fill(request);

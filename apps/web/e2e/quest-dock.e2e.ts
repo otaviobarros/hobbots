@@ -21,7 +21,7 @@ const TITLE = "Write the launch copy";
 const startParty = async (page: Page, quillBrief: ReadonlyArray<string>) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -202,7 +202,7 @@ test("[TC-UX-1146] a file reads under the same path for a lead and for a member 
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub({ "test/README.md": "# Tests\n" }, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // Aldric writes the notes in his folder; Quill, given only its test folder, edits the same file,
   // which the hub records from her folder as docs/NOTES.md.
@@ -299,7 +299,7 @@ test("[TC-UX-283] a member's History opens an archived Quest's room in its lead'
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
   const quill = members[0] ?? "";
   await api("PATCH", `/agents/${quill}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

@@ -32,7 +32,7 @@ import {
   RecordRepositoryLive,
 } from "../src/index.ts";
 import { makeJournaledChange } from "../src/journal.ts";
-import recordsMigration from "../src/migrations/0100_records.ts";
+import recordsMigration from "../src/migrations/0101_records.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1383 (ADR 037, Records): decisions are recorded, replaced and crossed out, kept for good,
@@ -448,7 +448,7 @@ describe("message authors", () => {
 
   // covers ADR 037 (Every author is an actor), DP-003
   it("[TC-CH-1383-06] gives every stored message and journaled message entry an author when it migrates", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0100")) as typeof migrations;
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0101")) as typeof migrations;
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       yield* sql`INSERT INTO agents ${sql.insert({

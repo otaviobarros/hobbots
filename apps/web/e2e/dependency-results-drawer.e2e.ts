@@ -70,7 +70,7 @@ test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Hand
   await hobNamed(current, "Quill", 4821);
   await hobNamed(current, "Rook", 5732);
 
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

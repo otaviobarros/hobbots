@@ -216,7 +216,7 @@ const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
     skills: row.skills === null || row.skills === undefined ? null : JSON.parse(String(row.skills)),
     skillsUsed: JSON.parse(String(row.skillsUsed ?? "[]")),
     askedSkill: row.askedSkill ?? null,
-    // Its author is two columns (migration 0100).
+    // Its author is two columns (migration 0101).
     actor: row.actorKind == null ? null : { kind: row.actorKind, id: row.actorId },
   }));
 
