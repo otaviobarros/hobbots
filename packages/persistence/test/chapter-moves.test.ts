@@ -553,6 +553,56 @@ describe("a quest whose chapter moves into a camp", () => {
     expect(result.after.quest.summaries).toEqual([["launch-quest", CHAT]]);
   });
 
+  // covers CH-009, PE-006, ADR 037 (Quests in camps)
+  it("[TC-CH-1389-07] a request the member's running session asks after the move is written in the camp", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first, step } = yield* runningQuest;
+        const approvals = yield* ApprovalRepository;
+        yield* move(first, intoNew());
+        // The session started before the move, so it still names the chat it was started from.
+        const asked = yield* approvals.insert(membersApproval(step, "member-second"));
+        return { asked, camp: yield* approvals.listForThread(CAMP), chat: yield* approvals.listForThread(CHAT) };
+      }),
+    );
+    expect(result.asked.value.threadId).toBe(CAMP);
+    expect(result.asked.entries[0]?.payload).toMatchObject({
+      _tag: "ApprovalRequested",
+      approval: { id: "member-second", threadId: CAMP },
+    });
+    expect(result.camp.map((approval) => approval.id)).toEqual(["member-rm", "member-second"]);
+    expect(result.chat).toEqual([]);
+  });
+
+  // covers CH-009, PE-006, ADR 037 (Quests in camps)
+  it("[TC-CH-1389-08] a decision read before the move and saved after it names the camp the request moved to", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* runningQuest;
+        const approvals = yield* ApprovalRepository;
+        // You decide the request: it is read in the chat, then the move commits, then the decision.
+        const read = Option.getOrThrow(yield* approvals.find(ApprovalId.make("member-rm")));
+        yield* move(first, intoNew());
+        const decided = yield* approvals.resolve(
+          new ApprovalRequest({ ...read, state: "approved", lifetime: "once", decidedAt: LATER }),
+          "pending",
+        );
+        return {
+          decided: Option.getOrThrow(decided),
+          stored: Option.getOrThrow(yield* approvals.find(ApprovalId.make("member-rm"))),
+          chat: yield* approvals.listForThread(CHAT),
+        };
+      }),
+    );
+    expect(result.decided.value).toMatchObject({ state: "approved", threadId: CAMP });
+    expect(result.decided.entries[0]?.payload).toMatchObject({
+      _tag: "ApprovalResolved",
+      approval: { id: "member-rm", threadId: CAMP },
+    });
+    expect(result.stored).toMatchObject({ state: "approved", threadId: CAMP });
+    expect(result.chat).toEqual([]);
+  });
+
   // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
   it("[TC-CH-1389-05] still refuses while an approval the chat's reply waits on is pending", async () => {
     const refused = await run(
