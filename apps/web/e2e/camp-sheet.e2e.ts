@@ -188,6 +188,8 @@ test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on 
   const chat = threadOf(page);
   const address = page.url();
   const unread = unreadOf(url, aldric, hub.headers, chat);
+  // Leaving and coming back changes only the address's hash, so the page and its query cache stay
+  // while the chat view unmounts and mounts again, as switching chats in the app does.
   const away = async (decision: { key: string; text: string }) => {
     await page.goto(`${url}/#/hobs/${aldric}`);
     await api("POST", `/threads/${chat}/messages`, {
@@ -208,7 +210,9 @@ test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on 
 });
 
 // covers CH-001, ADR 037 (Catch-up), STD-REACT-015
-test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread and offers Read again", async ({ page }) => {
+test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread until Try again reads it", async ({
+  page,
+}) => {
   const { url, aldric, api, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -222,17 +226,29 @@ test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread and o
   });
   await expect.poll(unread, { timeout: 15_000 }).toBe(true);
 
+  // What the page asks the hub, in order: each catch-up read and each mark read, and when Try again
+  // was pressed. A mark read sent while the read failed would come before Try again.
+  const asked: Array<string> = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === `/api/threads/${chat}/catch-up`) asked.push("catch-up");
+    if (path === `/api/threads/${chat}/read` && request.method() === "PUT") asked.push("read");
+  });
   await page.route("**/catch-up", (route) => route.abort());
   await page.goto(address);
   const card = main.getByRole("region", { name: "While you were away" });
   await expect(card.getByRole("alert")).toContainText("Couldn't read what changed while you were away.");
   await expectAccessible(page, card);
-  // The chat stays unread while its catch-up cannot be read.
-  await page.waitForTimeout(1_000);
-  expect(await unread()).toBe(true);
 
   await page.unroute("**/catch-up");
+  asked.push("try again");
   await card.getByRole("button", { name: "Try again" }).click();
   await expect(card).toContainText("Ship on Fridays.");
   await expect.poll(unread).toBe(false);
+  // The chat was marked read only once Try again had read it, never while the read failed.
+  const pressed = asked.indexOf("try again");
+  expect(asked.slice(0, pressed)).toContain("catch-up");
+  expect(asked.slice(0, pressed)).not.toContain("read");
+  expect(asked.slice(pressed)).toEqual(expect.arrayContaining(["catch-up", "read"]));
+  expect(asked.indexOf("read", pressed)).toBeGreaterThan(asked.indexOf("catch-up", pressed));
 });
