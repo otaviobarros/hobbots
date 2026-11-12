@@ -2,6 +2,7 @@ import type { WaitingDevice } from "@hobbots/api";
 import {
   type AgentId,
   ApprovalRequest,
+  CharmCall,
   HobProposal,
   HobProposalId,
   PairingRequest,
@@ -28,8 +29,12 @@ import {
 import {
   approvalEntry,
   byUrgency,
+  charmCallEntry,
   deviceEntry,
+  entryAsker,
+  entryPlace,
   entryRow,
+  entryThread,
   failedEntry,
   groupByPlace,
   namesRequest,
@@ -72,6 +77,30 @@ const device = (expiresAt: string): WaitingDevice => ({
 const failedCopy = {
   task: task(BUILD, { ownerId: QUILL, state: "failed", brief: "Build the page\nWith the hero" }),
   leadId: null,
+};
+
+/** A comment Quill's Task posted whose answer was lost, still uncertain after the last read-back (ADR 038). */
+const lostComment = {
+  call: new CharmCall({
+    agentId: QUILL,
+    scope: `task:${COPY}`,
+    key: "comment-1",
+    attempt: "attempt-1",
+    charm: "GitHub",
+    tool: "github_comment",
+    input: "{}",
+    site: "github.com/octo/workshop#1",
+    plan: "{}",
+    appliedText: "Commented.",
+    state: "uncertain",
+    result: null,
+    threadId: null,
+    messageId: null,
+    stepId: null,
+    createdAt: at,
+    updatedAt: at,
+  }),
+  task: task(COPY, { ownerId: QUILL }),
 };
 
 const asked = {
@@ -142,6 +171,34 @@ describe("entryRow", () => {
       "Ada",
       "Quill",
     ]);
+  });
+
+  // covers EX-003, EX-004, IN-007
+  it("[TC-IN-1343-01] lists a Task's write whose answer was lost from its hob, under the Task's quest", () => {
+    const entry = charmCallEntry(lostComment);
+    expect(entry.key).toBe(`charm-call:${COPY}:attempt-1`);
+    expect(namesRequest(entry.key)).toBe(false);
+    expect(entryRow(entry, names, ALDRIC, now)).toEqual({
+      chain: ["Quill", "you"],
+      kind: "Unsure",
+      tag: "needs-you",
+      what: "Quill lost GitHub's answer",
+      when: "Quill is waiting on this",
+      tone: "plain",
+    });
+    expect(entryAsker(entry)).toBe(QUILL);
+    expect(entryThread(entry)).toBe(lostComment.task.threadId);
+    const top = quest();
+    expect(entryPlace(entry, (taskId) => (taskId === COPY ? top : undefined))).toEqual({ kind: "quest", quest: top });
+    const listed = needsEntries({
+      devices: [],
+      questions: [],
+      blockers: [],
+      failed: [failedCopy],
+      charmCalls: [lostComment],
+      requests: [request(null)],
+    });
+    expect(listed.map((each) => each.kind)).toEqual(["failed", "charm-call", "approval"]);
   });
 
   it("shows a device asking to join with its name and when the request runs out", () => {

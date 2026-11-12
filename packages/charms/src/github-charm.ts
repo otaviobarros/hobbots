@@ -208,6 +208,8 @@ export const GitHubCharm = Effect.gen(function* () {
       }),
     // The Push it takes over is steered to github_push from a folder whose origin is on GitHub.
     takeovers: [{ operation: "push", tool: GITHUB_PUSH_TOOL, appliesIn: pushesFromGitHub }],
+    // Every write reads GitHub back, and one that stays uncertain in a Task is settled on that Task (ADR 038).
+    writesOutsideChats: true,
     context,
   });
 });

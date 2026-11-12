@@ -60,5 +60,5 @@ export const questHub = async ({
     });
     ids[name] = hob.id;
   }
-  return { url, headers, aldric: String(ids.Aldric) };
+  return { url, headers, dataDir, aldric: String(ids.Aldric) };
 };
