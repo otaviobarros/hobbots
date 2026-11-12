@@ -4,6 +4,7 @@ import {
   type AgentId,
   type Brain,
   type Committed,
+  liveSession,
   Message,
   type MessageId,
   MessageTransitions,
@@ -98,7 +99,7 @@ const attemptReadWeb = (turn: ChatTaskTurn | null, mark: WebReadMark | null): Ef
   turn === null || mark === null ? Effect.void : turn.readWeb(mark);
 
 const taskBriefIn = (thread: Thread, runtime: RuntimeKind): TaskBriefMark | null =>
-  thread.sessions.find((s) => s.runtime === runtime)?.taskBrief ?? null;
+  liveSession(thread, runtime)?.taskBrief ?? null;
 
 /** A chat turn's web search, recorded for its hob, chat and reply, and the Task and Attempt it works on (ADR 036). */
 const chatWebTurn = (

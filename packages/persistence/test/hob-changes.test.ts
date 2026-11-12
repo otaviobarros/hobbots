@@ -42,9 +42,17 @@ describe("HobChanges", () => {
         created_at: now,
         updated_at: now,
       })}`;
+      yield* sql`INSERT INTO chapters ${sql.insert({
+        id: "c1",
+        thread_id: "t1",
+        number: 1,
+        state: "live",
+        started_at: now,
+      })}`;
       yield* sql`INSERT INTO messages ${sql.insert({
         id: "m1",
         thread_id: "t1",
+        chapter_id: "c1",
         seq: 1,
         role: "assistant",
         content: "",

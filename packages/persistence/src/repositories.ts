@@ -5,7 +5,10 @@ import {
   type AgentId,
   AgentStatus,
   type ChangeActor,
+  Chapter,
+  ChapterId,
   type Committed,
+  firstChapter,
   type HobPolicy,
   heldCharms,
   type JournaledEvent,
@@ -24,8 +27,10 @@ import {
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { makeCampWrites, threadColumns } from "./camps.ts";
-import { makeJournaled } from "./journal.ts";
+import { startFirstChapterIn } from "./chapters.ts";
+import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { insertSkillUse } from "./skill-uses.ts";
+import { liveChapterColumn, unreadColumn } from "./thread-columns.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -134,6 +139,8 @@ export const threadRows = (
     readonly private?: unknown;
     readonly originThreadId?: unknown;
     readonly originChapterId?: unknown;
+    readonly liveChapterId?: unknown;
+    readonly liveChapterMerges?: unknown;
     readonly sessions?: unknown;
     readonly brain?: unknown;
     readonly skillTrial?: unknown;
@@ -146,6 +153,8 @@ export const threadRows = (
     ...row,
     private: Number(row.private ?? 0) === 1,
     origin: originThreadId == null ? null : { threadId: originThreadId, chapterId: originChapterId ?? null },
+    liveChapterId: row.liveChapterId ?? null,
+    liveChapterMerges: Number(row.liveChapterMerges ?? 0),
     lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
     unread: Number(unread ?? 0) === 1,
     revision: Number(row.revision),
@@ -162,17 +171,9 @@ const lastContent = (sql: SqlClient.SqlClient) =>
   sql`(SELECT substr(m.content, 1, 600) FROM messages m
     WHERE m.thread_id = threads.id AND m.status <> 'queued' AND m.quiet = 0 AND trim(m.content) <> ''
     ORDER BY m.seq DESC LIMIT 1) AS last_content`;
-/**
- * Whether the hob wrote in the thread since you last read it, as `unread`: a reply that ended with
- * text, or that failed, written after `read_revision` (ADR 027). That counts a reply continued in
- * place after you read it, since its message takes a new revision. A reply still under way waits
- * until it ends, and your own messages and a lead's quiet progress (#1006) never count.
- */
-const unreadColumn = (sql: SqlClient.SqlClient) =>
-  sql`(CASE WHEN EXISTS (SELECT 1 FROM messages u
-    WHERE u.thread_id = threads.id AND u.role = 'assistant' AND u.revision > COALESCE(threads.read_revision, 0)
-      AND u.status NOT IN ('queued', 'streaming', 'stopping') AND u.quiet = 0
-      AND (trim(u.content) <> '' OR u.status = 'failed')) THEN 1 ELSE 0 END) AS unread`;
+/** The live chapter of `threadId`, which a new message joins. */
+const liveChapterOf = (sql: SqlClient.SqlClient, threadId: ThreadId) =>
+  sql`(SELECT c.id FROM chapters c WHERE c.thread_id = ${threadId} AND c.state = 'live')`;
 const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
   rows.map((row) => ({ ...row, lines: JSON.parse(String(row.lines)), omitted: Number(row.omitted) }));
 // A reply's usage is one column per field (migration 0037), read as numbers: PostgreSQL reads
@@ -221,6 +222,7 @@ export const HobbotsRepositoryLive = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const journaled = makeJournaled(sql);
+    const journaledChange = makeJournaledChange(sql);
     // Text sort keys compare byte by byte: SQLite's default, PostgreSQL's "C" collation.
     // ISO-8601 timestamps sort the same under either collation.
     const bytewise = (column: string) =>
@@ -261,21 +263,21 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
+        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
           ORDER BY updated_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const listArchivedThreads = SqlSchema.findAll({
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
+        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
           ORDER BY archived_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Thread,
       execute: (id) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE id = ${id}`.pipe(
+        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${id}`.pipe(
           Effect.map(threadRows),
         ),
     });
@@ -411,8 +413,34 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
+    // Starts the thread's first chapter at `revision` unless it has one; null when it had.
+    const startFirstChapter = startFirstChapterIn(sql);
+
+    // The thread as a read shows it: its last line, unread mark and live chapter are read, never
+    // written, so the event that journals it carries what a read would show.
+    const asRead = (thread: Thread) =>
+      Effect.gen(function* () {
+        const [read] = threadRows(
+          yield* sql<{
+            readonly lastContent: unknown;
+            readonly unread: unknown;
+            readonly liveChapterId: unknown;
+            readonly liveChapterMerges: unknown;
+          }>`SELECT ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${thread.id}`,
+        );
+        return new Thread({
+          ...thread,
+          lastLine: read?.lastLine ?? null,
+          unread: read?.unread ?? false,
+          liveChapterId: read?.liveChapterId == null ? null : ChapterId.make(String(read.liveChapterId)),
+          liveChapterMerges: read?.liveChapterMerges ?? 0,
+        });
+      });
+
+    // A thread stored for the first time starts its first chapter in the same transaction (ADR 037),
+    // journaled after it, so every thread has a live chapter for its messages to join.
     const upsertThread = (input: Thread) =>
-      journaled(1, (revision) =>
+      journaledChange<Thread, never>((revision) =>
         Effect.gen(function* () {
           const thread = new Thread({ ...input, revision });
           yield* sql`INSERT INTO threads ${sql.insert(threadColumns(thread))} ON CONFLICT (id) DO UPDATE SET
@@ -429,15 +457,12 @@ export const HobbotsRepositoryLive = Layer.effect(
             pinned_at = excluded.pinned_at,
             updated_at = excluded.updated_at,
             revision = excluded.revision`;
-          // The last line is read, never written, so the event carries what a read would show.
-          const [read] = threadRows(
-            yield* sql<{
-              readonly lastContent: unknown;
-              readonly unread: unknown;
-            }>`SELECT ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE id = ${thread.id}`,
-          );
-          const shown = new Thread({ ...thread, lastLine: read?.lastLine ?? null, unread: read?.unread ?? false });
-          return { value: shown, events: [{ _tag: "ThreadUpserted", thread: shown }] };
+          const started = yield* startFirstChapter(thread, revision + 1);
+          const shown = yield* asRead(thread);
+          const events: Array<JournaledEvent> = [{ _tag: "ThreadUpserted", thread: shown }];
+          if (started !== null)
+            events.push({ _tag: "ChapterStarted", threadId: thread.id, chapter: started, ended: null });
+          return { value: shown, events };
         }),
       );
 
@@ -460,16 +485,21 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
-    // Writes the message row only; the caller journals its events in the same transaction.
+    // Writes the message row only; the caller journals its events in the same transaction. A new
+    // message joins its thread's live chapter (ADR 037); a stored one stays in its chapter. Returns
+    // the message as stored, with its chapter.
     const writeMessage = (message: Message) =>
       Effect.suspend(() => {
         const usage = usageColumns(message.usage);
-        return sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, runtime, model,
+        return sql<{
+          readonly chapterId: string;
+        }>`INSERT INTO messages (id, thread_id, chapter_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
           resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, created_at, revision, seq)
         VALUES (
-          ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
+          ${message.id}, ${message.threadId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.threadId)}),
+          ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},
           ${usage.time_to_request_ms}, ${usage.time_to_first_stream_ms}, ${usage.time_to_first_token_ms},
           ${usage.input_tokens}, ${usage.output_tokens}, ${usage.cache_read_tokens}, ${usage.cache_write_tokens},
@@ -499,7 +529,10 @@ export const HobbotsRepositoryLive = Layer.effect(
           quiet = excluded.quiet,
           skills = excluded.skills,
           skills_used = excluded.skills_used,
-          revision = excluded.revision`;
+          revision = excluded.revision
+        RETURNING chapter_id`.pipe(
+          Effect.map(([row]) => new Message({ ...message, chapterId: ChapterId.make(String(row?.chapterId)) })),
+        );
       });
 
     // The message's revision is its MessageUpserted entry, the first of its events. The skill uses
@@ -507,8 +540,7 @@ export const HobbotsRepositoryLive = Layer.effect(
     const upsertMessage = (input: Message, uses: ReadonlyArray<SkillUse>) =>
       journaled(messageEvents(input).length + uses.length, (revision) =>
         Effect.gen(function* () {
-          const message = new Message({ ...input, revision });
-          yield* writeMessage(message);
+          const message = yield* writeMessage(new Message({ ...input, revision }));
           for (const use of uses) yield* insertSkillUse(sql, use);
           const used = uses.map((use): JournaledEvent => ({ _tag: "SkillUsed", use }));
           return { value: message, events: [...messageEvents(message), ...used] };
@@ -520,16 +552,18 @@ export const HobbotsRepositoryLive = Layer.effect(
     const startQueuedMessage = (input: Message, inputReply: Message) =>
       journaled(2 + messageEvents(inputReply).length, (first) =>
         Effect.gen(function* () {
-          const message = new Message({ ...input, revision: first });
-          const reply = new Message({ ...inputReply, revision: first + 2 });
-          const started = yield* sql`UPDATE messages SET
-              status = ${message.status},
-              revision = ${message.revision},
-              seq = (SELECT MAX(seq) + 1 FROM messages WHERE thread_id = ${message.threadId})
-            WHERE id = ${message.id} AND status = 'queued'
-            RETURNING id`;
-          if (started.length === 0) return null;
-          yield* writeMessage(reply);
+          const queued = new Message({ ...input, revision: first });
+          // It joins the live chapter as it starts, as its reply does, wherever it waited (ADR 037).
+          const [started] = yield* sql<{ readonly chapterId: string }>`UPDATE messages SET
+              status = ${queued.status},
+              revision = ${queued.revision},
+              chapter_id = ${liveChapterOf(sql, queued.threadId)},
+              seq = (SELECT MAX(seq) + 1 FROM messages WHERE thread_id = ${queued.threadId})
+            WHERE id = ${queued.id} AND status = 'queued'
+            RETURNING chapter_id`;
+          if (started === undefined) return null;
+          const message = new Message({ ...queued, chapterId: ChapterId.make(started.chapterId) });
+          const reply = yield* writeMessage(new Message({ ...inputReply, revision: first + 2, chapterId: null }));
           const events: ReadonlyArray<JournaledEvent> = [
             { _tag: "MessageUpserted", message },
             { _tag: "MessageDequeued", threadId: message.threadId, messageId: message.id, reason: "started" },
@@ -569,7 +603,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       listThreads: (agentId) => listThreads(agentId).pipe(Effect.orDie),
       listArchivedThreads: (agentId) => listArchivedThreads(agentId).pipe(Effect.orDie),
       findThread: (id) => findThread(id).pipe(Effect.orDie),
-      upsertThread: (thread) => always(upsertThread(thread)),
+      upsertThread,
       markThreadRead,
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
       upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),

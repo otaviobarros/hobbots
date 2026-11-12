@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Effort, RUNTIME_NAMES, RuntimeKind } from "./agent.ts";
-import { MessageId, ThreadId } from "./ids.ts";
+import { ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { TaskId } from "./task.ts";
 import { WebReadMark } from "./web-mark.ts";
 
@@ -43,13 +43,23 @@ export const RosterMark = Schema.Struct({
 export type RosterMark = typeof RosterMark.Type;
 
 /**
- * A thread's binding to one runtime's session (ADR 017). A thread keeps one per runtime it has
- * used, so switching back resumes that runtime's own session.
+ * A thread's binding to one runtime's session (ADR 017), keyed by thread, runtime and chapter (ADR
+ * 037). A thread keeps one per runtime it has used, so switching back inside a chapter resumes that
+ * runtime's own session. A session belongs to the chapter it started in: a turn in a later chapter
+ * starts a new one in its place and never resumes it.
  */
 export const RuntimeSession = Schema.Struct({
   runtime: RuntimeKind,
   /** The runtime's own id for the session. */
   sessionId: Schema.String,
+  /** The chapter the session belongs to; migration 0099 gave every earlier session its thread's first. */
+  chapterId: ChapterId,
+  /**
+   * How many chapters had been merged into its chapter when the session started there (ADR 037).
+   * A merge into the live chapter makes it live again with a new session, so a session that started
+   * before the merge is never resumed, even one a turn under way records after it. Absent means 0.
+   */
+  chapterMerges: Schema.optionalKey(Schema.Int),
   /** The last message the session has seen, so switching back sends only what came after it. */
   seenThrough: Schema.NullOr(MessageId),
   /**

@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import type { RuntimeKind } from "./agent.ts";
 import { Brain, RuntimeSession } from "./brain.ts";
 import { AgentId, ChapterId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
@@ -50,12 +51,31 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withConstructorDefault(Effect.succeed("open" as const)),
   ),
   /**
-   * One session per runtime the thread has used, kept separate from the thread's identity (ADR 017).
+   * One session per runtime the thread has used, kept separate from the thread's identity (ADR 017),
+   * each in the chapter it started in (ADR 037): read the one a turn resumes with `liveSession`.
    * Thread events journaled before this carry none; their Claude Code session moved here in migration 0020.
    */
   sessions: Schema.Array(RuntimeSession).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
+  ),
+  /**
+   * The thread's live chapter (ADR 037), which new messages join and whose sessions a turn resumes.
+   * Worked out when the thread is read, never stored; null only on a thread not stored yet, since
+   * storing a new thread starts its first chapter.
+   */
+  liveChapterId: Schema.NullOr(ChapterId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * How many chapters were merged into the live chapter (ADR 037), worked out when the thread is read.
+   * Such a merge makes an earlier chapter live again with a new session: `liveSession` resumes only
+   * a session that started after the last one.
+   */
+  liveChapterMerges: Schema.Number.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(0)),
+    Schema.withConstructorDefault(Effect.succeed(0)),
   ),
   /** The thread's own brain, or null to think with the hob's. A thread setting: it grants nothing. */
   brain: Schema.NullOr(Brain).pipe(
@@ -214,6 +234,20 @@ export const ThreadLifecycle = {
   /** The hob's one open chat, which a new thread does not replace. */
   isOpenChat: (thread: Thread): boolean => thread.kind === "chat" && thread.state === "open",
 };
+
+/**
+ * The thread's session on `runtime` that a turn in its live chapter resumes, or undefined when the
+ * chapter has none yet: a session from an earlier chapter is never resumed (ADR 037).
+ */
+export const liveSession = (thread: Thread, runtime: RuntimeKind): RuntimeSession | undefined =>
+  thread.liveChapterId === null
+    ? undefined
+    : thread.sessions.find(
+        (session) =>
+          session.runtime === runtime &&
+          session.chapterId === thread.liveChapterId &&
+          (session.chapterMerges ?? 0) === thread.liveChapterMerges,
+      );
 
 /**
  * Whether a reply makes its thread unread once it lands, as the hub works it out: it ended, and it

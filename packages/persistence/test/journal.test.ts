@@ -83,39 +83,52 @@ describe("EventJournal", () => {
         messages: (yield* repo.listMessages(threadId)).map((m) => [m.id, m.revision]),
         agentRevision: Option.getOrThrow(yield* repo.findAgent(agentId)).revision,
         threadRevision: Option.getOrThrow(yield* repo.findThread(threadId)).revision,
+        liveChapterId: Option.getOrThrow(yield* repo.findThread(threadId)).liveChapterId,
       };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
+    // A new thread starts its first chapter in the same change (ADR 037).
     expect(result.entries.map((e) => [e.sequence, e.type])).toEqual([
       [1, "AgentUpserted"],
       [2, "ThreadUpserted"],
-      [3, "MessageUpserted"],
-      [4, "MessageQueued"],
-      [5, "MessageUpserted"],
-      [6, "TurnStopRequested"],
-      [7, "MessageUpserted"],
-      [8, "MessageDequeued"],
-      [9, "MessageUpserted"],
+      [3, "ChapterStarted"],
+      [4, "MessageUpserted"],
+      [5, "MessageQueued"],
+      [6, "MessageUpserted"],
+      [7, "TurnStopRequested"],
+      [8, "MessageUpserted"],
+      [9, "MessageDequeued"],
+      [10, "MessageUpserted"],
     ]);
-    expect(result.head.sequence).toBe(9);
+    expect(result.head.sequence).toBe(10);
     expect(result.head.epoch).toMatch(/^[0-9a-f-]{36}$/);
-    expect(result.returned).toEqual([3, 4, 5, 6]);
-    expect(result.startedSequences).toEqual([7, 8, 9]);
+    expect(result.returned).toEqual([4, 5, 6, 7]);
+    expect(result.startedSequences).toEqual([8, 9, 10]);
     expect(result.noops).toEqual([true, true, true, true]);
     // An entity's revision is the sequence of the entry that last wrote it.
     expect(result.agentRevision).toBe(1);
     expect(result.threadRevision).toBe(2);
     expect(result.messages).toEqual([
-      ["r", 5],
-      ["q", 7],
-      ["q-reply", 9],
+      ["r", 6],
+      ["q", 8],
+      ["q-reply", 10],
     ]);
     // Read back from storage, the envelope carries its payload, version and correlation.
-    const [, threadEntry, queuedEntry] = result.entries;
-    expect(threadEntry?.payload).toEqual({ _tag: "ThreadUpserted", thread: new Thread({ ...thread, revision: 2 }) });
+    const [, threadEntry, chapterEntry, queuedEntry] = result.entries;
+    const chapterId = result.liveChapterId;
+    expect(threadEntry?.payload).toEqual({
+      _tag: "ThreadUpserted",
+      thread: new Thread({ ...thread, revision: 2, liveChapterId: chapterId }),
+    });
+    expect(chapterEntry?.payload).toMatchObject({
+      _tag: "ChapterStarted",
+      threadId,
+      chapter: { id: chapterId, number: 1, state: "live", title: null, revision: 3 },
+      ended: null,
+    });
     expect(queuedEntry?.payload).toEqual({
       _tag: "MessageUpserted",
-      message: new Message({ ...message("q", "queued", "user"), revision: 3 }),
+      message: new Message({ ...message("q", "queued", "user"), revision: 4, chapterId }),
     });
     expect(queuedEntry?.schemaVersion).toBe(EVENT_SCHEMA_VERSIONS.MessageUpserted);
     expect(queuedEntry?.causationId).toBeNull();
@@ -135,7 +148,8 @@ describe("EventJournal", () => {
       // The next one finds them in the journal.
       const after = yield* Effect.gen(function* () {
         const journal = yield* EventJournal;
-        return yield* journal.readAfter(2);
+        // The hob, the thread and its first chapter came before.
+        return yield* journal.readAfter(3);
       }).pipe(Effect.provide(Layer.fresh(Repositories)));
       return { before, after };
     }).pipe(Effect.provide(TestDatabase), Effect.scoped, Effect.runPromise);
@@ -158,8 +172,8 @@ describe("EventJournal", () => {
       return (yield* journal.readAfter(0)).map((e) => e.sequence);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    // Two entries for the agent and thread, then one or two per message.
-    expect(sequences).toEqual(Array.from({ length: 2 + 20 + 40 }, (_, i) => i + 1));
+    // Three entries for the agent, the thread and its first chapter, then one or two per message.
+    expect(sequences).toEqual(Array.from({ length: 3 + 20 + 40 }, (_, i) => i + 1));
   });
 
   // covers DP-003
@@ -185,6 +199,6 @@ describe("EventJournal", () => {
       };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    expect(result).toEqual({ keptRecent: 0, deleted: 1, remaining: [2], oldest: 2 });
+    expect(result).toEqual({ keptRecent: 0, deleted: 1, remaining: [2, 3], oldest: 2 });
   });
 });

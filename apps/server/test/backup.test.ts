@@ -448,7 +448,10 @@ describe("backup and restore", () => {
     await refused(join(destination, "empty.hobbots-backup"), /manifest is missing/);
 
     const manifest = JSON.parse(await readFile(join(folder, "manifest.json"), "utf8"));
-    await writeFile(join(folder, "manifest.json"), JSON.stringify({ ...manifest, schemaVersion: 99 }));
+    await writeFile(
+      join(folder, "manifest.json"),
+      JSON.stringify({ ...manifest, schemaVersion: knownSchemaVersion() + 1 }),
+    );
     await refused(folder, /newer Hobbots/);
     await writeFile(join(folder, "manifest.json"), JSON.stringify({ ...manifest, database: "external" }));
     await refused(folder, /holds no database/);

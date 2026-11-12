@@ -14,6 +14,7 @@ import { carryingThread } from "@hobbots/inbox";
 import { Data, Effect, Option, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { makeItemReads } from "./backpack-rows.ts";
+import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { decodeRows, type Row } from "./task-rows.ts";
@@ -89,6 +90,15 @@ export const makeCampWrites = (
   const change = makeJournaledChange(sql);
   const items = makeItemReads(sql);
   const oldest = oldestFirst(sql);
+  const startFirstChapter = startFirstChapterIn(sql);
+  // A new thread's first chapter, journaled as `ChapterStarted` at `revision`, after the change's other events.
+  const firstChapterOf = (thread: Thread, revision: number) =>
+    startFirstChapter(thread, revision).pipe(
+      Effect.map(
+        (chapter): ReadonlyArray<JournaledEvent> =>
+          chapter === null ? [] : [{ _tag: "ChapterStarted", threadId: thread.id, chapter, ended: null }],
+      ),
+    );
 
   // A thread this change just wrote is there to read.
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
@@ -104,8 +114,9 @@ export const makeCampWrites = (
         }
         yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
         yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
+        const started = yield* firstChapterOf(camp, first + 1);
         const thread = yield* shown(camp.id);
-        return { value: thread, events: [{ _tag: "CampMade", thread } as const] };
+        return { value: thread, events: [{ _tag: "CampMade", thread } as const, ...started] };
       }),
     );
 
@@ -195,12 +206,13 @@ export const makeCampWrites = (
         );
         const roots = work.tasks.map((task) => task.id);
         const moved = yield* moveWork(from.id, input.chat.id, roots, held, at, first + 1);
+        const started = yield* firstChapterOf(input.chat, first + 1 + moved.length);
         const value = new StartedFresh({
           superseded: yield* shown(from.id),
           chat: yield* shown(input.chat.id),
           carried,
         });
-        const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ChatStartedFresh", ...value }, ...moved];
+        const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ChatStartedFresh", ...value }, ...moved, ...started];
         return { value, events };
       }),
     ).pipe(

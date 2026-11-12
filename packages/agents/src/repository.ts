@@ -63,7 +63,9 @@ export class HobbotsRepository extends Context.Service<
     readonly listArchivedThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
     readonly findThread: (id: ThreadId) => Effect.Effect<Option.Option<Thread>>;
     /**
-     * Writes the thread, leaving how far you read it as it is: only `markThreadRead` moves that.
+     * Writes the thread, leaving how far you read it as it is: only `markThreadRead` moves that. A
+     * thread stored for the first time starts its first chapter in the same transaction (ADR 037),
+     * journaled as `ChapterStarted` after its `ThreadUpserted`.
      */
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
     /**
@@ -80,7 +82,8 @@ export class HobbotsRepository extends Context.Service<
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
     /**
      * Saves the message with the events it produces (`messageEvents`), and in the same transaction
-     * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line).
+     * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line). A new
+     * message joins its thread's live chapter; the message returned carries the chapter it is in.
      */
     readonly upsertMessage: (message: Message, uses?: ReadonlyArray<SkillUse>) => Effect.Effect<Committed<Message>>;
     /**
@@ -96,7 +99,7 @@ export class HobbotsRepository extends Context.Service<
     readonly threadsWithQueuedMessages: Effect.Effect<ReadonlyArray<ThreadId>>;
     /**
      * Saves a queued message that started and its streaming reply in one transaction: the message
-     * moves after every message in the thread and the reply follows it, so a crash leaves either a
+     * moves after every message in the thread, into its live chapter, and the reply follows it, so a crash leaves either a
      * queued message or a reply that recovery marks interrupted. None, and nothing changed, when
      * the message is no longer queued.
      */

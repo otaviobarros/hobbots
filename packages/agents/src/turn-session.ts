@@ -1,5 +1,5 @@
 import type { MessageId, RuntimeKind, RuntimeSession, TaskBriefMark } from "@hobbots/domain";
-import { Thread } from "@hobbots/domain";
+import { liveSession, Thread } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";
@@ -61,8 +61,12 @@ export interface TurnSessionInput {
  * changes only while it is still the one the turn ran in.
  */
 export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: TurnSessionInput) => {
-  // The session the turn expects to resume, and what it was last told of its Task (#1027).
-  const expected = thread.sessions.find((s) => s.runtime === runtime);
+  // The session the turn expects to resume, and what it was last told of its Task (#1027): the one
+  // in the thread's live chapter, since a session from an earlier chapter is never resumed (ADR 037).
+  const expected = liveSession(thread, runtime);
+  // The chapter the turn runs in, which the session it starts belongs to, even when a new chapter
+  // starts during the turn: the next turn then starts a new session.
+  const chapterId = thread.liveChapterId;
   // The session the turn ran in, and the policy version its tools ran under, for the Attempt it may start on a Task.
   let sessionId: string | null = null;
   let policy: string | null = null;
@@ -117,9 +121,11 @@ export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: T
     return change((known) => (known.taskBrief == null ? null : { ...known, taskBrief: null }));
   });
 
-  // The session has now seen the thread through `seenThrough`, the turn's reply.
+  // The session has now seen the thread through `seenThrough`, the turn's reply. It takes the place of
+  // the runtime's session in an earlier chapter, which is never resumed again.
   const record = (started: string, seenThrough: MessageId) =>
     Effect.gen(function* () {
+      if (chapterId === null) return;
       const { memory, roster } = briefs;
       const updatedAt = yield* nowIso;
       yield* changeThread(thread.id, (latest) => {
@@ -130,6 +136,9 @@ export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: T
         const session: RuntimeSession = {
           runtime,
           sessionId: started,
+          chapterId,
+          // As the chapter stood when the turn began: a merge during the turn leaves it stale.
+          ...(thread.liveChapterMerges === 0 ? {} : { chapterMerges: thread.liveChapterMerges }),
           seenThrough,
           ...(memoryBrief === undefined ? {} : { memoryBrief }),
           ...carriedMarks(known, started),
@@ -137,6 +146,8 @@ export const makeTurnSession = ({ thread, runtime, changeThread, toldOfTask }: T
         };
         if (
           known?.sessionId === session.sessionId &&
+          known.chapterId === chapterId &&
+          (known.chapterMerges ?? 0) === thread.liveChapterMerges &&
           known.seenThrough === seenThrough &&
           known.memoryBrief === session.memoryBrief &&
           sameRoster(known.roster, session.roster)

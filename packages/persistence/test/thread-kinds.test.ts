@@ -5,6 +5,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import threadKinds from "../src/migrations/0095_thread_kinds.ts";
+import chapters from "../src/migrations/0099_chapters.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1375 (ADR 037): a thread is a chat or a camp. The migration makes each hob's most recent open
@@ -129,6 +130,8 @@ describe("0095_thread_kinds", () => {
       yield* storedThread({ id: "di-trial", agentId: "di", title: "Try", updatedAt: at(1), skillTrial: true });
 
       yield* threadKinds;
+      // The repository reads each thread's live chapter, which 0099 adds.
+      yield* chapters;
 
       const repo = yield* HobbotsRepository;
       const threads: Array<Thread> = [];
@@ -155,7 +158,8 @@ describe("0095_thread_kinds", () => {
       true,
     );
     // Each journaled thread decodes with the kind it has now and the state its own entry said.
-    expect(result.entries.map((entry) => entry.schemaVersion)).toEqual(result.entries.map(() => 4));
+    // 0099 then took each entry on to version 5, with its chapter.
+    expect(result.entries.map((entry) => entry.schemaVersion)).toEqual(result.entries.map(() => 5));
     const journaled = kindsOf(
       result.entries.flatMap((entry) => (entry.payload._tag === "ThreadUpserted" ? [entry.payload.thread] : [])),
     );
@@ -170,6 +174,8 @@ describe("0095_thread_kinds", () => {
       yield* storedHob("bo");
       yield* storedThread({ id: "ada-chat", agentId: "ada", title: "Lamps", updatedAt: at(1) });
       yield* threadKinds;
+      // The repository reads each thread's live chapter, which 0099 adds.
+      yield* chapters;
 
       const repo = yield* HobbotsRepository;
       const thread = (id: string, agentId: string, fields: Partial<Thread> = {}) =>

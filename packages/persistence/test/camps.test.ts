@@ -187,7 +187,9 @@ describe("Make a camp", () => {
       state: "open",
       origin: null,
     });
-    expect(result.made.entries.map((entry) => entry.payload._tag)).toEqual(["CampMade"]);
+    // The camp starts its first chapter in the same change (ADR 037, #1379).
+    expect(result.made.entries.map((entry) => entry.payload._tag)).toEqual(["CampMade", "ChapterStarted"]);
+    expect(result.made.value.liveChapterId).not.toBeNull();
     expect(result.again.entries).toEqual([]);
     expect(result.again.value).toEqual(result.made.value);
     expect(result.afterRename.entries).toEqual([]);
@@ -230,9 +232,12 @@ describe("Start fresh", () => {
     expect(result.carried).toEqual(started.value.carried);
     // One event for the chat, then each moved item, at the revision it was written with: the
     // failure the chat carries, and the step's own Task item, which moves with its tree unnamed.
+    // Last, the new chat's first chapter (ADR 037, #1379).
     const tags = started.entries.map((entry) => entry.payload._tag);
-    expect(tags).toEqual(["ChatStartedFresh", "BackpackItemChanged", "BackpackItemChanged"]);
-    const [fresh, ...moved] = started.entries;
+    expect(tags).toEqual(["ChatStartedFresh", "BackpackItemChanged", "BackpackItemChanged", "ChapterStarted"]);
+    expect(started.value.chat.liveChapterId).not.toBeNull();
+    const [fresh, ...rest] = started.entries;
+    const moved = rest.filter((entry) => entry.payload._tag === "BackpackItemChanged");
     expect(fresh?.correlation.threadId).toBe(FRESH);
     for (const entry of moved) {
       expect(entry.payload).toMatchObject({ item: { threadId: FRESH, revision: entry.sequence } });

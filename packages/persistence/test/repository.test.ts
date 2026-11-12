@@ -3,6 +3,7 @@ import {
   Agent,
   AgentId,
   type ChangeActor,
+  ChapterId,
   Message,
   MessageId,
   roleFields,
@@ -67,7 +68,9 @@ describe("HobbotsRepository", () => {
           id: threadId,
           agentId,
           title: "Renamed",
-          sessions: [{ runtime: "claude-code", sessionId: "s1", seenThrough: null }],
+          sessions: [
+            { runtime: "claude-code", sessionId: "s1", chapterId: ChapterId.make("chapter-1"), seenThrough: null },
+          ],
           brain: { runtime: "codex", model: "gpt", effort: null },
           createdAt: now,
           updatedAt: now,
@@ -89,7 +92,9 @@ describe("HobbotsRepository", () => {
     expect(result.agents.map((a) => [a.name, a.lookSeed, a.lookColor])).toEqual([["Aldric", 1234, "moss"]]);
     expect(Option.getOrThrow(result.thread)).toMatchObject({
       title: "Renamed",
-      sessions: [{ runtime: "claude-code", sessionId: "s1", seenThrough: null }],
+      sessions: [
+        { runtime: "claude-code", sessionId: "s1", chapterId: ChapterId.make("chapter-1"), seenThrough: null },
+      ],
       brain: { runtime: "codex", model: "gpt", effort: null },
     });
     expect(result.messages.map((m) => [m.id, m.content, m.status])).toEqual([
