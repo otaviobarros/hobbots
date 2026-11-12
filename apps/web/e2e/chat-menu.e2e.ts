@@ -16,7 +16,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   // Two chats, so archiving this one moves to the other.
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   for (const prompt of ["Plan the sale emails", "Draft the spring banner copy"]) {
-    await page.goto(`${url}/#/hobs/${aldric}/new`);
+    await page.goto(`${url}/#/hobs/${aldric}/chat`);
     await composer.fill(prompt);
     await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");

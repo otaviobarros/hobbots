@@ -25,7 +25,7 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
@@ -67,7 +67,7 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
   await roomMenu(page, title);
   await expect(page.getByRole("menuitem", { name: "Unpin quest" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await page.getByRole("textbox", { name: /^Message Aldric/ }).fill("Something else");
   await page.getByRole("textbox", { name: /^Message Aldric/ }).press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
@@ -116,7 +116,7 @@ test("[TC-CH-193] a lane says why a Reassign is refused, and the room cancels th
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
@@ -173,7 +173,7 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a spring sale for the shop");
   await composer.press("Enter");
@@ -254,7 +254,7 @@ test("[TC-CH-191] a nested Quest's member gets a lane of its own, and the member
   page,
 }) => {
   const { url, aldric } = await questHub({ nested: true });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
@@ -276,7 +276,7 @@ test("[TC-UX-240] a question answered in the asking hob's lane goes back to it a
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

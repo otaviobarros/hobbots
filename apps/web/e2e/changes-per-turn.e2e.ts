@@ -28,7 +28,7 @@ test("[TC-RT-109] two steps working in one folder at once each list only their o
 }) => {
   test.setTimeout(90_000);
   const { url, aldric } = await aldricHub({ "README.md": "# Site\n", "notes.txt": "Notes\n" });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // One step moves the notes with a command; the other writes a review with its Write tool. Each
   // keeps replying for a while after, so their turns overlap.

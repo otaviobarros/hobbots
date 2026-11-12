@@ -36,8 +36,8 @@ export const messages = {
     paused: "Paused until you wake it",
     live: "Working",
   },
-  newChat: "New chat",
-  newChatWith: ({ name }: { name: string }) => `New chat with ${name}`,
+  openChat: "Open chat",
+  openChatWith: ({ name }: { name: string }) => `Open your chat with ${name}`,
   profile: "Profile",
   tabs: {
     label: ({ name }: { name: string }) => `${name}'s chats, history, memory and skills`,

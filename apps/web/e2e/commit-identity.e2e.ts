@@ -37,7 +37,7 @@ test("[TC-OR-1241-05] with no Git identity the chat asks in plain words whether 
   home = `${test.info().outputDir}-no-git`;
   mkdirSync(home, { recursive: true });
   const { url, aldric } = await aldricHub(undefined, [], { HOBBOTS_GIT_HOME: home });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
 
   // Aldric's turn may commit, so the hub asks once, in this chat's tray, with no Git terms and no box.
   await ask(page, ["Save the notes", COMMIT]);

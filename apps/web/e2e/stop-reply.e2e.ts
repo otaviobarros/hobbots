@@ -47,7 +47,7 @@ test("[TC-CH-005] Stop shows Stopping, then Stopped with the partial reply kept,
     instructions: "",
   });
 
-  await page.goto(`${hub.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${hub.url}/#/hobs/${pip.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(LONG_PROMPT);
   await composer.press("Enter");

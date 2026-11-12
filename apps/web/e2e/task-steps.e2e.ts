@@ -53,7 +53,7 @@ test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // Steps 1, 3 and 4 return their own result at once. Step 2 writes a long reply, which the fake
   // streams word by word, so it runs long enough to be seen; its reply becomes its result.

@@ -101,7 +101,7 @@ export function FirstArrived({ hob, onReplay }: { hob: Agent; onReplay: () => vo
       <div className="absolute inset-x-4 bottom-5 flex flex-col items-center gap-2">
         <span className="flex max-w-full gap-2">
           <Button asChild className="min-w-0 max-w-[280px]">
-            <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }}>
+            <Link to="/hobs/$hobId/chat" params={{ hobId: hob.id }}>
               <span className="truncate">{copy.sayHello({ name: hob.name })}</span>
             </Link>
           </Button>

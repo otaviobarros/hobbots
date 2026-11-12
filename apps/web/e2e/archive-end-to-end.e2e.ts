@@ -53,7 +53,7 @@ const threadLink = sidebarThread;
 
 /** Starts a new thread with Pip from the composer and waits for its echo. */
 const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => {
-  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(prompt);
   await composer.press("Enter");

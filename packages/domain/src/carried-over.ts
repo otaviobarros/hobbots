@@ -63,11 +63,12 @@ const itemLabel = (item: BackpackItem, tasks: ReadonlyArray<Task>) => {
   return about === undefined ? item.kind : `${item.kind} about ${oneLine(about.brief)}`;
 };
 
-/** A ref and its label, before Start fresh records it. */
-export interface CarriedOverEntry {
-  readonly ref: CarriedOverRef;
-  readonly label: string;
-}
+/**
+ * A ref and its label, before Start fresh records it. A chat's Start fresh sheet lists these, so you
+ * see what would come along before you choose it.
+ */
+export const CarriedOverEntry = Schema.Struct({ ref: CarriedOverRef, label: Schema.String });
+export type CarriedOverEntry = typeof CarriedOverEntry.Type;
 
 /**
  * What Start fresh records as carried, in a stable order: Tasks, questions, reminders, then other

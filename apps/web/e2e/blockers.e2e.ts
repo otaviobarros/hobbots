@@ -51,7 +51,7 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // One step that returns at once; the turn its result starts is cut off, which uses its one delivery.
   const steps = [
@@ -101,7 +101,7 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
 // covers IN-007
 test("[TC-IN-097] Dismiss takes stuck work out of the chat's tray and out of Needs you", async ({ page }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   const steps = [
     {

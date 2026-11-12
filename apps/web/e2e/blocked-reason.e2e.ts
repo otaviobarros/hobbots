@@ -64,7 +64,7 @@ test("[TC-OR-223] Rook's lane says why its Task is blocked, not a bare Blocked",
   const aldric = await hobNamed(current, "Aldric", 4000);
   await hobNamed(current, "Rook", 5732);
 
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

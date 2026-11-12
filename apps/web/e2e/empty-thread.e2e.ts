@@ -15,12 +15,12 @@ test("[TC-CH-263] an empty thread shows the hob on its stage asking what we are 
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
 
   // Aldric has a chat already, so a new one is a fresh page.
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await composer.fill("Draft the spring banner copy");
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByText("Echo: Draft the spring banner copy").first()).toBeVisible({ timeout: 20_000 });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
 
   await expect(chat.getByText("What are we making?")).toBeVisible();
   await expect(chat.getByRole("heading", { name: "A fresh page" })).toBeVisible();

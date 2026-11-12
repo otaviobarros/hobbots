@@ -15,7 +15,7 @@ test("[TC-OR-402] the Quest room shows a step that stopped on a finding as block
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   const steps = [
     {

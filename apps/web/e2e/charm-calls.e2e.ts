@@ -87,7 +87,7 @@ test("[TC-OR-075] an uncertain GitHub push is settled from its step, once, and t
       effort: "medium",
       instructions: "",
     });
-    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
     const composer = page.getByRole("textbox", { name: /^Message Pip/ });
     await composer.fill(["Ship it", "fake:tool Bash sleep 600"].join("\n"));
     await composer.press("Enter");

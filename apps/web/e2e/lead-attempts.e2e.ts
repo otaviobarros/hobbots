@@ -20,7 +20,7 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
 
   // Three turns on one Task: the first starts it and edits the notes, the next reports a finding
   // and writes a changelog, the last finishes it.

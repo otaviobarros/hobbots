@@ -14,7 +14,7 @@ test("[TC-OR-432] a delegation that leaves Nettle no command tool shows in Aldri
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Nettle"]);
   // Nettle works in Aldric's folder too, so only the authority Aldric gives can leave it toolless.
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

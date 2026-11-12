@@ -12,7 +12,7 @@ test("[TC-OR-288] a Task that completed with uncommitted changes shows them unde
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Make the shop badge in our green");
   await composer.press("Enter");
@@ -34,7 +34,7 @@ test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Stil
   page,
 }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Wrap up the spec for the shop");
   await composer.press("Enter");

@@ -107,7 +107,7 @@ export function ArchiveProvider({
       thread.id,
     );
     if (next) openThread(next);
-    else void navigate({ to: "/hobs/$hobId/new", params: { hobId: hob.id } });
+    else void navigate({ to: "/hobs/$hobId/chat", params: { hobId: hob.id } });
     here.current = { hobId: hob.id, threadId: next?.id };
     return here.current;
   };

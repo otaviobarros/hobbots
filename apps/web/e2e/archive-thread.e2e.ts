@@ -140,7 +140,7 @@ test("[TC-CH-275] archiving a hob's only chat opens its fresh page and keeps the
   await page.getByRole("menuitem", { name: /Archive chat/ }).click();
 
   // Nothing is left to open, so the fresh page opens, and the toast survives the move.
-  await expect(page).toHaveURL(new RegExp(`hobs/${pip}/new$`));
+  await expect(page).toHaveURL(new RegExp(`hobs/${pip}/chat$`));
   await expect(page.getByRole("status").filter({ hasText: "Archived “Tagline ideas”." })).toBeVisible();
   await page.getByRole("button", { name: "Undo archive of Tagline ideas" }).click();
   await expect(page).toHaveURL(new RegExp(`threads/${threads[0]}$`));
@@ -181,7 +181,7 @@ test("[TC-CH-152] a thread cannot be archived while its reply runs, by menu or b
     .toEqual(["complete", "complete", "complete", "complete"]);
   await page.getByRole("main", { name: "Chat" }).click();
   await page.keyboard.press("Control+Alt+a");
-  await expect(page).toHaveURL(new RegExp(`hobs/${pip}/new$`));
+  await expect(page).toHaveURL(new RegExp(`hobs/${pip}/chat$`));
   await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
 });
 

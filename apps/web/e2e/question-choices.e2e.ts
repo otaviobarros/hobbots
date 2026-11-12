@@ -7,7 +7,7 @@ test.afterEach(stopQuestHub);
 /** Starts the Black Friday Quest and waits for Ada's question, which offers two choices, to reach you. */
 const startQuest = async (page: import("@playwright/test").Page) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");

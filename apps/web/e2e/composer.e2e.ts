@@ -43,7 +43,7 @@ const openMoss = async (page: Page) => {
     effort: "medium",
     instructions: "",
   });
-  await page.goto(`${hub.url}/#/hobs/${moss.id}/new`);
+  await page.goto(`${hub.url}/#/hobs/${moss.id}/chat`);
   return { hobUrl: `${hub.url}/#/hobs/${moss.id}`, composer: page.getByRole("textbox", { name: /^Message Moss/ }) };
 };
 
@@ -135,12 +135,12 @@ test("[TC-CH-132] each thread keeps its unsent draft, and a long draft grows, th
   await expect(page.getByText("Echo: Start a thread")).toBeVisible();
 
   await composer.fill("Half a thought");
-  await page.goto(`${hobUrl}/new`);
+  await page.goto(`${hobUrl}/chat`);
   await expect(composer).toHaveValue("");
   await composer.fill("A different idea");
   await page.goto(threadUrl);
   await expect(composer).toHaveValue("Half a thought");
-  await page.goto(`${hobUrl}/new`);
+  await page.goto(`${hobUrl}/chat`);
   await expect(composer).toHaveValue("A different idea");
 
   // A reload keeps the draft too, even one typed a moment before.

@@ -69,7 +69,7 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
 
   // Frodo brings in Quill, who asks him something, and waits for her. His next turn waits again,
   // reads her question in what the wait answers, and answers it.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

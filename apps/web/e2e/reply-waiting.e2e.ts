@@ -29,7 +29,7 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   scan,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // A Quest gives the commands a Workbench, whose Terminal shows how each one ended.
   await send(page, ["Start the dev server", script("start_quest", { key: "quest", goal: "Start the dev server" })]);
   await expect(ticket(page, "Start the dev server")).toBeVisible({ timeout: 20_000 });

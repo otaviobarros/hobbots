@@ -114,7 +114,7 @@ const startWork = async (
   members: ReadonlyArray<string>,
   state: string,
 ) => {
-  await page.goto(`${current.url}/#/hobs/${ids.Aldric}/new`);
+  await page.goto(`${current.url}/#/hobs/${ids.Aldric}/chat`);
   await send(page, request);
   await expect(page).toHaveURL(/\/threads\//);
   const thread = page.url().match(/threads\/([^/?#]+)/)?.[1] ?? "";
