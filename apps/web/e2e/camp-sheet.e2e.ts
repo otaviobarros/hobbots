@@ -1,5 +1,5 @@
 import type { Message, Thread } from "@hobbots/domain";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, test } from "./hub.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
@@ -251,4 +251,43 @@ test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread until
   expect(asked.slice(0, pressed)).not.toContain("read");
   expect(asked.slice(pressed)).toEqual(expect.arrayContaining(["catch-up", "read"]));
   expect(asked.indexOf("read", pressed)).toBeGreaterThan(asked.indexOf("catch-up", pressed));
+});
+
+/** An element's box, which the test needs on screen. */
+const boxOf = async (locator: Locator) => {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error("The element is not on screen");
+  return box;
+};
+
+// covers UX-001, ADR 037 (camp sheet, Find)
+test("[TC-UX-1431-02] the camp sheet's tabs fit it without a sideways scroll, and Find's close sits inside its box", async ({
+  page,
+}) => {
+  const { aldric, hub } = await aldricHub();
+  const camp = await campAt(hub, aldric, "Search the web for hobbots.app and explore the site");
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(camp.url);
+
+  await main.getByRole("button", { name: /^This camp, open the sheet for / }).click();
+  const sheet = page.getByRole("dialog", { name: /^Search the web/ });
+  await sheet.getByRole("tab", { name: /^Mine/ }).click();
+  await expect(sheet.getByRole("tab", { name: /^Mine/ })).toHaveAttribute("aria-selected", "true");
+  const sideways = await sheet.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(sideways).toBeLessThanOrEqual(0);
+  const edges = await boxOf(sheet);
+  for (const name of [/^Overview/, /^Decisions/, /^Artifacts/, /^Mine/]) {
+    const tab = await boxOf(sheet.getByRole("tab", { name }));
+    expect(tab.x).toBeGreaterThanOrEqual(edges.x);
+    expect(tab.x + tab.width).toBeLessThanOrEqual(edges.x + edges.width);
+  }
+  await page.keyboard.press("Escape");
+
+  // The close button keeps clear of the field's edges.
+  await page.getByRole("button", { name: "Find", exact: true }).click();
+  const field = await boxOf(page.locator("search").filter({ has: page.getByRole("searchbox", { name: "Find" }) }));
+  const close = await boxOf(page.getByRole("button", { name: "Close Find" }));
+  expect(close.x + close.width).toBeLessThanOrEqual(field.x + field.width - 4);
+  expect(close.y).toBeGreaterThanOrEqual(field.y + 2);
 });

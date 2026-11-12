@@ -60,12 +60,15 @@ export function CampSheet({ hob, camp, onClose }: { hob: Agent; camp: Thread; on
         </SheetHeader>
         <SheetTitle clamped>{camp.title}</SheetTitle>
         <Tabs value={tab} onValueChange={(value) => isCampTab(value) && setTab(value)}>
-          <TabsList className="mb-3.5">
+          {/* The tabs run to the sheet's edges and stay compact, so all four and their counts fit its width. */}
+          <TabsList variant="tight" className="-mx-[18px] mb-3.5">
             {TABS.map((each) => (
-              <TabsTrigger key={each} value={each}>
+              <TabsTrigger key={each} value={each} variant="tight">
                 {messages.tabs[each]}
                 {counts[each] !== undefined && (
-                  <span className="text-meta text-label">{messages.count({ count: counts[each] })}</span>
+                  <span className="rounded-tag bg-line px-1.5 text-meta font-semibold text-text-secondary">
+                    {messages.count({ count: counts[each] })}
+                  </span>
                 )}
               </TabsTrigger>
             ))}

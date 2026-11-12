@@ -111,7 +111,7 @@ test("[TC-UX-202] the chat column folds to a rail that marks a new message from 
   await expect(rail.getByRole("button", { name: "Open the chat, new from Aldric" })).toBeVisible({ timeout: 30_000 });
   await expect(rail).toContainText("New from Aldric");
   // Folded away, the chat reads nothing: the hub keeps the thread unread, so Aldric's tile says so.
-  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Aldric, / });
+  const tile = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Aldric, / });
   await expect(tile).toHaveAccessibleName(/, new messages$/);
 
   // The fold is kept on this device across a reload, and opening the chat clears the mark.

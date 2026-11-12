@@ -145,24 +145,18 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   await expect(page).toHaveURL(questThread("campaign"));
   await expect(drawer("Brief for campaign")).toBeVisible();
 
-  // Each member's card in the sidebar names the Quest it works on by its goal and opens it.
-  await page.goto(`${hub.url}/#/hobs/${ids.quill}`);
-  const card = async (name: string) => {
-    await page
-      .getByRole("navigation", { name: "Sections" })
-      .getByRole("button", { name: new RegExp(`^${name}, `) })
-      .click();
-    return page.getByRole("dialog", { name });
+  // Each member's page names the Quest it works on by its goal and opens it.
+  const card = async (name: "Aldric" | "Quill" | "Ada" | "Pip") => {
+    await page.goto(`${hub?.url}/#/hobs/${ids[name.toLowerCase() as keyof typeof ids]}`);
+    return page.getByRole("complementary", { name: `About ${name}` });
   };
   await expect(
     (await card("Ada")).getByRole("link", {
       name: "Ada is on Aldric's quest “Black Friday campaign”, Not started. Open the quest",
     }),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
   // Aldric leads it, so it is not his work as a member.
   await expect((await card("Aldric")).getByRole("link", { name: /^Aldric is on/ })).toHaveCount(0);
-  await page.keyboard.press("Escape");
   // Quill's work is not one of her threads.
   expect(await call<ReadonlyArray<unknown>>("GET", `/agents/${ids.quill}/threads`)).toEqual([]);
   await (await card("Quill"))
