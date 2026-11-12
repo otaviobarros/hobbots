@@ -7,6 +7,7 @@ test.afterEach(stopQuestHub);
 // covers OR-004, OR-006, UX-001
 test("[TC-UX-1346-07] a Quest its lead stopped at your request reads stopped, with its summary, never finished", async ({
   page,
+  scan,
 }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -27,6 +28,7 @@ test("[TC-UX-1346-07] a Quest its lead stopped at your request reads stopped, wi
   );
   await expect(ticket(page, title)).toContainText("Stopped at your request after", { timeout: 15_000 });
   await expect(ticket(page, title)).not.toContainText("Finished");
+  await scan();
 
   const quest = await openQuest(page, title);
   const stopped = quest.getByRole("region", { name: "Stopped at your request" });
@@ -34,4 +36,5 @@ test("[TC-UX-1346-07] a Quest its lead stopped at your request reads stopped, wi
   await expect(stopped).toContainText("Quill drafted the landing copy. The launch email was not scheduled.");
   await expect(stopped).toContainText("Why: You asked to stop the campaign");
   await expect(quest.getByRole("region", { name: "Quest finished" })).toHaveCount(0);
+  await scan(quest);
 });
