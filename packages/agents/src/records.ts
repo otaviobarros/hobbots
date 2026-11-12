@@ -2,6 +2,8 @@ import { ThreadNotFound } from "@hobbots/api";
 import {
   type Actor,
   type Artifact,
+  type ArtifactReviewOutcome,
+  type ArtifactReviewRefused,
   type Committed,
   type Decision,
   type DecisionId,
@@ -16,6 +18,7 @@ import {
   RECORD_DECISION_LABEL,
   RECORD_DECISION_TOOL,
   RecordDecisionInput,
+  type RegisteredArtifactId,
   recordDecisionJsonSchema,
   stableJson,
   type ThreadId,
@@ -31,7 +34,8 @@ import { PackRecordSource } from "./turn-pack.ts";
  * Decisions and the artifacts registry (ADR 037, Records). Decisions are recorded by a hob's
  * `record_decision`, on every runtime that serves hub tools, or by you in the app, and crossed out,
  * never edited. Artifacts are registered by the hub itself, in the transaction that journals the
- * records it indexes; this only reads them.
+ * records it indexes; you review or dismiss each, and the GitHub Charm reviews a pull request once
+ * GitHub reports it merged or closed (#1422).
  */
 
 /** A decision to record, as the command takes it. */
@@ -62,6 +66,15 @@ export interface CrossOutRequest {
   readonly at: string;
 }
 
+/** Your review of an artifact in a chat or camp. */
+export interface ReviewRequest {
+  readonly threadId: ThreadId;
+  readonly artifactId: RegisteredArtifactId;
+  readonly outcome: ArtifactReviewOutcome;
+  readonly by: Actor;
+  readonly at: string;
+}
+
 /**
  * Where decisions and artifacts are kept (ADR 037). Each command runs its pure rule and journals
  * its events in one transaction.
@@ -87,6 +100,24 @@ export class RecordRepository extends Context.Service<
     readonly listDecisions: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>>;
     /** The thread's artifacts, each once at its latest version, the most recently changed first. */
     readonly listArtifacts: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Artifact>>;
+    /**
+     * Reviews or dismisses an artifact waiting for you, journaled as `ArtifactReviewSettled` with the
+     * summaries of the Quests whose Tasks made it. One settled that way already is returned as it is,
+     * and nothing is journaled.
+     */
+    readonly reviewArtifact: (
+      request: ReviewRequest,
+    ) => Effect.Effect<Committed<Artifact>, ArtifactReviewRefused | ThreadNotFound>;
+    /**
+     * Reviews a pull request artifact GitHub reported merged or closed, journaled as
+     * `ArtifactReviewSettled`. Null, with nothing journaled, when it no longer waits for review.
+     */
+    readonly endPullRequest: (
+      artifactId: RegisteredArtifactId,
+      at: string,
+    ) => Effect.Effect<Committed<Artifact | null>>;
+    /** Every pull request artifact still waiting for review, in every chat and camp, oldest change first. */
+    readonly waitingPullRequests: Effect.Effect<ReadonlyArray<Artifact>>;
   }
 >()("@hobbots/agents/RecordRepository") {}
 
@@ -123,6 +154,16 @@ export class Records extends Context.Service<
     readonly activeDecisions: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>>;
     /** The artifacts index, the most recently changed first: what the context pack carries. */
     readonly artifactsOf: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Artifact>>;
+    /** Marks an artifact you looked at reviewed, or dismisses it; the same again changes nothing. */
+    readonly review: (
+      threadId: ThreadId,
+      artifactId: RegisteredArtifactId,
+      outcome: ArtifactReviewOutcome,
+    ) => Effect.Effect<Artifact, ArtifactReviewRefused | ThreadNotFound>;
+    /** Every pull request artifact still waiting for review, for the GitHub Charm to check. */
+    readonly waitingPullRequests: Effect.Effect<ReadonlyArray<Artifact>>;
+    /** Reviews a pull request artifact GitHub reported merged or closed; null when it no longer waits. */
+    readonly pullRequestEnded: (artifactId: RegisteredArtifactId) => Effect.Effect<Artifact | null>;
   }
 >()("@hobbots/agents/Records") {
   static readonly layer = Layer.effect(
@@ -130,7 +171,7 @@ export class Records extends Context.Service<
     Effect.gen(function* () {
       const records = yield* RecordRepository;
       const repo = yield* HobbotsRepository;
-      const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a decision");
+      const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a record");
       const now = Effect.map(DateTime.now, DateTime.formatIso);
 
       const known = (threadId: ThreadId) =>
@@ -172,6 +213,16 @@ export class Records extends Context.Service<
         activeDecisions: (threadId) =>
           Effect.map(records.listDecisions(threadId), (all) => all.filter(DecisionStates.isActive)),
         artifactsOf: (threadId) => records.listArtifacts(threadId),
+        review: (threadId, artifactId, outcome) =>
+          Effect.gen(function* () {
+            yield* known(threadId);
+            return yield* announced(
+              records.reviewArtifact({ threadId, artifactId, outcome, by: OWNER_ACTOR, at: yield* now }),
+            );
+          }),
+        waitingPullRequests: records.waitingPullRequests,
+        pullRequestEnded: (artifactId) =>
+          Effect.flatMap(now, (at) => announced(records.endPullRequest(artifactId, at))),
       });
     }),
   );

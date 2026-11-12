@@ -64,6 +64,7 @@ import {
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
   LocalGitToolsLive,
+  PullRequestReviews,
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
@@ -555,6 +556,8 @@ const ServerLive = Layer.unwrap(
             CampDrift.layer,
             // Each chat and camp gets its brief at chapter ends and Quest steps, which the pack reads (ADR 037).
             CampBriefs.layer,
+            // A pull request a hob delivered is reviewed once GitHub reports it merged or closed (#1422).
+            PullRequestReviews,
           ),
         ),
       )

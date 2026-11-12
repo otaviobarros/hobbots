@@ -23,3 +23,6 @@ export const hobActor = (agentId: AgentId): Actor => ({ kind: "hob", id: agentId
 
 /** The hub itself as the author of a record it writes, such as a camp's brief. */
 export const HUB_ACTOR: Actor = { kind: "hub", id: "hub" };
+
+/** The hub acting on what GitHub reported, such as a pull request merged or closed. */
+export const GITHUB_ACTOR: Actor = { kind: "hub", id: "github" };

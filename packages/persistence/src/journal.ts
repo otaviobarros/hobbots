@@ -229,6 +229,7 @@ type RecordEvent = Extract<
       | "DecisionRecorded"
       | "DecisionSuperseded"
       | "ArtifactRegistered"
+      | "ArtifactReviewSettled"
       | "BriefWritten";
   }
 >;
@@ -240,6 +241,7 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  "ArtifactReviewSettled",
   "BriefWritten",
 ]);
 const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
@@ -427,7 +429,11 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
     const artifacts = yield* registerArtifacts(sql, events, first + items.length + grants.length + claims.length);
     const before = [...items, ...grants, ...claims, ...artifacts];
-    const summarized = [...before, ...(yield* refreshQuestSummaries(sql, events, first + before.length))];
+    // A summary counts what Tasks made, so it reads the artifacts registered just now too.
+    const summarized = [
+      ...before,
+      ...(yield* refreshQuestSummaries(sql, [...events, ...artifacts], first + before.length)),
+    ];
     const raised = yield* raiseCampSuggestions(sql, [...events, ...artifacts], first + summarized.length);
     const expired = yield* expireCampSuggestions(sql, events, first + summarized.length + raised.length);
     return [...summarized, ...raised, ...expired];

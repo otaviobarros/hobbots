@@ -217,6 +217,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "DecisionRecorded",
   "DecisionSuperseded",
   "ArtifactRegistered",
+  "ArtifactReviewSettled",
   // Camp suggestions (ADR 037) have no screen yet; the suggestion card reads them (#1387).
   "CampSuggested",
   "CampSuggestionKept",
@@ -244,6 +245,7 @@ type UnappliedEvent = Extract<
       | "DecisionRecorded"
       | "DecisionSuperseded"
       | "ArtifactRegistered"
+      | "ArtifactReviewSettled"
       | "CampSuggested"
       | "CampSuggestionKept"
       | "CampSuggestionAccepted"
