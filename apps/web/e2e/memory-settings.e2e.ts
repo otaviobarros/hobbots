@@ -122,6 +122,38 @@ test("[TC-GEN-222] chooses the hub's brain from one list in Your data, sees shar
   await expectChosen(brain, BRAIN, "No AI");
 });
 
+// covers ADR 037, STD-REACT-015, STD-UI-009
+test("[TC-GEN-229] says when the hub can't tell which AI is signed in, keeps the providers it knows, and checks again", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  await finishSetup(hub, ["claude-code"]);
+  // The runtime check fails, so Codex, signed in on the hub but not used by the hobs, is not known yet.
+  let refuse = true;
+  await page.route("**/api/runtimes", async (route) => {
+    if (refuse) await route.fulfill({ status: 500, body: "" });
+    else await route.continue();
+  });
+  await page.goto(`${hub.url}/#/settings/data`);
+  const card = page.getByRole("region", { name: "The hub's brain" });
+  const brain = modelList(card, BRAIN);
+  await expect(card.getByRole("alert")).toContainText("could not check which AI is signed in", { timeout: 20_000 });
+  await expectChosen(brain, BRAIN, "Fake Thinker (recommended)");
+  await brain.click();
+  const menu = page.getByRole("menu", { name: BRAIN });
+  await expect(menu.getByRole("menuitemradio")).toHaveText(["✓Fake Thinker (recommended)", "No AI"]);
+  await page.keyboard.press("Escape");
+  refuse = false;
+  await card.getByRole("button", { name: "Try again" }).click();
+  await expect(card.getByRole("alert")).toHaveCount(0);
+  await brain.click();
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    "✓Fake Thinker (recommended)",
+    "Fake Coder (recommended)",
+    "No AI",
+  ]);
+});
+
 // covers ADR 028, ADR 037
 test("[TC-GEN-224] keeps a choice the hub could not save, sends it again or goes back, and brings an effort chosen before back to low", async ({
   page,

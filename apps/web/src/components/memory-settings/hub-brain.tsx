@@ -48,16 +48,51 @@ export function HubBrainCard() {
 
 /**
  * The providers the brain can run on: any runtime signed in on the hub, as its fallback does, one
- * connected for the hobs or one ready on this hub that the hobs do not use.
+ * connected for the hobs or one ready on this hub that the hobs do not use. When either can't be
+ * asked, the list keeps the providers it knows, and `failed` says some may be missing.
  */
-const useSignedIn = (): ReadonlyArray<MemoryModelVendor> => {
-  const forHobs = useQuery(setupQuery).data?.connectedProviders ?? [];
-  const ready = (useQuery(runtimesQuery).data ?? []).filter((health) => health.availability === "ready");
-  return [...forHobs, ...ready.map((health) => health.runtime)].flatMap((runtime) => {
+const useSignedIn = () => {
+  const setup = useQuery(setupQuery);
+  const runtimes = useQuery(runtimesQuery);
+  const forHobs = setup.data?.connectedProviders ?? [];
+  const ready = (runtimes.data ?? []).filter((health) => health.availability === "ready");
+  const vendors = [...forHobs, ...ready.map((health) => health.runtime)].flatMap((runtime) => {
     const each = vendorOf(runtime);
     return each === undefined ? [] : [each];
   });
+  return {
+    vendors: [...new Set(vendors)] as ReadonlyArray<MemoryModelVendor>,
+    // Until each answers once, the list may still grow; a retry shows as checking again.
+    checking: [setup, runtimes].some((query) => query.data === undefined && query.isFetching),
+    failed: [setup, runtimes].some((query) => query.data === undefined && query.isError && !query.isFetching),
+    retry: () => {
+      if (setup.isError) void setup.refetch();
+      if (runtimes.isError) void runtimes.refetch();
+    },
+  };
 };
+
+/** Says the list may miss a provider while the hub can't be asked which are signed in, with a retry. */
+function SignedInState({ signedIn }: { signedIn: ReturnType<typeof useSignedIn> }) {
+  if (signedIn.failed)
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <p role="alert" className="m-0 text-detail text-rose">
+          {copy.brain.checkFailed}
+        </p>
+        <Button variant="ghost" size="xs" onClick={signedIn.retry}>
+          {copy.model.retry}
+        </Button>
+      </span>
+    );
+  if (signedIn.checking)
+    return (
+      <span aria-busy className="text-detail text-label">
+        {copy.brain.checking}
+      </span>
+    );
+  return null;
+}
 
 /**
  * The model, from one list grouped by provider, the effort it runs at, the hint under it, what the
@@ -70,7 +105,8 @@ function BrainChoices({ settings, state }: { settings: MemorySettings; state: Me
   const failed = update.isError ? update.variables : undefined;
   const shown = (update.isPending ? update.variables : failed) ?? settings;
   const vendor = shown.provider === "none" ? null : shown.provider;
-  const connected = useSignedIn();
+  const signedIn = useSignedIn();
+  const connected = signedIn.vendors;
   // A runtime's models are asked for when the list shows them, or the fallback names its smallest.
   const listed = (each: MemoryModelVendor) =>
     connected.includes(each) || shown.provider === each || shown.fallback === "other";
@@ -100,6 +136,7 @@ function BrainChoices({ settings, state }: { settings: MemorySettings; state: Me
             onPick={(value) => save(pickBrain(shown, value))}
           />
         </span>
+        <SignedInState signedIn={signedIn} />
         {effort !== null && (
           <span className="flex flex-wrap items-center gap-2 text-detail text-text-secondary">
             {effort.text}

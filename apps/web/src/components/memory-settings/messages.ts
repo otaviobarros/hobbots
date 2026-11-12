@@ -36,6 +36,8 @@ export const messages = {
     list: ({ label, choice }: { label: string; choice: string }) => `${label}: ${choice}`,
     smallest: "Its smallest model",
     none: "No AI",
+    checking: "Checking which AI is signed in on the hub…",
+    checkFailed: "Hobbots could not check which AI is signed in on the hub, so some may be missing from the list.",
     effort: {
       low: "Runs at low effort: this work needs no more.",
       other: ({ effort }: { effort: string }) =>
