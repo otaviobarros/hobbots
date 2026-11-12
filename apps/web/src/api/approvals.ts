@@ -41,6 +41,17 @@ export const storeApproval = (queryClient: QueryClient, approval: ApprovalReques
   });
 };
 
+/**
+ * A request moved to another thread with its quest (ADR 037, #1389): it leaves the list of the
+ * thread it left, and is kept, at its newer revision, everywhere else it shows.
+ */
+export const moveApproval = (queryClient: QueryClient, fromThreadId: ThreadId, approval: ApprovalRequest) => {
+  storeApproval(queryClient, approval);
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(fromThreadId), (old) =>
+    old?.filter((each) => each.id !== approval.id),
+  );
+};
+
 export interface Decision {
   readonly decision: ApprovalDecision;
   readonly reason?: string | undefined;

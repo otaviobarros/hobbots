@@ -286,14 +286,16 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       );
 
     // What the lead writes in your chat: only the plan, a question no lead can answer and the
-    // finish (#901). The plan is its reply to your request; the rest the play writes as it goes.
+    // finish (#901). The plan is its reply to your request; the rest the play writes as it goes, in
+    // the thread the Quest is in now: a chapter moved into a camp takes it there (#1389).
     const say = (content: string) =>
       Effect.gen(function* () {
+        const top = Option.getOrUndefined(yield* tasks.readTree(campaignOf(cast.thread.id)))?.tasks[0];
         yield* repo
           .upsertMessage(
             new Message({
               id: MessageId.make(crypto.randomUUID()),
-              threadId: cast.thread.id,
+              threadId: top?.threadId ?? cast.thread.id,
               role: "assistant",
               content,
               status: "complete",

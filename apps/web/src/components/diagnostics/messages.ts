@@ -180,6 +180,7 @@ export const messages = {
     BackpackItemChanged: "Backpack item moved",
     ApprovalRequested: "Approval asked",
     ApprovalResolved: "Approval decided",
+    ApprovalMoved: "Approval moved",
     CommandRecorded: "Command recorded",
     FileChangesRecorded: "Files changed",
     FolderScanned: "Folder scanned",

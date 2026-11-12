@@ -359,6 +359,21 @@ describe("approval events", () => {
       "denied",
     ]);
   });
+
+  // covers ADR 037 (Quests in camps), #1389
+  it("[TC-CH-1389-06] moves a request that went with its quest out of the thread it left and into the camp's list", () => {
+    const client = new QueryClient();
+    const camp = ThreadId.make("camp-1");
+    const asked = approval("pending", 1);
+    client.setQueryData(approvalsKey(threadId), [asked]);
+    client.setQueryData(approvalsKey(camp), []);
+    const moved = new ApprovalRequest({ ...asked, threadId: camp, revision: 5 });
+    applyEvent(client, { _tag: "ApprovalMoved", fromThreadId: threadId, approval: moved });
+    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(threadId))).toEqual([]);
+    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(camp))?.map((a) => a.threadId)).toEqual([
+      camp,
+    ]);
+  });
 });
 
 // Settings reads remote access again as its stream connects, and the menu-bar icon pauses it while

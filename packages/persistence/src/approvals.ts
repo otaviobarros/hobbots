@@ -78,10 +78,20 @@ export const ApprovalRepositoryLive = Layer.effect(
           ORDER BY ${oldestFirst(sql)}`.pipe(Effect.map(approvalRows)),
     });
 
+    // A party member's request, asked outside any reply, is in the thread its Task is in when it is
+    // written: its session may have started before a chapter moved the quest into a camp (#1389).
+    // Read in the request's own transaction, which takes its turn with the move's.
+    const threadNow = (input: ApprovalRequest) =>
+      input.messageId !== null || input.taskId === null
+        ? Effect.succeed(input.threadId)
+        : sql<{ readonly threadId: string | null }>`SELECT thread_id FROM tasks WHERE id = ${input.taskId}`.pipe(
+            Effect.map(([task]) => (task?.threadId ?? input.threadId) as ApprovalRequest["threadId"]),
+          );
+
     const insert = (input: ApprovalRequest) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
-          const approval = new ApprovalRequest({ ...input, revision });
+          const approval = new ApprovalRequest({ ...input, threadId: yield* threadNow(input), revision });
           yield* sql`INSERT INTO approval_requests ${sql.insert({
             id: approval.id,
             agent_id: approval.agentId,
@@ -131,13 +141,18 @@ export const ApprovalRepositoryLive = Layer.effect(
     ) =>
       journaled(1 + grants.length, (revision) =>
         Effect.gen(function* () {
-          const approval = new ApprovalRequest({ ...input, revision });
-          const updated = yield* sql`UPDATE approval_requests
-            SET state = ${approval.state}, lifetime = ${approval.lifetime}, deny_reason = ${approval.denyReason},
-              decided_at = ${approval.decidedAt}, decided_by_device_id = ${approval.decidedByDeviceId},
-              decided_via = ${approval.decidedVia}, revision = ${revision}
-            WHERE id = ${approval.id} AND state = ${from} RETURNING id`;
-          if (updated.length === 0) return null;
+          const decided = new ApprovalRequest({ ...input, revision });
+          const [updated] = yield* sql<{ readonly threadId: string }>`UPDATE approval_requests
+            SET state = ${decided.state}, lifetime = ${decided.lifetime}, deny_reason = ${decided.denyReason},
+              decided_at = ${decided.decidedAt}, decided_by_device_id = ${decided.decidedByDeviceId},
+              decided_via = ${decided.decidedVia}, revision = ${revision}
+            WHERE id = ${decided.id} AND state = ${from} RETURNING thread_id`;
+          if (updated === undefined) return null;
+          // The request as stored: a chapter's move may have taken it to a camp since it was read (#1389).
+          const approval = new ApprovalRequest({
+            ...decided,
+            threadId: updated.threadId as ApprovalRequest["threadId"],
+          });
           const saved = yield* Effect.forEach(grants, (grant, index) =>
             Effect.gen(function* () {
               // A This Task grant whose top Task ended meanwhile is saved already ended, so it never
