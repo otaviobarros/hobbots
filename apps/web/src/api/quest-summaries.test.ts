@@ -57,6 +57,35 @@ const steps = fc.array(
   { maxLength: 12 },
 );
 
+/**
+ * The model: what the hub holds, and each read with what the hub held when the read was taken. A
+ * read answers with that, in the order the reads were made.
+ */
+const hubModel = (client: QueryClient) => {
+  const hub = new Map<QuestId, QuestSummary>();
+  const taken: Array<ReadonlyArray<QuestSummary>> = [];
+  let revision = 0;
+  let answered = 0;
+  const took = () => {
+    while (taken.length < pending.length) taken.push([...hub.values()].filter((each) => each.state === "active"));
+  };
+  const change = (quest: number, ended: boolean) => {
+    const questId = QUESTS[quest];
+    if (questId === undefined) return;
+    revision += 1;
+    const next = summary(questId, revision, revision, ended ? "completed" : "active");
+    hub.set(questId, next);
+    questSummaryChanged(client, next);
+  };
+  const answer = () => {
+    if (answered >= pending.length) return false;
+    pending[answered]?.(taken[answered] ?? []);
+    answered += 1;
+    return true;
+  };
+  return { hub, took, change, answer };
+};
+
 describe("the hub's Quest summaries in the window", () => {
   // covers UX-002
   it("[TC-UX-1374-03] ends with each Quest's newest summary, whatever order changes and reads arrive in", async () => {
@@ -64,40 +93,22 @@ describe("the hub's Quest summaries in the window", () => {
       fc.asyncProperty(steps, async (script: ReadonlyArray<Step>) => {
         pending.length = 0;
         const view = watched();
-        // The model: what the hub holds, and each read with what it held when the read was taken.
-        const hub = new Map<QuestId, QuestSummary>();
-        const taken: Array<ReadonlyArray<QuestSummary>> = [];
-        let revision = 0;
-        const took = () => {
-          while (taken.length < pending.length) taken.push([...hub.values()].filter((each) => each.state === "active"));
-        };
+        const model = hubModel(view.client);
         await settled();
-        took();
-        let answered = 0;
+        model.took();
         for (const step of script) {
-          if (step.kind === "change") {
-            const questId = QUESTS[step.quest] ?? QUESTS[0];
-            if (questId === undefined) continue;
-            revision += 1;
-            const next = summary(questId, revision, revision, step.ended ? "completed" : "active");
-            hub.set(questId, next);
-            questSummaryChanged(view.client, next);
-          } else if (answered < pending.length) {
-            pending[answered]?.(taken[answered] ?? []);
-            answered += 1;
-          }
+          if (step.kind === "change") model.change(step.quest, step.ended);
+          else model.answer();
           await settled();
-          took();
+          model.took();
         }
         // Every read still on its way answers, in order, as the hub would.
-        while (answered < pending.length) {
-          pending[answered]?.(taken[answered] ?? []);
-          answered += 1;
+        while (model.answer()) {
           await settled();
-          took();
+          model.took();
         }
         const shown = view.shown() ?? {};
-        for (const [questId, newest] of hub) {
+        for (const [questId, newest] of model.hub) {
           // An ended Quest the active read never saw need not be held; one it holds is never older.
           const held = shown[questId];
           if (newest.state === "active" || held !== undefined) expect(held).toEqual(newest);
