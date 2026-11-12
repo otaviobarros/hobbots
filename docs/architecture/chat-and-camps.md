@@ -101,7 +101,10 @@ Each part has a share of the budget (`PACK_BUDGET`: 12,000 tokens, counted as fo
 
 - A quest belongs to the thread that started it (`Quest.threadId`, `Task.threadId`). Its updates and questions land there.
 - A quest opens as a thread in its camp's sheet. ADR 027's records stand; its lanes layout is retired.
-- `QuestSummary` on the hub feeds the quest pill, the sidebar and Home.
+- `QuestSummary` on the hub feeds the quest pill, the sidebar and Home. Built in [#1373](https://github.com/otaviobarros/hobbots/issues/1373): `QuestSummary` and its fold `questSummaryOf` in `packages/domain/src/quest-summary.ts`, the rows in `packages/persistence/src/quest-summary-rows.ts` (migration 0103).
+  - **What it says.** Its Quest's lead, thread, parent Quest and state; how many Tasks under the Quest's own Task take each tone (`needs`, `working`, `waiting`, `done`, `problem`, `idle`, as `workTone` maps a Task's state); how many things need you while it runs (each question that climbed every lead and each pending approval on its Tasks, its own included, and each Task under it that failed, as the quest ticket counts them); and how many pull requests are ready for review: the distinct pull request links its completed Tasks, its own included, returned.
+  - **When it changes.** A pure fold over the Task tree, run in the transaction of every change whose events touch the tree: a Task created or moved, a Quest started or ended, a question asked, escalated, answered or withdrawn, an approval requested or decided, and a chat started fresh, which moves its Quests' thread. Each summary that says something new is written with its `QuestSummaryChanged`, after the change's own events and what they call for; one that says the same is neither written nor journaled. No projector is involved, so a client never sees a Task's change without its Quest's summary.
+  - **The snapshot.** `GET /api/quest-summaries` lists every active Quest's summary, and `?threadId=` every Quest followed in that chat or camp, ended ones included, with the stream cursor. The web client renders it in [#1374](https://github.com/otaviobarros/hobbots/issues/1374).
 - Slice: [#1365](https://github.com/otaviobarros/hobbots/issues/1365).
 
 ## The claims register

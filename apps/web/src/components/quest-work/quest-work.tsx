@@ -1,10 +1,9 @@
-import type { Agent } from "@hobbots/domain";
+import { type Agent, type WorkTone, workTone } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { agentsQuery } from "../../api/queries.ts";
 import { useHobQuestWork } from "../../api/quest-work.ts";
 import { firstLine } from "../../lib/format.ts";
-import { type WorkTone, workTone } from "../../lib/quest-work.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { QuestLink } from "./quest-link.tsx";

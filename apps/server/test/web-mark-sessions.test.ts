@@ -62,7 +62,8 @@ describe("the read-the-web mark of a member's session", () => {
             !tree.attempts.some((each) => each.taskId === pip.id && isLive(each.state)),
         ),
       );
-    await woken(0);
+    // Nettle's first finding wakes Pip once more; wait for that turn too, so the next one is Nettle's second.
+    await woken(1);
     // Pip's instructions change, so its next turn starts a new Attempt, in the session it had.
     await run(
       HobbotsRepository.use((repo) =>
@@ -75,8 +76,8 @@ describe("the read-the-web mark of a member's session", () => {
       ),
     );
     opens.get("second")?.();
-    const tree = await woken(1);
-    const resumed = pips()[1];
+    const tree = await woken(2);
+    const resumed = pips()[2];
     expect(resumed?.sessionId).not.toBeNull();
     expect(resumed?.prompt).not.toContain("fake:search");
     expect(resumed?.briefing).toContain("This session has read the web.");

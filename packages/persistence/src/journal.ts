@@ -8,6 +8,7 @@ import {
   type HubQuestion,
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
+  type QuestSummary,
   ThreadId,
   type WebFetchRecord,
   type WebSearchRecord,
@@ -17,6 +18,7 @@ import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
+import { refreshQuestSummaries } from "./quest-summary-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
@@ -152,6 +154,13 @@ const webCorrelationOf = (event: WebEvent): RowCorrelation => {
   return event._tag === "HobWebLimitsChanged" ? { ...NONE, agentId: event.agentId } : NONE;
 };
 
+const questSummaryCorrelation = (summary: QuestSummary): RowCorrelation => ({
+  ...NONE,
+  agentId: summary.leadId,
+  threadId: summary.threadId,
+  taskId: summary.taskId,
+});
+
 const hubQuestionCorrelation = (question: HubQuestion): RowCorrelation =>
   question.chat === null ? NONE : { ...NONE, agentId: question.chat.agentId, threadId: question.chat.threadId };
 
@@ -272,6 +281,8 @@ const restCorrelationOf = (
   // A hub question has no Task (#976): it names the chat it concerns, if any.
   if ("hubQuestion" in event) return hubQuestionCorrelation(event.hubQuestion);
   if (isTaskEvent(event)) return taskCorrelationOf(event);
+  // A Quest's summary is correlated as its Quest is: its lead, its thread and the Task it sits on.
+  if (event._tag === "QuestSummaryChanged") return questSummaryCorrelation(event.summary);
   if (isRecordEvent(event)) return recordCorrelationOf(event);
   if (isSkillEvent(event)) return skillCorrelationOf(event);
   // The Workbench's records name their Task (ADR 023).
@@ -395,7 +406,8 @@ export const lockJournal = (sql: SqlClient.SqlClient) => makeJournalWriter(sql).
 /**
  * The events a change's own events call for in the same transaction, at sequences from `first` on:
  * the backpack items they record (ADR 019), then the grants of the top Tasks they end (ADR 018), then
- * the claims of every Task they end, then the artifacts they made or changed (ADR 037).
+ * the claims of every Task they end, then the artifacts they made or changed, then the summaries of the
+ * Quests they change (ADR 037).
  */
 const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEventType>, first: number) =>
   Effect.gen(function* () {
@@ -403,7 +415,8 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     const grants = yield* endTaskGrants(sql, events, first + items.length);
     const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
     const artifacts = yield* registerArtifacts(sql, events, first + items.length + grants.length + claims.length);
-    return [...items, ...grants, ...claims, ...artifacts];
+    const before = [...items, ...grants, ...claims, ...artifacts];
+    return [...before, ...(yield* refreshQuestSummaries(sql, events, first + before.length))];
   });
 
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.

@@ -7,11 +7,12 @@ import {
   type TaskTree,
   type Thread,
   type ThreadId,
+  workTone,
 } from "@hobbots/domain";
 import type { ThreadActivity } from "../../api/activity.ts";
 import { groupOf } from "../../lib/crew.ts";
 import type { HobState } from "../../lib/hob-state.ts";
-import { type QuestInProgress, workTone } from "../../lib/quest-work.ts";
+import type { QuestInProgress } from "../../lib/quest-work.ts";
 import { filterCounts, filterOf, type HobFilter } from "../hobs-page/hobs-page-model.ts";
 import { messages } from "./messages.ts";
 

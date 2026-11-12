@@ -69,6 +69,11 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
           const at = yield* cursor;
           return { cursor: at, tasks: yield* tasks.listFailedTasks };
         }),
+      questSummaries: ({ query }) =>
+        Effect.gen(function* () {
+          const at = yield* cursor;
+          return { cursor: at, summaries: yield* tasks.listQuestSummaries(query.threadId ?? null) };
+        }),
       questWork: ({ params }) =>
         ofHob(params.agentId, tasks.listMemberWork(params.agentId)).pipe(
           Effect.map(({ at, read }) => ({ cursor: at, work: read })),
