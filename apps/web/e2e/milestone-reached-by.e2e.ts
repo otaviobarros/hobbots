@@ -69,7 +69,7 @@ test("[TC-OR-655] a member's milestone reached through its lead's work shows on 
   await summon(current, "Nettle", 4821);
 
   // Nettle builds the page; Frodo made the commit, so Nettle reports "Committed" as reached by Frodo.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

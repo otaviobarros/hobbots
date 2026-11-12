@@ -26,7 +26,7 @@ export function NewHob({ hob }: { hob: Agent }) {
         {startersOf(hob).map((prompt) => (
           <li key={prompt} className="flex">
             <Link
-              to="/hobs/$hobId/new"
+              to="/hobs/$hobId/chat"
               params={{ hobId: hob.id }}
               aria-label={copy.start({ prompt })}
               onClick={() => writeDraft(`new-${hob.id}`, prompt)}

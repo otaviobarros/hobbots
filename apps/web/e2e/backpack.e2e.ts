@@ -66,7 +66,7 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
   await hobNamed(current, "Quill", 4821);
 
   // Aldric brings in Quill, whose push waits for you; Quill finishes once you allow it.
-  await page.goto(`${current.url}/#/hobs/${aldric.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${aldric.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [

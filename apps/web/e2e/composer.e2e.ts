@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -43,8 +43,12 @@ const openMoss = async (page: Page) => {
     effort: "medium",
     instructions: "",
   });
-  await page.goto(`${hub.url}/#/hobs/${moss.id}/new`);
-  return { hobUrl: `${hub.url}/#/hobs/${moss.id}`, composer: page.getByRole("textbox", { name: /^Message Moss/ }) };
+  await page.goto(`${hub.url}/#/hobs/${moss.id}/chat`);
+  return {
+    hobUrl: `${hub.url}/#/hobs/${moss.id}`,
+    hobId: moss.id,
+    composer: page.getByRole("textbox", { name: /^Message Moss/ }),
+  };
 };
 
 const sentTexts = async (page: Page) => {
@@ -127,20 +131,21 @@ test("[TC-CH-133] a send the hub refuses puts its text back in the composer", as
 
 // covers CH-001, CH-003
 test("[TC-CH-132] each thread keeps its unsent draft, and a long draft grows, then scrolls", async ({ page }) => {
-  const { hobUrl, composer } = await openMoss(page);
+  const { hobUrl, hobId, composer } = await openMoss(page);
+  // A camp, so the hob's chat is still the empty one its first message would open.
+  const threadUrl = (await campAt(hub as Hub, hobId, "Start a thread")).url;
+  await page.goto(threadUrl);
   await composer.fill("Start a thread");
   await composer.press("Enter");
-  await expect(page).toHaveURL(/threads\//);
-  const threadUrl = page.url();
   await expect(page.getByText("Echo: Start a thread")).toBeVisible();
 
   await composer.fill("Half a thought");
-  await page.goto(`${hobUrl}/new`);
+  await page.goto(`${hobUrl}/chat`);
   await expect(composer).toHaveValue("");
   await composer.fill("A different idea");
   await page.goto(threadUrl);
   await expect(composer).toHaveValue("Half a thought");
-  await page.goto(`${hobUrl}/new`);
+  await page.goto(`${hobUrl}/chat`);
   await expect(composer).toHaveValue("A different idea");
 
   // A reload keeps the draft too, even one typed a moment before.

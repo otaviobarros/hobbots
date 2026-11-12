@@ -10,20 +10,8 @@ import {
 } from "@hobbots/ui/components/menu";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
-import { Link } from "@tanstack/react-router";
 import { type ComponentType, type ReactNode, useRef, useState } from "react";
-import { usePinThread } from "../../api/thread-settings.ts";
-import {
-  ArchiveMenuIcon,
-  DoorIcon,
-  ExportIcon,
-  PinMenuIcon,
-  RenameIcon,
-  SearchMenuIcon,
-  SlidersIcon,
-  SparkIcon,
-} from "../chat/chat-icons.tsx";
-import { messages as searchCopy } from "../chat-search/messages.ts";
+import { ArchiveMenuIcon, ExportIcon, SparkIcon } from "../chat/chat-icons.tsx";
 import { ExportDialog } from "../export/export-dialog.tsx";
 import { messages as exportCopy } from "../export/messages.ts";
 import { messages as appCopy } from "../messages.ts";
@@ -31,10 +19,10 @@ import { useThreadBrain } from "../providers/brain-picker.tsx";
 import { useArchive } from "./archive-context.tsx";
 import { isMac } from "./archive-rules.ts";
 import { messages as copy } from "./messages.ts";
+import { CampItems, HobItems, Line, ThreadItems } from "./thread-menu-items.tsx";
 import { useArchiveBlock } from "./use-archive-block.ts";
 
 const brainCopy = appCopy.brain;
-const chatCopy = appCopy.chat;
 
 type MenuItem = ComponentType<{
   disabled?: boolean;
@@ -79,51 +67,6 @@ export function ArchiveItem({
 
 /** Archive in the header's menu reads in rose, as the one item that takes the chat away. */
 const RoseItem: MenuItem = (props) => <DropdownMenuItem {...props} className="text-rose focus:text-rose" />;
-
-/** A menu item's first line: its icon, then its label. */
-const Line = ({ icon, children }: { icon: ReactNode; children: ReactNode }) => (
-  <span className="flex items-center gap-2.5">
-    {icon}
-    {children}
-  </span>
-);
-
-/** Rename, pin and search, for a thread that exists. */
-function ThreadItems({ thread, onRename, onSearch }: { thread: Thread; onRename: () => void; onSearch: () => void }) {
-  const pin = usePinThread();
-  const pinned = thread.pinnedAt !== null;
-  return (
-    <>
-      <DropdownMenuItem onSelect={onRename}>
-        <Line icon={<RenameIcon />}>{copy.rename}</Line>
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => pin.mutate({ thread, value: !pinned })}>
-        <Line icon={<PinMenuIcon />}>{pinned ? copy.unpin : copy.pin}</Line>
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={onSearch}>
-        <Line icon={<SearchMenuIcon />}>{searchCopy.open}</Line>
-      </DropdownMenuItem>
-    </>
-  );
-}
-
-/** The hob's page and its profile, where Edit hob goes. */
-function HobItems({ hob }: { hob: Agent }) {
-  return (
-    <>
-      <DropdownMenuItem asChild>
-        <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-inherit no-underline">
-          <Line icon={<DoorIcon />}>{copy.hobPage({ name: hob.name })}</Line>
-        </Link>
-      </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <Link to="/hobs/$hobId/profile" params={{ hobId: hob.id }} className="text-inherit no-underline">
-          <Line icon={<SlidersIcon />}>{chatCopy.editHob}</Line>
-        </Link>
-      </DropdownMenuItem>
-    </>
-  );
-}
 
 /** Export, then Archive chat after a divider, for a thread that exists. */
 function EndItems({
@@ -176,8 +119,8 @@ function BrainItem({ hob, thread, onSelect }: { hob: Agent; thread: Thread | und
 }
 
 /**
- * The chat header's ⋯ menu: rename the open thread in the header, pin it to the top of its hob's
- * chats, search it, change the brain it thinks with, open its hob's page or profile, export it, or
+ * The chat header's ⋯ menu: rename a camp in the header, pin it to the top of its hob's
+ * chats, search it, make a camp, start the hob's chat fresh, change the brain it thinks with, open its hob's page or profile, export it, or
  * archive it. On the fresh page, before the thread exists, it keeps the hob's page and profile, and
  * says when the brain can change.
  */
@@ -187,6 +130,8 @@ export function ThreadHeaderMenu({
   onRename,
   onSearch,
   onBrain,
+  onMakeCamp,
+  onStartFresh,
 }: {
   hob: Agent;
   thread: Thread | undefined;
@@ -194,6 +139,10 @@ export function ThreadHeaderMenu({
   onSearch: () => void;
   /** Opens the brain picker beside ⋯. */
   onBrain: () => void;
+  /** Opens the Make a camp sheet. */
+  onMakeCamp: () => void;
+  /** Opens the Start fresh sheet, offered on the hob's open chat. */
+  onStartFresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -222,6 +171,7 @@ export function ThreadHeaderMenu({
           }}
         >
           {thread && <ThreadItems thread={thread} onRename={moveTo(onRename)} onSearch={moveTo(onSearch)} />}
+          <CampItems thread={thread} onMakeCamp={moveTo(onMakeCamp)} onStartFresh={moveTo(onStartFresh)} />
           <BrainItem hob={hob} thread={thread} onSelect={moveTo(onBrain)} />
           <HobItems hob={hob} />
           {thread && <EndItems hob={hob} thread={thread} open={open} onExport={() => setExporting(true)} />}

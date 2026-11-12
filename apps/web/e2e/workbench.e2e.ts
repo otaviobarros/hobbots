@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { expect, test } from "./hub.ts";
+import { campAt, expect, test } from "./hub.ts";
 import {
   dock,
   lane,
@@ -21,7 +21,7 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, coun
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // In one turn Aldric edits a file with a file tool, runs no command and finishes the Task.
   await composer.fill(
@@ -95,7 +95,7 @@ test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(["Tidy the notes", script("start_quest", { key: "quest", goal: "Tidy the notes" })].join("\n"));
   await composer.press("Enter");
@@ -125,7 +125,7 @@ test("[TC-UX-030] a finished Task's summary in its lane says what happened and w
   page,
 }) => {
   const { url, aldric, folder } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // In one turn Aldric edits the notes, writes a report, reports a finding and finishes with what it made.
   const report = join(folder, "report.md");
@@ -194,7 +194,7 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -224,8 +224,8 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
 
 // covers UX-002, UX-006
 test("[TC-UX-032] a Quest pinned from another thread holds its question in its lane there", async ({ page }) => {
-  const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const { url, aldric, hub } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -248,7 +248,7 @@ test("[TC-UX-032] a Quest pinned from another thread holds its question in its l
   const room = questRoom(page, "Tidy the notes");
   await roomMenu(page, "Tidy the notes");
   await page.getByRole("menuitem", { name: "Pin quest" }).click();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto((await campAt({ url, headers: hub.headers }, aldric, "Something else")).url);
   await composer.fill("Something else");
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
@@ -272,7 +272,7 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
   await page.route("**/api/backpack", (route) =>
     failing ? route.fulfill({ status: 500, body: "" }) : route.continue(),
   );
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(
     [
@@ -307,7 +307,7 @@ test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the w
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   // The step tidies the notes and then fails. Retried from the same brief, it does nothing this
   // time, and fails again.

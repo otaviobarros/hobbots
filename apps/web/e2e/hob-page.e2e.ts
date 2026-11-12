@@ -1,4 +1,4 @@
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -48,7 +48,7 @@ const hubWithPip = async () => {
 test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a History tab", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
-  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("first");
   await composer.press("Enter");
@@ -85,8 +85,10 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await hero.getByRole("link", { name: "Profile" }).click();
   await expect(page.getByRole("main", { name: "Pip's profile" })).toBeVisible();
   await page.goBack();
-  await hero.getByRole("link", { name: "New chat with Pip" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/new$`));
+  await hero.getByRole("link", { name: "Your chat with Pip" }).click();
+  // The hob already has its chat, so the hero opens that one.
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/threads/`));
+  await expect(page.getByText("Echo: first")).toBeVisible();
 });
 
 // covers CH-001, CH-002, CH-006, CH-009
@@ -96,7 +98,8 @@ test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, 
   const { current, pip } = await hubWithPip();
   hub = current;
   for (const prompt of ["Fix the kettle", "Plan the spring launch", "Weekly report on the discount codes"]) {
-    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    // Each is a camp of its own, named by what it is about (#1378).
+    await page.goto((await campAt(current, pip.id, prompt)).url);
     const composer = page.getByRole("textbox", { name: /^Message Pip/ });
     await composer.fill(prompt);
     await composer.press("Enter");
@@ -150,7 +153,8 @@ test("[TC-UX-147] a link with q opens a hob's Chats already searching for it", a
   const { current, pip } = await hubWithPip();
   hub = current;
   for (const prompt of ["Fix the kettle", "Weekly report on the discount codes"]) {
-    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    // Each is a camp of its own, named by what it is about (#1378).
+    await page.goto((await campAt(current, pip.id, prompt)).url);
     const composer = page.getByRole("textbox", { name: /^Message Pip/ });
     await composer.fill(prompt);
     await composer.press("Enter");
@@ -192,7 +196,7 @@ test("[TC-UX-151] a new hob's page says hello and offers three starters, and one
   await main.getByRole("tab", { name: "Chats" }).click();
 
   await hello.getByRole("link", { name: "Start a chat: Turn my bullet points into a friendly email" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/new$`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/chat$`));
   await expect(page.getByRole("textbox", { name: /^Message Pip/ })).toHaveValue(
     "Turn my bullet points into a friendly email",
   );

@@ -80,7 +80,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
     .getByRole("region", { name: "Try asking" })
     .getByRole("link", { name: /What can you help me with/ })
     .click();
-  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new$/);
+  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/chat$/);
   await expect(page.getByRole("textbox", { name: /^Message Fern/ })).toHaveValue("What can you help me with?");
 
   const hobs = (await (await fetch(`${current.url}/api/agents`, { headers: current.headers })).json()) as ReadonlyArray<

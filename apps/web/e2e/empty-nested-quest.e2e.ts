@@ -65,7 +65,7 @@ test("[TC-OR-247] the quest sheet says a member's own Quest has no one brought i
   await summon(current, "Pip", 4821);
 
   // Pip starts a Quest of his own, asks Frodo something, and ends his turn with nobody brought in.
-  await page.goto(`${current.url}/#/hobs/${frodo.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${frodo.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });
   await composer.fill(
     [

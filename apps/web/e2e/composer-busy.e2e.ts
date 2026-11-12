@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 import { openRoom } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
@@ -48,7 +48,7 @@ const openMoss = async (page: Page) => {
     effort: null,
     instructions: "",
   });
-  await page.goto(`${hub.url}/#/hobs/${moss.id}/new`);
+  await page.goto(`${hub.url}/#/hobs/${moss.id}/chat`);
   return { current: hub, mossId: moss.id };
 };
 
@@ -161,13 +161,15 @@ test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new
 }) => {
   const { current, mossId } = await openMoss(page);
   const composer = page.getByRole("textbox", { name: /^Message Moss/ });
+  // A camp, so the hob's chat is still the empty one its first message would open.
+  const threadUrl = (await campAt(current, mossId, "first")).url;
+  await page.goto(threadUrl);
   await composer.fill("first");
   await composer.press("Enter");
   await expect(page.getByText("Echo: first", { exact: true })).toBeVisible({ timeout: 15_000 });
-  const threadUrl = page.url();
 
-  // A new thread: a paused hob starts none, and the draft typed before stays.
-  await page.goto(`${current.url}/#/hobs/${mossId}/new`);
+  // The empty chat: a paused hob starts none, and the draft typed before stays.
+  await page.goto(`${current.url}/#/hobs/${mossId}/chat`);
   await composer.fill("Plan the autumn page");
   await api(current, "POST", `/api/agents/${mossId}/pause`);
   await expect(page.getByRole("button", { name: "Wake Moss" })).toBeVisible();
@@ -209,7 +211,7 @@ test.describe("beside the Quest room", () => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1024, height: 800 });
     const { url, aldric } = await aldricHub();
-    await page.goto(`${url}/#/hobs/${aldric}/new`);
+    await page.goto(`${url}/#/hobs/${aldric}/chat`);
     const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
     await composer.fill(
       ["Plan the launch", script("start_quest", { key: "quest", goal: "Plan the launch" })].join("\n"),

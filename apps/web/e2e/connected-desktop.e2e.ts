@@ -146,7 +146,7 @@ const openHub = async (page: Page) => {
     instructions: "",
   });
   await standInBridge(page);
-  await page.goto(`${current.url}/#/hobs/${lark.id}/new`);
+  await page.goto(`${current.url}/#/hobs/${lark.id}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Lark/ });
   await composer.fill("sent once the hub is back");
   return { composer };

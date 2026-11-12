@@ -225,7 +225,22 @@ export { expect } from "@playwright/test";
 export const expandSidebar = (context: BrowserContext) =>
   context.addInitScript(() => localStorage.setItem("sidebar.open", "true"));
 
-/** The open hob's recent threads in the expanded sidebar, each a link named by its title. */
+/**
+ * A camp for the hob, made as Make a camp makes one (ADR 037), titled `title`: a thread of its own
+ * beside the hob's one chat. Gives back its address in the web client.
+ */
+export const campAt = async (current: Pick<Hub, "url" | "headers">, hobId: string, title: string) => {
+  const response = await fetch(`${current.url}/api/agents/${hobId}/camps`, {
+    method: "POST",
+    headers: { ...current.headers, "content-type": "application/json" },
+    body: JSON.stringify({ key: crypto.randomUUID(), title, goal: null, private: false }),
+  });
+  if (!response.ok) throw new Error(`Make a camp answered ${response.status}: ${await response.text()}`);
+  const camp = (await response.json()) as { readonly id: string };
+  return { id: camp.id, url: `${current.url}/#/hobs/${hobId}/threads/${camp.id}` };
+};
+
+/** The open hob's chat and camps in the expanded sidebar, each a link named by its title; its chat is "Chat". */
 export const sidebarThread = (page: Page, title: string) =>
   page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: title, exact: true });
 

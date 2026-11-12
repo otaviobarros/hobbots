@@ -11,7 +11,7 @@ test.afterEach(stopQuestHub);
 // covers OR-004
 test("[TC-OR-283] two members changing the same file show the hub's finding on both Tasks", async ({ page }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Make the shop badge in our green");
   await composer.press("Enter");
@@ -40,7 +40,7 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
 // covers OR-004
 test("[TC-OR-411] the lead's change from before it delegated shows no Same file label", async ({ page }) => {
   const { url, aldric } = await questHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Make the shop badge in our green");
   await composer.press("Enter");

@@ -5,6 +5,7 @@ import type {
   AgentId,
   AgentStatus,
   CarriedOver,
+  CarriedOverEntry,
   ChangeActor,
   Committed,
   Message,
@@ -131,5 +132,10 @@ export class HobbotsRepository extends Context.Service<
     }) => Effect.Effect<Option.Option<Committed<StartedFresh>>>;
     /** What Start fresh carried into the thread, in the order it recorded them; none for most threads. */
     readonly listCarriedOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOver>>;
+    /**
+     * What Start fresh would carry out of the thread if it ran now, in the order it would record
+     * them, read with the same rule; it changes nothing.
+     */
+    readonly carryOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOverEntry>>;
   }
 >()("@hobbots/agents/HobbotsRepository") {}

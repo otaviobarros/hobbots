@@ -45,19 +45,19 @@ import { minutesSince, type ReplyWait, replyWait } from "../../lib/reply-wait.ts
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
-import { ThreadHeaderMenu } from "../archive/thread-menu.tsx";
 import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
-import { ChatSearch, ChatSearchButton } from "../chat-search/chat-search.tsx";
-import { HobSprite, stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
+import { messages as campCopy } from "../camps/messages.ts";
+import { ChatSearch } from "../chat-search/chat-search.tsx";
+import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
 import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
 import { NeedsTray } from "../needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "../needs-tray/use-thread-needs.ts";
-import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picker.tsx";
+import { BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picker.tsx";
 import { PinNotes } from "../quest/pin-notes.tsx";
-import { ThreadQuestButton, useWorkMoments } from "../quest/thread-work.tsx";
+import { useWorkMoments } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { skillPicking } from "../skill-line/skill-picker-model.ts";
@@ -65,8 +65,7 @@ import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
 import { TrialNotice } from "../skills/trial-notice.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { repliesWeb, replyWebOf } from "../web/web-model.ts";
-import { BackIcon } from "./chat-icons.tsx";
-import { ChatTitle } from "./chat-title.tsx";
+import { ChatHeader } from "./chat-header.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
 import { type ContinueReply, MessageRow, QueuedRow, useScrollToMessage, WaitingRow } from "./message-row.tsx";
@@ -193,9 +192,6 @@ export function ChatView({
   const [findingIn, setFindingIn] = useState<string>();
   const finding = threadId !== undefined && findingIn === threadId;
   const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
-  const [renamingIn, setRenamingIn] = useState<string>();
-  const renaming = threadId !== undefined && renamingIn === threadId;
-  const setRenaming = (open: boolean) => setRenamingIn(open ? threadId : undefined);
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
@@ -227,7 +223,11 @@ export function ChatView({
 
   const state = threadState(current, threadId ? activity[threadId] : undefined, streaming);
   const paused = current.status === "paused";
-  const title = thread.data?.title ?? copy.newThread;
+  // The composer names a camp; the hob's chat, and the empty chat before it, is just the hob's.
+  const placeholder =
+    thread.data?.kind === "camp"
+      ? copy.placeholder({ name: current.name, title: thread.data.title })
+      : campCopy.header.placeholder({ name: current.name });
   // The draft clears as it is sent, so the next message can be typed at once. A refused send puts
   // its text back, even when the user has moved to another thread meanwhile.
   const deliver = (content: string) => {
@@ -271,55 +271,18 @@ export function ChatView({
       className="@container/chat flex min-w-chat-min flex-1 flex-col group-data-[room=open]/room:min-w-0"
     >
       {/* Back to the hob's chats, the tile, then the chat's title over who leads it and what they are doing (A2-02). */}
-      <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
-        {/* The way back to the chat list: the hob's page, which opens on its Chats tab. */}
-        <Button asChild variant="quiet" size="icon" className="-ms-2 -me-1">
-          <Link
-            to="/hobs/$hobId"
-            params={{ hobId }}
-            aria-label={copy.backToChats({ name: current.name })}
-            title={copy.backToChats({ name: current.name })}
-          >
-            <BackIcon />
-          </Link>
-        </Button>
-        {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
-        <Link
-          to="/hobs/$hobId"
-          params={{ hobId }}
-          tabIndex={-1}
-          aria-hidden
-          className="shrink-0 no-underline @max-[340px]/header:hidden"
-        >
-          <HobSprite hob={current} size={40} state={state} badge />
-        </Link>
-        {/* The title keeps its room when the quest button crowds the header, and gives it up in a
-            column beside the Quest room, where the buttons need it. */}
-        <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden @max-[340px]/header:min-w-0">
-          <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
-          <span className="truncate text-detail text-text-secondary">
-            <Link
-              to="/hobs/$hobId"
-              params={{ hobId }}
-              title={copy.openHob({ name: current.name })}
-              className="font-semibold text-text no-underline hover:underline"
-            >
-              {current.name}
-            </Link>
-            {copy.leadLine({ doing: wait === null ? stateLabel[state] : waitingWords(wait, now) })}
-          </span>
-        </div>
-        {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
-        {threadId && headerEnd === undefined && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
-        {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
-        <HeaderMenu
-          hob={current}
-          thread={thread.data}
-          onRename={() => setRenaming(true)}
-          onSearch={() => setFinding(true)}
-        />
-        {headerEnd}
-      </header>
+      <ChatHeader
+        hob={current}
+        hobId={hobId}
+        threadId={threadId}
+        thread={thread.data}
+        state={state}
+        doing={wait === null ? stateLabel[state] : waitingWords(wait, now)}
+        pins={pins}
+        finding={finding}
+        onFinding={setFinding}
+        headerEnd={headerEnd}
+      />
       <ReconnectingCard className="mx-6 mt-2.5" />
       {threadId && finding && (
         <ChatSearch
@@ -461,7 +424,7 @@ export function ChatView({
           )}
           <Composer
             name={current.name}
-            placeholder={copy.placeholder({ name: current.name, title })}
+            placeholder={placeholder}
             place={place}
             lastSent={lastSent}
             busy={streaming}
@@ -481,38 +444,6 @@ export function ChatView({
         </div>
       </div>
     </main>
-  );
-}
-
-/**
- * The header's ⋯ menu, with the brain picker it opens beside it once the thread exists (A2-02).
- */
-function HeaderMenu({
-  hob,
-  thread,
-  onRename,
-  onSearch,
-}: {
-  hob: Agent;
-  thread: Thread | undefined;
-  onRename: () => void;
-  onSearch: () => void;
-}) {
-  const [picking, setPicking] = useState(false);
-  const menu = (
-    <ThreadHeaderMenu
-      hob={hob}
-      thread={thread}
-      onRename={onRename}
-      onSearch={onSearch}
-      onBrain={() => setPicking(true)}
-    />
-  );
-  if (thread === undefined) return menu;
-  return (
-    <BrainPicker hob={hob} thread={thread} open={picking} onOpenChange={setPicking}>
-      {menu}
-    </BrainPicker>
   );
 }
 

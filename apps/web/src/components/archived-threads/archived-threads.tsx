@@ -16,7 +16,8 @@ export type WorkspaceMainProps = ComponentProps<typeof ChatView> & { readonly ro
 /**
  * The middle of the chat workspace for a thread: the chat, or, once the thread is archived, a move to
  * where the Archive reads it with Restore. A thread opened by its address shows neither until its
- * hob's lists say which it is, so an archived thread never offers a composer. A thread archived on any
+ * hob's lists say which it is, so an archived thread never offers a composer. A chat started fresh
+ * opens the hob's new chat instead. A thread archived on any
  * device moves to the Archive as its event arrives, and its unsent draft stays.
  */
 export function ThreadMain({ room = false, ...props }: WorkspaceMainProps) {
@@ -32,6 +33,10 @@ export function ThreadMain({ room = false, ...props }: WorkspaceMainProps) {
   // and the chat beside it says where to read the chat; Close room then moves to the Archive.
   if (archived.data) {
     if (room) return <ArchivedBeside hobId={hobId} threadId={archived.data.id} />;
+    // A chat started fresh lives on in the new one, so its address opens that chat (ADR 037).
+    if (archived.data.state === "superseded" && props.focusMessageId === undefined) {
+      return <Navigate to="/hobs/$hobId/chat" params={{ hobId }} replace />;
+    }
     return (
       <Navigate
         to="/archive/chats/$hobId/$threadId"

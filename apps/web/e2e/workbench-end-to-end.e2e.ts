@@ -52,7 +52,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
     "notes.md": "# Release notes\n",
     "draft.txt": "An old draft.\n",
   });
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // The first turn starts the Task, so the next turn's work belongs to it.
   await send(page, [
     "Write the release notes",
@@ -168,7 +168,7 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
   page,
 }) => {
   const { url, aldric } = await aldricHub();
-  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, [
     "Suggest a name for the release",
     script("start_quest", { key: "quest", goal: "Suggest a name for the release" }),

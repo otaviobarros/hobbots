@@ -9,9 +9,11 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { Schema } from "effect";
+import { openChatOf } from "./api/camps.ts";
+import { moveDraft } from "./api/drafts.ts";
 import { keptDraftOrStored } from "./api/first-hob.ts";
 import { needsPairing } from "./api/pairing.ts";
-import { agentsQuery } from "./api/queries.ts";
+import { agentsQuery, threadsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { ArchiveTab } from "./components/archive-page/archive-model.ts";
 import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
@@ -212,12 +214,30 @@ const hobRoute = createRoute({
   },
 });
 
-const newThreadRoute = createRoute({
+// The hob's chat (ADR 037): its open chat, or, while it has none, the empty chat whose first message
+// opens it. Opening a hob opens here.
+const chatRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
-  path: "hobs/$hobId/new",
-  component: function NewThreadPage() {
-    const params = newThreadRoute.useParams();
+  path: "hobs/$hobId/chat",
+  beforeLoad: async ({ context, params }) => {
+    // While the hub is out of reach the empty chat still shows, and its message waits in the outbox.
+    const threads = await context.queryClient
+      .ensureQueryData(threadsQuery(AgentId.make(params.hobId)))
+      .catch(() => undefined);
+    const chat = openChatOf(threads);
+    if (chat !== undefined) {
+      // A draft written for the hob's chat, as a starter question writes it, opens with the chat.
+      moveDraft(`new-${AgentId.make(params.hobId)}`, chat.id);
+      throw redirect({
+        to: "/hobs/$hobId/threads/$threadId",
+        params: { hobId: params.hobId, threadId: chat.id },
+        replace: true,
+      });
+    }
+  },
+  component: function ChatPage() {
+    const params = chatRoute.useParams();
     return <HobsLayout hobId={AgentId.make(params.hobId)} />;
   },
 });
@@ -570,7 +590,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     hobsRoute,
     hobRoute,
-    newThreadRoute,
+    chatRoute,
     archivedThreadsRoute,
     threadRoute,
     profileRoute,

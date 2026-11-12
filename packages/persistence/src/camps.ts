@@ -227,5 +227,12 @@ export const makeCampWrites = (
       Effect.orDie,
     );
 
-  return { makeCamp, startFresh, listCarriedOver } as const;
+  // What Start fresh would carry from the chat now, read with the same rule it records with.
+  const carryOver = (threadId: ThreadId) =>
+    openWork(threadId).pipe(
+      Effect.map(({ work }) => carriedOverFrom(work)),
+      Effect.orDie,
+    );
+
+  return { makeCamp, startFresh, listCarriedOver, carryOver } as const;
 };
