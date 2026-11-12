@@ -1,5 +1,6 @@
 import { ThreadKeyReused } from "@hobbots/api";
 import {
+  ApprovalRequest,
   type BackpackItem,
   CarriedOver,
   CarriedOverRef,
@@ -13,6 +14,7 @@ import {
 import { carryingThread } from "@hobbots/inbox";
 import { Data, Effect, Option, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
+import { approvalRow } from "./approvals.ts";
 import { makeItemReads } from "./backpack-rows.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
@@ -62,7 +64,17 @@ const sameRequest = (stored: Row, asked: Thread) =>
 // The chat changed between the read and the write: the change rolls back, and the caller reads again.
 class StaleChat extends Data.TaggedError("StaleChat") {}
 
+/**
+ * The records a Task's turn makes outside any message, which name the Task and its thread: web use
+ * and hob proposals. They follow their Task's tree to another thread (#1389); those made in a reply
+ * follow the reply's message instead. A member's approval requests follow it too, each journaled.
+ */
+const BY_TASK = ["web_searches", "web_fetches", "hob_proposals"] as const;
+
 const decodeRef = Schema.decodeUnknownSync(CarriedOverRef);
+
+// A request the hub wrote: one that does not decode is a defect.
+const decodeApproval = (row: unknown) => Schema.decodeUnknownEffect(ApprovalRequest)(row).pipe(Effect.orDie);
 
 const carriedRows = (rows: ReadonlyArray<Row>) =>
   rows.map(
@@ -155,8 +167,10 @@ export const makeCampWrites = (
       return { work: { tasks, trees, questions, items: carried }, held };
     });
 
-  // Moves the open work to the new chat: whole trees, with their Quests, and each item at the
-  // journal sequence of its own `BackpackItemChanged`, from `first` on.
+  // Moves open work to another thread, for Start fresh and a chapter's move: whole trees, with their
+  // Quests and the records their Tasks' turns made outside any message. From `first` on, each of
+  // their approval requests is journaled as its own `ApprovalMoved` at its new revision, so a client
+  // takes it out of the thread it left, and then each item as its own `BackpackItemChanged`.
   const moveWork = (
     from: ThreadId,
     to: ThreadId,
@@ -166,19 +180,41 @@ export const makeCampWrites = (
     first: number,
   ) =>
     Effect.gen(function* () {
-      if (roots.length > 0) {
-        yield* sql`UPDATE quests SET thread_id = ${to} WHERE thread_id = ${from}
-          AND task_id IN (SELECT id FROM tasks WHERE ${sql.in("root_id", roots)})`;
-        yield* sql`UPDATE tasks SET thread_id = ${to} WHERE thread_id = ${from} AND ${sql.in("root_id", roots)}`;
-      }
-      return yield* Effect.forEach(held, (item, index) =>
+      const approvals = roots.length === 0 ? [] : yield* moveTrees(from, to, roots, first);
+      const next = first + approvals.length;
+      const moved = yield* Effect.forEach(held, (item, index) =>
         Effect.gen(function* () {
-          yield* sql`UPDATE backpack_items SET thread_id = ${to}, updated_at = ${at}, revision = ${first + index}
+          yield* sql`UPDATE backpack_items SET thread_id = ${to}, updated_at = ${at}, revision = ${next + index}
             WHERE id = ${item.id}`;
           const moved = yield* items.item(item.id);
           return { _tag: "BackpackItemChanged", item: moved as BackpackItem } as const;
         }),
       );
+      return [...approvals, ...moved];
+    });
+
+  // The trees' Tasks and Quests, and what their turns made outside any message, with an
+  // `ApprovalMoved` for each approval request from `first` on.
+  const moveTrees = (from: ThreadId, to: ThreadId, roots: ReadonlyArray<string>, first: number) =>
+    Effect.gen(function* () {
+      const inTrees = sql`task_id IN (SELECT id FROM tasks WHERE ${sql.in("root_id", roots)})`;
+      for (const table of BY_TASK) {
+        yield* sql`UPDATE ${sql(table)} SET thread_id = ${to} WHERE thread_id = ${from} AND message_id IS NULL
+          AND ${inTrees}`;
+      }
+      const asked = yield* sql<{ readonly id: string }>`SELECT id FROM approval_requests WHERE thread_id = ${from}
+        AND message_id IS NULL AND ${inTrees} ORDER BY ${oldest}`;
+      const approvals = yield* Effect.forEach(asked, (row, index) =>
+        Effect.gen(function* () {
+          yield* sql`UPDATE approval_requests SET thread_id = ${to}, revision = ${first + index} WHERE id = ${row.id}`;
+          const [moved] = yield* sql<Row>`SELECT * FROM approval_requests WHERE id = ${row.id}`;
+          const approval = yield* decodeApproval(approvalRow(moved as Row));
+          return { _tag: "ApprovalMoved", fromThreadId: from, approval } as const;
+        }),
+      );
+      yield* sql`UPDATE quests SET thread_id = ${to} WHERE thread_id = ${from} AND ${inTrees}`;
+      yield* sql`UPDATE tasks SET thread_id = ${to} WHERE thread_id = ${from} AND ${sql.in("root_id", roots)}`;
+      return approvals;
     });
 
   const startFresh = (input: { readonly superseded: Thread; readonly chat: Thread }) => {
