@@ -388,6 +388,38 @@ describe("find", () => {
     expect(said(inCamp.records).filter((line) => line.startsWith("decision"))).toHaveLength(2);
     expect(inCamp.records.every((record) => record.threadTitle === "Launch")).toBe(true);
   });
+
+  // covers ADR 037 (Records, Moving a chapter, Private camps)
+  it("[TC-CH-1386-09] a chapter moved into a private camp is out of Find everywhere at once, before the index catches up", async () => {
+    const { id } = await launchChat();
+    expect(await index()).toBe(true);
+    expect((await find("launch")).records.length).toBeGreaterThan(0);
+    const [first] = await run(ChapterService.use((service) => service.listChapters(id)));
+    await run(
+      ChatService.use((chat) =>
+        chat.moveChapter(id, (first as Chapter).id, {
+          _tag: "new",
+          key: ThreadId.make("camp-secret"),
+          title: "Secret launch",
+          goal: null,
+          private: true,
+        }),
+      ),
+    );
+
+    // The projector has not run since the move, so its rows still name the chat.
+    expect((await find("launch")).records).toEqual([]);
+    expect((await find("launch", { in: id })).records).toEqual([]);
+    expect(await ask("When do the launch emails go out?")).toEqual({
+      _tag: "Matches",
+      reason: "nothing-found",
+      matches: [],
+    });
+    // Once it catches up, the camp finds them from inside.
+    expect(await index()).toBe(true);
+    const inCamp = await find("launch", { in: ThreadId.make("camp-secret") });
+    expect(said(inCamp.records).filter((line) => line.startsWith("decision"))).toHaveLength(2);
+  });
 });
 
 describe("ask", () => {

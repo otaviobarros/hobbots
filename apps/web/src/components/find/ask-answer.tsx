@@ -2,7 +2,8 @@ import type { Agent, AskAnswer } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { type FindRow, rowOf } from "./find-model.ts";
+import { type FindRow, findGroups, rowOf } from "./find-model.ts";
+import { FindGroups, type NameOf } from "./find-rows.tsx";
 import { messages as copy } from "./messages.ts";
 
 /** The arrow on a citation, pointing back at where it came from. */
@@ -17,21 +18,10 @@ export type AskView =
 /**
  * The answer card at the top of Find's results: the hob's answer from the records, and a citation
  * for each record it rests on, which opens the message it came from. With no answer it says why,
- * and the matches show below it.
+ * and lists the records Ask found, which may be more than Find's own matches: Find needs every word,
+ * Ask any word of the question.
  */
-export function AskAnswerCard({
-  hob,
-  view,
-  everywhere,
-  onCite,
-  onRetry,
-}: {
-  hob: Agent;
-  view: AskView;
-  everywhere: boolean;
-  onCite: (row: FindRow) => void;
-  onRetry: () => void;
-}) {
+export function AskAnswerCard({ hob, view, everywhere, nameOf, onCite, onRetry }: AskProps) {
   return (
     <div
       role="status"
@@ -43,24 +33,21 @@ export function AskAnswerCard({
         </span>
         {copy.answerBy({ name: hob.name })}
       </span>
-      <AskBody hob={hob} view={view} everywhere={everywhere} onCite={onCite} onRetry={onRetry} />
+      <AskBody hob={hob} view={view} everywhere={everywhere} nameOf={nameOf} onCite={onCite} onRetry={onRetry} />
     </div>
   );
 }
 
-function AskBody({
-  hob,
-  view,
-  everywhere,
-  onCite,
-  onRetry,
-}: {
-  hob: Agent;
-  view: AskView;
-  everywhere: boolean;
-  onCite: (row: FindRow) => void;
-  onRetry: () => void;
-}) {
+interface AskProps {
+  readonly hob: Agent;
+  readonly view: AskView;
+  readonly everywhere: boolean;
+  readonly nameOf: NameOf;
+  readonly onCite: (row: FindRow) => void;
+  readonly onRetry: () => void;
+}
+
+function AskBody({ hob, view, everywhere, nameOf, onCite, onRetry }: AskProps) {
   if (view.step === "asking") return <span className="text-text-secondary">{copy.asking({ name: hob.name })}</span>;
   if (view.step === "failed")
     return (
@@ -73,7 +60,16 @@ function AskBody({
     );
   const { answer } = view;
   if (answer._tag === "Matches")
-    return <span className="text-text-secondary">{copy.without({ reason: answer.reason, name: hob.name })}</span>;
+    return (
+      <>
+        <span className="text-text-secondary">{copy.without({ reason: answer.reason, name: hob.name })}</span>
+        <FindGroups
+          groups={findGroups({ records: answer.matches, messages: [] }, everywhere)}
+          nameOf={nameOf}
+          onPick={onCite}
+        />
+      </>
+    );
   return (
     <>
       <span className="text-text-strong">{answer.text}</span>

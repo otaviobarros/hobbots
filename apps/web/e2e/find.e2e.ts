@@ -1,4 +1,4 @@
-import type { Decision } from "@hobbots/domain";
+import { DEFAULT_MEMORY_SETTINGS, type Decision } from "@hobbots/domain";
 import type { Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { expect, test } from "./hub.ts";
@@ -82,6 +82,42 @@ test("[TC-CH-1386-08] Ask answers about an old decision, cites it, and the citat
 
   // A citation opens the message the decision came from and closes Find.
   await sources.getByRole("button").first().click();
+  await expect(page).toHaveURL(new RegExp(`/threads/${threadId}\\?message=`));
+  await expect(box).toBeHidden();
+});
+
+// covers CH-009, ADR 037 (Find, No AI)
+test("[TC-CH-1386-10] under No AI, Ask lists the records it found, even ones Find's every-word search misses, and each opens its message", async ({
+  page,
+}) => {
+  const { url, aldric, api } = await aldricHub();
+  await api("PUT", "/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, provider: "none" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, [
+    "Plan the newsletter.",
+    script("record_decision", { key: "day", text: "Launch emails go out on Thursdays" }),
+  ]);
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/`));
+  const threadId = threadOf(page);
+
+  // Find needs every word, so the question finds nothing; the index catches up in a few seconds.
+  await page.getByRole("button", { name: "Find", exact: true }).click();
+  const box = page.getByRole("searchbox", { name: "Find" });
+  await box.fill("thursdays");
+  const found = page.getByRole("region", { name: "What Find found" });
+  await expect(found.getByRole("region", { name: "Decisions · 1" })).toBeVisible({ timeout: 20_000 });
+  await box.fill("When do the launch emails go out?");
+  await expect(found.getByText("No exact matches. Ask Aldric: the records may still answer it.")).toBeVisible();
+
+  // Ask, with no AI, says so and lists what it found.
+  await box.press("Enter");
+  const answer = found.getByRole("status");
+  await expect(answer).toContainText("No AI is chosen for the hub's brain, so here is what matches, with no answer.");
+  const matched = answer.getByRole("region", { name: "Decisions · 1" });
+  await expect(matched.getByRole("button", { name: /^Launch emails go out on Thursdays/ })).toBeVisible();
+  await expectAccessible(page, found);
+
+  await matched.getByRole("button").first().click();
   await expect(page).toHaveURL(new RegExp(`/threads/${threadId}\\?message=`));
   await expect(box).toBeHidden();
 });

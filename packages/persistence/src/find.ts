@@ -128,13 +128,24 @@ const kindList = (kinds: ReadonlyArray<FindKind>) =>
     .join(", ");
 
 // A chapter's citation opens its first message, read now since a chapter gets messages after its row.
-const RECORD_COLUMNS = `r.kind, r.record_id, r.thread_id, r.title, r.detail, r.body, r.state, r.artifact_kind,
+// A decision's state is read now too, so one crossed out a moment ago already shows crossed out.
+const RECORD_COLUMNS = `r.kind, r.record_id, r.thread_id, r.title, r.detail, r.body,
+  COALESCE(CASE WHEN r.kind = 'decision' THEN (SELECT d.state FROM decisions d WHERE d.id = r.record_id) END,
+    r.state) AS state, r.artifact_kind,
   r.version, r.number, r.actor_kind, r.actor_id, r.at,
   COALESCE(r.message_id, CASE WHEN r.kind = 'chapter' THEN
     (SELECT m.id FROM messages m WHERE m.chapter_id = r.chapter_id ORDER BY m.seq LIMIT 1) END) AS message_id,
   t.title AS thread_title, t.kind AS thread_kind, t.agent_id AS hob_id`;
 
 const RECORDS_FROM = "JOIN threads t ON t.id = r.thread_id JOIN agents a ON a.id = t.agent_id";
+
+// A row the projector has not caught up with yet is left out: one whose record has moved to
+// another chat or camp, such as with a chapter into a private camp, or whose chapter moved away.
+// So privacy and scope hold from the move's own transaction, whatever the projector's lag.
+const STILL_THERE = `r.thread_id = CASE r.kind
+    WHEN 'decision' THEN (SELECT d.thread_id FROM decisions d WHERE d.id = r.record_id)
+    WHEN 'artifact' THEN (SELECT x.thread_id FROM artifacts x WHERE x.id = r.record_id)
+    ELSE (SELECT c.thread_id FROM chapters c WHERE c.id = r.record_id AND c.state <> 'moved') END`;
 
 /** The records that match, in `scope`, in the order given for each dialect. */
 const recordsQuery = (
@@ -144,10 +155,10 @@ const recordsQuery = (
 ): FindQuery =>
   dialects(
     `SELECT ${RECORD_COLUMNS} FROM find_search s JOIN find_records r ON r.seq = s.rowid ${RECORDS_FROM}
-      WHERE find_search MATCH ?1 AND ${scopeClause(scope)}${input.where} ORDER BY ${input.order.sqlite}
+      WHERE find_search MATCH ?1 AND ${scopeClause(scope)} AND ${STILL_THERE}${input.where} ORDER BY ${input.order.sqlite}
       LIMIT ${input.limit}`,
     `SELECT ${RECORD_COLUMNS} FROM find_records r ${RECORDS_FROM}
-      WHERE to_tsvector('simple', r.body) @@ to_tsquery('simple', ?1) AND ${scopeClause(scope)}${input.where}
+      WHERE to_tsvector('simple', r.body) @@ to_tsquery('simple', ?1) AND ${scopeClause(scope)} AND ${STILL_THERE}${input.where}
       ORDER BY ${input.order.pg} LIMIT ${input.limit}`,
     match,
     scopeParams(scope),

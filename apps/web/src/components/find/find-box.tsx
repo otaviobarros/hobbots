@@ -147,7 +147,14 @@ export function FindBox({
           className="absolute inset-x-6 top-[calc(100%+6px)] flex max-h-[440px] flex-col gap-0.5 overflow-y-auto rounded-card border border-line-2 bg-card p-1.5 shadow-menu"
         >
           {view !== null && (
-            <AskAnswerCard hob={hob} view={view} everywhere={scope === "everywhere"} onCite={pick} onRetry={askNow} />
+            <AskAnswerCard
+              hob={hob}
+              view={view}
+              everywhere={scope === "everywhere"}
+              nameOf={nameOf}
+              onCite={pick}
+              onRetry={askNow}
+            />
           )}
           <button
             type="button"
