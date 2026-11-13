@@ -112,9 +112,9 @@ Bruna asks in Shop team: "@Aldric we need a landing page for the market. Can it 
 - **The work stays where it was asked.** Aldric starts a quest in the camp, and the quest belongs to the camp's thread (ADR 037: a quest belongs to the thread that started it). No new camp is made for it. When the work keeps growing past the quest, the hub suggests "Give this its own camp", as it does for any long topic.
 - **The hob says what it read first.** Aldric's reply lists the records and memory its pack used, such as "Aldric's memory: the shop's look", "Shop camp: Landing page v3" and "Marina's message at 10:58". Each one opens. This comes from the `PackReport`, so it costs no model call.
 - **One living card per quest.** The quest card is a message part that updates in place, never a new message per step. It shows the steps, who is on each, a live thumbnail of the main artifact, the time and tokens so far, and Stop. A strip under the header keeps the running quest in view after the card scrolls away.
-- **The quest card has a reply thread, and that is where it is steered.** The hob-to-hob messages and step lines go in the card's reply thread, not in the camp. A reply there reaches the quest as a steer (#1345) without stopping it, and the hob answers in the thread. Tool calls and the terminal stay in the quest's own view (ADR 027), which a later decision redesigns.
+- **The quest card has a reply thread, and that is where it is steered.** The hob-to-hob messages and step lines go in the card's reply thread, not in the camp. A reply there reaches the quest as a steer (#1345) without stopping it, and the hob answers in the thread. Its steps, tool calls and their output are in that thread too; there is no separate quest view.
 - **The camp sees only what a person needs.** A hob's question for a person, one line for each new version ("Aldric updated Winter Market page v2 · map added, as Leo asked"), and Ready are also sent to the camp, marked as from the quest's thread. Everything else stays in the thread, which the card shows as "6 replies · last reply 11:18".
-- **Many quests at once.** Each quest has its own card and reply thread. The strip under the header lists every running quest with its progress, and a click jumps to its card.
+- **Many quests at once.** Each quest has its own card and reply thread. The quest strip under the header shows the running quest with its progress and what needs you, and opens its reply thread; All quests lists the others.
 - **Questions go to the person who asked.** A question names the requester and offers quick answers. The card turns `lantern` while it waits, and the answer is recorded as a decision the quest reads.
 - **Ready means ready for the requester.** The card turns into the review card: the page itself, then each thing the quest made, with its version and what changed. The requester decides, as with approvals. Going live is an approval of its own ("Put it live…"), because it reaches people outside the hub.
 - **Anyone in the camp can ask for a change.** Leo's "can the page show a map?", in the quest's thread with a mention of Aldric, reaches the running quest, not a new one. The new version records that Leo asked.
@@ -142,8 +142,8 @@ Artifacts already keep versions (#1434). This section decides how they look and 
   - **Changes**, for an artifact backed by code: a summary in words from the hob first, then the diff, unified or side by side, per file, with Viewed marks, comments on lines, the checks and where the branch lives.
   - **Versions**, each with its author, its time and the ask that caused it.
   - **An ask box** that goes to the hob that made it. The answer comes in the viewer, and the thread gets one line when the new version lands.
-- **Who asked is part of every change.** A version records the actor whose message caused it. That is how Compare, the update line and the Work tab can say "Leo asked".
-- **The Work tab.** The thread's sheet lists everything made or shared in it, grouped by the ask or quest it came from, with filters by kind. Files people add sit under "Shared in the camp".
+- **Who asked is part of every change.** A version records the actor whose message caused it. That is how Compare, the update line and the Artifacts tab can say "Leo asked".
+- **The Artifacts tab.** The thread's sheet lists everything made or shared in it, grouped by the ask or quest it came from, with filters by kind. Files people add sit under "Shared in the camp".
 - **What each person sees is the same.** Pins, comments and versions belong to the artifact, not to a person. Only read marks are per person.
 
 ### Users as actors
@@ -158,7 +158,7 @@ Artifacts already keep versions (#1434). This section decides how they look and 
 
 - **Two sections:** Camps (every camp, shared or not; a shared camp shows a stack of its members) and Direct messages (your hobs).
 - **Each row is a chat row:** its picture or a stack of members, its name, the last message with its author ("Marina: Thursday works"), the time, the unread count, and a mark when something needs you. A mention of you counts in `lantern`.
-- **The open direct message lists its hob's camps beneath it**, as the rail of ADR 037 does, so a hob's camps stay one click away.
+- **Camps come first, then direct messages.** Shared camps show above a hob's own camps, the rest wait behind Show more, and All your hobs closes the direct messages. A hob's page lists its direct message and the camps it is in. Above both sections sit Find or jump to, Home, For you (with the count of what needs you), Usage and Settings.
 - Each member can mute a thread. A muted thread still counts mentions of you.
 
 ### Scope
@@ -181,12 +181,14 @@ Artifacts already keep versions (#1434). This section decides how they look and 
 
 ### Rollout
 
-Four slices, in order. Each leaves the app working.
+Slices in this order. Each leaves the app working and is proven end to end on Claude Code, Codex and the fake runtime.
 
-1. **Members and users as actors:** `User`, `ThreadMember`, the migration, read markers per member and `Device.userId`. No change in what you see.
-2. **Shared camps with hobs:** add hobs to a camp, mentions, who answers, `TurnRequest`, the floor per conversation, reply threads, the relay budget, sessions per hob, the pack's speakers, the members sheet and the sidebar sections. Still one person.
-3. **Shared cards and work:** Change it, collision notes that name who asked, the For you list per member, status and cost, the living quest card, cards for each kind of artifact, and the viewer with Compare and Changes.
-4. **People:** after the accounts ADR, other people join threads, with their own For you list and mentions.
+1. **Members and users:** `User`, `Device.userId`, `UserSession` with a user, `ThreadMember` and its migration, read markers per member, the For you list and mentions per user, and a test seam that plays several people. Nothing changes on screen for one person.
+2. **Camps with several hobs:** add hobs to a camp, who answers, mentions in the composer, `TurnRequest` and the floor per conversation, `pass`, the relay budget, sessions and capture per hob, the pack with members and speakers, the members sheet and the sidebar's Camps and Direct messages. Still one person.
+3. **Reply parts and the viewer:** reply parts and the view catalog ([#1110](https://github.com/otaviobarros/hobbots/issues/1110)), cards for each kind of artifact, stored artifact versions with who asked, the viewer with Preview, Versions, Compare and Changes, the Artifacts tab, views in plain replies, and MCP servers as Charms. Runs beside slice 2.
+4. **Quests in conversations:** a quest started with its requester, the living quest card, reply threads with a floor each, steering from the card's thread, the quest strip, and questions, versions and Ready also sent to the main line.
+5. **Shared cards:** the decider rule, Change it with typed fields, collision notes that name who asked, comment pins and Point at something and ask.
+6. **People:** after the accounts ADR, other people join threads, with their own For you list and mentions.
 
 ## Rationale
 
