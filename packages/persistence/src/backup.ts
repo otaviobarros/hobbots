@@ -4,13 +4,23 @@ import { SkillName, SkillScope, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Schema, String as Str } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { migrations } from "./migrations/index.ts";
+import { appliedMigrationIds } from "./migrator.ts";
 
 /**
- * The schema version a Hobbots knows: the highest migration in `record`, such as 38. A backup from a
- * higher one is refused (ADR 026).
+ * The schema version a Hobbots knows: the highest migration id in `record`, such as 114 or, since
+ * ADR 040, 202611132315. A backup from a higher one is refused (ADR 026).
  */
 export const knownSchemaVersion = (record: Record<string, unknown> = migrations): number =>
   Math.max(0, ...Object.keys(record).map((key) => Number.parseInt(key, 10)));
+
+/**
+ * Whether the database lacks a migration `record` has, so the migrator would apply one. Ids are not
+ * applied in a fixed order since ADR 040, so a database can lack one below its highest.
+ */
+export const hasPendingMigrations = (record: Record<string, unknown> = migrations) =>
+  Effect.map(appliedMigrationIds, (applied) =>
+    Object.keys(record).some((key) => !applied.has(Number.parseInt(key, 10))),
+  );
 
 /** The highest migration the database has applied, or 0 for a database that has none. */
 export const schemaVersion: Effect.Effect<number, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(function* () {
