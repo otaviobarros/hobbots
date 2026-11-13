@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
+import { Criterion } from "./criterion.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
@@ -75,8 +76,16 @@ export class Quest extends Schema.Class<Quest>("Quest")({
   /** The thread that started it: its Task's thread. */
   threadId: Schema.NullOr(ThreadId),
   goal: Schema.String,
-  /** What has to hold for the Quest to be done. */
+  /** What has to hold for the Quest to be done, as its lead wrote it. */
   acceptance: Schema.Array(Schema.String),
+  /**
+   * The same conditions as criteria its lead checks against evidence (#1445), in order. Quests
+   * journaled before migration 0111 decode with none.
+   */
+  criteria: Schema.Array(Criterion).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
   limits: QuestLimits,
   /** 1 for a top Quest, one more for each Quest it sits in. */
   depth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
@@ -592,6 +601,15 @@ export const TaskRefusal = Schema.Literals([
   "lineage-owner",
   "owner-unavailable",
   "task-changed",
+  // A Quest with required acceptance criteria neither accepted nor waived cannot complete (#1445).
+  "criteria-unmet",
+  // No acceptance criterion with that id in a Quest the caller leads (#1445).
+  "criterion-missing",
+  // A check its criterion's state does not allow, such as accepting without evidence (#1445).
+  "criterion-state",
+  // Evidence that is no artifact of the Quest's, or not at its latest version (#1445).
+  "evidence-missing",
+  "evidence-stale",
   "options-collide",
   "quest-ended",
 ]);

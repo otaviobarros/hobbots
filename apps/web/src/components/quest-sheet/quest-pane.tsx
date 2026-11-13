@@ -22,6 +22,7 @@ import { StatusStrip } from "../quest/status-strip.tsx";
 import { useQuestProgress } from "../quest/use-quest-progress.ts";
 import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
+import { QuestCriteria } from "./criteria.tsx";
 import { messages } from "./messages.ts";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
@@ -186,6 +187,7 @@ function QuestBody({
           {copy.showWork}
         </Button>
       </span>
+      <QuestCriteria tree={tree} hobs={hobs} />
       <Team tree={tree} hobs={hobs} pins={pins} moves={moves} />
       <QuestThreadView tree={tree} threadId={threadId} lead={card.leadId} hobs={hobs} />
     </>

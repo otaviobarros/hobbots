@@ -30,6 +30,7 @@ import {
   ArtifactId,
   AttemptId,
   ContentId,
+  CriterionId,
   carriedFrom,
   DEFAULT_MEMORY_SETTINGS,
   DEFAULT_QUEST_LIMITS,
@@ -198,6 +199,8 @@ const seed = Effect.gen(function* () {
     taskId,
     goal: "Destroy the ring",
     acceptance: ["The ring is gone"],
+    // Optional, so the Quest completes without checks; quest-criteria.test.ts holds the gate.
+    criteria: [{ id: CriterionId.make("c-ring"), text: "The ring is gone", required: false }],
     limits: DEFAULT_QUEST_LIMITS,
     createdAt: now,
   });

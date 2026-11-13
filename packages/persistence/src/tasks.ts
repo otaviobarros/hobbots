@@ -48,9 +48,12 @@ import {
   TaskTransitions,
   TaskWait,
   type ThreadId,
+  unmetCriteria,
+  unmetCriteriaText,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
+import { criteriaOf, makeCriteriaChanges } from "./criteria-rows.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
 import { readQuestSummaries } from "./quest-summary-rows.ts";
@@ -332,6 +335,7 @@ export const TaskRepositoryLive = Layer.effect(
           const { outer, depth } = questPlacement(task, tree, quests);
           const quest = new Quest({
             ...input,
+            criteria: criteriaOf(input),
             leadId: task.ownerId,
             parentQuestId: outer?.id ?? null,
             threadId: task.threadId,
@@ -348,6 +352,7 @@ export const TaskRepositoryLive = Layer.effect(
             thread_id: quest.threadId,
             goal: quest.goal,
             acceptance: JSON.stringify(quest.acceptance),
+            criteria: JSON.stringify(quest.criteria),
             limits: JSON.stringify(quest.limits),
             depth: quest.depth,
             state: quest.state,
@@ -779,6 +784,10 @@ export const TaskRepositoryLive = Layer.effect(
         const { ledger: open, consumes, superseded } = yield* ledger.readFor(task, completion.carried);
         const refusal = ledgerRefusal(open);
         if (refusal !== null) return yield* refuse(refusal.reason, refusal.message);
+        // A Quest completes only once each required criterion is accepted or waived (#1445).
+        const [quest] = yield* read.questsOn([task.id]);
+        const unmet = quest === undefined ? [] : unmetCriteria(quest.criteria);
+        if (unmet.length > 0) return yield* refuse("criteria-unmet", unmetCriteriaText(task.id, unmet));
         return { consumes, superseded };
       });
 
@@ -1157,6 +1166,7 @@ export const TaskRepositoryLive = Layer.effect(
       createTask,
       startQuest,
       stopQuest,
+      ...makeCriteriaChanges(sql, change),
       startAttempt,
       updateAttempt,
       resumeAttempt,

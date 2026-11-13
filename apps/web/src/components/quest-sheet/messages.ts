@@ -33,6 +33,22 @@ export const messages = {
       total === 0 ? `${name} leads` : `${formatCount(done)} of ${formatCount(total)} done · ${name} leads`,
     needYou: ({ count }: { count: number }) =>
       plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
+    /** The quest's acceptance criteria and where each stands (#1445). */
+    criteria: "Done when",
+    optional: "optional",
+    criterion: {
+      open: "Not checked",
+      accepted: "Accepted",
+      "needs-rework": "Needs rework",
+      waived: "Waived",
+    },
+    /** The artifact version a criterion was accepted on, and whether a newer one voided it. */
+    evidence: ({ label, version }: { label: string; version: number }) => `${label}, version ${formatCount(version)}`,
+    voided: "a newer version replaced it",
+    /** Who last decided a criterion, and why. */
+    decidedBy: ({ who, reason }: { who: string; reason: string }) => `${who}: ${reason}`,
+    byYou: "You",
+    byHub: "Hobbots",
     showWork: "Show the work",
     showWorkHint: "Changes, files and terminals, in the Workbench beside the chat",
     team: "Who's on it",

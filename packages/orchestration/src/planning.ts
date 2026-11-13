@@ -20,6 +20,7 @@ import {
   type TaskWait,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
+import { askedByYou } from "./asked-by-you.ts";
 import type { Authority, PathSeparator } from "./authority.ts";
 import { cut, planNote } from "./briefs.ts";
 import {
@@ -38,6 +39,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import { criteriaNote, criterionDetail, newCriteria } from "./criteria.ts";
 import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
 import type { Delivery } from "./delivery.ts";
 import { type DestinationDeps, missingDestinations, notThere } from "./destinations.ts";
@@ -53,31 +55,6 @@ const notDelivered = (task: Task, delivered: boolean | undefined) =>
       "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile. If the user asked you to stop, call stop_quest instead."
     : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
       "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
-
-/**
- * Whether the turn making a call is your request (#1346): it answers a message of yours in the chat,
- * or carries your answer to a question its hob asked about `task`. A turn woken by a member's report,
- * a note or a finding is neither, whatever it says.
- */
-const askedByYou = (tasks: TaskRepository["Service"], scope: CallScope, task: Task) =>
-  Effect.gen(function* () {
-    if (scope.caller.messageId !== undefined) return true;
-    const carried = new Set<string>((scope.caller.carried ?? []).map((each) => each.itemId));
-    if (carried.size === 0) return false;
-    const ledger = yield* tasks.readLedger(task.id);
-    return Option.match(ledger, {
-      onNone: () => false,
-      onSome: (read) =>
-        read.open.some(
-          (entry) =>
-            entry._tag === "Item" &&
-            carried.has(entry.item.id) &&
-            entry.item.payload._tag === "answer" &&
-            entry.item.payload.question.askerId === scope.caller.agentId &&
-            entry.item.payload.question.answeredBy?._tag === "User",
-        ),
-    });
-  });
 
 /** What a lead is told when it tries to stop a Quest the user did not ask it to stop (#1346). */
 const notAsked = (quest: Quest) =>
@@ -362,6 +339,7 @@ export const makePlanning = ({
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
       const quest = yield* questLimitsFor(scope, limits, task, input);
+      const criteria = newCriteria(input.acceptance);
       // Its work is in the folders the lead names, else those its brief and goal name (#670).
       const lead = (yield* authority(scope, task)).folders;
       const folders =
@@ -369,7 +347,7 @@ export const makePlanning = ({
           ? yield* namedFolders(
               folderChecks,
               lead,
-              [task.brief, input.goal, ...(input.acceptance ?? [])].join("\n"),
+              [task.brief, input.goal, ...criteria.map((each) => each.text)].join("\n"),
               separator,
             )
           : yield* requestedFolders(folderChecks, lead, input.folders, separator);
@@ -380,7 +358,8 @@ export const makePlanning = ({
             id: QuestId.make(newId()),
             taskId: task.id,
             goal: input.goal,
-            acceptance: input.acceptance ?? [],
+            acceptance: criteria.map((each) => each.text),
+            criteria,
             limits: withFolders(quest, folders),
             createdAt: scope.at,
           }),
@@ -388,8 +367,14 @@ export const makePlanning = ({
       );
       return {
         done: {
-          message: `Task ${task.id} is now a Quest. You lead it.${planNote(task)}`,
-          details: { quest_id: started.id, depth: started.depth, max_depth: quest.maxDepth, deadline: quest.deadline },
+          message: `Task ${task.id} is now a Quest. You lead it.${criteriaNote(criteria)}${planNote(task)}`,
+          details: {
+            quest_id: started.id,
+            depth: started.depth,
+            max_depth: quest.maxDepth,
+            deadline: quest.deadline,
+            ...(criteria.length === 0 ? {} : { criteria: criteria.map(criterionDetail) }),
+          },
         },
         entries: journal.entries,
       };

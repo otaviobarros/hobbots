@@ -105,7 +105,25 @@ export const TaskToolInputs = {
     key,
     task_id: taskId,
     goal: text("What the Quest must achieve."),
-    acceptance: Schema.optionalKey(Schema.Array(text("A condition that must hold for the Quest to be done"))),
+    acceptance: Schema.optionalKey(
+      Schema.Array(
+        Schema.Union([
+          text("A condition that must hold for the Quest to be done. It is required."),
+          Schema.Struct({
+            text: text("A condition that must hold for the Quest to be done."),
+            optional: Schema.optionalKey(
+              Schema.Boolean.annotate({
+                description:
+                  "true when the Quest can be done without it. Leave it out for a required one: the Quest completes only once each required one is accepted or the user waives it.",
+              }),
+            ),
+          }),
+        ]),
+      ).annotate({
+        description:
+          "The acceptance criteria. Each gets an id, which start_quest returns; check each against evidence with check_criterion before you complete the Quest.",
+      }),
+    ),
     max_depth: Schema.optionalKey(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
         description: "How many Quests deep its work may nest. It cannot exceed the limit above it.",
@@ -136,6 +154,11 @@ export const TaskToolInputs = {
       }),
     ),
     authority: Schema.optionalKey(Authority),
+    criteria: Schema.optionalKey(
+      Schema.Array(id("A criterion id")).annotate({
+        description: "Ids of the Quest's acceptance criteria this Task works towards, as start_quest returned them.",
+      }),
+    ),
     timeout_minutes: Schema.optionalKey(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
         description: "How long the hob has. It cannot be longer than the time you were given.",
@@ -268,6 +291,21 @@ export const TaskToolInputs = {
           ),
         }),
       ),
+    ),
+  }),
+  check_criterion: Schema.Struct({
+    key,
+    criterion_id: id("The acceptance criterion to check, as start_quest and read_tasks give it."),
+    verdict: Schema.Literals(["accepted", "needs-rework", "waived"]).annotate({
+      description:
+        "accepted: the evidence shows it holds. needs-rework: the work does not meet it yet. waived: it no longer has to hold; a required one only when the user asked, in their message this turn answers or their answer to your ask.",
+    }),
+    reason: text("Why, in a sentence: what you checked, what is missing, or why it is waived."),
+    evidence: Schema.optionalKey(
+      Schema.Array(id("An artifact")).annotate({
+        description:
+          "For accepted: what proves it, each the id of an artifact a Task returned (read_tasks lists them) or the absolute path of a file a Task in the Quest changed. Each is checked at its latest version: a newer version voids it.",
+      }),
     ),
   }),
   cancel_task: Schema.Struct({
@@ -422,6 +460,12 @@ export const TASK_TOOLS: ReadonlyArray<{
     label: "Completing the Task",
   },
   {
+    name: "check_criterion",
+    description:
+      "Check one of your Quest's acceptance criteria against the work: accept it with the artifacts that prove it as evidence, send it back for rework, or waive it. Your Quest completes only once each required criterion is accepted or waived, and only the user waives a required one. A newer version of an artifact voids the evidence it gave, so check again after more work on it.",
+    label: "Checking a criterion",
+  },
+  {
     name: "cancel_task",
     description: "Cancel a Task under one you own, with everything under it.",
     label: "Cancelling a Task",
@@ -483,6 +527,8 @@ export const TaskToolRefusal = Schema.Literals([
   "stop-not-asked",
   // A stop_quest from a turn whose Task leads no Quest you asked for (#1346).
   "not-a-quest",
+  // A waiver of a required criterion from a turn that is neither your message nor your answer to it (#1445).
+  "waive-not-asked",
   // A Quest's lead saying it delivered while nothing is where the user asked for it (#1215).
   "not-at-destination",
   // A question with choices about a file the user named and is not there, none worded to let it go (#1219).

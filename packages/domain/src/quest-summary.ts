@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import type { ApprovalRequest } from "./approval.ts";
-import { type Artifact, ArtifactReviews, type RegisteredArtifactId } from "./artifact.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { type Artifact, ArtifactReviews } from "./artifact.ts";
+import { AgentId, type RegisteredArtifactId, ThreadId } from "./ids.ts";
 import { isActiveQuest, type Quest, QuestId, type Question, QuestState } from "./quest.ts";
 import { Revision } from "./revision.ts";
 import { descendantsOf, isCompletedTask, type Task, TaskId, type TaskState } from "./task.ts";

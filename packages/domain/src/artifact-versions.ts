@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { type ContentId, isImageFile } from "./activity.ts";
-import { type Artifact, ArtifactOrigin, RegisteredArtifactId } from "./artifact.ts";
+import { type Artifact, ArtifactOrigin } from "./artifact.ts";
+import { RegisteredArtifactId } from "./ids.ts";
 import type { AttemptId } from "./task.ts";
 import { previewOf } from "./task-files.ts";
 

@@ -1,4 +1,5 @@
 import type {
+  Actor,
   AgentId,
   Answerer,
   ArtifactId,
@@ -13,6 +14,7 @@ import type {
   CheckpointKind,
   CheckpointSource,
   Committed,
+  CriterionId,
   DelegationAuthority,
   DelegationId,
   DeviceId,
@@ -85,9 +87,36 @@ export interface NewQuest {
   readonly taskId: TaskId;
   readonly goal: string;
   readonly acceptance: ReadonlyArray<string>;
+  /**
+   * The acceptance as criteria (#1445), one for each line of `acceptance`, in order. Absent, each
+   * line is a required criterion with an id of the hub's.
+   */
+  readonly criteria?: ReadonlyArray<NewCriterion>;
   readonly limits: QuestLimits;
   readonly createdAt: string;
 }
+
+export interface NewCriterion {
+  readonly id: CriterionId;
+  readonly text: string;
+  readonly required: boolean;
+}
+
+/**
+ * Evidence a Quest's lead names for a criterion (#1445): an artifact a Task in the Quest returned,
+ * by its id, or a file a Task in the Quest made or changed, by its absolute path. The records tie
+ * it to that artifact's version.
+ */
+export type EvidenceClaim =
+  | { readonly _tag: "Returned"; readonly artifactId: ArtifactId }
+  | { readonly _tag: "File"; readonly path: string };
+
+/** A check of one acceptance criterion (#1445), by whom, why and when. */
+export type CriterionCheck = { readonly by: Actor; readonly reason: string; readonly at: string } & (
+  | { readonly _tag: "Accept"; readonly evidence: ReadonlyArray<EvidenceClaim> }
+  | { readonly _tag: "Rework" }
+  | { readonly _tag: "Waive" }
+);
 
 export interface NewAttempt {
   readonly id: AttemptId;
@@ -273,6 +302,19 @@ export class TaskRepository extends Context.Service<
       questId: QuestId,
       revision: number,
       stop: { readonly reason: string; readonly summary: string; readonly at: string },
+    ) => Changed<Quest>;
+    /**
+     * Checks one of a Quest's acceptance criteria (#1445): accepts it on evidence, tied to each
+     * artifact's latest version, sends it back for rework, or waives it. Refused for a criterion the
+     * Quest does not have, a check its state or rules do not allow (only you waive a required one),
+     * evidence that is no artifact of the Quest's Tasks, or one a newer version replaced.
+     */
+    readonly checkCriterion: (questId: QuestId, criterionId: CriterionId, check: CriterionCheck) => Changed<Quest>;
+    /** Links a Task to criteria of its Quest that it works towards (#1445). Refused for an unknown criterion. */
+    readonly linkCriteria: (
+      questId: QuestId,
+      criterionIds: ReadonlyArray<CriterionId>,
+      taskId: TaskId,
     ) => Changed<Quest>;
     /**
      * Starts the Task's next Attempt: its first, a resume or a retry. Never a new Task (EX-001). A
