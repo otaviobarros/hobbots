@@ -439,10 +439,15 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           yield* startQueued(threadId);
           return;
         }
-        // Work waiting here runs in one slot for the whole dispatch, or waits for one (#1448).
-        if (!(yield* workWaits(continuations.value, threadId, found.agent.id))) return;
+        // Work waiting here runs in one slot for the whole dispatch, or waits for one (#1448). A
+        // thread with nothing waiting gives its place up at once, so it holds back no other turn.
         const slot = yield* slotFor(found.thread, found.agent);
-        if (slot === null) return;
+        if (slot === null) {
+          if (slots !== null && !(yield* workWaits(continuations.value, threadId, found.agent.id))) {
+            yield* slots.withdraw(`thread:${threadId}`);
+          }
+          return;
+        }
         // The dispatch reads the backpack after this, so it sees whatever a wake until now announced.
         yield* must(threadId, { _tag: "Dispatch" });
         yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id, slot), scope);
