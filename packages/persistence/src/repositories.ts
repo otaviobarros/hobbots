@@ -29,6 +29,7 @@ import { makeCampWrites, threadColumns } from "./camps.ts";
 import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
+import { mentionsToStore } from "./message-mentions.ts";
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, unreadColumn } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
@@ -215,6 +216,7 @@ const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
     skills: row.skills === null || row.skills === undefined ? null : JSON.parse(String(row.skills)),
     skillsUsed: JSON.parse(String(row.skillsUsed ?? "[]")),
     askedSkill: row.askedSkill ?? null,
+    mentions: JSON.parse(String(row.mentions ?? "[]")),
     // Its author is two columns (migration 0101).
     actor: row.actorKind == null ? null : { kind: row.actorKind, id: row.actorId },
   }));
@@ -513,14 +515,16 @@ export const HobbotsRepositoryLive = Layer.effect(
         if (author === null && message.role !== "assistant") {
           return Effect.die(new Error(`A ${message.role} message must name the person who wrote it`));
         }
-        return sql<{
-          readonly chapterId: string;
-          readonly actorKind: string;
-          readonly actorId: string;
-        }>`INSERT INTO messages (id, thread_id, chapter_id, actor_kind, actor_id, role, content, status, error, config_version, runtime, model,
+        return mentionsToStore(sql, message).pipe(
+          Effect.flatMap((mentions) =>
+            sql<{
+              readonly chapterId: string;
+              readonly actorKind: string;
+              readonly actorId: string;
+            }>`INSERT INTO messages (id, thread_id, chapter_id, actor_kind, actor_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-          resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, created_at, revision, seq)
+          resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, mentions, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.threadId)}),
           ${author?.kind ?? "hob"},
@@ -533,7 +537,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           ${message.resetsAt}, ${JSON.stringify(message.steps)}, ${message.promptId},
           ${message.quiet ? 1 : 0},
           ${message.skills === null ? null : JSON.stringify(message.skills)},
-          ${JSON.stringify(message.skillsUsed)}, ${message.askedSkill},
+          ${JSON.stringify(message.skillsUsed)}, ${message.askedSkill}, ${JSON.stringify(mentions)},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
         )
@@ -556,15 +560,19 @@ export const HobbotsRepositoryLive = Layer.effect(
           quiet = excluded.quiet,
           skills = excluded.skills,
           skills_used = excluded.skills_used,
+          mentions = excluded.mentions,
           revision = excluded.revision
         RETURNING chapter_id, actor_kind, actor_id`.pipe(
-          Effect.map(
-            ([row]) =>
-              new Message({
-                ...message,
-                chapterId: ChapterId.make(String(row?.chapterId)),
-                actor: { kind: row?.actorKind as Actor["kind"], id: String(row?.actorId) },
-              }),
+              Effect.map(
+                ([row]) =>
+                  new Message({
+                    ...message,
+                    chapterId: ChapterId.make(String(row?.chapterId)),
+                    actor: { kind: row?.actorKind as Actor["kind"], id: String(row?.actorId) },
+                    mentions,
+                  }),
+              ),
+            ),
           ),
         );
       });
