@@ -45,7 +45,7 @@ export class QuestionService extends Context.Service<
         answer: (questionId, answer, via) =>
           Effect.gen(function* () {
             const session = yield* UserSession;
-            const from = { deviceId: session.deviceId, via: via ?? null };
+            const from = { deviceId: session.deviceId, via: via ?? null, actor: session.actor };
             const committed = yield* tasks
               .answerQuestion(questionId, { _tag: "User" }, answer, yield* nowIso, from)
               .pipe(

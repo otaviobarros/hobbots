@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { TaskRepository } from "@hobbots/agents";
-import type { RuntimeKind, TaskTree } from "@hobbots/domain";
+import { DeviceId, OWNER_ACTOR, type RuntimeKind, type TaskTree } from "@hobbots/domain";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -161,7 +161,9 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
         const tasks = yield* TaskRepository;
         const bus = yield* EventBus;
         const at = new Date().toISOString();
-        yield* bus.publish((yield* tasks.answerQuestion(question.id, { _tag: "User" }, choice, at)).entries);
+        // From your session on your phone: a waiver you choose names you.
+        const from = { deviceId: DeviceId.make("phone"), via: "chat", actor: OWNER_ACTOR } as const;
+        yield* bus.publish((yield* tasks.answerQuestion(question.id, { _tag: "User" }, choice, at, from)).entries);
         return question;
       });
     const first = await run(answer("Keep it"));
@@ -189,7 +191,7 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
     expect(quest?.criteria[0]).toMatchObject({
       state: "waived",
       waiverAsk: null,
-      decided: { by: { kind: "user" }, reason: "The date is still not set" },
+      decided: { by: OWNER_ACTOR, reason: "The date is still not set" },
     });
   }, 30_000);
 });

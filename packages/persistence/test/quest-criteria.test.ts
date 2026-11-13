@@ -9,6 +9,7 @@ import {
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
+  DeviceId,
   type EventEnvelope,
   OWNER_ACTOR,
   type Quest,
@@ -50,6 +51,8 @@ const DATE = CriterionId.make("criterion-date");
 const PHOTO = CriterionId.make("criterion-photo");
 const PAGE = "/code/launch/index.html";
 const LEAD: Actor = { kind: "hob", id: ALDRIC };
+/** Your answer, from your session on your phone: a waiver you choose names you. */
+const YOU = { deviceId: DeviceId.make("phone"), via: "chat", actor: OWNER_ACTOR } as const;
 
 let clock = 0;
 const tick = () => new Date(Date.parse(NOW) + 1000 * ++clock).toISOString();
@@ -270,11 +273,17 @@ describe("a Quest's acceptance criteria", () => {
         const asked = yield* ask("q-keep");
         const twice = yield* refusal(ask("q-twice"));
         // "Keep it" leaves the criterion as it was.
-        yield* tasks.answerQuestion(QuestionId.make("q-keep"), { _tag: "User" }, "Keep it", tick());
+        yield* tasks.answerQuestion(QuestionId.make("q-keep"), { _tag: "User" }, "Keep it", tick(), YOU);
         const kept = yield* questNow;
         const early = yield* refusal(complete(top.id, null));
         yield* ask("q-waive");
-        const answered = yield* tasks.answerQuestion(QuestionId.make("q-waive"), { _tag: "User" }, "waive it", tick());
+        const answered = yield* tasks.answerQuestion(
+          QuestionId.make("q-waive"),
+          { _tag: "User" },
+          "waive it",
+          tick(),
+          YOU,
+        );
         const waived = yield* questNow;
         const done = yield* complete(top.id, null);
         return { rework, noProof, optional, asked, twice, kept, early, answered, waived, done };

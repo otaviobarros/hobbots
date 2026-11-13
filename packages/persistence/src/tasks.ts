@@ -54,7 +54,7 @@ import {
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
-import { criteriaOf, makeCriteriaChanges, voidReplacedEvidence } from "./criteria-rows.ts";
+import { criteriaOf, makeCriteriaChanges, settleWaiverAsks, voidReplacedEvidence } from "./criteria-rows.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
 import { readQuestSummaries } from "./quest-summary-rows.ts";
@@ -1030,7 +1030,12 @@ export const TaskRepositoryLive = Layer.effect(
           });
           yield* saveQuestion(question);
           const settled = yield* settleCopies(before, revision + 1);
-          return { value: question, events: [{ _tag: "QuestionAnswered", question } as const, ...settled] };
+          // Your answer to a lead's ask to waive a required criterion waives it, or leaves it (#1445).
+          const waived = yield* settleWaiverAsks(sql, question, from?.actor ?? null, revision + 1 + settled.length);
+          return {
+            value: question,
+            events: [{ _tag: "QuestionAnswered", question } as const, ...settled, ...waived],
+          };
         }),
       );
 

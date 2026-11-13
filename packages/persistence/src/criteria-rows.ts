@@ -1,5 +1,6 @@
 import type { CriterionCheck, EvidenceClaim, NewCriterion, NewQuest, TaskRepository } from "@hobbots/agents";
 import {
+  type Actor,
   type Artifact,
   Criteria,
   Criterion,
@@ -10,7 +11,6 @@ import {
   type Evidence,
   IllegalCriterionTransition,
   type JournaledEvent,
-  OWNER_ACTOR,
   Quest,
   Question,
   QuestStates,
@@ -195,8 +195,7 @@ export const makeCriteriaChanges = (
       change((revision) =>
         Effect.gen(function* () {
           const { quest, criterion } = yield* openCriterion(questId, criterionId);
-          const waive = { _tag: "Waive", by: OWNER_ACTOR, reason: request.reason, at: request.at } as const;
-          if (!criterion.required || !Criteria.can(criterion, waive)) {
+          if (!criterion.required || !Criteria.waivable(criterion)) {
             return yield* refuse(
               "criterion-state",
               criterion.required
@@ -305,43 +304,43 @@ const voided = (criterion: Criterion, artifactId: RegisteredArtifactId, version:
 };
 
 /**
- * Settles the asks to waive a required criterion that your answers close (#1445), at journal
- * sequences from `first`: your "Waive it" waives it as yours, and any other answer leaves it as it
- * was. Returns their `QuestCriteriaChanged` events, one per Quest. Only within `sql.withTransaction`.
+ * Settles the asks to waive a required criterion that your answer to `question` closes (#1445), at
+ * journal sequences from `first`: your "Waive it" waives it in your name, `person`, from your
+ * session, and any other answer leaves it as it was. Returns their `QuestCriteriaChanged` events,
+ * one per Quest. Only within the transaction that records your answer.
  */
-export const waiveOnAnswers = (
+export const settleWaiverAsks = (
   sql: SqlClient.SqlClient,
-  events: ReadonlyArray<JournaledEvent>,
+  question: Question,
+  person: Actor | null,
   first: number,
 ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
   Effect.gen(function* () {
-    const answered = events.flatMap((event) =>
-      event._tag === "QuestionAnswered" && event.question.answeredBy?._tag === "User" ? [event.question] : [],
-    );
-    if (answered.length === 0) return [];
+    if (question.answeredBy?._tag !== "User") return [];
     const read = makeTaskReads(sql);
     const changed: Array<JournaledEvent> = [];
-    for (const question of answered) {
-      for (const quest of yield* read.questsOn([question.taskId])) {
-        if (!quest.criteria.some((each) => each.waiverAsk?.questionId === question.id)) continue;
-        const criteria = quest.criteria.map((each) =>
-          each.waiverAsk?.questionId === question.id ? settledAsk(each, question) : each,
-        );
-        const saved = yield* saveCriteria(sql, quest, criteria, first + changed.length);
-        changed.push({ _tag: "QuestCriteriaChanged", quest: saved });
-      }
+    for (const quest of yield* read.questsOn([question.taskId])) {
+      if (!quest.criteria.some((each) => each.waiverAsk?.questionId === question.id)) continue;
+      const criteria = quest.criteria.map((each) =>
+        each.waiverAsk?.questionId === question.id ? settledAsk(each, question, person) : each,
+      );
+      const saved = yield* saveCriteria(sql, quest, criteria, first + changed.length);
+      changed.push({ _tag: "QuestCriteriaChanged", quest: saved });
     }
     return changed;
   });
 
-/** A criterion once you answered whether to waive it: waived by you on "Waive it", else as it was. */
-const settledAsk = (criterion: Criterion, question: Question): Criterion => {
+/**
+ * A criterion once you answered whether to waive it: waived in your name on "Waive it", else as it
+ * was. An answer with no person to name waives nothing.
+ */
+const settledAsk = (criterion: Criterion, question: Question, person: Actor | null): Criterion => {
   const ask = criterion.waiverAsk;
   const closed = new Criterion({ ...criterion, waiverAsk: null });
-  if (ask === null || question.picked !== 0) return closed;
+  if (ask === null || person === null || question.picked !== 0) return closed;
   const next = Criteria.transition(closed, {
     _tag: "Waive",
-    by: OWNER_ACTOR,
+    by: person,
     reason: ask.reason,
     at: question.answeredAt ?? ask.at,
   });

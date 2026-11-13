@@ -179,6 +179,8 @@ export const Criteria = {
   /** Whether it still holds its Quest open: required, and neither accepted nor waived. */
   holdsOpen: (criterion: Pick<Criterion, "required" | "state">): boolean =>
     criterion.required && criterion.state !== "accepted" && criterion.state !== "waived",
+  /** Whether a person's waiver could still waive it: it is not waived already. */
+  waivable: (criterion: Pick<Criterion, "state">): boolean => criterion.state !== "waived",
   /** Whether it is settled for now: accepted or waived. */
   settled: (criterion: Pick<Criterion, "state">): boolean =>
     criterion.state === "accepted" || criterion.state === "waived",

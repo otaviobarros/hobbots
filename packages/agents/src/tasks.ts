@@ -414,7 +414,12 @@ export class TaskRepository extends Context.Service<
       by: Answerer,
       answer: string,
       at: string,
-      from?: { readonly deviceId: DeviceId; readonly via: QuestionSurface | null },
+      from?: {
+        readonly deviceId: DeviceId;
+        readonly via: QuestionSurface | null;
+        /** The person who answered, from their session (STD-SEC-006): a waiver they choose names them. */
+        readonly actor?: Actor;
+      },
     ) => Changed<Question>;
     /** Passes a question from its current lead to the next lead up, or to the user from the top lead. */
     readonly escalateQuestion: (questionId: QuestionId, by: AgentId) => Changed<Question>;
