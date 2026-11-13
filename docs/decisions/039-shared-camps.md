@@ -1,10 +1,10 @@
-# ADR 039 — Group chats with hobs and people
+# ADR 039 — Shared camps with hobs and people
 
-Status: **Proposed.** Amends the threads of [ADR 037](037-chat-and-camps.md) (a thread has members, a chat is a direct message with one hob, a runtime session also belongs to one hob, and a camp can be a campfire), the capture of [ADR 028](028-memory.md) (each hob captures only its own part of a shared thread), the user session of [ADR 021](021-devices-and-remote-access.md) (a device belongs to a user) and who decides an approval in [ADR 015](015-approval-lifetimes-and-grants.md). Builds on the Task tree of [ADR 018](018-tasks-and-quests.md), the backpack of [ADR 019](019-hob-backpack-and-continuations.md), the steer receipts of [ADR 027](027-quest-room.md), the hob directory of [ADR 032](032-hob-directory.md) and the claims register of ADR 037. Records the design for shared camps and campfires ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)).
+Status: **Proposed.** Amends the threads of [ADR 037](037-chat-and-camps.md) (a thread has members, a chat is a direct message with one hob, a runtime session also belongs to one hob), the capture of [ADR 028](028-memory.md) (each hob captures only its own part of a shared thread), the user session of [ADR 021](021-devices-and-remote-access.md) (a device belongs to a user) and who decides an approval in [ADR 015](015-approval-lifetimes-and-grants.md). Builds on the Task tree of [ADR 018](018-tasks-and-quests.md), the backpack of [ADR 019](019-hob-backpack-and-continuations.md), the steer receipts of [ADR 027](027-quest-room.md), the hob directory of [ADR 032](032-hob-directory.md) and the claims register of ADR 037. Records the design for shared camps ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)), and drops campfires as a separate kind.
 
 ## Context
 
-Hobbots chat should feel like the chat apps people already use, such as Slack or WhatsApp: direct messages, groups, people and hobs talking in one place. Hobbots adds its own pieces on top: camps, chapters, records, quests and the camp sheet.
+Hobbots chat should feel like the chat apps people already use, such as Slack or WhatsApp: direct messages, shared places, people and hobs talking in one place. Hobbots adds its own pieces on top: camps, chapters, records, quests and the camp sheet.
 
 Today a conversation has one hob and one person:
 
@@ -31,11 +31,11 @@ ADR 037 put an explicit actor on every authored record and left shared camps for
 | UI word | What it is | Code |
 | --- | --- | --- |
 | Direct message | You and one hob. Today's chat, unchanged. Each hob has one. | `Thread` with `kind: chat` |
-| Camp | A place with a goal. One hob or several, you alone or with other people. | `Thread` with `kind: camp` |
-| Group | A camp or campfire with more than one hob, or with another person. It is a view over the members, not a kind. | Derived from `ThreadMember` |
-| Campfire | A camp where hobs and people talk ideas through in rounds. Nothing gets built there. It ends in a decision or a quest. | `Thread` with `kind: campfire` |
-| Member | A person or a hob in a chat, camp or campfire. Not a party member of a Quest. | `ThreadMember` |
+| Camp | A place for a goal or a team. One hob or several, you alone or with other people. A camp for ideas is a camp where nobody starts a quest. | `Thread` with `kind: camp` |
+| Member | A person or a hob in a direct message or a camp. Not a party member of a Quest. | `ThreadMember` |
 | Host | The hob a thread was made with. It answers when nobody is mentioned, if the members chose that, and leads the thread's quests by default. | `Thread.agentId` |
+
+People see two places, direct messages and camps, as in Slack's direct messages and channels. This ADR says **shared camp** for a camp with more than one hob or with another person. It is worked out from `ThreadMember`, it is not a kind, and the UI has no word for it: a shared camp is just a camp with more members.
 
 The glossary gains these rows in the pull request that first builds each one.
 
@@ -45,7 +45,7 @@ The glossary gains these rows in the pull request that first builds each one.
 - **`MemberMachine`** has the states `active`, `left` and `removed`. A hob or a person added by a member is active at once. An invited state comes with accounts.
 - **The read marker moves to the member.** Today's per-thread marker becomes the owner's `readRevision`, so unread counts, the unread line and the away summary are per person.
 - **`Thread.agentId` stays and means the host.** Every thread keeps one host hob, the hob it was made with, so nothing that reads it today breaks. A thread names the host in the UI only when it has more than one hob.
-- **A direct message has exactly two members:** you and its hob. Adding anyone is refused. "Make a group" starts a new camp with both of you, and the current chapter can move into it as ADR 037 moves a chapter.
+- **A direct message has exactly two members:** you and its hob. Adding anyone is refused. "Make a camp" starts a new camp with both of you, and the current chapter can move into it as ADR 037 moves a chapter.
 - **A hob leaves every thread when it is retired**, and comes back when it returns.
 - **Migration.** Every thread gets two members: the owner, with role `owner`, and its hob. The thread's read marker becomes the owner's `readRevision`. It runs in one pass, on SQLite and PostgreSQL.
 
@@ -54,12 +54,12 @@ The glossary gains these rows in the pull request that first builds each one.
 `answerersFor(message, thread, members)` is a pure function, run in the transaction that stores the message. It returns the hobs that must answer, in order. The rules, in this order:
 
 1. **A note to self wakes nobody**, as today. Neither does a hob's message that mentions no hob.
-2. **An @mention wakes the mentioned hobs**, in the order they were mentioned. A mention of a hob that is not a member is refused before the message is stored, with "Rook isn't in this group. Add Rook?"
+2. **An @mention wakes the mentioned hobs**, in the order they were mentioned. A mention of a hob that is not a member is refused before the message is stored, with "Rook isn't in this camp. Add Rook?"
 3. **A reply to a hob's message counts as mentioning that hob.**
-4. **With no mention, the thread's answer rule decides.** `host`: the host answers. `mentions`: nobody answers, and the composer says so before you send. A direct message and a camp with one hob use `host`, so they behave as today. A group starts with `mentions`. Any member can change it in the members sheet.
+4. **With no mention, the thread's answer rule decides.** `host`: the host answers. `mentions`: nobody answers, and the composer says so before you send. A direct message and a camp with one hob use `host`, so they behave as today. A shared camp starts with `mentions`. Any member can change it in the members sheet.
 5. **A running Quest keeps its rules.** A message in its thread reaches the lead, and an @mention reaches the member hob directly, as steering a running member does ([#1345](https://github.com/otaviobarros/hobbots/issues/1345)).
 
-There is no mention that wakes every hob. A group that wants every hob's view asks the host, which can consult the others. This keeps the cost of one message predictable.
+There is no mention that wakes every hob. A shared camp that wants every hob's view asks the host, which can consult the others. This keeps the cost of one message predictable.
 
 ### One hob speaks at a time
 
@@ -69,13 +69,13 @@ There is no mention that wakes every hob. A group that wants every hob's view as
 - **People never wait.** A person's message is stored and shown at once, whoever holds the floor. A message that mentions the hob speaking now joins that hob's next turn, as today. One that mentions another hob adds a request behind the others.
 - **Stop stops the turn that is speaking.** The waiting requests stay. Stop all drops them, and each one is marked `dropped` with who stopped it.
 - **Threads stay independent.** A hob in three threads can speak in each, with one session per thread, as a hob already runs several Tasks at once.
-- **Quests are not chat turns.** A quest's work runs in the quest's own sessions (ADR 018) and never holds a conversation's floor. A group can run any number of quests at once, within the owner's plan, and people and hobs keep talking while they run. A hob that leads a quest can still answer a mention in the group: that is a separate chat turn, and its pack says the quest is running.
+- **Quests are not chat turns.** A quest's work runs in the quest's own sessions (ADR 018) and never holds a conversation's floor. A shared camp can run any number of quests at once, within the owner's plan, and people and hobs keep talking while they run. A hob that leads a quest can still answer a mention in the camp: that is a separate chat turn, and its pack says the quest is running.
 
 ### Hobs talking to hobs
 
 - **A hob may @mention another member hob** in its reply. That adds a `TurnRequest` caused by a hob.
 - **The relay budget.** After a person's message, hobs may wake each other for at most `HOB_RELAY_BUDGET` turns, 3, before a person speaks again. Past it, the hub drops the request and the thread shows "Hobs paused, waiting for a person" with "Let them go on", which resets the budget once. The budget is a named constant with tests.
-- **Work goes through the existing paths.** A mention in a group is for talking in the open. A hob that needs another hob's work starts a Task or a Quest. A hob that needs another hob's answer out of sight uses `consult_hob`.
+- **Work goes through the existing paths.** A mention in a shared camp is for talking in the open. A hob that needs another hob's work starts a Task or a Quest. A hob that needs another hob's answer out of sight uses `consult_hob`.
 
 ### The context pack with several hobs
 
@@ -90,45 +90,45 @@ There is no mention that wakes every hob. A group that wants every hob's view as
 
 - **Each hob captures its own part.** Capture writes a hob's own turns, and the messages its pack carried for them, into that hob's scope, tagged with the thread. Another hob's replies are never captured into its scope. They belong to their author's capture.
 - **A person's message is captured only by the hobs that took a turn on it.**
-- **Privacy is the thread's.** A private camp or campfire keeps every member hob's capture out, under the rule of ADR 037.
+- **Privacy is the thread's.** A private camp keeps every member hob's capture out, under the rule of ADR 037.
 - **For accounts later.** A memory page keeps its thread tag. When another person asks a hob something, recall leaves out pages from threads that person is not a member of. The accounts decision settles this.
 
 ### Cards every thread shares
 
-Each card is a message part built from records. It looks and works the same in a direct message, a camp, a group and a campfire.
+Each card is a message part built from records. It looks and works the same in a direct message and in a camp with one hob or many.
 
 - **Approval, with Change it.** An approval offers Approve, Change it and Don't.
   - On a Charm action with typed fields, such as a send time or a list of recipients, Change it opens the fields. The hub checks the changed call against the action's own schema and approves that call. The hob gets its result and a note of what changed.
   - On any other approval, Change it sends your words to the hob as the reason and what to do instead. It is recorded as a steer (ADR 027).
   - **The decider is the person who asked for the work:** the requester on the Task, or the author of the message that started the turn. The thread's owner may decide too. Everyone else sees "Waiting on Marina". The approval records who decided, as an actor.
-- **Collision note.** A Heads-up from the claims register (ADR 037), shown in every thread involved. In a group it names the people who asked, as well as the hobs: "Marina asked Quill to rewrite the hero while Leo asked Pip to change its photo." It says what the hub settled and what waits.
+- **Collision note.** A Heads-up from the claims register (ADR 037), shown in every thread involved. In a shared camp it names the people who asked, as well as the hobs: "Marina asked Quill to rewrite the hero while Leo asked Pip to change its photo." It says what the hub settled and what waits.
 - **Away summary.** "While you were away" sits at your unread line. It lists, from records written since your `readRevision`, your mentions, the decisions made, the artifacts that changed and what needs you. It is a projection and needs no model. With a hub brain it is phrased by a projector, never in a request.
 - **Status and cost.** The header says who is speaking and who waits. A reply's footer shows the hob and the turn's tokens. The members sheet shows each hob's turns and tokens today and how much of the plan is left, from the usage records. Runtimes run on the owner's sign-ins, so every member's message spends the owner's plan, and the sheet says whose plan it is.
 
-### Asking for a delivery in a group
+### Asking for a delivery in a shared camp
 
 Bruna asks in Shop team: "@Aldric we need a landing page for the market. Can it be live by Friday?"
 
-- **The work stays where it was asked.** Aldric starts a quest in the group, and the quest belongs to the group's thread (ADR 037: a quest belongs to the thread that started it). No camp is made for it. When the work keeps growing past the quest, the hub suggests "Give this its own camp", as it does for any long topic.
+- **The work stays where it was asked.** Aldric starts a quest in the camp, and the quest belongs to the camp's thread (ADR 037: a quest belongs to the thread that started it). No new camp is made for it. When the work keeps growing past the quest, the hub suggests "Give this its own camp", as it does for any long topic.
 - **The hob says what it read first.** Aldric's reply lists the records and memory its pack used, such as "Aldric's memory: the shop's look", "Shop camp: Landing page v3" and "Marina's message at 10:58". Each one opens. This comes from the `PackReport`, so it costs no model call.
 - **One living card per quest.** The quest card is a message part that updates in place, never a new message per step. It shows the steps, who is on each, a live thumbnail of the main artifact, the time and tokens so far, and Stop. A strip under the header keeps the running quest in view after the card scrolls away.
-- **The quest card has a reply thread, and that is where it is steered.** The hob-to-hob messages and step lines go in the card's reply thread, not in the group. A reply there reaches the quest as a steer (#1345) without stopping it, and the hob answers in the thread. Tool calls and the terminal stay in the quest's own view (ADR 027), which a later decision redesigns.
-- **The group sees only what a person needs.** A hob's question for a person, one line for each new version ("Aldric updated Winter Market page v2 · map added, as Leo asked"), and Ready are also sent to the group, marked as from the quest's thread. Everything else stays in the thread, which the card shows as "6 replies · last reply 11:18".
+- **The quest card has a reply thread, and that is where it is steered.** The hob-to-hob messages and step lines go in the card's reply thread, not in the camp. A reply there reaches the quest as a steer (#1345) without stopping it, and the hob answers in the thread. Tool calls and the terminal stay in the quest's own view (ADR 027), which a later decision redesigns.
+- **The camp sees only what a person needs.** A hob's question for a person, one line for each new version ("Aldric updated Winter Market page v2 · map added, as Leo asked"), and Ready are also sent to the camp, marked as from the quest's thread. Everything else stays in the thread, which the card shows as "6 replies · last reply 11:18".
 - **Many quests at once.** Each quest has its own card and reply thread. The strip under the header lists every running quest with its progress, and a click jumps to its card.
 - **Questions go to the person who asked.** A question names the requester and offers quick answers. The card turns `lantern` while it waits, and the answer is recorded as a decision the quest reads.
 - **Ready means ready for the requester.** The card turns into the review card: the page itself, then each thing the quest made, with its version and what changed. The requester decides, as with approvals. Going live is an approval of its own ("Put it live…"), because it reaches people outside the hub.
-- **Anyone in the group can ask for a change.** Leo's "can the page show a map?", in the quest's thread with a mention of Aldric, reaches the running quest, not a new one. The new version records that Leo asked.
+- **Anyone in the camp can ask for a change.** Leo's "can the page show a map?", in the quest's thread with a mention of Aldric, reaches the running quest, not a new one. The new version records that Leo asked.
 
 ### Reply threads
 
-Any message can have a reply thread, as in Slack, so a side conversation doesn't fill the group.
+Any message can have a reply thread, as in Slack, so a side conversation doesn't fill the camp.
 
 - **A reply thread is its root message's.** A message gains `rootMessageId`, which points at the message its thread hangs from. Replies are ordinary messages of the same thread, so find, chapters, records and capture keep working. The main line shows only messages with no root.
-- **The root shows the thread in one line:** the faces of who replied, the count and the time of the last reply. It opens beside the group, not over it.
-- **The answer rule is the group's.** In a reply thread a hob answers only when mentioned, or when the thread hangs from its own quest card. The thread is its own conversation for the floor, so a hob can answer there while another speaks in the main line.
-- **Also send to the group.** A reply can be sent to the main line too. It shows there with a link back to its thread. A hob's question for a person and a new version are always sent to both.
+- **The root shows the thread in one line:** the faces of who replied, the count and the time of the last reply. It opens beside the camp, not over it.
+- **The answer rule is the camp's.** In a reply thread a hob answers only when mentioned, or when the thread hangs from its own quest card. The thread is its own conversation for the floor, so a hob can answer there while another speaks in the main line.
+- **Also send to the camp.** A reply can be sent to the main line too. It shows there with a link back to its thread. A hob's question for a person and a new version are always sent to both.
 - **Per person.** Each member has a read marker per reply thread they took part in, and a reply in such a thread counts as unread for them. A mention of you anywhere counts as usual.
-- **The pack.** A hob that answers in a reply thread reads its root and replies as the live part, plus the group's records. It does not read the main line's recent messages unless the root points at them.
+- **The pack.** A hob that answers in a reply thread reads its root and replies as the live part, plus the camp's records. It does not read the main line's recent messages unless the root points at them.
 
 ### Showing work: cards and the viewer
 
@@ -143,15 +143,8 @@ Artifacts already keep versions (#1434). This section decides how they look and 
   - **Versions**, each with its author, its time and the ask that caused it.
   - **An ask box** that goes to the hob that made it. The answer comes in the viewer, and the thread gets one line when the new version lands.
 - **Who asked is part of every change.** A version records the actor whose message caused it. That is how Compare, the update line and the Work tab can say "Leo asked".
-- **The Work tab.** The thread's sheet lists everything made or shared in it, grouped by the ask or quest it came from, with filters by kind. Files people add sit under "Shared in the group".
+- **The Work tab.** The thread's sheet lists everything made or shared in it, grouped by the ask or quest it came from, with filters by kind. Files people add sit under "Shared in the camp".
 - **What each person sees is the same.** Pins, comments and versions belong to the artifact, not to a person. Only read marks are per person.
-
-### Campfires
-
-- **A campfire is a kind.** It has a question instead of a goal and a facilitator, which is its host.
-- **Rounds.** The facilitator opens a round. Each member hob speaks once, in an order the facilitator picks, through `TurnRequest`. People add ideas and vote at any time. `CampfireRound` is a machine with the states `open`, `closed` and `ended`.
-- **Nothing gets built.** In a campfire the tool policy allows only reading and searching. A hob that tries to write is refused with "This is a campfire. Turn the idea into a quest to build it."
-- **It ends with a choice.** "Turn the top idea into a quest" starts a quest in a camp the person picks, with the ideas and votes as its brief, and records the choice as a decision. "End without a choice" keeps the campfire read-only and searchable.
 
 ### Users as actors
 
@@ -163,7 +156,7 @@ Artifacts already keep versions (#1434). This section decides how they look and 
 
 ### The sidebar
 
-- **Three sections, worked out from members:** Groups (threads with another person or more than one hob), Camps (your camps with one hob) and Direct messages (your hobs).
+- **Two sections:** Camps (every camp, shared or not; a shared camp shows a stack of its members) and Direct messages (your hobs).
 - **Each row is a chat row:** its picture or a stack of members, its name, the last message with its author ("Marina: Thursday works"), the time, the unread count, and a mark when something needs you. A mention of you counts in `lantern`.
 - **The open direct message lists its hob's camps beneath it**, as the rail of ADR 037 does, so a hob's camps stay one click away.
 - Each member can mute a thread. A muted thread still counts mentions of you.
@@ -174,30 +167,30 @@ Artifacts already keep versions (#1434). This section decides how they look and 
 - **A model picks who answers.** It puts a model call in a command's request path, which ADR 037 forbids, and makes cost hard to predict. A projector may later suggest a hob to mention.
 - **Hob turns in parallel in one thread.** Replies would interleave and contradict each other, and none would read the others.
 - **One runtime session shared by every hob.** Hobs differ in runtime, model, instructions and memory.
-- **A separate `Group` table.** A group is a thread with members, so it keeps chapters, records, quests, find and archive for free.
+- **A "group" as its own kind, table or word.** A shared camp is a thread with members, so it keeps chapters, records, quests, find and archive for free, and people learn one place instead of two.
+- **A campfire kind.** Rounds, a facilitator and read-only tools added a word, a kind and a machine for little gain. A camp for ideas is a camp where nobody starts a quest, any hob can be asked to brainstorm, and an idea becomes a quest the usual way.
 
 ### Rollout
 
-Five slices, in order. Each leaves the app working.
+Four slices, in order. Each leaves the app working.
 
 1. **Members and users as actors:** `User`, `ThreadMember`, the migration, read markers per member and `Device.userId`. No change in what you see.
-2. **Groups with hobs:** add hobs to a camp, mentions, the answer rule, `TurnRequest`, the floor per conversation, reply threads, the relay budget, sessions per hob, the pack's speakers, the members sheet and the sidebar sections. Still one person.
+2. **Shared camps with hobs:** add hobs to a camp, mentions, the answer rule, `TurnRequest`, the floor per conversation, reply threads, the relay budget, sessions per hob, the pack's speakers, the members sheet and the sidebar sections. Still one person.
 3. **Shared cards and work:** Change it, collision notes that name who asked, the away summary per member, status and cost, the living quest card, cards for each kind of artifact, and the viewer with Compare and Changes.
-4. **Campfires:** the kind, rounds, the facilitator, read-only tools and turning an idea into a quest.
-5. **People:** after the accounts ADR, other people join threads, with their own tray, Inbox and mentions.
+4. **People:** after the accounts ADR, other people join threads, with their own tray, Inbox and mentions.
 
 ## Rationale
 
-- **Familiar first.** Direct messages, groups and @mentions are what people already know. Hobbots' own pieces sit on top of them, not instead of them.
-- **Nobody answers unless asked, in a group.** People in a group talk to each other most of the time. A hob that answered every message would cost a turn each time and crowd them out. The host rule keeps one-hob places exactly as they are.
+- **Familiar first.** Direct messages, shared places and @mentions are what people already know. Hobbots' own pieces sit on top of them, not instead of them.
+- **Nobody answers unless asked, in a shared camp.** People in a shared camp talk to each other most of the time. A hob that answered every message would cost a turn each time and crowd them out. The host rule keeps one-hob places exactly as they are.
 - **Rules before models.** Who answers, the floor and the relay budget are pure rules in the transaction. They are exact, free and work under No AI.
 - **One speaker at a time.** A hob that waits reads what was said and can pass, so two hobs never say the same thing at once.
-- **A group is a thread.** Members are rows on a thread, so groups keep everything ADR 037 built, and a direct message stays exactly what it is today.
+- **A shared camp is a thread.** Members are rows on a thread, so shared camps keep everything ADR 037 built, and a direct message stays exactly what it is today.
 - **Each hob stays itself.** Its own session, memory and policy keep a shared thread from mixing up what each hob knows or may do.
 
 ## Consequences
 
-- A turn in a group costs no more than a turn in a direct message. Only the hobs named, or the host, ever run.
+- A turn in a shared camp costs no more than a turn in a direct message. Only the hobs named, or the host, ever run.
 - The migration adds a member row for every thread and a user row for the owner. It runs in one pass, on SQLite and PostgreSQL, with a test for each.
 - `RuntimeSession` gains the hob in its key. Existing sessions take their thread's hob.
 - `ThreadRun`'s `wakePending` flag becomes a queue of `TurnRequest` records. The model-based tests of ADR 037 extend to several hobs.
@@ -208,15 +201,14 @@ Five slices, in order. Each leaves the app working.
 The scenarios that would show this decision holds. None is proven yet. Each slice will file its proof issues from these ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)).
 
 - After the migration every thread has the owner and its hob as members, unread counts read the same as before, and adding a member to a direct message is refused. Not proven yet.
-- In a group whose answer rule is `mentions`, a message with no mention starts no turn. A message that mentions Quill and Pip starts Quill's turn, then Pip's, never both at once, on Claude Code, Codex and the fake runtime. Not proven yet.
+- In a shared camp whose answer rule is `mentions`, a message with no mention starts no turn. A message that mentions Quill and Pip starts Quill's turn, then Pip's, never both at once, on Claude Code, Codex and the fake runtime. Not proven yet.
 - Model-based tests of random sends, mentions, replies, stops and restarts across three hobs agree with a model of the floor: one turn at a time, every request answered, passed or dropped exactly once. Not proven yet.
 - Two hobs that mention each other stop after `HOB_RELAY_BUDGET` turns, and the thread shows that it waits for a person. Not proven yet.
-- Each hob in a group resumes its own session. Its pack names every speaker and carries only what was said since it last spoke, within the live chapter's share, and never another hob's memory brief. Not proven yet.
-- Capture writes each hob's own turns to its own scope only, and nothing from a private group. Not proven yet.
+- Each hob in a shared camp resumes its own session. Its pack names every speaker and carries only what was said since it last spoke, within the live chapter's share, and never another hob's memory brief. Not proven yet.
+- Capture writes each hob's own turns to its own scope only, and nothing from a private camp. Not proven yet.
 - Change it on a Charm action approves the changed call only when it passes the action's schema, and records who changed what. Only the requester or the owner can decide. Not proven yet.
 - The away summary lists the same mentions, decisions and changed artifacts for the same records and read marker. Not proven yet.
-- A quest started from a group belongs to the group's thread. Its card updates in place, its work and steers stay in the card's reply thread, and the group gets only questions for a person, one line per new version and Ready. Not proven yet.
-- Two quests in one group run at once while people and hobs keep talking in the main line and in reply threads, and no chat turn waits on a quest. Not proven yet.
+- A quest started from a shared camp belongs to the camp's thread. Its card updates in place, its work and steers stay in the card's reply thread, and the camp gets only questions for a person, one line per new version and Ready. Not proven yet.
+- Two quests in one camp run at once while people and hobs keep talking in the main line and in reply threads, and no chat turn waits on a quest. Not proven yet.
 - A reply in a quest card's thread reaches the quest as a steer without stopping it. Not proven yet.
 - A version made because of a message records that message's author, and Compare lists each change with who asked for it. Not proven yet.
-- A campfire refuses every tool that writes, and turning its top idea into a quest records the choice as a decision. Not proven yet.

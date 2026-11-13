@@ -37,4 +37,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [036 — Searching and reading the web](036-web-search-and-pages.md)
 - [037 — Chat and camps](037-chat-and-camps.md)
 - [038 — Charm writes in Task sessions](038-charm-writes-in-task-sessions.md)
-- [039 — Group chats with hobs and people](039-group-chats.md)
+- [039 — Shared camps with hobs and people](039-shared-camps.md)
