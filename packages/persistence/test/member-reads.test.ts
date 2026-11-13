@@ -236,7 +236,7 @@ describe("read markers per member", () => {
   });
 
   // covers ADR 039 (Members: unread counts, the unread line and catch-up are per person)
-  it("[TC-PE-1454-03] keeps each person's unread threads and unread line their own", async () => {
+  it("[TC-PE-1454-03] keeps each person's unread threads and unread line their own, in either reading order", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -258,8 +258,17 @@ describe("read markers per member", () => {
         // Bruna reads it on her phone: her own row moves, journaled as hers.
         const hers = yield* asBruna(repo.markThreadRead(CAMP, MessageId.make("k1"), seen));
         // Aldric writes again: unread for both.
-        yield* say(CAMP, "k2");
+        const next = yield* say(CAMP, "k2");
         const again = { owner: yield* unreadIds, bruna: yield* asBruna(unreadIds) };
+        // The other order: Bruna reads first, then you read the same revision, and each row moves.
+        yield* asBruna(repo.markThreadRead(CAMP, MessageId.make("k2"), next));
+        const brunaFirst = { owner: yield* unreadIds, bruna: yield* asBruna(unreadIds) };
+        const yoursAfter = yield* repo.markThreadRead(CAMP, MessageId.make("k2"), next);
+        const bothRead = {
+          owner: yield* unreadIds,
+          bruna: yield* asBruna(unreadIds),
+          lines: [yield* catchUp.marker(CAMP), yield* asBruna(catchUp.marker(CAMP))],
+        };
         // A hob reads nothing, and someone outside the camp has no marker to move.
         const outsider = yield* Effect.provideService(
           repo.markThreadRead(CAMP, MessageId.make("k2"), Number.MAX_SAFE_INTEGER),
@@ -273,7 +282,7 @@ describe("read markers per member", () => {
             whileApproved: (write) => write,
           }),
         );
-        return { both, marked, afterYours, hers, again, outsider, seen };
+        return { both, marked, afterYours, hers, again, brunaFirst, yoursAfter, bothRead, next, outsider, seen };
       }),
     );
     expect(result.both).toEqual({ owner: [CAMP], bruna: [CAMP] });
@@ -288,6 +297,9 @@ describe("read markers per member", () => {
     expect(changed(result.marked)).toEqual([["ThreadMemberChanged", OWNER_ACTOR]]);
     expect(changed(result.hers)).toEqual([["ThreadMemberChanged", BRUNA]]);
     expect(result.again).toEqual({ owner: [CAMP], bruna: [CAMP] });
+    expect(result.brunaFirst).toEqual({ owner: [CAMP], bruna: [] });
+    expect(changed(result.yoursAfter)).toEqual([["ThreadMemberChanged", OWNER_ACTOR]]);
+    expect(result.bothRead).toEqual({ owner: [], bruna: [], lines: [result.next, result.next] });
     expect(result.outsider._tag).toBe("None");
   });
 
