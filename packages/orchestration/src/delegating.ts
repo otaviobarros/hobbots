@@ -12,6 +12,7 @@ import {
   AgentId,
   ArtifactId,
   ancestorsOf,
+  CriterionId,
   type DelegationAuthority,
   DelegationId,
   hobStanding,
@@ -23,6 +24,7 @@ import {
   type PolicyDecision,
   type PolicyOperation,
   type PolicyOverrides,
+  type Quest,
   QuestId,
   type QuestLimits,
   questsAbove,
@@ -327,6 +329,16 @@ const offerDetails = (offer: SessionToolOffer) => ({
 });
 
 /** Tools a lead brings in other hobs and moves results between them with. */
+/** Why delegate_task links no criteria it names (#1445): its Quest has none of those ids. */
+const notCriteria = (quest: Quest | undefined, unknown: ReadonlyArray<string>) => {
+  const listed = quest?.criteria.map((each) => `${each.id} "${each.text}"`) ?? [];
+  return `The Quest has no criterion ${unknown.join(", ")}. ${
+    listed.length === 0
+      ? "It has no acceptance criteria yet: start_quest gives them, before you delegate."
+      : `Its criteria: ${listed.join("; ")}.`
+  }`;
+};
+
 export const makeDelegating = ({
   tasks,
   hobs,
@@ -493,6 +505,9 @@ export const makeDelegating = ({
           existing === undefined
             ? { limits: yield* questLimitsFor(scope, limits, task, {}) }
             : { existing, ...(yield* depthWithin(scope, limits, task)) };
+        const linked = (input.criteria ?? []).map((id) => CriterionId.make(id));
+        const unknown = linked.filter((id) => !existing?.criteria.some((each) => each.id === id));
+        if (unknown.length > 0) return yield* refuse("criterion-missing", notCriteria(existing, unknown));
         if (input.check === true) {
           return {
             done: {
@@ -530,6 +545,7 @@ export const makeDelegating = ({
             }),
           ),
         );
+        if (linked.length > 0) journal.keep(yield* fromRecords(tasks.linkCriteria(quest.id, linked, created.id)));
         const carried = yield* carryNote(scope, created, journal);
         return {
           done: {

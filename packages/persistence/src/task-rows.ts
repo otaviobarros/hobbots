@@ -43,6 +43,7 @@ const fromRow = {
     ...row,
     stop: json(row.stop),
     acceptance: json(row.acceptance),
+    criteria: json(row.criteria),
     limits: json(row.limits),
     depth: int(row.depth),
     revision: int(row.revision),
@@ -160,6 +161,10 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     );
   const quest = (id: string) =>
     sql<Row>`SELECT * FROM quests WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("quest")));
+  /** The Quests still under way in a chat or camp, oldest first. */
+  const questsIn = (threadId: string) =>
+    sql<Row>`SELECT * FROM quests WHERE thread_id = ${threadId} AND state IN ('active', 'stopping')
+      ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("quest")));
   const attempt = (id: string) =>
     sql<Row>`SELECT * FROM attempts WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("attempt")));
   const question = (id: string) =>
@@ -428,6 +433,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     task,
     treeOf,
     questsOn,
+    questsIn,
     quest,
     attempt,
     question,
@@ -449,3 +455,22 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     rootsAtWork,
   };
 };
+
+/** Writes a question just asked: open, with nobody it passed yet. */
+export const insertQuestion = (sql: SqlClient.SqlClient, question: Question) =>
+  sql`INSERT INTO questions ${sql.insert({
+    id: question.id,
+    task_id: question.taskId,
+    asker_id: question.askerId,
+    recipient_id: question.recipientId,
+    chain: "[]",
+    text: question.text,
+    state: question.state,
+    answer: null,
+    answered_by: null,
+    created_at: question.createdAt,
+    answered_at: null,
+    options: JSON.stringify(question.options),
+    recommended: question.recommended,
+    revision: question.revision,
+  })}`;

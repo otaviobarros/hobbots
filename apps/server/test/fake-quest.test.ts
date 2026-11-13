@@ -181,7 +181,16 @@ describe("FakeQuestLive", () => {
         yield* until(
           Effect.map(repo.listMessages(camp), (all) => all.find((m) => m.content.includes("campaign is ready"))),
         );
-        expect((yield* treeIn(camp))?.tasks[0]?.state).toBe("completed");
+        const done = yield* treeIn(camp);
+        expect(done?.tasks[0]?.state).toBe("completed");
+        // Aldric checked the Quest's criteria on what Quill and Ada returned before it completed (#1445).
+        expect(done?.quests[0]?.criteria.map((each) => [each.text, each.required, each.state])).toEqual([
+          ["Landing copy approved", true, "accepted"],
+          ["Campaign scheduled", false, "accepted"],
+        ]);
+        expect(done?.quests[0]?.criteria[0]?.evidence).toMatchObject([
+          { taskId: named(done, "Draft the landing copy")?.id, version: 1, voidedAt: null },
+        ]);
         expect(yield* treeNow).toBeUndefined();
         expect((yield* repo.listMessages(threadId)).map((m) => m.content)).toEqual([]);
       }),
@@ -219,6 +228,14 @@ describe("FakeQuestLive", () => {
         expect(named(tree, "Build the campaign")?.state).toBe("cancelled");
         expect(tree?.questions.some((question) => question.taskId === build.id)).toBe(false);
         expect(tree?.handOffs).toEqual([]);
+        // Without Ada's part, Aldric waives the optional schedule, and the Quest completes (#1445).
+        const ended = yield* until(
+          Effect.map(treeNow, (each) => (each?.tasks[0]?.state === "completed" ? each : undefined)),
+        );
+        expect(ended.quests[0]?.criteria.map((each) => [each.text, each.state, each.decided?.by.kind])).toEqual([
+          ["Landing copy approved", "accepted", "hob"],
+          ["Campaign scheduled", "waived", "hob"],
+        ]);
       }),
     );
   }, 20_000);
