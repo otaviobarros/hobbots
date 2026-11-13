@@ -711,16 +711,44 @@ export const commitFolders = (
       if (program === "git") {
         const git = gitFolders(args, folder, home);
         if (args[git.sub] === "commit") found.add(git.folders[0] as string);
-      } else if (program === "eval") visit(args.join(" "), folder);
-      else if (SHELLS.has(program)) {
-        const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
-        if (flag !== -1) visit(args[flag + 1] ?? "", folder);
+      } else {
+        const nested = nestedLine(program, args);
+        if (nested !== undefined) visit(nested, folder);
       }
     });
   };
   const command = tool === "Bash" ? text(input, "command") : undefined;
   if (command !== undefined) visit(command, cwd);
   return [...found];
+};
+
+/** The arguments of the first `gh` a command line runs, behind any wrapper, `eval` or `sh -c`, or null. */
+const ghIn = (line: string, cwd: string, home: string): ReadonlyArray<string> | null => {
+  for (const token of commandLine(line)) {
+    if (!("words" in token)) continue;
+    const [name, ...args] = unwrap(token.words, cwd, home).words;
+    const program = basename(name ?? "");
+    if (program === "gh") return args;
+    const nested = nestedLine(program, args);
+    const found = nested === undefined ? null : ghIn(nested, cwd, home);
+    if (found !== null) return found;
+  }
+  return null;
+};
+
+/**
+ * The arguments of the first `gh` a tool call's command line runs, after any wrapper such as `env`,
+ * and inside `eval` or `sh -c`, or null when it runs none (#1349). Only what the line says is read:
+ * an alias or a script that runs `gh` is not seen, and fails to sign in on its own.
+ */
+export const ghArguments = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> | null => {
+  const command = tool === "Bash" ? text(input, "command") : undefined;
+  return command === undefined ? null : ghIn(command, cwd, home);
 };
 
 /** Variables that name a commit's author or committer, or pass Git settings or a config file. */
@@ -756,6 +784,14 @@ const SETS_VARIABLES = new Set(["export", "declare", "typeset", "readonly", "loc
 
 /** Shells whose `-c` runs a command line of its own. */
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+
+/** The command line `eval` or a shell's `-c` runs, which is read like the outer one, or undefined. */
+const nestedLine = (program: string, args: ReadonlyArray<string>): string | undefined => {
+  if (program === "eval") return args.join(" ");
+  if (!SHELLS.has(program)) return undefined;
+  const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
+  return flag === -1 ? undefined : (args[flag + 1] ?? "");
+};
 
 /** `git commit`'s long options that take a value, so the word after one is never read as an option. */
 const COMMIT_VALUE_OPTIONS = [
@@ -873,11 +909,9 @@ const setsIdentity =
     if (program === "unset") return args.some(isIdentityVariable);
     // A command line run by another shell, or by `eval`, is read the same way.
     const nested = (line: string) => overridesCommitIdentity("Bash", { command: line }, folder, home);
-    if (program === "eval") return nested(args.join(" "));
-    if (SHELLS.has(program)) {
-      const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
-      return flag !== -1 && nested(args[flag + 1] ?? "");
-    }
+    const line = nestedLine(program, args);
+    if (line !== undefined) return nested(line);
+    if (SHELLS.has(program)) return false;
     return program === "git" && gitSetsIdentity(args, folder);
   };
 

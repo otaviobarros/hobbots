@@ -28,6 +28,7 @@ export * from "./export.ts";
 export * from "./find.ts";
 export * from "./github.ts";
 export * from "./github-account.ts";
+export * from "./github-cli.ts";
 export * from "./good-at.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";
