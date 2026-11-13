@@ -40,6 +40,15 @@ Who is in a direct message or a camp ([ADR 039](../decisions/039-shared-camps.md
 - A hob that retires leaves every thread it is active in, and comes back to every thread it left when it returns, each journaled as `ThreadMemberChanged` in the same transaction as its `AgentUpserted`.
 - Migration (0114): every thread gets its owner, with the thread's read marker, and its hob, already left for a retired hob. Built in [#1453](https://github.com/otaviobarros/hobbots/issues/1453).
 
+### Mentions
+
+A message's @mentions ([ADR 039](../decisions/039-shared-camps.md#who-answers)) are `Message.mentions`: the hobs and people it names, in the order first named, each once. Built in [#1455](https://github.com/otaviobarros/hobbots/issues/1455).
+
+- `mentionsIn(text, roster)` in `@hobbots/domain` is the one parser. A mention is `@` and a name from the roster, matched without regard to case, longest name first. An `@` inside a word, such as an email address, and anything in Markdown code mention nobody.
+- The repository parses a message once, in the transaction that stores its final text: as it is sent, or when a reply ends. A reply still streaming mentions nobody yet. The roster is every hob and person of the hub, not only the thread's members, so a mention of a hob outside a camp is kept for who answers to refuse.
+- Mentions of you are yours alone. `ThreadMemberRepository.unreadMentions(actor)` counts, per thread the person is an active member of, the messages that mention them past their own read marker. Their own messages, notes to self and a lead's quiet progress never count.
+- Migration (0115): `messages.mentions` is JSON, empty for messages from before.
+
 ## Chapters
 
 | Field | Meaning |

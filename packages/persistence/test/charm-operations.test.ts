@@ -36,10 +36,10 @@ const messageId = MessageId.make("m1");
 const project = "/work/project";
 const repository = "otaviobarros/hobbots";
 
-// Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095, 0099, 0100 to 0102, 0113 and 0114 too: the repository that seeds the hobs writes their Charms, whether
+// Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095, 0099, 0100 to 0102, 0113 to 0115 too: the repository that seeds the hobs writes their Charms, whether
 // other hobs see them, their good at and who made and summoned them, and their Summoning scope, and seeds each thread
 // with the draft it tries, its kind and state and its first chapter; the journal registers artifacts
-// and weighs camp suggestions, and each Quest keeps its acceptance criteria.
+// and weighs camp suggestions, each Quest keeps its acceptance criteria, and each message its mentions.
 const before = Object.fromEntries(
   Object.entries(migrations).filter(
     ([key]) =>
@@ -60,6 +60,7 @@ const before = Object.fromEntries(
         "0105_artifact_reviews",
         "0113_quest_criteria",
         "0114_thread_members",
+        "0115_message_mentions",
       ].includes(key),
   ),
 ) as typeof migrations;
