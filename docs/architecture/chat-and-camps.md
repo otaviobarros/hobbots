@@ -44,8 +44,8 @@ Who is in a direct message or a camp ([ADR 039](../decisions/039-shared-camps.md
 
 A message's @mentions ([ADR 039](../decisions/039-shared-camps.md#who-answers)) are `Message.mentions`: the hobs and people it names, in the order first named, each once. Built in [#1455](https://github.com/otaviobarros/hobbots/issues/1455).
 
-- `mentionsIn(text, roster)` in `@hobbots/domain` is the one parser. A mention is `@` and a name from the roster, matched without regard to case, longest name first. An `@` inside a word, such as an email address, and anything in Markdown code mention nobody.
-- The repository parses a message once, in the transaction that stores its final text: as it is sent, or when a reply ends. A reply still streaming mentions nobody yet. The roster is every hob and person of the hub, not only the thread's members, so a mention of a hob outside a camp is kept for who answers to refuse.
+- `mentionsIn(text, roster)` in `@hobbots/domain` is the one parser. A mention is `@` and a name from the roster, matched without regard to case, longest name first. An `@` inside a word, such as an email address, and anything in Markdown code mention nobody: fenced blocks of ``` or ~~~ and code spans of any number of backticks, as CommonMark reads them.
+- The repository parses a message in the transaction that stores its final text: as it is sent, or when a reply ends. The same final text is never parsed twice, so renaming a hob later changes nothing stored. A reply still streaming keeps what it had: none on its first turn, and after Continue, the mentions of the text it kept. When it ends again, the mentions of its new text join after them. The roster is every hob and person of the hub, not only the thread's members, so a mention of a hob outside a camp is kept for who answers to refuse.
 - Mentions of you are yours alone. `ThreadMemberRepository.unreadMentions(actor)` counts, per thread the person is an active member of, the messages that mention them past their own read marker. Their own messages, notes to self and a lead's quiet progress never count.
 - Migration (0115): `messages.mentions` is JSON, empty for messages from before.
 

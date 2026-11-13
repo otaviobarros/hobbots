@@ -13,35 +13,99 @@ export interface Mentionable {
 /** Letters, digits and `_`: a mention never starts right after one, nor stops right before one. */
 const isWordChar = (char: string | undefined): boolean => char !== undefined && /[\p{L}\p{N}_]/u.test(char);
 
-/**
- * The text with its Markdown code blanked out: fenced blocks and inline spans, so `@Pip` in code is
- * never a mention. Each character keeps its place, so offsets still match the text. Linear: one pass,
- * no pattern (STD-SEC-005).
- */
-const withoutCode = (text: string): string => {
-  let out = "";
-  let fenced = false;
-  let inline = false;
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i] ?? "";
-    if (text.startsWith("```", i)) {
-      fenced = !fenced;
-      inline = false;
-      out += "   ";
-      i += 2;
-    } else if (char === "\n") {
-      // An inline span never runs past its line.
-      inline = false;
-      out += char;
-    } else if (char === "`" && !fenced) {
-      inline = !inline;
-      out += " ";
-    } else {
-      out += fenced || inline ? " " : char;
-    }
-  }
-  return out;
+/** Blanks `from` to `to` of the characters, line breaks kept, so offsets still match the text. */
+const blank = (chars: Array<string>, from: number, to: number): void => {
+  for (let at = from; at < to; at++) if (chars[at] !== "\n") chars[at] = " ";
 };
+
+/** How many times `char` repeats from `at` on. */
+const runLength = (text: string, at: number, char: string): number => {
+  let end = at;
+  while (text[end] === char) end++;
+  return end - at;
+};
+
+/** A fence line's marker (CommonMark 4.5): up to three spaces, then three or more ` or ~. */
+const fenceOf = (line: string): { readonly char: string; readonly length: number; readonly rest: string } | null => {
+  const indent = runLength(line, 0, " ");
+  const char = line[indent];
+  if (indent > 3 || (char !== "`" && char !== "~")) return null;
+  const length = runLength(line, indent, char);
+  return length < 3 ? null : { char, length, rest: line.slice(indent + length) };
+};
+
+/** Whether `line` closes a fence opened with `open`: the same character, at least as many, nothing after. */
+const closes = (line: string, open: { readonly char: string; readonly length: number }): boolean => {
+  const fence = fenceOf(line);
+  return fence !== null && fence.char === open.char && fence.length >= open.length && fence.rest.trim() === "";
+};
+
+/**
+ * The text with its fenced code blocks blanked out (CommonMark 4.5): from a fence line to the line
+ * that closes it, or to the end when none does. A backtick fence's info string has no backtick.
+ */
+const withoutFences = (text: string): string => {
+  const out = text.split("");
+  let open: { readonly char: string; readonly length: number; readonly from: number } | null = null;
+  let at = 0;
+  for (const line of text.split("\n")) {
+    const end = at + line.length;
+    if (open !== null) {
+      if (closes(line, open)) {
+        blank(out, open.from, end);
+        open = null;
+      }
+    } else {
+      const fence = fenceOf(line);
+      if (fence !== null && !(fence.char === "`" && fence.rest.includes("`"))) open = { ...fence, from: at };
+    }
+    at = end + 1;
+  }
+  if (open !== null) blank(out, open.from, text.length);
+  return out.join("");
+};
+
+/**
+ * The text with its code spans blanked out (CommonMark 6.1): a run of backticks opens a span that
+ * the next run of exactly as many closes, across lines too; a run nothing closes is plain text.
+ * Runs are grouped by length, and each group is read forward once, so it stays linear.
+ */
+const withoutSpans = (text: string): string => {
+  const runs: Array<{ readonly at: number; readonly length: number }> = [];
+  const byLength = new Map<number, Array<number>>();
+  for (let at = text.indexOf("`"); at !== -1; at = text.indexOf("`", at)) {
+    const length = runLength(text, at, "`");
+    const same = byLength.get(length);
+    if (same === undefined) byLength.set(length, [runs.length]);
+    else same.push(runs.length);
+    runs.push({ at, length });
+    at += length;
+  }
+  // For each length, how far along its runs the search has moved.
+  const read = new Map<number, number>();
+  const out = text.split("");
+  for (let i = 0; i < runs.length; i++) {
+    const open = runs[i];
+    if (open === undefined) continue;
+    const same = byLength.get(open.length) ?? [];
+    let k = read.get(open.length) ?? 0;
+    while (k < same.length && (same[k] ?? 0) <= i) k++;
+    read.set(open.length, k);
+    const j = same[k];
+    const close = j === undefined ? undefined : runs[j];
+    if (j === undefined || close === undefined) continue;
+    blank(out, open.at, close.at + close.length);
+    i = j;
+  }
+  return out.join("");
+};
+
+/**
+ * The text with its Markdown code blanked out, so `@Pip` in code is never a mention: fenced blocks
+ * with ``` or ~~~, then code spans of any number of backticks. Each character keeps its place, so
+ * offsets still match the text. No pattern that can backtrack (STD-SEC-005).
+ */
+const withoutCode = (text: string): string => withoutSpans(withoutFences(text));
 
 /**
  * The roster's names, longest first, so `@Pip Two` finds "Pip Two" before "Pip", each with the form
@@ -76,7 +140,7 @@ const namedAt = (text: string, at: number, names: ReturnType<typeof byLongestNam
  * A mention is `@` and a roster name, matched without regard to case, where the `@` starts the text
  * or follows something other than a letter or a digit (so `ana@pip.dev` mentions nobody) and the name
  * ends at something other than a letter or a digit. Of two names that both fit, the longer wins.
- * Markdown code, fenced or inline, mentions nobody.
+ * Markdown code mentions nobody: fenced blocks and code spans as CommonMark reads them.
  */
 export const mentionsIn = (text: string, roster: ReadonlyArray<Mentionable>): ReadonlyArray<Actor> => {
   if (!text.includes("@")) return [];

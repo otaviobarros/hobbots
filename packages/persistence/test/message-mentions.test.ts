@@ -8,6 +8,7 @@ import {
   hobActor,
   Message,
   MessageId,
+  MessageTransitions,
   OWNER_ACTOR,
   Thread,
   ThreadId,
@@ -146,6 +147,32 @@ describe("message mentions", () => {
     expect(result.streaming).toEqual([]);
     expect(result.ended).toEqual([hobActor(ROOK), BRUNA]);
     expect(result.again).toEqual([hobActor(ROOK), BRUNA]);
+  });
+
+  // covers ADR 039 (Who answers)
+  it("[TC-PE-1455-04] keeps a continued reply's mentions while it streams and adds those of its new text", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* HobbotsRepository;
+        const streaming = yield* repo.upsertMessage(message({ role: "assistant", content: "", status: "streaming" }));
+        // The text streamed so far is saved before the reply ends, with the same words it ends with.
+        yield* repo.checkpointMessage(new Message({ ...streaming.value, content: "Asking @Rook" }));
+        const cut = yield* repo.upsertMessage(
+          new Message({ ...streaming.value, content: "Asking @Rook", status: "interrupted", error: "lost" }),
+        );
+        const resumed = MessageTransitions.resume(cut.value);
+        if (!(resumed instanceof Message)) return yield* Effect.die(resumed);
+        const continued = yield* repo.upsertMessage(resumed);
+        const ended = yield* repo.upsertMessage(
+          new Message({ ...continued.value, content: "Asking @Rook, then @Bruna", status: "complete" }),
+        );
+        return { cut: cut.value.mentions, continued: continued.value.mentions, ended: ended.value.mentions };
+      }),
+    );
+    expect(result.cut).toEqual([hobActor(ROOK)]);
+    expect(result.continued).toEqual([hobActor(ROOK)]);
+    expect(result.ended).toEqual([hobActor(ROOK), BRUNA]);
   });
 
   // covers ADR 039 (Users as actors)

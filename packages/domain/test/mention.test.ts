@@ -40,8 +40,20 @@ describe("mentionsIn", () => {
     expect(mentionsIn(text, roster)).toEqual([ANA]);
   });
 
-  it("closes an inline code span at the end of its line", () => {
-    expect(mentionsIn("a stray ` here\n@Rook please", roster)).toEqual([ROOK]);
+  it("reads code spans as CommonMark does: any run of backticks, closed by a run as long, across lines", () => {
+    expect(mentionsIn("``@Ana and ` @Rook`` then @Pip", roster)).toEqual([PIP]);
+    expect(mentionsIn("`spans\n@Rook two lines` and @Ana", roster)).toEqual([ANA]);
+    // A run nothing as long closes is plain text, so what follows it still mentions.
+    expect(mentionsIn("a stray `` here\n@Rook please `x`", roster)).toEqual([ROOK]);
+    expect(mentionsIn("😀 `@Pip` @Rook", roster)).toEqual([ROOK]);
+  });
+
+  it("reads fenced blocks of ``` or ~~~, closed only by a fence as long of the same kind", () => {
+    expect(mentionsIn("~~~\n@Rook\n~~~\n@Ana", roster)).toEqual([ANA]);
+    expect(mentionsIn("````md\n```\n@Rook\n```\n````\n@Pip", roster)).toEqual([PIP]);
+    expect(mentionsIn("   ```\n@Rook\n~~~\n@Ana", roster)).toEqual([]);
+    // Four spaces of indent is not a fence.
+    expect(mentionsIn("    ```\n@Rook", roster)).toEqual([ROOK]);
   });
 
   it("finds no one with no @, an unknown name or a blank roster name", () => {
