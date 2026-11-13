@@ -1,6 +1,7 @@
 export * from "./activity.ts";
 export * from "./actor.ts";
 export * from "./agent.ts";
+export * from "./answerers.ts";
 export * from "./approval.ts";
 export * from "./artifact.ts";
 export * from "./artifact-versions.ts";
