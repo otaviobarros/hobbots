@@ -104,6 +104,34 @@ Each card is a message part built from records. It looks and works the same in a
 - **Away summary.** "While you were away" sits at your unread line. It lists, from records written since your `readRevision`, your mentions, the decisions made, the artifacts that changed and what needs you. It is a projection and needs no model. With a hub brain it is phrased by a projector, never in a request.
 - **Status and cost.** The header says who is speaking and who waits. A reply's footer shows the hob and the turn's tokens. The members sheet shows each hob's turns and tokens today and how much of the plan is left, from the usage records. Runtimes run on the owner's sign-ins, so every member's message spends the owner's plan, and the sheet says whose plan it is.
 
+### Asking for a delivery in a group
+
+Bruna asks in Shop team: "@Aldric we need a landing page for the market. Can it be live by Friday?"
+
+- **The work stays where it was asked.** Aldric starts a quest in the group, and the quest belongs to the group's thread (ADR 037: a quest belongs to the thread that started it). No camp is made for it. When the work keeps growing past the quest, the hub suggests "Give this its own camp", as it does for any long topic.
+- **The hob says what it read first.** Aldric's reply lists the records and memory its pack used, such as "Aldric's memory: the shop's look", "Shop camp: Landing page v3" and "Marina's message at 10:58". Each one opens. This comes from the `PackReport`, so it costs no model call.
+- **One living card per quest.** The quest card is a message part that updates in place, never a new message per step. It shows the steps, who is on each, a live thumbnail of the main artifact, the time and tokens so far, and Stop. A strip under the header keeps the running quest in view after the card scrolls away.
+- **The group sees only what a person needs.** The quest's own room keeps the hob-to-hob messages, tool calls and terminal (ADR 027). The group gets a hob's question for a person, one line for each new version ("Aldric updated Winter Market page v2 · map added, as Leo asked"), and Ready.
+- **Questions go to the person who asked.** A question names the requester and offers quick answers. The card turns `lantern` while it waits, and the answer is recorded as a decision the quest reads.
+- **Ready means ready for the requester.** The card turns into the review card: the page itself, then each thing the quest made, with its version and what changed. The requester decides, as with approvals. Going live is an approval of its own ("Put it live…"), because it reaches people outside the hub.
+- **Anyone in the group can ask for a change.** Leo's "can the page show a map?" with a mention of Aldric starts a turn inside the running quest, not a new one. The new version records that Leo asked.
+
+### Showing work: cards and the viewer
+
+Artifacts already keep versions (#1434). This section decides how they look and read wherever they appear.
+
+- **A card for each kind.** An artifact in chat shows what it is, not a file icon: a page shows its preview, a doc its opening lines, an image its picture (before and after when there is a v1), code its files with +/− counts and its checks, a table its first rows, a PDF its first page, screenshots as a strip. Each card has the version, who made it and one line on what changed.
+- **One viewer for everything.** Opening any artifact opens the same viewer, over the thread:
+  - **Preview** at desktop or phone size, with comment pins on the artifact itself.
+  - **Point at something**: pick a part of a page or a span of a doc, and the ask carries it to the hob ("On: Save my spot button").
+  - **Compare with an earlier version**: changes are numbered on the artifact, and a list says what each one is and who asked for it. Pages compare side by side, docs as a redline, images before and after.
+  - **Changes**, for an artifact backed by code: a summary in words from the hob first, then the diff, unified or side by side, per file, with Viewed marks, comments on lines, the checks and where the branch lives.
+  - **Versions**, each with its author, its time and the ask that caused it.
+  - **An ask box** that goes to the hob that made it. The answer comes in the viewer, and the thread gets one line when the new version lands.
+- **Who asked is part of every change.** A version records the actor whose message caused it. That is how Compare, the update line and the Work tab can say "Leo asked".
+- **The Work tab.** The thread's sheet lists everything made or shared in it, grouped by the ask or quest it came from, with filters by kind. Files people add sit under "Shared in the group".
+- **What each person sees is the same.** Pins, comments and versions belong to the artifact, not to a person. Only read marks are per person.
+
 ### Campfires
 
 - **A campfire is a kind.** It has a question instead of a goal and a facilitator, which is its host.
@@ -140,7 +168,7 @@ Five slices, in order. Each leaves the app working.
 
 1. **Members and users as actors:** `User`, `ThreadMember`, the migration, read markers per member and `Device.userId`. No change in what you see.
 2. **Groups with hobs:** add hobs to a camp, mentions, the answer rule, `TurnRequest`, the floor, the relay budget, sessions per hob, the pack's speakers, the members sheet and the sidebar sections. Still one person.
-3. **Shared cards:** Change it, collision notes that name who asked, the away summary per member, and status and cost.
+3. **Shared cards and work:** Change it, collision notes that name who asked, the away summary per member, status and cost, the living quest card, cards for each kind of artifact, and the viewer with Compare and Changes.
 4. **Campfires:** the kind, rounds, the facilitator, read-only tools and turning an idea into a quest.
 5. **People:** after the accounts ADR, other people join threads, with their own tray, Inbox and mentions.
 
@@ -173,4 +201,6 @@ The scenarios that would show this decision holds. None is proven yet. Each slic
 - Capture writes each hob's own turns to its own scope only, and nothing from a private group. Not proven yet.
 - Change it on a Charm action approves the changed call only when it passes the action's schema, and records who changed what. Only the requester or the owner can decide. Not proven yet.
 - The away summary lists the same mentions, decisions and changed artifacts for the same records and read marker. Not proven yet.
+- A quest started from a group belongs to the group's thread. Its card updates in place, and the group gets only questions for a person, one line per new version and Ready. Not proven yet.
+- A version made because of a message records that message's author, and Compare lists each change with who asked for it. Not proven yet.
 - A campfire refuses every tool that writes, and turning its top idea into a quest records the choice as a decision. Not proven yet.
