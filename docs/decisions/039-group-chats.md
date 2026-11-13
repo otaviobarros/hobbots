@@ -64,11 +64,12 @@ There is no mention that wakes every hob. A group that wants every hob's view as
 ### One hob speaks at a time
 
 - **A `TurnRequest` records each answer owed:** `threadId`, `hobId`, the message that caused it, the actor who caused it, and a state of `waiting`, `speaking`, `answered`, `passed` or `dropped`, held by `TurnRequestMachine`. It is written with the message, in the same transaction.
-- **`ThreadRun` gives the floor to the oldest waiting request.** A thread runs one turn at a time, whichever hob it is for. The run keeps its states from ADR 037. Its `wakePending` flag becomes the queue of waiting requests, rebuilt at start from the records.
+- **The floor belongs to one conversation.** A conversation is a thread's main line or one of its reply threads (see Reply threads). `ThreadRun` gives each conversation's floor to its oldest waiting request, so a conversation runs one chat turn at a time, whichever hob it is for. Two conversations in the same group run their turns at once. The run keeps its states from ADR 037. Its `wakePending` flag becomes the queue of waiting requests, rebuilt at start from the records.
 - **A hob that waited reads what was said meanwhile.** Its pack carries the replies since the message that woke it. It may answer briefly, or `pass`: a hub tool on every runtime that ends the turn with no message and records "Pip passed: Quill covered it".
 - **People never wait.** A person's message is stored and shown at once, whoever holds the floor. A message that mentions the hob speaking now joins that hob's next turn, as today. One that mentions another hob adds a request behind the others.
 - **Stop stops the turn that is speaking.** The waiting requests stay. Stop all drops them, and each one is marked `dropped` with who stopped it.
 - **Threads stay independent.** A hob in three threads can speak in each, with one session per thread, as a hob already runs several Tasks at once.
+- **Quests are not chat turns.** A quest's work runs in the quest's own sessions (ADR 018) and never holds a conversation's floor. A group can run any number of quests at once, within the owner's plan, and people and hobs keep talking while they run. A hob that leads a quest can still answer a mention in the group: that is a separate chat turn, and its pack says the quest is running.
 
 ### Hobs talking to hobs
 
@@ -111,10 +112,23 @@ Bruna asks in Shop team: "@Aldric we need a landing page for the market. Can it 
 - **The work stays where it was asked.** Aldric starts a quest in the group, and the quest belongs to the group's thread (ADR 037: a quest belongs to the thread that started it). No camp is made for it. When the work keeps growing past the quest, the hub suggests "Give this its own camp", as it does for any long topic.
 - **The hob says what it read first.** Aldric's reply lists the records and memory its pack used, such as "Aldric's memory: the shop's look", "Shop camp: Landing page v3" and "Marina's message at 10:58". Each one opens. This comes from the `PackReport`, so it costs no model call.
 - **One living card per quest.** The quest card is a message part that updates in place, never a new message per step. It shows the steps, who is on each, a live thumbnail of the main artifact, the time and tokens so far, and Stop. A strip under the header keeps the running quest in view after the card scrolls away.
-- **The group sees only what a person needs.** The quest's own room keeps the hob-to-hob messages, tool calls and terminal (ADR 027). The group gets a hob's question for a person, one line for each new version ("Aldric updated Winter Market page v2 · map added, as Leo asked"), and Ready.
+- **The quest card has a reply thread, and that is where it is steered.** The hob-to-hob messages and step lines go in the card's reply thread, not in the group. A reply there reaches the quest as a steer (#1345) without stopping it, and the hob answers in the thread. Tool calls and the terminal stay in the quest's own view (ADR 027), which a later decision redesigns.
+- **The group sees only what a person needs.** A hob's question for a person, one line for each new version ("Aldric updated Winter Market page v2 · map added, as Leo asked"), and Ready are also sent to the group, marked as from the quest's thread. Everything else stays in the thread, which the card shows as "6 replies · last reply 11:18".
+- **Many quests at once.** Each quest has its own card and reply thread. The strip under the header lists every running quest with its progress, and a click jumps to its card.
 - **Questions go to the person who asked.** A question names the requester and offers quick answers. The card turns `lantern` while it waits, and the answer is recorded as a decision the quest reads.
 - **Ready means ready for the requester.** The card turns into the review card: the page itself, then each thing the quest made, with its version and what changed. The requester decides, as with approvals. Going live is an approval of its own ("Put it live…"), because it reaches people outside the hub.
-- **Anyone in the group can ask for a change.** Leo's "can the page show a map?" with a mention of Aldric starts a turn inside the running quest, not a new one. The new version records that Leo asked.
+- **Anyone in the group can ask for a change.** Leo's "can the page show a map?", in the quest's thread with a mention of Aldric, reaches the running quest, not a new one. The new version records that Leo asked.
+
+### Reply threads
+
+Any message can have a reply thread, as in Slack, so a side conversation doesn't fill the group.
+
+- **A reply thread is its root message's.** A message gains `rootMessageId`, which points at the message its thread hangs from. Replies are ordinary messages of the same thread, so find, chapters, records and capture keep working. The main line shows only messages with no root.
+- **The root shows the thread in one line:** the faces of who replied, the count and the time of the last reply. It opens beside the group, not over it.
+- **The answer rule is the group's.** In a reply thread a hob answers only when mentioned, or when the thread hangs from its own quest card. The thread is its own conversation for the floor, so a hob can answer there while another speaks in the main line.
+- **Also send to the group.** A reply can be sent to the main line too. It shows there with a link back to its thread. A hob's question for a person and a new version are always sent to both.
+- **Per person.** Each member has a read marker per reply thread they took part in, and a reply in such a thread counts as unread for them. A mention of you anywhere counts as usual.
+- **The pack.** A hob that answers in a reply thread reads its root and replies as the live part, plus the group's records. It does not read the main line's recent messages unless the root points at them.
 
 ### Showing work: cards and the viewer
 
@@ -167,7 +181,7 @@ Artifacts already keep versions (#1434). This section decides how they look and 
 Five slices, in order. Each leaves the app working.
 
 1. **Members and users as actors:** `User`, `ThreadMember`, the migration, read markers per member and `Device.userId`. No change in what you see.
-2. **Groups with hobs:** add hobs to a camp, mentions, the answer rule, `TurnRequest`, the floor, the relay budget, sessions per hob, the pack's speakers, the members sheet and the sidebar sections. Still one person.
+2. **Groups with hobs:** add hobs to a camp, mentions, the answer rule, `TurnRequest`, the floor per conversation, reply threads, the relay budget, sessions per hob, the pack's speakers, the members sheet and the sidebar sections. Still one person.
 3. **Shared cards and work:** Change it, collision notes that name who asked, the away summary per member, status and cost, the living quest card, cards for each kind of artifact, and the viewer with Compare and Changes.
 4. **Campfires:** the kind, rounds, the facilitator, read-only tools and turning an idea into a quest.
 5. **People:** after the accounts ADR, other people join threads, with their own tray, Inbox and mentions.
@@ -201,6 +215,8 @@ The scenarios that would show this decision holds. None is proven yet. Each slic
 - Capture writes each hob's own turns to its own scope only, and nothing from a private group. Not proven yet.
 - Change it on a Charm action approves the changed call only when it passes the action's schema, and records who changed what. Only the requester or the owner can decide. Not proven yet.
 - The away summary lists the same mentions, decisions and changed artifacts for the same records and read marker. Not proven yet.
-- A quest started from a group belongs to the group's thread. Its card updates in place, and the group gets only questions for a person, one line per new version and Ready. Not proven yet.
+- A quest started from a group belongs to the group's thread. Its card updates in place, its work and steers stay in the card's reply thread, and the group gets only questions for a person, one line per new version and Ready. Not proven yet.
+- Two quests in one group run at once while people and hobs keep talking in the main line and in reply threads, and no chat turn waits on a quest. Not proven yet.
+- A reply in a quest card's thread reaches the quest as a steer without stopping it. Not proven yet.
 - A version made because of a message records that message's author, and Compare lists each change with who asked for it. Not proven yet.
 - A campfire refuses every tool that writes, and turning its top idea into a quest records the choice as a decision. Not proven yet.
