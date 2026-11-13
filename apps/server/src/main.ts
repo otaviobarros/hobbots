@@ -126,6 +126,7 @@ import {
   SqliteLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  UserRepositoryLive,
   WebFoundUrlsLive,
   WebRecordsLive,
 } from "@hobbots/persistence";
@@ -381,6 +382,8 @@ const ServerLive = Layer.unwrap(
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
+      // The people the hub serves; the owner is the user every OWNER_ACTOR names (ADR 039).
+      UserRepositoryLive,
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
