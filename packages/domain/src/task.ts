@@ -38,6 +38,9 @@ export type TaskState = typeof TaskState.Type;
 export const isTerminalTask = (state: TaskState): boolean =>
   state === "completed" || state === "failed" || state === "cancelled";
 
+/** Whether a cancel was asked for a Task and is not confirmed yet: no new work starts under it (OR-006). */
+export const isCancellingTask = (state: TaskState): boolean => state === "cancelling";
+
 /** Whether a Task ended with its result. */
 export const isCompletedTask = (state: TaskState): boolean => state === "completed";
 

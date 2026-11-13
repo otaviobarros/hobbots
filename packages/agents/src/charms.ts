@@ -8,6 +8,7 @@ import {
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
   type MessageId,
+  type PolicyDecision,
   READ_HOB_TOOL,
   READ_MESSAGE_TOOL,
   RECORD_DECISION_TOOL,
@@ -221,8 +222,9 @@ export interface CharmDefinition<R extends HubRequest, V extends AskableVerdict>
 /** A registered Charm, with what the registry needs of it whatever its requests are. */
 export interface Charm extends CharmIdentity {
   /**
-   * Its tools' names, which of them write, and the operation each write is decided as, when it
-   * declares one: outside a chat, a write the hob's policy answers Never for is not offered (ADR 038).
+   * Its tools' names, which of them write, and the operation each is decided as, when it declares
+   * one: outside a chat, a write the hob's policy answers Never for is not offered (ADR 038). A read's
+   * operation only names the answer a delegation shows its lead (#1348).
    */
   readonly tools: ReadonlyArray<{
     readonly name: string;
@@ -233,6 +235,22 @@ export interface Charm extends CharmIdentity {
   /** Its actions for a turn, run through the pipeline with the hub's one never-twice runner. */
   readonly serve: (calls: CharmCallRunner) => (turn: CharmTurn) => HubTools;
 }
+
+/**
+ * Why a session outside any chat is not offered one of a Charm's tools, or null when it is (ADR 038):
+ * a write of a Charm that offers its writes only in chats, or one the hob's policy answers Never for.
+ * Its reads are offered whatever their answer, and refused call by call under Never. The Charm
+ * registry and the offer a delegation shows its lead read this one rule (#1348).
+ */
+export const closedOutsideChats = (
+  charm: Pick<Charm, "writesOutsideChats">,
+  tool: Charm["tools"][number],
+  decide: (operation: AnyOperation) => PolicyDecision,
+): "chats-only" | "never" | null => {
+  if (tool.effect !== "write") return null;
+  if (charm.writesOutsideChats !== true) return "chats-only";
+  return tool.operation !== undefined && decide(tool.operation) === "deny" ? "never" : null;
+};
 
 /** Whether the hob still holds `charm` (ADR 031). */
 const holder = (charm: CharmDeclaration) => (access: ToolAccess) => holdsCharm(access.policy.hob, charm.id);
@@ -359,15 +377,11 @@ export class Charms extends Context.Service<
         ) => {
           const run = within(charm);
           const hub = serve(turn);
-          // Outside a chat, a write is offered only by a Charm that offers its writes there, and
-          // only while the hob's policy answers anything but Never for it (ADR 038). In a chat, a
-          // write under Never is refused on its step, in the policy's words, as before.
-          const closedOutside = (tool: Charm["tools"][number]) =>
-            charm.writesOutsideChats !== true ||
-            (tool.operation !== undefined && operationDecision(access.policy, tool.operation) === "deny");
+          // In a chat, a write under Never is refused on its step, in the policy's words, as before.
+          const decide = (operation: AnyOperation) => operationDecision(access.policy, operation);
           const closed = new Set(
             charm.tools
-              .filter((tool) => offer?.writes === false && tool.effect === "write" && closedOutside(tool))
+              .filter((tool) => offer?.writes === false && closedOutsideChats(charm, tool, decide) !== null)
               .map((tool) => tool.name),
           );
           const tools = hub.tools.filter((tool) => !closed.has(tool.name));

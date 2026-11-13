@@ -98,6 +98,8 @@ const hob = (id: AgentId, name: string) =>
 export interface HubPolicy {
   readonly preset?: SafetyPreset;
   readonly charmOperations?: ReadonlyArray<CharmOperation>;
+  /** Whether the runtime's sandbox starts on this hub: on by default. */
+  readonly sandbox?: "on" | "unavailable";
 }
 
 /** Every hob works in the project folder under the hub's preset, with its own policy. */
@@ -188,7 +190,7 @@ const hubCalls = (prompt: string): ReadonlyArray<ScriptedHubCall> =>
 const named = (lines: ReadonlyArray<string>, prefix: string) =>
   lines.find((line) => line.startsWith(`${prefix} `))?.slice(prefix.length + 1);
 
-const scripted = (script: Script) =>
+const scripted = (script: Script, sandbox: "on" | "unavailable" = "on") =>
   Layer.effect(
     RuntimeAdapter,
     Effect.gen(function* () {
@@ -217,7 +219,7 @@ const scripted = (script: Script) =>
         },
       });
     }),
-  ).pipe(Layer.provide(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node))));
+  ).pipe(Layer.provide(FakeRuntimeLayer({ sandbox }).pipe(Layer.provide(PolicyEngine.node))));
 
 /** The backpack, frozen once the hub has stopped: every call it is asked from then on waits forever. */
 const stoppable = (script: Script) =>
@@ -279,7 +281,7 @@ const makeHub = (database: Database, script: Script, charms: Charms, policy: Hub
         LocalGit,
         charms,
         HobAdmission.layer,
-        scripted(script),
+        scripted(script, policy.sandbox),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",

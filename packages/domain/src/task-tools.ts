@@ -164,6 +164,12 @@ export const TaskToolInputs = {
         description: "How long the hob has. It cannot be longer than the time you were given.",
       }),
     ),
+    check: Schema.optionalKey(
+      Schema.Boolean.annotate({
+        description:
+          "true to only check the delegation: the result lists the tools and answers the hob would get, the tools it would not get and why, and any warning, but no Task starts and nothing is recorded. Leave it out to delegate.",
+      }),
+    ),
   }),
   report_checkpoint: Schema.Struct({
     key,
@@ -405,7 +411,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   },
   {
     name: "delegate_task",
-    description: `Give another hob a Task under one you own, with a brief, milestones and dependencies. You become its lead. Its authority is yours narrowed by what you pass, never wider. Never tell it to ask you before an action: the user approves what its policy asks first. ${LEAN_CHAT_RULE}`,
+    description: `Give another hob a Task under one you own, with a brief, milestones and dependencies. You become its lead. Its authority is yours narrowed by what you pass, never wider. The result lists the tools the hob gets with their answers, and the tools it does not get and why; pass check: true to see that first without starting anything. Never tell it to ask you before an action: the user approves what its policy asks first. ${LEAN_CHAT_RULE}`,
     label: "Delegating a Task",
   },
   {

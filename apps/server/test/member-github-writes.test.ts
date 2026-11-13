@@ -34,7 +34,7 @@ import {
 } from "@hobbots/domain";
 import { waitToFind, waitUntil } from "@hobbots/domain/testing";
 import { PolicyEngine } from "@hobbots/permissions";
-import { CharmCallsLive, GitHubAccountRepository, TaskRepositoryLive } from "@hobbots/persistence";
+import { CharmCallsLive, EventJournal, GitHubAccountRepository, TaskRepositoryLive } from "@hobbots/persistence";
 import { type HubCallRuntime, hubCallRuntimes } from "@hobbots/runtimes/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -42,9 +42,11 @@ import {
   givePolicy,
   hub,
   memberTask,
+  messagesWhen,
   PIP,
   project,
   promptsTo,
+  QUILL,
   ROOK,
   send,
   sharedDatabase,
@@ -147,13 +149,13 @@ const POLICY: HobPolicy = {
 };
 
 /** A hub over a new database whose members' Task sessions run on `members`, or the fake runtime. */
-const startGitHubHub = async (members: HubCallRuntime | null = null) => {
+const startGitHubHub = async (members: HubCallRuntime | null = null, sandbox: "on" | "unavailable" = "on") => {
   const database = await sharedDatabase();
   const started = await startHub(
     database,
     [],
     githubCharm(),
-    { preset: "trusting", charmOperations: declaredOperations([GITHUB_CHARM]) },
+    { preset: "trusting", charmOperations: declaredOperations([GITHUB_CHARM]), sandbox },
     members,
   );
   await started.run(givePolicy(POLICY));
@@ -176,6 +178,19 @@ const startGitHubHub = async (members: HubCallRuntime | null = null) => {
 };
 
 const offered = (request: PromptRequest) => request.hubTools?.tools.map((tool) => tool.name) ?? [];
+
+/** The runtime's own tools a delegation lists beside the hub tools (#1348). */
+const RUNTIME_TOOLS = ["file_reads", "file_edits", "commands", "read_only_commands"];
+
+/** The tools a `delegate_task` answer lists for its member with their answers, and those it lacks with why. */
+const listedIn = (answer: string | undefined) => {
+  if (answer === undefined) throw new Error("expected delegate_task's answer");
+  const details = JSON.parse(answer.slice(answer.lastIndexOf("\n{") + 1)) as {
+    readonly tools: Readonly<Record<string, string>>;
+    readonly dropped: Readonly<Record<string, string>>;
+  };
+  return { ...details, hub: Object.keys(details.tools).filter((tool) => !RUNTIME_TOOLS.includes(tool)) };
+};
 
 const firstPrompt = (requests: ReadonlyArray<PromptRequest>, task: Task) =>
   waitToFind("the first prompt to the Task's session", () => promptsTo(requests, task)[0]);
@@ -269,6 +284,10 @@ const writesOn = async (runtime: HubCallRuntime) => {
   expect(offered(request), name).toEqual(
     expect.arrayContaining(["github_push", "github_open_pull_request", "github_comment"]),
   );
+  // What the delegation listed is what the session was offered, on this runtime (#1348).
+  const listed = listedIn(answers.get("work-Rook"));
+  expect([...listed.hub].sort(), name).toEqual([...offered(request)].sort());
+  expect(listed.tools.github_comment, name).toBe("ask");
   // A `git push` from Rook's folder goes to github_push, as in chat.
   const steering = request.steering?.takeovers ?? [];
   expect(
@@ -393,5 +412,196 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
       expect.objectContaining({ agentId: PIP, taskId: pip.id, tool: "github_comment", reason: "unknown-tool" }),
     ]);
     expect(github.requests.slice(before).filter((sent) => sent.path.endsWith("/comments"))).toEqual([]);
+  }, 60_000);
+});
+
+/** The tree of the lead's request, or none while nothing started it. */
+const threadTrees = TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+
+/** The member's first session prompt, once its Task completed, and the tools its delegation listed. */
+const listedAndOffered = async (
+  started: Awaited<ReturnType<typeof startGitHubHub>>,
+  member: typeof ROOK,
+  key: string,
+) => {
+  const tree = await started.run(treeWhen((each) => memberTask(each, member)?.state === "completed"));
+  const request = await started.run(firstPrompt(started.requests, taskOf(tree, member)));
+  return { listed: listedIn(started.answers.get(key)), offered: offered(request), tree };
+};
+
+describe("What a delegated member will be able to do, before it starts (#1348)", () => {
+  // covers OR-002, PE-005, ADR 014 (Amendment: what a delegation tells its lead)
+  it("[TC-OR-1348-01] a check lists the member's tools and answers, Charm tools included, and makes no Task and no records", async () => {
+    const started = await startGitHubHub();
+    const { run, answers } = started;
+    const journal = await run(Effect.flatMap(Effect.service(EventJournal), (each) => each.head));
+    const brief = "Review the parser and comment on issue 1";
+    const authority = { decisions: { "read-files": "allow", "edit-files": "allow", push: "allow" }, folders: "all" };
+    await run(send(["Check first", hub("delegate_task", { key: "same", hob: "Rook", brief, authority, check: true })]));
+    await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
+    const checked = answers.get("same") ?? "";
+    expect(checked).toContain("Checked only: nothing was delegated, and no Task started.");
+    expect(checked).toContain("github_push, and github_open_pull_request (Allow); github_comment (Ask).");
+    const { tools, dropped } = listedIn(checked);
+    expect(tools).toMatchObject({
+      file_reads: "allow",
+      github_push: "allow",
+      github_comment: "ask",
+      github_open_pull_request: "allow",
+      github_search: "allow",
+      delegate_task: "allow",
+    });
+    expect(Object.keys(dropped).filter((tool) => !RUNTIME_TOOLS.includes(tool))).toEqual([]);
+    // Nothing started, and nothing about Tasks was recorded, not even the call's key.
+    expect(await run(threadTrees)).toEqual([]);
+    const since = await run(Effect.flatMap(Effect.service(EventJournal), (each) => each.readAfter(journal.sequence)));
+    expect(since.filter((entry) => /^(Task|Quest|Delegation|ToolCall|Attempt)/.test(entry.type))).toEqual([]);
+
+    // The same key then delegates, since the check kept none, and lists what Rook's session is offered.
+    await run(
+      send([
+        "Delegate it",
+        hub("delegate_task", {
+          key: "same",
+          hob: "Rook",
+          brief: [brief, hub("complete_task", { delivered: true, key: "rook-done", summary: "Reviewed" })].join("\n"),
+          authority,
+        }),
+      ]),
+    );
+    const { listed, offered: given } = await listedAndOffered(started, ROOK, "same");
+    expect(answers.get("same")).toContain("Delegated Task");
+    expect([...listed.hub].sort()).toEqual([...given].sort());
+    expect(listed.tools).toEqual(listedIn(checked).tools);
+  }, 60_000);
+
+  // covers PE-005, SEC-003, ADR 038
+  it("[TC-OR-1348-02] Never answers and a narrowing Delegation show as the session gets them, and a brief that needs a dropped tool warns", async () => {
+    const started = await startGitHubHub();
+    await started.run(
+      delegate("Pip", [hub("complete_task", { delivered: true, key: "pip-done", summary: "Could not comment" })], {
+        "github.comment": "deny",
+        push: "ask",
+      }),
+    );
+    const { listed, offered: given } = await listedAndOffered(started, PIP, "work-Pip");
+    expect([...listed.hub].sort()).toEqual([...given].sort());
+    expect(listed.tools.github_push).toBe("ask");
+    expect(listed.dropped.github_comment).toBe("never");
+    const answer = started.answers.get("work-Pip") ?? "";
+    expect(answer).toContain("It will not be offered github_comment, since its answer is Never.");
+    expect(answer).toContain(
+      "Warning: the brief names commenting, but github_comment will not be offered: its answer is Never.",
+    );
+  }, 60_000);
+
+  // covers PE-005, ADR 031
+  it("[TC-OR-1348-03] a member that does not hold the GitHub Charm is told so before it starts, and its session is offered none of its tools", async () => {
+    const started = await startGitHubHub();
+    await started.run(givePolicy({ ...POLICY, charms: { granted: [], overrides: {} } }));
+    await started.run(
+      send([
+        "Review the parser",
+        hub("delegate_task", {
+          key: "no-charm",
+          hob: "Rook",
+          brief: [
+            "Review the parser and comment on it",
+            hub("complete_task", { delivered: true, key: "nc", summary: "Read it" }),
+          ].join("\n"),
+          authority: { decisions: { "read-files": "allow", "edit-files": "allow" }, folders: "all" },
+        }),
+      ]),
+    );
+    const { listed, offered: given } = await listedAndOffered(started, ROOK, "no-charm");
+    expect([...listed.hub].sort()).toEqual([...given].sort());
+    expect(given.filter((tool) => tool.startsWith("github_"))).toEqual([]);
+    expect(listed.dropped.github_comment).toBe("not-granted");
+    const answer = started.answers.get("no-charm") ?? "";
+    expect(answer.slice(0, answer.lastIndexOf("\n{"))).not.toContain("github_push");
+    expect(answer).toContain("Warning: the brief names commenting, but github_comment will not be offered");
+  }, 60_000);
+
+  // covers OR-004, ADR 014 (Amendment: what a delegation tells its lead)
+  it("[TC-OR-1348-04] a check is refused as the delegation would be, past the depth limit or on a Task that is not a sibling, and keeps nothing", async () => {
+    const started = await startGitHubHub();
+    const { run, answers } = started;
+    const check = { hob: "Rook", brief: "Review the parser", check: true };
+    await run(send(["Check first", hub("delegate_task", { ...check, key: "outside", depends_on: ["nonexistent"] })]));
+    await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
+    expect(answers.get("outside")).toBe("Refused (dependency-outside-tree): A Task depends only on its siblings");
+    expect(await run(threadTrees)).toEqual([]);
+
+    // Pip, two Quests deep, checks bringing in Quill: a Quest 3 deep, as the delegation itself is refused.
+    const pipBrief = [
+      hub("delegate_task", { key: "deeper", hob: "Quill", brief: "Research some more", check: true }),
+      hub("complete_task", { delivered: true, key: "pip-done", summary: "Did it myself" }),
+    ].join("\n");
+    await run(
+      send([
+        "Review the parser",
+        hub("delegate_task", {
+          key: "to-rook",
+          hob: "Rook",
+          brief: [hub("delegate_task", { key: "to-pip", hob: "Pip", brief: pipBrief })].join("\n"),
+        }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, PIP)?.state === "completed"));
+    expect(answers.get("deeper")).toBe(
+      "Refused (depth-limit): This would be a Quest 3 deep, past the limit of 2. Do this work yourself, or split it into steps.",
+    );
+    expect(tree.tasks.map((task) => task.ownerId)).not.toContain(QUILL);
+  }, 60_000);
+
+  // covers PE-005, ADR 014
+  it("[TC-OR-1348-05] where the member's runtime cannot start its sandbox, its commands are listed as dropped, as its session gets none, and a brief to run tests warns", async () => {
+    const started = await startGitHubHub(null, "unavailable");
+    const { run, answers } = started;
+    const authority = { decisions: { "read-files": "allow", "edit-files": "allow" }, folders: "all" };
+    await run(
+      send([
+        "Check first",
+        hub("delegate_task", { key: "no-box", hob: "Rook", brief: "Run the tests", authority, check: true }),
+      ]),
+    );
+    await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
+    const answer = answers.get("no-box") ?? "";
+    const { tools, dropped } = listedIn(answer);
+    expect(tools.commands).toBeUndefined();
+    expect(tools.file_edits).toBe("allow");
+    expect(dropped.commands).toBe("no-sandbox");
+    expect(answer).toContain(
+      "Rook will have: file reads, file edits, git_init; no commands (its runtime has no sandbox here).",
+    );
+    expect(answer).toContain(
+      "Warning: the brief names running commands, but commands will not be offered: Rook's runtime cannot start its sandbox on this hub.",
+    );
+
+    // Under Edit files Never its commands would be read-only: those are dropped and warned of too.
+    const readOnly = { ...authority, decisions: { ...authority.decisions, "edit-files": "deny" } };
+    await run(
+      send([
+        "Check again",
+        hub("delegate_task", {
+          key: "read-only",
+          hob: "Rook",
+          brief: "Run the tests",
+          authority: readOnly,
+          check: true,
+        }),
+      ]),
+    );
+    await run(messagesWhen((all) => all.filter((message) => message.role === "assistant").length >= 2));
+    const again = answers.get("read-only") ?? "";
+    expect(listedIn(again).dropped.read_only_commands).toBe("no-sandbox");
+    expect(again).toContain(
+      "Rook will have: file reads; no file edits, no read-only commands (its runtime has no sandbox here), no git_init.",
+    );
+    expect(again).toContain(
+      "Warning: the brief names running commands, but read_only_commands will not be offered: Rook's runtime cannot start its sandbox on this hub.",
+    );
+    // The answer never promises commands the session will not have.
+    for (const each of [answer, again]) expect(each).not.toMatch(/will have: [^;.]*commands/);
   }, 60_000);
 });

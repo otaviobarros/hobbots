@@ -10,16 +10,16 @@ import {
   openThreadTask,
   QuestStates,
   type ResponsibilityLedger,
-  type Task,
+  Task,
   TaskId,
   type TaskToolName,
   type TaskToolRefused,
-  type TaskTree,
+  TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { renderBrief } from "./brief-parts.ts";
 import { BRIEF_LIMIT, briefingShows, cut, ownerBriefingParts } from "./briefs.ts";
-import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
+import { type CallScope, fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
 import { reportingRules } from "./reporting.ts";
 
 /**
@@ -30,6 +30,42 @@ const STARTS_WORK: ReadonlySet<TaskToolName> = new Set(["plan_steps", "start_que
 
 /** Calls that need the turn's own Attempt: starting work, and returning the result it produced. */
 const NEEDS_ATTEMPT: ReadonlySet<TaskToolName> = new Set([...STARTS_WORK, "complete_task"]);
+
+/**
+ * The Task a chat turn's first call that starts work would start, unsaved, with the tree it would
+ * be alone in: what a delegation's check is decided on before any Task exists (#1348).
+ */
+export const draftScope = (turn: ChatTurn, at: string): CallScope => {
+  const id = TaskId.make("draft");
+  const task = Task.make({
+    id,
+    ownerId: turn.agentId,
+    parentId: null,
+    rootId: id,
+    threadId: turn.threadId,
+    brief: cut(turn.prompt, BRIEF_LIMIT) || "A request in this conversation",
+    state: "active",
+    dependsOn: [],
+    result: null,
+    currentAttemptId: null,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const tree = TaskTree.make({
+    tasks: [task],
+    quests: [],
+    delegations: [],
+    attempts: [],
+    milestones: [],
+    checkpoints: [],
+    questions: [],
+    artifacts: [],
+    handOffs: [],
+    notes: [],
+    waits: [],
+  });
+  return { caller: { agentId: turn.agentId, taskId: id }, turnTask: task, tree, at };
+};
 
 /** The caller a chat turn's call resolves to, the records it wrote to get there, and the Attempt it started. */
 export interface ResolvedCaller {
