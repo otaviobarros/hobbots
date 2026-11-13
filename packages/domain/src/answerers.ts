@@ -1,7 +1,7 @@
+import { Schema } from "effect";
 import type { Actor } from "./actor.ts";
-import { AgentId, type ThreadId } from "./ids.ts";
+import { AgentId, ThreadId } from "./ids.ts";
 import type { MessageRole } from "./message.ts";
-import { isActiveQuest, partyOf, type TaskTree } from "./quest.ts";
 import type { ThreadKind } from "./thread.ts";
 import { type ThreadMember, ThreadMembers } from "./thread-member.ts";
 
@@ -44,38 +44,23 @@ export interface RunningQuest {
   readonly party: ReadonlyArray<AgentId>;
 }
 
-/**
- * The top Quest running in a thread, from the thread's Task trees (oldest first): the latest one
- * started there that is still under way, with its party. Null when none runs there.
- */
-export const runningQuestIn = (threadId: ThreadId, trees: ReadonlyArray<TaskTree>): RunningQuest | null =>
-  trees
-    .flatMap((tree) =>
-      tree.quests
-        .filter((quest) => quest.parentQuestId === null && quest.threadId === threadId && isActiveQuest(quest.state))
-        .map((quest) => ({ leadId: quest.leadId, party: partyOf(quest, tree.delegations) })),
-    )
-    .at(-1) ?? null;
-
 /** What `answerersFor` reads of the thread. */
 export interface AnswerPlace {
+  readonly id: ThreadId;
   readonly kind: ThreadKind;
   /** The Quest running in the thread, or null when none runs there. */
   readonly quest: RunningQuest | null;
 }
 
-/** The hobs that must answer, in order; empty when nobody does. */
-export interface Answering {
-  readonly _tag: "answering";
-  readonly answerers: ReadonlyArray<AnswerOwed>;
-}
-
-/** The message mentions hobs that cannot hear it, so it is refused before it is stored. */
-export interface MentionRefused {
-  readonly _tag: "refused";
+/**
+ * A message refused before it is stored, for mentioning hobs that cannot hear it (ADR 039, Who
+ * answers). It carries their ids; the client names them ("Rook isn't in this camp. Add Rook?").
+ */
+export class MentionRefused extends Schema.TaggedError<MentionRefused>()("MentionRefused", {
+  threadId: ThreadId,
   /** The hobs mentioned that are not members, each once, in the order they were mentioned. */
-  readonly hobs: ReadonlyArray<AgentId>;
-}
+  hobs: Schema.Array(AgentId),
+}) {}
 
 const isHob = (actor: Actor | null): actor is Actor => actor?.kind === "hob";
 
@@ -96,7 +81,8 @@ const hears = (hobId: AgentId, members: ReadonlyArray<AgentId>, quest: RunningQu
   members.includes(hobId) || (quest !== null && (quest.leadId === hobId || quest.party.includes(hobId)));
 
 /**
- * Who answers `message` in `thread`, given its `members` in every state. The rules, in order:
+ * Who answers `message` in `thread`, given its `members` in every state: the hobs that owe it an
+ * answer, in order and empty when nobody does, or `MentionRefused`. The rules, in order:
  *
  * 1. A note to self wakes nobody, and neither does a hob's message that mentions no other hob.
  * 2. An @mention wakes the mentioned hobs, in the order they were mentioned. A mention of a hob
@@ -113,23 +99,22 @@ export function answerersFor(
   message: SaidMessage & { readonly mentions: readonly [] },
   thread: AnswerPlace,
   members: ReadonlyArray<ThreadMember>,
-): Answering;
+): ReadonlyArray<AnswerOwed>;
 export function answerersFor(
   message: SaidMessage,
   thread: AnswerPlace,
   members: ReadonlyArray<ThreadMember>,
-): Answering | MentionRefused;
+): ReadonlyArray<AnswerOwed> | MentionRefused;
 export function answerersFor(
   message: SaidMessage,
   thread: AnswerPlace,
   members: ReadonlyArray<ThreadMember>,
-): Answering | MentionRefused {
-  const answering = (answerers: ReadonlyArray<AnswerOwed>): Answering => ({ _tag: "answering", answerers });
-  if (message.role === "note") return answering([]);
+): ReadonlyArray<AnswerOwed> | MentionRefused {
+  if (message.role === "note") return [];
   const hobs = activeHobs(members);
   const mentioned = [...new Set(message.mentions.filter(isHob).map((actor) => AgentId.make(actor.id)))];
   const missing = mentioned.filter((hobId) => !hears(hobId, hobs, thread.quest));
-  if (missing.length > 0) return { _tag: "refused", hobs: missing };
+  if (missing.length > 0) return new MentionRefused({ threadId: thread.id, hobs: missing });
 
   const relayed = isHob(message.actor);
   const author = relayed ? message.actor?.id : undefined;
@@ -143,21 +128,9 @@ export function answerersFor(
       .filter((hobId) => !mentioned.includes(hobId))
       .map((hobId) => ({ hobId, cause: relayed ? "relay" : "reply" }) as const),
   ].filter((answerer) => answerer.hobId !== author);
-  if (named.length > 0 || !byPerson(message)) return answering(named);
+  if (named.length > 0 || !byPerson(message)) return named;
 
-  if (thread.quest !== null) return answering([{ hobId: thread.quest.leadId, cause: "lead" }]);
+  if (thread.quest !== null) return [{ hobId: thread.quest.leadId, cause: "lead" }];
   const [only, ...others] = hobs;
-  return answering(only !== undefined && others.length === 0 ? [{ hobId: only, cause: "only-hob" }] : []);
+  return only !== undefined && others.length === 0 ? [{ hobId: only, cause: "only-hob" }] : [];
 }
-
-/**
- * What the composer says when a message is refused for mentioning hobs that are not members, by
- * their names: "Rook isn't in this camp. Add Rook?". A direct message takes no one else, so it only
- * says so.
- */
-export const mentionRefusedText = (names: ReadonlyArray<string>, kind: ThreadKind): string => {
-  const who = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  const verb = names.length <= 1 ? "isn't" : "aren't";
-  if (kind === "chat") return `${who} ${verb} in this direct message.`;
-  return `${who} ${verb} in this camp. Add ${names.length <= 1 ? who : "them"}?`;
-};

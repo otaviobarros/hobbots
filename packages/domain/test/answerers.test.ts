@@ -6,7 +6,7 @@ import {
   type AnswerPlace,
   answerersFor,
   type MemberState,
-  mentionRefusedText,
+  MentionRefused,
   type RunningQuest,
   type SaidMessage,
   Thread,
@@ -71,7 +71,11 @@ const quests: fc.Arbitrary<RunningQuest | null> = fc.option(
   }),
   { nil: null },
 );
-const places: fc.Arbitrary<AnswerPlace> = fc.record({ kind: fc.constantFrom("chat", "camp"), quest: quests });
+const places: fc.Arbitrary<AnswerPlace> = fc.record({
+  id: fc.constant(ThreadId.make("camp")),
+  kind: fc.constantFrom("chat", "camp"),
+  quest: quests,
+});
 
 const cases = fc.record({ message: said, thread: places, members: memberLists });
 
@@ -99,10 +103,7 @@ describe("answerersFor", () => {
   it("[TC-OR-1460-01] wakes nobody for a note to self, whatever it mentions", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
-        expect(answerersFor({ ...message, role: "note" }, thread, members)).toEqual({
-          _tag: "answering",
-          answerers: [],
-        });
+        expect(answerersFor({ ...message, role: "note" }, thread, members)).toEqual([]);
       }),
     );
   });
@@ -113,7 +114,7 @@ describe("answerersFor", () => {
       fc.property(cases, ({ message, thread, members }) => {
         fc.pre(message.role !== "note" && !byPerson(message) && !namesSomeone(message, members, thread.quest));
         const decided = answerersFor(message, thread, members);
-        if (decided._tag === "answering") expect(decided.answerers).toEqual([]);
+        if (!(decided instanceof MentionRefused)) expect(decided).toEqual([]);
       }),
     );
   });
@@ -125,8 +126,11 @@ describe("answerersFor", () => {
         fc.pre(message.role !== "note");
         const missing = hobMentions(message).filter((id) => !hears(id, members, thread.quest));
         const decided = answerersFor(message, thread, members);
-        if (missing.length > 0) expect(decided).toEqual({ _tag: "refused", hobs: missing });
-        else expect(decided._tag).toBe("answering");
+        if (missing.length > 0)
+          expect(decided).toEqual(
+            new MentionRefused({ threadId: thread.id, hobs: missing.map((id) => AgentId.make(id)) }),
+          );
+        else expect(Array.isArray(decided)).toBe(true);
       }),
     );
   });
@@ -137,16 +141,16 @@ describe("answerersFor", () => {
       fc.property(cases, ({ message, thread, members }) => {
         fc.pre(message.role !== "note" && namesSomeone(message, members, thread.quest));
         const decided = answerersFor(message, thread, members);
-        fc.pre(decided._tag === "answering");
-        if (decided._tag !== "answering") return;
+        fc.pre(!(decided instanceof MentionRefused));
+        if (decided instanceof MentionRefused) return;
         const author = byHob(message) ? message.actor?.id : undefined;
         const replied =
           message.repliesTo?.kind === "hob" && hears(message.repliesTo.id, members, thread.quest)
             ? [message.repliesTo.id]
             : [];
         const expected = [...new Set([...hobMentions(message), ...replied])].filter((id) => id !== author);
-        expect(decided.answerers.map((a) => a.hobId)).toEqual(expected);
-        for (const answerer of decided.answerers) {
+        expect(decided.map((a) => a.hobId)).toEqual(expected);
+        for (const answerer of decided) {
           const wasMentioned = hobMentions(message).includes(answerer.hobId);
           const cause = byHob(message) ? "relay" : wasMentioned ? "mention" : "reply";
           expect(answerer.cause).toBe(cause);
@@ -161,10 +165,7 @@ describe("answerersFor", () => {
       fc.property(cases, hobIds, ({ thread, members }, replied) => {
         fc.pre(hears(replied, members, thread.quest));
         const message: SaidMessage = { role: "user", actor: OWNER, mentions: [], repliesTo: hob(replied) };
-        expect(answerersFor(message, thread, members)).toEqual({
-          _tag: "answering",
-          answerers: [{ hobId: replied, cause: "reply" }],
-        });
+        expect(answerersFor(message, thread, members)).toEqual([{ hobId: replied, cause: "reply" }]);
       }),
     );
   });
@@ -177,10 +178,9 @@ describe("answerersFor", () => {
         fc.pre(message.role !== "note" && byPerson(message) && !namesSomeone(message, members, null));
         fc.pre(hobMentions(message).every((id) => hears(id, members, null)));
         const hobs = activeHobs(members);
-        expect(answerersFor(message, place, members)).toEqual({
-          _tag: "answering",
-          answerers: hobs.length === 1 ? [{ hobId: hobs[0], cause: "only-hob" }] : [],
-        });
+        expect(answerersFor(message, place, members)).toEqual(
+          hobs.length === 1 ? [{ hobId: hobs[0], cause: "only-hob" }] : [],
+        );
       }),
     );
   });
@@ -192,17 +192,11 @@ describe("answerersFor", () => {
         fc.pre(thread.quest !== null && message.role !== "note" && byPerson(message));
         const quest = thread.quest as RunningQuest;
         if (hobMentions(message).length === 0 && !namesSomeone(message, members, quest)) {
-          expect(answerersFor(message, thread, members)).toEqual({
-            _tag: "answering",
-            answerers: [{ hobId: quest.leadId, cause: "lead" }],
-          });
+          expect(answerersFor(message, thread, members)).toEqual([{ hobId: quest.leadId, cause: "lead" }]);
         }
         const party = [quest.leadId, ...quest.party];
         const decided = answerersFor({ ...message, mentions: party.map(hob), repliesTo: null }, thread, members);
-        expect(decided).toEqual({
-          _tag: "answering",
-          answerers: [...new Set(party)].map((hobId) => ({ hobId, cause: "mention" })),
-        });
+        expect(decided).toEqual([...new Set(party)].map((hobId) => ({ hobId, cause: "mention" })));
       }),
     );
   });
@@ -212,8 +206,8 @@ describe("answerersFor", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         const decided = answerersFor(message, thread, members);
-        if (decided._tag !== "answering") return;
-        const ids = decided.answerers.map((a) => a.hobId);
+        if (decided instanceof MentionRefused) return;
+        const ids = decided.map((a) => a.hobId);
         expect(new Set(ids).size).toBe(ids.length);
         expect(ids.length).toBeLessThanOrEqual(hobMentions(message).length + 1);
         for (const id of ids) expect(hears(id, members, thread.quest)).toBe(true);
@@ -225,12 +219,5 @@ describe("answerersFor", () => {
   it("[TC-OR-1460-09] keeps no answer-rule or host setting on a thread", () => {
     const fields = Object.keys(Thread.fields);
     expect(fields.filter((field) => /answer|host/i.test(field))).toEqual([]);
-  });
-
-  it("says who is not in the camp, and offers to add them", () => {
-    expect(mentionRefusedText(["Rook"], "camp")).toBe("Rook isn't in this camp. Add Rook?");
-    expect(mentionRefusedText(["Rook", "Pip"], "camp")).toBe("Rook and Pip aren't in this camp. Add them?");
-    expect(mentionRefusedText(["Rook", "Pip", "Leo"], "camp")).toBe("Rook, Pip and Leo aren't in this camp. Add them?");
-    expect(mentionRefusedText(["Rook"], "chat")).toBe("Rook isn't in this direct message.");
   });
 });

@@ -14,7 +14,6 @@ import {
 import {
   type Agent,
   type AgentId,
-  answerersFor,
   type Brain,
   type ChapterId,
   type ChapterMove,
@@ -31,7 +30,6 @@ import {
   MessageTransitions,
   openThreadTask,
   type PackReport,
-  runningQuestIn,
   type SkillMention,
   type SkillTrial,
   type StartedFresh,
@@ -55,7 +53,6 @@ import { uncertainCalls } from "./steps.ts";
 import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
 import { makeThreadCommands } from "./thread-commands.ts";
-import { ThreadMemberRepository } from "./thread-members.ts";
 import { isBusy } from "./thread-run.ts";
 import { brainFor, makeThreadRunner } from "./thread-runner.ts";
 import { HobTools } from "./tools.ts";
@@ -283,7 +280,6 @@ export class ChatService extends Context.Service<
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       const taskRecords = yield* Effect.serviceOption(TaskRepository);
-      const memberRecords = yield* Effect.serviceOption(ThreadMemberRepository);
       const inputs = yield* makeTurnInputs(repo, hobTools, redactor);
       const { acceptedIn } = inputs;
       // Without a backpack, a thread starts only your queued messages.
@@ -446,24 +442,6 @@ export class ChatService extends Context.Service<
           );
         });
 
-      // The hobs that answer a message you send: from the thread's members and the Quest running
-      // there. Without the member records (a hub assembled without them) the thread's hob answers.
-      const answerersOf = (thread: Thread, message: Message) =>
-        Effect.gen(function* () {
-          if (Option.isNone(memberRecords)) return [thread.agentId];
-          const members = yield* memberRecords.value.list(thread.id);
-          const trees = Option.isSome(taskRecords) ? yield* taskRecords.value.readThreadTrees(thread.id) : [];
-          const decided = answerersFor(
-            { role: message.role, actor: message.actor, mentions: [], repliesTo: null },
-            { kind: thread.kind, quest: runningQuestIn(thread.id, trees) },
-            members,
-          );
-          return decided.answerers.map((answerer) => answerer.hobId);
-        });
-      // A message nobody answers starts no turn, so it never waits in the queue.
-      const queuedNoMore = (message: Message) =>
-        message.status === "queued" ? new Message({ ...message, status: "complete" }) : message;
-
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
@@ -499,12 +477,12 @@ export class ChatService extends Context.Service<
               askedSkill: pickedSkill(content, askedSkill, named),
               createdAt: yield* nowIso,
             });
-            // Who answers is decided with the message, before it is stored (ADR 039, Who answers).
-            // You cannot mention a hob yet (#1455), so this never refuses, and a thread has one hob
-            // until hobs can be added to a camp (#1467): when it names one, it is the thread's hob.
-            const answerers = yield* answerersOf(thread, userMessage);
-            const saved = yield* saveMessage(answerers.length === 0 ? queuedNoMore(userMessage) : userMessage);
-            if (answerers.length === 0) return { userMessage: saved, assistantMessage: null };
+            // Who answers is decided in the transaction that stores the message (ADR 039, Who
+            // answers). You cannot mention a hob yet (#1455), so nothing is refused, and a thread has
+            // one hob until hobs can be added to a camp (#1467): when it names one, it is the thread's.
+            const sent = yield* repo.sendMessage(userMessage, { mentions: [], repliesTo: null });
+            const saved = yield* announce(sent).pipe(Effect.map((value) => value.message));
+            if (sent.value.answerers.length === 0) return { userMessage: saved, assistantMessage: null };
             // A message that waits behind a busy thread has the thread look at its work again once it
             // is free, so a dispatch that already found nothing does not start it without its progress.
             if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });
