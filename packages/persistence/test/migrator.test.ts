@@ -46,18 +46,18 @@ const effectMigratorTable = Effect.gen(function* () {
 
 describe("migrator", () => {
   // covers DP-003
-  it("[TC-DP-040-01] names every migration 0001 to 0114, or by the UTC minute it was made", () => {
+  it("[TC-DP-040-01] names every migration 0001 to 0114, or by the UTC second it was made", () => {
     const ids = Object.keys(migrations).map((key) => key.split("_")[0] ?? "");
     const numbered = ids.filter((id) => id.length === 4);
     expect(numbered.map(Number)).toEqual(numbered.map((_, index) => index + 1));
     expect(numbered).toHaveLength(114);
     for (const id of ids.filter((id) => id.length !== 4)) {
-      const minute = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(id);
-      expect(minute, `${id} is not YYYYMMDDHHMM`).not.toBeNull();
-      const [, year, month, day, hour, min] = (minute ?? []).map(Number);
-      const date = new Date(Date.UTC(year ?? 0, (month ?? 0) - 1, day, hour, min));
-      expect(date.toISOString().slice(0, 16).replace(/\D/g, "")).toBe(id);
-      expect(Number(id)).toBeGreaterThanOrEqual(202611130000);
+      const second = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(id);
+      expect(second, `${id} is not YYYYMMDDHHMMSS`).not.toBeNull();
+      const [, year, month, day, hour, min, sec] = (second ?? []).map(Number);
+      const date = new Date(Date.UTC(year ?? 0, (month ?? 0) - 1, day, hour, min, sec));
+      expect(date.toISOString().slice(0, 19).replace(/\D/g, "")).toBe(id);
+      expect(Number(id)).toBeGreaterThanOrEqual(20261113000000);
     }
     expect(ids).toEqual([...ids].sort((a, b) => Number(a) - Number(b)));
   });
@@ -65,24 +65,24 @@ describe("migrator", () => {
   // covers DP-003
   it("[TC-DP-040-02] applies a migration whose id is below one already applied, and only once", async () => {
     const result = await Effect.gen(function* () {
-      const first = yield* runMigrations({ "202611140900_later": makes("later_one") });
+      const first = yield* runMigrations({ "20261114090000_later": makes("later_one") });
       // A pull request opened earlier merges after it: its id is lower, and it still runs.
       const second = yield* runMigrations({
-        "202611131200_earlier": makes("earlier_one"),
-        "202611140900_later": makes("later_one"),
+        "20261113120000_earlier": makes("earlier_one"),
+        "20261114090000_later": makes("later_one"),
       });
       const third = yield* runMigrations({
-        "202611131200_earlier": makes("earlier_one"),
-        "202611140900_later": makes("later_one"),
+        "20261113120000_earlier": makes("earlier_one"),
+        "20261114090000_later": makes("later_one"),
       });
       return { first, second, third, applied: yield* applied };
     }).pipe(Effect.provide(TestDatabaseAt({})), Effect.runPromise);
-    expect(result.first).toEqual(["202611140900_later"]);
-    expect(result.second).toEqual(["202611131200_earlier"]);
+    expect(result.first).toEqual(["20261114090000_later"]);
+    expect(result.second).toEqual(["20261113120000_earlier"]);
     expect(result.third).toEqual([]);
     expect(result.applied).toEqual([
-      [202611131200, "earlier"],
-      [202611140900, "later"],
+      [20261113120000, "earlier"],
+      [20261114090000, "later"],
     ]);
   });
 
@@ -94,7 +94,7 @@ describe("migrator", () => {
         "0001_first": makes("never_one"),
         "0002_second": makes("never_two"),
         "0003_third": makes("third_one"),
-        "202611132315_minute": makes("minute_one"),
+        "20261113231542_second": makes("second_one"),
       });
       const sql = yield* SqlClient.SqlClient;
       const type = yield* sql.onDialectOrElse({
@@ -111,30 +111,30 @@ describe("migrator", () => {
       });
       return { ran, type, applied: yield* applied };
     }).pipe(Effect.provide(TestDatabaseAt({})), Effect.runPromise);
-    expect(result.ran).toEqual(["0003_third", "202611132315_minute"]);
+    expect(result.ran).toEqual(["0003_third", "20261113231542_second"]);
     expect(result.applied).toEqual([
       [1, "first"],
       [2, "second"],
       [3, "third"],
-      [202611132315, "minute"],
+      [20261113231542, "second"],
     ]);
-    // On PostgreSQL the id column is widened to hold a minute's id.
+    // On PostgreSQL the id column is widened to hold a second's id.
     expect(["bigint", "integer"]).toContain(result.type);
     if (process.env.HOBBOTS_TEST_DB === "postgres") expect(result.type).toBe("bigint");
   });
 
   // covers DP-003
-  it("[TC-DP-040-04] refuses two migrations with one id, and applies none of a failed run", async () => {
+  it("[TC-DP-040-04] refuses two migrations with one id, as two branches made in one second would have, and applies none of a failed run", async () => {
     const result = await Effect.gen(function* () {
       const duplicate = yield* runMigrations({ "0001_one": makes("a_one"), "1_two": makes("a_two") }).pipe(Effect.flip);
       const failing = yield* runMigrations({
-        "202611131200_fine": makes("fine_one"),
-        "202611131300_broken": Effect.fail("broken"),
+        "20261113120000_fine": makes("fine_one"),
+        "20261113130000_broken": Effect.fail("broken"),
       }).pipe(Effect.flip);
       return { duplicate: duplicate.message, failing: failing.message, applied: yield* applied };
     }).pipe(Effect.provide(TestDatabaseAt({})), Effect.runPromise);
     expect(result.duplicate).toBe('Migrations "0001_one" and "1_two" share the id 1');
-    expect(result.failing).toBe('Migration "202611131300_broken" failed');
+    expect(result.failing).toBe('Migration "20261113130000_broken" failed');
     expect(result.applied).toEqual([]);
   });
 });

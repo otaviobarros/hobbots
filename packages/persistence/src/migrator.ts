@@ -41,7 +41,7 @@ const migrationIds = (record: Record<string, unknown>) =>
 
 /**
  * Makes the table on a new database. On PostgreSQL, Effect's migrator made `migration_id` an
- * `integer`, too small for ids such as 202611132315, so an older table is widened to `bigint` once.
+ * `integer`, too small for ids such as 20261113231542, so an older table is widened to `bigint` once.
  * SQLite's `INTEGER` already holds 64 bits.
  */
 const ensureTable = (sql: SqlClient.SqlClient) =>

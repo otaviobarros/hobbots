@@ -8,7 +8,7 @@ The code grew from the first validation slice of [ADR 009](docs/decisions/009-to
 
 - `pnpm check` runs the standards check (rule index, ADR validation sections, evidence records), the layer check, the complexity check, the implicit-state check, knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
 - `pnpm test:pg` runs the persistence and server suites on PostgreSQL. Run it when a change touches SQL, migrations or repositories. It needs Docker.
-- `pnpm migration:new <name>` adds a persistence migration named by the current UTC minute. Never number one by hand or list it anywhere ([ADR 040](docs/decisions/040-parallel-pull-requests.md)).
+- `pnpm migration:new <name>` adds a persistence migration named by the current UTC second. Never number one by hand or list it anywhere ([ADR 040](docs/decisions/040-parallel-pull-requests.md)).
 - `pnpm add <pkg>` adds a dependency at its latest stable release, pinned exactly (STD-DOCS-006). Effect packages use the workspace catalog (STD-EFFECT-005).
 
 ## Standards

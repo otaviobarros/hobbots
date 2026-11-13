@@ -8,10 +8,17 @@ import { appliedMigrationIds } from "./migrator.ts";
 
 /**
  * The schema version a Hobbots knows: the highest migration id in `record`, such as 114 or, since
- * ADR 040, 202611132315. A backup from a higher one is refused (ADR 026).
+ * ADR 040, 20261113231542. A backup from a higher one is refused (ADR 026).
  */
 export const knownSchemaVersion = (record: Record<string, unknown> = migrations): number =>
   Math.max(0, ...Object.keys(record).map((key) => Number.parseInt(key, 10)));
+
+/**
+ * The migration ids a Hobbots knows. Since ADR 040 a newer Hobbots can add an id below this one's
+ * highest, so a restore compares these, not only the highest (ADR 026).
+ */
+export const knownMigrationIds = (record: Record<string, unknown> = migrations): ReadonlySet<number> =>
+  new Set(Object.keys(record).map((key) => Number.parseInt(key, 10)));
 
 /**
  * Whether the database lacks a migration `record` has, so the migrator would apply one. Ids are not
@@ -189,6 +196,8 @@ export const onDatabaseFile = <A, E>(
 /** What a backup's copy of the database says, once it is scrubbed, for the manifest. */
 export interface FinishedCopy {
   readonly schemaVersion: number;
+  /** Every migration id the copy has applied, in order, so a restore can refuse one it does not know. */
+  readonly migrations: ReadonlyArray<number>;
   readonly counts: BackupCounts;
   readonly hobFolders: ReadonlyArray<HobFolders>;
   /**
@@ -218,6 +227,7 @@ export const finishBackupCopy = (filename: string) =>
       if (!(yield* integrityOk)) return yield* new BackupCopyDamaged();
       return {
         schemaVersion: yield* schemaVersion,
+        migrations: [...(yield* appliedMigrationIds)].sort((a, b) => a - b),
         counts: yield* backupCounts(schema),
         hobFolders: yield* hobFolders(schema),
         backedUpRevisions: yield* backedUpRevisions(schema),

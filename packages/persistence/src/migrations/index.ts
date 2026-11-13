@@ -7,7 +7,7 @@ import type { SqlClient } from "effect/sql";
 
 type Migration = Effect.Effect<void, unknown, SqlClient.SqlClient>;
 
-/** A migration file: `<id>_<name>.ts`, where the id is 0001 to 0114 or, since ADR 040, a UTC minute such as 202611132315. */
+/** A migration file: `<id>_<name>.ts`, where the id is 0001 to 0114 or, since ADR 040, the UTC second it was made, such as 20261113231542. */
 const FILE = /^(\d+_\w+)\.ts$/;
 
 /**
