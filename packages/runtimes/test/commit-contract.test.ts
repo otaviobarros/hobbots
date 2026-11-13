@@ -402,13 +402,15 @@ const GITHUB_CHARM = offering([...GITHUB_TOOLS, ...GITHUB_WRITE_TOOLS].map((tool
 
 describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runtime) => {
   // covers PE-005, SEC-002, ADR 020
-  it("[TC-PE-1349-01] refuses gh before it runs, naming the Charm tool for what it tried, also inside env and sh -c", async () => {
+  it("[TC-PE-1349-01] refuses gh before it runs, naming the Charm tool for what it tried, also inside env, sh -c, if and $(…)", async () => {
     const tools = access(settleCommitsAs(null, NONE, null));
     const cases: ReadonlyArray<readonly [string, string]> = [
       ["gh pr create --fill", "Use the github_open_pull_request tool instead of gh pr create"],
       ["env GH_PAGER=cat gh pr comment 1 --body hi", "Use the github_comment tool instead of gh pr comment"],
       ["sh -c 'gh issue view 1'", "Use the github_item tool instead of gh issue view"],
       ["pnpm test && gh pr list", "Use the github_search tool instead of gh pr list"],
+      ["if gh pr view 1; then echo found; fi", "Use the github_item tool instead of gh pr view"],
+      ['echo "$(gh repo view)"', "Use the github_repository tool instead of gh repo view"],
       ["gh issue create -t Parser", "GitHub issues are not available to hobs yet."],
     ];
     for (const [command, pointer] of cases) {

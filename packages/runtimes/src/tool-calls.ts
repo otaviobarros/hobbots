@@ -723,22 +723,97 @@ export const commitFolders = (
 };
 
 /** The arguments of the first `gh` a command line runs, behind any wrapper, `eval` or `sh -c`, or null. */
+/** Shell words that start or join a compound command, before the command that runs. */
+const SHELL_KEYWORDS = new Set(["if", "then", "else", "elif", "while", "until", "do", "!", "{", "(", "time"]);
+
+/** A simple command's words with any leading shell keywords, such as `if` or `do`, taken off. */
+const afterKeywords = (words: ReadonlyArray<string>): ReadonlyArray<string> => {
+  let i = 0;
+  while (i < words.length && SHELL_KEYWORDS.has(words[i] as string)) i++;
+  return words.slice(i);
+};
+
+/** Where the `$(` body that starts at `start` ends: its closing parenthesis, or the line's end. */
+const closingParen = (line: string, start: number): number => {
+  let depth = 1;
+  for (let i = start; i < line.length; i++) {
+    const char = line[i];
+    if (char === "\\") i++;
+    else if (char === "(") depth++;
+    else if (char === ")" && --depth === 0) return i;
+  }
+  return line.length;
+};
+
+/** Where the backtick body that starts at `start` ends: its closing backtick, or the line's end. */
+const closingBacktick = (line: string, start: number): number => {
+  for (let i = start; i < line.length; i++) {
+    if (line[i] === "\\") i++;
+    else if (line[i] === "`") return i;
+  }
+  return line.length;
+};
+
+/**
+ * The command lines a line's `$(…)` and backtick substitutions run, also inside double quotes, which
+ * the shell runs too; single quotes keep them literal. Read in one pass, so in linear time.
+ */
+const substitutions = (line: string): ReadonlyArray<string> => {
+  const found: Array<string> = [];
+  let single = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (single) single = char !== "'";
+    else if (char === "'") single = true;
+    else if (char === "\\") i++;
+    else if (char === "$" && line[i + 1] === "(") {
+      const end = closingParen(line, i + 2);
+      found.push(line.slice(i + 2, end));
+      i = end;
+    } else if (char === "`") {
+      const end = closingBacktick(line, i + 1);
+      found.push(line.slice(i + 1, end));
+      i = end;
+    }
+  }
+  return found;
+};
+
+/** The arguments of the first `gh` one simple command runs, or the line it runs in turn, or null. */
+const ghInCommand = (
+  words: ReadonlyArray<string>,
+  cwd: string,
+  home: string,
+): ReadonlyArray<string> | null | { readonly line: string } => {
+  const [name, ...args] = unwrap(afterKeywords(words), cwd, home).words;
+  const program = basename(name ?? "");
+  if (program === "gh") return args;
+  const nested = nestedLine(program, args);
+  return nested === undefined ? null : { line: nested };
+};
+
+/**
+ * The arguments of the first `gh` a command line runs, behind any wrapper or shell keyword such as
+ * `if`, inside `eval`, `sh -c` or a command substitution, or null.
+ */
 const ghIn = (line: string, cwd: string, home: string): ReadonlyArray<string> | null => {
   for (const token of commandLine(line)) {
     if (!("words" in token)) continue;
-    const [name, ...args] = unwrap(token.words, cwd, home).words;
-    const program = basename(name ?? "");
-    if (program === "gh") return args;
-    const nested = nestedLine(program, args);
-    const found = nested === undefined ? null : ghIn(nested, cwd, home);
-    if (found !== null) return found;
+    const found = ghInCommand(token.words, cwd, home);
+    const args = found !== null && "line" in found ? ghIn(found.line, cwd, home) : found;
+    if (args !== null) return args;
+  }
+  for (const inner of substitutions(line)) {
+    const args = ghIn(inner, cwd, home);
+    if (args !== null) return args;
   }
   return null;
 };
 
 /**
- * The arguments of the first `gh` a tool call's command line runs, after any wrapper such as `env`,
- * and inside `eval` or `sh -c`, or null when it runs none (#1349). Only what the line says is read:
+ * The arguments of the first `gh` a tool call's command line runs, after any wrapper such as `env`
+ * or shell keyword such as `if`, and inside `eval`, `sh -c` or a `$(…)` or backtick substitution,
+ * or null when it runs none (#1349). Only what the line says is read:
  * an alias or a script that runs `gh` is not seen, and fails to sign in on its own.
  */
 export const ghArguments = (

@@ -9,7 +9,7 @@ const found = (command: string) => ghArguments("Bash", { command }, project, "/U
 
 describe("the gh a command line runs (#1349)", () => {
   // covers PE-005, SEC-002
-  it("[TC-RT-1349-01] finds gh behind wrappers, after other commands, inside eval and sh -c, and nothing for any other command", () => {
+  it("[TC-RT-1349-01] finds gh behind wrappers and shell keywords, after other commands, inside eval, sh -c and command substitutions, and nothing for any other command", () => {
     expect(found("gh pr create --fill")).toEqual(["pr", "create", "--fill"]);
     expect(found("git add -A && gh pr comment 3 --body 'Looks good'")).toEqual([
       "pr",
@@ -27,10 +27,22 @@ describe("the gh a command line runs (#1349)", () => {
     expect(found("eval gh pr status")).toEqual(["pr", "status"]);
     expect(found("timeout 30 gh run list")).toEqual(["run", "list"]);
     expect(found("gh")).toEqual([]);
+    // Behind shell keywords, and in a command substitution, quoted or not.
+    expect(found("if gh pr view 1; then echo found; fi")).toEqual(["pr", "view", "1"]);
+    expect(found("while ! gh pr checks 3; do sleep 5; done")).toEqual(["pr", "checks", "3"]);
+    expect(found("for i in 1 2; do gh issue view $i; done")).toEqual(["issue", "view", "$i"]);
+    expect(found("{ gh pr list; }")).toEqual(["pr", "list"]);
+    expect(found('echo "$(gh pr view 1)"')).toEqual(["pr", "view", "1"]);
+    expect(found("echo `gh pr list`")).toEqual(["pr", "list"]);
+    expect(found('n=$(echo "$(gh issue list | wc -l)")')).toEqual(["issue", "list"]);
+    expect(found("cat <(gh pr list)")).toEqual(["pr", "list"]);
     for (const command of [
       "git push origin main",
       "echo gh pr create",
       "ghq list",
+      "echo '$(gh pr view 1)'",
+      "echo 'if gh pr view 1'",
+      "if test -f gh; then echo gh; fi",
       "cat gh.md",
       "sh -c 'git status'",
     ]) {
