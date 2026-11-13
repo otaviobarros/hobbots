@@ -1,6 +1,6 @@
 # ADR 039 — Shared camps with hobs and people
 
-Status: **Proposed.** Amends the threads of [ADR 037](037-chat-and-camps.md) (a thread has members, a chat is a direct message with one hob, a runtime session also belongs to one hob, and chapters run on their own without Split, Merge, the Focus chip or Start fresh), the quest view of [ADR 027](027-quest-room.md) (a quest is followed in its card's reply thread), the capture of [ADR 028](028-memory.md) (each hob captures only its own part of a shared thread), the user session of [ADR 021](021-devices-and-remote-access.md) (a device belongs to a user) and who decides an approval in [ADR 015](015-approval-lifetimes-and-grants.md). Builds on the Task tree of [ADR 018](018-tasks-and-quests.md), the backpack of [ADR 019](019-hob-backpack-and-continuations.md), the steer receipts of [ADR 027](027-quest-room.md), the hob directory of [ADR 032](032-hob-directory.md) and the claims register of ADR 037. Records the design for shared camps ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)), and drops campfires as a separate kind.
+Status: **Proposed.** Amends the threads of [ADR 037](037-chat-and-camps.md) (a thread has members, a chat is a direct message with one hob, a runtime session also belongs to one hob, and chapters run on their own without Split, Merge, the Focus chip or Start fresh), the quest view of [ADR 027](027-quest-room.md) (a quest is followed in its card's reply thread), the capture of [ADR 028](028-memory.md) (each hob captures only its own part of a shared thread), the user session of [ADR 021](021-devices-and-remote-access.md) (a device belongs to a user) and who decides an approval in [ADR 015](015-approval-lifetimes-and-grants.md). Builds on the Task tree of [ADR 018](018-tasks-and-quests.md), the backpack of [ADR 019](019-hob-backpack-and-continuations.md), the steer receipts of [ADR 027](027-quest-room.md), the hob directory of [ADR 032](032-hob-directory.md) and the claims register of ADR 037. Records the design for shared camps ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)).
 
 ## Context
 
@@ -12,7 +12,7 @@ Today a conversation has one hob and one person:
 - The person is implied. `OWNER_ACTOR` is the only user actor, devices act as that user, and the thread's read marker is "yours".
 - A runtime session is keyed by thread, runtime and chapter. There is one hob, so there is one session per chapter.
 - `ThreadRun` runs one turn at a time for that hob.
-- Several hobs already work together, but only inside a Quest, under a lead, and party members never talk to each other. `consult_hob` ([#1293](https://github.com/otaviobarros/hobbots/issues/1293)) lets one hob ask another a question, out of sight.
+- Several hobs already work together, but only inside a Quest, under a lead, and party members never talk to each other. A planned `consult_hob` would have let one hob ask another a question out of sight.
 
 Putting several hobs and several people in one conversation raises questions that one hob never did:
 
@@ -75,7 +75,7 @@ There is no mention that wakes every hob. A shared camp that wants every hob's v
 
 - **A hob may @mention another member hob** in its reply. That adds a `TurnRequest` caused by a hob.
 - **The relay budget.** After a person's message, hobs may wake each other for at most `HOB_RELAY_BUDGET` turns, 3, before a person speaks again. Past it, the hub drops the request and the thread shows "Hobs paused, waiting for a person" with "Let them go on", which resets the budget once. The budget is a named constant with tests.
-- **Work goes through the existing paths.** A mention in a shared camp is for talking in the open. A hob that needs another hob's work starts a quest. A hob that needs another hob's answer mentions it in a reply thread, in the open. This replaces `consult_hob` ([#1293](https://github.com/otaviobarros/hobbots/issues/1293)), which is not built.
+- **Work goes through the existing paths.** A mention in a shared camp is for talking in the open. A hob that needs another hob's work starts a quest. A hob that needs another hob's answer mentions it in a reply thread, in the open. No separate consult tool is needed.
 
 ### The context pack with several hobs
 
@@ -161,7 +161,7 @@ Artifacts already keep versions (#1434). This section decides how they look and 
 - **The open direct message lists its hob's camps beneath it**, as the rail of ADR 037 does, so a hob's camps stay one click away.
 - Each member can mute a thread. A muted thread still counts mentions of you.
 
-### Kept simple
+### Scope
 
 - **A hob replies or runs a quest.** Work for one person is a quest with one member; Tasks are its parts. Hobs do not choose between a reply, a Task and a Quest ([#1157](https://github.com/otaviobarros/hobbots/issues/1157)).
 - **The quest view is the card's reply thread.** It holds the steps, questions, versions and steering, and the viewer opens what the quest made. There is no quest tab in the camp sheet and no separate quest room. ADR 027's steer receipts and unread markers move into the thread.
