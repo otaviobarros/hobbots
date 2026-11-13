@@ -3,8 +3,8 @@ import { Context, type Effect, type Option } from "effect";
 
 /**
  * Who is in each direct message and camp (ADR 039, Members). A thread is stored with its first two
- * members, the person who made it and its hob, and a hob leaves every thread when it retires and
- * comes back when it returns; this reads them and adds more.
+ * members, the person who made it and its hob, journaled with it, and a hob leaves every thread
+ * when it retires and comes back when it returns; this reads them and adds more.
  */
 export class ThreadMemberRepository extends Context.Service<
   ThreadMemberRepository,

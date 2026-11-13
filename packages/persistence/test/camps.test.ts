@@ -187,8 +187,18 @@ describe("Make a camp", () => {
       state: "open",
       origin: null,
     });
-    // The camp starts its first chapter in the same change (ADR 037, #1379).
-    expect(result.made.entries.map((entry) => entry.payload._tag)).toEqual(["CampMade", "ChapterStarted"]);
+    // The camp starts its first chapter in the same change (ADR 037, #1379), with its person and its
+    // hob as its first members (ADR 039).
+    expect(result.made.entries.map((entry) => entry.payload._tag)).toEqual([
+      "CampMade",
+      "ChapterStarted",
+      "ThreadMemberAdded",
+      "ThreadMemberAdded",
+    ]);
+    expect(result.made.entries.slice(2).map((entry) => entry.payload)).toMatchObject([
+      { member: { actor: { kind: "user", id: "owner" }, role: "owner", state: "active" } },
+      { member: { actor: { kind: "hob" }, role: "member", state: "active" } },
+    ]);
     expect(result.made.value.liveChapterId).not.toBeNull();
     expect(result.again.entries).toEqual([]);
     expect(result.again.value).toEqual(result.made.value);
@@ -232,17 +242,23 @@ describe("Start fresh", () => {
     expect(result.carried).toEqual(started.value.carried);
     // One event for the chat, then each moved item, at the revision it was written with: the
     // failure the chat carries, and the step's own Task item, which moves with its tree unnamed.
-    // Then the new chat's first chapter (ADR 037, #1379), and last the moved Quest's summary, which
-    // now names the new chat (#1373).
+    // Then the new chat's first chapter (ADR 037, #1379), the old chat's members in the new one
+    // (ADR 039), and last the moved Quest's summary, which now names the new chat (#1373).
     const tags = started.entries.map((entry) => entry.payload._tag);
     expect(tags).toEqual([
       "ChatStartedFresh",
       "BackpackItemChanged",
       "BackpackItemChanged",
       "ChapterStarted",
+      "ThreadMemberAdded",
+      "ThreadMemberAdded",
       "QuestSummaryChanged",
     ]);
-    expect(started.entries[4]?.payload).toMatchObject({ summary: { threadId: FRESH } });
+    expect(started.entries.slice(4, 6).map((entry) => entry.payload)).toMatchObject([
+      { member: { threadId: FRESH, actor: { kind: "user", id: "owner" }, role: "owner" } },
+      { member: { threadId: FRESH, actor: { kind: "hob" }, role: "member" } },
+    ]);
+    expect(started.entries[6]?.payload).toMatchObject({ summary: { threadId: FRESH } });
     expect(started.value.chat.liveChapterId).not.toBeNull();
     const [fresh, ...rest] = started.entries;
     const moved = rest.filter((entry) => entry.payload._tag === "BackpackItemChanged");

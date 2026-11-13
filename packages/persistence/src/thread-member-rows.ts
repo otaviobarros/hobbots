@@ -92,45 +92,58 @@ export const movedMember = (member: ThreadMember, event: MemberEvent, revision: 
   return new ThreadMember({ ...next, revision });
 };
 
+/** Stores each new member, at journal sequences from `first` on: their `ThreadMemberAdded` events. */
+const added = (sql: SqlClient.SqlClient, members: ReadonlyArray<ThreadMember>, first: number) =>
+  Effect.forEach(members, (member, index) =>
+    Effect.gen(function* () {
+      const stored = new ThreadMember({ ...member, revision: first + index });
+      yield* insertMember(sql, stored);
+      return { _tag: "ThreadMemberAdded", member: stored } as const;
+    }),
+  );
+
 /**
- * Stores a new thread's first two members, unjournaled, as its own event shows the thread (ADR 039):
- * the person whose session made it, with role `owner`, and its hob, both added by that person. With
- * no session it is the hub's own code making the thread, for its owner (`sessionActor`). A retired
- * hob's thread, as a restored one, has its hob as a member that left. Rows already stored stay.
+ * Stores a new thread's first two members, at journal sequences from `first` on, and returns their
+ * `ThreadMemberAdded` events, which the change journals after the thread's own (ADR 039): the person
+ * whose session made it, with role `owner`, and its hob, both added by that person. With no session
+ * it is the hub's own code making the thread, for its owner (`sessionActor`). A retired hob's thread
+ * has its hob as a member that left.
  */
-export const startMembersIn = (sql: SqlClient.SqlClient) => (thread: Thread, revision: number) =>
-  Effect.gen(function* () {
-    const owner = yield* sessionActor;
-    const [hob] = yield* sql<{ readonly status: string }>`SELECT status FROM agents WHERE id = ${thread.agentId}`;
-    const first = { threadId: thread.id, joinedAt: thread.createdAt, addedBy: owner, revision };
-    const rest = { readRevision: null, mutedUntil: null };
-    yield* insertMember(sql, new ThreadMember({ ...first, ...rest, actor: owner, role: "owner", state: "active" }));
-    yield* insertMember(
-      sql,
-      new ThreadMember({
-        ...first,
-        ...rest,
-        actor: { kind: "hob", id: thread.agentId },
-        role: "member",
-        state: hob?.status === "retired" ? "left" : "active",
-      }),
-    );
-  });
+export const startMembersIn =
+  (sql: SqlClient.SqlClient) =>
+  (thread: Thread, first: number): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+    Effect.gen(function* () {
+      const owner = yield* sessionActor;
+      const [hob] = yield* sql<{ readonly status: string }>`SELECT status FROM agents WHERE id = ${thread.agentId}`;
+      const fields = { threadId: thread.id, joinedAt: thread.createdAt, addedBy: owner, readRevision: null };
+      const members = [
+        new ThreadMember({ ...fields, actor: owner, role: "owner", state: "active", mutedUntil: null }),
+        new ThreadMember({
+          ...fields,
+          actor: { kind: "hob", id: thread.agentId },
+          role: "member",
+          state: hob?.status === "retired" ? "left" : "active",
+          mutedUntil: null,
+        }),
+      ];
+      return yield* added(sql, members, first);
+    });
 
 /**
  * Gives the chat Start fresh makes the members of the chat it replaces, as they stand, joined when
- * the new chat was made: a direct message keeps its person and its hob. Unjournaled, as
- * `startMembersIn`; read markers start empty, since nothing in the new chat was read yet.
+ * the new chat was made, at journal sequences from `first` on: a direct message keeps its person and
+ * its hob. Returns their `ThreadMemberAdded` events. Read markers start empty, since nothing in the
+ * new chat was read yet.
  */
-export const copyMembersIn = (sql: SqlClient.SqlClient) => (from: ThreadId, to: Thread, revision: number) =>
-  Effect.gen(function* () {
-    for (const member of yield* selectMembers(sql, from)) {
-      yield* insertMember(
-        sql,
-        new ThreadMember({ ...member, threadId: to.id, joinedAt: to.createdAt, readRevision: null, revision }),
+export const copyMembersIn =
+  (sql: SqlClient.SqlClient) =>
+  (from: ThreadId, to: Thread, first: number): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+    Effect.gen(function* () {
+      const members = (yield* selectMembers(sql, from)).map(
+        (member) => new ThreadMember({ ...member, threadId: to.id, joinedAt: to.createdAt, readRevision: null }),
       );
-    }
-  });
+      return yield* added(sql, members, first);
+    });
 
 /**
  * Moves each person's read marker with their thread's, where the thread's marker moves without them

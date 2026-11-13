@@ -173,7 +173,7 @@ const PairingRequested = Schema.TaggedStruct("PairingRequested", { request: Pair
 const PairingChanged = Schema.TaggedStruct("PairingChanged", { request: PairingRequest });
 /** The user revoked a device: its requests are refused from now on (ADR 021). Carries no token. */
 const DeviceRevoked = Schema.TaggedStruct("DeviceRevoked", { device: Device });
-/** A person or a hob added to a camp (ADR 039, Members). A thread's first two members come with it, unjournaled. */
+/** A person or a hob added to a thread (ADR 039, Members): its first two when it is made, and anyone added to a camp. */
 const ThreadMemberAdded = Schema.TaggedStruct("ThreadMemberAdded", { member: ThreadMember });
 /** A member left, was removed or came back (`MemberMachine`), as a hob does when it retires and returns. */
 const ThreadMemberChanged = Schema.TaggedStruct("ThreadMemberChanged", { member: ThreadMember });

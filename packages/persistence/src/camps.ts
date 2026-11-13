@@ -119,7 +119,8 @@ export const makeCampWrites = (
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
 
   /**
-   * Makes `camp` at `first`, journaled as `CampMade` and its first chapter's `ChapterStarted`; the
+   * Makes `camp` at `first`, journaled as `CampMade`, its first chapter's `ChapterStarted` and its first
+   * two members' `ThreadMemberAdded`; the
    * camp stored under its key already, with no events, when the same camp was asked for before.
    */
   const insertCamp = (camp: Thread, first: number) =>
@@ -132,10 +133,11 @@ export const makeCampWrites = (
       }
       yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
       yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
-      yield* startMembers(camp, first);
       const started = yield* firstChapterOf(camp, first + 1);
+      // Its person and its hob are its first members (ADR 039).
+      const members = yield* startMembers(camp, first + 1 + started.length);
       const thread = yield* shown(camp.id);
-      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started];
+      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started, ...members];
       return { value: thread, events };
     });
 
@@ -231,8 +233,6 @@ export const makeCampWrites = (
           WHERE id = ${from.id} AND revision = ${from.revision} AND state = 'open' RETURNING id`;
         if (written.length === 0) return yield* new StaleChat();
         yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...input.chat, revision: first })))}`;
-        // The new chat is the same direct message: its person and its hob, as they stand (ADR 039).
-        yield* copyMembers(from.id, input.chat, first);
         const { work, held } = yield* openWork(from.id);
         const carried = carriedOverFrom(work).map(
           (each) => new CarriedOver({ fromThreadId: from.id, toThreadId: input.chat.id, ...each, carriedAt: at }),
@@ -254,6 +254,8 @@ export const makeCampWrites = (
         const roots = work.tasks.map((task) => task.id);
         const moved = yield* moveWork(from.id, input.chat.id, roots, held, at, first + 1);
         const started = yield* firstChapterOf(input.chat, first + 1 + moved.length);
+        // The new chat is the same direct message: its person and its hob, as they stand (ADR 039).
+        const members = yield* copyMembers(from.id, input.chat, first + 1 + moved.length + started.length);
         // The moved Tasks now belong to the new chat's first chapter, and move with it (ADR 037).
         if (roots.length > 0) {
           yield* sql`UPDATE tasks SET chapter_id = (SELECT c.id FROM chapters c
@@ -264,7 +266,12 @@ export const makeCampWrites = (
           chat: yield* shown(input.chat.id),
           carried,
         });
-        const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ChatStartedFresh", ...value }, ...moved, ...started];
+        const events: ReadonlyArray<JournaledEvent> = [
+          { _tag: "ChatStartedFresh", ...value },
+          ...moved,
+          ...started,
+          ...members,
+        ];
         return { value, events };
       }),
     ).pipe(

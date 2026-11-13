@@ -35,7 +35,7 @@ Who is in a direct message or a camp ([ADR 039](../decisions/039-shared-camps.md
 | `readRevision` | How far they read the thread; written beside the thread's own marker, and read once unread counts move onto it ([#1454](https://github.com/otaviobarros/hobbots/issues/1454)) |
 | `mutedUntil` | Until when they muted the thread, or null |
 
-- A thread stored for the first time starts with two members, in the same transaction: the person whose session made it, as `owner`, and its hob, both added by that person. Start fresh gives the new chat the old chat's members. Neither is journaled apart from the thread's own event.
+- A thread stored for the first time starts with two members, in the same transaction: the person whose session made it, as `owner`, and its hob, both added by that person. Start fresh gives the new chat the old chat's members. Each is journaled as `ThreadMemberAdded` in the same transaction, after the events that make the thread.
 - A direct message (a chat) keeps exactly its person and its hob: adding anyone else is refused (`MemberRefused`, `direct-message`). A camp takes more, journaled as `ThreadMemberAdded`; one who left or was removed comes back, journaled as `ThreadMemberChanged`.
 - A hob that retires leaves every thread it is active in, and comes back to every thread it left when it returns, each journaled as `ThreadMemberChanged` in the same transaction as its `AgentUpserted`.
 - Migration (0113): every thread gets its owner, with the thread's read marker, and its hob, already left for a retired hob. Built in [#1453](https://github.com/otaviobarros/hobbots/issues/1453).

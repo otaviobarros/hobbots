@@ -104,6 +104,14 @@ const bringBack = (agentId: AgentId) =>
     return yield* repo.setAgentStatus(new Agent({ ...agent, status: "active", retiredAt: null }), "retired");
   });
 
+/** The members a change journaled as `ThreadMemberAdded`, as `shown` shows them. */
+const journaledMembers = (entries: ReadonlyArray<{ readonly payload: { readonly _tag: string } }>) =>
+  entries.flatMap((entry) =>
+    entry.payload._tag === "ThreadMemberAdded" && "member" in entry.payload
+      ? [shown(entry.payload.member as ThreadMember)]
+      : [],
+  );
+
 const types = (entries: ReadonlyArray<{ readonly type: string }>) => entries.map((entry) => entry.type);
 
 describe("thread members", () => {
@@ -149,22 +157,34 @@ describe("thread members", () => {
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(hob(ALDRIC));
-        yield* repo.upsertThread(thread(CHAT, "chat"));
+        const made = yield* repo.upsertThread(thread(CHAT, "chat"));
         // Bruna makes the camp from her phone.
-        yield* repo.makeCamp(thread(CAMP, "camp")).pipe(Effect.provideService(UserSession, brunaSession));
+        const camped = yield* repo
+          .makeCamp(thread(CAMP, "camp"))
+          .pipe(Effect.provideService(UserSession, brunaSession));
         const chat = Option.getOrThrow(yield* repo.findThread(CHAT));
         const fresh = new Thread({
           ...thread(ThreadId.make("fresh"), "chat"),
           origin: { threadId: CHAT, chapterId: null },
         });
-        yield* repo.startFresh({
+        const started = yield* repo.startFresh({
           superseded: new Thread({ ...chat, state: "superseded", archivedAt: NOW }),
           chat: fresh,
         });
         // A later write of a thread leaves its members as they are.
         const camp = Option.getOrThrow(yield* repo.findThread(CAMP));
-        yield* repo.upsertThread(new Thread({ ...camp, title: "Renamed" }));
-        return { chat: yield* members(CHAT), camp: yield* members(CAMP), fresh: yield* members(fresh.id) };
+        const renamed = yield* repo.upsertThread(new Thread({ ...camp, title: "Renamed" }));
+        return {
+          chat: yield* members(CHAT),
+          camp: yield* members(CAMP),
+          fresh: yield* members(fresh.id),
+          journaled: {
+            chat: journaledMembers(made.entries),
+            camp: journaledMembers(camped.entries),
+            fresh: journaledMembers(Option.getOrThrow(started).entries),
+            renamed: journaledMembers(renamed.entries),
+          },
+        };
       }),
     );
     const directMessage = [
@@ -177,6 +197,13 @@ describe("thread members", () => {
       { actor: "user:bruna", role: "owner", state: "active", addedBy: "user:bruna" },
       { actor: "hob:aldric", role: "member", state: "active", addedBy: "user:bruna" },
     ]);
+    // Each is journaled in the change that made the thread, so a journal reader learns them too.
+    expect(result.journaled).toEqual({
+      chat: result.chat,
+      camp: result.camp,
+      fresh: result.fresh,
+      renamed: [],
+    });
   });
 
   // covers ADR 039 (Members)

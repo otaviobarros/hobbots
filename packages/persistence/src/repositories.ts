@@ -467,12 +467,13 @@ export const HobbotsRepositoryLive = Layer.effect(
             updated_at = excluded.updated_at,
             revision = excluded.revision`;
           const started = yield* startFirstChapter(thread, revision + 1);
-          // A thread stored for the first time starts with its person and its hob as members (ADR 039).
-          if (started !== null) yield* startMembers(thread, revision);
           const shown = yield* asRead(thread);
           const events: Array<JournaledEvent> = [{ _tag: "ThreadUpserted", thread: shown }];
-          if (started !== null)
+          if (started !== null) {
             events.push({ _tag: "ChapterStarted", threadId: thread.id, chapter: started, ended: null });
+            // A thread stored for the first time starts with its person and its hob as members (ADR 039).
+            events.push(...(yield* startMembers(thread, revision + 2)));
+          }
           return { value: shown, events };
         }),
       );

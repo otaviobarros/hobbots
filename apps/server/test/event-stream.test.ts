@@ -327,16 +327,20 @@ describe("event stream", () => {
           }),
         );
         const announced = yield* chat.createThread(HOB_ID);
-        // Each new thread journals itself and its first chapter (ADR 037).
-        yield* waitFor(() => entries(connection.frames).length === 4);
+        // Each new thread journals itself, its first chapter (ADR 037) and its first two members (ADR 039).
+        yield* waitFor(() => entries(connection.frames).length === 8);
         return { frames: connection.frames, silent: silent.entries, announced };
       }),
     );
     const sent = entries(result.frames);
-    expect(sent.slice(0, 2)).toEqual(result.silent);
-    expect(sent[2]?.payload).toMatchObject({ _tag: "ThreadUpserted", thread: { id: result.announced.id } });
-    expect(sent[2]?.sequence).toBe((sent[1]?.sequence ?? 0) + 1);
-    expect(sent[3]?.payload).toMatchObject({ _tag: "ChapterStarted", threadId: result.announced.id });
+    expect(sent.slice(0, 4)).toEqual(result.silent);
+    expect(sent[4]?.payload).toMatchObject({ _tag: "ThreadUpserted", thread: { id: result.announced.id } });
+    expect(sent[4]?.sequence).toBe((sent[3]?.sequence ?? 0) + 1);
+    expect(sent[5]?.payload).toMatchObject({ _tag: "ChapterStarted", threadId: result.announced.id });
+    expect(sent.slice(6).map((entry) => entry.payload)).toMatchObject([
+      { _tag: "ThreadMemberAdded", member: { threadId: result.announced.id, role: "owner" } },
+      { _tag: "ThreadMemberAdded", member: { threadId: result.announced.id, role: "member" } },
+    ]);
   });
 
   // covers CH-004
