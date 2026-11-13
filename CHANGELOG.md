@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.0.5](https://github.com/otaviobarros/hobbots/compare/v0.0.4...v0.0.5) (2026-11-13)
+
+
+### Features
+
+* **agents:** add Make a camp and Start fresh commands ([#1410](https://github.com/otaviobarros/hobbots/issues/1410)) ([1aa3773](https://github.com/otaviobarros/hobbots/commit/1aa3773a9ef3c45aae60119e647cff40801f3c8b))
+* **agents:** add the start_chapter and read_message hub tools ([#1414](https://github.com/otaviobarros/hobbots/issues/1414)) ([a51c2f1](https://github.com/otaviobarros/hobbots/commit/a51c2f1b6f0fcbd3a7901d7afca46d2cc872bcd7))
+* **agents:** keep private camps out of memory capture ([#1405](https://github.com/otaviobarros/hobbots/issues/1405)) ([68b5cd2](https://github.com/otaviobarros/hobbots/commit/68b5cd2b5c8b59cbfdb764420e8e06010634f2ab))
+* **charms:** offer GitHub Charm writes in delegated Task sessions ([#1439](https://github.com/otaviobarros/hobbots/issues/1439)) ([d4cf55a](https://github.com/otaviobarros/hobbots/commit/d4cf55a46b29161d800bfc35907e85f414626fae)), closes [#1343](https://github.com/otaviobarros/hobbots/issues/1343)
+* **chat:** land a quest's updates in its camp and move it whole with its chapter ([#1427](https://github.com/otaviobarros/hobbots/issues/1427)) ([3599c0d](https://github.com/otaviobarros/hobbots/commit/3599c0d49c539c9b3347dc7ad3ca48aef5fb18ff))
+* **chat:** start each new chapter's session from the context pack ([#1416](https://github.com/otaviobarros/hobbots/issues/1416)) ([8aded72](https://github.com/otaviobarros/hobbots/commit/8aded724acbaf76294cf077086dfa1a49d916758))
+* **chat:** write each chat's and camp's brief with a hub projector ([#1419](https://github.com/otaviobarros/hobbots/issues/1419)) ([3c1d6b0](https://github.com/otaviobarros/hobbots/commit/3c1d6b0ac6f30f39fd71a7dc876d4556ea104cc2))
+* count delivered work you have not reviewed as ready for review ([#1426](https://github.com/otaviobarros/hobbots/issues/1426)) ([e77efdb](https://github.com/otaviobarros/hobbots/commit/e77efdbf4fd5b8c881221f18a82b518eb798c3ff))
+* declare memory share and hob proposal machines, add the glossary check ([#1436](https://github.com/otaviobarros/hobbots/issues/1436)) ([715ec6c](https://github.com/otaviobarros/hobbots/commit/715ec6cf764bd3021131c21cb0f6781401b4e219))
+* **domain:** declare lifecycles with defineMachine and move Task onto it ([#1392](https://github.com/otaviobarros/hobbots/issues/1392)) ([1881e7c](https://github.com/otaviobarros/hobbots/commit/1881e7c8bd99c3b8151b1c676b90108c0d4eebe0))
+* **domain:** give threads a kind and a lifecycle, with one open chat per hob ([#1395](https://github.com/otaviobarros/hobbots/issues/1395)) ([566f647](https://github.com/otaviobarros/hobbots/commit/566f64732643e7e3f6292bbd2aed4e65487bf94d))
+* **domain:** split threads into chapters and key runtime sessions by chapter ([#1411](https://github.com/otaviobarros/hobbots/issues/1411)) ([40cbeec](https://github.com/otaviobarros/hobbots/commit/40cbeec37e7e23a01fcdcd3fd903d05dc90e1e3d))
+* find decisions, artifacts and chapters, and ask with sources ([#1428](https://github.com/otaviobarros/hobbots/issues/1428)) ([a07684b](https://github.com/otaviobarros/hobbots/commit/a07684bd3de7ec913f85e4f4630e8146a5f39e07)), closes [#1386](https://github.com/otaviobarros/hobbots/issues/1386)
+* let a hob run read-only commands without granting file editing ([#1435](https://github.com/otaviobarros/hobbots/issues/1435)) ([c7b0339](https://github.com/otaviobarros/hobbots/commit/c7b0339c94dbccd23218af986ef670bb9350e2f9))
+* let a lead stop its own Quest at your request ([#1438](https://github.com/otaviobarros/hobbots/issues/1438)) ([b590542](https://github.com/otaviobarros/hobbots/commit/b590542a405d138b0a47e93a45e95e924792c4b5))
+* **memory:** give the hub a brain for its own judgments ([#1404](https://github.com/otaviobarros/hobbots/issues/1404)) ([8241d4a](https://github.com/otaviobarros/hobbots/commit/8241d4a5b3531b77ca363b5ce1b70211c2eb66fe))
+* **orchestration:** add the claims register for numbers, paths and branches ([#1409](https://github.com/otaviobarros/hobbots/issues/1409)) ([029ef84](https://github.com/otaviobarros/hobbots/commit/029ef84d7fd075f4ff5aae72945dcf1892e8c2e5))
+* **orchestration:** publish a QuestSummary for every Quest from the hub ([#1420](https://github.com/otaviobarros/hobbots/issues/1420)) ([e39ed36](https://github.com/otaviobarros/hobbots/commit/e39ed362d81035ef5ec108a0d95e56b6d5553e40))
+* **orchestration:** steer a running member mid-turn ([#1437](https://github.com/otaviobarros/hobbots/issues/1437)) ([44c2a0f](https://github.com/otaviobarros/hobbots/commit/44c2a0fa6d2e2cd53fa60272a464d813c797c71e))
+* record decisions and artifacts with an author on every record ([#1415](https://github.com/otaviobarros/hobbots/issues/1415)) ([cc7c997](https://github.com/otaviobarros/hobbots/commit/cc7c99788aba77308330ffbae507e98fc1d085a5))
+* **server:** publish thread runs and hob presence from the hub ([#1396](https://github.com/otaviobarros/hobbots/issues/1396)) ([3d80406](https://github.com/otaviobarros/hobbots/commit/3d80406e312a28e1a2f2733acc502ae101912e5f))
+* suggest camps and move a chapter into a camp ([#1421](https://github.com/otaviobarros/hobbots/issues/1421)) ([adfaf85](https://github.com/otaviobarros/hobbots/commit/adfaf8500ef11f919d12e759e3f15010fc0c1526))
+* **web:** add the camp sheet, notes to self, pins and catch-up ([#1430](https://github.com/otaviobarros/hobbots/issues/1430)) ([f83d310](https://github.com/otaviobarros/hobbots/commit/f83d310d4be96b37ba32a9c49f10d13bb424f3f9))
+* **web:** choose the hub's brain from one list in Settings and setup ([#1408](https://github.com/otaviobarros/hobbots/issues/1408)) ([8768a57](https://github.com/otaviobarros/hobbots/commit/8768a576cee4d94c2785b2afbe20123fb28f8756))
+* **web:** list each hob's chat and camps, with Make a camp and Start fresh ([#1417](https://github.com/otaviobarros/hobbots/issues/1417)) ([204a7d4](https://github.com/otaviobarros/hobbots/commit/204a7d4042e19b5bedb9bfda467e490eb3ec8dc9))
+* **web:** open quests in the camp sheet and retire the lanes layout ([#1441](https://github.com/otaviobarros/hobbots/issues/1441)) ([dfab04d](https://github.com/otaviobarros/hobbots/commit/dfab04d9bd7fd249f9be10e5b1e59d12d754cb8f))
+* **web:** render the hub's status and drop client-derived status ([#1429](https://github.com/otaviobarros/hobbots/issues/1429)) ([f9abb54](https://github.com/otaviobarros/hobbots/commit/f9abb54f1f6fdcdd1b135b6d50d98329924913de))
+* **web:** show chapters and the Focus chip in the chat ([#1418](https://github.com/otaviobarros/hobbots/issues/1418)) ([388b486](https://github.com/otaviobarros/hobbots/commit/388b48677b0b1124f8b787dd3159cc77e2f69e2a))
+* **web:** view artifacts by kind with their versions, one row per file ([#1440](https://github.com/otaviobarros/hobbots/issues/1440)) ([1a974fd](https://github.com/otaviobarros/hobbots/commit/1a974fd919b2413413ebfffe30f6613e9f16b898))
+
+
+### Bug Fixes
+
+* **web:** open a hob's chat from the sidebar, cap its camps, and fit the camp sheet and Find ([#1432](https://github.com/otaviobarros/hobbots/issues/1432)) ([19a6a4b](https://github.com/otaviobarros/hobbots/commit/19a6a4b688c3a3882f557d829e05c7a21c04ca49))
+* **web:** pick the hub's brain from Hobbots' own menu, with every signed-in runtime ([#1412](https://github.com/otaviobarros/hobbots/issues/1412)) ([d0edc1f](https://github.com/otaviobarros/hobbots/commit/d0edc1f522d5a36d339308e5e49f993e4a12cdcf))
+
+
+### Code Refactoring
+
+* **agents:** hold each thread's run in a ThreadRun machine ([#1394](https://github.com/otaviobarros/hobbots/issues/1394)) ([71ca827](https://github.com/otaviobarros/hobbots/commit/71ca827edd7c032d3e705290b48f1fd80584eaf7))
+* **agents:** move a thread's commands out of ChatService ([#1402](https://github.com/otaviobarros/hobbots/issues/1402)) ([fe039a0](https://github.com/otaviobarros/hobbots/commit/fe039a0066eb779c43d86ced1f85eaba1c1311cb))
+* **agents:** move chat turns' tool grants out of ChatService ([#1398](https://github.com/otaviobarros/hobbots/issues/1398)) ([b4b5d8a](https://github.com/otaviobarros/hobbots/commit/b4b5d8a16f80877cb873f1bb2652be27ef5ae60c))
+* **agents:** move running a chat turn out of ChatService ([#1400](https://github.com/otaviobarros/hobbots/issues/1400)) ([08b5989](https://github.com/otaviobarros/hobbots/commit/08b5989ef2fadbaafe47728a0d03b466b5d9dfd7))
+* **agents:** move the thread run loop out of ChatService ([#1401](https://github.com/otaviobarros/hobbots/issues/1401)) ([8462a3b](https://github.com/otaviobarros/hobbots/commit/8462a3bbbc7676af65cc9a2ed632fbee907fc9c8))
+* **agents:** move what a chat turn starts with out of ChatService ([#1399](https://github.com/otaviobarros/hobbots/issues/1399)) ([90cf582](https://github.com/otaviobarros/hobbots/commit/90cf582daf1172668ded279e947a94c88cebf0a4))
+
 ## [0.0.4](https://github.com/otaviobarros/hobbots/compare/v0.0.3...v0.0.4) (2026-11-10)
 
 
