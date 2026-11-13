@@ -191,6 +191,7 @@ import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
 import { SummoningCharm } from "./summoning.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
+import { testSeams } from "./test-seams.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
@@ -567,6 +568,8 @@ const ServerLive = Layer.unwrap(
             // Settings › Your data › Start over (#948), which first moves what is left in the shared keychain items (#1214).
             HubReset.layer.pipe(Layer.provide(Legacy)),
             fakePlays(config),
+            // Nothing outside the browser tests' build, which plays several people (ADR 039).
+            testSeams(dataDir),
             memoryPageLayer(config, PageStore),
             // Each chapter that comes to rest gets its one-line summary, which the pack reads (ADR 037).
             ChapterSummaries.layer,
