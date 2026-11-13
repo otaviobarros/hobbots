@@ -47,7 +47,6 @@
     "apps/web/src/components/home/stage-hob.tsx": 2,
     "apps/web/src/components/inbox/inbox-history.tsx": 1,
     "apps/web/src/components/inbox/inbox-page.tsx": 2,
-    "apps/web/src/components/needs-tray/needs-tray.tsx": 1,
     "apps/web/src/components/onboarding/first-arrived.tsx": 3,
     "apps/web/src/components/onboarding/onboarding-first-hob.tsx": 1,
     "apps/web/src/components/onboarding/onboarding-providers.tsx": 1,

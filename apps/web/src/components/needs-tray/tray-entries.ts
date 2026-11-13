@@ -59,6 +59,21 @@ export const trayEntries = ({
 };
 
 /**
+ * Where a chat's or camp's tray looks: only at what is about that chat or camp, or at what waits
+ * everywhere, as on Home (#1423).
+ */
+export type TrayScope = "here" | "everywhere";
+
+/** What a chat's or camp's tray holds in each scope, from everything that waits on you. */
+export const scopedTray = (
+  everywhere: ReadonlyArray<TrayEntry>,
+  threadId: ThreadId,
+): { readonly here: ReadonlyArray<TrayEntry>; readonly everywhere: ReadonlyArray<TrayEntry> } => ({
+  here: everywhere.filter((entry) => entryThread(entry) === threadId),
+  everywhere,
+});
+
+/**
  * The entry the tray shows: the one it showed before while that one still waits, else the one now
  * at the same place, else the last. Undefined when nothing waits.
  */

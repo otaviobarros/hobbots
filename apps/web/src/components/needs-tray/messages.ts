@@ -1,4 +1,4 @@
-import { formatCount } from "../../lib/format.ts";
+import { formatCount, plural } from "../../lib/format.ts";
 
 /** User-facing copy for the Needs-you tray above the composer (STD-I18N-001). */
 export const messages = {
@@ -15,5 +15,20 @@ export const messages = {
     `${[...names, "you"].join(" → ")} · about ${task} · asked ${when}`,
   /** A question the hub itself asks (#976): no lead passed it up. */
   fromHub: ({ about, when }: { about: string; when: string }) => `Your hub → you · about ${about} · asked ${when}`,
+  /** The tray's scope in a chat or camp (#1423): what waits there, or everywhere. */
+  scope: {
+    label: "Show what waits",
+    here: ({ kind }: { kind: "chat" | "camp" }) => (kind === "camp" ? "This camp" : "This chat"),
+    everywhere: "Everywhere",
+    /** The tray of a chat or camp where nothing waits while something waits elsewhere. */
+    elsewhereLabel: "Waiting elsewhere",
+    elsewhere: ({ kind, count }: { kind: "chat" | "camp"; count: number }) =>
+      plural(count, {
+        one: `Nothing waits in this ${kind}. 1 thing waits elsewhere.`,
+        other: `Nothing waits in this ${kind}. ${formatCount(count)} things wait elsewhere.`,
+      }),
+    /** Where an entry from another chat or camp waits, as a link there. */
+    waitsIn: ({ place }: { place: string }) => `Waits in ${place}`,
+  },
   details: { approval: "Why, risk and who asked", question: "Who asked", stuck: "Tries and the error" },
 } as const;

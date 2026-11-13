@@ -1,13 +1,9 @@
-import type { ApprovalRequest, ApprovalSurface } from "@hobbots/domain";
+import type { ApprovalRequest, ApprovalSurface, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-import { useDecideApproval } from "../../api/approvals.ts";
+import { type ReactNode, useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
-import { ApprovalActions } from "../approvals/approval-actions.tsx";
-import { riskOf } from "../approvals/approval-rules.ts";
-import { decisionErrorText, expiryText } from "../approvals/approval-text.ts";
 import { blockerWhat } from "../blockers/blocker-model.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
@@ -16,7 +12,6 @@ import { hobProposalWhat } from "../hob-proposal/hob-proposal-model.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages as inboxCopy } from "../inbox/messages.ts";
 import { messages as appCopy } from "../messages.ts";
-import { useMoveOn } from "../move-on/move-on.tsx";
 import { WAITS } from "../move-on/places.ts";
 import { approvalAction } from "../plain-words/plain-words.ts";
 import { AnswerForm } from "../quest/answer-form.tsx";
@@ -24,7 +19,7 @@ import { messages as questMessages } from "../quest/messages.ts";
 import { type HobLookup, useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { webAskOf } from "../web/web-ask.ts";
-import { TrayAction } from "../web/web-ask-parts.tsx";
+import { ApprovalBody } from "./approval-body.tsx";
 import { Details } from "./details.tsx";
 import { HubQuestionBody } from "./hub-question-body.tsx";
 import { messages } from "./messages.ts";
@@ -43,16 +38,22 @@ type Hob = ReturnType<HobLookup>;
  * proposals, then stuck work, then questions. "1 of 2" and Next step through them; deciding one shows the next. The
  * high-risk variant has a rose edge and its confirm box. Gone when nothing waits. The chat and Home
  * pass the entries they hold, and `via` names the surface a decision made here records. Focus that
- * was on a decided item moves to the next one, or out of the tray once nothing waits (#995).
+ * was on a decided item moves to the next one, or out of the tray once nothing waits (#995). A chat
+ * or camp passes its scope control in `scope`, `where` names where an entry from elsewhere waits, and
+ * `inboxIn` opens the Inbox on that chat or camp (#1423).
  */
 export function NeedsTray({
   entries,
   via = "chat",
-  className,
+  scope,
+  where = nowhere,
+  inboxIn,
 }: {
   entries: ReadonlyArray<TrayEntry>;
   via?: ApprovalSurface;
-  className?: string;
+  scope?: ReactNode;
+  where?: (entry: TrayEntry) => ReactNode;
+  inboxIn?: ThreadId | undefined;
 }) {
   const hobs = useHobLookup();
   const [place, setPlace] = useState<{ key: string | undefined; index: number }>({ key: undefined, index: 0 });
@@ -60,10 +61,7 @@ export function NeedsTray({
   if (shown === undefined) return null;
   const { entry, index } = shown;
   const count = entries.length;
-  const risky =
-    (entry.kind === "approval" && entry.request.onceOnly) ||
-    (entry.kind === "hob-proposal" && entry.hobs.proposal.highRisk);
-  const stuck = entry.kind === "stuck";
+  const { risky, stuck } = toneOf(entry);
   const next = () => {
     const after = entries[(index + 1) % count];
     setPlace({ key: after?.key, index: (index + 1) % count });
@@ -76,7 +74,6 @@ export function NeedsTray({
       className={cn(
         "cut flex animate-hb-in gap-3 border-(length:--edge) bg-card p-4",
         risky || stuck ? "border-rose" : "border-lantern",
-        className,
       )}
     >
       {/* A new item hops its hob in the looks that hop, and fades in in the others. */}
@@ -102,7 +99,7 @@ export function NeedsTray({
           <span aria-hidden className="size-1.5 rounded-dot bg-current" />
           {stuck ? copy.eyebrow.stuck : risky ? copy.eyebrow.risk : copy.eyebrow.needs}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="m-0 min-w-0 flex-1 font-heading text-title font-bold text-text-strong">
             {titleOf(entry, asker)}
           </h2>
@@ -111,7 +108,8 @@ export function NeedsTray({
               {copy.position({ index: index + 1, count })}
             </span>
           )}
-          <Link to="/inbox" search={{ tab: "needs" }} className="text-detail text-text-strong underline">
+          {scope}
+          <Link to="/inbox" search={inboxSearch(inboxIn)} className="text-detail text-text-strong underline">
             {copy.seeAll}
           </Link>
           {count > 1 && (
@@ -120,11 +118,27 @@ export function NeedsTray({
             </Button>
           )}
         </div>
+        {where(entry)}
         <TrayBody entry={entry} asker={asker} hobs={hobs} via={via} />
       </section>
     </section>
   );
 }
+
+/** No line naming where an entry waits, on Home, where everything shows. */
+const nowhere = () => null;
+
+/** Whether an entry is a high-risk ask, or stuck work: both edge the tray in rose. */
+const toneOf = (entry: TrayEntry) => ({
+  risky:
+    (entry.kind === "approval" && entry.request.onceOnly) ||
+    (entry.kind === "hob-proposal" && entry.hobs.proposal.highRisk),
+  stuck: entry.kind === "stuck",
+});
+
+/** See all in Inbox's address: Needs you, on the tray's chat or camp when it has one. */
+const inboxSearch = (inboxIn: ThreadId | undefined) =>
+  inboxIn === undefined ? { tab: "needs" as const } : { tab: "needs" as const, in: inboxIn };
 
 /** Who asks for a question the hub itself puts to you (#976): the hub, shown as the chief. */
 const HUB = { name: inboxCopy.row.hub } as const;
@@ -193,52 +207,5 @@ function TrayBody({
         })}
       </Details>
     </>
-  );
-}
-
-function ApprovalBody({
-  entry,
-  asker,
-  via,
-}: {
-  entry: Extract<TrayEntry, { kind: "approval" }>;
-  asker: Hob;
-  via: ApprovalSurface;
-}) {
-  const { request } = entry;
-  const decide = useDecideApproval(request, via);
-  const area = useRef<HTMLDivElement>(null);
-  const moveOn = useMoveOn();
-  return (
-    <div ref={area} className="contents">
-      <TrayAction request={request} name={asker.name} />
-      <ApprovalActions
-        approval={request}
-        hob={asker}
-        pending={decide.isPending}
-        // The decision's line shows in the transcript, so the tray says nothing more.
-        onDecide={(decision) =>
-          moveOn({ from: area.current, targets: trayTargets, sent: decide.mutateAsync(decision) })
-        }
-        look="tray"
-      />
-      {decide.isError && (
-        <p role="alert" className="m-0 text-ui text-rose">
-          {decisionErrorText(decide.error)}
-        </p>
-      )}
-      <Details summary={copy.details.approval}>
-        <span className="flex flex-col gap-1">
-          <span>
-            {approvalCopy.targetLine({
-              target: request.targets.length === 0 ? approvalCopy.noTarget : request.targets.join(", "),
-            })}
-          </span>
-          <span>{approvalCopy.askedByLine({ chain: approvalCopy.chain({ name: asker.name }) })}</span>
-          <span>{approvalCopy.riskLine({ risk: riskOf(request.operation) })}</span>
-          <span>{expiryText(request)}</span>
-        </span>
-      </Details>
-    </div>
   );
 }
