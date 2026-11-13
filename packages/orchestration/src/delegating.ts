@@ -4,6 +4,7 @@ import {
   AgentId,
   ArtifactId,
   ancestorsOf,
+  CriterionId,
   DelegationId,
   hobStanding,
   isTerminalTask,
@@ -13,6 +14,7 @@ import {
   type PolicyDecision,
   type PolicyOperation,
   type PolicyOverrides,
+  type Quest,
   QuestId,
   questsAbove,
   type Task,
@@ -193,6 +195,16 @@ const toolsFor = (
 };
 
 /** Tools a lead brings in other hobs and moves results between them with. */
+/** Why delegate_task links no criteria it names (#1445): its Quest has none of those ids. */
+const notCriteria = (quest: Quest | undefined, unknown: ReadonlyArray<string>) => {
+  const listed = quest?.criteria.map((each) => `${each.id} "${each.text}"`) ?? [];
+  return `The Quest has no criterion ${unknown.join(", ")}. ${
+    listed.length === 0
+      ? "It has no acceptance criteria yet: start_quest gives them, before you delegate."
+      : `Its criteria: ${listed.join("; ")}.`
+  }`;
+};
+
 export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority, limits, separator }: Deps) => {
   /**
    * The member's authority: the caller's on this Task, narrowed by what the brief asks for and by
@@ -321,6 +333,9 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
         // A Quest started above this one later may allow less depth than when this one started.
         if (existing !== undefined) yield* depthWithin(scope, limits, task);
+        const linked = (input.criteria ?? []).map((id) => CriterionId.make(id));
+        const unknown = linked.filter((id) => !existing?.criteria.some((each) => each.id === id));
+        if (unknown.length > 0) return yield* refuse("criterion-missing", notCriteria(existing, unknown));
         const quest = existing ?? journal.keep(yield* startQuest(scope, task, lead));
         const milestones = (input.milestones ?? []).map((title) => ({ id: MilestoneId.make(newId()), title }));
         const delegationId = DelegationId.make(newId());
@@ -347,6 +362,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
             }),
           ),
         );
+        if (linked.length > 0) journal.keep(yield* fromRecords(tasks.linkCriteria(quest.id, linked, created.id)));
         const carried = yield* carryNote(scope, created, journal);
         return {
           done: {

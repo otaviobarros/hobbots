@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
-import { RegisteredArtifactId, RegisteredArtifactKind } from "./artifact.ts";
+import { RegisteredArtifactKind } from "./artifact.ts";
 import { DecisionId, DecisionState, DecisionStates } from "./decision.ts";
-import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChapterId, MessageId, RegisteredArtifactId, ThreadId } from "./ids.ts";
 import { MessageRole } from "./message.ts";
 import { SnippetPart } from "./search.ts";
 import { ThreadKind } from "./thread.ts";

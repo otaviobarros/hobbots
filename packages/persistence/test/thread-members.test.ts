@@ -19,7 +19,7 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations, ThreadMemberRepositoryLive } from "../src/index.ts";
-import threadMembers, { MEMBER_ROLES, MEMBER_STATES } from "../src/migrations/0113_thread_members.ts";
+import threadMembers, { MEMBER_ROLES, MEMBER_STATES } from "../src/migrations/0114_thread_members.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1453 (ADR 039, Members): every thread has members, a person or a hob each. The migration
@@ -34,8 +34,8 @@ const CHAT = ThreadId.make("chat");
 const CAMP = ThreadId.make("camp");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
-/** The migrations that ran before 0113, when threads had no members. */
-const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0113")) as typeof migrations;
+/** The migrations that ran before 0114, when threads had no members. */
+const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0114")) as typeof migrations;
 
 type Services = HobbotsRepository | ThreadMemberRepository | EventJournal | SqlClient.SqlClient;
 

@@ -11,7 +11,7 @@ import {
 import { Effect, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 
-// The members of each thread (ADR 039, Members; migration 0113). An actor is two columns, as a
+// The members of each thread (ADR 039, Members; migration 0114). An actor is two columns, as a
 // message's author is (0101); PostgreSQL reads BIGINT as a bigint and SQLite as a number.
 
 export interface MemberRow {

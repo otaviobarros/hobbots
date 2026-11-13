@@ -25,6 +25,7 @@ import {
   ArtifactId,
   AttemptId,
   CommandId,
+  CriterionId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -183,6 +184,8 @@ const seed = Effect.gen(function* () {
     taskId: top,
     goal: "A Black Friday campaign",
     acceptance: ["Copy approved"],
+    // Optional, so the Quest completes without checks; quest-criteria.test.ts holds the gate.
+    criteria: [{ id: CriterionId.make("c-copy"), text: "Copy approved", required: false }],
     limits: DEFAULT_QUEST_LIMITS,
     createdAt: AT,
   });

@@ -20,6 +20,7 @@ import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
 import { expireCampSuggestions, raiseCampSuggestions } from "./camp-suggestion-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
+import { voidReplacedEvidence } from "./criteria-rows.ts";
 import { refreshQuestSummaries } from "./quest-summary-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
 import { settleHobMembers } from "./thread-member-rows.ts";
@@ -61,6 +62,7 @@ type TaskEvent = Extract<
       | "QuestStarted"
       | "QuestCompleted"
       | "QuestStopRequested"
+      | "QuestCriteriaChanged"
       | "CheckpointRecorded"
       | "QuestionAsked"
       | "QuestionAnswered"
@@ -446,7 +448,13 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     const grants = yield* endTaskGrants(sql, events, first + items.length);
     const claims = yield* releaseEndedClaims(sql, events, first + items.length + grants.length);
     const artifacts = yield* registerArtifacts(sql, events, first + items.length + grants.length + claims.length);
-    const before = [...items, ...grants, ...claims, ...artifacts];
+    // A newer version of an artifact voids the evidence a Quest's criterion was accepted on (#1445).
+    const voided = yield* voidReplacedEvidence(
+      sql,
+      artifacts,
+      first + items.length + grants.length + claims.length + artifacts.length,
+    );
+    const before = [...items, ...grants, ...claims, ...artifacts, ...voided];
     // A summary counts what Tasks made, so it reads the artifacts registered just now too.
     const summarized = [
       ...before,

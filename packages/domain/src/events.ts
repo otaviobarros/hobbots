@@ -283,6 +283,11 @@ const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
  */
 const QuestStopRequested = Schema.TaggedStruct("QuestStopRequested", { quest: Quest });
 /**
+ * A Quest's acceptance criteria changed (#1445): its lead checked one, linked a Task to some, or a
+ * newer artifact version voided the evidence one was accepted on. The Quest carries them all.
+ */
+const QuestCriteriaChanged = Schema.TaggedStruct("QuestCriteriaChanged", { quest: Quest });
+/**
  * How a Quest is going changed (ADR 037): a change to a Task, a question or an approval under it
  * gave it another summary, journaled in the same transaction, after the change's own events.
  */
@@ -509,6 +514,7 @@ export const JournaledEvent = Schema.Union([
   TaskCompleted,
   QuestCompleted,
   QuestStopRequested,
+  QuestCriteriaChanged,
   QuestSummaryChanged,
   ClaimMade,
   ClaimContested,
@@ -621,6 +627,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // A change's `wait` was added with a default, and its optional `control` and `reply` later, compatibly.
   TaskStateChanged: 1,
   // A Quest's `stop`, and its `stopping` and `stopped` states (#1346), were added with a default, compatibly.
+  // A Quest's `criteria` (#1445) were added with a default, compatibly.
   QuestStarted: 1,
   CheckpointRecorded: 1,
   QuestionAsked: 1,
@@ -639,6 +646,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   TaskCompleted: 1,
   QuestCompleted: 1,
   QuestStopRequested: 1,
+  QuestCriteriaChanged: 1,
   QuestSummaryChanged: 1,
   ClaimMade: 1,
   ClaimContested: 1,

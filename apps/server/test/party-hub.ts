@@ -58,8 +58,9 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
+import type { HubCallRuntime, ScriptedHubCall } from "@hobbots/runtimes/testing";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
-import { Effect, Layer, ManagedRuntime, Stream } from "effect";
+import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { DirectoryToolsLive } from "../src/directory.ts";
@@ -144,6 +145,91 @@ const finishedWhenSentBack = (prompt: string) =>
     ? [prompt, hub("complete_task", { delivered: true, key: "sent-back", summary: "Done as briefed" })].join("\n")
     : prompt;
 
+/** A string input value `$<key>.<path>` names a detail of an earlier scripted call's answer. */
+const REFERENCE = /^\$([^.\s]+)\.(\S+)$/;
+
+/** `input` with each `$<key>.<path>` replaced by that detail of an earlier answer, as the fake resolves it. */
+const resolved = (input: unknown, details: ReadonlyMap<string, unknown>): unknown => {
+  if (typeof input === "string") {
+    const match = REFERENCE.exec(input);
+    if (match === null) return input;
+    let value: unknown = details.get(match[1] ?? "");
+    for (const part of (match[2] ?? "").split(".")) {
+      value = value !== null && typeof value === "object" ? (value as Record<string, unknown>)[part] : undefined;
+    }
+    return value === undefined ? input : value;
+  }
+  if (Array.isArray(input)) return input.map((each) => resolved(each, details));
+  if (input !== null && typeof input === "object") {
+    return Object.fromEntries(Object.entries(input).map(([name, value]) => [name, resolved(value, details)]));
+  }
+  return input;
+};
+
+/** The details an answer gives back on its last line, when they are JSON. */
+const detailsOf = (text: string): unknown => {
+  try {
+    return JSON.parse(text.split("\n").at(-1) ?? "");
+  } catch {
+    return undefined;
+  }
+};
+
+const HUB_LINE = "fake:hub ";
+const THEN_LINE = "fake:then ";
+
+/**
+ * Each turn played on `runtime`, an installed Claude Code or Codex with its stand-in model, as the
+ * fake plays it: the turn's model makes the calls its prompt's `fake:hub` lines script, `fake:then`
+ * lines wait for the session's next turn, and `$<key>.<path>` names what an earlier call answered.
+ * The stand-in is handed every call before the turn starts, so a reference is resolved as the hub
+ * is called. One turn runs at a time, as the stand-in serves one script.
+ */
+const playedOn = (runtime: HubCallRuntime) => {
+  const kept = new Map<string, ReadonlyArray<string>>();
+  const details = new Map<string, unknown>();
+  const one = Semaphore.makeUnsafe(1);
+  return (request: PromptRequest): ReturnType<RuntimeAdapterShape["sendPrompt"]> => {
+    const lines = [
+      ...(request.sessionId == null ? [] : (kept.get(request.sessionId) ?? [])),
+      ...request.prompt.split("\n").map((line) => line.trim()),
+    ];
+    const later = lines.filter((line) => line.startsWith(THEN_LINE)).map((line) => line.slice(THEN_LINE.length).trim());
+    const calls = lines
+      .filter((line) => line.startsWith(HUB_LINE))
+      .map((line): ScriptedHubCall => {
+        const [tool = "", ...input] = line.slice(HUB_LINE.length).trim().split(" ");
+        return { tool, input: JSON.parse(input.join(" ")) };
+      });
+    const hubTools = request.hubTools;
+    const played: PromptRequest =
+      hubTools == null
+        ? request
+        : {
+            ...request,
+            hubTools: {
+              ...hubTools,
+              call: (name, input, step) =>
+                Effect.tap(hubTools.call(name, resolved(input, details), step), (answer) =>
+                  Effect.sync(() => {
+                    const key = (input as { readonly key?: unknown } | null)?.key;
+                    if (typeof key === "string" && !answer.refused) details.set(key, detailsOf(answer.text));
+                  }),
+                ),
+            },
+          };
+    const events = runtime.events(played, calls).pipe(
+      Stream.tap((event) =>
+        Effect.sync(() => {
+          if (event._tag === "SessionStarted") kept.set(event.sessionId, later);
+        }),
+      ),
+      Stream.ensuring(Semaphore.release(one, 1)),
+    );
+    return Stream.unwrap(Effect.as(Semaphore.take(one, 1), events));
+  };
+};
+
 /**
  * The hub's services, a temporary project folder, and what each scripted call was answered. With
  * `memory`, the hub's hobs remember through it (ADR 028); with `activity`, each turn outside a chat
@@ -169,6 +255,8 @@ export const partyHub = (
     readonly directory?: boolean;
     /** Whether every turn is offered the Chapter tools, `start_chapter` and `read_message` (ADR 037). */
     readonly chapters?: boolean;
+    /** The installed runtime every turn runs on instead of the fake, with its stand-in model (STD-TEST-002). */
+    readonly turnsOn?: HubCallRuntime;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -180,6 +268,7 @@ export const partyHub = (
   /** Gates on scripted calls, by the call's key: see `answering`. */
   const gates = new Map<string, () => Promise<void>>();
   const reactions: Array<Reaction> = [];
+  const play = options.turnsOn === undefined ? null : playedOn(options.turnsOn);
 
   const tools = Layer.succeed(
     HobTools,
@@ -208,7 +297,7 @@ export const partyHub = (
       const finished = options.repliesWhenSentBack === true ? prompt : finishedWhenSentBack(prompt);
       const request = answering({ ...sent, prompt: finished }, answers, gates);
       requests.push(request);
-      const events = fake.sendPrompt(request);
+      const events = play === null ? fake.sendPrompt(request) : play(request);
       return options.announcesTwice?.(request.prompt)
         ? events.pipe(
             Stream.flatMap((event) =>

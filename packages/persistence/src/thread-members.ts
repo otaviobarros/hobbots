@@ -12,7 +12,7 @@ import {
   selectMembers,
 } from "./thread-member-rows.ts";
 
-/** The SQL store of thread members, for SQLite and PostgreSQL (migration 0113). */
+/** The SQL store of thread members, for SQLite and PostgreSQL (migration 0114). */
 export const ThreadMemberRepositoryLive = Layer.effect(
   ThreadMemberRepository,
   Effect.gen(function* () {

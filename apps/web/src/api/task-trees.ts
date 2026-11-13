@@ -58,6 +58,7 @@ export type TaskEvent =
           | "TaskCompleted"
           | "QuestCompleted"
           | "QuestStopRequested"
+          | "QuestCriteriaChanged"
           | "ToolCallRefused";
       }
     >;
@@ -218,6 +219,7 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
   QuestStarted: questChange,
   QuestCompleted: questChange,
   QuestStopRequested: questChange,
+  QuestCriteriaChanged: questChange,
   CheckpointRecorded: (tree, { checkpoint, milestone }, ids) =>
     ids.has(checkpoint.taskId)
       ? {
