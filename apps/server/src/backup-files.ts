@@ -298,6 +298,13 @@ const restoreSkillObjects = async (dataDir: string, backup: string, manifest: Ba
 export const writeManifest = (folder: string, manifest: BackupManifest) =>
   writeFile(join(folder, "manifest.json"), `${encodeManifest(manifest)}\n`, { flag: "wx", mode: 0o600 });
 
+/**
+ * Whether a backup's database is newer than this Hobbots: a higher schema version, or since ADR 040
+ * a migration id it does not know, which a newer Hobbots can add below the highest this one knows.
+ */
+const isNewerSchema = (manifest: BackupManifest, knownSchema: number, knownIds: ReadonlySet<number>) =>
+  manifest.schemaVersion > knownSchema || (manifest.migrations ?? []).some((id) => !knownIds.has(id));
+
 /** Why a backup folder cannot be restored, in words for the restore screen. */
 export class NotRestorable extends Error {}
 
@@ -322,8 +329,7 @@ export const readBackup = async (
       "This folder is not a complete Hobbots backup: its manifest is missing or unreadable. A backup that stopped before it finished has none.",
     );
   }
-  const unknown = (manifest.migrations ?? []).filter((id) => !knownIds.has(id));
-  if (manifest.schemaVersion > knownSchema || unknown.length > 0) {
+  if (isNewerSchema(manifest, knownSchema, knownIds)) {
     throw new NotRestorable("This backup is from a newer Hobbots. Update Hobbots first.");
   }
   if (manifest.database !== "included") {
