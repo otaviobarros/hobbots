@@ -118,6 +118,15 @@ export type CriterionCheck = { readonly by: Actor; readonly reason: string; read
   | { readonly _tag: "Waive" }
 );
 
+/** A lead's ask that you waive a required criterion (#1445): the question the hub puts to you. */
+export interface WaiverRequest {
+  readonly questionId: QuestionId;
+  /** The Quest's lead, who asks. */
+  readonly askerId: AgentId;
+  readonly reason: string;
+  readonly at: string;
+}
+
 export interface NewAttempt {
   readonly id: AttemptId;
   readonly runtime: RuntimeKind;
@@ -310,6 +319,17 @@ export class TaskRepository extends Context.Service<
      * evidence that is no artifact of the Quest's Tasks, or one a newer version replaced.
      */
     readonly checkCriterion: (questId: QuestId, criterionId: CriterionId, check: CriterionCheck) => Changed<Quest>;
+    /**
+     * Asks you whether to waive a required criterion (#1445): a question to you about the Quest's top
+     * Task, with the choices "Waive it" and "Keep it". Your "Waive it" waives it as yours; any other
+     * answer leaves it as it is. Refused for an optional or waived criterion, an ended Quest, and while
+     * an earlier ask about it is still open.
+     */
+    readonly askToWaive: (
+      questId: QuestId,
+      criterionId: CriterionId,
+      request: WaiverRequest,
+    ) => Changed<{ readonly quest: Quest; readonly question: Question }>;
     /** Links a Task to criteria of its Quest that it works towards (#1445). Refused for an unknown criterion. */
     readonly linkCriteria: (
       questId: QuestId,

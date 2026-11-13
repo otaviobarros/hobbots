@@ -49,6 +49,8 @@ export const messages = {
     decidedBy: ({ who, reason }: { who: string; reason: string }) => `${who}: ${reason}`,
     byYou: "You",
     byHub: "Hobbots",
+    /** A lead asked you to waive a required criterion, and your answer decides it. */
+    waiverAsked: "Waiting on your answer to waive it",
     showWork: "Show the work",
     showWorkHint: "Changes, files and terminals, in the Workbench beside the chat",
     team: "Who's on it",

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Actor, HUB_ACTOR } from "./actor.ts";
 import { RegisteredArtifactId, TaskId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
@@ -40,6 +40,23 @@ export const CriterionDecision = Schema.Struct({
 });
 export type CriterionDecision = typeof CriterionDecision.Type;
 
+/**
+ * A required criterion its lead asked you to waive (#1445): the hub put the question to you, and
+ * waives it as yours only when you pick its "Waive it" choice. The question's id is a `QuestionId`.
+ */
+export const WaiverAsk = Schema.Struct({
+  questionId: Schema.String,
+  reason: Schema.String,
+  at: Schema.String,
+});
+export type WaiverAsk = typeof WaiverAsk.Type;
+
+/** The choices of the question that asks you to waive a required criterion; the first one waives it. */
+export const WAIVER_CHOICES = [
+  { label: "Waive it", consequence: "The Quest can complete without it." },
+  { label: "Keep it", consequence: "It still has to be accepted on evidence before the Quest completes." },
+] as const;
+
 export class Criterion extends Schema.Class<Criterion>("Criterion")({
   id: CriterionId,
   /** What has to hold, as its lead wrote it. */
@@ -54,6 +71,11 @@ export class Criterion extends Schema.Class<Criterion>("Criterion")({
   evidence: Schema.Array(Evidence),
   /** The last change to its state; null while nobody has checked it. */
   decided: Schema.NullOr(CriterionDecision),
+  /** The question asking you to waive it, while you have not answered; null otherwise. */
+  waiverAsk: Schema.NullOr(WaiverAsk).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 }) {}
 
 /** What can happen to a criterion. */
@@ -178,8 +200,10 @@ const waitsOn = (criterion: Criterion) =>
  * Why a Quest cannot complete while required criteria are unmet, and what its lead does about it:
  * check each against evidence, or ask you to waive it.
  */
-export const unmetCriteriaText = (taskId: string, unmet: ReadonlyArray<Criterion>): string =>
+export const unmetCriteriaText = (taskId: string, unmet: ReadonlyArray<Criterion>, more = ""): string =>
   `Task ${taskId} is not complete: its Quest has required acceptance criteria that are neither accepted nor waived: ` +
   unmet.map((each) => `${each.id} "${each.text}" (${waitsOn(each)})`).join("; ") +
   ". Check each with check_criterion, accepted with the artifacts that prove it as evidence, " +
-  "or finish the work it needs. Only the user waives a required criterion: ask them with ask, and call check_criterion with waived in the turn their answer wakes.";
+  "or finish the work it needs. Only the user waives a required criterion: check_criterion with waived asks them, " +
+  'and the hub waives it once they choose "Waive it".' +
+  more;

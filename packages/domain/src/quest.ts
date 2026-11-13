@@ -610,6 +610,8 @@ export const TaskRefusal = Schema.Literals([
   // Evidence that is no artifact of the Quest's, or not at its latest version (#1445).
   "evidence-missing",
   "evidence-stale",
+  // A waiver of a required criterion asked of the user, whose answer is still awaited (#1445).
+  "waiver-asked",
   "options-collide",
   "quest-ended",
 ]);

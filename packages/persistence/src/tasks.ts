@@ -53,11 +53,24 @@ import {
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
-import { criteriaOf, makeCriteriaChanges } from "./criteria-rows.ts";
+import { registerArtifacts } from "./artifact-rows.ts";
+import { criteriaOf, makeCriteriaChanges, voidReplacedEvidence } from "./criteria-rows.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
 import { readQuestSummaries } from "./quest-summary-rows.ts";
-import { makeTaskReads, taskColumns } from "./task-rows.ts";
+import { insertQuestion, makeTaskReads, taskColumns } from "./task-rows.ts";
+
+/**
+ * What a lead is told when the artifacts its own completion returns voided evidence (#1445): the
+ * version it makes replaced the one a criterion was accepted on. Empty when they voided none.
+ */
+const returnedAgain = (registered: ReadonlyArray<JournaledEvent>, voided: ReadonlyArray<JournaledEvent>) => {
+  if (voided.length === 0) return "";
+  const named = registered
+    .flatMap((event) => (event._tag === "ArtifactRegistered" ? [`"${event.artifact.title}"`] : []))
+    .join(", ");
+  return ` Returning ${named} from this completion makes a newer version, which replaces the version a criterion was accepted on. The Quest already holds what its Tasks returned, so leave it out of artifacts.`;
+};
 
 const refuse = (reason: TaskRefusal, message: string) => Effect.fail(new TaskRefused({ reason, message }));
 
@@ -784,11 +797,27 @@ export const TaskRepositoryLive = Layer.effect(
         const { ledger: open, consumes, superseded } = yield* ledger.readFor(task, completion.carried);
         const refusal = ledgerRefusal(open);
         if (refusal !== null) return yield* refuse(refusal.reason, refusal.message);
-        // A Quest completes only once each required criterion is accepted or waived (#1445).
-        const [quest] = yield* read.questsOn([task.id]);
-        const unmet = quest === undefined ? [] : unmetCriteria(quest.criteria);
-        if (unmet.length > 0) return yield* refuse("criteria-unmet", unmetCriteriaText(task.id, unmet));
         return { consumes, superseded };
+      });
+
+    /**
+     * The criteria gate (#1445), on the records as the completion leaves them: what it returns is
+     * registered first, so a version it makes voids the evidence of the one it replaced. A Quest
+     * completes only once each required criterion is accepted or waived. Returns the events of the
+     * artifacts it registered and the criteria they voided.
+     */
+    const criteriaHold = (task: Task, completed: ReadonlyArray<JournaledEvent>, first: number) =>
+      Effect.gen(function* () {
+        const [quest] = yield* read.questsOn([task.id]);
+        if (quest === undefined) return [];
+        const registered = yield* registerArtifacts(sql, completed, first);
+        const voided = yield* voidReplacedEvidence(sql, registered, first + registered.length);
+        const [now] = yield* read.questsOn([task.id]);
+        const unmet = unmetCriteria(now?.criteria ?? []);
+        if (unmet.length > 0) {
+          return yield* refuse("criteria-unmet", unmetCriteriaText(task.id, unmet, returnedAgain(registered, voided)));
+        }
+        return [...registered, ...voided];
       });
 
     const completeTask: TaskRepository["Service"]["completeTask"] = (taskId, expected, completion) =>
@@ -823,7 +852,8 @@ export const TaskRepositoryLive = Layer.effect(
             })}`;
           }
           const events: Array<JournaledEvent> = [{ _tag: "TaskCompleted", task, artifacts }];
-          events.push(...(yield* automatic(task, completion.at, revision + 1)));
+          events.push(...(yield* criteriaHold(task, events, revision + events.length)));
+          events.push(...(yield* automatic(task, completion.at, revision + events.length)));
           if (completion.uncommitted !== undefined) {
             const checkpoint = new Checkpoint({
               id: completion.uncommitted.id,
@@ -936,22 +966,7 @@ export const TaskRepositoryLive = Layer.effect(
             answeredAt: null,
             revision,
           });
-          yield* sql`INSERT INTO questions ${sql.insert({
-            id: question.id,
-            task_id: question.taskId,
-            asker_id: question.askerId,
-            recipient_id: question.recipientId,
-            chain: "[]",
-            text: question.text,
-            state: question.state,
-            answer: null,
-            answered_by: null,
-            created_at: question.createdAt,
-            answered_at: null,
-            options: JSON.stringify(question.options),
-            recommended: question.recommended,
-            revision,
-          })}`;
+          yield* insertQuestion(sql, question);
           return { value: question, events: [{ _tag: "QuestionAsked", question } as const] };
         }),
       );

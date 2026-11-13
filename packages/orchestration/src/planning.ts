@@ -20,7 +20,6 @@ import {
   type TaskWait,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { askedByYou } from "./asked-by-you.ts";
 import type { Authority, PathSeparator } from "./authority.ts";
 import { cut, planNote } from "./briefs.ts";
 import {
@@ -55,6 +54,31 @@ const notDelivered = (task: Task, delivered: boolean | undefined) =>
       "Finish what is missing, or ask the user with ask what to do instead. The Quest stays open meanwhile. If the user asked you to stop, call stop_quest instead."
     : `Task ${task.id} is not complete yet. Say whether its result delivers everything the user asked for, where they asked for it: ` +
       "call complete_task again with delivered: true if it does. If it does not, finish what is missing, or ask the user with ask what to do, and leave the Quest open.";
+
+/**
+ * Whether the turn making a call is your request (#1346): it answers a message of yours in the chat,
+ * or carries your answer to a question its hob asked about `task`. A turn woken by a member's report,
+ * a note or a finding is neither, whatever it says.
+ */
+const askedByYou = (tasks: TaskRepository["Service"], scope: CallScope, task: Task) =>
+  Effect.gen(function* () {
+    if (scope.caller.messageId !== undefined) return true;
+    const carried = new Set<string>((scope.caller.carried ?? []).map((each) => each.itemId));
+    if (carried.size === 0) return false;
+    const ledger = yield* tasks.readLedger(task.id);
+    return Option.match(ledger, {
+      onNone: () => false,
+      onSome: (read) =>
+        read.open.some(
+          (entry) =>
+            entry._tag === "Item" &&
+            carried.has(entry.item.id) &&
+            entry.item.payload._tag === "answer" &&
+            entry.item.payload.question.askerId === scope.caller.agentId &&
+            entry.item.payload.question.answeredBy?._tag === "User",
+        ),
+    });
+  });
 
 /** What a lead is told when it tries to stop a Quest the user did not ask it to stop (#1346). */
 const notAsked = (quest: Quest) =>

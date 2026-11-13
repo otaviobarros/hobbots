@@ -298,7 +298,7 @@ export const TaskToolInputs = {
     criterion_id: id("The acceptance criterion to check, as start_quest and read_tasks give it."),
     verdict: Schema.Literals(["accepted", "needs-rework", "waived"]).annotate({
       description:
-        "accepted: the evidence shows it holds. needs-rework: the work does not meet it yet. waived: it no longer has to hold; a required one only when the user asked, in their message this turn answers or their answer to your ask.",
+        'accepted: the evidence shows it holds. needs-rework: the work does not meet it yet. waived: it no longer has to hold. You waive an optional one; for a required one the hub asks the user, and waives it only once they choose "Waive it".',
     }),
     reason: text("Why, in a sentence: what you checked, what is missing, or why it is waived."),
     evidence: Schema.optionalKey(
@@ -527,8 +527,6 @@ export const TaskToolRefusal = Schema.Literals([
   "stop-not-asked",
   // A stop_quest from a turn whose Task leads no Quest you asked for (#1346).
   "not-a-quest",
-  // A waiver of a required criterion from a turn that is neither your message nor your answer to it (#1445).
-  "waive-not-asked",
   // A Quest's lead saying it delivered while nothing is where the user asked for it (#1215).
   "not-at-destination",
   // A question with choices about a file the user named and is not there, none worded to let it go (#1219).

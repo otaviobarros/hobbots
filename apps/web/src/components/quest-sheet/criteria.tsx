@@ -49,6 +49,9 @@ export function QuestCriteria({ tree, hobs }: { tree: TaskTree; hobs: HobLookup 
                   {each.voidedAt !== null && <> · {copy.voided}</>}
                 </span>
               ))}
+              {criterion.waiverAsk !== null && (
+                <span className="text-detail text-text-secondary">{copy.waiverAsked}</span>
+              )}
               {who !== null && criterion.decided !== null && (
                 <span className="text-detail text-text-secondary wrap-anywhere">
                   {copy.decidedBy({ who, reason: criterion.decided.reason })}

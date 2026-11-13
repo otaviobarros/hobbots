@@ -19,7 +19,7 @@ import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
 import { expireCampSuggestions, raiseCampSuggestions } from "./camp-suggestion-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
-import { voidReplacedEvidence } from "./criteria-rows.ts";
+import { voidReplacedEvidence, waiveOnAnswers } from "./criteria-rows.ts";
 import { refreshQuestSummaries } from "./quest-summary-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
 
@@ -440,7 +440,13 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
       artifacts,
       first + items.length + grants.length + claims.length + artifacts.length,
     );
-    const before = [...items, ...grants, ...claims, ...artifacts, ...voided];
+    // Your answer to a lead's ask to waive a required criterion waives it, or leaves it (#1445).
+    const waived = yield* waiveOnAnswers(
+      sql,
+      events,
+      first + items.length + grants.length + claims.length + artifacts.length + voided.length,
+    );
+    const before = [...items, ...grants, ...claims, ...artifacts, ...voided, ...waived];
     // A summary counts what Tasks made, so it reads the artifacts registered just now too.
     const summarized = [
       ...before,

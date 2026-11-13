@@ -10,18 +10,21 @@ import {
   type Evidence,
   IllegalCriterionTransition,
   type JournaledEvent,
+  OWNER_ACTOR,
   Quest,
+  Question,
   QuestStates,
   type RegisteredArtifactId,
   type TaskId,
   type TaskRefusal,
   TaskRefused,
+  WAIVER_CHOICES,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { type ArtifactRow, artifactFromRow, tasksThatMade } from "./artifact-rows.ts";
 import type { makeJournaledChange } from "./journal.ts";
-import { makeTaskReads } from "./task-rows.ts";
+import { insertQuestion, makeTaskReads } from "./task-rows.ts";
 
 // A Quest's acceptance criteria (#1445), kept as JSON on its row, in order. Each change goes through
 // `CriterionMachine` and is journaled as `QuestCriteriaChanged`, with the whole Quest.
@@ -140,7 +143,7 @@ const notAllowed = (criterion: Criterion, check: CriterionCheck) => {
 export const makeCriteriaChanges = (
   sql: SqlClient.SqlClient,
   change: ReturnType<typeof makeJournaledChange>,
-): Pick<TaskRepository["Service"], "checkCriterion" | "linkCriteria"> => {
+): Pick<TaskRepository["Service"], "checkCriterion" | "linkCriteria" | "askToWaive"> => {
   const read = makeTaskReads(sql);
 
   const questOf = (questId: string) =>
@@ -160,17 +163,23 @@ export const makeCriteriaChanges = (
         }`;
   };
 
+  /** A criterion of a Quest still under way, refused for an ended Quest or an unknown criterion. */
+  const openCriterion = (questId: string, criterionId: string) =>
+    Effect.gen(function* () {
+      const quest = yield* questOf(questId);
+      if (!QuestStates.takesWork(quest)) {
+        return yield* refuse("quest-ended", `Quest ${questId} is ${quest.state}, so its criteria no longer change`);
+      }
+      const unknown = missing(quest, [criterionId]);
+      if (unknown !== null) return yield* refuse("criterion-missing", unknown);
+      return { quest, criterion: quest.criteria.find((each) => each.id === criterionId) as Criterion };
+    });
+
   return {
     checkCriterion: (questId, criterionId, check) =>
       change((revision) =>
         Effect.gen(function* () {
-          const quest = yield* questOf(questId);
-          if (!QuestStates.takesWork(quest)) {
-            return yield* refuse("quest-ended", `Quest ${questId} is ${quest.state}, so its criteria no longer change`);
-          }
-          const unknown = missing(quest, [criterionId]);
-          if (unknown !== null) return yield* refuse("criterion-missing", unknown);
-          const criterion = quest.criteria.find((each) => each.id === criterionId) as Criterion;
+          const { quest, criterion } = yield* openCriterion(questId, criterionId);
           const event: CriterionEvent =
             check._tag === "Accept" ? { ...check, evidence: yield* evidenceOf(sql, quest, check.evidence) } : check;
           const next = Criteria.transition(criterion, event);
@@ -180,6 +189,58 @@ export const makeCriteriaChanges = (
           const criteria = quest.criteria.map((each) => (each.id === criterionId ? next : each));
           const saved = yield* saveCriteria(sql, quest, criteria, revision);
           return { value: saved, events: [{ _tag: "QuestCriteriaChanged", quest: saved } as const] };
+        }),
+      ),
+    askToWaive: (questId, criterionId, request) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const { quest, criterion } = yield* openCriterion(questId, criterionId);
+          const waive = { _tag: "Waive", by: OWNER_ACTOR, reason: request.reason, at: request.at } as const;
+          if (!criterion.required || !Criteria.can(criterion, waive)) {
+            return yield* refuse(
+              "criterion-state",
+              criterion.required
+                ? `Criterion ${criterion.id} is ${criterion.state}, so there is nothing to waive.`
+                : `Criterion ${criterion.id} is optional: waive it yourself.`,
+            );
+          }
+          if (criterion.waiverAsk !== null) {
+            return yield* refuse(
+              "waiver-asked",
+              `You already asked the user whether to waive criterion ${criterion.id}, in question ${criterion.waiverAsk.questionId}. It is waived if they choose "${WAIVER_CHOICES[0].label}".`,
+            );
+          }
+          // The question goes to you, whoever leads above: only your answer waives it.
+          const question = new Question({
+            id: request.questionId,
+            taskId: quest.taskId,
+            askerId: request.askerId,
+            recipientId: null,
+            chain: [],
+            text: `Waive "${criterion.text}"? ${request.reason}`,
+            state: "open",
+            answer: null,
+            answeredBy: null,
+            createdAt: request.at,
+            answeredAt: null,
+            options: WAIVER_CHOICES,
+            recommended: null,
+            revision,
+          });
+          yield* insertQuestion(sql, question);
+          const asked = new Criterion({
+            ...criterion,
+            waiverAsk: { questionId: question.id, reason: request.reason, at: request.at },
+          });
+          const criteria = quest.criteria.map((each) => (each.id === criterionId ? asked : each));
+          const saved = yield* saveCriteria(sql, quest, criteria, revision + 1);
+          return {
+            value: { quest: saved, question },
+            events: [
+              { _tag: "QuestionAsked", question } as const,
+              { _tag: "QuestCriteriaChanged", quest: saved } as const,
+            ],
+          };
         }),
       ),
     linkCriteria: (questId, criterionIds, taskId) =>
@@ -241,4 +302,48 @@ export const voidReplacedEvidence = (
 const voided = (criterion: Criterion, artifactId: RegisteredArtifactId, version: number, at: string) => {
   const next = Criteria.transition(criterion, { _tag: "Void", artifactId, version, at });
   return next instanceof Criterion ? next : null;
+};
+
+/**
+ * Settles the asks to waive a required criterion that your answers close (#1445), at journal
+ * sequences from `first`: your "Waive it" waives it as yours, and any other answer leaves it as it
+ * was. Returns their `QuestCriteriaChanged` events, one per Quest. Only within `sql.withTransaction`.
+ */
+export const waiveOnAnswers = (
+  sql: SqlClient.SqlClient,
+  events: ReadonlyArray<JournaledEvent>,
+  first: number,
+): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+  Effect.gen(function* () {
+    const answered = events.flatMap((event) =>
+      event._tag === "QuestionAnswered" && event.question.answeredBy?._tag === "User" ? [event.question] : [],
+    );
+    if (answered.length === 0) return [];
+    const read = makeTaskReads(sql);
+    const changed: Array<JournaledEvent> = [];
+    for (const question of answered) {
+      for (const quest of yield* read.questsOn([question.taskId])) {
+        if (!quest.criteria.some((each) => each.waiverAsk?.questionId === question.id)) continue;
+        const criteria = quest.criteria.map((each) =>
+          each.waiverAsk?.questionId === question.id ? settledAsk(each, question) : each,
+        );
+        const saved = yield* saveCriteria(sql, quest, criteria, first + changed.length);
+        changed.push({ _tag: "QuestCriteriaChanged", quest: saved });
+      }
+    }
+    return changed;
+  });
+
+/** A criterion once you answered whether to waive it: waived by you on "Waive it", else as it was. */
+const settledAsk = (criterion: Criterion, question: Question): Criterion => {
+  const ask = criterion.waiverAsk;
+  const closed = new Criterion({ ...criterion, waiverAsk: null });
+  if (ask === null || question.picked !== 0) return closed;
+  const next = Criteria.transition(closed, {
+    _tag: "Waive",
+    by: OWNER_ACTOR,
+    reason: ask.reason,
+    at: question.answeredAt ?? ask.at,
+  });
+  return next instanceof Criterion ? next : closed;
 };

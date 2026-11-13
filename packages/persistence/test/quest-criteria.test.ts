@@ -13,6 +13,7 @@ import {
   OWNER_ACTOR,
   type Quest,
   QuestId,
+  QuestionId,
   type Task,
   TaskId,
   TaskRefused,
@@ -246,7 +247,7 @@ describe("a Quest's acceptance criteria", () => {
   });
 
   // covers OR-004
-  it("[TC-DP-1445-05] lets only you waive a required criterion, and completes the Quest once you do", async () => {
+  it("[TC-DP-1445-05] waives a required criterion only on your answer to the question it asks you, and completes the Quest once you do", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -261,14 +262,92 @@ describe("a Quest's acceptance criteria", () => {
         const noProof = yield* refusal(
           tasks.checkCriterion(QUEST, DATE, { ...said, by: LEAD, _tag: "Accept", evidence: [] }),
         );
-        const waived = yield* tasks.checkCriterion(QUEST, DATE, { ...said, by: OWNER_ACTOR, _tag: "Waive" });
+        const ask = (id: string) =>
+          tasks.askToWaive(QUEST, DATE, { questionId: QuestionId.make(id), askerId: ALDRIC, ...said });
+        const optional = yield* refusal(
+          tasks.askToWaive(QUEST, PHOTO, { questionId: QuestionId.make("q-photo"), askerId: ALDRIC, ...said }),
+        );
+        const asked = yield* ask("q-keep");
+        const twice = yield* refusal(ask("q-twice"));
+        // "Keep it" leaves the criterion as it was.
+        yield* tasks.answerQuestion(QuestionId.make("q-keep"), { _tag: "User" }, "Keep it", tick());
+        const kept = yield* questNow;
+        const early = yield* refusal(complete(top.id, null));
+        yield* ask("q-waive");
+        const answered = yield* tasks.answerQuestion(QuestionId.make("q-waive"), { _tag: "User" }, "waive it", tick());
+        const waived = yield* questNow;
         const done = yield* complete(top.id, null);
-        return { rework, noProof, waived, done };
+        return { rework, noProof, optional, asked, twice, kept, early, answered, waived, done };
       }),
     );
     expect(result.rework.value.criteria[0]?.state).toBe("needs-rework");
     expect(result.noProof[0]).toBe("criterion-state");
-    expect(result.waived.value.criteria[0]).toMatchObject({ state: "waived", decided: { by: OWNER_ACTOR } });
+    expect(result.optional).toEqual(["criterion-state", `Criterion ${PHOTO} is optional: waive it yourself.`]);
+    // The question goes to you, whoever leads above, with the choices that decide it.
+    expect(tags(result.asked.entries).slice(0, 2)).toEqual(["QuestionAsked", "QuestCriteriaChanged"]);
+    expect(result.asked.value.question).toMatchObject({
+      taskId: "campaign",
+      askerId: ALDRIC,
+      recipientId: null,
+      text: 'Waive "The page names the launch date"? The date is not set yet',
+      options: [{ label: "Waive it" }, { label: "Keep it" }],
+    });
+    expect(result.asked.value.quest.criteria[0]).toMatchObject({
+      state: "needs-rework",
+      waiverAsk: { questionId: "q-keep", reason: "The date is not set yet" },
+    });
+    expect(result.twice[0]).toBe("waiver-asked");
+    expect(result.kept.criteria[0]).toMatchObject({ state: "needs-rework", waiverAsk: null });
+    expect(result.early[0]).toBe("criteria-unmet");
+    // Your answer and the waiver it makes are journaled together.
+    expect(tags(result.answered.entries)).toEqual(expect.arrayContaining(["QuestionAnswered", "QuestCriteriaChanged"]));
+    expect(result.waived.criteria[0]).toMatchObject({
+      state: "waived",
+      waiverAsk: null,
+      decided: { by: OWNER_ACTOR, reason: "The date is not set yet" },
+    });
+    expect(tags(result.done.entries)).toContain("QuestCompleted");
+  });
+
+  // covers OR-004, OR-006, DP-003
+  it("[TC-DP-1445-07] refuses a completion whose own artifacts void the evidence a criterion was accepted on, and changes nothing", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        for (const id of [ALDRIC, QUILL, ADA]) yield* repo.insertAgent(hob(id));
+        yield* repo.upsertThread(
+          new Thread({ id: THREAD, agentId: ALDRIC, title: "Launch", createdAt: NOW, updatedAt: NOW }),
+        );
+        const tasks = yield* TaskRepository;
+        const top = yield* started("campaign", ALDRIC, null);
+        const quill = yield* started("page", QUILL, top.id);
+        yield* complete(quill.id, "ref-quill");
+        yield* tasks.checkCriterion(QUEST, DATE, {
+          _tag: "Accept",
+          by: LEAD,
+          reason: "The page says Friday 6 December",
+          at: tick(),
+          evidence: [{ _tag: "Returned", artifactId: ArtifactId.make("ref-quill") }],
+        });
+        // Aldric returns the same page from his own Attempt: that would be its version 2.
+        const returned = yield* refusal(complete(top.id, "ref-aldric"));
+        const after = yield* questNow;
+        const versions = yield* (yield* SqlClient.SqlClient)<{
+          readonly latestVersion: number | string;
+        }>`SELECT latest_version FROM artifacts`;
+        const done = yield* complete(top.id, null);
+        return { returned, after, versions, done };
+      }),
+    );
+    expect(result.returned[0]).toBe("criteria-unmet");
+    expect(result.returned[1]).toContain(
+      `${DATE} "The page names the launch date" (its evidence was voided by a newer version)`,
+    );
+    expect(result.returned[1]).toContain('Returning "Launch page" from this completion makes a newer version');
+    // The refusal rolled back the version it would have made, and the void with it.
+    expect(result.versions.map((row) => Number(row.latestVersion))).toEqual([1]);
+    expect(result.after.criteria[0]).toMatchObject({ state: "accepted", evidence: [{ version: 1, voidedAt: null }] });
+    expect(result.after.state).toBe("active");
     expect(tags(result.done.entries)).toContain("QuestCompleted");
   });
 

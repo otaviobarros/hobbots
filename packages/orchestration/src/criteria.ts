@@ -5,14 +5,14 @@ import {
   CriterionId,
   hobActor,
   isAbsolutePath,
-  OWNER_ACTOR,
   type Quest,
+  QuestionId,
   QuestStates,
   type TaskToolInput,
   unmetCriteria,
+  WAIVER_CHOICES,
 } from "@hobbots/domain";
 import { Effect } from "effect";
-import { askedByYou } from "./asked-by-you.ts";
 import { cut } from "./briefs.ts";
 import { type CallScope, fromRecords, journalOf, newId, refuse } from "./call-scope.ts";
 
@@ -65,6 +65,7 @@ export const describeCriterion = (criterion: Criterion) => ({
   ...(criterion.decided === null
     ? {}
     : { decided: { by: criterion.decided.by.kind, reason: criterion.decided.reason, at: criterion.decided.at } }),
+  ...(criterion.waiverAsk === null ? {} : { waiver_asked: { question_id: criterion.waiverAsk.questionId } }),
 });
 
 /** The Quests the caller leads in the tree, and every criterion they have. */
@@ -78,14 +79,6 @@ const unknownCriterion = (scope: CallScope, id: string) => {
       : `Their criteria: ${listed.join("; ")}.`
   }`;
 };
-
-/**
- * Why a required criterion is not waived (#1445): only the user waives one, in a message this turn
- * answers or in their answer to the lead's ask.
- */
-const notAskedToWaive = (criterion: Criterion) =>
-  `Criterion ${criterion.id} is required, and only the user waives a required criterion: in a message to you, or in their answer to your ask, and this turn is neither. ` +
-  "Ask the user with ask whether to waive it, and call check_criterion with waived in the turn their answer wakes. Otherwise finish the work it needs.";
 
 /** What is left to check on the Quest after a check, for its lead. */
 const leftText = (quest: Quest) => {
@@ -105,7 +98,7 @@ const doneText = (verdict: TaskToolInput<"check_criterion">["verdict"], criterio
     case "needs-rework":
       return `Criterion ${criterion.id} needs rework. Give the work it needs to a member, or do it, then check it again.`;
     case "waived":
-      return `Criterion ${criterion.id} is waived by ${criterion.decided?.by.kind === "user" ? "the user" : "you"}.`;
+      return `Criterion ${criterion.id} is waived by you.`;
   }
 };
 
@@ -115,14 +108,9 @@ const claimOf = (value: string): EvidenceClaim =>
 
 /**
  * The criterion a check names, once the hub has checked it may be checked: it is on a Quest the
- * caller leads that still takes work, acceptance names evidence, and a required one is waived only
- * on your word. `yours` says the check records your word.
+ * caller leads that still takes work, and acceptance names evidence.
  */
-const checkable = (
-  tasks: TaskRepository["Service"],
-  scope: CallScope,
-  input: Omit<TaskToolInput<"check_criterion">, "key">,
-) =>
+const checkable = (scope: CallScope, input: Omit<TaskToolInput<"check_criterion">, "key">) =>
   Effect.gen(function* () {
     const quest = ledCriteria(scope).find((each) => each.criteria.some((c) => c.id === input.criterion_id));
     const criterion = quest?.criteria.find((each) => each.id === input.criterion_id);
@@ -138,30 +126,57 @@ const checkable = (
         `Criterion ${criterion.id} is accepted only on evidence: name the artifacts that prove it, by the ids read_tasks lists or by their absolute paths.`,
       );
     }
-    // Only you waive a required criterion: the lead records your word, from a turn that carries it.
-    const yours = input.verdict === "waived" && criterion.required;
-    if (yours) {
-      const questTask = scope.tree.tasks.find((each) => each.id === quest.taskId);
-      if (questTask === undefined || !(yield* askedByYou(tasks, scope, questTask))) {
-        return yield* refuse("waive-not-asked", notAskedToWaive(criterion));
-      }
-    }
-    return { quest, criterion, yours };
+    return { quest, criterion };
+  });
+
+/**
+ * Only you waive a required criterion (#1445): its lead's waiver asks you, with the choices "Waive
+ * it" and "Keep it", and your "Waive it" waives it. Nothing the lead says, nor the turn it says it
+ * in, stands for your answer.
+ */
+const askToWaive = (
+  tasks: TaskRepository["Service"],
+  scope: CallScope,
+  quest: Quest,
+  criterion: Criterion,
+  reason: string,
+) =>
+  Effect.gen(function* () {
+    const journal = journalOf();
+    const { quest: asked, question } = journal.keep(
+      yield* fromRecords(
+        tasks.askToWaive(quest.id, criterion.id, {
+          questionId: QuestionId.make(newId()),
+          askerId: scope.caller.agentId,
+          reason,
+          at: scope.at,
+        }),
+      ),
+    );
+    const now = asked.criteria.find((each) => each.id === criterion.id) ?? criterion;
+    return {
+      done: {
+        message:
+          `Criterion ${criterion.id} is required, so only the user waives it: the hub asked them, in question ${question.id}. ` +
+          `If they choose "${WAIVER_CHOICES[0].label}", it is waived as theirs; you hear their answer either way. Until then it holds the Quest open.`,
+        details: { quest_id: quest.id, question_id: question.id, criterion: describeCriterion(now) },
+      },
+      entries: journal.entries,
+    };
   });
 
 export const makeCriteria = ({ tasks }: { readonly tasks: TaskRepository["Service"] }) => ({
   check_criterion: (scope: CallScope, input: Omit<TaskToolInput<"check_criterion">, "key">) =>
     Effect.gen(function* () {
-      const { quest, criterion, yours } = yield* checkable(tasks, scope, input);
-      const evidence = input.evidence ?? [];
-      const said = {
-        by: yours ? OWNER_ACTOR : hobActor(scope.caller.agentId),
-        reason: cut(input.reason, REASON_LIMIT),
-        at: scope.at,
-      };
+      const { quest, criterion } = yield* checkable(scope, input);
+      const reason = cut(input.reason, REASON_LIMIT);
+      if (input.verdict === "waived" && criterion.required) {
+        return yield* askToWaive(tasks, scope, quest, criterion, reason);
+      }
+      const said = { by: hobActor(scope.caller.agentId), reason, at: scope.at };
       const check: CriterionCheck =
         input.verdict === "accepted"
-          ? { ...said, _tag: "Accept", evidence: evidence.map(claimOf) }
+          ? { ...said, _tag: "Accept", evidence: (input.evidence ?? []).map(claimOf) }
           : { ...said, _tag: input.verdict === "waived" ? "Waive" : "Rework" };
       const journal = journalOf();
       const checked = journal.keep(yield* fromRecords(tasks.checkCriterion(quest.id, criterion.id, check)));

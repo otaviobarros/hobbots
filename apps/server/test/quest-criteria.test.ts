@@ -1,12 +1,16 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { TaskRepository } from "@hobbots/agents";
 import type { RuntimeKind, TaskTree } from "@hobbots/domain";
+import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
+import { EventBus } from "../src/event-bus.ts";
 import { hub, ownedBy, PIP, partyHub, QUILL, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1445: a Quest's acceptance criteria were strings folded into its brief, and `delivered`
 // was its lead's own word. Each criterion now has an id, and a Quest completes only once each
-// required one is accepted on evidence or you waive it. Evidence names an artifact version, and a
+// required one is accepted on evidence or you waive it, by choosing to in your answer to the
+// question its lead's waiver asks you. Evidence names an artifact version, and a
 // newer version voids it. The hub checks every call, so it holds for every runtime.
 
 let dispose: (() => Promise<void>) | undefined;
@@ -63,7 +67,6 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
         hub("wait_for", { key: "wait", tasks: ["$page.task_id"] }),
         // The turn Pip's result wakes is no request of yours.
         `fake:then ${hub("complete_task", { key: "early", delivered: true, summary: "The page is written" })}`,
-        `fake:then ${hub("check_criterion", { key: "waive-date", criterion_id: DATE, verdict: "waived", reason: "No date yet" })}`,
         `fake:then ${hub("check_criterion", { key: "waive-photo", criterion_id: PHOTO, verdict: "waived", reason: "No photo this time" })}`,
         `fake:then ${hub("check_criterion", { key: "accept", criterion_id: DATE, verdict: "accepted", reason: "It says Friday 6 December", evidence: ["$pip-done.artifacts.0"] })}`,
         `fake:then ${hub("complete_task", { key: "whole", delivered: true, summary: "The page is written" })}`,
@@ -74,7 +77,6 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
     expect(answers.get("quest")).toContain("Its acceptance criteria have ids");
     expect(answers.get("early")).toContain("Refused (criteria-unmet)");
     expect(answers.get("early")).toContain('"The page names the launch date" (not checked yet)');
-    expect(answers.get("waive-date")).toContain("Refused (waive-not-asked)");
     expect(answers.get("waive-photo")).toContain("is waived by you");
     expect(answers.get("accept")).toContain('is accepted on "Launch page" version 1');
     expect(answers.get("accept")).toContain("Every required criterion of the Quest is accepted or waived.");
@@ -133,25 +135,61 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
   }, 30_000);
 
   // covers OR-004, IN-004
-  it("[TC-OR-1445-06] waives a required criterion when you ask in the message its turn answers, as yours", async () => {
+  it("[TC-OR-1445-06] waives a required criterion only when you choose to, in your answer to the question it asks you", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;
     await run(
       send([
+        // Even your own message asking to skip it does not waive it: your answer to the question does.
         "Write the launch page. The date is not set, so skip that check.",
         startQuest,
-        hub("check_criterion", { key: "waive", criterion_id: DATE, verdict: "waived", reason: "You said to skip it" }),
-        hub("complete_task", { key: "whole", delivered: true, summary: "The page is written, without a date" }),
+        hub("check_criterion", { key: "waive", criterion_id: DATE, verdict: "waived", reason: "The date is not set" }),
+        hub("complete_task", { key: "early", delivered: true, summary: "The page is written, without a date" }),
+        // Your "Keep it" wakes Frodo: the criterion still holds the Quest open, so he asks again.
+        `fake:then ${hub("complete_task", { key: "kept", delivered: true, summary: "The page is written, without a date" })}`,
+        `fake:then ${hub("check_criterion", { key: "again", criterion_id: DATE, verdict: "waived", reason: "The date is still not set" })}`,
+        // Your "Waive it" wakes him again, and the Quest completes.
+        `fake:then fake:then ${hub("complete_task", { key: "whole", delivered: true, summary: "The page is written, without a date" })}`,
       ]),
     );
+    const answer = (choice: string) =>
+      Effect.gen(function* () {
+        const tree = yield* treeWhen((each) => each.questions.some((question) => question.state === "open"));
+        const question = tree.questions.find((each) => each.state === "open");
+        if (question === undefined) throw new Error("no open question");
+        const tasks = yield* TaskRepository;
+        const bus = yield* EventBus;
+        const at = new Date().toISOString();
+        yield* bus.publish((yield* tasks.answerQuestion(question.id, { _tag: "User" }, choice, at)).entries);
+        return question;
+      });
+    const first = await run(answer("Keep it"));
+    expect(first).toMatchObject({
+      recipientId: null,
+      text: 'Waive "The page names the launch date"? The date is not set',
+      options: [{ label: "Waive it" }, { label: "Keep it" }],
+    });
+    await run(
+      treeWhen(
+        (tree) =>
+          tree.questions.filter((question) => question.state === "open").length === 1 && tree.questions.length === 2,
+      ),
+    );
+    await run(answer("Waive it"));
     const finished = await run(treeWhen(done));
-    expect(answers.get("waive")).toContain("is waived by the user");
+
+    expect(answers.get("waive")).toContain("only the user waives it: the hub asked them");
+    // While you have not answered, the question itself holds the Quest open.
+    expect(answers.get("early")).toContain("Refused (questions-open)");
+    expect(answers.get("kept")).toContain("Refused (criteria-unmet)");
+    expect(answers.get("kept")).toContain("(not checked yet)");
     const [quest] = finished.quests;
     expect(quest?.state).toBe("completed");
     expect(quest?.criteria[0]).toMatchObject({
       state: "waived",
-      decided: { by: { kind: "user" }, reason: "You said to skip it" },
+      waiverAsk: null,
+      decided: { by: { kind: "user" }, reason: "The date is still not set" },
     });
   }, 30_000);
 });
