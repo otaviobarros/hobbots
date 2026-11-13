@@ -237,6 +237,13 @@ export const runSessionTurn = (
       attemptId: Effect.succeed(turn.attemptId),
     });
     const search = webSearchRequest(turn.access, webUse, adapter);
+    // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
+    const { notOffered, ...offer } = yield* Effect.provideService(turn.offer(approvals), TurnSkillsInUse, given);
+    // A call to a tool the session was not offered is recorded on its Task, with why it lacks it (#1356).
+    const explained = (event: RuntimeEvent): Effect.Effect<RuntimeEvent> =>
+      event._tag !== "ToolDenied" || event.notOffered === undefined || notOffered === undefined
+        ? Effect.succeed(event)
+        : Effect.map(notOffered({ tool: event.tool, ...event.notOffered }), (reason) => ({ ...event, reason }));
     yield* activity
       .run(
         {
@@ -264,8 +271,7 @@ export const runSessionTurn = (
               webMark.read({ _tag: "Search", query: redactor.text(event.query) }),
             ),
           ...(turn.steers === undefined || adapter.steersTurns !== true ? {} : { steers: turn.steers }),
-          // A hub tool reads the revisions this turn mounted, not what a rollout moved since.
-          ...(yield* Effect.provideService(turn.offer(approvals), TurnSkillsInUse, given)),
+          ...offer,
         },
         adapter.sendPrompt,
       )
@@ -304,7 +310,7 @@ export const runSessionTurn = (
             ending = { _tag: "Replied", text: event.text };
             usage = event.usage ?? null;
           }
-          return Effect.andThen(confirmBrief, stepOf(event));
+          return Effect.andThen(confirmBrief, Effect.flatMap(explained(event), stepOf));
         }),
         Effect.catchTags({
           RuntimeError: (error) =>

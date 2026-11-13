@@ -23,6 +23,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   approvalNote,
+  notOfferedDenial,
   operationDecision,
   type PromptRequest,
   type Redactor,
@@ -92,7 +93,14 @@ import {
   withCommitIdentity,
 } from "./sandbox.ts";
 import { askedMount, holdSkillFolder, skillFolderScope } from "./skills.ts";
-import { commandOf, offeredTools, readOnlyCommands, toolLabel, WEB_SEARCH_TOOL } from "./tool-calls.ts";
+import {
+  claudeCodeRuntimeTool,
+  commandOf,
+  offeredTools,
+  readOnlyCommands,
+  toolLabel,
+  WEB_SEARCH_TOOL,
+} from "./tool-calls.ts";
 import { fullToolOutput, savedOutputFolder } from "./tool-output.ts";
 import { claudeWebSearched, recordSearched } from "./web-search.ts";
 
@@ -626,6 +634,63 @@ export const planFromReport = (report: SDKUsageReport | undefined, checkedAt: st
   };
 };
 
+/** The words Claude Code answers a call to a tool the session does not have with, as its tool_result says. */
+const NOT_OFFERED_RESULT = /^<tool_use_error>Error: No such tool available: (\S+?)(?:\.\s.*)?<\/tool_use_error>$/s;
+
+/** The text of a tool_result block's content, a string or text blocks. */
+const resultText = (content: unknown): string =>
+  typeof content === "string"
+    ? content
+    : Array.isArray(content)
+      ? content
+          .map((block: { readonly type?: unknown; readonly text?: unknown }) =>
+            block.type === "text" && typeof block.text === "string" ? block.text : "",
+          )
+          .join("")
+      : "";
+
+/**
+ * The calls to tools the session was never offered (#1356). Claude Code answers such a call with
+ * an error result of its own before any hook runs, so Hobbots reads it from the turn's messages: the
+ * model's tool_use, and the "No such tool available" result that answers it. A hub tool is named
+ * without the hub server's prefix, as the session's offer names it. A subagent's calls are its own.
+ */
+const notOfferedCalls = () => {
+  const calls = new Map<string, { readonly name: string; readonly input: Record<string, unknown> }>();
+  return (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
+    if ((message.type !== "assistant" && message.type !== "user") || message.parent_tool_use_id !== null) return [];
+    const content = message.message.content;
+    if (!Array.isArray(content)) return [];
+    if (message.type === "assistant") {
+      for (const block of content) {
+        if (block.type === "tool_use") {
+          const input = block.input !== null && typeof block.input === "object" ? block.input : {};
+          calls.set(block.id, { name: block.name, input: input as Record<string, unknown> });
+        }
+      }
+      return [];
+    }
+    return content.flatMap((block): ReadonlyArray<RuntimeEvent> => {
+      if (block.type !== "tool_result" || block.is_error !== true) return [];
+      const said = NOT_OFFERED_RESULT.exec(resultText(block.content).trim())?.[1];
+      if (said === undefined) return [];
+      const call = calls.get(block.tool_use_id);
+      calls.delete(block.tool_use_id);
+      // The call's own name, exact; the result's words may add a sentence after it.
+      const named = call?.name ?? said;
+      const tool = hubToolOf(named) ?? named;
+      return [
+        notOfferedDenial({
+          id: block.tool_use_id,
+          tool,
+          label: toolLabel(tool, call?.input ?? {}),
+          runtimeTool: claudeCodeRuntimeTool(named),
+        }),
+      ];
+    });
+  };
+};
+
 /**
  * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
  * becomes a step that starts with the block and ends when it stops. `tools` are the turn's, whose
@@ -634,6 +699,7 @@ export const planFromReport = (report: SDKUsageReport | undefined, checkedAt: st
 export const turnEvents = (tools: ToolTurn | null = null) => {
   // The step of each open thinking block, by content block index.
   const open = new Map<number, string>();
+  const refused = notOfferedCalls();
   let steps = 0;
   const endAll = (): ReadonlyArray<RuntimeEvent> => {
     const ended = Array.from(open.values(), (id): RuntimeEvent => ({ _tag: "StepEnded", id }));
@@ -685,6 +751,10 @@ export const turnEvents = (tools: ToolTurn | null = null) => {
             return [];
         }
       }
+      // A call to a tool the session was never offered, which Claude Code refused itself (#1356).
+      case "assistant":
+      case "user":
+        return refused(message);
       case "rate_limit_event":
         if (!limitReached(message.rate_limit_info)) return [];
         throw new RuntimeLimitReached({

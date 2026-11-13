@@ -2,6 +2,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import {
   AdditionalRuntimes,
   hubCallStep,
+  notOfferedDenial,
   type PromptRequest,
   RuntimeAdapter,
   RuntimeError,
@@ -710,6 +711,15 @@ export const scriptedHubEvents = (
         Effect.gen(function* () {
           yield* steered(call.first);
           const report = (event: RuntimeEvent) => Queue.offerUnsafe(queue, event);
+          // A tool the turn was not offered never reaches the hub: the runtime refuses it, as Claude
+          // Code and Codex do, and the turn reads that it did not run (#1356).
+          if (!hub.tools.some((tool) => tool.name === call.name)) {
+            const denied = notOfferedDenial({ id: call.id, tool: call.name, label: call.name, runtimeTool: null });
+            report(denied);
+            answers.push(`${call.name}: ${denied.reason}`);
+            yield* Queue.end(queue);
+            return;
+          }
           report({
             _tag: "StepStarted",
             id: call.id,

@@ -85,6 +85,28 @@ const artifactsOf = (task: Task, tree: TaskTree) => {
   return artifacts.length === 0 ? {} : { artifacts };
 };
 
+/** How many of a Task's latest refused tool calls `read_tasks` shows. */
+const RECENT_REFUSALS = 3;
+
+/**
+ * The latest tool calls the hub recorded as refused on a Task (#575, #1356), newest first, such as
+ * a call to a tool its member's session was not offered, with why; nothing when there are none.
+ */
+const refusalsOf = (task: Task, tree: TaskTree) => {
+  const refused = tree.refusals
+    .filter((each) => each.taskId === task.id)
+    .toSorted((a, b) => b.refusedAt.localeCompare(a.refusedAt))
+    .slice(0, RECENT_REFUSALS)
+    .map((each) => ({
+      tool: each.tool,
+      reason: each.reason,
+      message: each.message,
+      ...(each.tries > 1 && { tries: each.tries }),
+      at: each.refusedAt,
+    }));
+  return refused.length === 0 ? {} : { refused_calls: refused };
+};
+
 /** One Task as `read_tasks` reports it: where it stands, what holds it and what it last said. */
 const describeTask = (task: Task, tree: TaskTree, caller: string) => {
   // What its hob and the hub reported, newest first; the hub's own state changes show in `state`.
@@ -112,6 +134,7 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
     }),
     ...(task.result === null ? {} : { result: task.result.summary }),
     ...artifactsOf(task, tree),
+    ...refusalsOf(task, tree),
   };
 };
 

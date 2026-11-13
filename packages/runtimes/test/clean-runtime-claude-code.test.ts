@@ -374,6 +374,34 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     );
   });
 
+  // covers PE-001, ADR 014 (#1356)
+  it("[TC-PE-1356-01] a call to a tool the session was not offered is reported as refused, not offered", {
+    timeout: 120_000,
+  }, async () => {
+    const contract = stepRecordingContract();
+    // The sandbox is not started here, so the session is offered no Bash.
+    const { exit } = await turn(
+      { hubTools: contract.hubTools, recordToolStart: contract.recordToolStart, tools: access },
+      [
+        { tool: "github_comment", input: { body: "Looks good." } },
+        { tool: "mcp__hobbots__github_review", input: { body: "Approve." } },
+        { tool: "Bash", input: { command: "git diff" } },
+        { say: "Done." },
+      ],
+    );
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const events = Exit.isSuccess(exit) ? exit.value : [];
+    const refused = events.filter((event) => event._tag === "ToolDenied");
+    expect(refused.map((event) => (event._tag === "ToolDenied" ? [event.tool, event.notOffered] : null))).toEqual([
+      ["github_comment", { runtimeTool: null }],
+      ["github_review", { runtimeTool: null }],
+      ["Bash", { runtimeTool: "commands" }],
+    ]);
+    expect(refused[2]).toMatchObject({ operation: "run-commands", label: "Running git diff", decidedBy: "policy" });
+    // None of them reached the hub or was recorded as started.
+    expect(contract.order).toEqual([]);
+  });
+
   // covers ADR 036 (On every runtime)
   it("[TC-PE-1267-16] records a web_fetch call's step before the hub reads the page", {
     timeout: 120_000,

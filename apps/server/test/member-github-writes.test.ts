@@ -408,10 +408,104 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
     const tools = offered(await run(firstPrompt(requests, pip)));
     expect(tools).toEqual(expect.arrayContaining(["github_push", "github_open_pull_request"]));
     expect(tools).not.toContain("github_comment");
+    // Its runtime refuses the call, and the hub records it with why (#1356).
     expect(tree.refusals).toEqual([
-      expect.objectContaining({ agentId: PIP, taskId: pip.id, tool: "github_comment", reason: "unknown-tool" }),
+      expect.objectContaining({
+        agentId: PIP,
+        taskId: pip.id,
+        tool: "github_comment",
+        reason: "not-offered",
+        message: expect.stringContaining("It is not offered because its answer is Never."),
+      }),
     ]);
     expect(github.requests.slice(before).filter((sent) => sent.path.endsWith("/comments"))).toEqual([]);
+  }, 60_000);
+});
+
+/**
+ * Rook, on `runtime`, holds no GitHub Charm and is delegated a review to post: its session is not
+ * offered `github_comment`, its runtime refuses the call, and the hub records it on Rook's Task with
+ * why. The lead's read_tasks shows it (#1356).
+ */
+const notOfferedOn = async (runtime: HubCallRuntime) => {
+  const name = runtime.name;
+  const started = await startGitHubHub(name === "fake" ? null : runtime);
+  const { run, answers } = started;
+  await run(givePolicy({ ...POLICY, charms: { granted: [], overrides: {} } }));
+  const before = github.requests.length;
+  await run(
+    delegate("Rook", [
+      hub("github_comment", { key: `comment-${name}`, folder: project, number: 1, body: "Looks good." }),
+      hub("complete_task", { delivered: false, key: `done-${name}`, summary: "Could not post the review" }),
+    ]),
+  );
+  const tree = await run(treeWhen((each) => memberTask(each, ROOK)?.state === "completed"));
+  const rook = taskOf(tree, ROOK);
+  const why =
+    "github_comment is not offered in this session, so it did not run. It is not offered because Rook does not hold the GitHub Charm.";
+  expect(tree.refusals, name).toEqual([
+    expect.objectContaining({
+      agentId: ROOK,
+      taskId: rook.id,
+      tool: "github_comment",
+      reason: "not-offered",
+      message: why,
+    }),
+  ]);
+  expect(
+    github.requests.slice(before).filter((sent) => sent.path.endsWith("/comments")),
+    name,
+  ).toEqual([]);
+  // The lead reads it with read_tasks, as it reads the member's state.
+  await run(send(["Where does the review stand?", hub("read_tasks", { key: `read-${name}` })]));
+  await run(messagesWhen(() => answers.has(`read-${name}`)));
+  const read = answers.get(`read-${name}`) ?? "";
+  const details = JSON.parse(read.slice(read.indexOf("\n{") + 1)) as {
+    readonly tasks: ReadonlyArray<{ readonly task_id: string; readonly refused_calls?: ReadonlyArray<unknown> }>;
+  };
+  expect(details.tasks.find((task) => task.task_id === rook.id)?.refused_calls, name).toEqual([
+    expect.objectContaining({ tool: "github_comment", reason: "not-offered", message: why }),
+  ]);
+};
+
+describe("A call to a tool a member's session was not offered (#1356)", () => {
+  // covers PE-001, OR-002, ADR 014 (Enforcement)
+  it("[TC-OR-1356-01] on each runtime, a member's call to github_comment it holds no Charm for is refused on its Task with why, and read_tasks shows it", async () => {
+    const runtimes = await hubCallRuntimes();
+    try {
+      expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
+      for (const runtime of runtimes.runtimes) await notOfferedOn(runtime);
+    } finally {
+      runtimes.close();
+    }
+  }, 300_000);
+
+  // covers PE-001, ADR 014 (Enforcement)
+  it("[TC-OR-1356-02] a lead's call in chat to a tool its turn was not offered shows as a refused step, recorded on the Task it works on", async () => {
+    const { run } = await startGitHubHub();
+    await run(
+      send([
+        "Review the parser",
+        hub("delegate_task", {
+          key: "chat-work",
+          hob: "Rook",
+          brief: ["Review the parser", hub("complete_task", { delivered: true, key: "cw", summary: "Read it" })].join(
+            "\n",
+          ),
+          authority: { decisions: { "read-files": "allow" }, folders: "all" },
+        }),
+        hub("post_to_slack", { text: "Started the review." }),
+      ]),
+    );
+    const said = "post_to_slack is not offered in this session, so it did not run.";
+    const tree = await run(treeWhen((each) => each.refusals.length > 0));
+    const top = tree.tasks[0] as Task;
+    expect(tree.refusals).toEqual([
+      expect.objectContaining({ taskId: top.id, tool: "post_to_slack", reason: "not-offered", message: said }),
+    ]);
+    const messages = await run(messagesWhen((all) => all.some((m) => m.steps.some((step) => step.state === "denied"))));
+    const steps = messages.flatMap((m) => m.steps).filter((step) => step.state === "denied");
+    expect(steps).toEqual([expect.objectContaining({ label: "post_to_slack", reason: said, decidedBy: "policy" })]);
   }, 60_000);
 });
 

@@ -11,7 +11,7 @@ import type {
   WebReadMark,
 } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
-import type { HubTools } from "./runtime.ts";
+import type { HubOffer, HubTools } from "./runtime.ts";
 
 /** A chat turn that may work on a Task: the hob, its thread, the prompt and the brain it runs on. */
 export interface ChatTurn {
@@ -78,6 +78,11 @@ export interface ChatTaskTurn {
    * recorded on the Task the turn works on (#664).
    */
   readonly recordCharms: (charms: HubTools | null) => HubTools | null;
+  /**
+   * Records a call to a tool the turn was not offered as refused on the Task the turn works on, if
+   * any, as a refused Task tool call is, and says why it did not run (#1356).
+   */
+  readonly notOffered?: HubOffer["notOffered"];
   /** The Attempt the turn runs on its Task: from the start when briefed on one, once a call starts one, else null. */
   readonly attempt: Effect.Effect<AttemptId | null>;
   /** The folders the Quest on its Task works in, which the turn's activity is tracked in (#670); null for all. */

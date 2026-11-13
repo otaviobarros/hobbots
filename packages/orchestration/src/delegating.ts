@@ -1,5 +1,4 @@
 import {
-  type DroppedTool,
   type FolderChecksShape,
   type HobbotsRepository,
   type OfferedTool,
@@ -52,6 +51,7 @@ import {
   type TaskToolLimits,
 } from "./call-scope.ts";
 import { briefTargets, defaultFolders, namedFolders, outOfReach, withFolders } from "./default-folders.ts";
+import { dropWords } from "./not-offered.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -241,26 +241,6 @@ const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
 
 const ANSWER_WORDS = { allow: "Allow", ask: "Ask", never: "Never: each call is refused" } as const;
 
-/** Why a tool is not offered, in words for the lead. */
-const dropWords = (member: Agent, dropped: DroppedTool): string => {
-  switch (dropped.reason) {
-    case "never":
-      return "its answer is Never";
-    case "not-granted":
-      return `${member.name} does not hold ${dropped.from}`;
-    case "not-connected":
-      return `${dropped.from} is not connected`;
-    case "chats-only":
-      return `${dropped.from} offers its writes only in chats, not in a Task`;
-    case "chat-only":
-      return "its turns are chat-only";
-    case "commands-closed":
-      return "commands need Read files Allow and Edit files Allow or Never";
-    case "no-sandbox":
-      return `${member.name}'s runtime cannot start its sandbox on this hub`;
-  }
-};
-
 /** Whether the lead hears of a tool by name: the runtime's are in the sentence before, and the Task tools are always offered. */
 const named = (tool: { readonly from: string }) => tool.from !== RUNTIME_TOOLS_OWNER && tool.from !== "the Task tools";
 
@@ -281,7 +261,7 @@ const offerWords = (member: Agent, offer: SessionToolOffer): string => {
   });
   const lacks = offer.dropped
     .filter((tool) => named(tool) && tool.reason !== "not-granted" && tool.reason !== "not-connected")
-    .map((tool) => `${tool.tool}, since ${dropWords(member, tool)}`);
+    .map((tool) => `${tool.tool}, since ${dropWords(member.name, tool)}`);
   return [
     byAnswer.length === 0 ? "" : ` Its Charm tools: ${byAnswer.join("; ")}.`,
     lacks.length === 0 ? "" : ` It will not be offered ${lacks.join("; ")}.`,
@@ -316,7 +296,7 @@ const briefNeeds = (member: Agent, brief: string, offer: SessionToolOffer): stri
   });
   if (lacking.length === 0) return "";
   const each = lacking.map(
-    ({ need, tool }) => `${need.work}, but ${tool.tool} will not be offered: ${dropWords(member, tool)}`,
+    ({ need, tool }) => `${need.work}, but ${tool.tool} will not be offered: ${dropWords(member.name, tool)}`,
   );
   return ` Warning: the brief names ${each.join("; ")}. Do that part yourself, give ${member.name} what it lacks, or bring in a hob that has it.`;
 };

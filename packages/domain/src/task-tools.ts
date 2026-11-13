@@ -451,7 +451,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "read_tasks",
     description:
-      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints, its result and the artifacts it returned, by the id hand_off takes. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
+      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints, the tool calls refused on it and why, its result and the artifacts it returned, by the id hand_off takes. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
     label: "Reading the work",
   },
   {
@@ -545,6 +545,8 @@ export const TaskToolRefusal = Schema.Literals([
   "not-a-repository",
   // A claim made where the hub keeps no claims register.
   "no-register",
+  // A call to a tool the turn's session was not offered, which its runtime refused before the hub saw it (#1356).
+  "not-offered",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;
 

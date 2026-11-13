@@ -47,6 +47,7 @@ import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate, refusalNotice, shellScript } from "./policy.ts";
 import { type ThreadItem, TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
+import { rolloutRefusals } from "./rollout.ts";
 import {
   admitSkills,
   askedSkillInput,
@@ -80,6 +81,8 @@ interface CodexToolTurn {
   readonly tell: (turnId: string, text: string) => Effect.Effect<void>;
   /** Decides the turn's tool calls: the policy for a turn with tools, otherwise every one is refused. */
   readonly gate: CodexToolGate;
+  /** Reports the calls Codex refused as tools it was not offered since it last asked (#1356). */
+  readonly refusals: Effect.Effect<void>;
 }
 
 /** A request Codex sends about a tool call it would run itself. Hub tool calls go to the hub instead. */
@@ -348,9 +351,11 @@ const requestHandlers = (
     const current = turn();
     // Codex asks about calls only while a turn runs, which is after its thread is open.
     if (current === undefined) return Effect.fail(new RuntimeError({ message: "No Codex turn is running." }));
+    // Calls Codex refused before this one show first, so the hub hears of them in order (#1356).
     // Hub tools reach the hub on this channel, so the sandbox holds no hub address or token (ADR 024).
-    if (request.method === "item/tool/call") return callHubTool(hub, request.params, current);
-    return current.gate(request, current);
+    if (request.method === "item/tool/call")
+      return Effect.andThen(current.refusals, callHubTool(hub, request.params, current));
+    return Effect.andThen(current.refusals, current.gate(request, current));
   };
   return Object.fromEntries(
     TURN_SERVER_REQUESTS.map((method) => [
@@ -472,12 +477,14 @@ const settle = <E>(
   now: CodexTurnNow,
   followUp: (notice: string) => Effect.Effect<void, E>,
   report: (event: RuntimeEvent) => void,
+  turnEnded: Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
     while (true) {
       const signal = yield* Queue.take(signals);
       // A Codex turn that is running hears of a command's end once it completes.
       if (signal === "commandEnded" && now.turnId !== null) continue;
+      if (now.turnId !== null) yield* turnEnded;
       // No Codex turn runs from here, so cancelling has none to interrupt.
       now.turnId = null;
       if (signal === "lost" || (signal !== "commandEnded" && signal._tag !== "Completed")) return signal;
@@ -849,6 +856,8 @@ const turnEvents = (
       const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
       thread = threadId;
+      // The calls to tools the thread was not offered, which only its rollout shows (#1356).
+      const refusals = rolloutRefusals(opened.thread.path, report);
       const mapper = codexTurnEvents(
         threadId,
         skillRootsOf(launch.skills),
@@ -866,6 +875,7 @@ const turnEvents = (
         redact: request.redaction?.text ?? ((text) => text),
         tell: tellTurn(server, threadId),
         gate: launch.gate,
+        refusals: refusals.read,
       };
       report({
         _tag: "SessionStarted",
@@ -891,6 +901,7 @@ const turnEvents = (
         Effect.gen(function* () {
           mapper.expect();
           now.ended = yield* Deferred.make<void>();
+          yield* refusals.start;
           const started: TurnStartResponse = yield* server
             .request("turn/start", {
               threadId,
@@ -931,7 +942,12 @@ const turnEvents = (
       );
 
       yield* startTurn(turnPrompt(request, launch.instructions, launch.commits, launch.sandboxNote), asked);
-      return yield* finish(yield* settle(signals, mapper, now, startTurn, report), mapper, report, Queue.end(queue));
+      return yield* finish(
+        yield* settle(signals, mapper, now, startTurn, report, refusals.read),
+        mapper,
+        report,
+        Queue.end(queue),
+      );
     }),
   );
 
