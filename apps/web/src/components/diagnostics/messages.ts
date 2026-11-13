@@ -176,6 +176,7 @@ export const messages = {
     QuestStarted: "Quest started",
     QuestCompleted: "Quest ended",
     QuestStopRequested: "Quest stopped by its lead",
+    QuestCriteriaChanged: "Quest acceptance criteria changed",
     CheckpointRecorded: "Progress noted",
     QuestionAsked: "Question asked",
     QuestionAnswered: "Question answered",

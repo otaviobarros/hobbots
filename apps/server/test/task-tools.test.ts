@@ -892,6 +892,7 @@ describe("hob tools for Tasks and Quests", () => {
       complete_task: { key: "s-complete", summary: "The copy is ready" },
       cancel_task: { key: "s-cancel", task_id: String(TOP) },
       stop_quest: { key: "s-stop", reason: "You asked", summary: "Nothing delivered" },
+      check_criterion: { key: "s-criterion", criterion_id: "c-1", verdict: "needs-rework", reason: "Not yet" },
       claim: { key: "s-claim", scope: "path", path: "README.md" },
     };
     const before = await head();

@@ -3,7 +3,7 @@ import { baseName, extensionOf, isImageFile } from "./activity.ts";
 import { Actor, GITHUB_ACTOR, hobActor } from "./actor.ts";
 import type { JournaledEvent } from "./events.ts";
 import { pullRequestOf } from "./github.ts";
-import { type AgentId, ChapterId, type MessageId, ThreadId } from "./ids.ts";
+import { type AgentId, ChapterId, type MessageId, RegisteredArtifactId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { isInProgress, type Message } from "./message.ts";
 import type { ArtifactRef } from "./quest.ts";
@@ -17,9 +17,6 @@ import type { AttemptId, TaskId } from "./task.ts";
  * holds where the thing is and which record saw it last. Every rule here is pure; the repository
  * runs them in the transaction that journals the records they read.
  */
-
-export const RegisteredArtifactId = Schema.String.pipe(Schema.brand("RegisteredArtifactId"));
-export type RegisteredArtifactId = typeof RegisteredArtifactId.Type;
 
 /** What an artifact is, as the camp sheet groups them. */
 export const RegisteredArtifactKind = Schema.Literals(["code", "page", "doc", "email", "image", "pr", "file"]);

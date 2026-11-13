@@ -16,3 +16,7 @@ export type MessageId = typeof MessageId.Type;
 /** A Task of ADR 018. */
 export const TaskId = Schema.String.pipe(Schema.brand("TaskId"));
 export type TaskId = typeof TaskId.Type;
+
+/** An artifact in the registry (ADR 037): one thing a hob made or changed in a chat or camp. */
+export const RegisteredArtifactId = Schema.String.pipe(Schema.brand("RegisteredArtifactId"));
+export type RegisteredArtifactId = typeof RegisteredArtifactId.Type;

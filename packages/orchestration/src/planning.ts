@@ -38,6 +38,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import { criteriaNote, criterionDetail, newCriteria } from "./criteria.ts";
 import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
 import type { Delivery } from "./delivery.ts";
 import { type DestinationDeps, missingDestinations, notThere } from "./destinations.ts";
@@ -362,6 +363,7 @@ export const makePlanning = ({
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
       const quest = yield* questLimitsFor(scope, limits, task, input);
+      const criteria = newCriteria(input.acceptance);
       // Its work is in the folders the lead names, else those its brief and goal name (#670).
       const lead = (yield* authority(scope, task)).folders;
       const folders =
@@ -369,7 +371,7 @@ export const makePlanning = ({
           ? yield* namedFolders(
               folderChecks,
               lead,
-              [task.brief, input.goal, ...(input.acceptance ?? [])].join("\n"),
+              [task.brief, input.goal, ...criteria.map((each) => each.text)].join("\n"),
               separator,
             )
           : yield* requestedFolders(folderChecks, lead, input.folders, separator);
@@ -380,7 +382,8 @@ export const makePlanning = ({
             id: QuestId.make(newId()),
             taskId: task.id,
             goal: input.goal,
-            acceptance: input.acceptance ?? [],
+            acceptance: criteria.map((each) => each.text),
+            criteria,
             limits: withFolders(quest, folders),
             createdAt: scope.at,
           }),
@@ -388,8 +391,14 @@ export const makePlanning = ({
       );
       return {
         done: {
-          message: `Task ${task.id} is now a Quest. You lead it.${planNote(task)}`,
-          details: { quest_id: started.id, depth: started.depth, max_depth: quest.maxDepth, deadline: quest.deadline },
+          message: `Task ${task.id} is now a Quest. You lead it.${criteriaNote(criteria)}${planNote(task)}`,
+          details: {
+            quest_id: started.id,
+            depth: started.depth,
+            max_depth: quest.maxDepth,
+            deadline: quest.deadline,
+            ...(criteria.length === 0 ? {} : { criteria: criteria.map(criterionDetail) }),
+          },
         },
         entries: journal.entries,
       };

@@ -18,6 +18,7 @@ export * from "./chapter-tools.ts";
 export * from "./charm-call.ts";
 export * from "./claim.ts";
 export * from "./context-pack.ts";
+export * from "./criterion.ts";
 export * from "./decision.ts";
 export * from "./decision-tools.ts";
 export * from "./device.ts";
