@@ -212,6 +212,9 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
+  // Nothing on screen shows members yet (ADR 039).
+  "ThreadMemberAdded",
+  "ThreadMemberChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -223,7 +226,9 @@ type UnappliedEvent = Extract<
       | "TurnEnded"
       | "ThreadRunChanged"
       | "HobPresenceChanged"
-      | "HobPresenceRemoved";
+      | "HobPresenceRemoved"
+      | "ThreadMemberAdded"
+      | "ThreadMemberChanged";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

@@ -21,6 +21,7 @@ import { DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
 import { unreadExpression } from "./thread-columns.ts";
+import { followThreadReads } from "./thread-member-rows.ts";
 
 // A thread's chapters (ADR 037, migration 0099). The rules of each command are the pure planners
 // in @hobbots/domain; this runs them on the chapters as stored, inside the transaction that writes
@@ -133,6 +134,7 @@ export const ChapterRepositoryLive = Layer.effect(
       Effect.gen(function* () {
         yield* sql`UPDATE threads SET read_revision = ${revision}
           WHERE id = ${threadId} AND ${unreadExpression(sql)} = 0`;
+        yield* followThreadReads(sql, [threadId]);
         yield* sql`UPDATE messages SET chapter_id = ${to}, revision = ${revision} WHERE ${which}`;
       });
 

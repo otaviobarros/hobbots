@@ -58,6 +58,7 @@ const before = Object.fromEntries(
         "0103_quest_summaries",
         "0104_camp_suggestions",
         "0105_artifact_reviews",
+        "0113_thread_members",
       ].includes(key),
   ),
 ) as typeof migrations;

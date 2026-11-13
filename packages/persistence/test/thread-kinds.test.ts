@@ -8,6 +8,7 @@ import threadKinds from "../src/migrations/0095_thread_kinds.ts";
 import chapters from "../src/migrations/0099_chapters.ts";
 import projectorCursors from "../src/migrations/0100_projector_cursors.ts";
 import campSuggestions from "../src/migrations/0104_camp_suggestions.ts";
+import threadMembers from "../src/migrations/0113_thread_members.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1375 (ADR 037): a thread is a chat or a camp. The migration makes each hob's most recent open
@@ -181,6 +182,8 @@ describe("0095_thread_kinds", () => {
       yield* chapters;
       yield* projectorCursors;
       yield* campSuggestions;
+      // A new thread starts with its members, which 0113 keeps.
+      yield* threadMembers;
 
       const repo = yield* HobbotsRepository;
       const thread = (id: string, agentId: string, fields: Partial<Thread> = {}) =>

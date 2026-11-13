@@ -48,6 +48,7 @@ import {
 } from "./skills.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
+import { ThreadMember } from "./thread-member.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
 /**
@@ -172,6 +173,10 @@ const PairingRequested = Schema.TaggedStruct("PairingRequested", { request: Pair
 const PairingChanged = Schema.TaggedStruct("PairingChanged", { request: PairingRequest });
 /** The user revoked a device: its requests are refused from now on (ADR 021). Carries no token. */
 const DeviceRevoked = Schema.TaggedStruct("DeviceRevoked", { device: Device });
+/** A person or a hob added to a camp (ADR 039, Members). A thread's first two members come with it, unjournaled. */
+const ThreadMemberAdded = Schema.TaggedStruct("ThreadMemberAdded", { member: ThreadMember });
+/** A member left, was removed or came back (`MemberMachine`), as a hob does when it retires and returns. */
+const ThreadMemberChanged = Schema.TaggedStruct("ThreadMemberChanged", { member: ThreadMember });
 /** A Task, a step or a delegated Task was created, with its Delegation and planned Milestones (ADR 018). */
 const TaskCreated = Schema.TaggedStruct("TaskCreated", {
   task: Task,
@@ -521,6 +526,8 @@ export const JournaledEvent = Schema.Union([
   PairingRequested,
   PairingChanged,
   DeviceRevoked,
+  ThreadMemberAdded,
+  ThreadMemberChanged,
   CommandRecorded,
   FileChangesRecorded,
   FolderScanned,
@@ -652,6 +659,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   PairingChanged: 1,
   // 2: its device's `userId` (ADR 039, migration 0112).
   DeviceRevoked: 2,
+  ThreadMemberAdded: 1,
+  ThreadMemberChanged: 1,
   CommandRecorded: 1,
   FileChangesRecorded: 1,
   FolderScanned: 1,

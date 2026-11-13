@@ -72,6 +72,7 @@ export * from "./task-files.ts";
 export * from "./task-tools.ts";
 export * from "./terminal-escapes.ts";
 export * from "./thread.ts";
+export * from "./thread-member.ts";
 export * from "./tone.ts";
 export * from "./tool-output.ts";
 export * from "./turn-end.ts";

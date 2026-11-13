@@ -20,6 +20,7 @@ import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { decodeRows, type Row } from "./task-rows.ts";
+import { copyMembersIn, startMembersIn } from "./thread-member-rows.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376): each one transaction that writes the threads, moves
 // what Start fresh carries, and journals the change, so a crash between the writes leaves neither half.
@@ -103,6 +104,8 @@ export const makeCampWrites = (
   const items = makeItemReads(sql);
   const oldest = oldestFirst(sql);
   const startFirstChapter = startFirstChapterIn(sql);
+  const startMembers = startMembersIn(sql);
+  const copyMembers = copyMembersIn(sql);
   // A new thread's first chapter, journaled as `ChapterStarted` at `revision`, after the change's other events.
   const firstChapterOf = (thread: Thread, revision: number) =>
     startFirstChapter(thread, revision).pipe(
@@ -129,6 +132,7 @@ export const makeCampWrites = (
       }
       yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
       yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
+      yield* startMembers(camp, first);
       const started = yield* firstChapterOf(camp, first + 1);
       const thread = yield* shown(camp.id);
       const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started];
@@ -227,6 +231,8 @@ export const makeCampWrites = (
           WHERE id = ${from.id} AND revision = ${from.revision} AND state = 'open' RETURNING id`;
         if (written.length === 0) return yield* new StaleChat();
         yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...input.chat, revision: first })))}`;
+        // The new chat is the same direct message: its person and its hob, as they stand (ADR 039).
+        yield* copyMembers(from.id, input.chat, first);
         const { work, held } = yield* openWork(from.id);
         const carried = carriedOverFrom(work).map(
           (each) => new CarriedOver({ fromThreadId: from.id, toThreadId: input.chat.id, ...each, carriedAt: at }),

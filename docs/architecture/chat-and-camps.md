@@ -22,6 +22,24 @@ A thread is a chat or a camp. The UI says chat or camp and never thread; the cod
 - Migration (0095): each hob's most recent open thread becomes its chat; its others become camps with their titles. A skill trial stays a camp.
 - Slice: [#1362](https://github.com/otaviobarros/hobbots/issues/1362).
 
+## Members
+
+Who is in a direct message or a camp ([ADR 039](../decisions/039-shared-camps.md#members)): a person or a hob, one `ThreadMember` row per thread and actor.
+
+| Field | Meaning |
+| --- | --- |
+| `threadId`, `actor` | The thread and who is in it, a person (`user`) or a hob; unique together |
+| `role` | `owner` for the person whose thread it is, `member` for everyone else |
+| `state` | [Member](machines/member.md): active, left, removed |
+| `joinedAt`, `addedBy` | When they joined and who added them |
+| `readRevision` | How far they read the thread; written beside the thread's own marker, and read once unread counts move onto it ([#1454](https://github.com/otaviobarros/hobbots/issues/1454)) |
+| `mutedUntil` | Until when they muted the thread, or null |
+
+- A thread stored for the first time starts with two members, in the same transaction: the person whose session made it, as `owner`, and its hob, both added by that person. Start fresh gives the new chat the old chat's members. Neither is journaled apart from the thread's own event.
+- A direct message (a chat) keeps exactly its person and its hob: adding anyone else is refused (`MemberRefused`, `direct-message`). A camp takes more, journaled as `ThreadMemberAdded`; one who left or was removed comes back, journaled as `ThreadMemberChanged`.
+- A hob that retires leaves every thread it is active in, and comes back to every thread it left when it returns, each journaled as `ThreadMemberChanged` in the same transaction as its `AgentUpserted`.
+- Migration (0113): every thread gets its owner, with the thread's read marker, and its hob, already left for a retired hob. Built in [#1453](https://github.com/otaviobarros/hobbots/issues/1453).
+
 ## Chapters
 
 | Field | Meaning |
