@@ -23,7 +23,6 @@ import {
   type AgentId,
   type AttemptId,
   AttemptId as AttemptIdSchema,
-  ancestorsOf,
   type Committed,
   isTerminalTask,
   liveAttemptOn,
@@ -35,10 +34,11 @@ import {
   taskChat,
 } from "@hobbots/domain";
 import { Cause, DateTime, Effect, FiberMap, Option, Queue, type Scope, Semaphore, Stream } from "effect";
-import { type PathSeparator, sharedFolders } from "./authority.ts";
+import type { PathSeparator } from "./authority.ts";
 import { memberPrompt, memberReminder, sendBackPrompt } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { emptyQuestFinding } from "./empty-quests.ts";
+import { delegatedAccess } from "./member-access.ts";
 import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
 import type { TaskTools } from "./task-tools.ts";
 import { endTurn } from "./turn-end.ts";
@@ -76,41 +76,6 @@ export interface MemberDeps {
 }
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-
-/**
- * A member's tools, narrowed by every Delegation on the way down to its Task (ADR 018): each adds
- * the answers it gives as a restriction, and the member keeps only the folders each one allows. A
- * Delegation holds only the answers given on purpose, so a restriction's Ask is never answered by
- * a grant, while the member's own preset Ask still can be (ADR 015).
- */
-export const delegatedAccess = (
-  access: ToolAccess | null,
-  task: Task,
-  tree: TaskTree,
-  separator: PathSeparator,
-): ToolAccess | null => {
-  if (access === null) return null;
-  const path = new Set<string>([task.id, ...ancestorsOf(task, tree.tasks).map((each) => each.id)]);
-  const given = tree.delegations.filter((delegation) => path.has(delegation.childTaskId));
-  const restrictions = [...access.policy.restrictions, ...given.map((delegation) => delegation.authority.overrides)];
-  const narrowing = given.flatMap((delegation) =>
-    delegation.authority.folders === null ? [] : [delegation.authority.folders],
-  );
-  if (narrowing.length === 0) return { ...access, policy: { ...access.policy, restrictions } };
-  const folders = narrowing.reduce((kept, allowed) => sharedFolders(kept, allowed, separator), access.folders);
-  // The policy engine reads its folders from the policy, not from the access: the member's
-  // folders become the only ones it may reach, its own and hidden ones folded into them.
-  return {
-    ...access,
-    policy: {
-      ...access.policy,
-      restrictions,
-      sharedFolders: folders,
-      hob: { ...access.policy.hob, ownFolders: [], hiddenSharedFolders: [] },
-    },
-    folders,
-  };
-};
 
 /**
  * The session the member's last turn on the Task ran in, to resume, or null before its first. Only

@@ -15,7 +15,7 @@ import {
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberPrompt } from "../src/briefs.ts";
-import { delegatedAccess } from "../src/members.ts";
+import { delegatedAccess } from "../src/member-access.ts";
 
 const at = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");

@@ -2,9 +2,11 @@ import {
   type ChatTaskTurn,
   type ChatTurn,
   callScope,
+  describeSessionOffer,
   EventPublisher,
   FolderChecks,
   HobbotsRepository,
+  HobTools,
   type HubCallStep,
   type HubOffer,
   type HubTools,
@@ -22,15 +24,20 @@ import {
   turnSteering,
 } from "@hobbots/agents";
 import {
+  type Agent,
   type AttemptId,
+  AttemptId as AttemptIdSchema,
   type CarriedItem,
   carriedWith,
+  type DelegationAuthority,
   type EventEnvelope,
   isTaskToolName,
   stableJson,
   TASK_TOOLS,
   type TaskId,
+  TaskId as TaskIdSchema,
   type TaskToolDone,
+  type TaskToolInput,
   TaskToolInputs,
   type TaskToolName,
   TaskToolRefused,
@@ -53,13 +60,14 @@ import {
   type TaskToolLimits,
 } from "./call-scope.ts";
 import { makeCharmRecords } from "./charm-records.ts";
-import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
+import { draftScope, makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeClaiming } from "./claiming.ts";
 import { makeDelegating } from "./delegating.ts";
 import { makeApprovedRemovals, makeDeliveryCheck, makeDestinationCheck } from "./delivery.ts";
 import { flagIdleQuest } from "./empty-quests.ts";
 import { makeHeldCommits } from "./held-commits.ts";
 import { makeLeading } from "./leading.ts";
+import { accessGiven } from "./member-access.ts";
 import { makePlanning } from "./planning.ts";
 import { routineReply, waitingForYou } from "./quiet-replies.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
@@ -93,7 +101,18 @@ interface CallSource {
   readonly resolve: (name: TaskToolName, at: string) => Effect.Effect<ResolvedCaller, TaskToolRefused>;
   /** The backpack items the turn's earlier calls showed it, by id, which it carries from then on (#662). */
   readonly shown: Map<string, CarriedItem>;
+  /**
+   * For a chat turn that works on no Task yet, the Task its first call that starts work would
+   * start, unsaved, as a call on it sees it: what a delegation's check is decided on.
+   */
+  readonly draft?: (at: string) => CallScope;
 }
+
+type DelegateInput = Omit<TaskToolInput<"delegate_task">, "key">;
+
+/** Whether a call's raw input asks only to check a delegation (#1348). */
+const isCheck = (raw: unknown): boolean =>
+  typeof raw === "object" && raw !== null && "check" in raw && (raw as { readonly check: unknown }).check === true;
 
 /** The caller, carrying what the turn's earlier calls showed it as well, a held claim winning. */
 const withShown = (caller: TaskToolCaller, shown: ReadonlyMap<string, CarriedItem>): TaskToolCaller =>
@@ -178,6 +197,56 @@ export class TaskTools extends Context.Service<
         // Which runtimes take a message while a turn runs (#1345); without adapters, as in tests of the
         // tools alone, every one is taken to.
         const steersTurns = yield* turnSteering;
+        // Without Charms or local Git tools, a session offers only its Task tools.
+        const charmsFor = yield* hubToolOffer;
+        const describeOffer = yield* describeSessionOffer;
+        const hobTools = yield* HobTools;
+        /**
+         * The hub tools a session working the caller's Task outside any chat is offered, beside its
+         * Task tools: the one place both its session and its lead's delegation read them (#1348).
+         */
+        const sessionOffer = (caller: TaskToolCaller, turn: SessionCharms) =>
+          charmsFor(
+            {
+              ...turn,
+              agentId: caller.agentId,
+              threadId: null,
+              messageId: null,
+              taskId: caller.taskId,
+              webPlace: {
+                threadId: turn.threadId,
+                taskId: Effect.succeed(caller.taskId),
+                attemptId: Effect.succeed(turn.attemptId),
+              },
+              scope: () => callScope.task(caller.taskId),
+            },
+            { writes: false },
+          );
+        /**
+         * What `member`'s session will be offered on a Task under one whose Delegations gave `given`,
+         * top first, the new one last: its access as its session reads it, narrowed by each, and the
+         * offer that session is built from, described for its lead. It reads its access as any read
+         * outside a turn does, so it asks you nothing, and builds no tool it serves.
+         */
+        const memberOffer = (member: Agent, given: ReadonlyArray<DelegationAuthority>) =>
+          Effect.gen(function* () {
+            const access = accessGiven(yield* hobTools.access(member), given, separator);
+            // Never run: the offer is only read, and its Task does not exist yet.
+            const taskId = TaskIdSchema.make("check");
+            const offer = yield* sessionOffer(
+              { agentId: member.id, taskId },
+              {
+                attemptId: AttemptIdSchema.make("check"),
+                threadId: null,
+                currentAccess: Effect.succeed(access),
+                redactor,
+                approvals: null,
+              },
+            );
+            // A member's session is offered every Task tool beside them, as `forSession` gives it.
+            const names = [...(offer.hubTools?.tools ?? []), ...TASK_TOOLS].map((tool) => tool.name);
+            return yield* describeOffer({ agentId: member.id, access, offered: names });
+          });
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({
             tasks,
@@ -191,7 +260,7 @@ export class TaskTools extends Context.Service<
             authority: authority.of,
             separator,
           }),
-          ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
+          ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator, memberOffer }),
           ...makeAsking({
             tasks,
             hobs,
@@ -231,6 +300,8 @@ export class TaskTools extends Context.Service<
           raw: unknown,
           committed: (resolved: ResolvedCaller) => void = () => {},
         ) => {
+          // A check reads what a delegation would give and records nothing, not even a refusal (#1348).
+          if (name === "delegate_task" && isCheck(raw)) return checkOnly(agentId, source, raw);
           // Set inside the call's transaction; read only once it has committed, or was refused.
           const seen: { resolved: ResolvedCaller | null } = { resolved: null };
           // A refused call's Task, unless the call started it: that Task was rolled back with the call.
@@ -285,6 +356,29 @@ export class TaskTools extends Context.Service<
             return outcome.done;
           }).pipe(refusals.recorded({ agentId, scope: source.scope, tool: name, raw, taskOf }));
         };
+
+        /**
+         * A `delegate_task` call with `check`: decided as the delegation would be, on the Task the
+         * call would act on, but outside the call ledger and its transaction, so it starts no Task,
+         * keeps no key and records nothing, a refusal included. A chat turn that works on no Task
+         * yet checks it on the Task its first delegation would start.
+         */
+        const checkOnly = (agentId: TaskToolCaller["agentId"], source: CallSource, raw: unknown) =>
+          Effect.gen(function* () {
+            const { key: _key, ...input } = yield* Schema.decodeUnknownEffect(TaskToolInputs.delegate_task)(raw).pipe(
+              Effect.mapError((error) => new TaskToolRefused({ reason: "invalid-input", message: describe(error) })),
+            );
+            const at = DateTime.formatIso(yield* DateTime.now);
+            const taskId = source.taskId();
+            const scope =
+              taskId !== null
+                ? yield* scopeOf({ agentId, taskId }, at)
+                : source.draft === undefined
+                  ? yield* refuse("no-task", "You are not working on a Task, so there is nothing to delegate from.")
+                  : source.draft(at);
+            const made = yield* handlers.delegate_task(scope, input satisfies DelegateInput as never);
+            return made.done;
+          });
 
         const announce = (entries: ReadonlyArray<EventEnvelope>) =>
           Effect.gen(function* () {
@@ -380,6 +474,7 @@ export class TaskTools extends Context.Service<
               taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),
               shown: new Map(),
+              draft: (at) => draftScope(turn, at),
             };
             // The questions waiting for you as the turn starts, so its end knows one it brought you (#1006).
             const askedBefore = known === null ? [] : waitingForYou(yield* tasks.readTree(known));
@@ -498,27 +593,10 @@ export class TaskTools extends Context.Service<
          */
         const anyTools = (charms: HubTools | null): HubTools | null =>
           charms === null || charms.tools.length === 0 ? null : charms;
-        // Without Charms or local Git tools, a session offers only its Task tools.
-        const charmsFor = yield* hubToolOffer;
         const forSession = (caller: TaskToolCaller, turn: SessionCharms, only?: ReadonlyArray<TaskToolName>) =>
           Effect.gen(function* () {
             const scope = () => callScope.task(caller.taskId);
-            const offer = yield* charmsFor(
-              {
-                ...turn,
-                agentId: caller.agentId,
-                threadId: null,
-                messageId: null,
-                taskId: caller.taskId,
-                webPlace: {
-                  threadId: turn.threadId,
-                  taskId: Effect.succeed(caller.taskId),
-                  attemptId: Effect.succeed(turn.attemptId),
-                },
-                scope,
-              },
-              { writes: false },
-            );
+            const offer = yield* sessionOffer(caller, turn);
             const charms = anyTools(offer.hubTools);
             const recorded = charmRecords({ agentId: caller.agentId, scope, taskOf: () => caller.taskId })(charms);
             const tools = forTurn(caller, only);

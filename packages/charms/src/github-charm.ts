@@ -170,6 +170,8 @@ export const GitHubCharm = Effect.gen(function* () {
         tool: { ...tool, inputSchema: githubToolJsonSchema(tool.name) },
         input: GitHubToolInputs[tool.name],
         effect: "read",
+        // Every read is decided as reading GitHub: a delegation names that answer to its lead (#1348).
+        operation: "github.read",
         otherwise: "GitHub cannot be read",
         plan: planRead(tool.name),
       }),

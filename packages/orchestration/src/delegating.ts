@@ -1,9 +1,18 @@
-import type { FolderChecksShape, HobbotsRepository, TaskRepository } from "@hobbots/agents";
+import {
+  type DroppedTool,
+  type FolderChecksShape,
+  type HobbotsRepository,
+  type OfferedTool,
+  RUNTIME_TOOLS_OWNER,
+  type SessionToolOffer,
+  type TaskRepository,
+} from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
   ArtifactId,
   ancestorsOf,
+  type DelegationAuthority,
   DelegationId,
   hobStanding,
   isTerminalTask,
@@ -53,6 +62,11 @@ interface Deps {
   };
   readonly limits: TaskToolLimits;
   readonly separator: PathSeparator;
+  /**
+   * What a member's session will be offered under the authority each Delegation on the way down to
+   * its Task gives it, top first: read from the offer its session is built from (#1348).
+   */
+  readonly memberOffer: (member: Agent, given: ReadonlyArray<DelegationAuthority>) => Effect.Effect<SessionToolOffer>;
 }
 
 type DelegateInput = Omit<TaskToolInput<"delegate_task">, "key">;
@@ -192,8 +206,102 @@ const toolsFor = (
   );
 };
 
+const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
+
+const ANSWER_WORDS = { allow: "Allow", ask: "Ask", never: "Never: each call is refused" } as const;
+
+/** Why a tool is not offered, in words for the lead. */
+const dropWords = (member: Agent, dropped: DroppedTool): string => {
+  switch (dropped.reason) {
+    case "never":
+      return "its answer is Never";
+    case "not-granted":
+      return `${member.name} does not hold ${dropped.from}`;
+    case "not-connected":
+      return `${dropped.from} is not connected`;
+    case "chats-only":
+      return `${dropped.from} offers its writes only in chats, not in a Task`;
+    case "chat-only":
+      return "its turns are chat-only";
+    case "commands-closed":
+      return "commands need Read files Allow and Edit files Allow or Never";
+  }
+};
+
+/** Whether the lead hears of a tool by name: the runtime's are in the sentence before, and the Task tools are always offered. */
+const named = (tool: { readonly from: string }) => tool.from !== RUNTIME_TOOLS_OWNER && tool.from !== "the Task tools";
+
+/**
+ * The member's hub tools in words for the lead (#1348): each with its answer, then each it will not
+ * be offered and why. A Charm the member does not hold is named once, not tool by tool.
+ */
+const offerWords = (member: Agent, offer: SessionToolOffer): string => {
+  const byAnswer = (["allow", "ask", "never"] as const).flatMap((answer) => {
+    const tools = offer.tools.filter((tool) => named(tool) && tool.answer === answer).map((tool) => tool.tool);
+    return tools.length === 0 ? [] : [`${listFormat.format(tools)} (${ANSWER_WORDS[answer]})`];
+  });
+  const decided = offer.tools.filter((tool) => named(tool) && tool.answer === null).map((tool) => tool.tool);
+  const offered = [
+    ...byAnswer,
+    ...(decided.length === 0 ? [] : [`${listFormat.format(decided)} (decided on each call)`]),
+  ];
+  const ungranted = [
+    ...new Set(offer.dropped.filter((tool) => tool.reason === "not-granted").map((tool) => tool.from)),
+  ];
+  const lacks = [
+    ...offer.dropped
+      .filter((tool) => named(tool) && tool.reason !== "not-granted")
+      .map((tool) => `${tool.tool}, since ${dropWords(member, tool)}`),
+    ...ungranted.map((from) => `${from}'s tools, since ${member.name} does not hold it`),
+  ];
+  return [
+    offered.length === 0 ? "" : ` Its hub tools: ${offered.join("; ")}.`,
+    lacks.length === 0 ? "" : ` It will not be offered ${lacks.join("; ")}.`,
+  ].join("");
+};
+
+/**
+ * Words in a brief that name work needing a tool, by the tool (#1348). Simple on purpose: a brief
+ * that names the work is warned about, and one that does not is not.
+ */
+const NEEDS: ReadonlyArray<{ readonly tool: string; readonly words: RegExp; readonly work: string }> = [
+  { tool: "github_comment", words: /\bcomment/i, work: "commenting" },
+  { tool: "github_open_pull_request", words: /\bpull requests?\b|\bPRs?\b/, work: "opening a pull request" },
+  { tool: "github_push", words: /\bpush/i, work: "pushing" },
+  { tool: "commands", words: /\bcommit|\brun\b|\btests?\b/i, work: "running commands" },
+  { tool: "file edits", words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },
+];
+
+/** A warning for the lead when the brief names work that needs a tool the member will not be offered. Empty otherwise. */
+const briefNeeds = (member: Agent, brief: string, dropped: ReadonlyArray<DroppedTool>): string => {
+  const lacking = NEEDS.flatMap((need) => {
+    const tool = dropped.find((each) => each.tool === need.tool);
+    return tool !== undefined && need.words.test(brief) ? [{ need, tool }] : [];
+  });
+  if (lacking.length === 0) return "";
+  const each = lacking.map(
+    ({ need, tool }) => `${need.work}, but ${tool.tool} will not be offered: ${dropWords(member, tool)}`,
+  );
+  return ` Warning: the brief names ${each.join("; ")}. Do that part yourself, give ${member.name} what it lacks, or bring in a hob that has it.`;
+};
+
+/** The offer as the call's details carry it, for a lead that reads them. */
+const offerDetails = (offer: SessionToolOffer) => ({
+  tools: offer.tools.map((tool: OfferedTool) => ({ tool: tool.tool, from: tool.from, answer: tool.answer })),
+  dropped: offer.dropped.map((tool) => ({ tool: tool.tool, from: tool.from, reason: tool.reason })),
+});
+
 /** Tools a lead brings in other hobs and moves results between them with. */
-export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority, limits, separator }: Deps) => {
+export const makeDelegating = ({
+  tasks,
+  hobs,
+  folderChecks,
+  capacity,
+  authority,
+  limits,
+  separator,
+  memberOffer,
+}: Deps) => {
   /**
    * The member's authority: the caller's on this Task, narrowed by what the brief asks for and by
    * the member's own policy, so it holds the intersection of the lead's and its own (STD-SEC-003).
@@ -235,8 +343,13 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
       // Where the brief asks for work the member cannot reach, its lead hears so now (#1181).
       const { folders: named, parents } = yield* briefTargets(folderChecks, lead.folders, input.brief, separator);
       const unreachable = outOfReach([...new Set([...named, ...parents])], both.folders, separator);
+      const path = new Set<string>([task.id, ...ancestorsOf(task, scope.tree.tasks).map((each) => each.id)]);
+      const above = scope.tree.delegations
+        .filter((delegation) => path.has(delegation.childTaskId))
+        .map((delegation) => delegation.authority);
       return {
         given: { overrides, folders: [...both.folders] },
+        above,
         decisions: both.decisions,
         lead: lead.folders,
         unreachable,
@@ -314,9 +427,21 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const { given, decisions, lead, unreachable } = yield* memberAuthority(scope, task, member, input);
+        const { given, above, decisions, lead, unreachable } = yield* memberAuthority(scope, task, member, input);
         const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
+        // The new Delegation narrows the member last, as its session reads it once the Task starts.
+        const offer = yield* memberOffer(member, [...above, { overrides: given.overrides, folders: given.folders }]);
+        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer.dropped)}`;
+        if (input.check === true) {
+          return {
+            done: {
+              message: `Checked only: nothing was delegated, and no Task started.${tools}${offered}${alreadyOpen(scope.tree, task, member)}${outOfFolders(member, unreachable)} Call delegate_task without check to delegate.`,
+              details: { check: true, hob: member.name, ...offerDetails(offer) },
+            },
+            entries: [],
+          };
+        }
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
         // A Quest started above this one later may allow less depth than when this one started.
@@ -350,13 +475,14 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const carried = yield* carryNote(scope, created, journal);
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}${outOfFolders(member, unreachable)}${existing === undefined ? planNote(task) : ""}`,
+            message: `Delegated Task ${created.id} to ${member.name}.${carried} You lead Quest ${quest.id}.${tools}${offered}${alreadyOpen(scope.tree, task, member)}${outOfFolders(member, unreachable)}${existing === undefined ? planNote(task) : ""}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,
               quest_started: existing === undefined,
               delegation_id: delegationId,
               milestones: milestones.map((milestone) => milestone.id as string),
+              ...offerDetails(offer),
             },
           },
           entries: journal.entries,

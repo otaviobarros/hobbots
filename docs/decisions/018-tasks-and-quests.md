@@ -140,7 +140,7 @@ Hobs act through Hobbots tools on the runtime's control channel, as Charms are e
 |---|---|---|---|
 | `plan_steps` | A Task's owner | Splits its own Task into steps, each with a brief | Child Tasks with the same owner |
 | `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones, limits and the folders its work is in | Quest |
-| `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest | Task, Delegation |
+| `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest. Its answer lists the tools the member's session will be offered and those it will not, and `check: true` answers that alone ([ADR 014](014-tool-policy-and-enforcement.md#amendment-what-a-delegation-tells-its-lead-1348)) | Task, Delegation; none with `check` |
 | `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress | Checkpoint |
 | `ask` | A Task's owner | Asks a question, optionally with two to four choices and the one it recommends; the server routes it to the nearest lead | Question |
 | `answer` | A lead | Answers a question from its subtree; an answer that names a choice picks it | The answer on the Question |
