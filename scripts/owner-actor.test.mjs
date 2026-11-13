@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check, isChecked, ownerActorLines } from "./owner-actor.mjs";
+import { bareAuthorFields, check, checkRecords, isChecked, isRecordChecked, ownerActorLines } from "./owner-actor.mjs";
 
 test("finds OWNER_ACTOR imported and used, and not in a comment or a string", () => {
   const text = [
@@ -33,4 +33,50 @@ test("fails a new direct use and names the rule", () => {
   const errors = check(Object.keys(files), (file) => files[file]);
   assert.equal(errors.length, 2);
   assert.match(errors[0], /^packages\/agents\/src\/notes\.ts:1 names OWNER_ACTOR\..*STD-SEC-006/);
+});
+
+test("finds a field that says who did something with a bare id schema, and not an Actor value, an owner or a read id", () => {
+  const text = [
+    'import { Actor, AgentId, UserId } from "@hobbots/domain";',
+    'export class Request extends Schema.Class<Request>("Request")({',
+    "  requestedBy: UserId,",
+    "  reviewedBy: Schema.NullOr(AgentId),",
+    "  author: AgentId,",
+    "  decidedBy: Actor,",
+    "  userId: UserId,",
+    "  pickedUpBy: Schema.NullOr(Schema.String),",
+    "  summonedBy: Schema.NullOr(AgentId).pipe(Schema.withDecodingDefaultKey(none)),",
+    "}) {}",
+    "const made = { reachedBy: task.ownerId };",
+    'const written = { actor: { kind: "user", id: UserId.make("bruna") }, addedBy: userActor(UserId.make("leo")) };',
+    "const hob = { requestedBy: hobActor(AgentId.make(id)), author: [AgentId.make(id)] };",
+  ].join("\n");
+  assert.deepEqual(bareAuthorFields("a.ts", text), [
+    { field: "requestedBy", line: 3 },
+    { field: "reviewedBy", line: 4 },
+    { field: "author", line: 5 },
+    { field: "summonedBy", line: 9 },
+  ]);
+});
+
+test("the record check reads sources, not tests or fakes", () => {
+  assert.equal(isRecordChecked("packages/domain/src/quest.ts"), true);
+  assert.equal(isRecordChecked("apps/server/src/fake-quest.ts"), false);
+  assert.equal(isRecordChecked("apps/server/src/testing/people.ts"), false);
+  assert.equal(isRecordChecked("packages/domain/test/quest.test.ts"), false);
+});
+
+test("fails a new record with a bare user or hob id, passes a known one and flags a known one that is gone", () => {
+  const files = {
+    "packages/domain/src/request.ts": "export const Request = Schema.Struct({ requestedBy: UserId });\n",
+    "packages/domain/src/agent.ts": "export const fields = { summonedBy: Schema.NullOr(AgentId) };\n",
+  };
+  const known = new Set(["packages/domain/src/agent.ts summonedBy", "packages/domain/src/quest.ts reachedBy"]);
+  const errors = checkRecords(Object.keys(files), (file) => files[file], known);
+  assert.equal(errors.length, 2);
+  assert.match(
+    errors[0],
+    /^packages\/domain\/src\/request\.ts:1 says who did something in "requestedBy".*STD-ARCH-020/,
+  );
+  assert.match(errors[1], /^"packages\/domain\/src\/quest\.ts reachedBy" no longer names a bare id/);
 });
