@@ -1,5 +1,4 @@
 import type { HobPermissions } from "@hobbots/api";
-import type { RuntimeKind } from "@hobbots/domain";
 import { reachLines } from "./change-reach-model.ts";
 
 // The save bar is the inverted surface, like the toasts: light in the dark themes and dark in the
@@ -44,7 +43,7 @@ export function CardSaveOutcome({
   save,
   failed,
 }: {
-  hob: { readonly name: string; readonly runtime: RuntimeKind };
+  hob: { readonly name: string };
   save: { readonly isError: boolean; readonly data: HobPermissions | undefined };
   failed: string;
 }) {

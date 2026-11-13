@@ -1,4 +1,4 @@
-import type { ChangeReach, HobPermissions } from "@hobbots/api";
+import type { HobPermissions } from "@hobbots/api";
 import { AgentNotFound } from "@hobbots/api";
 import {
   type Agent,
@@ -13,10 +13,11 @@ import {
   hobAnswers,
   POLICY_OPERATIONS,
   type PolicyDecision,
+  type RuntimeKind,
   type SafetyPreset,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
-import { changeReach, type ReachCharm } from "./change-reach.ts";
+import { changeReach, type ReachCharm, type ReachHob } from "./change-reach.ts";
 import type { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, type GrantService, policyLoss } from "./grants.ts";
@@ -129,22 +130,27 @@ export const changePermissions =
 
 /**
  * What a change from `before` to `after` opens that some of the hob's sessions still do not get
- * (#1347), under the installation's current preset, with the Charms the hub holds and what the hob's
- * runtime keeps when it resumes a session.
+ * (#1347), under the installation's current preset, with the Charms the hub holds. The runtimes
+ * whose sessions keep the tools they started with are read from the hob's own runtime, which its
+ * Tasks run on, and from each of its chats' brains, which may be another one (ADR 017).
  */
 export const reachOf =
   (services: {
+    readonly repo: HobbotsRepository["Service"];
     readonly setup: InstallationSettings["Service"];
     readonly adapters: RuntimeAdapters;
     readonly charms: ReadonlyArray<ReachCharm>;
   }) =>
-  (before: Agent, after: Agent): Effect.Effect<ChangeReach> =>
-    Effect.map(services.setup.get, ({ safetyPreset }) =>
-      changeReach({
+  (before: ReachHob, after: ReachHob & { readonly id: AgentId; readonly runtime: RuntimeKind }) =>
+    Effect.gen(function* () {
+      const { safetyPreset } = yield* services.setup.get;
+      const threads = yield* services.repo.listThreads(after.id);
+      const runtimes = [...new Set([after.runtime, ...threads.flatMap((thread) => thread.brain?.runtime ?? [])])];
+      return changeReach({
         before,
         after,
         preset: safetyPreset,
         charms: services.charms,
-        keepsTools: services.adapters(after.runtime)?.resumeKeepsHubTools === true,
-      }),
-    );
+        keepsTools: runtimes.filter((runtime) => services.adapters(runtime)?.resumeKeepsHubTools === true),
+      });
+    });

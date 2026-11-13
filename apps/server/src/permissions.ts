@@ -13,7 +13,7 @@ import {
   runtimeAdapters,
 } from "@hobbots/agents";
 import { HobbotsApi } from "@hobbots/api";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 // A hob's policy with what it adds up to under the installation's current preset and shared folders.
@@ -26,6 +26,7 @@ export const PermissionsHandlers = HttpApiBuilder.group(HobbotsApi, "permissions
     const grants = yield* GrantService;
     const changed = changePermissions({ repo, grants, chat, charms: yield* CharmDeclarations });
     const reach = reachOf({
+      repo,
       setup: yield* InstallationSettings,
       adapters: yield* runtimeAdapters,
       charms: Option.match(yield* Effect.serviceOption(Charms), { onNone: () => [], onSome: (each) => each.charms }),

@@ -8,6 +8,7 @@ import {
   PolicyDecision,
   PolicyOverrides,
   RuntimeEnforcement,
+  RuntimeKind,
   SafetyPreset,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -33,11 +34,23 @@ export const ChangeReach = Schema.Struct({
    */
   chatsOnly: Schema.Array(CharmId),
   /**
-   * On a runtime whose resumed session keeps the hub tools it started with, as Codex's does (#1245):
-   * the Charms the change grants, and the answers it opens from Never that offer hub tools. A chat
-   * or Task the hob already started does not get them; one it starts after the change does.
+   * What only a session started after the change gets, on a runtime that resumes a session with the
+   * hub tools it started with, as Codex's does (#1245). Empty when none of the hob's sessions runs on
+   * such a runtime, or the change offers no new hub tool.
    */
-  newSessionsOnly: Schema.Struct({ charms: Schema.Array(CharmId), operations: Schema.Array(AnyOperation) }),
+  newSessionsOnly: Schema.Struct({
+    /** The runtimes, among the hob's own and its chats' brains, whose sessions keep their tools. */
+    runtimes: Schema.Array(RuntimeKind),
+    /** The Charms the change grants, whose tools a chat or Task started before does not get. */
+    charms: Schema.Array(CharmId),
+    /** The answers the change opens from Never whose hub tools a chat or Task started before does not get. */
+    operations: Schema.Array(AnyOperation),
+    /**
+     * The Charm writes the change opens from Never, which a chat was offered already but a Task
+     * session is offered only once they are not Never (ADR 038), so a Task started before does not get them.
+     */
+    taskOperations: Schema.Array(AnyOperation),
+  }),
 });
 export type ChangeReach = typeof ChangeReach.Type;
 

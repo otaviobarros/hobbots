@@ -1381,7 +1381,7 @@ describe("the Summoning Charm, end to end", () => {
       hub("summoning_change", {
         key: "retone-duo",
         changes: [
-          { hob: "Rook", instructions: "Be brief." },
+          { hob: "Rook", instructions: "Be brief.", charms: ["github"] },
           { hob: "Sly", instructions: "Be brief." },
         ],
       }),
@@ -1391,12 +1391,13 @@ describe("the Summoning Charm, end to end", () => {
     expect((await onProposal(view, `rows/${rookRow?.id}/allow`)).status).toBe(200);
     await stoppedWhileMaking(view.proposal.id, rookRow?.id ?? "");
     expect((await request("PATCH", `/api/agents/${rook.id}`, { goodAt: "Short notes." })).status).toBe(200);
-    // Reading the card is enough: the row reads as made, and Deny cannot say nothing was done.
+    // Reading the card is enough: the row reads as made, and Deny cannot say nothing was done. It
+    // still names the GitHub writes a Task is not offered, worked out again from the version made (#1347).
     const read = await proposalOf(view.proposal.id);
     expect(read.proposal.rows[0]).toMatchObject({
       state: "allowed",
       outcome:
-        "Changed instructions. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops.",
+        "Changed instructions, charms. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops. In a Task, Rook is still not offered the GitHub Charm's writes: that Charm offers them only in chats.",
     });
     expect((await onProposal(view, `rows/${rookRow?.id}/deny`)).status).toBe(409);
     await decideProposal(retone, "deny-all");

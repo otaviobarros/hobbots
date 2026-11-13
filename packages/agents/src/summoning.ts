@@ -932,9 +932,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         );
       }
       return services.changePermissions(agent.id, write).pipe(
-        Effect.flatMap((after) =>
-          reachOf({ setup: services.setup, adapters: services.adapters, charms: services.charms })(agent, after),
-        ),
+        Effect.flatMap((after) => reachOf(services)(agent, after)),
         Effect.map((reach) => reachLines(agent, reach, services.charms)),
         Effect.mapError((error) => `- ${agent.name}: ${failure(error)}`),
       );
@@ -1473,7 +1471,18 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           );
           if (made === undefined) return null;
           if (made._tag === "Status") return `${agent.name} is ${made.status} now.`;
-          return row.change === null ? null : changedWords(row.change);
+          if (row.change === null) return null;
+          // What it opened that some sessions still miss is read again from the versions it made,
+          // so a row settled after the hub stopped says what one applied at once says (#1347).
+          const reach =
+            made.previous === null
+              ? []
+              : reachLines(
+                  agent,
+                  yield* reachOf(services)(made.previous, { ...made.config, id: agent.id }),
+                  services.charms,
+                );
+          return [changedWords(row.change), ...reach].join(" ");
         }),
     };
     yield* hub.bindApplier(applier);

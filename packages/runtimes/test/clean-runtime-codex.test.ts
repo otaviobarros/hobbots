@@ -234,6 +234,39 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     }
   });
 
+  /** The names of the tools each model request of the turns since `asked` carried. */
+  const toolNames = (asked: number) =>
+    model.requests.slice(asked).map((request) => (request.tools ?? []).map((tool) => tool.name ?? tool.type));
+
+  // covers PE-008, ADR 031 (#1347, #1245)
+  it("[TC-PE-1347-04] a resumed session keeps the hub tools it started with, and a new one is offered the turn's", {
+    timeout: 120_000,
+  }, async () => {
+    const { hubTools } = stepRecordingContract();
+    const wider = { ...hubTools, tools: [...hubTools.tools, WEB_FETCH_CONTRACT_TOOL] };
+    const asked = model.requests.length;
+    const first = await turn({ hubTools });
+    expect(Exit.isSuccess(first.exit), String(first.exit)).toBe(true);
+    const events = Exit.isSuccess(first.exit) ? first.exit.value : [];
+    const started = events.find((event) => event._tag === "SessionStarted");
+    const sessionId = started?._tag === "SessionStarted" ? started.sessionId : null;
+    expect(sessionId).not.toBeNull();
+    const resumed = await turn({ hubTools: wider, sessionId });
+    expect(Exit.isSuccess(resumed.exit), String(resumed.exit)).toBe(true);
+    const fresh = await turn({ hubTools: wider });
+    expect(Exit.isSuccess(fresh.exit), String(fresh.exit)).toBe(true);
+    const [started1, resumed1, fresh1] = toolNames(asked).map((names) => [
+      names.some((name) => name?.includes(CONTRACT_HUB_TOOL)),
+      names.some((name) => name?.includes(WEB_FETCH_CONTRACT_TOOL.name)),
+    ]);
+    // Codex resumes a thread with the dynamic tools it started with: the change names it (#1347).
+    expect([started1, resumed1, fresh1]).toEqual([
+      [true, false],
+      [true, false],
+      [true, true],
+    ]);
+  });
+
   // covers ADR 036 (On every runtime)
   it("[TC-PE-1267-17] records a web_fetch call's step before the hub reads the page", {
     timeout: 60_000,

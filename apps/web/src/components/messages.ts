@@ -1166,7 +1166,9 @@ export const messages = {
       chatsOnly: ({ name, charm }: { name: string; charm: string }) =>
         `In a Task, ${name} is still not offered the ${charm} Charm's writes: that Charm offers them only in chats.`,
       newSessionsOnly: ({ name, runtime, what }: { name: string; runtime: string; what: string }) =>
-        `${name} runs on ${runtime}, where a chat or Task already started keeps the tools it started with, so ${what} reach ${name} only in a chat or Task it starts after this.`,
+        `On ${runtime}, a chat or Task ${name} already started keeps the tools it started with, so ${name} gets ${what} only in a chat or Task it starts after this.`,
+      newTasksOnly: ({ name, runtime, what }: { name: string; runtime: string; what: string }) =>
+        `On ${runtime}, a Task ${name} already started keeps the tools it started with, so ${name} gets ${what} only in a Task it starts after this.`,
       charmTools: ({ charm }: { charm: string }) => `the ${charm} Charm's tools`,
       answerTools: ({ answers }: { answers: string }) => `the tools of ${answers}`,
     },

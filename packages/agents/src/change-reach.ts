@@ -42,7 +42,6 @@ export interface ReachCharm {
 
 /** A hob's version, as the reach of a change compares two. */
 export interface ReachHob {
-  readonly runtime: RuntimeKind;
   readonly policy: HobPolicy;
 }
 
@@ -74,25 +73,31 @@ const BUILT_IN_TOOL_GATES: ReadonlyArray<{
 
 const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
 
-const NO_REACH: ChangeReach = { chatsOnly: [], newSessionsOnly: { charms: [], operations: [] } };
+const NONE: ChangeReach["newSessionsOnly"] = { runtimes: [], charms: [], operations: [], taskOperations: [] };
 
 /** Whether nothing the change opens is kept from any of the hob's sessions. */
 export const reachesEverySession = (reach: ChangeReach) =>
   reach.chatsOnly.length === 0 &&
   reach.newSessionsOnly.charms.length === 0 &&
-  reach.newSessionsOnly.operations.length === 0;
+  reach.newSessionsOnly.operations.length === 0 &&
+  reach.newSessionsOnly.taskOperations.length === 0;
 
 /**
  * What a change from `before` to `after` opens that some of the hob's sessions still do not get,
- * under the installation's `preset`, with the Charms the hub holds. `keepsTools` says whether the
- * hob's runtime resumes a session with the hub tools it started with.
+ * under the installation's `preset`, with the Charms the hub holds. `keepsTools` lists the runtimes,
+ * among those the hob's sessions run on, that resume a session with the hub tools it started with.
+ *
+ * It follows how each session is offered tools: a chat is offered every tool of each Charm the hob
+ * holds, a write under Never refused on its step; a session outside any chat is offered a Charm's
+ * reads, and its writes only where the Charm offers them there and they are not Never (ADR 038); a
+ * built-in hub tool is offered in either while its answer is not Never (ADR 014).
  */
 export const changeReach = (input: {
   readonly before: ReachHob;
   readonly after: ReachHob;
   readonly preset: SafetyPreset;
   readonly charms: ReadonlyArray<ReachCharm>;
-  readonly keepsTools: boolean;
+  readonly keepsTools: ReadonlyArray<RuntimeKind>;
 }): ChangeReach => {
   const declared = input.charms.flatMap((charm) => charm.declaration.operations);
   const decide = (policy: HobPolicy) => (operation: AnyOperation) =>
@@ -102,50 +107,35 @@ export const changeReach = (input: {
   const heldBefore = heldCharms(input.before.policy);
   const held = input.charms.filter((charm) => heldCharms(input.after.policy).includes(charm.declaration.id));
   const granted = held.filter((charm) => !heldBefore.includes(charm.declaration.id));
-  const opens = (operation: AnyOperation | undefined, fresh: boolean) =>
-    operation === undefined ? fresh : is(operation) !== "deny" && (fresh || was(operation) === "deny");
+  const kept = held.filter((charm) => !granted.includes(charm));
+  /** A write the change opens: one of a Charm granted under anything but Never, or one it took off Never. */
+  const opensWrite = (tool: ReachCharm["tools"][number], fresh: boolean) =>
+    tool.effect === "write" &&
+    (tool.operation === undefined ? fresh : is(tool.operation) !== "deny" && (fresh || was(tool.operation) === "deny"));
 
   // A write is offered outside a chat only by a Charm that offers its writes there (ADR 038).
   const chatsOnly = held
     .filter((charm) => charm.writesOutsideChats !== true)
-    .filter((charm) =>
-      charm.tools.some((tool) => tool.effect === "write" && opens(tool.operation, granted.includes(charm))),
-    )
+    .filter((charm) => charm.tools.some((tool) => opensWrite(tool, granted.includes(charm))))
     .map((charm) => charm.declaration.id);
-  if (!input.keepsTools) return { ...NO_REACH, chatsOnly };
+  if (input.keepsTools.length === 0) return { chatsOnly, newSessionsOnly: NONE };
 
-  // A Charm granted brings its own tools, so only the answers opened on the others are named.
-  const kept = held.filter((charm) => !granted.includes(charm));
-  const charmOperations = kept.flatMap((charm) =>
-    charm.declaration.operations.map((operation) => operation.id).filter((operation) => opens(operation, false)),
-  );
-  const builtIn = BUILT_IN_TOOL_GATES.filter((gate) => gate.offered(is) && !gate.offered(was)).map(
+  const operations = BUILT_IN_TOOL_GATES.filter((gate) => gate.offered(is) && !gate.offered(was)).map(
     (gate) => gate.operation,
   );
-  return {
-    chatsOnly,
-    newSessionsOnly: {
-      charms: granted.map((charm) => charm.declaration.id),
-      operations: [...builtIn, ...charmOperations],
-    },
+  // A chat had a held Charm's writes already, Never or not; a Task gets one once it is off Never.
+  const taskOperations = kept
+    .filter((charm) => charm.writesOutsideChats === true)
+    .flatMap((charm) => charm.tools.filter((tool) => opensWrite(tool, false)))
+    .flatMap((tool) => (tool.operation === undefined ? [] : [tool.operation]));
+  const newSessionsOnly = {
+    runtimes: input.keepsTools,
+    charms: granted.map((charm) => charm.declaration.id),
+    operations,
+    taskOperations: [...new Set(taskOperations)],
   };
-};
-
-/** The words for what a change opens, from the Charms that declare it. */
-const opened = (reach: ChangeReach, charms: ReadonlyArray<ReachCharm>) => {
-  const nameOf = (id: CharmId) => charms.find((charm) => charm.declaration.id === id)?.name ?? id;
-  const words = (operation: AnyOperation) =>
-    isCharmOperation(operation)
-      ? (charms.flatMap((charm) => charm.declaration.operations).find((each) => each.id === operation)?.words ??
-        operation)
-      : (BUILT_IN_TOOL_GATES.find((gate) => gate.operation === operation)?.words ?? operation);
-  return {
-    nameOf,
-    list: listFormat.format([
-      ...reach.newSessionsOnly.charms.map((id) => `the ${nameOf(id)} Charm's tools`),
-      ...reach.newSessionsOnly.operations.map(words),
-    ]),
-  };
+  const any = newSessionsOnly.charms.length + operations.length + newSessionsOnly.taskOperations.length > 0;
+  return { chatsOnly, newSessionsOnly: any ? newSessionsOnly : NONE };
 };
 
 /**
@@ -153,20 +143,37 @@ const opened = (reach: ChangeReach, charms: ReadonlyArray<ReachCharm>) => {
  * and why, or none when it reaches every session.
  */
 export const reachLines = (
-  hob: { readonly name: string; readonly runtime: RuntimeKind },
+  hob: { readonly name: string },
   reach: ChangeReach,
   charms: ReadonlyArray<ReachCharm>,
 ): ReadonlyArray<string> => {
-  const { nameOf, list } = opened(reach, charms);
+  const nameOf = (id: CharmId) => charms.find((charm) => charm.declaration.id === id)?.name ?? id;
+  const words = (operation: AnyOperation) =>
+    isCharmOperation(operation)
+      ? (charms.flatMap((charm) => charm.declaration.operations).find((each) => each.id === operation)?.words ??
+        operation)
+      : (BUILT_IN_TOOL_GATES.find((gate) => gate.operation === operation)?.words ?? operation);
+  const { runtimes, charms: granted, operations, taskOperations } = reach.newSessionsOnly;
+  const on = listFormat.format(runtimes.map((runtime) => RUNTIME_NAMES[runtime]));
+  const everywhere = listFormat.format([
+    ...granted.map((id) => `the ${nameOf(id)} Charm's tools`),
+    ...(operations.length === 0 ? [] : [`the tools for ${listFormat.format(operations.map(words))}`]),
+  ]);
+  const inTasks = taskOperations.length === 0 ? "" : `the tools for ${listFormat.format(taskOperations.map(words))}`;
   return [
     ...reach.chatsOnly.map(
       (id) =>
         `In a Task, ${hob.name} is still not offered the ${nameOf(id)} Charm's writes: that Charm offers them only in chats.`,
     ),
-    ...(list === ""
+    ...(everywhere === ""
       ? []
       : [
-          `${hob.name} runs on ${RUNTIME_NAMES[hob.runtime]}, where a chat or Task already started keeps the tools it started with, so ${list} reach ${hob.name} only in a chat or Task it starts after this.`,
+          `On ${on}, a chat or Task ${hob.name} already started keeps the tools it started with, so ${hob.name} gets ${everywhere} only in a chat or Task it starts after this.`,
+        ]),
+    ...(inTasks === ""
+      ? []
+      : [
+          `On ${on}, a Task ${hob.name} already started keeps the tools it started with, so ${hob.name} gets ${inTasks} only in a Task it starts after this.`,
         ]),
   ];
 };
