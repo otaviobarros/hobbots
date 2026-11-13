@@ -14,7 +14,6 @@ import {
   Message,
   type MessageId,
   messageEvents,
-  OWNER_ACTOR,
   previewLine,
   type ReplyUsage,
   type Retiring,
@@ -499,8 +498,12 @@ export const HobbotsRepositoryLive = Layer.effect(
     const writeMessage = (message: Message) =>
       Effect.suspend(() => {
         const usage = usageColumns(message.usage);
-        // A new message names its author as it is stored (ADR 037): you, or its thread's hob.
+        // A new message names its author as it is stored (ADR 037): the person who sent it, or its
+        // thread's hob. A person's message names them already (ADR 039): the hub never assumes one.
         const author = message.actor;
+        if (author === null && message.role !== "assistant") {
+          return Effect.die(new Error(`A ${message.role} message must name the person who wrote it`));
+        }
         return sql<{
           readonly chapterId: string;
           readonly actorKind: string;
@@ -511,8 +514,8 @@ export const HobbotsRepositoryLive = Layer.effect(
           resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.threadId)}),
-          ${author?.kind ?? (message.role === "assistant" ? "hob" : OWNER_ACTOR.kind)},
-          COALESCE(${author?.id ?? (message.role === "assistant" ? null : OWNER_ACTOR.id)},
+          ${author?.kind ?? "hob"},
+          COALESCE(${author?.id ?? null},
             (SELECT t.agent_id FROM threads t WHERE t.id = ${message.threadId})),
           ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},

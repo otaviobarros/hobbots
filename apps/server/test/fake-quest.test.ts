@@ -5,6 +5,7 @@ import {
   type ChapterId,
   Message,
   MessageId,
+  OWNER_ACTOR,
   type Task,
   type TaskTree,
   Thread,
@@ -117,6 +118,7 @@ const askForCampaign = Effect.gen(function* () {
     new Message({
       id: MessageId.make("request"),
       threadId,
+      actor: OWNER_ACTOR,
       role: "user",
       content: "Plan a Black Friday campaign for the shop",
       status: "complete",

@@ -35,6 +35,7 @@ import {
   DEFAULT_QUEST_LIMITS,
   Message,
   MessageId,
+  OWNER_ACTOR,
   PairingRequest,
   QuestId,
   SkillName,
@@ -179,6 +180,7 @@ const seed = Effect.gen(function* () {
     new Message({
       id: MessageId.make("m1"),
       threadId,
+      actor: OWNER_ACTOR,
       role: "user",
       content: `Take the ring. ${PASTED}`,
       status: "complete",

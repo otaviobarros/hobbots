@@ -1,4 +1,4 @@
-import { ThreadNotFound } from "@hobbots/api";
+import { ThreadNotFound, UserSession } from "@hobbots/api";
 import {
   type Actor,
   type Artifact,
@@ -13,7 +13,6 @@ import {
   DecisionStates,
   hobActor,
   type MessageId,
-  OWNER_ACTOR,
   RECORD_DECISION_DESCRIPTION,
   RECORD_DECISION_LABEL,
   RECORD_DECISION_TOOL,
@@ -150,11 +149,14 @@ const inputOf = (text: string, replaces: DecisionId | null) => stableJson({ text
 export class Records extends Context.Service<
   Records,
   {
-    /** Records a decision you made in the app; `key` makes a retried request record it once. */
+    /**
+     * Records a decision you made in the app, as the session's user (ADR 039); `key` makes a retried
+     * request record it once.
+     */
     readonly recordYours: (
       threadId: ThreadId,
       input: { readonly key: string; readonly text: string; readonly replaces: DecisionId | null },
-    ) => Effect.Effect<DecisionPlan, DecisionRefused | ThreadNotFound>;
+    ) => Effect.Effect<DecisionPlan, DecisionRefused | ThreadNotFound, UserSession>;
     /** Records a decision a hob's turn made, from `record_decision`. */
     readonly recordHobs: (
       request: Omit<DecisionRequest, "at">,
@@ -169,12 +171,15 @@ export class Records extends Context.Service<
     readonly activeDecisions: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>>;
     /** The artifacts index, the most recently changed first: what the context pack carries. */
     readonly artifactsOf: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Artifact>>;
-    /** Marks an artifact you looked at reviewed, or dismisses it; the same again changes nothing. */
+    /**
+     * Marks an artifact you looked at reviewed, or dismisses it, as the session's user (ADR 039); the
+     * same again changes nothing.
+     */
     readonly review: (
       threadId: ThreadId,
       artifactId: RegisteredArtifactId,
       outcome: ArtifactReviewOutcome,
-    ) => Effect.Effect<Artifact, ArtifactReviewRefused | ThreadNotFound>;
+    ) => Effect.Effect<Artifact, ArtifactReviewRefused | ThreadNotFound, UserSession>;
     /** Every pull request artifact still waiting for review, for the GitHub Charm to check. */
     readonly waitingPullRequests: Effect.Effect<ReadonlyArray<Artifact>>;
     /** Reviews a pull request artifact GitHub reported merged or closed; null when it no longer waits. */
@@ -199,6 +204,7 @@ export class Records extends Context.Service<
       return Records.of({
         recordYours: (threadId, input) =>
           Effect.gen(function* () {
+            const session = yield* UserSession;
             yield* known(threadId);
             return yield* announced(
               records.recordDecision({
@@ -207,7 +213,7 @@ export class Records extends Context.Service<
                 sourceMessageId: null,
                 text: input.text,
                 replaces: input.replaces,
-                actor: OWNER_ACTOR,
+                actor: session.actor,
                 key: keyOf("app", input.key),
                 input: inputOf(input.text, input.replaces),
                 at: yield* now,
@@ -230,9 +236,10 @@ export class Records extends Context.Service<
         artifactsOf: (threadId) => records.listArtifacts(threadId),
         review: (threadId, artifactId, outcome) =>
           Effect.gen(function* () {
+            const session = yield* UserSession;
             yield* known(threadId);
             return yield* announced(
-              records.reviewArtifact({ threadId, artifactId, outcome, by: OWNER_ACTOR, at: yield* now }),
+              records.reviewArtifact({ threadId, artifactId, outcome, by: session.actor, at: yield* now }),
             );
           }),
         waitingPullRequests: records.waitingPullRequests,

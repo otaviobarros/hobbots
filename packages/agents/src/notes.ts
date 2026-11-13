@@ -1,11 +1,10 @@
-import { MessageKeyReused, type MessageNotFound, ThreadArchived, ThreadNotFound } from "@hobbots/api";
+import { MessageKeyReused, type MessageNotFound, ThreadArchived, ThreadNotFound, UserSession } from "@hobbots/api";
 import {
   type Committed,
   isNote,
   Message,
   type MessageId,
   type MessagePin,
-  OWNER_ACTOR,
   type Thread,
   type ThreadId,
 } from "@hobbots/domain";
@@ -47,12 +46,13 @@ export class Notes extends Context.Service<
     /**
      * Writes a note to self in the thread, under `key`, which becomes its id: the same note sent
      * again returns it, and a key that names anything else is refused. An archived thread takes none.
+     * The note is the session's user's (ADR 039): only a person writes one.
      */
     readonly write: (
       threadId: ThreadId,
       key: MessageId,
       content: string,
-    ) => Effect.Effect<Message, ThreadNotFound | ThreadArchived | MessageKeyReused>;
+    ) => Effect.Effect<Message, ThreadNotFound | ThreadArchived | MessageKeyReused, UserSession>;
     readonly setPinned: (
       threadId: ThreadId,
       messageId: MessageId,
@@ -88,6 +88,7 @@ export class Notes extends Context.Service<
         );
 
       const writeIn = Effect.fn("Notes.write")(function* (threadId: ThreadId, key: MessageId, content: string) {
+        const session = yield* UserSession;
         const thread = yield* threadOf(threadId);
         const stored = yield* repo.findMessage(key);
         if (Option.isSome(stored)) {
@@ -98,7 +99,7 @@ export class Notes extends Context.Service<
         const note = new Message({
           id: key,
           threadId,
-          actor: OWNER_ACTOR,
+          actor: session.actor,
           role: "note",
           content,
           status: "complete",

@@ -110,6 +110,7 @@ const message = (threadId: ThreadId, id: string, role: Message["role"], fields: 
   new Message({
     id: MessageId.make(id),
     threadId,
+    actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
     status: "complete",

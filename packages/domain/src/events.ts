@@ -650,7 +650,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   BackpackItemChanged: 1,
   PairingRequested: 1,
   PairingChanged: 1,
-  DeviceRevoked: 1,
+  // 2: its device's `userId` (ADR 039, migration 0112).
+  DeviceRevoked: 2,
   CommandRecorded: 1,
   FileChangesRecorded: 1,
   FolderScanned: 1,

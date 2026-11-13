@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import { DeviceService } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
-import { type RemoteAccessStatus, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { OWNER_ACTOR, OWNER_USER_ID, type RemoteAccessStatus, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { HubHosts } from "@hobbots/permissions";
 import { DeviceRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -143,6 +143,8 @@ const YOU = UserSession.of({
   deviceId: WINDOW_DEVICE_ID,
   name: "This computer's Hobbots window",
   kind: "window",
+  userId: OWNER_USER_ID,
+  actor: OWNER_ACTOR,
   whileApproved: (write) => write,
 });
 

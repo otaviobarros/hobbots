@@ -59,6 +59,7 @@ import { HobTools } from "./tools.ts";
 import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources, PackReports } from "./turn-pack.ts";
+import { sessionActor } from "./users.ts";
 
 /** How much of a cut-off reply the runtime is shown when asked to continue it. */
 const CONTINUE_CONTEXT = 4_000;
@@ -455,6 +456,7 @@ export class ChatService extends Context.Service<
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,
+              actor: yield* sessionActor,
               role: "user",
               content,
               status: waits || carries ? "queued" : "complete",
