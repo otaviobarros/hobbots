@@ -178,22 +178,17 @@ const startGitHubHub = async (members: HubCallRuntime | null = null) => {
 
 const offered = (request: PromptRequest) => request.hubTools?.tools.map((tool) => tool.name) ?? [];
 
-/** A tool a delegation lists, as its details carry it (#1348). */
-interface Listed {
-  readonly tool: string;
-  readonly from: string;
-  readonly answer?: string | null;
-  readonly reason?: string;
-}
+/** The runtime's own tools a delegation lists beside the hub tools (#1348). */
+const RUNTIME_TOOLS = ["file_reads", "file_edits", "commands", "read_only_commands"];
 
-/** The tools a `delegate_task` answer lists for its member, and those it says the member lacks. */
+/** The tools a `delegate_task` answer lists for its member with their answers, and those it lacks with why. */
 const listedIn = (answer: string | undefined) => {
   if (answer === undefined) throw new Error("expected delegate_task's answer");
   const details = JSON.parse(answer.slice(answer.lastIndexOf("\n{") + 1)) as {
-    readonly tools: ReadonlyArray<Listed>;
-    readonly dropped: ReadonlyArray<Listed>;
+    readonly tools: Readonly<Record<string, string>>;
+    readonly dropped: Readonly<Record<string, string>>;
   };
-  return { ...details, hub: details.tools.filter((tool) => tool.from !== "the runtime").map((tool) => tool.tool) };
+  return { ...details, hub: Object.keys(details.tools).filter((tool) => !RUNTIME_TOOLS.includes(tool)) };
 };
 
 const firstPrompt = (requests: ReadonlyArray<PromptRequest>, task: Task) =>
@@ -291,7 +286,7 @@ const writesOn = async (runtime: HubCallRuntime) => {
   // What the delegation listed is what the session was offered, on this runtime (#1348).
   const listed = listedIn(answers.get("work-Rook"));
   expect([...listed.hub].sort(), name).toEqual([...offered(request)].sort());
-  expect(listed.tools, name).toContainEqual({ tool: "github_comment", from: "the GitHub Charm", answer: "ask" });
+  expect(listed.tools.github_comment, name).toBe("ask");
   // A `git push` from Rook's folder goes to github_push, as in chat.
   const steering = request.steering?.takeovers ?? [];
   expect(
@@ -447,17 +442,15 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     expect(checked).toContain("Checked only: nothing was delegated, and no Task started.");
     expect(checked).toContain("github_push, and github_open_pull_request (Allow); github_comment (Ask).");
     const { tools, dropped } = listedIn(checked);
-    expect(tools).toEqual(
-      expect.arrayContaining([
-        { tool: "file reads", from: "the runtime", answer: "allow" },
-        { tool: "github_push", from: "the GitHub Charm", answer: "allow" },
-        { tool: "github_comment", from: "the GitHub Charm", answer: "ask" },
-        { tool: "github_open_pull_request", from: "the GitHub Charm", answer: "allow" },
-        { tool: "github_search", from: "the GitHub Charm", answer: "allow" },
-        { tool: "delegate_task", from: "the Task tools", answer: "allow" },
-      ]),
-    );
-    expect(dropped.filter((tool) => tool.from !== "the runtime")).toEqual([]);
+    expect(tools).toMatchObject({
+      file_reads: "allow",
+      github_push: "allow",
+      github_comment: "ask",
+      github_open_pull_request: "allow",
+      github_search: "allow",
+      delegate_task: "allow",
+    });
+    expect(Object.keys(dropped).filter((tool) => !RUNTIME_TOOLS.includes(tool))).toEqual([]);
     // Nothing started, and nothing about Tasks was recorded, not even the call's key.
     expect(await run(threadTrees)).toEqual([]);
     const since = await run(Effect.flatMap(Effect.service(EventJournal), (each) => each.readAfter(journal.sequence)));
@@ -492,8 +485,8 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     );
     const { listed, offered: given } = await listedAndOffered(started, PIP, "work-Pip");
     expect([...listed.hub].sort()).toEqual([...given].sort());
-    expect(listed.tools).toContainEqual({ tool: "github_push", from: "the GitHub Charm", answer: "ask" });
-    expect(listed.dropped).toContainEqual({ tool: "github_comment", from: "the GitHub Charm", reason: "never" });
+    expect(listed.tools.github_push).toBe("ask");
+    expect(listed.dropped.github_comment).toBe("never");
     const answer = started.answers.get("work-Pip") ?? "";
     expect(answer).toContain("It will not be offered github_comment, since its answer is Never.");
     expect(answer).toContain(
@@ -522,9 +515,9 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     const { listed, offered: given } = await listedAndOffered(started, ROOK, "no-charm");
     expect([...listed.hub].sort()).toEqual([...given].sort());
     expect(given.filter((tool) => tool.startsWith("github_"))).toEqual([]);
-    expect(listed.dropped).toContainEqual({ tool: "github_comment", from: "the GitHub Charm", reason: "not-granted" });
+    expect(listed.dropped.github_comment).toBe("not-granted");
     const answer = started.answers.get("no-charm") ?? "";
-    expect(answer).toContain("It will not be offered the GitHub Charm's tools, since Rook does not hold it.");
+    expect(answer.slice(0, answer.lastIndexOf("\n{"))).not.toContain("github_push");
     expect(answer).toContain("Warning: the brief names commenting, but github_comment will not be offered");
   }, 60_000);
 });

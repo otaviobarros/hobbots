@@ -206,6 +206,8 @@ const toolsFor = (
   );
 };
 
+const NO_OFFER: SessionToolOffer = { tools: [], dropped: [] };
+
 const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
 
 const ANSWER_WORDS = { allow: "Allow", ask: "Ask", never: "Never: each call is refused" } as const;
@@ -231,31 +233,26 @@ const dropWords = (member: Agent, dropped: DroppedTool): string => {
 /** Whether the lead hears of a tool by name: the runtime's are in the sentence before, and the Task tools are always offered. */
 const named = (tool: { readonly from: string }) => tool.from !== RUNTIME_TOOLS_OWNER && tool.from !== "the Task tools";
 
+/** Whether a tool comes from a Charm, whose tools the lead hears of by name. */
+const fromCharm = (tool: { readonly from: string }) => tool.from.endsWith(" Charm");
+
 /**
- * The member's hub tools in words for the lead (#1348): each with its answer, then each it will not
- * be offered and why. A Charm the member does not hold is named once, not tool by tool.
+ * The member's Charm tools in words for the lead (#1348), kept short since the lead reads them in
+ * its turn and they are what a brief most often needs: each with its answer, then each named tool
+ * it will not be offered and why. The call's details list every tool, a Charm it does not hold or
+ * that is not connected included; the warning names one the brief needs.
  */
 const offerWords = (member: Agent, offer: SessionToolOffer): string => {
-  const byAnswer = (["allow", "ask", "never"] as const).flatMap((answer) => {
-    const tools = offer.tools.filter((tool) => named(tool) && tool.answer === answer).map((tool) => tool.tool);
-    return tools.length === 0 ? [] : [`${listFormat.format(tools)} (${ANSWER_WORDS[answer]})`];
+  const byAnswer = (["allow", "ask", "never", null] as const).flatMap((answer) => {
+    const tools = offer.tools.filter((tool) => fromCharm(tool) && tool.answer === answer).map((tool) => tool.tool);
+    const words = answer === null ? "decided on each call" : ANSWER_WORDS[answer];
+    return tools.length === 0 ? [] : [`${listFormat.format(tools)} (${words})`];
   });
-  const decided = offer.tools.filter((tool) => named(tool) && tool.answer === null).map((tool) => tool.tool);
-  const offered = [
-    ...byAnswer,
-    ...(decided.length === 0 ? [] : [`${listFormat.format(decided)} (decided on each call)`]),
-  ];
-  const ungranted = [
-    ...new Set(offer.dropped.filter((tool) => tool.reason === "not-granted").map((tool) => tool.from)),
-  ];
-  const lacks = [
-    ...offer.dropped
-      .filter((tool) => named(tool) && tool.reason !== "not-granted")
-      .map((tool) => `${tool.tool}, since ${dropWords(member, tool)}`),
-    ...ungranted.map((from) => `${from}'s tools, since ${member.name} does not hold it`),
-  ];
+  const lacks = offer.dropped
+    .filter((tool) => named(tool) && tool.reason !== "not-granted" && tool.reason !== "not-connected")
+    .map((tool) => `${tool.tool}, since ${dropWords(member, tool)}`);
   return [
-    offered.length === 0 ? "" : ` Its hub tools: ${offered.join("; ")}.`,
+    byAnswer.length === 0 ? "" : ` Its Charm tools: ${byAnswer.join("; ")}.`,
     lacks.length === 0 ? "" : ` It will not be offered ${lacks.join("; ")}.`,
   ].join("");
 };
@@ -264,19 +261,26 @@ const offerWords = (member: Agent, offer: SessionToolOffer): string => {
  * Words in a brief that name work needing a tool, by the tool (#1348). Simple on purpose: a brief
  * that names the work is warned about, and one that does not is not.
  */
-const NEEDS: ReadonlyArray<{ readonly tool: string; readonly words: RegExp; readonly work: string }> = [
+const NEEDS: ReadonlyArray<{
+  readonly tool: string;
+  readonly words: RegExp;
+  readonly work: string;
+  /** A tool that does the same work when offered, as a command pushes where no Charm takes it over. */
+  readonly or?: string;
+}> = [
   { tool: "github_comment", words: /\bcomment/i, work: "commenting" },
   { tool: "github_open_pull_request", words: /\bpull requests?\b|\bPRs?\b/, work: "opening a pull request" },
-  { tool: "github_push", words: /\bpush/i, work: "pushing" },
+  { tool: "github_push", words: /\bpush/i, work: "pushing", or: "commands" },
   { tool: "commands", words: /\bcommit|\brun\b|\btests?\b/i, work: "running commands" },
-  { tool: "file edits", words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },
+  { tool: "file_edits", words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },
 ];
 
 /** A warning for the lead when the brief names work that needs a tool the member will not be offered. Empty otherwise. */
-const briefNeeds = (member: Agent, brief: string, dropped: ReadonlyArray<DroppedTool>): string => {
+const briefNeeds = (member: Agent, brief: string, offer: SessionToolOffer): string => {
   const lacking = NEEDS.flatMap((need) => {
-    const tool = dropped.find((each) => each.tool === need.tool);
-    return tool !== undefined && need.words.test(brief) ? [{ need, tool }] : [];
+    const tool = offer.dropped.find((each) => each.tool === need.tool);
+    const instead = offer.tools.some((each) => each.tool === need.or);
+    return tool !== undefined && !instead && need.words.test(brief) ? [{ need, tool }] : [];
   });
   if (lacking.length === 0) return "";
   const each = lacking.map(
@@ -287,8 +291,9 @@ const briefNeeds = (member: Agent, brief: string, dropped: ReadonlyArray<Dropped
 
 /** The offer as the call's details carry it, for a lead that reads them. */
 const offerDetails = (offer: SessionToolOffer) => ({
-  tools: offer.tools.map((tool: OfferedTool) => ({ tool: tool.tool, from: tool.from, answer: tool.answer })),
-  dropped: offer.dropped.map((tool) => ({ tool: tool.tool, from: tool.from, reason: tool.reason })),
+  // Each tool by its name, with its answer, "per-call" for one decided on each call: compact, since a lead reads it in its turn.
+  tools: Object.fromEntries(offer.tools.map((tool: OfferedTool) => [tool.tool, tool.answer ?? "per-call"])),
+  dropped: Object.fromEntries(offer.dropped.map((tool) => [tool.tool, tool.reason])),
 });
 
 /** Tools a lead brings in other hobs and moves results between them with. */
@@ -420,8 +425,22 @@ export const makeDelegating = ({
       return " The user's message this turn answers goes with it as your note, so they can see it reached this hob.";
     });
 
+  /**
+   * What the member's session would be offered, read before the call's transaction (#1348). A
+   * Charm's services and the hub's other tool sets read the database on their own, which would
+   * wait on the transaction a delegation runs in, so `delegate_task` takes the offer prepared here.
+   */
+  const previewOffer = (scope: CallScope, input: DelegateInput) =>
+    Effect.gen(function* () {
+      const task = yield* ownTask(scope, input.task_id);
+      const member = yield* findHob(hobs, input.hob);
+      const { given, above } = yield* memberAuthority(scope, task, member, input);
+      return yield* memberOffer(member, [...above, { overrides: given.overrides, folders: given.folders }]);
+    });
+
   return {
-    delegate_task: (scope: CallScope, input: DelegateInput) =>
+    previewOffer,
+    delegate_task: (scope: CallScope, input: DelegateInput & { readonly prepared?: SessionToolOffer | null }) =>
       Effect.gen(function* () {
         const task = yield* ownTask(scope, input.task_id);
         const member = yield* findHob(hobs, input.hob);
@@ -431,8 +450,12 @@ export const makeDelegating = ({
         const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         // The new Delegation narrows the member last, as its session reads it once the Task starts.
-        const offer = yield* memberOffer(member, [...above, { overrides: given.overrides, folders: given.folders }]);
-        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer.dropped)}`;
+        // Null when it could not be read before the call: the answer then lists nothing rather than wait.
+        const offer =
+          input.prepared === undefined
+            ? yield* memberOffer(member, [...above, { overrides: given.overrides, folders: given.folders }])
+            : (input.prepared ?? NO_OFFER);
+        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}`;
         if (input.check === true) {
           return {
             done: {

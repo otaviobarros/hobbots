@@ -58,8 +58,8 @@ describe("a member's session offer, described for its lead (#1348)", () => {
       "complete_task",
     ]);
     expect(tools).toEqual([
-      { tool: "file reads", from: "the runtime", answer: "allow" },
-      { tool: "file edits", from: "the runtime", answer: "ask" },
+      { tool: "file_reads", from: "the runtime", answer: "allow" },
+      { tool: "file_edits", from: "the runtime", answer: "ask" },
       { tool: "pip_read", from: "the Pip Charm", answer: "allow" },
       { tool: "rook_read", from: "the Rook Charm", answer: "allow" },
       { tool: "rook_write", from: "the Rook Charm", answer: "ask" },
@@ -95,7 +95,7 @@ describe("a member's session offer, described for its lead (#1348)", () => {
     expect(none.tools).toEqual([{ tool: "complete_task", from: "the Task tools", answer: "allow" }]);
     expect(none.dropped).toEqual(
       expect.arrayContaining([
-        { tool: "file reads", from: "the runtime", reason: "chat-only" },
+        { tool: "file_reads", from: "the runtime", reason: "chat-only" },
         { tool: "pip_read", from: "the Pip Charm", reason: "not-granted" },
         { tool: "rook_write", from: "the Rook Charm", reason: "not-granted" },
         { tool: "git_init", from: "Local Git", reason: "chat-only" },

@@ -54,7 +54,10 @@ export interface SessionToolOffer {
   readonly dropped: ReadonlyArray<DroppedTool>;
 }
 
-/** Who offers the runtime's own file and command tools, as the offer names it. */
+/**
+ * Who offers the runtime's own file and command tools, as the offer names it. They are named
+ * `file_reads`, `file_edits` and `commands`, or `read_only_commands`, one word each like a hub tool.
+ */
 export const RUNTIME_TOOLS_OWNER = "the runtime";
 
 /**
@@ -85,10 +88,10 @@ const runtimeTools = (access: ToolAccess | null, decide: (operation: AnyOperatio
   const chatOnly = access === null || access.folders.length === 0 || !open.read;
   const commandOperation: PolicyOperation = decide("run-commands") === "deny" ? "local-git" : "run-commands";
   const entries: ReadonlyArray<readonly [string, boolean, PolicyOperation, DropReason]> = [
-    ["file reads", open.read, "read-files", "never"],
-    ["file edits", open.edit, "edit-files", "never"],
+    ["file_reads", open.read, "read-files", "never"],
+    ["file_edits", open.edit, "edit-files", "never"],
     [
-      open.commandsReadOnly ? "read-only commands" : "commands",
+      open.commandsReadOnly ? "read_only_commands" : "commands",
       open.commands,
       commandOperation,
       decide("run-commands") === "deny" && decide("local-git") === "deny" ? "never" : "commands-closed",

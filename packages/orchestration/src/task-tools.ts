@@ -247,6 +247,16 @@ export class TaskTools extends Context.Service<
             const names = [...(offer.hubTools?.tools ?? []), ...TASK_TOOLS].map((tool) => tool.name);
             return yield* describeOffer({ agentId: member.id, access, offered: names });
           });
+        const delegating = makeDelegating({
+          tasks,
+          capacity,
+          limits,
+          authority,
+          folderChecks,
+          hobs,
+          separator,
+          memberOffer,
+        });
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({
             tasks,
@@ -260,7 +270,8 @@ export class TaskTools extends Context.Service<
             authority: authority.of,
             separator,
           }),
-          ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator, memberOffer }),
+          delegate_task: delegating.delegate_task,
+          hand_off: delegating.hand_off,
           ...makeAsking({
             tasks,
             hobs,
@@ -315,6 +326,9 @@ export class TaskTools extends Context.Service<
               Effect.mapError((error) => new TaskToolRefused({ reason: "invalid-input", message: describe(error) })),
             );
             const { key, ...rest } = input;
+            // The member's offer is read before the call's transaction, which its services would wait on.
+            const prepared =
+              name === "delegate_task" ? yield* prepareOffer(agentId, source, rest as DelegateInput) : null;
             // What the turn changed is on the record before the completion reads it (#586), and
             // before a delegation, so a lead's earlier changes are not taken for its member's (#658).
             if (name === "complete_task" || name === "delegate_task") yield* settle(rest, source.taskId());
@@ -334,7 +348,10 @@ export class TaskTools extends Context.Service<
                 const resolved = yield* source.resolve(name, at);
                 seen.resolved = resolved;
                 const scope = yield* scopeOf(withShown(resolved.caller, source.shown), at);
-                const made = yield* handlers[name](scope, rest as never);
+                const made = yield* handlers[name](
+                  scope,
+                  (name === "delegate_task" ? { ...rest, prepared } : rest) as never,
+                );
                 // A call that starts the turn's Task takes the turn's calls into that Task's work.
                 const started = resolved.entries.some((entry) => entry.type === "TaskCreated");
                 return {
@@ -363,19 +380,30 @@ export class TaskTools extends Context.Service<
          * keeps no key and records nothing, a refusal included. A chat turn that works on no Task
          * yet checks it on the Task its first delegation would start.
          */
+        /** The scope a call outside any transaction reads: the turn's Task, or the one its first call would start. */
+        const scopeOutside = (agentId: TaskToolCaller["agentId"], source: CallSource, at: string) => {
+          const taskId = source.taskId();
+          if (taskId !== null) return scopeOf({ agentId, taskId }, at);
+          return source.draft === undefined
+            ? refuse("no-task", "You are not working on a Task, so there is nothing to delegate from.")
+            : Effect.succeed(source.draft(at));
+        };
+
+        /** The member's offer for a delegation, or null when it cannot be read now: the call then refuses in its own words. */
+        const prepareOffer = (agentId: TaskToolCaller["agentId"], source: CallSource, input: DelegateInput) =>
+          Effect.gen(function* () {
+            const at = DateTime.formatIso(yield* DateTime.now);
+            const scope = yield* scopeOutside(agentId, source, at);
+            return yield* delegating.previewOffer(scope, input);
+          }).pipe(Effect.orElseSucceed(() => null));
+
         const checkOnly = (agentId: TaskToolCaller["agentId"], source: CallSource, raw: unknown) =>
           Effect.gen(function* () {
             const { key: _key, ...input } = yield* Schema.decodeUnknownEffect(TaskToolInputs.delegate_task)(raw).pipe(
               Effect.mapError((error) => new TaskToolRefused({ reason: "invalid-input", message: describe(error) })),
             );
             const at = DateTime.formatIso(yield* DateTime.now);
-            const taskId = source.taskId();
-            const scope =
-              taskId !== null
-                ? yield* scopeOf({ agentId, taskId }, at)
-                : source.draft === undefined
-                  ? yield* refuse("no-task", "You are not working on a Task, so there is nothing to delegate from.")
-                  : source.draft(at);
+            const scope = yield* scopeOutside(agentId, source, at);
             const made = yield* handlers.delegate_task(scope, input satisfies DelegateInput as never);
             return made.done;
           });
