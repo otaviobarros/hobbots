@@ -12,15 +12,16 @@ export interface CampList<T> {
 
 /**
  * The first few camps in their order (pinned first), and the open camp wherever it falls, so the
- * row for the page you are on never hides.
+ * row for the page you are on never hides. `unread` holds the threads you have not read.
  */
-export const campList = <T extends { readonly id: string; readonly unread: boolean }>(
+export const campList = <T extends { readonly id: string }>(
   camps: ReadonlyArray<T>,
   openId: string | undefined,
+  unread: ReadonlySet<string>,
   limit: number = CAMPS_SHOWN,
 ): CampList<T> => {
   if (camps.length <= limit) return { shown: camps, hidden: 0, hiddenUnread: false };
   const shown = camps.filter((camp, index) => index < limit || camp.id === openId);
   const left = camps.filter((camp) => !shown.includes(camp));
-  return { shown, hidden: left.length, hiddenUnread: left.some((camp) => camp.unread) };
+  return { shown, hidden: left.length, hiddenUnread: left.some((camp) => unread.has(camp.id)) };
 };

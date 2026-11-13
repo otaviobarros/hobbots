@@ -36,8 +36,10 @@ import {
   Thread,
   ThreadId,
   ThreadLifecycle,
+  type ThreadMember,
   type ThreadRunStatus,
   takesNewWork,
+  type UnreadThreads,
   waitedSteps,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
@@ -180,15 +182,18 @@ export class ChatService extends Context.Service<
       value: boolean,
     ) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived | ThreadNotCamp>;
     /**
-     * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027), so
-     * its unread dot clears on every device. The marker only moves forward: a message you had read
-     * past, or one from another thread, returns the thread as it is. An archived thread takes it too.
+     * Records that the person asking read the thread through `messageId`, as they saw it at
+     * `revision` (ADR 027), so its unread dot clears on every device of theirs: their member row,
+     * with its marker moved (ADR 039). The marker only moves forward: a message they had read past,
+     * or one from another thread, returns null. An archived thread takes it too.
      */
     readonly markRead: (
       threadId: ThreadId,
       messageId: MessageId,
       revision: number,
-    ) => Effect.Effect<Thread, ThreadNotFound>;
+    ) => Effect.Effect<ThreadMember | null, ThreadNotFound>;
+    /** The threads where a hob wrote since the person asking last read them (ADR 039). */
+    readonly unreadThreads: Effect.Effect<UnreadThreads>;
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /**
@@ -678,6 +683,7 @@ export class ChatService extends Context.Service<
         setPinned,
         setPrivate,
         markRead,
+        unreadThreads: repo.listUnreadThreads,
         restore,
         makeCamp,
         startFresh,

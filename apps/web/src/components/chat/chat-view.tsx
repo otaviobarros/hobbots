@@ -180,7 +180,7 @@ export function ChatView({
   // What changed while you were away is read before the chat marks itself read (ADR 037).
   const catchUp = useCatchUp(thread.data, inView);
   // Reading the chat clears its unread dot on every device, while it is in view (ADR 027).
-  useReadThread(hobId, thread.data, transcript, inView && !catchUp.reading);
+  useReadThread(thread.data, transcript, inView && !catchUp.reading);
   // Notes to self go from the composer too, and wake no hob (ADR 037).
   const note = useNoteToSelf(threadId, place);
   // Up brings back the last message that went out; a queued one is still there to remove or edit.

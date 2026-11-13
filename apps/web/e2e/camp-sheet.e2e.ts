@@ -1,4 +1,4 @@
-import type { Message, Thread } from "@hobbots/domain";
+import type { Message, Thread, ThreadId, UnreadThreads } from "@hobbots/domain";
 import type { Locator, Page, Route } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, test } from "./hub.ts";
@@ -13,15 +13,11 @@ test.afterEach(stopAldricHub);
 
 const threadOf = (page: Page) => new URL(page.url()).hash.split("/threads/")[1]?.split("?")[0] ?? "";
 
-/** Whether the hub has `chat` unread, as the hob's list says. */
-const unreadOf =
-  (url: string, aldric: string, headers: Record<string, string>, chat: string) =>
-  async (): Promise<boolean | undefined> => {
-    const listed = (await (
-      await fetch(`${url}/api/agents/${aldric}/threads`, { headers })
-    ).json()) as ReadonlyArray<Thread>;
-    return listed.find((thread) => thread.id === chat)?.unread;
-  };
+/** Whether the hub has `chat` unread for you, as your list of unread threads says. */
+const unreadOf = (url: string, headers: Record<string, string>, chat: string) => async (): Promise<boolean> => {
+  const listed = (await (await fetch(`${url}/api/unread-threads`, { headers })).json()) as UnreadThreads;
+  return listed.threadIds.includes(chat as ThreadId);
+};
 
 /** Sends `lines` as one message and waits until the reply, which echoes them, has ended. */
 const say = async (page: Page, composerName: RegExp, lines: ReadonlyArray<string>) => {
@@ -159,7 +155,7 @@ test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async (
   await api("POST", `/threads/${chat}/messages`, {
     content: ["While you are out.", script("record_decision", { key: "fridays", text: "Ship on Fridays." })].join("\n"),
   });
-  const unread = unreadOf(url, aldric, hub.headers, chat);
+  const unread = unreadOf(url, hub.headers, chat);
   await expect.poll(unread, { timeout: 15_000 }).toBe(true);
 
   await page.goto(address);
@@ -186,7 +182,7 @@ test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on 
   await say(page, /^Message Aldric/, ["Hello."]);
   const chat = threadOf(page);
   const address = page.url();
-  const unread = unreadOf(url, aldric, hub.headers, chat);
+  const unread = unreadOf(url, hub.headers, chat);
   // Leaving and coming back changes only the address's hash, so the page and its query cache stay
   // while the chat view unmounts and mounts again, as switching chats in the app does.
   const away = async (decision: { key: string; text: string }) => {
@@ -218,7 +214,7 @@ test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread until
   await say(page, /^Message Aldric/, ["Hello."]);
   const chat = threadOf(page);
   const address = page.url();
-  const unread = unreadOf(url, aldric, hub.headers, chat);
+  const unread = unreadOf(url, hub.headers, chat);
   await page.goto(`${url}/#/hobs/${aldric}`);
   await api("POST", `/threads/${chat}/messages`, {
     content: ["While you are out.", script("record_decision", { key: "fridays", text: "Ship on Fridays." })].join("\n"),

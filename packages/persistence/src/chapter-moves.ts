@@ -30,8 +30,7 @@ import type { makeCampWrites } from "./camps.ts";
 import { chapterRows, writeChapters } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
-import { unreadExpression } from "./thread-columns.ts";
-import { followThreadReads } from "./thread-member-rows.ts";
+import { keepReadersRead } from "./thread-member-rows.ts";
 
 // Moving a chapter into a camp (ADR 037, #1385): one transaction that runs the pure `planMove` on
 // the chapters as stored, re-parents the chapter's messages, decisions, artifacts and the quests
@@ -104,9 +103,7 @@ export const makeChapterMoves = (
   const moveMessages = (from: ThreadId, plan: ChapterMovePlan, revision: number) =>
     Effect.gen(function* () {
       const to = plan.landed.threadId;
-      yield* sql`UPDATE threads SET read_revision = ${revision}
-        WHERE ${sql.in("id", [from, to])} AND ${unreadExpression(sql)} = 0`;
-      yield* followThreadReads(sql, [from, to]);
+      yield* keepReadersRead(sql, [from, to], revision);
       const moved = yield* sql<{ readonly id: MessageId; readonly steps: unknown }>`SELECT id, steps FROM messages
         WHERE chapter_id = ${plan.stub.id} ORDER BY seq`;
       const [last] = yield* sql<{

@@ -1,37 +1,37 @@
-import {
-  type AgentId,
-  isInProgress,
-  leavesUnread,
-  type Message,
-  type MessageId,
-  Thread,
-  type ThreadId,
-} from "@hobbots/domain";
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { isInProgress, leavesUnread, type Message, type MessageId, type Thread, type ThreadId } from "@hobbots/domain";
+import { type QueryClient, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { call } from "./client.ts";
-import { placeThread, queryKeys } from "./queries.ts";
-
-/** The hob's thread lists, live and archived, as Query holds them. */
-const threadLists = (queryClient: QueryClient) =>
-  queryClient.getQueriesData<ReadonlyArray<Thread>>({
-    predicate: (query) =>
-      query.queryKey[0] === "agents" && /^(threads|archivedThreads)$/.test(String(query.queryKey[2])),
-  });
-
-/** Sets whether a thread is unread in every list that holds it, without a new revision. */
-const setUnread = (queryClient: QueryClient, threadId: ThreadId, unread: boolean) => {
-  for (const [key, threads] of threadLists(queryClient)) {
-    if (!threads?.some((thread) => thread.id === threadId && thread.unread !== unread)) continue;
-    queryClient.setQueryData<ReadonlyArray<Thread>>(key, (old) =>
-      old?.map((thread) => (thread.id === threadId ? new Thread({ ...thread, unread }) : thread)),
-    );
-  }
-};
+import { followsEvents, queryKeys } from "./queries.ts";
+import { syncedUnread } from "./sync.ts";
 
 /**
- * A reply that just ended leaves its thread unread in the hob's lists, as the hub works it out when
- * it reads them (ADR 027), so the dot shows as the reply lands. Call it before the transcript takes
+ * The threads unread for you, as the hub works them out from your own read markers (ADR 039), with
+ * the replies that landed since added.
+ */
+export const unreadThreadsQuery = queryOptions({
+  queryKey: queryKeys.unreadThreads,
+  ...followsEvents,
+  queryFn: syncedUnread(() => call((c) => c.threads.unreadThreads())),
+});
+
+const NONE: ReadonlySet<ThreadId> = new Set();
+const asSet = (ids: ReadonlyArray<ThreadId>): ReadonlySet<ThreadId> => new Set(ids);
+
+/** The threads unread for you; none until the hub answers. */
+export const useUnreadThreads = (): ReadonlySet<ThreadId> =>
+  useQuery({ ...unreadThreadsQuery, select: asSet }).data ?? NONE;
+
+/** Sets whether a thread is unread for you, until the hub's list is read again. */
+const setUnread = (queryClient: QueryClient, threadId: ThreadId, unread: boolean) =>
+  queryClient.setQueryData<ReadonlyArray<ThreadId>>(queryKeys.unreadThreads, (old) => {
+    if (old === undefined || old.includes(threadId) === unread) return old;
+    return unread ? [...old, threadId] : old.filter((id) => id !== threadId);
+  });
+
+/**
+ * A reply that just ended leaves its thread unread for you, as the hub works it out when it reads
+ * your markers (ADR 027, ADR 039), so the dot shows as the reply lands. Call it before the transcript takes
  * the new copy: a reply the transcript already held as ended was there before, maybe already read.
  * The chat open in front reads it again at once.
  */
@@ -79,12 +79,10 @@ export const readThrough = (
 
 /**
  * Marks the open chat read on the hub while it is in view, on a page in front, and the thread shows
- * unread, so its dot clears on every device (ADR 027). A chat folded away beside a quest's Workbench is
- * not in view. The dot clears here at once; the hub's answer and event bring the thread's new
- * revision.
+ * unread, so its dot clears on every device of yours (ADR 027). A chat folded away beside a quest's
+ * Workbench is not in view. The dot clears here at once; your member row's event brings the rest.
  */
 export const useReadThread = (
-  hobId: AgentId,
   thread: Thread | undefined,
   transcript: ReadonlyArray<Message> | undefined,
   inView: boolean,
@@ -95,14 +93,13 @@ export const useReadThread = (
   const messageId = through?.messageId;
   const revision = through?.revision;
   const threadId = thread?.id;
-  const unread = thread?.unread === true;
+  const unread = useUnreadThreads().has(threadId as ThreadId);
   useEffect(() => {
     if (!shown || !unread || threadId === undefined || messageId === undefined || revision === undefined) return;
     setUnread(queryClient, threadId, false);
-    call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId, revision } })).then(
-      (read) => placeThread(queryClient, read),
+    call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId, revision } })).catch(
       // The dot comes back with the next read of the list; nothing else depends on it.
-      () => void queryClient.invalidateQueries({ queryKey: ["agents", hobId, "threads"], exact: true }),
+      () => void queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true }),
     );
-  }, [queryClient, hobId, threadId, messageId, revision, shown, unread]);
+  }, [queryClient, threadId, messageId, revision, shown, unread]);
 };

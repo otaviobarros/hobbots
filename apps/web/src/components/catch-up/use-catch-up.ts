@@ -2,7 +2,7 @@ import { type CatchUp, hasNews, type Thread, type ThreadId } from "@hobbots/doma
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import { catchUpQuery } from "../../api/notes.ts";
-import { usePageShown } from "../../api/thread-reads.ts";
+import { usePageShown, useUnreadThreads } from "../../api/thread-reads.ts";
 import { CATCH_UP_START, type CatchUpEvent, type CatchUpFlow, catchUpStep, moves } from "./catch-up-flow.ts";
 
 /** What the chat shows of catching up, and whether its read still holds back marking it read. */
@@ -37,11 +37,12 @@ export const useCatchUp = (thread: Thread | undefined, inView: boolean): CatchUp
   const [flow, dispatch] = useReducer(catchUpStep, CATCH_UP_START);
   // Each mount counts its visits from 1 again, so the visit's key carries this mount's own id too.
   const [mount] = useState(newMountId);
+  const unread = useUnreadThreads();
   const seen: Extract<CatchUpEvent, { readonly _tag: "See" }> = {
     _tag: "See",
     threadId: thread?.id,
     shown,
-    unread: thread?.unread === true,
+    unread: thread !== undefined && unread.has(thread.id),
   };
   // Where you are changed: the flow takes it in this render, as a visit or not (adjusting state to a prop).
   if (moves(flow, seen)) dispatch(seen);

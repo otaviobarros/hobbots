@@ -188,15 +188,16 @@ export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
       );
     });
 
-    // Needs no hob lock: the marker moves forward in one statement, whatever else changes the thread.
+    // Needs no hob lock: the reader's marker moves forward in one statement, whatever else changes
+    // the thread.
     const markRead = Effect.fn("ChatService.markRead")(function* (
       threadId: ThreadId,
       messageId: MessageId,
       revision: number,
     ) {
-      const thread = yield* findThread(threadId);
+      yield* findThread(threadId);
       const marked = yield* repo.markThreadRead(threadId, messageId, revision);
-      return Option.isSome(marked) ? yield* announce(marked.value) : thread;
+      return Option.isSome(marked) ? yield* announce(marked.value) : null;
     });
 
     return {

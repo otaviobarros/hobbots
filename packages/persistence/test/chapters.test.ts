@@ -584,8 +584,10 @@ describe("chapters in the database", () => {
           messageId: MessageId.make("v3"),
           title: "Later",
         });
+        const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
         const afterSplit = {
           messages: yield* revisions(),
+          unread: yield* unread(),
           thread: Option.getOrThrow(yield* repo.findThread(threadId)),
           checkpoint: yield* repo.findCheckpoint(threadId),
         };
@@ -593,6 +595,7 @@ describe("chapters in the database", () => {
         const merged = yield* store.mergeChapters(threadId, ChapterId.make("versions-c2"));
         const afterMerge = {
           messages: yield* revisions(),
+          unread: yield* unread(),
           thread: Option.getOrThrow(yield* repo.findThread(threadId)),
           checkpoint: yield* repo.findCheckpoint(threadId),
         };
@@ -616,7 +619,7 @@ describe("chapters in the database", () => {
       ["v4", result.first, mergedAt],
     ]);
     // A thread you had read stays read, and the briefing summary of the old boundaries is gone.
-    expect([result.afterSplit.thread.unread, result.afterMerge.thread.unread]).toEqual([false, false]);
+    expect([result.afterSplit.unread, result.afterMerge.unread]).toEqual([false, false]);
     expect([Option.isNone(result.afterSplit.checkpoint), Option.isNone(result.afterMerge.checkpoint)]).toEqual([
       true,
       true,
