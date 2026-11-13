@@ -15,6 +15,7 @@ import {
   type DelegationAuthority,
   DelegationId,
   hobStanding,
+  isCancellingTask,
   isTerminalTask,
   MilestoneId,
   NoteId,
@@ -227,7 +228,7 @@ const NO_OFFER: SessionToolOffer = { tools: [], dropped: [] };
  */
 const placeable = (scope: CallScope, task: Task, dependsOn: ReadonlyArray<string>) => {
   if (isTerminalTask(task.state)) return refuse("parent-ended", `Task ${task.id} is ${task.state}`);
-  if (task.state === "cancelling") return refuse("parent-cancelling", `Task ${task.id} is cancelling`);
+  if (isCancellingTask(task.state)) return refuse("parent-cancelling", `Task ${task.id} is cancelling`);
   const siblings = new Set<string>(scope.tree.tasks.filter((each) => each.parentId === task.id).map((each) => each.id));
   return dependsOn.every((id) => siblings.has(id))
     ? Effect.void
