@@ -833,6 +833,8 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
       expect(toolSteps(await approve(sub)), runtime).toMatchObject([{ state: "done" }]);
       const part = github.items("octo/workshop").find((item) => item.title === `Part of ${runtime}`);
       expect(tracked?.subIssues, runtime).toEqual([part?.number]);
+      // Closed, as you would on GitHub, so the next runtime's search counts only the first issue.
+      for (const opened of [tracked, part]) if (opened !== undefined) opened.state = "closed";
     });
     git(project, "checkout", "--quiet", "main");
   });
