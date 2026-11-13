@@ -33,7 +33,7 @@ The [glossary](docs/product/glossary.md) has the full list.
 
 ## Status
 
-**Beta.** Hobbots runs as a desktop app on macOS and Linux and in the browser. Hobs on Claude Code or Codex chat in persistent threads, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.4 release notes](docs/releases/0.0.4.md) list what is new in the fourth beta, including hobs that see and manage each other and web search, and its known limits.
+**Beta.** Hobbots runs as a desktop app on macOS and Linux and in the browser. Hobs on Claude Code or Codex chat in persistent threads, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.5 release notes](docs/releases/0.0.5.md) list what is new in the fifth beta, including one chat per hob with camps, chapters and records you can find, and its known limits.
 
 The [status page](docs/STATUS.md) lists what has been proven end to end, on which setup, and what is not proven yet.
 
