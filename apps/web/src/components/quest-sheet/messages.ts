@@ -78,8 +78,9 @@ export const messages = {
     needYou: ({ count }: { count: number }) =>
       plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
     open: "Open the camp's quests",
-    /** The pill's name: what it shows, then what it does. */
-    named: ({ parts }: { parts: ReadonlyArray<string> }) => `${parts.join(", ")}. Open the camp's quests`,
+    /** Read between the pill's counts, and after them what it does, so its name is "1 quest, 1 needs you. Open the camp's quests". */
+    between: ", ",
+    does: ". Open the camp's quests",
   },
   /** The banner a finished request shows under the quest's title. */
   finished: {

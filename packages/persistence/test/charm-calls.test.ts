@@ -1,6 +1,16 @@
 import { CharmCallService, CharmCalls, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
-import { Agent, AgentId, CharmCall, MessageId, TaskId, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  CharmCall,
+  MessageId,
+  OWNER_ACTOR,
+  OWNER_USER_ID,
+  TaskId,
+  ThreadId,
+  WINDOW_DEVICE_ID,
+} from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -167,6 +177,8 @@ describe("Charm call records", () => {
       deviceId: WINDOW_DEVICE_ID,
       name: "This computer's Hobbots window",
       kind: "window",
+      userId: OWNER_USER_ID,
+      actor: OWNER_ACTOR,
       whileApproved: (write) => write,
     });
     const result = await run(
@@ -201,6 +213,8 @@ describe("Charm call records", () => {
       deviceId: WINDOW_DEVICE_ID,
       name: "This computer's Hobbots window",
       kind: "window",
+      userId: OWNER_USER_ID,
+      actor: OWNER_ACTOR,
       whileApproved: (write) => write,
     });
     const onTask = (key: string, overrides: Partial<CharmCall> = {}) =>

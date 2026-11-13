@@ -10,12 +10,16 @@ import {
   HobAdmission,
   HobLifecycle,
   HobService,
+  Notes,
   PermissionSummary,
+  Records,
 } from "@hobbots/agents";
 import { CONNECT_PROTOCOL, DeviceSession, HobbotsApi } from "@hobbots/api";
 import {
+  type Actor,
   type Agent,
   type ApprovalRequest,
+  type Decision,
   DeviceId,
   type Grant,
   isInProgress,
@@ -33,6 +37,8 @@ import {
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  PinRepositoryLive,
+  RecordRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
@@ -81,6 +87,7 @@ const TestPeers = Layer.succeed(TailnetPeers, {
 const App = HobLifecycle.layer
   .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer, EventStream.layer)))
   .pipe(Layer.provideMerge(ChatService.layer))
+  .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, Records.layer)))
   .pipe(Layer.provideMerge(ApprovalService.layer))
   .pipe(Layer.provideMerge(GrantService.layer))
   .pipe(Layer.provideMerge(HobToolsLive))
@@ -94,6 +101,8 @@ const App = HobLifecycle.layer
           ApprovalRepositoryLive,
           GrantRepositoryLive,
           TaskRepositoryLive,
+          RecordRepositoryLive,
+          PinRepositoryLive,
           EventJournal.layer,
           BackpackLive,
           SetupRepository.layer,
@@ -532,6 +541,56 @@ describe("only approved devices reach the hub", () => {
   });
 });
 
+describe("a device acts for its user", () => {
+  // covers ADR 039 (Users as actors)
+  it("[TC-PE-1452-04] names the device's user as the author of a message, a note and a decision it sends", async () => {
+    await setupDone();
+    const thread = await hobThread("Pip");
+    const { cookie } = await pairedBrowser();
+    // A new device belongs to the owner until accounts exist.
+    expect((await devices()).map((device) => device.userId)).toEqual(["owner", "owner"]);
+
+    // Give the browser to a second person, as accounts will, and send from both devices.
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO users ${sql.insert({ id: "bruna", name: "Bruna", initials: "B", color: "sky", state: "active" })}`;
+        yield* sql`UPDATE devices SET user_id = 'bruna' WHERE id <> ${WINDOW_DEVICE_ID}`;
+      }),
+    );
+    const asBruna = browser(cookie, "POST");
+    expect((await request(asBruna, "POST", `/api/threads/${thread.id}/messages`, { content: "Hi, Pip" })).status).toBe(
+      200,
+    );
+    await settledReply(thread);
+    expect((await request(APP, "POST", `/api/threads/${thread.id}/messages`, { content: "Hi again" })).status).toBe(
+      200,
+    );
+    await settledReply(thread);
+    const note = await request<Message>(asBruna, "POST", `/api/threads/${thread.id}/notes`, {
+      key: "note-1",
+      content: "Ask about the beds",
+    });
+    const decided = await request<{ recorded: Decision }>(asBruna, "POST", `/api/threads/${thread.id}/decisions`, {
+      key: "beds",
+      text: "Raised beds",
+      replaces: null,
+    });
+
+    const BRUNA: Actor = { kind: "user", id: "bruna" };
+    const OWNER: Actor = { kind: "user", id: "owner" };
+    const sent = (await request<ReadonlyArray<Message>>(APP, "GET", `/api/threads/${thread.id}/messages`)).body;
+    expect(
+      sent.filter((message) => message.role === "user").map((message) => [message.content, message.actor]),
+    ).toEqual([
+      ["Hi, Pip", BRUNA],
+      ["Hi again", OWNER],
+    ]);
+    expect(note.body.actor).toEqual(BRUNA);
+    expect(decided.body.recorded.actor).toEqual(BRUNA);
+  });
+});
+
 describe("revoking a device", () => {
   /** An open event stream, read until the hub sent `ready`, so its connection is subscribed and live. */
   const openStream = async (caller: Caller) => {
@@ -791,15 +850,19 @@ describe("only the user decides approvals and manages grants", () => {
         join("packages", "agents", "src", "hob-proposals.ts"),
         join("packages", "agents", "src", "hub-questions.ts"),
         join("packages", "agents", "src", "memory-shares.ts"),
+        join("packages", "agents", "src", "notes.ts"),
         join("packages", "agents", "src", "questions.ts"),
+        join("packages", "agents", "src", "records.ts"),
         join("packages", "agents", "src", "skill-proposals.ts"),
         join("packages", "agents", "src", "skill-reviews.ts"),
+        join("packages", "agents", "src", "users.ts"),
         join("packages", "api", "src", "user-session.ts"),
       ].sort(),
     );
     // The services only require it: they import it, name it in a signature or a comment, and read it.
+    // The session default only reads it when there is one.
     const requiring =
-      /^\s*(UserSession,|import .*\bUserSession\b.*|(const session = )?yield\* UserSession;|.*, UserSession>;?|\s*\*.*|\) => Effect\.Effect<.*UserSession>;|\s*UserSession$)$/;
+      /^\s*(UserSession,|import .*\bUserSession\b.*|(const session = )?yield\* UserSession;|.*, UserSession>;?|\s*\*.*|\) => Effect\.Effect<.*UserSession>;|\s*UserSession$|\s*Effect\.serviceOption\(UserSession\),)$/;
     for (const service of [
       "approvals.ts",
       "charm-calls.ts",
@@ -808,9 +871,12 @@ describe("only the user decides approvals and manages grants", () => {
       "grants.ts",
       "hob-proposals.ts",
       "memory-shares.ts",
+      "notes.ts",
       "questions.ts",
+      "records.ts",
       "skill-proposals.ts",
       "skill-reviews.ts",
+      "users.ts",
     ]) {
       const lines = readFileSync(join(root, "packages", "agents", "src", service), "utf8")
         .split("\n")

@@ -37,6 +37,7 @@ import {
   Message,
   MessageId,
   memoryProjectIdentity,
+  OWNER_ACTOR,
   QuestId,
   TaskId,
   Thread,
@@ -109,6 +110,7 @@ const message = (id: string, threadId: ThreadId, role: "user" | "assistant", con
   new Message({
     id: MessageId.make(id),
     threadId,
+    actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content,
     status: "complete",
@@ -268,8 +270,8 @@ const seed = Effect.gen(function* () {
   });
   // A device the hub approved: an export never holds it.
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`INSERT INTO devices (id, name, kind, platform, token_hash, approved_at)
-    VALUES ('phone', 'Otto phone', 'browser', 'iOS', ${TOKEN_HASH}, ${AT})`;
+  yield* sql`INSERT INTO devices (id, user_id, name, kind, platform, token_hash, approved_at)
+    VALUES ('phone', 'owner', 'Otto phone', 'browser', 'iOS', ${TOKEN_HASH}, ${AT})`;
 });
 
 /** Memory for the exports (ADR 028): Quill's own, a project's and everyone's, none of it Aldric's. */

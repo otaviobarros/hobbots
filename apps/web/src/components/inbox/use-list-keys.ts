@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { type RefObject, useEffect, useEffectEvent } from "react";
 import type { InboxEntry } from "./inbox-entries.ts";
 import { stepFrom, stepKey } from "./inbox-keys.ts";
+import { type InboxIn, inSearch } from "./inbox-scope.ts";
 
 /**
  * ↑ and ↓, or K and J, move the selection through Needs you in the order the list shows, from
@@ -13,6 +14,7 @@ export const useListKeys = (
   order: ReadonlyArray<InboxEntry>,
   selectedKey: string | undefined,
   list: RefObject<HTMLElement | null>,
+  scope?: InboxIn | undefined,
 ) => {
   const navigate = useNavigate();
   const onKey = useEffectEvent((event: KeyboardEvent) => {
@@ -25,7 +27,7 @@ export const useListKeys = (
       rows.querySelector<HTMLElement>(`[data-entry="${CSS.escape(next.key)}"]`)?.focus();
     }
     if (next.key !== selectedKey) {
-      void navigate({ to: "/inbox", search: { tab: "needs", request: next.key }, replace: true });
+      void navigate({ to: "/inbox", search: { tab: "needs", ...inSearch(scope), request: next.key }, replace: true });
     }
   });
   useEffect(() => {

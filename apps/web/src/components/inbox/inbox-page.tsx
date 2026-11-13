@@ -61,6 +61,8 @@ import { expiryText, type InboxTab, type InboxView, isInboxView, pendingCount, t
 import { InboxKeyHints } from "./inbox-key-hints.tsx";
 import { shownOrder } from "./inbox-keys.ts";
 import { InboxList, InboxRowsSkeleton, InboxViewPicker } from "./inbox-list.tsx";
+import { type InboxIn, type InboxSearch, inScope, inSearch, waitingIn } from "./inbox-scope.ts";
+import { InboxScopePicker, QuietHere } from "./inbox-scope-parts.tsx";
 import { InboxPanel, InboxTabList, InboxTabs } from "./inbox-tabs.tsx";
 import { messages } from "./messages.ts";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
@@ -131,6 +133,26 @@ const waitingCount = (
   (failed.data ?? NO_FAILED).length +
   (charmCalls.data ?? NO_CHARM_CALLS).length;
 
+/** Whether the Inbox lists only what is about the chat or camp it opened on. */
+const scopedHere = (scope: InboxIn | undefined) => scope?.scope === "here";
+
+/** The chat or camp the Inbox opened on, with its name, for the scope picker. */
+const placeOf = (scope: InboxIn | undefined, directory: InboxDirectory) =>
+  scope === undefined ? undefined : { scope, name: directory.threadTitle(scope.threadId) };
+
+type Place = ReturnType<typeof placeOf>;
+
+/**
+ * The chat or camp the Inbox opened on when nothing waits there, once every read is in, though
+ * something waits elsewhere; undefined otherwise.
+ */
+const quietPlace = (list: boolean, place: Place, entries: ReadonlyArray<InboxEntry>, read: boolean): Place =>
+  list && scopedHere(place?.scope) && entries.length === 0 && read ? place : undefined;
+
+/** Whether every read Needs you lists from is in. */
+const readsIn = (inbox: InboxRead, reads: WaitReads) =>
+  inbox.isSuccess && Object.values(reads).every((read: { readonly isSuccess: boolean }) => read.isSuccess);
+
 /** Whether a read has finished and holds nothing. */
 const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: ReadonlyArray<unknown> | undefined }) =>
   read.isSuccess && read.data?.length === 0;
@@ -150,8 +172,8 @@ const emptyState = (tab: InboxTab, read: boolean, entries: ReadonlyArray<InboxEn
   return ALL_CLEAR;
 };
 
-/** Everything the Inbox reads, and what the open tab lists and shows from it. */
-const useInbox = (tab: InboxTab, requestId: string | undefined) => {
+/** Everything the Inbox reads, and what the open tab lists and shows from it, on its chat or camp when it has one. */
+const useInbox = (tab: InboxTab, requestId: string | undefined, scope: InboxIn | undefined) => {
   const inbox = useQuery(inboxQuery);
   const shown = useWithShown(
     inbox.data ?? NONE,
@@ -176,7 +198,8 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   };
   const devices = usePromptedDevices();
   const shares = useQuery(memorySharesQuery).data ?? NO_SHARES;
-  const entries = tabEntries(tab, requests, devices, reads, shares, requestId);
+  const everywhere = tabEntries(tab, requests, devices, reads, shares, requestId);
+  const entries = inScope(everywhere, scope);
   const questOf = useEntryQuests(entries);
   return {
     questOf,
@@ -187,13 +210,15 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
     reads,
     entries,
     selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
-    waiting:
-      waitingCount(approvals, reads) +
-      devices.length +
-      waitingShares(shares).length +
-      waitingProposals(reads.proposals.data ?? NO_PROPOSALS).length +
-      waitingHobProposals(reads.hobProposals.data ?? NO_HOB_PROPOSALS).length,
-    empty: emptyState(tab, inbox.isSuccess, entries, reads),
+    waiting: scopedHere(scope)
+      ? waitingIn(entries)
+      : waitingCount(approvals, reads) +
+        devices.length +
+        waitingShares(shares).length +
+        waitingProposals(reads.proposals.data ?? NO_PROPOSALS).length +
+        waitingHobProposals(reads.hobProposals.data ?? NO_HOB_PROPOSALS).length,
+    // All clear only when nothing waits anywhere, whichever chat or camp the Inbox opened on.
+    empty: emptyState(tab, inbox.isSuccess, everywhere, reads),
   };
 };
 
@@ -203,10 +228,20 @@ const useInbox = (tab: InboxTab, requestId: string | undefined) => {
  * Needs you, All and History, and beside the list the selected entry in full with the controls the
  * chat has. It follows the journal, so an entry decided in the chat updates here, and the reverse.
  */
-export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
+export function InboxPage({
+  tab,
+  requestId,
+  scope,
+}: {
+  tab: InboxTab;
+  requestId: string | undefined;
+  /** The chat or camp the Inbox opened on from its tray, and whether it shows everywhere (#1423). */
+  scope?: InboxIn | undefined;
+}) {
   const { inbox, shown, directory, requests, reads, entries, questOf, selected, waiting, empty } = useInbox(
     tab,
     requestId,
+    scope,
   );
   const [view, setView] = useInboxView();
   const now = useNow();
@@ -216,16 +251,18 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   const shownKey = selected?.key;
   const listRef = useRef<HTMLUListElement>(null);
   const clearRef = useRef<HTMLDivElement>(null);
-  useListKeys(shownOrder(entries, view, questOf), shownKey, listRef);
+  useListKeys(shownOrder(entries, view, questOf), shownKey, listRef, scope);
   useEffect(() => {
     if (shownKey !== undefined && shownKey !== requestId) {
-      void navigate({ to: "/inbox", search: { tab, request: shownKey }, replace: true });
+      void navigate({ to: "/inbox", search: { tab, ...inSearch(scope), request: shownKey }, replace: true });
     }
-  }, [navigate, tab, shownKey, requestId]);
+  }, [navigate, tab, shownKey, requestId, scope]);
 
   const soonest = soonestExpiry(entries, directory.hobName, now);
   const needs = tab === "needs";
   const list = needs && empty === undefined;
+  const place = placeOf(scope, directory);
+  const quiet = quietPlace(list, place, entries, readsIn(inbox, reads));
 
   return (
     <InboxTabs tab={tab}>
@@ -250,12 +287,16 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
             directory={directory}
             now={now}
             listRef={listRef}
+            place={place}
+            search={{ tab: "needs", ...inSearch(scope) }}
           />
         )}
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           {needs ? (
             empty !== undefined ? (
               <AllClear ref={clearRef} />
+            ) : quiet !== undefined ? (
+              <QuietHere scope={quiet.scope} place={quiet.name} />
             ) : (
               <Selected
                 entry={selected}
@@ -307,6 +348,8 @@ function NeedsList({
   directory,
   now,
   listRef,
+  place,
+  search,
 }: {
   inbox: InboxRead;
   reads: WaitReads;
@@ -318,6 +361,10 @@ function NeedsList({
   directory: InboxDirectory;
   now: Date;
   listRef: RefObject<HTMLUListElement | null>;
+  /** The chat or camp the Inbox opened on, whose list offers that place or Everywhere (#1423). */
+  place: Place;
+  /** Where its rows' links keep the Inbox. */
+  search: InboxSearch;
 }) {
   // Until the reads land, the list holds three rows in skeleton, never a line in their place.
   const { questions, blockers, failed, hub, proposals, hobProposals, charmCalls } = reads;
@@ -360,9 +407,10 @@ function NeedsList({
             />
           </div>
         )}
+        {place !== undefined && <InboxScopePicker scope={place.scope} place={place.name} />}
         {entries.length > 0 && <InboxViewPicker view={view} onChange={onView} />}
         <InboxList
-          tab="needs"
+          search={search}
           view={view}
           entries={entries}
           questOf={questOf}

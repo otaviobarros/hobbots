@@ -382,7 +382,7 @@ const ServerLive = Layer.unwrap(
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
-      // The people the hub serves; the owner is the user every OWNER_ACTOR names (ADR 039).
+      // The people the hub serves; the owner is always one of them (ADR 039).
       UserRepositoryLive,
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,

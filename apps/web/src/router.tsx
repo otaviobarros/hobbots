@@ -28,6 +28,7 @@ import { HobFilter } from "./components/hobs-page/hobs-page-model.ts";
 import { Home } from "./components/home/home.tsx";
 import { InboxTab } from "./components/inbox/inbox-items.ts";
 import { InboxPage } from "./components/inbox/inbox-page.tsx";
+import { InboxScope } from "./components/inbox/inbox-scope.ts";
 import { ChangeFilter } from "./components/memory/memory-model.ts";
 import { MemoryPage } from "./components/memory/memory-page.tsx";
 import { OnboardingFirstHob } from "./components/onboarding/onboarding-first-hob.tsx";
@@ -358,17 +359,24 @@ const summonRoute = createRoute({
   },
 });
 
-// `?tab=` picks Needs you, All or History and `?request=` the request shown beside the list.
+// `?tab=` picks Needs you, All or History and `?request=` the request shown beside the list. `?in=`
+// opens Needs you on one chat or camp, from its tray, and `?scope=everywhere` lists everything (#1423).
 const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "inbox",
   validateSearch: Schema.toStandardSchemaV1(
-    Schema.Struct({ tab: searchParam(InboxTab), request: searchParam(Schema.String) }),
+    Schema.Struct({
+      tab: searchParam(InboxTab),
+      request: searchParam(Schema.String),
+      in: searchParam(ThreadId),
+      scope: searchParam(InboxScope),
+    }),
   ),
   component: function Inbox() {
-    const { tab, request } = inboxRoute.useSearch();
-    return <InboxPage tab={tab ?? "needs"} requestId={request} />;
+    const search = inboxRoute.useSearch();
+    const scope = search.in === undefined ? undefined : { threadId: search.in, scope: search.scope ?? "here" };
+    return <InboxPage tab={search.tab ?? "needs"} requestId={search.request} scope={scope} />;
   },
 });
 // `?days=` picks the period: the last 7 days, or 30. The router reads the number as a number. `?by=quest`

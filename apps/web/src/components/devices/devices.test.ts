@@ -1,4 +1,4 @@
-import { Device, DeviceId, type RemoteAccessStatus, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { Device, DeviceId, OWNER_USER_ID, type RemoteAccessStatus, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { qrRows } from "@hobbots/ui/components/qr-code";
 import { describe, expect, it } from "vitest";
 import { connectionCalls } from "../../api/connected-desktop.ts";
@@ -13,6 +13,7 @@ const now = new Date("2026-11-02T15:00:00Z");
 const device = (change: Partial<Device>) =>
   new Device({
     id: DeviceId.make("d1"),
+    userId: OWNER_USER_ID,
     name: "Safari on iPhone",
     kind: "browser",
     platform: "iOS",

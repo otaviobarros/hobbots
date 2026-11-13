@@ -8,6 +8,8 @@ import {
   EMPTY_HOB_POLICY,
   holdsCharm,
   MessageId,
+  OWNER_ACTOR,
+  OWNER_USER_ID,
   type PolicyDecision,
   type ReplyStep,
   ThreadId,
@@ -639,6 +641,8 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
       deviceId: WINDOW_DEVICE_ID,
       name: "This computer's Hobbots window",
       kind: "window",
+      userId: OWNER_USER_ID,
+      actor: OWNER_ACTOR,
       whileApproved: (write) => write,
     });
     const settled = await Effect.gen(function* () {

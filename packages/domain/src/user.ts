@@ -35,3 +35,6 @@ export class User extends Schema.Class<User>("User")({
 /** The user a person actor names, or none for a hob or the hub. */
 export const userIdOf = (actor: Actor): Option.Option<UserId> =>
   actor.kind === "user" ? Option.some(UserId.make(actor.id)) : Option.none();
+
+/** The actor a user writes records as: the session's actor for a request from one of their devices. */
+export const userActor = (userId: UserId): Actor => ({ kind: "user", id: userId });

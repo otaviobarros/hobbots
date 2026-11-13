@@ -14,27 +14,25 @@ const copy = messages.pill;
 export function QuestPillButton({ threadId, open, onOpen }: { threadId: ThreadId; open: boolean; onOpen: () => void }) {
   const pill = questPill(threadId, useThreadSummaries(threadId));
   if (pill === null) return null;
-  const parts = [
-    copy.quests({ count: pill.quests }),
-    ...(pill.review > 0 ? [copy.review({ count: pill.review })] : []),
-    ...(pill.needs > 0 ? [copy.needYou({ count: pill.needs })] : []),
-  ];
   return (
     <button
       type="button"
       aria-expanded={open}
-      aria-label={copy.named({ parts })}
       title={copy.open}
       onClick={onOpen}
       className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-dot border-(length:--edge) border-line bg-card ps-3 pe-1.5 text-detail text-text-strong hover:bg-hover"
     >
       <FlagIcon size={16} className="text-star" />
       <span className="font-semibold whitespace-nowrap">{copy.quests({ count: pill.quests })}</span>
+      {/* The pill's name is its own words, so what it shows is what it is called (axe
+          label-content-name-mismatch); the commas and what it does are read, not shown. */}
+      {pill.review > 0 && <span className="sr-only">{copy.between}</span>}
       {pill.review > 0 && (
         <span className="sr-only whitespace-nowrap text-text-secondary @4xl/header:not-sr-only">
           {copy.review({ count: pill.review })}
         </span>
       )}
+      {pill.needs > 0 && <span className="sr-only">{copy.between}</span>}
       {pill.needs > 0 ? (
         <span className="rounded-dot bg-lantern px-2.5 py-0.5 font-bold whitespace-nowrap text-ground">
           {copy.needYou({ count: pill.needs })}
@@ -42,6 +40,7 @@ export function QuestPillButton({ threadId, open, onOpen }: { threadId: ThreadId
       ) : (
         <span aria-hidden className="w-0.5" />
       )}
+      <span className="sr-only">{copy.does}</span>
     </button>
   );
 }

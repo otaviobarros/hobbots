@@ -24,7 +24,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations, TaskRepositoryLive } from "../src/index.ts";
-import questCriteria from "../src/migrations/0112_quest_criteria.ts";
+import questCriteria from "../src/migrations/0113_quest_criteria.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1445: a Quest's acceptance criteria are checked against evidence. Each has an id, is
@@ -353,7 +353,7 @@ describe("a Quest's acceptance criteria", () => {
 
   // covers DP-003
   it("[TC-DP-1445-06] gives every Quest stored before one required criterion per line of its acceptance", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0112")) as typeof migrations;
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0113")) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       yield* sql`INSERT INTO agents ${sql.insert({

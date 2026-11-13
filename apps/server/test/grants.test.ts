@@ -22,6 +22,8 @@ import {
   EMPTY_HOB_POLICY,
   isInProgress,
   type Message,
+  OWNER_ACTOR,
+  OWNER_USER_ID,
   type ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
@@ -101,6 +103,8 @@ const TestLayer = HobLifecycle.layer.pipe(
         deviceId: WINDOW_DEVICE_ID,
         name: "This computer's Hobbots window",
         kind: "window",
+        userId: OWNER_USER_ID,
+        actor: OWNER_ACTOR,
         whileApproved: (write) => write,
       }),
       HobAdmission.layer,

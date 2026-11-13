@@ -46,6 +46,7 @@ import { SqlClient } from "effect/sql";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
+import { asOwner } from "./window-device.ts";
 
 // Issue #1380 (ADR 037): a new chapter's session starts from the context pack, built from records,
 // never from the old chapter's transcript. It carries the open work, the active decisions and the
@@ -284,7 +285,7 @@ describe("the context pack", () => {
               ],
             }),
           );
-        }),
+        }).pipe(asOwner),
       );
       await startChapter(id, "chapter-2", "Sending");
 

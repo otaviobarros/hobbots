@@ -9,6 +9,7 @@ import {
   liveSession,
   Message,
   MessageId,
+  OWNER_ACTOR,
   roleFields,
   Thread,
   ThreadCheckpoint,
@@ -53,6 +54,7 @@ const userMessage = (threadId: string, id: string, status: Message["status"] = "
   new Message({
     id: MessageId.make(id),
     threadId: ThreadId.make(threadId),
+    actor: OWNER_ACTOR,
     role: "user",
     content: id,
     status,

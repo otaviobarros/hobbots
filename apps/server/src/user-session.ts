@@ -1,12 +1,14 @@
 import { DeviceRepository } from "@hobbots/agents";
 import { DeviceSession, UserSession } from "@hobbots/api";
+import { userActor } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { DeviceGate } from "./devices.ts";
 
 /**
  * Admits only approved devices to the routes behind it and gives each request the user session of
- * its device (ADR 021, PE-006). It is the only code that provides `UserSession`: a hob, a Charm or a
+ * its device (ADR 021, PE-006): the device, and the user it belongs to as the actor of what the request
+ * writes (ADR 039). It is the only code that provides `UserSession`: a hob, a Charm or a
  * runtime tool has no device token, so it has no user session. Every refusal is logged with the
  * route and the peer, never the token.
  */
@@ -22,6 +24,8 @@ export const DeviceSessionLive = Layer.effect(
           deviceId: device.id,
           name: device.name,
           kind: device.kind,
+          userId: device.userId,
+          actor: userActor(device.userId),
           whileApproved: repo.whileApproved(device.id),
         });
       }),

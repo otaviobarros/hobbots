@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HobbotsRepository } from "@hobbots/agents";
-import { Agent, AgentId, type AgentStatus, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type AgentStatus, Message, MessageId, OWNER_ACTOR, Thread, ThreadId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -173,7 +173,7 @@ describe("SearchIndex", () => {
   // covers CH-006, CH-008
   it("[TC-CH-070] a queued message joins the index when its turn starts, and a stopped reply when it stops", async () => {
     const queued = (id: string, content: string) =>
-      new Message({ ...message(id, "taxes", content, "queued"), role: "user" });
+      new Message({ ...message(id, "taxes", content, "queued"), role: "user", actor: OWNER_ACTOR });
     const result = await Effect.gen(function* () {
       yield* seed;
       const repo = yield* HobbotsRepository;

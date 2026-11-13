@@ -1,6 +1,8 @@
 import { DeviceService } from "@hobbots/agents";
+import { UserSession } from "@hobbots/api";
+import { OWNER_ACTOR, OWNER_USER_ID, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { DeviceRepositoryLive } from "@hobbots/persistence";
-import { Layer } from "effect";
+import { Effect, Layer } from "effect";
 import {
   DeviceGate,
   DeviceSecretsLive,
@@ -33,3 +35,17 @@ export const testDevicesWith = (peers: Layer.Layer<TailnetPeers>) =>
   );
 
 export const TestDevices = testDevicesWith(LocalPeers);
+
+/** The owner on the hub's window, as the device middleware would name them, with no revoke to race. */
+export const WINDOW_SESSION = UserSession.of({
+  deviceId: WINDOW_DEVICE_ID,
+  name: "This computer's Hobbots window",
+  kind: "window",
+  userId: OWNER_USER_ID,
+  actor: OWNER_ACTOR,
+  whileApproved: (write) => write,
+});
+
+/** Runs a person's command as the owner on the hub's window. */
+export const asOwner = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, UserSession, WINDOW_SESSION);
