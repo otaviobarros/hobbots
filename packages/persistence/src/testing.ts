@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { PgClient } from "@effect/sql-pg";
+import type { User } from "@hobbots/domain";
 import { Effect, Layer, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { migrations } from "./migrations/index.ts";
@@ -20,6 +21,18 @@ export const TestDatabase = Layer.unwrap(Effect.sync(() => testDatabase(migratio
 
 /** `TestDatabase` with only the given migrations applied, to check a later one against existing rows. */
 export const TestDatabaseAt = (record: typeof migrations) => Layer.unwrap(Effect.sync(() => testDatabase(record)));
+
+/**
+ * Adds a person to the hub for tests that play several people (ADR 039): the hub itself has no way
+ * to add one until accounts exist. A user already there is left as it is.
+ */
+export const addTestUser = (user: User) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`INSERT INTO users (id, name, initials, color, state)
+      VALUES (${user.id}, ${user.name}, ${user.initials}, ${user.color}, ${user.state})
+      ON CONFLICT (id) DO NOTHING`;
+  }).pipe(Effect.orDie);
 
 const testDatabase = (record: typeof migrations) => {
   const db = process.env.HOBBOTS_TEST_DB || "sqlite";
