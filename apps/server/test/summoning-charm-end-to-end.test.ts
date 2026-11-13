@@ -1129,7 +1129,9 @@ describe("the Summoning Charm, end to end", () => {
     expect((await onProposal(view, `rows/${jules?.id}/allow`)).status).toBe(200);
     expect((await onProposal(view, `rows/${kai?.id}/deny`)).status).toBe(200);
     const reply = await settled(asked.thread);
-    expect(reply.content).toContain("- Iris: the user allowed it. Changed instructions, from its next turn.");
+    expect(reply.content).toContain(
+      "- Iris: the user allowed it. Changed instructions. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops.",
+    );
     expect(reply.content).toContain("- Jules: the user allowed it.");
     // A row keeps the name its hob had when the row was made.
     expect(reply.content).toContain("- Kai: the user denied it, so nothing was done.");
@@ -1393,7 +1395,8 @@ describe("the Summoning Charm, end to end", () => {
     const read = await proposalOf(view.proposal.id);
     expect(read.proposal.rows[0]).toMatchObject({
       state: "allowed",
-      outcome: "Changed instructions, from its next turn.",
+      outcome:
+        "Changed instructions. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops.",
     });
     expect((await onProposal(view, `rows/${rookRow?.id}/deny`)).status).toBe(409);
     await decideProposal(retone, "deny-all");

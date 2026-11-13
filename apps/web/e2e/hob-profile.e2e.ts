@@ -101,7 +101,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await expect(page.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-selected", "true");
   await expect(instructions).toHaveValue("Write long answers.");
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  await expect(page.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   await expect(page.getByText(/· Version 2$/)).toBeVisible();
 
   // Back in the chat, the same thread's next reply runs on the edited configuration.
@@ -150,7 +150,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
   await look.getByRole("radio", { name: "Tiny crown" }).click();
   await look.getByRole("radio", { name: "From the look" }).last().click();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText(/^Saved\. Bramble's next reply uses the new settings/)).toBeVisible();
+  await expect(page.getByText(/^Saved\. Bramble gets this from its next turn/)).toBeVisible();
 
   const renamed = page.getByRole("main", { name: "Bramble's profile" });
   await expect(renamed.getByRole("heading", { name: "Bramble", exact: true })).toBeVisible();
@@ -245,7 +245,7 @@ test("[TC-AG-075] changing the role in the profile updates Your hobs, the hob's 
   await expect(sheet).toBeHidden();
   await expect(profile.getByText("QA engineer", { exact: true }).first()).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  await expect(profile.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
   await listedRole("QA engineer");
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
@@ -259,7 +259,7 @@ test("[TC-AG-075] changing the role in the profile updates Your hobs, the hob's 
   await sheet.getByRole("textbox", { name: "Your own role title" }).fill("Bug hunter");
   await sheet.getByRole("button", { name: "Use your own title" }).click();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  await expect(profile.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   await expect(chip).toHaveText("Bug hunter");
 
   await listedRole("Bug hunter");
@@ -288,7 +288,7 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
   await tone.getByText("Brief", { exact: true }).click();
   await expect(page.getByText("2 changes not saved yet")).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  await expect(page.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
 
   const hobs = await api<Array<Hob & { voice: string; length: string }>>(current, "GET", "/api/agents");
   const saved = hobs.find((h) => h.id === pip.id);
@@ -318,7 +318,7 @@ test("[TC-AG-1233-03] turning Visible to other hobs off and on in the profile sa
   const save = async () => {
     await expect(page.getByText("1 change not saved yet")).toBeVisible();
     await profile.getByRole("button", { name: "Save changes" }).click();
-    await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+    await expect(page.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   };
 
   await visible.click();
@@ -385,6 +385,10 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
   await commands.getByText("Ask", { exact: true }).click();
   await expect(commands.getByRole("radio", { name: "Ask" })).toBeChecked();
+  // The save says when the change applies (#1347).
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved. Pip gets this from its next turn, in a chat or a Task." }),
+  ).toBeVisible();
   await expect(
     page.getByRole("radiogroup", { name: "Delete files" }).getByRole("radio", { name: "Allow" }),
   ).toBeDisabled();

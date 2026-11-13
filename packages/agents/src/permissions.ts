@@ -1,4 +1,4 @@
-import type { HobPermissions } from "@hobbots/api";
+import type { ChangeReach, HobPermissions } from "@hobbots/api";
 import { AgentNotFound } from "@hobbots/api";
 import {
   type Agent,
@@ -16,12 +16,13 @@ import {
   type SafetyPreset,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
+import { changeReach, type ReachCharm } from "./change-reach.ts";
 import type { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, type GrantService, policyLoss } from "./grants.ts";
 import { FolderChecks, type FolderChecksShape, InstallationSettings } from "./ports.ts";
 import type { HobbotsRepository } from "./repository.ts";
-import { missingRuntimeHealth, runtimeAdapters } from "./runtime.ts";
+import { missingRuntimeHealth, type RuntimeAdapters, runtimeAdapters } from "./runtime.ts";
 
 /**
  * The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). A shared
@@ -125,3 +126,25 @@ export const changePermissions =
       yield* services.chat.reviewAuthority(agentId);
       return after;
     });
+
+/**
+ * What a change from `before` to `after` opens that some of the hob's sessions still do not get
+ * (#1347), under the installation's current preset, with the Charms the hub holds and what the hob's
+ * runtime keeps when it resumes a session.
+ */
+export const reachOf =
+  (services: {
+    readonly setup: InstallationSettings["Service"];
+    readonly adapters: RuntimeAdapters;
+    readonly charms: ReadonlyArray<ReachCharm>;
+  }) =>
+  (before: Agent, after: Agent): Effect.Effect<ChangeReach> =>
+    Effect.map(services.setup.get, ({ safetyPreset }) =>
+      changeReach({
+        before,
+        after,
+        preset: safetyPreset,
+        charms: services.charms,
+        keepsTools: services.adapters(after.runtime)?.resumeKeepsHubTools === true,
+      }),
+    );

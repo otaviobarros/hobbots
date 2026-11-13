@@ -1,6 +1,7 @@
 import {
   AgentId,
   AnyOperation,
+  CharmId,
   ConfigVersion,
   HobCharms,
   HobPolicy,
@@ -20,6 +21,25 @@ import {
   UnofferedAnswer,
 } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
+
+/**
+ * What a change to a hob's permissions opens that some of its sessions still do not get, though it
+ * applies from the hob's next turn (#1347). Empty lists when the change reaches every session.
+ */
+export const ChangeReach = Schema.Struct({
+  /**
+   * Charms whose writes the change opens, which a session outside any chat, a party member's or a
+   * step's, is still not offered, since such a Charm offers its writes only in chats (ADR 038).
+   */
+  chatsOnly: Schema.Array(CharmId),
+  /**
+   * On a runtime whose resumed session keeps the hub tools it started with, as Codex's does (#1245):
+   * the Charms the change grants, and the answers it opens from Never that offer hub tools. A chat
+   * or Task the hob already started does not get them; one it starts after the change does.
+   */
+  newSessionsOnly: Schema.Struct({ charms: Schema.Array(CharmId), operations: Schema.Array(AnyOperation) }),
+});
+export type ChangeReach = typeof ChangeReach.Type;
 
 /**
  * What a hob may touch (ADR 014): its stored policy, and what it adds up to under the installation's
@@ -47,6 +67,8 @@ export const HobPermissions = Schema.Struct({
    * local Git and the web are blocked whatever the decisions say.
    */
   enforcement: RuntimeEnforcement,
+  /** On the answer to a change only: what it opens that some of the hob's sessions still do not get. */
+  reach: Schema.optionalKey(ChangeReach),
 });
 export type HobPermissions = typeof HobPermissions.Type;
 

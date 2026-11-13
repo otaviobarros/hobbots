@@ -68,7 +68,8 @@ import {
 } from "@hobbots/domain";
 import { Context, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import type { AskableVerdict } from "./asking.ts";
-import { type Charm, defineCharm } from "./charms.ts";
+import { type ReachCharm, reachLines, whenItApplies } from "./change-reach.ts";
+import { type Charm, Charms, defineCharm } from "./charms.ts";
 import { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, GrantService } from "./grants.ts";
@@ -77,7 +78,7 @@ import { type HobProposalApplier, HobProposals, pendingRow } from "./hob-proposa
 import { changedPolicy, checkGoodAt, checkRole, checkRuntimeBrain, HobService } from "./hobs.ts";
 import { type HubAction, type HubPlanContext, HubRefusal, hubAction } from "./hub-actions.ts";
 import { HobLifecycle } from "./lifecycle.ts";
-import { changePermissions } from "./permissions.ts";
+import { changePermissions, reachOf } from "./permissions.ts";
 import { FolderChecks, HobGitHubApps, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
@@ -117,6 +118,8 @@ export interface SummoningServices {
   readonly changes: HobChanges["Service"];
   /** A hob's tool access as its next turn would read it, for applying a proposal outside any turn. */
   readonly access: (agentId: AgentId) => Effect.Effect<ToolAccess | null>;
+  /** The Charms the hub holds, which say what a change opens that some sessions still do not get (#1347). */
+  readonly charms: ReadonlyArray<ReachCharm>;
 }
 
 /**
@@ -126,6 +129,9 @@ export interface SummoningServices {
 export const UnattendedSummonLimits = Context.Reference<SummonLimits>("@hobbots/agents/UnattendedSummonLimits", {
   defaultValue: () => DEFAULT_SUMMON_LIMITS,
 });
+
+/** What a change allowed on a proposal row made, and when it applies (#1347). */
+const changedWords = (change: SummoningChange) => `Changed ${fieldsSet(change).join(", ")}. ${whenItApplies("It")}`;
 
 /** A hob's unattended summons against the caps, as the Charms tab shows them (ADR 034). */
 export const summonCapsOf = (agents: ReadonlyArray<Agent>, agentId: AgentId, limits: SummonLimits): SummonCaps => ({
@@ -197,6 +203,8 @@ export class SummoningHub extends Context.Service<
         proposals,
         changes: yield* HobChanges,
         access: (agentId) => accessNow(repo, hobTools, agentId),
+        // The registry holds this Charm too, so it is read once the hub is built, never while it is.
+        charms: Option.match(yield* Effect.serviceOption(Charms), { onNone: () => [], onSome: (each) => each.charms }),
       });
     }),
   );
@@ -901,7 +909,10 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           .pipe(Effect.mapError((error) => `- ${payload.name}: ${failure(error)}`));
       });
 
-    /** Changes one hob as `actor`: its profile and permissions as one version (ADR 034). */
+    /**
+     * Changes one hob as `actor`: its profile and permissions as one version (ADR 034). Answers what
+     * the change opens that some of the hob's sessions still do not get, in words (#1347).
+     */
     const changeOne = (agent: Agent, each: SummoningChange, services: SummoningServices, actor: ChangeActor) => {
       const profile = updatePayload(each);
       const permissions = permissionsPayload(each, agent.policy);
@@ -914,7 +925,17 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         },
         actor,
       );
-      return (permissions === null ? write : services.changePermissions(agent.id, write)).pipe(
+      if (permissions === null) {
+        return write.pipe(
+          Effect.map(() => [] as ReadonlyArray<string>),
+          Effect.mapError((error) => `- ${agent.name}: ${failure(error)}`),
+        );
+      }
+      return services.changePermissions(agent.id, write).pipe(
+        Effect.flatMap((after) =>
+          reachOf({ setup: services.setup, adapters: services.adapters, charms: services.charms })(agent, after),
+        ),
+        Effect.map((reach) => reachLines(agent, reach, services.charms)),
         Effect.mapError((error) => `- ${agent.name}: ${failure(error)}`),
       );
     };
@@ -1147,13 +1168,16 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             for (const [index, row] of rows.entries()) {
               const each = input.changes[index] as SummoningChange;
               const applied = yield* changeOne(row.agent, each, services, actor).pipe(Effect.result);
-              if (applied._tag === "Success") done.push(`- ${row.agent.name}: changed ${fieldsSet(each).join(", ")}.`);
-              else failed.push(applied.failure);
+              if (applied._tag === "Success") {
+                done.push(
+                  [`- ${row.agent.name}: changed ${fieldsSet(each).join(", ")}.`, ...applied.success].join(" "),
+                );
+              } else failed.push(applied.failure);
             }
             if (done.length === 0)
               return { _tag: "Refused", text: `No hob was changed.\n${failed.join("\n")}` } as const;
             const text = [
-              "Changed, from each hob's next turn:",
+              `Changed. ${whenItApplies("Each hob")}`,
               ...done,
               ...(failed.length === 0 ? [] : ["These could not be changed:", ...failed]),
             ].join("\n");
@@ -1392,10 +1416,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               if (checked.row.problems.length > 0 || checked.found === null) return yield* refuse(checked.row.problems);
               const made = yield* changeOne(checked.found.agent, row.change, services, actor).pipe(Effect.result);
               return made._tag === "Success"
-                ? ({
-                    _tag: "Applied",
-                    text: `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`,
-                  } as const)
+                ? ({ _tag: "Applied", text: [changedWords(row.change), ...made.success].join(" ") } as const)
                 : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
             }
             default:
@@ -1452,7 +1473,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           );
           if (made === undefined) return null;
           if (made._tag === "Status") return `${agent.name} is ${made.status} now.`;
-          return row.change === null ? null : `Changed ${fieldsSet(row.change).join(", ")}, from its next turn.`;
+          return row.change === null ? null : changedWords(row.change);
         }),
     };
     yield* hub.bindApplier(applier);

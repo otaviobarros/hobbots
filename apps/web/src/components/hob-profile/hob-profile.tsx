@@ -53,6 +53,7 @@ import { CharmsTab } from "./hob-charms.tsx";
 import { NameAndLook } from "./hob-name-look.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { RetireDialog, type Retired } from "./retire-dialog.tsx";
+import { BAR, BAR_ACTION, SavedBar } from "./saved-bar.tsx";
 import { TonePicker } from "./tone-picker.tsx";
 
 /** The profile's tabs; a link may open one other than Profile with `?tab=`. */
@@ -689,15 +690,6 @@ function RoleLine({ draft }: { draft: ProfileDraft }) {
   );
 }
 
-// The save bar is the inverted surface, like the toasts: light in the dark themes and dark in the
-// light ones. The theme's focus ring is chosen to show on ground, so here focus is a ground ring
-// drawn inside the button in every theme.
-const BAR =
-  "cut sticky bottom-4 z-10 flex animate-hb-in items-center gap-3 bg-text-strong px-4 py-3 text-ground shadow-menu [--control-focus-outline:none] [--control-focus-ring:inset_0_0_0_2px_var(--color-ground)]";
-// Undo and Save changes: text buttons on the inverted bar.
-const BAR_ACTION =
-  "cut-control cursor-pointer border-0 bg-transparent px-2 py-1 font-bold whitespace-nowrap text-ground underline underline-offset-2 hover:no-underline disabled:cursor-default disabled:no-underline disabled:opacity-50";
-
 /**
  * Floats at the bottom of the page while anything is unsaved: how many changes, Undo and Save.
  * Once saved it says so with a check mark until the next edit.
@@ -725,14 +717,7 @@ function SaveBar({
 }) {
   const copy = messages.profile;
   if (!dirty && !pending && failure === undefined) {
-    return saved ? (
-      <div role="status" className={BAR}>
-        <span aria-hidden className="font-bold">
-          ✓
-        </span>
-        <span className="text-ui">{copy.savedNow({ name })}</span>
-      </div>
-    ) : null;
+    return saved ? <SavedBar text={copy.savedNow({ name })} lines={[]} /> : null;
   }
   const headline = problem ?? (pending ? copy.saving : copy.notSaved({ count: Math.max(count, 1) }));
   return (

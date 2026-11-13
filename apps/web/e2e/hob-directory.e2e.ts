@@ -117,7 +117,7 @@ const saveQuill = async (page: Page) => {
   const profile = page.getByRole("main", { name: "Quill's profile" });
   await expect(page.getByText("1 change not saved yet")).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText(/^Saved\. Quill's next reply uses the new settings/)).toBeVisible();
+  await expect(page.getByText(/^Saved\. Quill gets this from its next turn/)).toBeVisible();
 };
 
 /** Asks Pip, in its chat, for the roster its turn was told, and reads the reply. */

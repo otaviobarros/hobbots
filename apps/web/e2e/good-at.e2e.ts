@@ -125,7 +125,7 @@ test("[TC-AG-1232-05] editing good at in the profile saves a new version that th
   await goodAt.fill("  Launch emails  and newsletters ");
   await expect(page.getByText("1 change not saved yet")).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  await expect(page.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   await expect(page.getByText(/· Version 2$/)).toBeVisible();
   await expect(header).toContainText("Launch emails and newsletters");
   await page.reload();

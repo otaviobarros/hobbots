@@ -15,6 +15,7 @@ import { sendingCharm, switchCharm } from "../../api/safety.ts";
 import { messages } from "../messages.ts";
 import { GitHubRules } from "./github-rules.tsx";
 import { HobGitHubApp } from "./hob-github-app.tsx";
+import { CardSaveOutcome } from "./saved-bar.tsx";
 
 /** Where the GitHub Charm stands, for the tag beside its name. */
 type CharmState = "off" | "on" | "as-you" | "not-ready" | "cannot-act";
@@ -122,11 +123,7 @@ export function GitHubCharm({
           </Link>
         </span>
       )}
-      {update.isError && (
-        <span role="alert" className="ps-16 pe-4.5 pb-4 text-detail text-rose">
-          {copy.saveFailed}
-        </span>
-      )}
+      <CardSaveOutcome hob={hob} save={update} failed={copy.saveFailed} />
     </section>
   );
 }

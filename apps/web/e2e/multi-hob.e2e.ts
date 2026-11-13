@@ -105,7 +105,7 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
+  await expect(profile.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   expect((await replies(pipChat.thread)).map((m) => m.status)).toEqual(["streaming"]);
 
   // Every reply completes in its own window, on its own thread.

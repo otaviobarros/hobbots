@@ -845,6 +845,28 @@ describe("a GitHub comment after the session read the web (#1272)", () => {
   });
 });
 
+describe("when a Charm granted applies", () => {
+  // covers PE-005, ADR 031, ADR 038
+  it("[TC-PE-1347-03] granting a Charm whose writes stay in chats says a Task session is still not offered them", {
+    timeout: TIMEOUT,
+  }, async () => {
+    await connected();
+    const hob = await summon("Thorn", ["github"]);
+    // The GitHub Charm offers its writes outside chats too, so taking it back and granting it again names nothing.
+    const github = await request("PATCH", `/api/agents/${hob.id}/permissions`, { charms: { granted: [] } });
+    expect(github.body.reach).toEqual({ chatsOnly: [], newSessionsOnly: { charms: [], operations: [] } });
+    const again = await request("PATCH", `/api/agents/${hob.id}/permissions`, { charms: { granted: ["github"] } });
+    expect(again.body.reach).toEqual({ chatsOnly: [], newSessionsOnly: { charms: [], operations: [] } });
+    // The Shelf Charm offers its writes only in chats.
+    const shelf = await request("PATCH", `/api/agents/${hob.id}/permissions`, {
+      charms: { granted: ["github", "shelf"] },
+    });
+    expect(shelf.body.reach).toEqual({ chatsOnly: ["shelf"], newSessionsOnly: { charms: [], operations: [] } });
+    // Reading the permissions says nothing of a change.
+    expect((await request("GET", `/api/agents/${hob.id}/permissions`)).body.reach).toBeUndefined();
+  });
+});
+
 /** The tools a turn's runtime was handed, as the model reads them: name, description and input schema. */
 const toolList = (request: PromptRequest) =>
   (request.hubTools?.tools ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
