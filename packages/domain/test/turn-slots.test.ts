@@ -21,13 +21,16 @@ import { agreesWithModel } from "../testing/machine-model.ts";
 // Issue #1448 (OR-005): turns past a limit per hob, Quest or runtime wait, and slots go to the
 // Quests in a fair order.
 
-const HOBS = ["aldric", "bram", "cora"].map((id) => AgentId.make(id));
+const ALDRIC = AgentId.make("aldric");
+const BRAM = AgentId.make("bram");
+const CORA = AgentId.make("cora");
+const HOBS = [ALDRIC, BRAM, CORA];
 const RUNTIMES = ["claude-code", "codex"] as const;
 const QUESTS = [null, "q1", "q2", "q3"] as const;
 
 const ticket = (overrides: Partial<TurnTicket> = {}): TurnTicket => ({
   id: "thread:shire",
-  agentId: HOBS[0] as AgentId,
+  agentId: ALDRIC,
   runtime: "claude-code",
   quest: null,
   state: "waiting",
@@ -112,7 +115,7 @@ describe("TurnTicketMachine", () => {
 
 describe("turn limits", () => {
   const active = (holder: Partial<TurnHolder>): TurnHolder => ({
-    agentId: HOBS[0] as AgentId,
+    agentId: ALDRIC,
     runtime: "claude-code",
     quest: null,
     ...holder,
@@ -122,12 +125,12 @@ describe("turn limits", () => {
   it("[TC-DM-1448-03] names the limit a turn would go past: its hob's, its Quest's, then its runtime's", () => {
     const bounds = { perHob: 1, perQuest: 1, perRuntime: { "claude-code": 2, codex: 1 } };
     expect(limitReached(bounds, [active({})], active({}))).toBe("hob");
-    expect(limitReached(bounds, [active({ quest: "q1" })], active({ agentId: HOBS[1], quest: "q1" }))).toBe("quest");
-    expect(
-      limitReached(bounds, [active({}), active({ agentId: HOBS[1] })], active({ agentId: HOBS[2], quest: "q2" })),
-    ).toBe("runtime");
+    expect(limitReached(bounds, [active({ quest: "q1" })], active({ agentId: BRAM, quest: "q1" }))).toBe("quest");
+    expect(limitReached(bounds, [active({}), active({ agentId: BRAM })], active({ agentId: CORA, quest: "q2" }))).toBe(
+      "runtime",
+    );
     // A turn outside any Quest counts against no Quest, and each runtime counts only its own turns.
-    expect(limitReached(bounds, [active({ quest: "q1" })], active({ agentId: HOBS[1], runtime: "codex" }))).toBe(null);
+    expect(limitReached(bounds, [active({ quest: "q1" })], active({ agentId: BRAM, runtime: "codex" }))).toBe(null);
     expect(limitReached(DEFAULT_TURN_LIMITS, [], active({}))).toBe(null);
   });
 
@@ -171,7 +174,7 @@ describe("turn limits", () => {
   it("[TC-DM-1448-05] gives a free slot to the Quest that waited without a turn, not the busy one that asked first", () => {
     const bounds = { perHob: 4, perQuest: 4, perRuntime: { "claude-code": 1, codex: 1 } };
     const busy = ticket({ id: "step:busy-2", quest: "busy", asked: 1 });
-    const quiet = ticket({ id: "step:quiet-1", agentId: HOBS[1], quest: "quiet", asked: 2 });
+    const quiet = ticket({ id: "step:quiet-1", agentId: BRAM, quest: "quiet", asked: 2 });
     // The busy Quest started a turn at 0; the quiet one never has.
     const planned = admitInOrder(bounds, [], [busy, quiet], new Map([["quest:busy", 0]]));
     expect(planned.map(({ ticket: each, wait }) => [each.id, wait])).toEqual([

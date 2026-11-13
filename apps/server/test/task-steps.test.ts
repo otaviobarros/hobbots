@@ -563,7 +563,9 @@ describe("a Task's steps in fresh sessions", () => {
         ),
       ),
     );
-    const waiting = await run(TurnSlots.use((slots) => slots.report));
+    const waiting = await run(
+      Effect.flatMap(Effect.serviceOption(TurnSlots), (slots) => Option.getOrThrow(slots).report),
+    );
     expect(waiting.waiting.map((each) => each.waitingOn)).toEqual(["runtime", "runtime"]);
 
     // Each step's end hands the slot on: the other Quest's turn goes first each time.

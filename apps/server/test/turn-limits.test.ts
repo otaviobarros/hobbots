@@ -86,7 +86,8 @@ const hubLayer = (database: Database, starts: Array<Start>) =>
     Layer.provideMerge(database),
   );
 
-type Hub = ManagedRuntime.ManagedRuntime<Layer.Success<ReturnType<typeof hubLayer>>, never>;
+type HubServices = Layer.Success<ReturnType<typeof hubLayer>>;
+type Hub = ManagedRuntime.ManagedRuntime<HubServices, never>;
 
 const hob = (id: string, runtime: RuntimeKind) =>
   new Agent({
@@ -159,7 +160,7 @@ const send = (hub: Hub, threadId: string, text: string) =>
   hub.runPromise(ChatService.use((chat) => chat.sendPrompt(ThreadId.make(threadId), text)));
 
 /** Waits until `check` holds, reading again every millisecond: never a fixed delay. */
-const until = <A>(hub: Hub, read: Effect.Effect<A, never, never>, check: (value: A) => boolean) =>
+const until = <A>(hub: Hub, read: Effect.Effect<A, never, HubServices>, check: (value: A) => boolean) =>
   hub.runPromise(
     read.pipe(
       Effect.flatMap((value) => (check(value) ? Effect.succeed(value) : Effect.fail("not yet" as const))),
