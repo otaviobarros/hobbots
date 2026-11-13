@@ -46,6 +46,7 @@ import {
   PIP,
   project,
   promptsTo,
+  QUILL,
   ROOK,
   send,
   sharedDatabase,
@@ -148,13 +149,13 @@ const POLICY: HobPolicy = {
 };
 
 /** A hub over a new database whose members' Task sessions run on `members`, or the fake runtime. */
-const startGitHubHub = async (members: HubCallRuntime | null = null) => {
+const startGitHubHub = async (members: HubCallRuntime | null = null, sandbox: "on" | "unavailable" = "on") => {
   const database = await sharedDatabase();
   const started = await startHub(
     database,
     [],
     githubCharm(),
-    { preset: "trusting", charmOperations: declaredOperations([GITHUB_CHARM]) },
+    { preset: "trusting", charmOperations: declaredOperations([GITHUB_CHARM]), sandbox },
     members,
   );
   await started.run(givePolicy(POLICY));
@@ -519,5 +520,59 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     const answer = started.answers.get("no-charm") ?? "";
     expect(answer.slice(0, answer.lastIndexOf("\n{"))).not.toContain("github_push");
     expect(answer).toContain("Warning: the brief names commenting, but github_comment will not be offered");
+  }, 60_000);
+
+  // covers OR-004, ADR 014 (Amendment: what a delegation tells its lead)
+  it("[TC-OR-1348-04] a check is refused as the delegation would be, past the depth limit or on a Task that is not a sibling, and keeps nothing", async () => {
+    const started = await startGitHubHub();
+    const { run, answers } = started;
+    const check = { hob: "Rook", brief: "Review the parser", check: true };
+    await run(send(["Check first", hub("delegate_task", { ...check, key: "outside", depends_on: ["nonexistent"] })]));
+    await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
+    expect(answers.get("outside")).toBe("Refused (dependency-outside-tree): A Task depends only on its siblings");
+    expect(await run(threadTrees)).toEqual([]);
+
+    // Pip, two Quests deep, checks bringing in Quill: a Quest 3 deep, as the delegation itself is refused.
+    const pipBrief = [
+      hub("delegate_task", { key: "deeper", hob: "Quill", brief: "Research some more", check: true }),
+      hub("complete_task", { delivered: true, key: "pip-done", summary: "Did it myself" }),
+    ].join("\n");
+    await run(
+      send([
+        "Review the parser",
+        hub("delegate_task", {
+          key: "to-rook",
+          hob: "Rook",
+          brief: [hub("delegate_task", { key: "to-pip", hob: "Pip", brief: pipBrief })].join("\n"),
+        }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, PIP)?.state === "completed"));
+    expect(answers.get("deeper")).toBe(
+      "Refused (depth-limit): This would be a Quest 3 deep, past the limit of 2. Do this work yourself, or split it into steps.",
+    );
+    expect(tree.tasks.map((task) => task.ownerId)).not.toContain(QUILL);
+  }, 60_000);
+
+  // covers PE-005, ADR 014
+  it("[TC-OR-1348-05] where the member's runtime cannot start its sandbox, its commands are listed as dropped, as its session gets none, and a brief to run tests warns", async () => {
+    const started = await startGitHubHub(null, "unavailable");
+    const { run, answers } = started;
+    const authority = { decisions: { "read-files": "allow", "edit-files": "allow" }, folders: "all" };
+    await run(
+      send([
+        "Check first",
+        hub("delegate_task", { key: "no-box", hob: "Rook", brief: "Run the tests", authority, check: true }),
+      ]),
+    );
+    await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
+    const answer = answers.get("no-box") ?? "";
+    const { tools, dropped } = listedIn(answer);
+    expect(tools.commands).toBeUndefined();
+    expect(tools.file_edits).toBe("allow");
+    expect(dropped.commands).toBe("no-sandbox");
+    expect(answer).toContain(
+      "Warning: the brief names running commands, but commands will not be offered: Rook's runtime cannot start its sandbox on this hub.",
+    );
   }, 60_000);
 });

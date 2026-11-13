@@ -9,6 +9,7 @@ import {
   type PolicyDecision,
   type PolicyOperation,
   READ_HOB_TOOL,
+  type RuntimeKind,
   SKILL_FEEDBACK_TOOL,
   SKILL_PROPOSE_TOOL,
   SKILL_REQUEST_TOOL,
@@ -17,7 +18,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { BUILT_IN_HUB_TOOLS, type Charm, Charms, closedOutsideChats } from "./charms.ts";
-import type { ToolAccess } from "./runtime.ts";
+import { RuntimeAdapter, runtimeAdapters, type ToolAccess } from "./runtime.ts";
 import { operationDecision } from "./tools.ts";
 
 /**
@@ -39,9 +40,17 @@ export interface OfferedTool {
 /**
  * Why the session is not offered a tool: its answer is Never, the hob does not hold the Charm, the
  * Charm is not connected, the Charm offers its writes only in chats, the session has no folder or
- * cannot read files so its turns are chat-only, or commands are closed by the file answers they need.
+ * cannot read files so its turns are chat-only, commands are closed by the file answers they need,
+ * or the member's runtime cannot start its sandbox on this hub, without which it offers no commands.
  */
-export type DropReason = "never" | "not-granted" | "not-connected" | "chats-only" | "chat-only" | "commands-closed";
+export type DropReason =
+  | "never"
+  | "not-granted"
+  | "not-connected"
+  | "chats-only"
+  | "chat-only"
+  | "commands-closed"
+  | "no-sandbox";
 
 export interface DroppedTool {
   readonly tool: string;
@@ -82,26 +91,40 @@ const OWNERS = new Map(BUILT_IN_HUB_TOOLS.flatMap(({ owner, names }) => names.ma
 
 const answerOf = (decision: PolicyDecision): ToolAnswer => (decision === "deny" ? "never" : decision);
 
-/** The runtime's own tools under `access`, offered or not, as `toolTurn` gives them a session. */
-const runtimeTools = (access: ToolAccess | null, decide: (operation: AnyOperation) => PolicyDecision) => {
+/**
+ * The runtime's own tools under `access`, offered or not, as `toolTurn` gives them a session: its
+ * commands also need its sandbox, as `offeredTools` offers them.
+ */
+const runtimeTools = (
+  access: ToolAccess | null,
+  decide: (operation: AnyOperation) => PolicyDecision,
+  sandbox: boolean,
+) => {
   const open = openTools(decide);
   const chatOnly = access === null || access.folders.length === 0 || !open.read;
   const commandOperation: PolicyOperation = decide("run-commands") === "deny" ? "local-git" : "run-commands";
+  const commandsClosed: DropReason =
+    decide("run-commands") === "deny" && decide("local-git") === "deny" ? "never" : "commands-closed";
   const entries: ReadonlyArray<readonly [string, boolean, PolicyOperation, DropReason]> = [
     ["file_reads", open.read, "read-files", "never"],
     ["file_edits", open.edit, "edit-files", "never"],
     [
       open.commandsReadOnly ? "read_only_commands" : "commands",
-      open.commands,
+      open.commands && sandbox,
       commandOperation,
-      decide("run-commands") === "deny" && decide("local-git") === "deny" ? "never" : "commands-closed",
+      open.commands ? "no-sandbox" : commandsClosed,
     ],
   ];
   const tools: Array<OfferedTool> = [];
   const dropped: Array<DroppedTool> = [];
   for (const [tool, on, operation, closed] of entries) {
     if (on && !chatOnly) tools.push({ tool, from: RUNTIME_TOOLS_OWNER, answer: answerOf(decide(operation)) });
-    else dropped.push({ tool, from: RUNTIME_TOOLS_OWNER, reason: chatOnly && on ? "chat-only" : closed });
+    else
+      dropped.push({
+        tool,
+        from: RUNTIME_TOOLS_OWNER,
+        reason: chatOnly && (on || closed === "no-sandbox") ? "chat-only" : closed,
+      });
   }
   return { tools, dropped };
 };
@@ -144,6 +167,17 @@ const builtInDrop = (
  */
 export const describeSessionOffer = Effect.gen(function* () {
   const registry = yield* Effect.serviceOption(Charms);
+  const claude = yield* Effect.serviceOption(RuntimeAdapter);
+  const adapters = Option.isSome(claude)
+    ? yield* Effect.provideService(runtimeAdapters, RuntimeAdapter, claude.value)
+    : () => undefined;
+  /** Whether `runtime` can start its sandbox on this hub; a runtime the hub has no adapter for is taken to. */
+  const sandboxStarts = (runtime: RuntimeKind | undefined) =>
+    Effect.gen(function* () {
+      const adapter = runtime === undefined ? undefined : adapters(runtime);
+      if (adapter === undefined) return true;
+      return (yield* adapter.enforcement).processSandbox.status !== "unsupported";
+    });
   const charms = Option.isSome(registry) ? registry.value.charms : [];
   const charmOf = new Map(charms.flatMap((charm) => charm.tools.map((tool) => [tool.name, { charm, tool }] as const)));
   /** An offered tool, with who offers it and its answer: a Charm tool with no operation decides each call. */
@@ -186,12 +220,14 @@ export const describeSessionOffer = Effect.gen(function* () {
     readonly agentId: AgentId;
     readonly access: ToolAccess | null;
     readonly offered: ReadonlyArray<string>;
+    /** The member's runtime, whose sandbox its commands need. */
+    readonly runtime?: RuntimeKind;
   }): Effect.Effect<SessionToolOffer> =>
     Effect.gen(function* () {
       const { access } = input;
       const decide = (operation: AnyOperation): PolicyDecision =>
         access === null ? "deny" : operationDecision(access.policy, operation);
-      const runtime = runtimeTools(access, decide);
+      const runtime = runtimeTools(access, decide, yield* sandboxStarts(input.runtime));
       const offered = new Set(input.offered);
       const charmsDropped = yield* Effect.forEach(charms, (charm) => charmDrops(charm, input, offered, decide));
       const builtInsDropped = Object.entries(BUILT_IN_OPERATIONS).flatMap(([name, operation]) =>

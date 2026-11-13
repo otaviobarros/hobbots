@@ -23,6 +23,7 @@ import {
   type PolicyOperation,
   type PolicyOverrides,
   QuestId,
+  type QuestLimits,
   questsAbove,
   type Task,
   TaskId,
@@ -208,6 +209,20 @@ const toolsFor = (
 
 const NO_OFFER: SessionToolOffer = { tools: [], dropped: [] };
 
+/**
+ * What the records refuse of a new Task under `task`, checked before anything is written so that
+ * `check: true` is refused as the call would be: under a Task that ended or is cancelling, or
+ * depending on a Task that is not one of its siblings.
+ */
+const placeable = (scope: CallScope, task: Task, dependsOn: ReadonlyArray<string>) => {
+  if (isTerminalTask(task.state)) return refuse("parent-ended", `Task ${task.id} is ${task.state}`);
+  if (task.state === "cancelling") return refuse("parent-cancelling", `Task ${task.id} is cancelling`);
+  const siblings = new Set<string>(scope.tree.tasks.filter((each) => each.parentId === task.id).map((each) => each.id));
+  return dependsOn.every((id) => siblings.has(id))
+    ? Effect.void
+    : refuse("dependency-outside-tree", "A Task depends only on its siblings");
+};
+
 const listFormat = new Intl.ListFormat("en", { type: "conjunction" });
 
 const ANSWER_WORDS = { allow: "Allow", ask: "Ask", never: "Never: each call is refused" } as const;
@@ -227,6 +242,8 @@ const dropWords = (member: Agent, dropped: DroppedTool): string => {
       return "its turns are chat-only";
     case "commands-closed":
       return "commands need Read files Allow and Edit files Allow or Never";
+    case "no-sandbox":
+      return `${member.name}'s runtime cannot start its sandbox on this hub`;
   }
 };
 
@@ -386,9 +403,8 @@ export const makeDelegating = ({
    * The Quest the first delegate_task call turns its Task into: the Task's brief is its goal, and
    * its work is in the folders the brief names, if any (#670).
    */
-  const startQuest = (scope: CallScope, task: Task, lead: ReadonlyArray<string>) =>
+  const startQuest = (scope: CallScope, task: Task, lead: ReadonlyArray<string>, quest: QuestLimits) =>
     Effect.gen(function* () {
-      const quest = yield* questLimitsFor(scope, limits, task, {});
       const folders = yield* namedFolders(folderChecks, lead, task.brief, separator);
       return yield* fromRecords(
         tasks.startQuest({
@@ -456,6 +472,14 @@ export const makeDelegating = ({
             ? yield* memberOffer(member, [...above, { overrides: given.overrides, folders: given.folders }])
             : (input.prepared ?? NO_OFFER);
         const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}`;
+        const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
+        // Refused here, not only by the records, so a check is refused as the call would be.
+        yield* placeable(scope, task, input.depends_on ?? []);
+        // A Quest started above this one later may allow less depth than when this one started.
+        const placing =
+          existing === undefined
+            ? { limits: yield* questLimitsFor(scope, limits, task, {}) }
+            : { existing, ...(yield* depthWithin(scope, limits, task)) };
         if (input.check === true) {
           return {
             done: {
@@ -466,10 +490,8 @@ export const makeDelegating = ({
           };
         }
         const journal = journalOf();
-        const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
-        // A Quest started above this one later may allow less depth than when this one started.
-        if (existing !== undefined) yield* depthWithin(scope, limits, task);
-        const quest = existing ?? journal.keep(yield* startQuest(scope, task, lead));
+        const quest =
+          "existing" in placing ? placing.existing : journal.keep(yield* startQuest(scope, task, lead, placing.limits));
         const milestones = (input.milestones ?? []).map((title) => ({ id: MilestoneId.make(newId()), title }));
         const delegationId = DelegationId.make(newId());
         const created = journal.keep(

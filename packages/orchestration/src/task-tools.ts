@@ -245,7 +245,7 @@ export class TaskTools extends Context.Service<
             );
             // A member's session is offered every Task tool beside them, as `forSession` gives it.
             const names = [...(offer.hubTools?.tools ?? []), ...TASK_TOOLS].map((tool) => tool.name);
-            return yield* describeOffer({ agentId: member.id, access, offered: names });
+            return yield* describeOffer({ agentId: member.id, access, offered: names, runtime: member.runtime });
           });
         const delegating = makeDelegating({
           tasks,
