@@ -1,8 +1,8 @@
-import { runtimeAdapters } from "@hobbots/agents";
+import { runtimeAdapters, TurnSlots } from "@hobbots/agents";
 import { HobbotsApi } from "@hobbots/api";
-import { RuntimeKind, unreportedPlan } from "@hobbots/domain";
+import { DEFAULT_TURN_LIMITS, RuntimeKind, type TurnSlotsReport, unreportedPlan } from "@hobbots/domain";
 import { UsageLedger } from "@hobbots/persistence";
-import { DateTime, Duration, Effect, Layer } from "effect";
+import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 // The Usage screen's report (OP-002): every hob's replies over the period from the usage they
@@ -31,6 +31,10 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
       (kind) => adapters(kind)?.planUsage ?? Effect.succeed(unreportedPlan(kind)),
       { concurrency: "unbounded" },
     );
+    // A hub without turn slots, as in tests of one part, limits no turn and reports none.
+    const slots = Option.getOrUndefined(yield* Effect.serviceOption(TurnSlots));
+    const unlimited: TurnSlotsReport = { limits: DEFAULT_TURN_LIMITS, active: [], waiting: [], usage: "after-turn" };
+    const turns = slots === undefined ? Effect.succeed(unlimited) : slots.report;
     return handlers.handleAll({
       usage: ({ query }) =>
         Effect.gen(function* () {
@@ -41,6 +45,9 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
           return { since, until, hobs: used.hobs, quests: used.quests, minutes: used.minutes };
         }),
       plans: () => plans,
+      turns: () => turns,
+      setTurnLimits: ({ payload }) =>
+        slots === undefined ? Effect.succeed(unlimited) : Effect.andThen(slots.setLimits(payload), slots.report),
     });
   }),
 ).pipe(Layer.provide(UsageLedger.layer));

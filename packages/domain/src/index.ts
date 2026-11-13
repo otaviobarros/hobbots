@@ -77,6 +77,7 @@ export * from "./thread-member.ts";
 export * from "./tone.ts";
 export * from "./tool-output.ts";
 export * from "./turn-end.ts";
+export * from "./turn-slots.ts";
 export * from "./usage.ts";
 export * from "./user.ts";
 export * from "./web-fetch.ts";

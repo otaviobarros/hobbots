@@ -52,6 +52,7 @@ import {
   ThreadNotCamp,
   ThreadNotFound,
   ToolLogNotFound,
+  TurnsAtLimit,
 } from "./errors.ts";
 import { ExportsGroup } from "./export.ts";
 import { GitHubGroup } from "./github.ts";
@@ -368,7 +369,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
     HttpApiEndpoint.post("continueReply", "/threads/:threadId/messages/:messageId/continue", {
       params: { threadId: ThreadId, messageId: MessageId },
       success: Message,
-      error: [ThreadNotFound, HobUnavailable, ReplyNotResumable, ThreadArchived],
+      error: [ThreadNotFound, HobUnavailable, ReplyNotResumable, ThreadArchived, TurnsAtLimit],
     }),
     // The whole redacted output of a tool step that shows only its start and end, as plain text.
     HttpApiEndpoint.get("toolLog", "/threads/:threadId/messages/:messageId/steps/:stepId/log", {

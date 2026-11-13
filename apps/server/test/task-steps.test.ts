@@ -8,11 +8,14 @@ import {
   SkillFiles,
   SkillLibrary,
   TaskRepository,
+  TurnLimitsStore,
+  TurnSlots,
 } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
   AttemptId,
+  DEFAULT_TURN_LIMITS,
   isLiveAttempt,
   type Message,
   SkillName,
@@ -22,6 +25,7 @@ import {
   TaskId,
   type TaskTree,
   type ThreadId,
+  type TurnLimits,
 } from "@hobbots/domain";
 import { waitFor, waitUntil } from "@hobbots/domain/testing";
 import {
@@ -152,7 +156,14 @@ interface Options {
   readonly opsBeforeYield?: number;
   /** A skills library, so every session gets the hob's skills. */
   readonly skills?: Layer.Layer<SkillLibrary | SkillFiles>;
+  /** Limits on the turns that run at once (#1448); absent, no turn waits for a slot. */
+  readonly turnLimits?: TurnLimits;
 }
+
+const turnSlotsWith = (limits: TurnLimits) =>
+  TurnSlots.layer.pipe(
+    Layer.provide(Layer.succeed(TurnLimitsStore, { get: Effect.succeed(limits), set: () => Effect.void })),
+  );
 
 const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, requests: Array<PromptRequest>) =>
   ChatService.layer.pipe(
@@ -177,6 +188,7 @@ const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, 
         HobAdmission.layer,
         gated(gates, requests),
         options.skills ?? Layer.empty,
+        options.turnLimits === undefined ? Layer.empty : turnSlotsWith(options.turnLimits),
       ),
     ),
     Layer.provideMerge(TestDatabase),
@@ -529,6 +541,44 @@ describe("a Task's steps in fresh sessions", () => {
     await run(control.open("Banner A"));
     await run(control.open("Banner C"));
     await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+  });
+
+  // covers OR-005
+  it("[TC-OR-1448-01] steps of two Quests take the one free slot in turn, not in the order they asked", async () => {
+    const { run, control, stepsAsked } = setUp({
+      turnLimits: { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } },
+    });
+    const first = await run(seed);
+    const second = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
+    await run(
+      send(first.id, hub("plan_steps", { key: "plan", steps: [{ brief: "North one" }, { brief: "North two" }] })),
+    );
+    await run(waitFor("the first step to start", () => control.waiting().length === 1));
+    // The second Quest's request waits for the slot, queued, behind the step that holds it.
+    await run(
+      ChatService.use((chat) =>
+        chat.sendPrompt(
+          second.id,
+          hub("plan_steps", { key: "plan", steps: [{ brief: "South one" }, { brief: "South two" }] }),
+        ),
+      ),
+    );
+    const waiting = await run(TurnSlots.use((slots) => slots.report));
+    expect(waiting.waiting.map((each) => each.waitingOn)).toEqual(["runtime", "runtime"]);
+
+    // Each step's end hands the slot on: the other Quest's turn goes first each time.
+    for (const name of ["North one", "South one", "North two", "South two"]) {
+      await run(waitFor(`${name} to start`, () => control.waiting().includes(name)));
+      expect(control.waiting()).toEqual([name]);
+      await run(control.open(name));
+    }
+    expect(stepsAsked().map((request) => request.prompt.split("\n")[0])).toEqual([
+      "North one",
+      "South one",
+      "North two",
+      "South two",
+    ]);
+    await run(treeWhen(second.id, (tree) => states(tree).every((state) => state === "completed")));
   });
 
   // covers OR-004
