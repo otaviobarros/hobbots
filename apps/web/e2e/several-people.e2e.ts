@@ -1,4 +1,5 @@
 import type { Actor, Message } from "@hobbots/domain";
+import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, signInAs, test, testPeople } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
@@ -19,13 +20,14 @@ test("[TC-CH-1457-01] Bruna and Leo sign in on two devices, see each other's mes
 
   const people = [];
   for (const person of [bruna, leo]) {
-    const context = await signInAs(browser, hub, person);
+    // Each person's browser is watched like the test's own: the window never scrolls (STD-TEST-010).
+    const { context, watch } = await signInAs(browser, hub, person);
     const page = await context.newPage();
     // Each device is in without the pairing screen, and opens the camp.
     await page.goto(camp.url);
     await expect(page).not.toHaveURL(/#\/pair$/);
     await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toBeVisible();
-    people.push({ person, context, page });
+    people.push({ person, context, watch, page });
   }
 
   for (const { person, page } of people) {
@@ -37,11 +39,12 @@ test("[TC-CH-1457-01] Bruna and Leo sign in on two devices, see each other's mes
     await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }
 
-  // Both devices see both people's messages, on one hub.
+  // Both devices see both people's messages, on one hub, in a camp each can use (STD-TEST-007).
   for (const { page } of people) {
     for (const { person } of people) {
       await expect(page.getByText(`${person.name} asks for the landing page`, { exact: true }).first()).toBeVisible();
     }
+    await expectAccessible(page);
   }
 
   // Each message names the person whose device sent it, never the owner.
@@ -53,5 +56,9 @@ test("[TC-CH-1457-01] Bruna and Leo sign in on two devices, see each other's mes
   expect(writerOf("Bruna asks for the landing page")).toEqual({ kind: "user", id: bruna.userId });
   expect(writerOf("Leo asks for the landing page")).toEqual({ kind: "user", id: leo.userId });
 
-  for (const { context } of people) await context.close();
+  for (const { person, context, watch } of people) {
+    await watch.checkOpenPages();
+    expect(watch.breaks(), `${person.name}'s window must never scroll (STD-TEST-010)`).toEqual([]);
+    await context.close();
+  }
 });

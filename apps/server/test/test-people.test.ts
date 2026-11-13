@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceRepository, DeviceSecrets, UserRepository } from "@hobbots/agents";
+import type { TestPersonSeat } from "@hobbots/api";
 import { OWNER_USER_ID } from "@hobbots/domain";
 import { DeviceRepositoryLive, UserRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -9,7 +10,7 @@ import { type Config, ConfigProvider, Effect, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DeviceSecretsLive } from "../src/devices.ts";
-import { type Seat, TEST_PEOPLE, TestPeopleLive, testPeopleFile, testSeams } from "../src/testing/people.ts";
+import { TEST_PEOPLE, TestPeopleLive, testPeopleFile, testSeams } from "../src/testing/people.ts";
 
 // Issue #1457 (ADR 039, How we test several people): the browser tests' build of the hub adds Bruna
 // and Leo with a device each, so a test plays two people on two devices. On SQLite and PostgreSQL
@@ -25,7 +26,7 @@ afterEach(() => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-const seats = (): ReadonlyArray<Seat> => JSON.parse(readFileSync(testPeopleFile(dataDir), "utf8"));
+const seats = (): ReadonlyArray<TestPersonSeat> => JSON.parse(readFileSync(testPeopleFile(dataDir), "utf8"));
 
 const stores = Layer.mergeAll(DeviceRepositoryLive, UserRepositoryLive, DeviceSecretsLive).pipe(
   Layer.provideMerge(TestDatabase),

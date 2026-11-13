@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DeviceRepository, DeviceSecrets } from "@hobbots/agents";
+import { TEST_PEOPLE_FILE, type TestPersonSeat, TestPersonSeats } from "@hobbots/api";
 import {
   DEVICE_TOKEN_PREFIX,
   Device,
@@ -24,29 +25,17 @@ export const TEST_PEOPLE: ReadonlyArray<User> = [
   new User({ id: UserId.make("leo"), name: "Leo", initials: "L", color: "sky", state: "active" }),
 ];
 
-/** One person's device, as the seam writes it for the tests: who, which device, and its token. */
-const Seat = Schema.Struct({
-  userId: UserId,
-  name: Schema.String,
-  deviceId: DeviceId,
-  deviceName: Schema.String,
-  token: Schema.String,
-});
-export type Seat = typeof Seat.Type;
-
-const Seats = Schema.fromJsonString(Schema.Array(Seat));
-
 /** The file in the data folder where the seam writes each person's device token, readable only by the user. */
-export const testPeopleFile = (dataDir: string) => join(dataDir, "test-people.json");
+export const testPeopleFile = (dataDir: string) => join(dataDir, TEST_PEOPLE_FILE);
 
-const readSeats = (file: string): ReadonlyArray<Seat> =>
-  existsSync(file) ? Schema.decodeUnknownSync(Seats)(readFileSync(file, "utf8")) : [];
+const readSeats = (file: string): ReadonlyArray<TestPersonSeat> =>
+  existsSync(file) ? Schema.decodeUnknownSync(TestPersonSeats)(readFileSync(file, "utf8")) : [];
 
 /**
  * Gives `user` an approved browser device, as Allow would give it, with the token a browser keeps:
  * the device the seat names when it is still approved, or a new one.
  */
-const seatFor = (user: User, held: Option.Option<Seat>) =>
+const seatFor = (user: User, held: Option.Option<TestPersonSeat>) =>
   Effect.gen(function* () {
     const repo = yield* DeviceRepository;
     const secrets = yield* DeviceSecrets;
@@ -97,14 +86,14 @@ export const TestPeopleLive = (dataDir: string) =>
     Effect.gen(function* () {
       const file = testPeopleFile(dataDir);
       const held = readSeats(file);
-      const seats: Array<Seat> = [];
+      const seats: Array<TestPersonSeat> = [];
       for (const user of TEST_PEOPLE) {
         yield* addTestUser(user);
         seats.push(yield* seatFor(user, Option.fromNullishOr(held.find((seat) => seat.userId === user.id))));
       }
       const temporary = `${file}.${process.pid}`;
       yield* Effect.sync(() => {
-        writeFileSync(temporary, Schema.encodeSync(Seats)(seats), { mode: 0o600 });
+        writeFileSync(temporary, Schema.encodeSync(TestPersonSeats)(seats), { mode: 0o600 });
         chmodSync(temporary, 0o600);
         renameSync(temporary, file);
       });

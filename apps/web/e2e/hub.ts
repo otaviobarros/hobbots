@@ -12,7 +12,9 @@ import {
 } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
+import { TEST_PEOPLE_FILE, type TestPersonSeat, TestPersonSeats } from "@hobbots/api";
 import { type Browser, type BrowserContext, test as base, expect, type Locator, type Page } from "@playwright/test";
+import { Schema } from "effect";
 import { expectAccessible, type SetAside } from "./accessibility.ts";
 import { type WindowWatch, watchWindow } from "./window-still.ts";
 
@@ -182,29 +184,25 @@ export const admit = async (context: BrowserContext, hub: Hub) => {
   await context.addCookies([{ name: DEVICE_COOKIE, value: token, url: hub.url, httpOnly: true, sameSite: "Strict" }]);
 };
 
-/** A person the hub's test seam added with a device of their own (ADR 039), as `test-people.json` holds it. */
-export interface TestPerson {
-  readonly userId: string;
-  readonly name: string;
-  readonly deviceId: string;
-  readonly deviceName: string;
-  readonly token: string;
-}
-
 /**
  * The people a hub started with `HOBBOTS_TEST_PEOPLE: "on"` added beside the owner: Bruna and Leo,
  * each with an approved browser device. Only the browser tests' build of the hub has this seam.
  */
-export const testPeople = (hub: Pick<Hub, "dataDir">): ReadonlyArray<TestPerson> =>
-  JSON.parse(readFileSync(join(hub.dataDir, "test-people.json"), "utf8"));
+export const testPeople = (hub: Pick<Hub, "dataDir">): ReadonlyArray<TestPersonSeat> =>
+  Schema.decodeUnknownSync(TestPersonSeats)(readFileSync(join(hub.dataDir, TEST_PEOPLE_FILE), "utf8"));
 
-/** A browser of its own for `person`, signed in with their device's cookie, as their own computer would be. */
-export const signInAs = async (browser: Browser, hub: Pick<Hub, "url">, person: TestPerson) => {
+/**
+ * A browser of its own for `person`, signed in with their device's cookie, as their own computer
+ * would be. Its window is watched from the first page it opens, as the test's own browser is
+ * (STD-TEST-010): check `watch.breaks()` after `watch.checkOpenPages()` before closing it.
+ */
+export const signInAs = async (browser: Browser, hub: Pick<Hub, "url">, person: TestPersonSeat) => {
   const context = await browser.newContext();
+  const watch = await watchWindow(context);
   await context.addCookies([
     { name: DEVICE_COOKIE, value: person.token, url: hub.url, httpOnly: true, sameSite: "Strict" },
   ]);
-  return context;
+  return { context, watch };
 };
 
 // The context of the test running on this worker; a hub started during the test admits it.

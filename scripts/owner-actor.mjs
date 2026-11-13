@@ -81,17 +81,28 @@ export const isRecordChecked = (file) =>
   !/\/(?:test|testing)\//.test(file) &&
   !/\/fake[^/]*\.tsx?$/.test(file);
 
-const mentionsBareId = (node) => {
-  if (node === null || typeof node !== "object") return false;
-  if (Array.isArray(node)) return node.some(mentionsBareId);
-  if (node.type === "Identifier" && BARE_IDS.has(node.name)) return true;
-  return Object.entries(node).some(([key, child]) => key !== "parent" && mentionsBareId(child));
+/** The Schema wrappers a bare id may sit in and still be one, such as `Schema.NullOr(AgentId)`. */
+const WRAPPERS = new Set(["NullOr", "optional", "optionalKey", "UndefinedOr", "NullishOr", "Array", "mutableKey"]);
+
+/**
+ * Whether a field's value is the schema of a bare id: `UserId`, a wrapper of one, or either piped,
+ * as in `Schema.NullOr(AgentId).pipe(…)`. A value built at run time, such as an Actor
+ * `{ kind: "user", id: UserId.make(…) }` or `userActor(id)`, is not a schema and never counts.
+ */
+const isBareIdSchema = (node) => {
+  if (node?.type === "Identifier") return BARE_IDS.has(node.name);
+  if (node?.type !== "CallExpression" || node.callee?.type !== "MemberExpression") return false;
+  const { object, property } = node.callee;
+  if (property?.name === "pipe") return isBareIdSchema(object);
+  return object?.type === "Identifier" && object.name === "Schema" && WRAPPERS.has(property?.name)
+    ? node.arguments.some(isBareIdSchema)
+    : false;
 };
 
 /**
  * The fields of a file that say who did something with a bare user or hob id, such as
- * `requestedBy: UserId` or `author: Schema.NullOr(AgentId)`, each with its line. A value that only
- * reads an id, such as `reachedBy: task.ownerId`, is not a schema and does not count.
+ * `requestedBy: UserId` or `author: Schema.NullOr(AgentId)`, each with its line. A value that is
+ * not a schema, such as `reachedBy: task.ownerId` or an Actor, does not count.
  */
 export const bareAuthorFields = (file, text) => {
   const { program } = parseSync(file, text);
@@ -105,7 +116,7 @@ export const bareAuthorFields = (file, text) => {
     }
     if (node.type === "Property" && !node.computed) {
       const name = node.key?.name ?? node.key?.value;
-      if (typeof name === "string" && WHO.test(name) && mentionsBareId(node.value)) {
+      if (typeof name === "string" && WHO.test(name) && isBareIdSchema(node.value)) {
         found.push({ field: name, line: lineAt(node.start) });
       }
     }

@@ -35,7 +35,7 @@ test("fails a new direct use and names the rule", () => {
   assert.match(errors[0], /^packages\/agents\/src\/notes\.ts:1 names OWNER_ACTOR\..*STD-SEC-006/);
 });
 
-test("finds a field that says who did something with a bare user or hob id, and not an Actor, an owner or a value", () => {
+test("finds a field that says who did something with a bare id schema, and not an Actor value, an owner or a read id", () => {
   const text = [
     'import { Actor, AgentId, UserId } from "@hobbots/domain";',
     'export class Request extends Schema.Class<Request>("Request")({',
@@ -45,13 +45,17 @@ test("finds a field that says who did something with a bare user or hob id, and 
     "  decidedBy: Actor,",
     "  userId: UserId,",
     "  pickedUpBy: Schema.NullOr(Schema.String),",
+    "  summonedBy: Schema.NullOr(AgentId).pipe(Schema.withDecodingDefaultKey(none)),",
     "}) {}",
     "const made = { reachedBy: task.ownerId };",
+    'const written = { actor: { kind: "user", id: UserId.make("bruna") }, addedBy: userActor(UserId.make("leo")) };',
+    "const hob = { requestedBy: hobActor(AgentId.make(id)), author: [AgentId.make(id)] };",
   ].join("\n");
   assert.deepEqual(bareAuthorFields("a.ts", text), [
     { field: "requestedBy", line: 3 },
     { field: "reviewedBy", line: 4 },
     { field: "author", line: 5 },
+    { field: "summonedBy", line: 9 },
   ]);
 });
 
