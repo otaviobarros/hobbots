@@ -9,6 +9,7 @@ export { clip, contextBlock } from "./briefing.ts";
 export * from "./camp-briefs.ts";
 export * from "./camp-suggestions.ts";
 export * from "./catch-up.ts";
+export * from "./change-reach.ts";
 export * from "./chapter-summaries.ts";
 export * from "./chapter-tools.ts";
 export * from "./chapters.ts";

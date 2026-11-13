@@ -352,6 +352,28 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     }
   });
 
+  // covers PE-008, ADR 031 (#1347)
+  it("[TC-PE-1347-05] a resumed session is offered the turn's hub tools, so a change reaches its next turn", {
+    timeout: 120_000,
+  }, async () => {
+    const { hubTools } = stepRecordingContract();
+    const wider = { ...hubTools, tools: [...hubTools.tools, WEB_FETCH_CONTRACT_TOOL] };
+    const first = await turn({ hubTools, ephemeral: false });
+    expect(Exit.isSuccess(first.exit), String(first.exit)).toBe(true);
+    const events = Exit.isSuccess(first.exit) ? first.exit.value : [];
+    const started = events.find((event) => event._tag === "SessionStarted");
+    const sessionId = started?._tag === "SessionStarted" ? started.sessionId : null;
+    expect(sessionId).not.toBeNull();
+    const resumed = await turn({ hubTools: wider, sessionId, ephemeral: false });
+    expect(Exit.isSuccess(resumed.exit), String(resumed.exit)).toBe(true);
+    const hub = (requests: typeof first.requests) =>
+      toolsOf(requests).filter((tool) => tool.startsWith("mcp__hobbots__"));
+    expect(hub(first.requests)).toEqual([`mcp__hobbots__${CONTRACT_HUB_TOOL}`]);
+    expect(hub(resumed.requests)).toEqual(
+      [`mcp__hobbots__${CONTRACT_HUB_TOOL}`, `mcp__hobbots__${WEB_FETCH_CONTRACT_TOOL.name}`].sort(),
+    );
+  });
+
   // covers ADR 036 (On every runtime)
   it("[TC-PE-1267-16] records a web_fetch call's step before the hub reads the page", {
     timeout: 120_000,

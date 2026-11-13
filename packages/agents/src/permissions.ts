@@ -13,15 +13,17 @@ import {
   hobAnswers,
   POLICY_OPERATIONS,
   type PolicyDecision,
+  type RuntimeKind,
   type SafetyPreset,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
+import { changeReach, type ReachCharm, type ReachHob } from "./change-reach.ts";
 import type { ChatService } from "./chat.ts";
 import { sameFolderIn } from "./folders.ts";
 import { CharmDeclarations, type GrantService, policyLoss } from "./grants.ts";
 import { FolderChecks, type FolderChecksShape, InstallationSettings } from "./ports.ts";
 import type { HobbotsRepository } from "./repository.ts";
-import { missingRuntimeHealth, runtimeAdapters } from "./runtime.ts";
+import { missingRuntimeHealth, type RuntimeAdapters, runtimeAdapters } from "./runtime.ts";
 
 /**
  * The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). A shared
@@ -124,4 +126,31 @@ export const changePermissions =
       yield* services.grants.revokeLost(agentId, policyLoss(before.policy, after.policy, services.charms));
       yield* services.chat.reviewAuthority(agentId);
       return after;
+    });
+
+/**
+ * What a change from `before` to `after` opens that some of the hob's sessions still do not get
+ * (#1347), under the installation's current preset, with the Charms the hub holds. The runtimes
+ * whose sessions keep the tools they started with are read from the hob's own runtime, which its
+ * Tasks run on, and from each of its chats' brains, which may be another one (ADR 017).
+ */
+export const reachOf =
+  (services: {
+    readonly repo: HobbotsRepository["Service"];
+    readonly setup: InstallationSettings["Service"];
+    readonly adapters: RuntimeAdapters;
+    readonly charms: ReadonlyArray<ReachCharm>;
+  }) =>
+  (before: ReachHob, after: ReachHob & { readonly id: AgentId; readonly runtime: RuntimeKind }) =>
+    Effect.gen(function* () {
+      const { safetyPreset } = yield* services.setup.get;
+      const threads = yield* services.repo.listThreads(after.id);
+      const runtimes = [...new Set([after.runtime, ...threads.flatMap((thread) => thread.brain?.runtime ?? [])])];
+      return changeReach({
+        before,
+        after,
+        preset: safetyPreset,
+        charms: services.charms,
+        keepsTools: runtimes.filter((runtime) => services.adapters(runtime)?.resumeKeepsHubTools === true),
+      });
     });

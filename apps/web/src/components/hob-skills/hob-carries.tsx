@@ -2,8 +2,8 @@ import type { HobSkills, SkillsList } from "@hobbots/api";
 import { type Agent, SkillName, skillRevisionLabel } from "@hobbots/domain";
 import { Switch } from "@hobbots/ui/components/switch";
 import { Link } from "@tanstack/react-router";
+import { charmName } from "../charm-name.ts";
 import { RowList } from "../memory/memory-overview.tsx";
-import { messages as shared } from "../messages.ts";
 import {
   type HobDirectory,
   memberView,
@@ -19,10 +19,6 @@ import { messages } from "./messages.ts";
 import { useHobSkillWrites } from "./use-hob-skill-writes.ts";
 
 const copy = messages.carries;
-
-/** A Charm's name as the app shows it, such as GitHub. */
-export const charmName = (charm: string): string =>
-  charm === "github" ? shared.charms.github.name : charm.charAt(0).toUpperCase() + charm.slice(1);
 
 const headingOf = (group: CarriedGroup, hob: Agent) => {
   switch (group.scope._tag) {

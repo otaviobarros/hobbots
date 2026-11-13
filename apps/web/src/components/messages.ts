@@ -249,10 +249,11 @@ export const messages = {
       `${name} reads this before every reply. Write it the way you would brief a person.`,
     notSaved: ({ count }: { count: number }) =>
       count === 1 ? "1 change not saved yet" : `${count} changes not saved yet`,
+    /** When a change applies (#1347): the hub's own words, in its change results too. */
     nextReply: ({ name }: { name: string }) =>
-      `${name}'s next reply uses the new settings. Replies already running finish the old way.`,
+      `${name} gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops.`,
     savedNow: ({ name }: { name: string }) =>
-      `Saved. ${name}'s next reply uses the new settings. Replies already running finish the old way.`,
+      `Saved. ${name} gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops.`,
     undo: "Undo",
     save: "Save changes",
     /** The line under the profile: where the hob works, who summoned it and when, and its version. */
@@ -1160,6 +1161,17 @@ export const messages = {
     cancel: "Cancel",
   },
   permissions: {
+    /** What a change opens that some of the hob's sessions still do not get, and why (#1347). */
+    reach: {
+      chatsOnly: ({ name, charm }: { name: string; charm: string }) =>
+        `In a Task, ${name} is still not offered the ${charm} Charm's writes: that Charm offers them only in chats.`,
+      newSessionsOnly: ({ name, runtime, what }: { name: string; runtime: string; what: string }) =>
+        `On ${runtime}, a chat or Task ${name} already started keeps the tools it started with, so ${name} gets ${what} only in a chat or Task it starts after this.`,
+      newTasksOnly: ({ name, runtime, what }: { name: string; runtime: string; what: string }) =>
+        `On ${runtime}, a Task ${name} already started keeps the tools it started with, so ${name} gets ${what} only in a Task it starts after this.`,
+      charmTools: ({ charm }: { charm: string }) => `the ${charm} Charm's tools`,
+      answerTools: ({ answers }: { answers: string }) => `the tools of ${answers}`,
+    },
     loadFailed: ({ name }: { name: string }) => `Hobbots could not read what ${name} may do.`,
     tryAgain: "Try again",
     noShared: "No shared folders yet.",

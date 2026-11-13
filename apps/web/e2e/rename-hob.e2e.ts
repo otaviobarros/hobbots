@@ -77,7 +77,7 @@ test("[TC-AG-405-05] renaming a hob from its profile saves a new version, says y
   await name.fill("  Bramble ");
   await expect(page.getByText("1 change not saved yet")).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText(/^Saved\. Bramble's next reply uses the new settings/)).toBeVisible();
+  await expect(page.getByText(/^Saved\. Bramble gets this from its next turn/)).toBeVisible();
   const renamed = page.getByRole("main", { name: "Bramble's profile" });
   await expect(renamed.getByRole("heading", { level: 1, name: "Bramble" })).toBeVisible();
   await expect(renamed.getByText(/ · Summoned by you on \w+ \d+ · Version 2$/)).toBeVisible();

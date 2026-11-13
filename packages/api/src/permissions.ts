@@ -1,12 +1,14 @@
 import {
   AgentId,
   AnyOperation,
+  CharmId,
   ConfigVersion,
   HobCharms,
   HobPolicy,
   PolicyDecision,
   PolicyOverrides,
   RuntimeEnforcement,
+  RuntimeKind,
   SafetyPreset,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -20,6 +22,37 @@ import {
   UnofferedAnswer,
 } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
+
+/**
+ * What a change to a hob's permissions opens that some of its sessions still do not get, though it
+ * applies from the hob's next turn (#1347). Empty lists when the change reaches every session.
+ */
+export const ChangeReach = Schema.Struct({
+  /**
+   * Charms whose writes the change opens, which a session outside any chat, a party member's or a
+   * step's, is still not offered, since such a Charm offers its writes only in chats (ADR 038).
+   */
+  chatsOnly: Schema.Array(CharmId),
+  /**
+   * What only a session started after the change gets, on a runtime that resumes a session with the
+   * hub tools it started with, as Codex's does (#1245). Empty when none of the hob's sessions runs on
+   * such a runtime, or the change offers no new hub tool.
+   */
+  newSessionsOnly: Schema.Struct({
+    /** The runtimes, among the hob's own and its chats' brains, whose sessions keep their tools. */
+    runtimes: Schema.Array(RuntimeKind),
+    /** The Charms the change grants, whose tools a chat or Task started before does not get. */
+    charms: Schema.Array(CharmId),
+    /** The answers the change opens from Never whose hub tools a chat or Task started before does not get. */
+    operations: Schema.Array(AnyOperation),
+    /**
+     * The Charm writes the change opens from Never, which a chat was offered already but a Task
+     * session is offered only once they are not Never (ADR 038), so a Task started before does not get them.
+     */
+    taskOperations: Schema.Array(AnyOperation),
+  }),
+});
+export type ChangeReach = typeof ChangeReach.Type;
 
 /**
  * What a hob may touch (ADR 014): its stored policy, and what it adds up to under the installation's
@@ -47,6 +80,8 @@ export const HobPermissions = Schema.Struct({
    * local Git and the web are blocked whatever the decisions say.
    */
   enforcement: RuntimeEnforcement,
+  /** On the answer to a change only: what it opens that some of the hob's sessions still do not get. */
+  reach: Schema.optionalKey(ChangeReach),
 });
 export type HobPermissions = typeof HobPermissions.Type;
 

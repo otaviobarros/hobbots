@@ -10,6 +10,7 @@ import { useId } from "react";
 import { useUpdatePermissions } from "../../api/queries.ts";
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { CharmMark } from "../hob-profile/github-charm.tsx";
+import { CardSaveOutcome } from "../hob-profile/saved-bar.tsx";
 import { messages } from "./messages.ts";
 import { SummonCapsSection } from "./summon-caps.tsx";
 import { hobEditPayload, hobSummoning, hobSwitchPayload, type SummoningHeld } from "./summoning-model.ts";
@@ -105,11 +106,7 @@ export function HobSummoning({
           {copy.off({ name: hob.name })}
         </span>
       )}
-      {update.isError && (
-        <span role="alert" className="ps-16 pe-4.5 pb-4 text-detail text-rose">
-          {copy.saveFailed}
-        </span>
-      )}
+      <CardSaveOutcome hob={hob} save={update} failed={copy.saveFailed} />
     </section>
   );
 }

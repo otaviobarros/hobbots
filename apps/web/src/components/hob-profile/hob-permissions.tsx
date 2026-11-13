@@ -37,7 +37,9 @@ import { watchedSetupQuery } from "../../api/setup.ts";
 import { messages } from "../messages.ts";
 import { FolderList, LockedSwitch } from "../safety/safety-and-folders.tsx";
 import { HobWebLimitsRow, SiteRules } from "../web/hob-web.tsx";
+import { reachLines } from "./change-reach-model.ts";
 import { CheckedTag, EnforcementList, NeedsSandbox } from "./enforcement.tsx";
+import { SavedBar } from "./saved-bar.tsx";
 
 /**
  * The hob's permissions as the hub works them out. They change with the hob's configuration
@@ -197,6 +199,9 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
           <EnforcementList enforcement={data.enforcement} />
         </div>
       </details>
+      {update.isSuccess && (
+        <SavedBar text={messages.profile.savedNow({ name: hob.name })} lines={reachLines(hob, update.data.reach)} />
+      )}
     </div>
   );
 }
