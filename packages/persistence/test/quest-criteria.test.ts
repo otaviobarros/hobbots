@@ -362,7 +362,7 @@ describe("a Quest's acceptance criteria", () => {
 
   // covers DP-003
   it("[TC-DP-1445-06] gives every Quest stored before one required criterion per line of its acceptance", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0114")) as typeof migrations;
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0113")) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       yield* sql`INSERT INTO agents ${sql.insert({
