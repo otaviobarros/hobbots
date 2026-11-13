@@ -572,7 +572,36 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     expect(tools.file_edits).toBe("allow");
     expect(dropped.commands).toBe("no-sandbox");
     expect(answer).toContain(
+      "Rook will have: file reads, file edits, git_init; no commands (its runtime has no sandbox here).",
+    );
+    expect(answer).toContain(
       "Warning: the brief names running commands, but commands will not be offered: Rook's runtime cannot start its sandbox on this hub.",
     );
+
+    // Under Edit files Never its commands would be read-only: those are dropped and warned of too.
+    const readOnly = { ...authority, decisions: { ...authority.decisions, "edit-files": "deny" } };
+    await run(
+      send([
+        "Check again",
+        hub("delegate_task", {
+          key: "read-only",
+          hob: "Rook",
+          brief: "Run the tests",
+          authority: readOnly,
+          check: true,
+        }),
+      ]),
+    );
+    await run(messagesWhen((all) => all.filter((message) => message.role === "assistant").length >= 2));
+    const again = answers.get("read-only") ?? "";
+    expect(listedIn(again).dropped.read_only_commands).toBe("no-sandbox");
+    expect(again).toContain(
+      "Rook will have: file reads; no file edits, no read-only commands (its runtime has no sandbox here), no git_init.",
+    );
+    expect(again).toContain(
+      "Warning: the brief names running commands, but read_only_commands will not be offered: Rook's runtime cannot start its sandbox on this hub.",
+    );
+    // The answer never promises commands the session will not have.
+    for (const each of [answer, again]) expect(each).not.toMatch(/will have: [^;.]*commands/);
   }, 60_000);
 });

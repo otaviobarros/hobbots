@@ -169,21 +169,32 @@ const toolsFor = (
   member: Agent,
   asked: PolicyOverrides | undefined,
   { decisions, folders }: Pick<Authority, "decisions" | "folders">,
+  offer: SessionToolOffer,
 ) => {
   const open = openTools((operation) => decisions[operation]);
+  // Commands also need the runtime's sandbox, as the offer the session is built from says.
+  const sandbox = !offer.dropped.some((tool) => tool.reason === "no-sandbox");
   const chatOnly =
     folders.length === 0 ? "no folder is both yours and its own" : open.read ? null : "it would have read-files deny";
   const tools = [
     [open.read, "file reads"],
     [open.edit, "file edits"],
-    [open.commands, open.commandsReadOnly ? "read-only commands" : "commands"],
+    [open.commands && sandbox, open.commandsReadOnly ? "read-only commands" : "commands"],
     [open.gitInit, "git_init"],
   ] as const;
   const has = tools.flatMap(([on, name]) => (on ? [name] : []));
-  const lacks = tools.flatMap(([on, name]) => (on ? [] : [`no ${name}`]));
+  const lacks = tools.flatMap(([on, name]) =>
+    on
+      ? []
+      : [
+          open.commands && !sandbox && name.endsWith("commands")
+            ? `no ${name} (its runtime has no sandbox here)`
+            : `no ${name}`,
+        ],
+  );
   const summary =
     chatOnly === null
-      ? ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.${open.commandsReadOnly ? readOnlyNote(member.name) : ""}`
+      ? ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.${open.commandsReadOnly && sandbox ? readOnlyNote(member.name) : ""}`
       : ` ${member.name} will have no tools: ${chatOnly}, so its turns are chat-only. Do the Task's file work yourself, or give it work that needs no files.`;
   const commands = COMMAND_OPERATIONS.filter((operation) => decisions[operation] !== "deny");
   if (open.commands || commands.length === 0) return Effect.succeed(summary);
@@ -279,23 +290,24 @@ const offerWords = (member: Agent, offer: SessionToolOffer): string => {
  * that names the work is warned about, and one that does not is not.
  */
 const NEEDS: ReadonlyArray<{
-  readonly tool: string;
+  /** The tool the work needs, by any of the names the offer gives it. */
+  readonly tool: ReadonlyArray<string>;
   readonly words: RegExp;
   readonly work: string;
   /** A tool that does the same work when offered, as a command pushes where no Charm takes it over. */
   readonly or?: string;
 }> = [
-  { tool: "github_comment", words: /\bcomment/i, work: "commenting" },
-  { tool: "github_open_pull_request", words: /\bpull requests?\b|\bPRs?\b/, work: "opening a pull request" },
-  { tool: "github_push", words: /\bpush/i, work: "pushing", or: "commands" },
-  { tool: "commands", words: /\bcommit|\brun\b|\btests?\b/i, work: "running commands" },
-  { tool: "file_edits", words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },
+  { tool: ["github_comment"], words: /\bcomment/i, work: "commenting" },
+  { tool: ["github_open_pull_request"], words: /\bpull requests?\b|\bPRs?\b/, work: "opening a pull request" },
+  { tool: ["github_push"], words: /\bpush/i, work: "pushing", or: "commands" },
+  { tool: ["commands", "read_only_commands"], words: /\bcommit|\brun\b|\btests?\b/i, work: "running commands" },
+  { tool: ["file_edits"], words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },
 ];
 
 /** A warning for the lead when the brief names work that needs a tool the member will not be offered. Empty otherwise. */
 const briefNeeds = (member: Agent, brief: string, offer: SessionToolOffer): string => {
   const lacking = NEEDS.flatMap((need) => {
-    const tool = offer.dropped.find((each) => each.tool === need.tool);
+    const tool = offer.dropped.find((each) => need.tool.includes(each.tool));
     const instead = offer.tools.some((each) => each.tool === need.or);
     return tool !== undefined && !instead && need.words.test(brief) ? [{ need, tool }] : [];
   });
@@ -463,14 +475,14 @@ export const makeDelegating = ({
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
         const { given, above, decisions, lead, unreachable } = yield* memberAuthority(scope, task, member, input);
-        const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
-        const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         // The new Delegation narrows the member last, as its session reads it once the Task starts.
         // Null when it could not be read before the call: the answer then lists nothing rather than wait.
         const offer =
           input.prepared === undefined
             ? yield* memberOffer(member, [...above, { overrides: given.overrides, folders: given.folders }])
             : (input.prepared ?? NO_OFFER);
+        const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders }, offer);
+        const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}`;
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
         // Refused here, not only by the records, so a check is refused as the call would be.
