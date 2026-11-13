@@ -63,6 +63,7 @@ import {
   HobGitHubAppLive,
   HobGitHubAppService,
   hobAppName,
+  issueReadBack,
   KeychainError,
 } from "../src/index.ts";
 import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
@@ -1480,6 +1481,64 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
     expect(comment?.body).toMatch(/^Bill is a fine name\.\n\n<!-- hobbots-call: [0-9a-f-]{36} -->$/);
     expect(github.installationTokens.at(-1)?.permissions).toEqual(ACTION_PERMISSIONS.comment);
     expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022, PE-003, PE-007
+  it("[TC-GEN-1350-01] opens a labelled sub-issue as the hob's bot after one card, with tokens for opening issues only", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const project = projectFor("issue-shed");
+    const fromToken = github.installationTokens.length;
+    const outcome = await runWrites(
+      w,
+      calls,
+      project,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, [project.slug]);
+        const opened = yield* callAs(FRODO, w, project.folder, "github_open_issue", {
+          title: "Shoe the pony",
+          body: "Bill needs new shoes.",
+          labels: ["Enhancement"],
+          parent: 1,
+          key: "i-1",
+        });
+        const openedWith = github.installationTokens.length;
+        // As when its answer was lost: the call is read back by the bot's marker on GitHub.
+        const api = yield* GitHubApi;
+        const readBack = yield* issueReadBack(api)([...w.calls.values()][0] as CharmCall);
+        return { app, openedWith, readBack, ...opened };
+      }),
+    );
+    const bot = `${outcome.app.slug}[bot]`;
+    expect(outcome.answer).toMatchObject({ refused: false, text: expect.stringContaining("Opened sub-issue #2") });
+    expect(outcome.asked).toHaveLength(1);
+    expect(outcome.summary[0]).toBe(
+      [
+        `Open a sub-issue in ${project.slug} under #1: Pick a name for the pony`,
+        "Title: Shoe the pony",
+        "Labels: enhancement",
+        "",
+        "Bill needs new shoes.",
+        "",
+        `As Frodo's app, ${bot}.`,
+      ].join("\n"),
+    );
+    expect(outcome.labels).toContain(`Opening a sub-issue under #1 as Frodo's app, ${bot}`);
+    const [parent, issue] = github.items(project.slug);
+    expect(issue).toMatchObject({ author: bot, title: "Shoe the pony", labels: ["enhancement"] });
+    expect(issue?.body).toMatch(/^Bill needs new shoes\.\n\n<!-- hobbots-call: [0-9a-f-]{36} -->$/);
+    expect(parent?.subIssues).toEqual([issue?.number]);
+    // Reading and the labels use a read token; opening and attaching, one for opening issues only.
+    expect(
+      tokensSince(fromToken)
+        .slice(0, outcome.openedWith - fromToken)
+        .map((token) => token.permissions),
+    ).toEqual([ACTION_PERMISSIONS.read, ACTION_PERMISSIONS["open-issue"]]);
+    expect(calls).toEqual([]);
+
+    // Applied, under its parent.
+    const { readBack } = outcome;
+    expect(readBack).toEqual(expect.stringContaining("It is a sub-issue of #1."));
   });
 
   // covers ADR 022, PE-003, PE-005

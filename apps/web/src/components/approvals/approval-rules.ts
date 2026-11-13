@@ -129,6 +129,7 @@ const charmPhrase = (rule: Extract<GrantRule, { readonly _tag: "CharmSite" }>, n
     return copy.pullRequest({ name, repository, base: rule.site.base ?? "" });
   }
   if (rule.operation === "github.comment") return copy.comment({ name, repository });
+  if (rule.operation === "github.open-issue") return copy.issue({ name, repository });
   return copy.charm({ name, operation: rule.operation, site: Object.values(rule.site).join(" ") });
 };
 

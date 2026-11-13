@@ -10,15 +10,19 @@ import {
 } from "@hobbots/agents";
 import {
   type AgentId,
+  type CharmCall,
   commentMarker,
   GITHUB_WRITE_TOOLS,
+  type GitHubActor,
   type GitHubCommentPlan,
+  type GitHubIssuePlan,
   type GitHubPullRequestPlan,
   type GitHubRepository,
   type GitHubWriteInput,
   GitHubWriteInputs,
   githubActorText,
   githubCommentSummary,
+  githubIssueSummary,
   githubPullRequestSummary,
   githubWriteToolJsonSchema,
   hasCommentMarker,
@@ -30,11 +34,11 @@ import { Context, Effect } from "effect";
 import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { githubActor, recordedLogin } from "./github-actor.ts";
-import { GitHubApi, type GitHubError, type GitHubWrite } from "./github-api.ts";
+import { GitHubApi, type GitHubError, type GitHubOpenedIssue, type GitHubWrite } from "./github-api.ts";
 import { GITHUB_CHARM } from "./github-operations.ts";
 
 /**
- * The GitHub Charm's Open pull requests and Comment on GitHub (ADR 020, #324), as hub actions (ADR
+ * The GitHub Charm's Open pull requests, Comment on GitHub (ADR 020, #324) and Open issues (#1350), as hub actions (ADR
  * 031). Each only plans its call: it reads GitHub's side under one sign-in and builds the request, the
  * card, what the call's record keeps and the send, and the hub action pipeline decides, asks, records
  * and sends it. The pipeline hands the plan the hob's input redacted, so the approval card shows, and
@@ -64,6 +68,23 @@ const openedText = (plan: GitHubPullRequestPlan, number: number, url: string) =>
 /** What the hob is told about a posted comment. */
 const commentedText = (plan: GitHubCommentPlan, url: string) =>
   `Commented on ${plan.pullRequest ? "pull request" : "issue"} #${plan.number} in ${plan.repository}: ${url}`;
+
+/** What the hob is told about an opened issue, and where it went under its parent when it has one. */
+const issueText = (plan: GitHubIssuePlan, issue: Pick<GitHubOpenedIssue, "number" | "url">, attached: string) =>
+  `Opened ${plan.parent === null ? "issue" : "sub-issue"} #${issue.number} in ${plan.repository}: ${issue.url}${attached}`;
+
+/** What the hob is told about the parent when it asked for one. */
+const parentText = (plan: GitHubIssuePlan, attached: boolean, why = "") =>
+  plan.parent === null
+    ? ""
+    : attached
+      ? `\nIt is a sub-issue of #${plan.parent.number}.`
+      : `\nIt is not under #${plan.parent.number}: ${why === "" ? "GitHub did not attach it." : why} Tell the user, who can attach it on GitHub. Do not open it again.`;
+
+/** An issue's plan as recorded: the card's plan and the hub's marker nonce, which the hob never sees. */
+interface RecordedIssuePlan extends GitHubIssuePlan {
+  readonly marker: string;
+}
 
 /** A pull request's plan as recorded: the card's plan and the pull requests already there when deciding. */
 interface RecordedPullRequestPlan extends GitHubPullRequestPlan {
@@ -103,6 +124,28 @@ export const pullRequestReadBack =
     });
 
 /**
+ * What reading back a marked write starts from: its recorded plan, its repository, the account it
+ * acted as, the marker, and how far back to read. The nonce alone identifies the call's write, so
+ * the time only narrows how much is read.
+ */
+const markedReadBack = <
+  P extends { readonly repository: string; readonly actingAs: GitHubActor; readonly marker: string },
+>(
+  api: GitHubApi["Service"],
+  call: CharmCall,
+) =>
+  Effect.gen(function* () {
+    const plan = JSON.parse(call.plan) as P;
+    return {
+      plan,
+      repository: ownerAndName(plan.repository),
+      actingAs: recordedLogin(plan.actingAs) ?? (yield* api.viewer(call.agentId)),
+      since: new Date(recordedSecond(call.createdAt) - COMMENT_MARGIN_MS).toISOString(),
+      marker: commentMarker(plan.marker),
+    };
+  });
+
+/**
  * Reads a comment back (ADR 020): it took effect when a comment by the acting account on that item
  * carries this call's hidden marker.
  */
@@ -110,15 +153,29 @@ export const commentReadBack =
   (api: GitHubApi["Service"]): ReadBack =>
   (call) =>
     Effect.gen(function* () {
-      const plan = JSON.parse(call.plan) as RecordedCommentPlan;
-      const repository = ownerAndName(plan.repository);
-      const actingAs = recordedLogin(plan.actingAs) ?? (yield* api.viewer(call.agentId));
-      // The nonce alone identifies this call's comment, so the time only narrows how much is read.
-      const since = new Date(recordedSecond(call.createdAt) - COMMENT_MARGIN_MS).toISOString();
-      const marker = commentMarker(plan.marker);
+      const { plan, repository, actingAs, since, marker } = yield* markedReadBack<RecordedCommentPlan>(api, call);
       const comments = yield* api.commentsSince(call.agentId, repository, plan.number, since);
       const found = comments.find((comment) => comment.author === actingAs && comment.body.includes(marker));
       return found === undefined ? false : commentedText(plan, found.url);
+    });
+
+/**
+ * Reads opening an issue back (#1350): it took effect when an issue by the acting account carries
+ * this call's hidden marker. Under a parent, GitHub's sub-issues of the parent then say whether the
+ * second step attached it; an issue that is there but not attached still took effect, and the hob is
+ * told so, since sending again would open a second issue.
+ */
+export const issueReadBack =
+  (api: GitHubApi["Service"]): ReadBack =>
+  (call) =>
+    Effect.gen(function* () {
+      const { plan, repository, actingAs, since, marker } = yield* markedReadBack<RecordedIssuePlan>(api, call);
+      const issues = yield* api.issuesSince(call.agentId, repository, since);
+      const found = issues.find((issue) => issue.author === actingAs && issue.body.includes(marker));
+      if (found === undefined) return false;
+      if (plan.parent === null) return issueText(plan, found, "");
+      const under = yield* api.subIssues(call.agentId, repository, plan.parent.number);
+      return issueText(plan, found, parentText(plan, under.includes(found.number)));
     });
 
 /** A GitHub write's answer as the hob is told it; `applied` words a write GitHub took. */
@@ -173,6 +230,37 @@ export const pinnedPlan = <P extends object, R>(
       Effect.mapError((error) => (error instanceof HubRefusal ? error : new HubRefusal({ message: error.message }))),
     );
 
+/**
+ * A body the hub ends with its marker, as the hob wrote it: anything shaped like the marker goes before
+ * the text is shown, and what is left is redacted again, since taking one out can join a secret back
+ * together (ADR 020). `what` names the body in the hob's words, such as "comment".
+ */
+const markableBody = (
+  written: string,
+  { redacted = [], redact = (text) => text }: HubPlanContext,
+  what: string,
+  empty: "refuse" | "allow",
+): Effect.Effect<{ readonly body: string; readonly note: string }, HubRefusal> =>
+  Effect.gen(function* () {
+    const unmarked = stripCommentMarkers(written);
+    const body = redact(unmarked);
+    if (hasCommentMarker(body)) {
+      return yield* new HubRefusal({
+        message: `Your ${what} holds text shaped like Hobbots' hidden call marker (\`<!-- hobbots-call\`), which Hobbots keeps for itself. Write it without that.`,
+      });
+    }
+    if (empty === "refuse" && body.trim() === "") {
+      return yield* new HubRefusal({ message: `Your ${what} is empty once Hobbots' hidden markers are taken out.` });
+    }
+    const note = [
+      ...(unmarked === written
+        ? []
+        : [" Hobbots took out text shaped like its hidden call marker, which it keeps for itself."]),
+      redactedNote(redacted.includes("body") || body !== unmarked ? [what] : []),
+    ].join("");
+    return { body, note };
+  });
+
 /** The folder a write acts from and its repository, resolved from the hob's own folders as for a read. */
 export type RepositoryFor = (
   access: ToolAccess,
@@ -180,13 +268,13 @@ export type RepositoryFor = (
 ) => Effect.Effect<{ readonly folder: string; readonly repository: GitHubRepository }, HubRefusal>;
 
 /** A write tool as the hob is offered it, before the pipeline adds its key. */
-const writeTool = (name: "github_open_pull_request" | "github_comment") => {
+const writeTool = (name: "github_open_pull_request" | "github_comment" | "github_open_issue") => {
   const tool = GITHUB_WRITE_TOOLS.find((each) => each.name === name);
   if (tool === undefined) throw new Error(`The GitHub Charm has no ${name} tool.`);
   return { ...tool, inputSchema: githubWriteToolJsonSchema(name) };
 };
 
-/** The GitHub writes the pipeline runs: opening a pull request and commenting. */
+/** The GitHub writes the pipeline runs: opening a pull request, commenting and opening an issue. */
 export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
   Effect.gen(function* () {
     const api = yield* GitHubApi;
@@ -300,33 +388,12 @@ export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
       });
 
     /** Comments on an issue or pull request of the hob's folder's repository. */
-    const planComment = (
-      input: GitHubWriteInput<"github_comment">,
-      { turn, access, redacted = [], redact = (text) => text }: HubPlanContext,
-    ) =>
+    const planComment = (input: GitHubWriteInput<"github_comment">, context: HubPlanContext) =>
       Effect.gen(function* () {
+        const { turn, access } = context;
         const { folder, repository } = yield* repositoryFor(access, input.folder);
-        // The hub's marker is its own: anything shaped like one goes before the text is shown. Taking
-        // one out can join a secret back together, so what is left is redacted again (ADR 020).
-        const unmarked = stripCommentMarkers(input.body);
-        const body = redact(unmarked);
-        if (hasCommentMarker(body)) {
-          return yield* new HubRefusal({
-            message:
-              "Your comment holds text shaped like Hobbots' hidden call marker (`<!-- hobbots-call`), which Hobbots keeps for itself. Write it without that.",
-          });
-        }
-        if (body.trim() === "") {
-          return yield* new HubRefusal({
-            message: "Your comment is empty once Hobbots' hidden markers are taken out.",
-          });
-        }
-        const note = [
-          ...(unmarked === input.body
-            ? []
-            : [" Hobbots took out text shaped like its hidden call marker, which it keeps for itself."]),
-          redactedNote(redacted.includes("body") || body !== unmarked ? ["comment"] : []),
-        ].join("");
+        // The hub's marker is its own (ADR 020).
+        const { body, note } = yield* markableBody(input.body, context, "comment", "refuse");
         const slug = repositorySlug(repository);
         const agentId = turn.agentId;
         return yield* pinned(
@@ -379,6 +446,130 @@ export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
         );
       });
 
+    /** The labels as GitHub names them; one the repository does not have is refused before the card. */
+    const labelsOf = (agentId: AgentId, repository: GitHubRepository, wanted: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const names: Array<string> = [];
+        for (const name of new Set(wanted)) {
+          const found = yield* github(api.label(agentId, repository, name));
+          if (found === null) {
+            return yield* new HubRefusal({
+              message: `${repositorySlug(repository)} has no label "${name}", so no issue was opened. Leave it out, or ask the user to add it on GitHub first.`,
+            });
+          }
+          if (!names.includes(found)) names.push(found);
+        }
+        return names;
+      });
+
+    /** The issue an issue opens under: one of the repository's issues, never a pull request. */
+    const parentOf = (agentId: AgentId, repository: GitHubRepository, number: number) =>
+      Effect.gen(function* () {
+        const item = yield* github(api.item(agentId, repository, number, 0));
+        if (item.pullRequest) {
+          return yield* new HubRefusal({
+            message: `#${number} in ${repositorySlug(repository)} is a pull request; a sub-issue goes under an issue.`,
+          });
+        }
+        return { number, title: item.title };
+      });
+
+    /**
+     * Opens the issue, then, under a parent, attaches it as a sub-issue as the second step of the same
+     * call. The issue stands once GitHub opened it: a second step GitHub refused or never got is told,
+     * and only one whose answer was lost leaves the call uncertain, for reading back.
+     */
+    const sendIssue = (agentId: AgentId, repository: GitHubRepository, plan: GitHubIssuePlan, marker: string) =>
+      Effect.gen(function* () {
+        const opened = yield* sendOnceMore(
+          api.openIssue(agentId, repository, {
+            title: plan.title,
+            body: plan.body === "" ? commentMarker(marker) : `${plan.body}\n\n${commentMarker(marker)}`,
+            labels: plan.labels,
+          }),
+        );
+        if (opened._tag !== "Done" || plan.parent === null) {
+          return outcomeOf(opened, (issue) => issueText(plan, issue, ""));
+        }
+        const issue = opened.value;
+        const attached = yield* sendOnceMore(api.addSubIssue(agentId, repository, plan.parent.number, issue.id));
+        switch (attached._tag) {
+          case "Done":
+            return { _tag: "Applied", text: issueText(plan, issue, parentText(plan, true)) } satisfies WriteOutcome;
+          case "Uncertain":
+            return {
+              _tag: "Uncertain",
+              text: `Opened issue #${issue.number} in ${plan.repository}: ${issue.url}. Attaching it under #${plan.parent.number} may not have taken effect: ${attached.message}`,
+            } satisfies WriteOutcome;
+          case "SignedOut":
+            return {
+              _tag: "Applied",
+              text: issueText(plan, issue, parentText(plan, false, "GitHub refused the hub's sign-in.")),
+            } satisfies WriteOutcome;
+          default:
+            return {
+              _tag: "Applied",
+              text: issueText(plan, issue, parentText(plan, false, attached.message)),
+            } satisfies WriteOutcome;
+        }
+      });
+
+    /** Opens an issue, or a sub-issue under a parent, in the hob's folder's repository. */
+    const planIssue = (input: GitHubWriteInput<"github_open_issue">, context: HubPlanContext) =>
+      Effect.gen(function* () {
+        const { folder, repository } = yield* repositoryFor(context.access, input.folder);
+        const { body, note } = yield* markableBody(input.body ?? "", context, "description", "allow");
+        const titleNote = redactedNote((context.redacted ?? []).includes("title") ? ["title"] : []);
+        const slug = repositorySlug(repository);
+        const agentId = context.turn.agentId;
+        return yield* pinned(
+          agentId,
+          repository,
+          Effect.gen(function* () {
+            const labels = yield* labelsOf(agentId, repository, input.labels ?? []);
+            const parent = input.parent === undefined ? null : yield* parentOf(agentId, repository, input.parent);
+            const actingAs = yield* github(githubActor(credential, api, agentId));
+            const plan: GitHubIssuePlan = {
+              repository: slug,
+              folder,
+              title: input.title,
+              body,
+              labels,
+              parent,
+              actingAs,
+            };
+            // Random per call and never shown to the hob, so no issue it writes can pass for this call's.
+            const marker = crypto.randomUUID();
+            const request: PolicyRequest = {
+              _tag: "Charm",
+              charm: GITHUB_CHARM.id,
+              operation: "github.open-issue",
+              folder,
+              site: { repository: slug },
+              targets: [parent === null ? `github.com/${slug} issues` : `github.com/${slug} #${parent.number}`],
+            };
+            return {
+              request,
+              card: {
+                arguments: { ...plan },
+                summary: githubIssueSummary(plan),
+                label:
+                  parent === null
+                    ? `Opening an issue ${githubActorText(actingAs)}`
+                    : `Opening a sub-issue under #${parent.number} ${githubActorText(actingAs)}`,
+              },
+              write: {
+                site: `github.com/${slug} issues`,
+                recorded: { ...plan, marker },
+                appliedText: `Opened an issue in ${slug}.`,
+                note: `${titleNote}${note}`,
+                send: sendPinned(agentId, repository, sendIssue(agentId, repository, plan, marker)),
+              },
+            };
+          }),
+        );
+      });
+
     const actions: ReadonlyArray<HubAction<PolicyRequest>> = [
       hubAction({
         tool: writeTool("github_open_pull_request"),
@@ -397,6 +588,15 @@ export const makeGitHubWrites = (repositoryFor: RepositoryFor) =>
         otherwise: "nothing can be commented",
         readBack: commentReadBack(api),
         plan: planComment,
+      }),
+      hubAction({
+        tool: writeTool("github_open_issue"),
+        input: GitHubWriteInputs.github_open_issue,
+        effect: "write",
+        operation: "github.open-issue",
+        otherwise: "no issue can be opened",
+        readBack: issueReadBack(api),
+        plan: planIssue,
       }),
     ];
     return actions;

@@ -672,6 +672,7 @@ export const messages = {
         `let ${name} open pull requests into ${base} in ${repository}`,
       comment: ({ name, repository }: { name: string; repository: string }) =>
         `let ${name} comment on issues and pull requests in ${repository}`,
+      issue: ({ name, repository }: { name: string; repository: string }) => `let ${name} open issues in ${repository}`,
       charm: ({ name, operation, site }: { name: string; operation: string; site: string }) =>
         site === "" ? `let ${name} use ${operation}` : `let ${name} use ${operation} for ${site}`,
       runner: ({ name, command, file }: { name: string; command: string; file: string }) =>
@@ -710,6 +711,7 @@ export const messages = {
       "github.read": "Reads only. Nothing changes.",
       "github.open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
       "github.comment": "Posts a comment others can see at once. You can edit or delete it.",
+      "github.open-issue": "Opens an issue others can see at once. You can close or edit it.",
       "outside-folders": "Acts outside the folders this hob may use.",
       "search-memory": "Reads only. Nothing changes.",
       "save-memory": "Writes a page to its own memory. You can edit or undo it.",
@@ -755,11 +757,15 @@ export const messages = {
           label: "Comment and reply",
           note: "Comments on issues and pull requests in the repository of its folders.",
         },
+        "github.open-issue": {
+          label: "Open issues",
+          note: "New issues and sub-issues, with labels the repository has, in the repository of its folders.",
+        },
       },
       reads: ({ name }: { name: string }) =>
-        `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
+        `Reads, pushes to, opens pull requests and issues in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
       readsAsBot: ({ name, bot }: { name: string; bot: string }) =>
-        `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as ${bot}. The hub keeps the app's key, so no key reaches ${name}.`,
+        `Reads, pushes to, opens pull requests and issues in and comments on the repository of ${name}'s folders, as ${bot}. The hub keeps the app's key, so no key reaches ${name}.`,
       grant: ({ name }: { name: string }) => `Let ${name} use GitHub`,
       off: ({ name }: { name: string }) =>
         `${name} can't use GitHub. Turn it back on and its rules and its app are as you left them.`,

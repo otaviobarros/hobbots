@@ -126,6 +126,12 @@ describe("ruleText", () => {
       "Always let Pip run pnpm test in /w",
     );
     expect(ruleText({ _tag: "Host", host: "example.com" }, "Pip")).toBe("Always let Pip use example.com");
+    expect(
+      ruleText(
+        { _tag: "CharmSite", charm: "github", operation: "github.open-issue", site: { repository: "octo/app" } },
+        "Pip",
+      ),
+    ).toBe("Always let Pip open issues in octo/app");
     expect(ruleText({ _tag: "Push", cwd: "/w", remote: "git@host:me/app.git", branch: "feature" }, "Pip")).toBe(
       "Always let Pip push /w to feature on git@host:me/app.git",
     );

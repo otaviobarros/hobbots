@@ -757,7 +757,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
   });
 
   // covers PE-002, PE-003, PE-007, ADR 020, ADR 031
-  it("[TC-PE-518] reads, pushes, opens a pull request and comments through the GitHub Charm, beside the Shelf Charm", {
+  it("[TC-PE-518] reads, pushes, opens a pull request, comments and opens issues through the GitHub Charm, beside the Shelf Charm", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();
@@ -808,6 +808,31 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
         .find((item) => item.number === pull?.number)
         ?.comments.at(-1);
       expect(posted?.body, runtime).toMatch(new RegExp(`^Ready from ${runtime}\\.`));
+
+      // An issue, then a sub-issue under it, each after one approval, as the user's account (#1350).
+      const issue = await turn(
+        hob,
+        call("github_open_issue", { title: `Track ${runtime}`, labels: ["bug"], key: `issue-${runtime}` }),
+      );
+      expect(issue.pending, runtime).toMatchObject({
+        tool: "github_open_issue",
+        operation: "github.open-issue",
+        arguments: { title: `Track ${runtime}`, labels: ["bug"], parent: null },
+      });
+      expect(toolSteps(await approve(issue)), runtime).toMatchObject([{ state: "done" }]);
+      const tracked = github.items("octo/workshop").find((item) => item.title === `Track ${runtime}`);
+      expect(tracked, runtime).toMatchObject({ labels: ["bug"], author: "otaviobarros", pullRequest: null });
+      const sub = await turn(
+        hob,
+        call("github_open_issue", { title: `Part of ${runtime}`, parent: tracked?.number, key: `sub-${runtime}` }),
+      );
+      expect(sub.pending, runtime).toMatchObject({
+        tool: "github_open_issue",
+        arguments: { parent: { number: tracked?.number, title: `Track ${runtime}` } },
+      });
+      expect(toolSteps(await approve(sub)), runtime).toMatchObject([{ state: "done" }]);
+      const part = github.items("octo/workshop").find((item) => item.title === `Part of ${runtime}`);
+      expect(tracked?.subIssues, runtime).toEqual([part?.number]);
     });
     git(project, "checkout", "--quiet", "main");
   });

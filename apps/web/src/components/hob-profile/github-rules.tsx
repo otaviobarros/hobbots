@@ -53,6 +53,7 @@ const ICONS: Readonly<Record<string, string>> = {
   push: "↑",
   "github.open-pull-request": "⇄",
   "github.comment": "✎",
+  "github.open-issue": "⊙",
 };
 
 /** The GitHub Charm's actions as its card names them, each with the hub's rule for it. */
