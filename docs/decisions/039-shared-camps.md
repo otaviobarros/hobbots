@@ -43,7 +43,7 @@ The glossary gains these rows in the pull request that first builds each one.
 
 - **`ThreadMember`** has `threadId`, `actor` (a user or a hob), `role` (`owner` or `member`), `state`, `joinedAt`, `addedBy` (an actor) and `readRevision`. It is unique on thread and actor.
 - **`MemberMachine`** has the states `active`, `left` and `removed`. A hob or a person added by a member is active at once. An invited state comes with accounts.
-- **The read marker moves to the member.** Today's per-thread marker becomes the owner's `readRevision`, so unread counts, the unread line and the away summary are per person.
+- **The read marker moves to the member.** Today's per-thread marker becomes the owner's `readRevision`, so unread counts, the unread line and "While you were away" are per person.
 - **`Thread.agentId` stays and means the default lead.** Every thread keeps the hob it was made with, so nothing that reads it today breaks. It leads the thread's quests unless someone asks another hob.
 - **A direct message has exactly two members:** you and its hob. Adding anyone is refused. "Make a camp" starts a new camp with both of you, and the current chapter can move into it as ADR 037 moves a chapter.
 - **A hob leaves every thread when it is retired**, and comes back when it returns.
@@ -64,11 +64,14 @@ There is no mention that wakes every hob. A shared camp that wants every hob's v
 ### One hob speaks at a time
 
 - **A `TurnRequest` records each answer owed:** `threadId`, `hobId`, the message that caused it, the actor who caused it, and a state of `waiting`, `speaking`, `answered`, `passed` or `dropped`, held by `TurnRequestMachine`. It is written with the message, in the same transaction.
-- **The floor belongs to one conversation.** A conversation is a thread's main line or one of its reply threads (see Reply threads). `ThreadRun` gives each conversation's floor to its oldest waiting request, so a conversation runs one chat turn at a time, whichever hob it is for. Two conversations in the same group run their turns at once. The run keeps its states from ADR 037. Its `wakePending` flag becomes the queue of waiting requests, rebuilt at start from the records.
+- **A `TurnRequest` is a reply owed, not work.** It says that a hob owes a conversation an answer, as the session contract's reply obligations do. Work for a hob, such as a Task's result or a hand-off, still goes only in its backpack (ADR 019, STD-ARCH-017). Neither is a second queue of the other.
+- **The floor belongs to one conversation.** A conversation is a thread's main line or one of its reply threads (see Reply threads). It runs one chat turn at a time, whichever hob it is for. Two conversations in the same camp run their turns at once. `ThreadRun` becomes one run per conversation and keeps its states from ADR 037, `held` and `wakePending` included.
+- **The dispatcher stays the one delivery path, and it hands out the floor.** A backpack item already names the thread it returns to; it also names the conversation, which is the one the work was started from (the main line for work started before reply threads). When a conversation's floor is free, or `wakePending` says to look again, the dispatcher re-reads the records and picks the oldest of: a waiting `TurnRequest` there, and a hob's deliverable backpack work for there. The turn it starts is that hob's, and it carries everything that hob has waiting in that conversation: its other requests there, marked `answered` by that one turn, and its backpack items, as one continuation. Work that arrives while the floor is taken sets `wakePending`, as today, with no `TurnRequest`.
+- **Restart.** Requests, backpack items and held marks are records, so the dispatcher rebuilds each conversation's waiting list from them in the same order. A turn that was speaking when the hub stopped is ended as today, and its request goes back to `waiting`.
 - **A hob that waited reads what was said meanwhile.** Its pack carries the replies since the message that woke it. It may answer briefly, or `pass`: a hub tool on every runtime that ends the turn with no message and records "Pip passed: Quill covered it".
 - **People never wait.** A person's message is stored and shown at once, whoever holds the floor. A message that mentions the hob speaking now joins that hob's next turn, as today. One that mentions another hob adds a request behind the others.
-- **Stop stops the turn that is speaking.** The waiting requests stay. Stop all drops them, and each one is marked `dropped` with who stopped it.
-- **Threads stay independent.** A hob in three threads can speak in each, with one session per thread, as a hob already runs several Tasks at once.
+- **Stop stops the turn that is speaking.** The waiting requests stay. Backpack work the stopped turn carried is held, as today, until you write, resume it or its hob wakes. Stop all drops the conversation's waiting requests, each marked `dropped` with who stopped it, and holds its backpack work. Work is never dropped by Stop: a result stays in the backpack until it is delivered.
+- **Conversations stay independent.** A hob in three conversations, in one thread or several, can speak in each at once, with one session per conversation, as a hob already runs several Tasks at once.
 - **Quests are not chat turns.** A quest's work runs in the quest's own sessions (ADR 018) and never holds a conversation's floor. A shared camp can run any number of quests at once, within the owner's plan, and people and hobs keep talking while they run. A hob that leads a quest can still answer a mention in the camp: that is a separate chat turn, and its pack says the quest is running.
 
 ### Hobs talking to hobs
@@ -79,7 +82,7 @@ There is no mention that wakes every hob. A shared camp that wants every hob's v
 
 ### The context pack with several hobs
 
-- **A runtime session also belongs to one hob.** `RuntimeSession` is keyed by thread, chapter, runtime and hob. In a shared thread each member hob has its own session, so each keeps its own runtime and model (ADR 017).
+- **A runtime session belongs to one hob and one conversation.** `RuntimeSession` is keyed by thread, conversation (the reply thread's root message, or none for the main line), chapter, runtime and hob. In a shared thread each member hob has its own session, so each keeps its own runtime and model (ADR 017). A hob that answers in the main line and in a reply thread of the same chapter has two sessions, so the two turns can run at once and neither carries the other's history. Each session keeps its own `seenThrough` and memory-brief fingerprint.
 - **Records are shared.** The brief, active decisions, the artifacts index, chapter lines and carried items are one set per thread, and every member hob reads the same set.
 - **The transcript part names every speaker.** The live chapter's messages carry their author, such as "Marina (person)" or "Quill (hob)". A hob's own replies are its own turns. A resumed session adds only what was said since that hob last spoke.
 - **Its share stays the live chapter's.** When "since you last spoke" is longer than the live chapter's share, the oldest lines become a count, and the hob reads them with `read_message`.
@@ -201,10 +204,10 @@ Slices in this order. Each leaves the app working and is proven end to end on Cl
 
 ## Consequences
 
-- A turn in a shared camp costs no more than a turn in a direct message. Only the hobs named, or the only hob in the thread, ever run.
+- Only the hobs named, or the only hob in the thread, ever run, so the number of turns a message starts is known before it is sent. A turn's own cost depends on its pack, and the pack's budget is the same in a direct message and a shared camp.
 - The migration adds a member row for every thread and a user row for the owner. It runs in one pass, on SQLite and PostgreSQL, with a test for each.
-- `RuntimeSession` gains the hob in its key. Existing sessions take their thread's hob.
-- `ThreadRun`'s `wakePending` flag becomes a queue of `TurnRequest` records. The model-based tests of ADR 037 extend to several hobs.
+- `RuntimeSession` gains the hob and the conversation in its key. Existing sessions take their thread's hob and the main line. A reply thread starts its own session from the pack, which costs one fresh briefing per reply thread a hob answers in.
+- `ThreadRun` becomes one run per conversation. The dispatcher picks the next turn from `TurnRequest` records and backpack items, and `wakePending` keeps its meaning. The model-based tests of ADR 037 extend to several hobs, several conversations and backpack work.
 - Every memory and For you query that assumes one person gains an actor. Today that actor is always the owner.
 
 ## Validation
@@ -213,12 +216,14 @@ The scenarios that would show this decision holds. None is proven yet. Each slic
 
 - After the migration every thread has the owner and its hob as members, unread counts read the same as before, and adding a member to a direct message is refused. Not proven yet.
 - In a camp with several hobs, a message with no mention starts no turn. A message that mentions Quill and Pip starts Quill's turn, then Pip's, never both at once, on Claude Code, Codex and the fake runtime. Not proven yet.
-- Model-based tests of random sends, mentions, replies, stops and restarts across three hobs agree with a model of the floor: one turn at a time, every request answered, passed or dropped exactly once. Not proven yet.
+- Model-based tests of random sends, mentions, replies, backpack arrivals, stops and restarts across three hobs and two conversations agree with a model of the floor: one turn at a time per conversation, every request answered, passed or dropped exactly once, and every backpack item delivered exactly once. Not proven yet.
 - Two hobs that mention each other stop after `HOB_RELAY_BUDGET` turns, and the thread shows that it waits for a person. Not proven yet.
+- The same hob mentioned in the main line and in a reply thread of the same chapter answers both at once, from two sessions, and neither turn's runtime input holds the other conversation's messages. Not proven yet.
+- A Task result that reaches the backpack while another hob holds the floor starts its hob's continuation once the floor is free, with no `TurnRequest`, and survives a restart and a Stop. When that hob also owes a reply there, one turn carries both. Not proven yet.
 - Each hob in a shared camp resumes its own session. Its pack names every speaker and carries only what was said since it last spoke, within the live chapter's share, and never another hob's memory brief. Not proven yet.
 - Capture writes each hob's own turns to its own scope only, and nothing from a private camp. Not proven yet.
 - Change it on a Charm action approves the changed call only when it passes the action's schema, and records who changed what. Only the requester or the owner can decide. Not proven yet.
-- The For you list and its away summary list the same mentions, decisions and changed artifacts for the same records and read marker. Not proven yet.
+- The For you list and its "While you were away" part list the same mentions, decisions and changed artifacts for the same records and read marker. Not proven yet.
 - A quest started from a shared camp belongs to the camp's thread. Its card updates in place, its work and steers stay in the card's reply thread, and the camp gets only questions for a person, one line per new version and Ready. Not proven yet.
 - Two quests in one camp run at once while people and hobs keep talking in the main line and in reply threads, and no chat turn waits on a quest. Not proven yet.
 - A reply in a quest card's thread reaches the quest as a steer without stopping it. Not proven yet.
