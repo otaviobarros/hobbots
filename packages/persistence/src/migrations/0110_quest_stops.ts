@@ -7,7 +7,7 @@ import { SqlClient } from "effect/sql";
 //
 // The two states join the set 0046 lets the `state` column take, written out as they stand now: a
 // migration never changes. PostgreSQL swaps its named CHECK constraint; SQLite swaps its triggers.
-export const QUEST_STATES = ["active", "stopping", "completed", "failed", "cancelled", "stopped"] as const;
+const QUEST_STATES = ["active", "stopping", "completed", "failed", "cancelled", "stopped"] as const;
 
 const list = QUEST_STATES.map((state) => `'${state}'`).join(", ");
 const message = `quests.state must be one of ${QUEST_STATES.join(", ")}`;

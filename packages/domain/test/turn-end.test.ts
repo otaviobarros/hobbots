@@ -56,13 +56,17 @@ const shown = (move: TaskMove): string =>
       ? `→${move.to}`
       : move._tag === "SendBack"
         ? "back"
-        : `complete|${shown(move.otherwise)}`;
+        : move._tag === "SettlePause"
+          ? `paused|${move.otherwise}`
+          : `complete|${shown(move.otherwise)}`;
 
 const STATES: ReadonlyArray<TaskState> = [
   "queued",
   "active",
   "waiting",
   "blocked",
+  "pausing",
+  "paused",
   "cancelling",
   "completed",
   "failed",
@@ -75,6 +79,8 @@ const ATTEMPTS: Record<TaskState, readonly [string, string, string]> = {
   active: ["completed", "failed", "interrupted"],
   waiting: ["completed", "failed", "interrupted"],
   blocked: ["completed", "failed", "interrupted"],
+  pausing: ["completed", "failed", "interrupted"],
+  paused: ["completed", "failed", "interrupted"],
   cancelling: ["cancelled", "failed", "cancelled"],
   completed: ["completed", "failed", "interrupted"],
   failed: ["completed", "failed", "interrupted"],
@@ -88,6 +94,9 @@ const MOVES: Record<TurnRunner, Record<TaskState, readonly [string, string, stri
     active: ["complete|→failed", "→failed", "→failed"],
     waiting: ["complete|→failed", "→failed", "→failed"],
     blocked: ["complete|→failed", "→failed", "→failed"],
+    // A paused step that finished still delivers; any other starts afresh on Resume (#1446).
+    pausing: ["complete|paused|queued", "paused|queued", "paused|queued"],
+    paused: ["stay", "stay", "stay"],
     cancelling: ["→cancelled", "→cancelled", "→cancelled"],
     completed: ["stay", "stay", "stay"],
     failed: ["stay", "stay", "stay"],
@@ -98,6 +107,8 @@ const MOVES: Record<TurnRunner, Record<TaskState, readonly [string, string, stri
     active: ["back", "stay", "→waiting"],
     waiting: ["back", "stay", "stay"],
     blocked: ["back", "stay", "stay"],
+    pausing: ["paused|waiting", "paused|waiting", "paused|waiting"],
+    paused: ["stay", "stay", "stay"],
     cancelling: ["→cancelled", "→cancelled", "→cancelled"],
     completed: ["stay", "stay", "stay"],
     failed: ["stay", "stay", "stay"],
@@ -108,6 +119,8 @@ const MOVES: Record<TurnRunner, Record<TaskState, readonly [string, string, stri
     active: ["stay", "stay", "stay"],
     waiting: ["stay", "stay", "stay"],
     blocked: ["stay", "stay", "stay"],
+    pausing: ["paused|active", "paused|active", "paused|active"],
+    paused: ["stay", "stay", "stay"],
     cancelling: ["→cancelled", "→cancelled", "→cancelled"],
     completed: ["stay", "stay", "stay"],
     failed: ["stay", "stay", "stay"],

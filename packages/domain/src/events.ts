@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import { CommandId, CommandRecord, FileChange, FileChangeId, FolderScan } from "./activity.ts";
+import { Actor } from "./actor.ts";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { Artifact } from "./artifact.ts";
@@ -189,8 +190,22 @@ const TaskCreated = Schema.TaggedStruct("TaskCreated", {
  * carries the Task's Delegation as it now is, so its owner's backpack gets the work again.
  */
 export const TaskControl = Schema.Union([
-  Schema.TaggedStruct("Retried", { delegation: Schema.NullOr(Delegation) }),
-  Schema.TaggedStruct("Reassigned", { from: AgentId, delegation: Delegation }),
+  Schema.TaggedStruct("Retried", {
+    delegation: Schema.NullOr(Delegation),
+    /** Who retried it and why, when its lead did (#1446); absent when you did. */
+    by: Schema.optionalKey(Actor),
+    reason: Schema.optionalKey(Schema.String),
+  }),
+  Schema.TaggedStruct("Reassigned", {
+    from: AgentId,
+    delegation: Delegation,
+    by: Schema.optionalKey(Actor),
+    reason: Schema.optionalKey(Schema.String),
+  }),
+  /** You paused it (#1446): `now` when its running turn was stopped at once. */
+  Schema.TaggedStruct("Paused", { by: Actor, now: Schema.Boolean }),
+  /** You resumed it (#1446). */
+  Schema.TaggedStruct("Resumed", { by: Actor }),
 ]);
 export type TaskControl = typeof TaskControl.Type;
 

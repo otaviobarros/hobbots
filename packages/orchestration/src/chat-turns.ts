@@ -8,10 +8,12 @@ import {
   type EventEnvelope,
   latestThreadTask,
   openThreadTask,
+  pausedHolder,
   QuestStates,
   type ResponsibilityLedger,
   Task,
   TaskId,
+  TaskPauses,
   type TaskToolName,
   type TaskToolRefused,
   TaskTree,
@@ -88,6 +90,45 @@ const cancelledIn = (trees: ReadonlyArray<TaskTree>, taskId: TaskId): string | n
   return quest !== undefined && QuestStates.stoppedByLead(quest)
     ? `You stopped Quest ${quest.id} at the user's request, so this turn does no more work on it and starts none in its place. Tell the user in a line, then end your turn.`
     : `Task ${taskId} was cancelled, so this turn does no more work on it and starts none in its place.`;
+};
+
+/** The calls that do work on a Task, which wait while you have it paused (#1446). */
+const HELD_WHILE_PAUSED: ReadonlySet<TaskToolName> = new Set([
+  ...NEEDS_ATTEMPT,
+  "wait_for",
+  "hand_off",
+  "check_criterion",
+  "retry_task",
+  "reassign_task",
+]);
+
+/**
+ * Why a call waits while you have the work paused (#1446): `task` is paused, its turn having ended,
+ * and the call does work on it. Null when the call goes on. A turn still running as you paused may
+ * finish what it does; the records refuse anything new under the Task.
+ */
+const pausedIn = (trees: ReadonlyArray<TaskTree>, task: Task, name: TaskToolName): string | null => {
+  if (!HELD_WHILE_PAUSED.has(name)) return null;
+  const tree = trees.find((each) => each.tasks[0]?.id === task.id);
+  const holder = tree === undefined ? undefined : pausedHolder(task, tree.tasks);
+  if (holder === undefined || TaskPauses.isPausing(holder)) return null;
+  return `The user paused Task ${holder.id}, so no work goes on in it until they resume it. Answer the user, and do not ask them to resume it unless they ask what to do.`;
+};
+
+/**
+ * Why a turn does nothing more on its Task, or null: you cancelled the Task it worked on, and it
+ * starts nothing in its place; or you have the work paused, and its lead only answers you (#1446).
+ */
+const heldBack = (
+  trees: ReadonlyArray<TaskTree>,
+  workingOn: TaskId | null,
+  task: Task | undefined,
+  name: TaskToolName,
+): { readonly reason: "task-cancelling" | "task-paused"; readonly message: string } | null => {
+  const cancelled = workingOn === null ? null : cancelledIn(trees, workingOn);
+  if (cancelled !== null) return { reason: "task-cancelling", message: cancelled };
+  const paused = task === undefined ? null : pausedIn(trees, task, name);
+  return paused === null ? null : { reason: "task-paused", message: paused };
 };
 
 /**
@@ -239,10 +280,9 @@ export const makeChatResolver = (
       Effect.gen(function* () {
         const journal = journalOf();
         const trees = yield* tasks.readThreadTrees(turn.threadId);
-        // A turn whose Task you cancelled does nothing more about it, and starts nothing in its place.
-        const cancelled = workingOn === null ? null : cancelledIn(trees, workingOn);
-        if (cancelled !== null) return yield* refuse("task-cancelling", cancelled);
         let task: Task | undefined = openThreadTask(trees, turn.agentId)?.top;
+        const held = heldBack(trees, workingOn, task, name);
+        if (held !== null) return yield* refuse(held.reason, held.message);
         // Once the request has ended, its lead can still read it, never change it, to answer you about it (#666).
         const ended = task === undefined && name === "read_tasks" ? latestThreadTask(trees, turn.agentId) : undefined;
         if (ended !== undefined) {

@@ -132,9 +132,11 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         const session = liveSession(thread, runtime);
         if (session === undefined) return null;
         const missed = missedBy(runtime, session.seenThrough, before);
-        // Only a switch needs one: a session is told what other brains wrote that it did not see.
+        // Only a switch needs one: a session is told what other brains wrote that it did not see,
+        // and what you sent here that no turn of its took, as an @mention of a member does (#1446).
         const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
-        if (!switched && !others) return null;
+        const yours = missed.some((m) => m.role === "user");
+        if (!switched && !others && !yours) return null;
         return buildBriefing({ kind: "resumed", messages: missed, checkpoint: null })?.text ?? null;
       });
 

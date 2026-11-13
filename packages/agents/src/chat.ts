@@ -45,6 +45,7 @@ import { HobAdmission } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
+import { makeMentionNotes } from "./mention-notes.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
@@ -399,6 +400,7 @@ export class ChatService extends Context.Service<
       });
 
       const grants = yield* makeTurnGrants(repo, hobTools);
+      const mentions = yield* makeMentionNotes;
       const {
         runOf,
         step,
@@ -431,6 +433,36 @@ export class ChatService extends Context.Service<
           );
         });
 
+      /** Your message as stored in the thread, `queued` while it waits for its turn. */
+      const yourMessage = (
+        thread: Thread,
+        agent: Agent,
+        content: string,
+        askedSkill: SkillMention | null,
+        queued: boolean,
+      ) =>
+        Effect.gen(function* () {
+          const accepted = yield* acceptedIn(thread, agent);
+          const named = namedSkills(accepted, thread.skillTrial);
+          return new Message({
+            id: MessageId.make(crypto.randomUUID()),
+            threadId: thread.id,
+            actor: yield* sessionActor,
+            role: "user",
+            content,
+            status: queued ? "queued" : "complete",
+            error: null,
+            configVersion: null,
+            skills: accepted,
+            // A skill of a set picked by its name alone is recorded with its set, when that names one.
+            askedSkill:
+              askedSkill === null
+                ? mentionedSkill(content, named)
+                : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill),
+            createdAt: yield* nowIso,
+          });
+        });
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
@@ -444,6 +476,14 @@ export class ChatService extends Context.Service<
             if (agent.status === "retired") yield* requireActive(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
+            // A message that @mentions a member of a quest here goes to that member, and the lead
+            // reads it in the chat on its next turn without being woken for it (#1446).
+            const mentioned = yield* mentions.targets(threadId, agent, content);
+            if (mentioned.length > 0) {
+              const saved = yield* saveMessage(yield* yourMessage(thread, agent, content, askedSkill, false));
+              yield* mentions.send(saved, mentioned);
+              return { userMessage: saved, assistantMessage: null };
+            }
             // A message waits while its hob is paused, while a reply runs, and behind any message
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
             const busy = isBusy(yield* runOf(threadId));
@@ -451,26 +491,7 @@ export class ChatService extends Context.Service<
             // Work you stopped here, and routine progress, ride along: the message starts through the
             // dispatcher, under their claims.
             const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
-            const accepted = yield* acceptedIn(thread, agent);
-            const named = namedSkills(accepted, thread.skillTrial);
-            const userMessage = new Message({
-              id: MessageId.make(crypto.randomUUID()),
-              threadId,
-              actor: yield* sessionActor,
-              role: "user",
-              content,
-              status: waits || carries ? "queued" : "complete",
-              error: null,
-              configVersion: null,
-              skills: accepted,
-              // A skill of a set picked by its name alone is recorded with its set, when that names one.
-              askedSkill:
-                askedSkill === null
-                  ? mentionedSkill(content, named)
-                  : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill),
-              createdAt: yield* nowIso,
-            });
-            const saved = yield* saveMessage(userMessage);
+            const saved = yield* saveMessage(yield* yourMessage(thread, agent, content, askedSkill, waits || carries));
             // A message that waits behind a busy thread has the thread look at its work again once it
             // is free, so a dispatch that already found nothing does not start it without its progress.
             if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });

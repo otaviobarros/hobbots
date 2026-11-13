@@ -21,6 +21,7 @@ import {
   type Delivery,
   Dispatcher,
   DispatcherHost,
+  heldByPause,
   lateWorkOf,
   type ResultsIn,
   runningTurnAsk,
@@ -51,12 +52,14 @@ const makeCarrier = Effect.gen(function* () {
           (routine || item.actionable) &&
           (item.notBefore === null || item.notBefore <= now),
       );
-      return yield* Effect.forEach(waiting, (item) =>
+      const all = yield* Effect.forEach(waiting, (item) =>
         Effect.map(
           item.taskId === null ? Effect.succeed<ReadonlyArray<Task>>([]) : host.treeOf(item.taskId),
           (tree) => ({ item, tree }),
         ),
       );
+      // Work on a Task you paused waits for you to resume it: no turn starts for it (#1446).
+      return all.filter(({ item, tree }) => !heldByPause(item, tree));
     });
 
   /** What the turn is handed; a claim found lost as its runtime accepts it fails `lost`, which stops the turn. */

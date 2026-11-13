@@ -123,6 +123,8 @@ export const messages = {
     active: "Working",
     waiting: "Waiting",
     blocked: "Blocked",
+    pausing: "Pausing",
+    paused: "Paused",
     cancelling: "Cancelling",
     completed: "Done",
     failed: "Failed",
@@ -146,6 +148,7 @@ export const messages = {
   },
   questStates: {
     active: "Under way",
+    paused: "Paused",
     stopping: "Stopping",
     completed: "Done",
     failed: "Failed",

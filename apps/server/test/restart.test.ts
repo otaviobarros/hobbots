@@ -442,4 +442,46 @@ describe("recovering after a restart", () => {
     expect(states.get(TaskId.make("dig"))).toBe("failed");
     expect(await second.run(TaskRepository.use((tasks) => tasks.listStrandedSteps))).toEqual([]);
   });
+
+  // covers EX-004, OR-006
+  it("[TC-OR-1446-20] a Quest paused while its step ran starts no turn at the next start, and its step runs again on Resume", async () => {
+    const database = await sharedDatabase();
+    const you = { kind: "user" as const, id: "owner" };
+    await leftBehind(
+      database,
+      Effect.gen(function* () {
+        yield* frodoAndThread;
+        const quest = yield* createTask("quest", null);
+        const { task } = yield* startSession(yield* createTask("pass", "quest"));
+        const tasks = yield* TaskRepository;
+        // You paused the work while its step's session ran; Hobbots stopped before it ended.
+        yield* tasks.pauseTask(quest.id, quest.revision, { at: now, by: you, now: false });
+        yield* tasks.pauseTask(task.id, task.revision, { at: now, by: you, now: false });
+      }),
+    );
+
+    const second = await start(database);
+    // The cut-off step settles paused, to start afresh on Resume, and nothing runs meanwhile.
+    const paused = await second.run(until(statesOf, (each) => each.get(TaskId.make("pass")) === "paused"));
+    expect(paused.get(TaskId.make("quest"))).toBe("paused");
+    await second.run(Effect.sleep("300 millis"));
+    expect(second.requests).toEqual([]);
+    const [tree] = await second.run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    expect(tree?.tasks.find((task) => task.id === TaskId.make("pass"))?.pause).toMatchObject({ from: "queued" });
+
+    // Resume puts the step back in the queue, and it runs again.
+    await second.run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        for (const id of [TaskId.make("quest"), TaskId.make("pass")]) {
+          const [current] = yield* tasks.readThreadTrees(threadId);
+          const found = current?.tasks.find((each) => each.id === id);
+          if (found === undefined) throw new Error(`no Task ${id}`);
+          yield* tasks.resumeTask(id, found.revision, { at: now, by: you });
+        }
+        yield* TaskSignal.use((signal) => signal.notify);
+      }),
+    );
+    await second.run(until(Effect.succeed(second.requests), (sent) => sent.some((r) => r.prompt.includes("pass"))));
+  });
 });

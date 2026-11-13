@@ -226,6 +226,7 @@ const listSummaries = (sql: SqlClient.SqlClient, where: Statement.Fragment) =>
  * included; without one, every Quest still under way. Oldest Quest first.
  */
 export const readQuestSummaries = (sql: SqlClient.SqlClient, threadId: ThreadId | null) =>
-  listSummaries(sql, threadId === null ? sql`s.state IN ('active', 'stopping')` : sql`s.thread_id = ${threadId}`).pipe(
-    Effect.orDie,
-  );
+  listSummaries(
+    sql,
+    threadId === null ? sql`s.state IN ('active', 'paused', 'stopping')` : sql`s.thread_id = ${threadId}`,
+  ).pipe(Effect.orDie);

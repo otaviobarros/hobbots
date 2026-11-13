@@ -7,17 +7,26 @@ import {
   UserSession,
 } from "@hobbots/api";
 import {
+  type Actor,
   type AgentId,
   type Committed,
   cancelMoves,
+  HUB_ACTOR,
   type IllegalTaskTransition,
   isLiveAttempt,
   isTerminalTask,
+  NoteId,
   openThreadTask,
+  pausedAbove,
+  pauseTargets,
   type QuestId,
+  resumeNote,
+  resumeRecipients,
+  resumeTargets,
   type StaleTask,
   type Task,
   type TaskId,
+  TaskPauses,
   type TaskRefused,
   type TaskTree,
 } from "@hobbots/domain";
@@ -44,8 +53,11 @@ const refusedFor = (taskId: TaskId) => (error: Refusal) => {
   return new TaskNotControllable({ taskId, reason: "task-state", message });
 };
 
+/** A control on one Task, made in your session. */
+type OnTask<E> = (taskId: TaskId) => Effect.Effect<void, TaskNotFound | E, UserSession>;
+
 /**
- * Your controls on a Task (ADR 018): Cancel, Retry and Reassign act on it directly, never through
+ * Your controls on a Task (ADR 018): Cancel, Pause, Resume, Retry and Reassign act on it directly, never through
  * its lead, and report what the hub did, not what it hopes (OR-006). Each needs a `UserSession`,
  * which no hob, Charm or runtime tool has (PE-006). A hob cancels work under its own Task with its
  * `cancel_task` tool instead.
@@ -67,6 +79,28 @@ export class TaskControls extends Context.Service<
     readonly retry: (
       taskId: TaskId,
     ) => Effect.Effect<void, TaskNotFound | TaskNotControllable | HobUnavailable, UserSession>;
+    /**
+     * Pauses the Task and everything under it (#1446): no turn starts there until you resume it. A
+     * turn already running ends on its own, or is stopped at once with `now` (Pause now); either way
+     * its Task shows pausing until it has. Pausing again changes nothing.
+     */
+    readonly pause: (
+      taskId: TaskId,
+      now: boolean,
+    ) => Effect.Effect<void, TaskNotFound | TaskNotControllable, UserSession>;
+    /** Pauses the Task a Quest sits on, as above, with its whole party. */
+    readonly pauseQuest: (
+      questId: QuestId,
+      now: boolean,
+    ) => Effect.Effect<void, QuestNotFound | TaskNotControllable, UserSession>;
+    /**
+     * Resumes the Task and everything under it you paused, each where it stood, and tells each hob
+     * that goes back to work what changed while it was paused (#1446). Refused while a Task above it
+     * is still paused. Resuming again changes nothing.
+     */
+    readonly resume: (taskId: TaskId) => Effect.Effect<void, TaskNotFound | TaskNotControllable, UserSession>;
+    /** Resumes the Task a Quest sits on, as above, with its whole party. */
+    readonly resumeQuest: (questId: QuestId) => Effect.Effect<void, QuestNotFound | TaskNotControllable, UserSession>;
     /**
      * Gives a party member's Task to another hob, which starts on it afresh; its Attempts,
      * checkpoints and results stay. Giving it again to the hob that has it changes nothing.
@@ -160,8 +194,107 @@ export class TaskControls extends Context.Service<
           yield* review;
         });
 
+      /** The Task a Quest sits on, as a control on the Quest finds it. */
+      const questTask = (questId: QuestId) =>
+        Effect.flatMap(tasks.findQuest(questId), (quest) =>
+          Option.isNone(quest) ? Effect.fail(new QuestNotFound({ questId })) : Effect.succeed(quest.value.taskId),
+        );
+      const onQuest =
+        <E>(control: OnTask<E>) =>
+        (questId: QuestId) =>
+          Effect.flatMap(questTask(questId), (taskId) =>
+            control(taskId).pipe(Effect.catchTag("TaskNotFound", () => Effect.fail(new QuestNotFound({ questId })))),
+          );
+
+      /** Moved again from where it is now when a Task under it moved meanwhile, as a cancel is. */
+      const fresh = <A, R>(effect: Effect.Effect<A, TaskNotFound | TaskNotControllable, R>) =>
+        effect.pipe(
+          Effect.retry({
+            while: (error) => error._tag === "TaskNotControllable" && error.reason === "task-state",
+            times: 3,
+          }),
+        );
+
+      /** Pauses every Task under `taskId`, the Task included, that is under way now, by `by`. */
+      const pauseTree = (taskId: TaskId, pause: { readonly at: string; readonly by: Actor; readonly now: boolean }) =>
+        Effect.gen(function* () {
+          const { task, tree } = yield* subtree(taskId);
+          for (const each of pauseTargets(task, tree)) {
+            yield* tasks
+              .pauseTask(each.id, each.revision, pause)
+              .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
+          }
+        });
+
+      const pause = (taskId: TaskId, now: boolean) =>
+        Effect.gen(function* () {
+          const session = yield* UserSession;
+          const { task, tree } = yield* subtree(taskId);
+          if (!TaskPauses.canPause(task) && !TaskPauses.isPaused(task)) {
+            return yield* new TaskNotControllable({
+              taskId,
+              reason: "task-ended",
+              message: `Task ${taskId} is ${task.state}; there is nothing to pause.`,
+            });
+          }
+          if (pauseTargets(task, tree).length === 0) return;
+          // Read before the moves: once paused, the Task is no longer the one its hob's turns work on.
+          const replying = now && TaskPauses.canPause(task) && (yield* repliedOn(task, tree));
+          yield* fresh(pauseTree(taskId, { at: yield* nowIso, by: session.actor, now }));
+          // Pause now stops the reply working on the Task you asked for; the runner stops the rest.
+          if (replying) yield* stopReply(task);
+          yield* review;
+        });
+
+      /** Resumes every Task under `taskId`, the Task included, that you paused, by `by`. */
+      const resumeTree = (taskId: TaskId, at: string, by: Actor) =>
+        Effect.gen(function* () {
+          const { task, tree } = yield* subtree(taskId);
+          for (const each of resumeTargets(task, tree)) {
+            yield* tasks
+              .resumeTask(each.id, each.revision, { at, by })
+              .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
+          }
+        });
+
+      const resume = (taskId: TaskId) =>
+        Effect.gen(function* () {
+          const session = yield* UserSession;
+          const { task, tree } = yield* subtree(taskId);
+          const above = pausedAbove(task, tree);
+          if (above !== undefined) {
+            return yield* new TaskNotControllable({
+              taskId,
+              reason: "parent-paused",
+              message: `Task ${above.id} above it is paused too; resume that one, and this one goes on with it.`,
+            });
+          }
+          // Read before the moves, with each pause as it was, for what each hob is told.
+          const resumed = resumeTargets(task, tree);
+          const at = yield* nowIso;
+          yield* fresh(resumeTree(taskId, at, session.actor));
+          // Each hob going back to work hears what changed meanwhile, on its own Task, which wakes it.
+          for (const each of resumeRecipients(resumed)) {
+            yield* tasks
+              .leaveNote({
+                id: NoteId.make(`resume:${each.id}:${each.pause?.at ?? at}`),
+                taskId: each.id,
+                text: resumeNote(each, tree, at),
+                createdAt: at,
+                author: HUB_ACTOR,
+                direct: true,
+              })
+              .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
+          }
+          yield* review;
+        });
+
       return TaskControls.of({
         cancel,
+        pause,
+        pauseQuest: (questId, now) => onQuest((taskId) => pause(taskId, now))(questId),
+        resume,
+        resumeQuest: onQuest(resume),
         cancelQuest: (questId) =>
           Effect.gen(function* () {
             const quest = yield* tasks.findQuest(questId);

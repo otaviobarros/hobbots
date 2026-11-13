@@ -106,7 +106,7 @@ const missingArtifact = (scope: CallScope, id: string): string => {
 const NOTE_LIMIT = 2_000;
 
 /** A hob that can take work, by its id or its name. */
-const findHob = (hobs: Deps["hobs"], named: string): Effect.Effect<Agent, TaskToolRefused> =>
+export const findHob = (hobs: Deps["hobs"], named: string): Effect.Effect<Agent, TaskToolRefused> =>
   Effect.gen(function* () {
     const byId = yield* hobs.findAgent(AgentId.make(named));
     const wanted = named.trim().toLowerCase();
@@ -120,7 +120,7 @@ const findHob = (hobs: Deps["hobs"], named: string): Effect.Effect<Agent, TaskTo
   });
 
 /** Checks the member can take this Task: not the caller itself, and not a hob that already leads its lineage. */
-const checkMember = (scope: CallScope, task: Task, member: Agent) => {
+export const checkMember = (scope: CallScope, task: Task, member: Agent) => {
   if (member.id === scope.caller.agentId) {
     return refuse("own-hob", "You cannot delegate to yourself. Split your own work with plan_steps.");
   }

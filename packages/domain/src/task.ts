@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { Actor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { AgentId, TaskId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
@@ -21,13 +22,17 @@ export type AttemptId = typeof AttemptId.Type;
 /**
  * Where a Task stands (attempt lifecycle). `waiting` is on a dependency, approval or answer;
  * `blocked` waits for a decision from outside its turn: its lead's, or for a step its owner's;
- * `cancelling` is a cancel requested and not yet confirmed. `completed`, `failed` and `cancelled` are terminal; only a retry reopens a failed Task.
+ * `pausing` is a pause you asked for while its turn still runs, and `paused` starts no turn until
+ * you resume it (#1446); `cancelling` is a cancel requested and not yet confirmed. `completed`,
+ * `failed` and `cancelled` are terminal; only a retry reopens a failed Task.
  */
 export const TaskState = Schema.Literals([
   "queued",
   "active",
   "waiting",
   "blocked",
+  "pausing",
+  "paused",
   "cancelling",
   "completed",
   "failed",
@@ -51,6 +56,22 @@ export const TaskResult = Schema.Struct({
 });
 export type TaskResult = typeof TaskResult.Type;
 
+/** The states a paused Task goes back to when you resume it: where it stood before the pause. */
+export const PausedFrom = Schema.Literals(["queued", "active", "waiting", "blocked"]);
+export type PausedFrom = typeof PausedFrom.Type;
+
+/**
+ * A pause you put on a Task (#1446): who paused it and when, whether its running turn was stopped
+ * at once (`now`, Pause now) or left to end (Pause), and the state it goes back to on Resume.
+ */
+export const TaskPause = Schema.Struct({
+  from: PausedFrom,
+  at: Schema.String,
+  by: Actor,
+  now: Schema.Boolean,
+});
+export type TaskPause = typeof TaskPause.Type;
+
 export class Task extends Schema.Class<Task>("Task")({
   id: TaskId,
   /** The hob that owns the work. A step has its parent's owner; another owner comes with a Delegation. */
@@ -73,6 +94,14 @@ export class Task extends Schema.Class<Task>("Task")({
   updatedAt: Schema.String,
   /** The Task's version: changes that name a stale one are refused (EX-002). */
   revision: Revision,
+  /**
+   * The pause on it while it is `pausing` or `paused` (#1446); null otherwise, and for Tasks
+   * journaled before migration 0115.
+   */
+  pause: Schema.NullOr(TaskPause).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 }) {}
 
 /**
@@ -161,12 +190,51 @@ export type TaskEvent =
     }
   | { readonly _tag: "Retry"; readonly at: string }
   | { readonly _tag: "Reassign"; readonly at: string; readonly ownerId: AgentId }
-  | { readonly _tag: "Complete"; readonly at: string; readonly result: TaskResult };
+  | { readonly _tag: "Complete"; readonly at: string; readonly result: TaskResult }
+  /**
+   * You pause it (#1446). `running` says whether a turn runs on it now, read by the caller: a turn
+   * that runs ends first, stopped at once when `now` (Pause now), or left to end (Pause).
+   */
+  | {
+      readonly _tag: "Pause";
+      readonly at: string;
+      readonly by: Actor;
+      readonly now: boolean;
+      readonly running: boolean;
+    }
+  /**
+   * The turn that ran as you paused it ended (#1446). A Task its turn left mid-work goes back to
+   * `otherwise` on Resume: waiting for a member, whom Resume's note wakes, queued for a step, which
+   * starts afresh, active for the Task you asked for.
+   */
+  | { readonly _tag: "PauseSettled"; readonly at: string; readonly otherwise: PausedFrom }
+  /** You resume it (#1446): back to `to`, where its pause says it stood. */
+  | { readonly _tag: "Unpause"; readonly at: string; readonly to: PausedFrom };
 
 /** The states a Task with nothing ended can be in: an Attempt may start, or another hob take it over. */
 const OPEN: ReadonlyArray<TaskState> = ["queued", "active", "waiting", "blocked", "failed"];
 
+/** The states a turn may still run in: those it starts from, and a pause that waits for it to end. */
+const UNDER_WAY: ReadonlyArray<TaskState> = ["queued", "active", "waiting", "blocked", "pausing"];
+
 const moved = (task: Task, to: TaskState, at: string) => new Task({ ...task, state: to, updatedAt: at });
+
+/** A pause asked for from `from`, by the event. */
+const pausedAs = (task: Task, to: "pausing" | "paused", from: PausedFrom, e: Extract<TaskEvent, { _tag: "Pause" }>) =>
+  new Task({ ...task, state: to, pause: { from, at: e.at, by: e.by, now: e.now }, updatedAt: e.at });
+
+/** The pause's state to go back to, kept while its turn runs: what the turn did meanwhile moves it. */
+const repaused = (task: Task, from: PausedFrom, at: string) =>
+  new Task({ ...task, pause: task.pause === null ? null : { ...task.pause, from }, updatedAt: at });
+
+/** Resume to `to`: one rule per state, so the table names each. */
+const unpauseTo = (to: PausedFrom) => ({
+  from: ["paused"] as ReadonlyArray<TaskState>,
+  to,
+  guard: (_: Task, e: Extract<TaskEvent, { _tag: "Unpause" }>) => e.to === to,
+  apply: (task: Task, e: Extract<TaskEvent, { _tag: "Unpause" }>) =>
+    new Task({ ...task, state: to, pause: null, updatedAt: e.at }),
+});
 
 /** A Task's lifecycle (EX-002, ADR 018), declared once (ADR 037). */
 export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTaskTransition>({
@@ -176,6 +244,8 @@ export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTask
     active: "An Attempt is running",
     waiting: "Waiting on a dependency, an approval or an answer",
     blocked: "Waiting for a decision from outside its turn: its lead's, or for a step its owner's",
+    pausing: "You paused it while its turn ran; no turn starts once that one ends",
+    paused: "You paused it; no turn starts on it until you resume it",
     cancelling: "A cancel was requested and is not confirmed yet",
     completed: "Done, with its result",
     failed: "Ended without a result; a retry or reassignment reopens it",
@@ -183,22 +253,33 @@ export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTask
   },
   field: "state",
   events: {
-    Wait: { from: ["active"], to: "waiting", apply: (task, e) => moved(task, "waiting", e.at) },
-    Block: { from: ["active", "waiting"], to: "blocked", apply: (task, e) => moved(task, "blocked", e.at) },
+    // A turn running while you paused waits as it would, and goes back there on Resume.
+    Wait: [
+      { from: ["active"], to: "waiting", apply: (task, e) => moved(task, "waiting", e.at) },
+      { from: ["pausing"], to: "pausing", apply: (task, e) => repaused(task, "waiting", e.at) },
+    ],
+    Block: [
+      { from: ["active", "waiting"], to: "blocked", apply: (task, e) => moved(task, "blocked", e.at) },
+      { from: ["pausing"], to: "pausing", apply: (task, e) => repaused(task, "blocked", e.at) },
+    ],
     Resume: { from: ["waiting", "blocked"], to: "active", apply: (task, e) => moved(task, "active", e.at) },
     Fail: {
-      from: ["queued", "active", "waiting", "blocked"],
+      from: [...UNDER_WAY, "paused"],
       to: "failed",
-      apply: (task, e) => moved(task, "failed", e.at),
+      apply: (task, e) => new Task({ ...task, state: "failed", pause: null, updatedAt: e.at }),
     },
     RequestCancel: {
-      from: ["queued", "active", "waiting", "blocked"],
+      from: [...UNDER_WAY, "paused"],
       to: "cancelling",
-      apply: (task, e) => moved(task, "cancelling", e.at),
+      apply: (task, e) => new Task({ ...task, state: "cancelling", pause: null, updatedAt: e.at }),
     },
-    // A queued Task has nothing running, so its cancel is confirmed at once.
-    Cancel: { from: ["queued", "cancelling"], to: "cancelled", apply: (task, e) => moved(task, "cancelled", e.at) },
-    // A first start, a resume, or a retry of a failed Task, once its tree says it is Ready.
+    // A queued or paused Task has nothing running, so its cancel is confirmed at once.
+    Cancel: {
+      from: ["queued", "paused", "cancelling"],
+      to: "cancelled",
+      apply: (task, e) => new Task({ ...task, state: "cancelled", pause: null, updatedAt: e.at }),
+    },
+    // A first start, a resume, or a retry of a failed Task, once its tree says it is Ready. Never while paused.
     Start: {
       from: OPEN,
       to: "active",
@@ -214,12 +295,53 @@ export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTask
       apply: (task, e) =>
         new Task({ ...task, ownerId: e.ownerId, state: "queued", currentAttemptId: null, updatedAt: e.at }),
     },
-    // From its turn, or, once blocked, as its owner decides how it ends (#667).
+    // From its turn, or, once blocked, as its owner decides how it ends (#667); a turn that runs
+    // on as you pause it still delivers what it finished.
     Complete: {
-      from: ["active", "waiting", "blocked"],
+      from: ["active", "waiting", "blocked", "pausing"],
       to: "completed",
-      apply: (task, e) => new Task({ ...task, state: "completed", result: e.result, updatedAt: e.at }),
+      apply: (task, e) => new Task({ ...task, state: "completed", result: e.result, pause: null, updatedAt: e.at }),
     },
+    // A Task with a turn running waits for it to end; any other stops at once.
+    Pause: [
+      {
+        from: ["active"],
+        to: "pausing",
+        guard: (_, e) => e.running,
+        apply: (task, e) => pausedAs(task, "pausing", "active", e),
+      },
+      {
+        from: ["queued", "active", "waiting", "blocked"],
+        to: "paused",
+        apply: (task, e) => pausedAs(task, "paused", task.state as PausedFrom, e),
+      },
+    ],
+    // What the ended turn left: where it stood if it moved there itself, else `otherwise`.
+    PauseSettled: {
+      from: ["pausing"],
+      to: "paused",
+      apply: (task, e) => {
+        const from = task.pause === null || task.pause.from === "active" ? e.otherwise : task.pause.from;
+        return new Task({
+          ...task,
+          state: "paused",
+          pause: task.pause === null ? null : { ...task.pause, from },
+          updatedAt: e.at,
+        });
+      },
+    },
+    Unpause: [
+      unpauseTo("queued"),
+      unpauseTo("active"),
+      unpauseTo("waiting"),
+      unpauseTo("blocked"),
+      // Resumed before its turn ended: it simply goes on.
+      {
+        from: ["pausing"],
+        to: "active",
+        apply: (task, e) => new Task({ ...task, state: "active", pause: null, updatedAt: e.at }),
+      },
+    ],
   },
   illegal: (task, _, to) => new IllegalTaskTransition({ taskId: task.id, from: task.state, to }),
 });
@@ -263,6 +385,49 @@ export const TaskTransitions = {
    */
   complete: (task: Task, result: TaskResult, at: string): Task | IllegalTaskTransition =>
     TaskMachine.transition(task, { _tag: "Complete", at, result }),
+
+  /** Pauses the Task for `by` (#1446): pausing while a turn runs on it, paused otherwise. */
+  pause: (
+    task: Task,
+    pause: { readonly at: string; readonly by: Actor; readonly now: boolean; readonly running: boolean },
+  ): Task | IllegalTaskTransition => TaskMachine.transition(task, { _tag: "Pause", ...pause }),
+
+  /** The turn a pause waited for ended: the Task is paused, back to `otherwise` on Resume unless it moved. */
+  settlePause: (task: Task, otherwise: PausedFrom, at: string): Task | IllegalTaskTransition =>
+    TaskMachine.transition(task, { _tag: "PauseSettled", at, otherwise }),
+
+  /** Resumes a paused Task where its pause says it stood, or a pausing one whose turn still runs. */
+  unpause: (task: Task, at: string): Task | IllegalTaskTransition =>
+    TaskMachine.transition(task, { _tag: "Unpause", at, to: task.pause?.from ?? "active" }),
+};
+
+/** The questions code outside this module asks of a Task's pause (#1446). */
+export const TaskPauses = {
+  /** Whether you paused it: its turn may still be ending, but none starts. */
+  isPaused: (task: Pick<Task, "state">): boolean => task.state === "pausing" || task.state === "paused",
+  /** Whether a turn it waited for still runs on it. */
+  isPausing: (task: Pick<Task, "state">): boolean => task.state === "pausing",
+  /** Whether it can be paused now: it is under way and not paused already. */
+  canPause: (task: Pick<Task, "state">): boolean =>
+    task.state === "queued" || task.state === "active" || task.state === "waiting" || task.state === "blocked",
+};
+
+/**
+ * The paused Task that holds `task` (#1446): itself, or the nearest Task above it that you paused.
+ * No turn starts on a held Task, and no work lands on it. Undefined when nothing holds it.
+ */
+export const pausedHolder = <T extends Pick<Task, "id" | "parentId" | "state">>(
+  task: T,
+  tree: ReadonlyArray<T>,
+): T | undefined => {
+  const byId = new Map(tree.map((each) => [each.id, each]));
+  const seen = new Set<string>();
+  for (let at: T | undefined = task; at !== undefined && !seen.has(at.id); ) {
+    if (TaskPauses.isPaused(at)) return at;
+    seen.add(at.id);
+    at = at.parentId === null ? undefined : byId.get(at.parentId);
+  }
+  return undefined;
 };
 
 /**

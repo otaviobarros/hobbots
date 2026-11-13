@@ -889,6 +889,8 @@ describe("hob tools for Tasks and Quests", () => {
       wait_for: { key: "s-wait", tasks: [String(TOP)] },
       read_tasks: { key: "s-read" },
       message_task: { key: "s-message", task_id: String(TOP), text: "Go on" },
+      retry_task: { key: "s-retry", task_id: String(TOP), reason: "Try again", expected_revision: 1 },
+      reassign_task: { key: "s-reassign", task_id: String(TOP), hob: "Ada", reason: "Ada", expected_revision: 1 },
       complete_task: { key: "s-complete", summary: "The copy is ready" },
       cancel_task: { key: "s-cancel", task_id: String(TOP) },
       stop_quest: { key: "s-stop", reason: "You asked", summary: "Nothing delivered" },

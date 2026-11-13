@@ -100,6 +100,20 @@ export const messages = {
     stoppingHint: "Hobbots is stopping the work under it.",
     reason: ({ reason }: { reason: string }) => `Why: ${reason}`,
   },
+  /** Pause, Pause now and Resume (#1446): the quest's work held until you resume it. */
+  paused: {
+    pause: "Pause",
+    pauseHint: "No new turn starts on this quest until you resume it. A turn running now finishes first.",
+    pauseNow: "Pause now",
+    pauseNowHint: "Stops any turn running on this quest at once, then nothing new starts until you resume it.",
+    resume: "Resume",
+    resumeHint: "Each hob goes back to where it stood, and hears what changed while it was paused.",
+    title: "Paused",
+    pausing: "Pausing",
+    hint: "No turn starts on this quest until you resume it.",
+    pausingHint: "The turn running now finishes first. Nothing new starts after it.",
+    failed: "Hobbots couldn't do that. Try again in a moment.",
+  },
   /** The quest's Workbench beside the chat (ADR 023). */
   workbench: {
     label: "The quest's work",

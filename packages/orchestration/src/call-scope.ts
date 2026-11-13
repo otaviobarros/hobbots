@@ -207,6 +207,18 @@ export const ledTask = (scope: CallScope, id: string): Effect.Effect<Task, TaskT
     leads(scope, task) ? Effect.succeed(task) : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
   );
 
+/**
+ * A member's Task directly under one the caller owns, which it messages, retries or reassigns, or a
+ * refusal ending with what to do `instead`.
+ */
+export const memberTask = (scope: CallScope, id: string, instead: string): Effect.Effect<Task, TaskToolRefused> =>
+  Effect.flatMap(ledTask(scope, id), (task) => {
+    const parent = scope.tree.tasks.find((each) => each.id === task.parentId);
+    return parent?.ownerId !== scope.caller.agentId || task.ownerId === scope.caller.agentId
+      ? refuse("not-lead", `Task ${task.id} is not a member's Task directly under one of yours. ${instead}`)
+      : Effect.succeed(task);
+  });
+
 /** A Quest's deadline: the one asked for, never later than the one above it, and not passed. */
 const deadlineWithin = (scope: CallScope, above: string | null, asked: string | undefined) =>
   Effect.gen(function* () {

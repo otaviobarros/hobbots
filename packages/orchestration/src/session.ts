@@ -329,10 +329,11 @@ export const runSessionTurn = (
   );
 
 /** Why a running session was stopped, which decides what its Task becomes. */
-export type StopReason = "cancel" | "authority" | "hob" | "interrupt";
+export type StopReason = "cancel" | "authority" | "hob" | "interrupt" | "pause";
 
 export const STOPPED: Record<StopReason, string> = {
   cancel: "Cancelled.",
+  pause: "Stopped because you paused its work with Pause now; it goes on when you resume it.",
   authority: "Stopped because its hob's permissions were narrowed.",
   hob: "Stopped by Hobbots before it finished, with its hob's other work.",
   interrupt: "Stopped by its lead's message, which the next turn starts with.",

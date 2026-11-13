@@ -36,6 +36,7 @@ const fromRow = {
   task: (row: Row) => ({
     ...row,
     dependsOn: json(row.dependsOn),
+    pause: json(row.pause),
     result: row.resultSummary == null ? null : { summary: row.resultSummary, attemptId: row.resultAttemptId },
     revision: int(row.revision),
   }),
@@ -69,7 +70,7 @@ const fromRow = {
   artifact: (row: Row) => row,
   handOff: (row: Row) => row,
   // `left_revision` only orders the notes (migration 0051).
-  note: ({ leftRevision: _, ...row }: Row) => ({ ...row, revision: int(row.revision) }),
+  note: ({ leftRevision: _, ...row }: Row) => ({ ...row, author: json(row.author), revision: int(row.revision) }),
   wait: (row: Row) => ({ taskId: row.taskId, on: json(row.waitsOn), mode: row.mode, createdAt: row.createdAt }),
   refusal: (row: Row) => ({
     id: row.id,
@@ -146,6 +147,7 @@ export const taskColumns = (task: Task) => ({
   created_at: task.createdAt,
   updated_at: task.updatedAt,
   revision: task.revision,
+  pause: task.pause === null ? null : JSON.stringify(task.pause),
 });
 
 /** Reads of Task records, inside or outside a writing transaction. */
@@ -163,7 +165,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     sql<Row>`SELECT * FROM quests WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("quest")));
   /** The Quests still under way in a chat or camp, oldest first. */
   const questsIn = (threadId: string) =>
-    sql<Row>`SELECT * FROM quests WHERE thread_id = ${threadId} AND state IN ('active', 'stopping')
+    sql<Row>`SELECT * FROM quests WHERE thread_id = ${threadId} AND state IN ('active', 'paused', 'stopping')
       ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("quest")));
   const attempt = (id: string) =>
     sql<Row>`SELECT * FROM attempts WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("attempt")));
@@ -327,7 +329,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         Effect.flatMap(decodeRows("delegation")),
       );
       if (delegations.length === 0) return [];
-      const quests = yield* sql<Row>`SELECT * FROM quests WHERE state IN ('active', 'stopping')
+      const quests = yield* sql<Row>`SELECT * FROM quests WHERE state IN ('active', 'paused', 'stopping')
         AND ${sql.in("id", [...new Set(delegations.map((each) => each.questId))])}`.pipe(
         Effect.flatMap(decodeRows("quest")),
       );
@@ -410,6 +412,9 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
   /** Tasks whose cancel is not confirmed yet, oldest first. */
   const cancelling = sql<Row>`SELECT * FROM tasks WHERE state = 'cancelling'
     ORDER BY ${orderBy(sql, ["created_at", "id"])}`.pipe(Effect.flatMap(decodeRows("task")));
+  /** Tasks paused while their turn ran, oldest first (#1446). */
+  const pausing = sql<Row>`SELECT * FROM tasks WHERE state = 'pausing'
+    ORDER BY ${orderBy(sql, ["created_at", "id"])}`.pipe(Effect.flatMap(decodeRows("task")));
   /** The Delegation that brought a member its Task, if it was delegated. */
   const delegationsOf = (taskId: string) =>
     sql<Row>`SELECT * FROM delegations WHERE child_task_id = ${taskId}`.pipe(Effect.flatMap(decodeRows("delegation")));
@@ -448,6 +453,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     memberWork,
     historyRecords,
     queuedSteps,
+    pausing,
     strandedSteps,
     cancelling,
     delegationsOf,

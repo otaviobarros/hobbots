@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Actor } from "./actor.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { Criterion } from "./criterion.ts";
 import { DeviceId } from "./device.ts";
@@ -30,14 +31,24 @@ export type NoteId = typeof NoteId.Type;
 
 /**
  * A Quest ends with the Task it sits on. `stopping` is a stop its lead made at your request (#1346),
- * while the work under it is still being cancelled; it ends `stopped`, never completed.
+ * while the work under it is still being cancelled; it ends `stopped`, never completed. `paused` is
+ * a pause you put on its Task (#1446): no turn starts in it until you resume it.
  */
-export const QuestState = Schema.Literals(["active", "stopping", "completed", "failed", "cancelled", "stopped"]);
+export const QuestState = Schema.Literals([
+  "active",
+  "paused",
+  "stopping",
+  "completed",
+  "failed",
+  "cancelled",
+  "stopped",
+]);
 export type QuestState = typeof QuestState.Type;
 
-/** Whether a Quest is still under way: its Task has not ended, though its lead may be stopping it. */
+/** Whether a Quest is still under way: its Task has not ended, though you may have paused it or its lead be stopping it. */
 // standards-allow STD-ARCH-013: QuestStates' own question, kept as a plain function for state-only copies
-export const isActiveQuest = (state: QuestState): boolean => state === "active" || state === "stopping";
+export const isActiveQuest = (state: QuestState): boolean =>
+  state === "active" || state === "paused" || state === "stopping";
 
 /** How far a Quest may grow: Quests nested inside it count towards `maxDepth` (2 by default), steps never do. */
 export const QuestLimits = Schema.Struct({
@@ -114,7 +125,11 @@ export type QuestEvent =
   /** Its Task's cancel was confirmed: you cancelled it, or its lead stopped it. */
   | { readonly _tag: "Cancel"; readonly at: string }
   /** Its failed Task was retried or given to another hob. */
-  | { readonly _tag: "Reopen"; readonly at: string };
+  | { readonly _tag: "Reopen"; readonly at: string }
+  /** You paused its Task (#1446). */
+  | { readonly _tag: "Pause"; readonly at: string }
+  /** You resumed its Task (#1446). */
+  | { readonly _tag: "Unpause"; readonly at: string };
 
 /** A change to a Quest its state does not allow. */
 export class IllegalQuestTransition extends Schema.TaggedError<IllegalQuestTransition>()("IllegalQuestTransition", {
@@ -130,6 +145,7 @@ export const QuestMachine = defineMachine<QuestState, QuestEvent, Quest, Illegal
   name: "Quest",
   states: {
     active: "Under way: its lead works on it with its party",
+    paused: "You paused it: no turn starts in it until you resume it",
     stopping: "Its lead stopped it at your request; the work under it is being cancelled",
     completed: "Its lead said it delivered what you asked for",
     failed: "Its Task failed; a retry or another hob reopens it",
@@ -138,19 +154,23 @@ export const QuestMachine = defineMachine<QuestState, QuestEvent, Quest, Illegal
   },
   field: "state",
   events: {
+    // A paused Quest can still be stopped: you asked its lead to, in the chat.
     Stop: {
-      from: ["active"],
+      from: ["active", "paused"],
       to: "stopping",
       apply: (quest, e) =>
         new Quest({ ...quest, state: "stopping", stop: { reason: e.reason, summary: e.summary, at: e.at } }),
     },
-    Complete: { from: ["active"], to: "completed", apply: (quest, e) => endedAs(quest, "completed", e.at) },
-    Fail: { from: ["active"], to: "failed", apply: (quest, e) => endedAs(quest, "failed", e.at) },
+    // A turn left to end as you paused may still deliver it.
+    Complete: { from: ["active", "paused"], to: "completed", apply: (quest, e) => endedAs(quest, "completed", e.at) },
+    Fail: { from: ["active", "paused"], to: "failed", apply: (quest, e) => endedAs(quest, "failed", e.at) },
     // A Quest its lead was stopping ends stopped, whoever confirmed the cancel.
     Cancel: [
       { from: ["stopping"], to: "stopped", apply: (quest, e) => endedAs(quest, "stopped", e.at) },
-      { from: ["active"], to: "cancelled", apply: (quest, e) => endedAs(quest, "cancelled", e.at) },
+      { from: ["active", "paused"], to: "cancelled", apply: (quest, e) => endedAs(quest, "cancelled", e.at) },
     ],
+    Pause: { from: ["active"], to: "paused", apply: (quest) => new Quest({ ...quest, state: "paused" }) },
+    Unpause: { from: ["paused"], to: "active", apply: (quest) => new Quest({ ...quest, state: "active" }) },
     Reopen: {
       from: ["failed"],
       to: "active",
@@ -165,6 +185,8 @@ export const QuestStates = {
   ...QuestMachine,
   /** Whether its lead may still take work on: under way and not being stopped. */
   takesWork: (quest: Pick<Quest, "state">): boolean => quest.state === "active",
+  /** Whether you paused it (#1446). */
+  isPaused: (quest: Pick<Quest, "state">): boolean => quest.state === "paused",
   /** Whether its lead stopped it at your request, whether or not the work under it has ended yet. */
   stoppedByLead: (quest: Pick<Quest, "state">): boolean => quest.state === "stopping" || quest.state === "stopped",
 };
@@ -485,9 +507,10 @@ export const NoteDelivery = Schema.Literals(["next-turn", "steer", "interrupt"])
 export type NoteDelivery = typeof NoteDelivery.Type;
 
 /**
- * A note you left on a Task (ADR 018). You talk only to the lead, so it goes to the Task's nearest
- * lead as a message about that Task, or to the Task's own owner when nobody leads it. Its id is the
- * idempotency key of the command that left it, so leaving it again changes nothing.
+ * A note left on a Task (ADR 018). Yours goes to the Task's nearest lead as a message about that
+ * Task, or to the Task's own owner when nobody leads it; an @mention of a member in a quest goes to
+ * the member's Task directly (#1446). A lead's goes to its member. Its id is the idempotency key of
+ * the command that left it, so leaving it again changes nothing.
  */
 export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
   id: NoteId,
@@ -534,6 +557,14 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
     Schema.withConstructorDefault(Effect.succeed("next-turn" as const)),
   ),
   revision: Revision,
+  /**
+   * Who wrote it (STD-ARCH-019): you, a lead or the hub. Null for notes journaled before migration
+   * 0114, which named only a lead as `senderId`.
+   */
+  author: Schema.NullOr(Actor).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
 }) {}
 
 export const ArtifactKind = Schema.Literals(["file", "link", "text"]);
@@ -614,6 +645,12 @@ export const TaskRefusal = Schema.Literals([
   "waiver-asked",
   "options-collide",
   "quest-ended",
+  // A pause or resume the Task's state does not allow, or new work under a Task you paused (#1446).
+  "task-paused",
+  "task-not-paused",
+  "parent-paused",
+  // A retry or reassignment while the Task's last Attempt may still run: its stop was never confirmed (#1446).
+  "attempt-unresolved",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 
