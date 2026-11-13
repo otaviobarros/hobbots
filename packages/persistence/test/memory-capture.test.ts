@@ -70,7 +70,7 @@ describe("MemoryCaptureLog", () => {
       return { first, kept, afterOne, held, ended, released, again };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    expect(result.first).toEqual({ sequence: 10_003, sessions: [], exclusions: { privateThreads: [], excluded: [] } });
+    expect(result.first).toEqual({ sequence: 10_005, sessions: [], exclusions: { privateThreads: [], excluded: [] } });
     expect(result.kept).toBe(0);
     expect(result.afterOne).toBe(1);
     expect(result.held).toEqual({
@@ -85,11 +85,11 @@ describe("MemoryCaptureLog", () => {
       exclusions: { privateThreads: [], excluded: ["attempt:a1", "message:m2"] },
     });
     // Released, compaction goes on as before, and the next hold starts at the head: the thread's
-    // entry goes, and its first chapter's with it.
-    expect(result.released).toBe(2);
+    // entry goes, and its first chapter's and first members' with it.
+    expect(result.released).toBe(4);
     // Starting again at the head keeps what capture kept out.
     expect(result.again).toEqual({
-      sequence: 10_003,
+      sequence: 10_005,
       sessions: [],
       exclusions: { privateThreads: [], excluded: ["attempt:a1", "message:m2"] },
     });

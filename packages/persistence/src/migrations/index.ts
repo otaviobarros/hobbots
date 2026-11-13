@@ -113,6 +113,7 @@ import questStops from "./0110_quest_stops.ts";
 import users from "./0111_users.ts";
 import deviceUsers from "./0112_device_users.ts";
 import questCriteria from "./0113_quest_criteria.ts";
+import threadMembers from "./0114_thread_members.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -233,4 +234,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0111_users": users,
   "0112_device_users": deviceUsers,
   "0113_quest_criteria": questCriteria,
+  "0114_thread_members": threadMembers,
 };

@@ -63,6 +63,7 @@ export * from "./summoning.ts";
 export * from "./task-files.ts";
 export * from "./task-turns.ts";
 export * from "./tasks.ts";
+export * from "./thread-members.ts";
 export * from "./tool-output.ts";
 export * from "./tools.ts";
 export * from "./turn-activity.ts";

@@ -20,6 +20,7 @@ import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { decodeRows, type Row } from "./task-rows.ts";
+import { copyMembersIn, startMembersIn } from "./thread-member-rows.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376): each one transaction that writes the threads, moves
 // what Start fresh carries, and journals the change, so a crash between the writes leaves neither half.
@@ -103,6 +104,8 @@ export const makeCampWrites = (
   const items = makeItemReads(sql);
   const oldest = oldestFirst(sql);
   const startFirstChapter = startFirstChapterIn(sql);
+  const startMembers = startMembersIn(sql);
+  const copyMembers = copyMembersIn(sql);
   // A new thread's first chapter, journaled as `ChapterStarted` at `revision`, after the change's other events.
   const firstChapterOf = (thread: Thread, revision: number) =>
     startFirstChapter(thread, revision).pipe(
@@ -116,7 +119,8 @@ export const makeCampWrites = (
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
 
   /**
-   * Makes `camp` at `first`, journaled as `CampMade` and its first chapter's `ChapterStarted`; the
+   * Makes `camp` at `first`, journaled as `CampMade`, its first chapter's `ChapterStarted` and its first
+   * two members' `ThreadMemberAdded`; the
    * camp stored under its key already, with no events, when the same camp was asked for before.
    */
   const insertCamp = (camp: Thread, first: number) =>
@@ -130,8 +134,10 @@ export const makeCampWrites = (
       yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
       yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
       const started = yield* firstChapterOf(camp, first + 1);
+      // Its person and its hob are its first members (ADR 039).
+      const members = yield* startMembers(camp, first + 1 + started.length);
       const thread = yield* shown(camp.id);
-      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started];
+      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started, ...members];
       return { value: thread, events };
     });
 
@@ -248,6 +254,8 @@ export const makeCampWrites = (
         const roots = work.tasks.map((task) => task.id);
         const moved = yield* moveWork(from.id, input.chat.id, roots, held, at, first + 1);
         const started = yield* firstChapterOf(input.chat, first + 1 + moved.length);
+        // The new chat is the same direct message: its person and its hob, as they stand (ADR 039).
+        const members = yield* copyMembers(from.id, input.chat, first + 1 + moved.length + started.length);
         // The moved Tasks now belong to the new chat's first chapter, and move with it (ADR 037).
         if (roots.length > 0) {
           yield* sql`UPDATE tasks SET chapter_id = (SELECT c.id FROM chapters c
@@ -258,7 +266,12 @@ export const makeCampWrites = (
           chat: yield* shown(input.chat.id),
           carried,
         });
-        const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ChatStartedFresh", ...value }, ...moved, ...started];
+        const events: ReadonlyArray<JournaledEvent> = [
+          { _tag: "ChatStartedFresh", ...value },
+          ...moved,
+          ...started,
+          ...members,
+        ];
         return { value, events };
       }),
     ).pipe(

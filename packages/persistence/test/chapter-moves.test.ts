@@ -278,16 +278,18 @@ describe("moving a chapter into a camp", () => {
         };
       }),
     );
-    // One transaction: the camp is made, then the move, then each moved backpack item.
+    // One transaction: the camp is made with its first members, then the move, then each moved backpack item.
     // The quest's summary names the camp now (#1389).
     expect(result.moved.entries.map((entry) => entry.type)).toEqual([
       "CampMade",
       "ChapterStarted",
+      "ThreadMemberAdded",
+      "ThreadMemberAdded",
       "ChapterMoved",
-      ...result.moved.entries.slice(3, -1).map(() => "BackpackItemChanged"),
+      ...result.moved.entries.slice(5, -1).map(() => "BackpackItemChanged"),
       "QuestSummaryChanged",
     ]);
-    expect(result.moved.entries.length).toBeGreaterThan(4);
+    expect(result.moved.entries.length).toBeGreaterThan(6);
     // The chat keeps the chapter as a stub that links to the camp; the camp's first chapter holds it.
     const stub = result.chat.find((chapter) => chapter.id === result.first);
     expect(stub).toMatchObject({ state: "moved", movedTo: CAMP, number: 1 });

@@ -77,7 +77,8 @@ export class HobbotsRepository extends Context.Service<
     /**
      * Writes the thread, leaving how far you read it as it is: only `markThreadRead` moves that. A
      * thread stored for the first time starts its first chapter in the same transaction (ADR 037),
-     * journaled as `ChapterStarted` after its `ThreadUpserted`.
+     * journaled as `ChapterStarted` after its `ThreadUpserted`, and its first two members, the
+     * person whose session made it and its hob, each journaled as `ThreadMemberAdded` (ADR 039).
      */
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
     /**

@@ -10,6 +10,7 @@ import {
   type JournaledEvent as JournaledEventType,
   type QuestSummary,
   ThreadId,
+  type ThreadMember,
   type WebFetchRecord,
   type WebSearchRecord,
 } from "@hobbots/domain";
@@ -22,6 +23,7 @@ import { releaseEndedClaims } from "./claim-rows.ts";
 import { voidReplacedEvidence } from "./criteria-rows.ts";
 import { refreshQuestSummaries } from "./quest-summary-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
+import { settleHobMembers } from "./thread-member-rows.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {
@@ -115,6 +117,12 @@ const approvalCorrelationOf = (approval: ApprovalEvent["approval"]): RowCorrelat
   threadId: approval.threadId,
   messageId: approval.messageId,
   taskId: approval.taskId,
+});
+
+const memberCorrelation = (member: ThreadMember): RowCorrelation => ({
+  ...NONE,
+  threadId: member.threadId,
+  agentId: member.actor.kind === "hob" ? AgentId.make(member.actor.id) : null,
 });
 
 const correlationOf = (event: JournaledEventType): RowCorrelation => {
@@ -234,7 +242,9 @@ type RecordEvent = Extract<
       | "ArtifactRegistered"
       | "ArtifactReviewSettled"
       | "BriefWritten"
-      | "MessagePinned";
+      | "MessagePinned"
+      | "ThreadMemberAdded"
+      | "ThreadMemberChanged";
   }
 >;
 const RECORD_EVENTS: ReadonlySet<string> = new Set([
@@ -248,17 +258,21 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "ArtifactReviewSettled",
   "BriefWritten",
   "MessagePinned",
+  "ThreadMemberAdded",
+  "ThreadMemberChanged",
 ]);
 const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
 
 /**
  * ADR 037's records: a claim names its Task, whose owner and thread the row takes; a decision its
  * thread and the reply that recorded it; an artifact its thread, and the hob that made its latest
- * version; a brief its thread; a pin the message it pins and its thread.
+ * version; a brief its thread; a pin the message it pins and its thread; a member its thread (ADR 039).
  */
 const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
   if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
   if ("pin" in event) return { ...NONE, threadId: event.pin.threadId, messageId: event.pin.messageId };
+  // A member names its thread, and its hob when it is one (ADR 039).
+  if ("member" in event) return memberCorrelation(event.member);
   if ("brief" in event) return { ...NONE, threadId: event.brief.threadId };
   if ("decision" in event) {
     return { ...NONE, threadId: event.decision.threadId, messageId: event.decision.sourceMessageId };
@@ -448,7 +462,9 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     ];
     const raised = yield* raiseCampSuggestions(sql, [...events, ...artifacts], first + summarized.length);
     const expired = yield* expireCampSuggestions(sql, events, first + summarized.length + raised.length);
-    return [...summarized, ...raised, ...expired];
+    const settled = [...summarized, ...raised, ...expired];
+    // A hob that retired leaves its threads, and comes back to them when it returns (ADR 039).
+    return [...settled, ...(yield* settleHobMembers(sql, events, first + settled.length))];
   });
 
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.

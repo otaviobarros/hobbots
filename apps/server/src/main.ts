@@ -126,6 +126,7 @@ import {
   SqliteLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  ThreadMemberRepositoryLive,
   UserRepositoryLive,
   WebFoundUrlsLive,
   WebRecordsLive,
@@ -384,6 +385,8 @@ const ServerLive = Layer.unwrap(
       DeviceRepositoryLive,
       // The people the hub serves; the owner is always one of them (ADR 039).
       UserRepositoryLive,
+      // Who is in each direct message and camp (ADR 039).
+      ThreadMemberRepositoryLive,
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,

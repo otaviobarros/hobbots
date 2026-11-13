@@ -1,4 +1,4 @@
-import { HobbotsRepository } from "@hobbots/agents";
+import { HobbotsRepository, sessionActor } from "@hobbots/agents";
 import {
   type Actor,
   Agent,
@@ -31,6 +31,7 @@ import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, unreadColumn } from "./thread-columns.ts";
+import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -422,6 +423,7 @@ export const HobbotsRepositoryLive = Layer.effect(
 
     // Starts the thread's first chapter at `revision` unless it has one; null when it had.
     const startFirstChapter = startFirstChapterIn(sql);
+    const startMembers = startMembersIn(sql);
 
     // The thread as a read shows it: its last line, unread mark and live chapter are read, never
     // written, so the event that journals it carries what a read would show.
@@ -467,8 +469,11 @@ export const HobbotsRepositoryLive = Layer.effect(
           const started = yield* startFirstChapter(thread, revision + 1);
           const shown = yield* asRead(thread);
           const events: Array<JournaledEvent> = [{ _tag: "ThreadUpserted", thread: shown }];
-          if (started !== null)
+          if (started !== null) {
             events.push({ _tag: "ChapterStarted", threadId: thread.id, chapter: started, ended: null });
+            // A thread stored for the first time starts with its person and its hob as members (ADR 039).
+            events.push(...(yield* startMembers(thread, revision + 2)));
+          }
           return { value: shown, events };
         }),
       );
@@ -486,6 +491,10 @@ export const HobbotsRepositoryLive = Layer.effect(
             WHERE id = ${threadId} AND ${seen} > COALESCE(read_revision, 0)
             RETURNING id`;
           if (moved.length === 0) return null;
+          // The reader's own marker moves with it (ADR 039); unread counts move onto it later.
+          const [marker] = yield* sql<{ readonly readRevision: unknown }>`SELECT read_revision FROM threads
+            WHERE id = ${threadId}`;
+          yield* markMemberRead(sql, threadId, yield* sessionActor, Number(marker?.readRevision));
           const [thread] = yield* findThread(threadId).pipe(Effect.orDie, Effect.map(Option.toArray));
           if (thread === undefined) return null;
           return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
