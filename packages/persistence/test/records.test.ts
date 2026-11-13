@@ -65,6 +65,7 @@ const message = (id: string, role: Message["role"], fields: Partial<Message> = {
   new Message({
     id: MessageId.make(id),
     threadId: THREAD,
+    actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
     status: "complete",

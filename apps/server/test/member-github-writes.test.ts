@@ -27,6 +27,8 @@ import {
   declaredOperations,
   EMPTY_HOB_POLICY,
   type HobPolicy,
+  OWNER_ACTOR,
+  OWNER_USER_ID,
   type Task,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
@@ -160,6 +162,8 @@ const startGitHubHub = async (members: HubCallRuntime | null = null) => {
     deviceId: WINDOW_DEVICE_ID,
     name: "This computer's Hobbots window",
     kind: "window",
+    userId: OWNER_USER_ID,
+    actor: OWNER_ACTOR,
     whileApproved: (write) => write,
   });
   const settling = CharmCallService.layer.pipe(

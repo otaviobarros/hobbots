@@ -1,5 +1,5 @@
 import { DeviceRepository } from "@hobbots/agents";
-import { Device, DeviceId, PairingRequest, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { Device, DeviceId, OWNER_USER_ID, PairingRequest, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Exit, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,7 @@ const asking = (id: string, overrides: Partial<PairingRequest> = {}) =>
 const deviceFor = (request: PairingRequest, id: string) =>
   new Device({
     id: DeviceId.make(id),
+    userId: OWNER_USER_ID,
     name: request.name,
     kind: request.kind,
     platform: request.platform,

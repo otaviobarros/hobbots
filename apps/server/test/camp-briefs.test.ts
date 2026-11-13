@@ -51,6 +51,7 @@ import { SqlClient } from "effect/sql";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
+import { asOwner } from "./window-device.ts";
 
 // Issue #1384 (ADR 037, Records, The hub's brain): each chat's and camp's brief is written by a hub
 // projector at chapter ends and Quest steps, never by a hob turn. Under No AI it is the plain brief
@@ -168,7 +169,7 @@ const startChapter = (id: ThreadId, chapter: string, title: string) =>
   run(ChapterService.use((chapters) => chapters.startChapter(id, { id: ChapterId.make(chapter), title })));
 
 const decide = (id: ThreadId, key: string, text: string) =>
-  run(Records.use((records) => records.recordYours(id, { key, text, replaces: null })));
+  run(asOwner(Records.use((records) => records.recordYours(id, { key, text, replaces: null }))));
 
 /** A reply's step wrote `path`, which the artifacts registry keeps. */
 const wrote = (reply: Message, path: string) =>

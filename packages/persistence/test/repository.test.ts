@@ -6,6 +6,7 @@ import {
   ChapterId,
   Message,
   MessageId,
+  OWNER_ACTOR,
   roleFields,
   TaskId,
   Thread,
@@ -131,7 +132,9 @@ describe("HobbotsRepository", () => {
       yield* repo.upsertMessage(new Message({ ...message("m1"), content: "Done.\n\nThe copy is in\tdocs/launch.md" }));
       // A reply made only of tool calls has no text, and a queued message is not in the transcript yet.
       yield* repo.upsertMessage(new Message({ ...message("m2"), content: "  " }));
-      yield* repo.upsertMessage(new Message({ ...message("m3", "queued"), role: "user", configVersion: null }));
+      yield* repo.upsertMessage(
+        new Message({ ...message("m3", "queued"), role: "user", actor: OWNER_ACTOR, configVersion: null }),
+      );
       const shown = (yield* repo.listThreads(agentId))[0]?.lastLine;
       yield* repo.upsertMessage(new Message({ ...message("m4"), content: "word ".repeat(60) }));
       const long = Option.getOrThrow(yield* repo.findThread(threadId)).lastLine;
@@ -170,7 +173,7 @@ describe("HobbotsRepository", () => {
       );
       yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
       const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
-      const asked = new Message({ ...message("m1"), role: "user", configVersion: null });
+      const asked = new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(asked);
       const yours = yield* unread();
       // A reply under way leaves the thread read until it ends.
@@ -283,7 +286,9 @@ describe("HobbotsRepository", () => {
       );
       yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
       const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
-      yield* repo.upsertMessage(new Message({ ...message("m1"), role: "user", configVersion: null }));
+      yield* repo.upsertMessage(
+        new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null }),
+      );
       // The reply was cut off, and you read it as it was.
       const half = yield* repo.upsertMessage(new Message({ ...message("m2", "failed"), content: "Half a plan" }));
       yield* repo.markThreadRead(threadId, MessageId.make("m2"), half.value.revision);
@@ -696,7 +701,7 @@ describe("HobbotsRepository", () => {
       );
       yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Queue", createdAt: now, updatedAt: now }));
       const user = (id: string, status: Message["status"]) =>
-        new Message({ ...message(id, status), role: "user", configVersion: null });
+        new Message({ ...message(id, status), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(user("q1", "queued"));
       yield* repo.upsertMessage(message("reply", "streaming"));
       yield* repo.upsertMessage(user("q2", "queued"));

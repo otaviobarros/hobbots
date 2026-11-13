@@ -34,6 +34,7 @@ import {
   HobPolicy,
   hobAppBot,
   MessageId,
+  OWNER_USER_ID,
   type PolicyDecision,
   type SafetyPreset,
   ThreadId,
@@ -109,6 +110,7 @@ const agent = (id: AgentId, name: string, status: "active" | "retired" = "active
 const device = (id: DeviceId, revokedAt: string | null = null) =>
   new Device({
     id,
+    userId: OWNER_USER_ID,
     name: id,
     kind: "window",
     platform: "macOS",

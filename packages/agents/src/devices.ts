@@ -18,6 +18,7 @@ import {
   Device,
   DeviceId,
   deviceName,
+  OWNER_USER_ID,
   PAIRING_DEFERRED_MS,
   PAIRING_LIFETIME_MS,
   PAIRING_SECRET_PREFIX,
@@ -444,6 +445,8 @@ export class DeviceService extends Context.Service<
                   id,
                   new Device({
                     id: DeviceId.make(crypto.randomUUID()),
+                    // Every device is the owner's until accounts exist (ADR 039, Users as actors).
+                    userId: OWNER_USER_ID,
                     name: request.name,
                     kind: request.kind,
                     platform: request.platform,

@@ -3,6 +3,7 @@ import { DeviceRevoked } from "@hobbots/api";
 import {
   Device,
   type DeviceId,
+  OWNER_USER_ID,
   PairingRequest,
   type TailscaleIdentity,
   TailscaleOwner,
@@ -51,7 +52,7 @@ const tailscaleColumns = (tailscale: TailscaleIdentity | null) => ({
 });
 
 const DEVICE_COLUMNS =
-  "id, name, kind, platform, tailscale_node_id, tailscale_node_name, tailscale_owner, approved_at, last_active_at, revoked_at, revoked_reason";
+  "id, user_id, name, kind, platform, tailscale_node_id, tailscale_node_name, tailscale_owner, approved_at, last_active_at, revoked_at, revoked_reason";
 
 /** The SQL store of devices and pairing requests, for SQLite and PostgreSQL (ADR 011, ADR 021). */
 export const DeviceRepositoryLive = Layer.effect(
@@ -144,6 +145,7 @@ export const DeviceRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           yield* sql`INSERT INTO devices ${sql.insert({
             id: device.id,
+            user_id: device.userId,
             name: device.name,
             kind: device.kind,
             platform: device.platform,
@@ -196,6 +198,8 @@ export const DeviceRepositoryLive = Layer.effect(
       ensureWindow: (at) =>
         sql`INSERT INTO devices ${sql.insert({
           id: WINDOW_DEVICE_ID,
+          // The hub's window is the owner's: whoever runs the hub on this computer (ADR 039).
+          user_id: OWNER_USER_ID,
           name: "This computer's Hobbots window",
           kind: "window",
           platform: "",

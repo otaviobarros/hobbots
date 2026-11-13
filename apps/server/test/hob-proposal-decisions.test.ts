@@ -1,6 +1,14 @@
 import { HobbotsRepository, type HobProposalApplier, HobProposalLog, HobProposals, pendingRow } from "@hobbots/agents";
 import { DeviceRevoked, UserSession } from "@hobbots/api";
-import { Agent, AgentId, type HobProposal, type HobProposalRow, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type HobProposal,
+  type HobProposalRow,
+  OWNER_ACTOR,
+  OWNER_USER_ID,
+  WINDOW_DEVICE_ID,
+} from "@hobbots/domain";
 import { CharmCallsLive, HobbotsRepositoryLive, HobProposalLogLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Exit, Layer, Option } from "effect";
@@ -35,6 +43,8 @@ const session = Layer.succeed(UserSession, {
   deviceId: WINDOW_DEVICE_ID,
   name: "This computer's Hobbots window",
   kind: "window",
+  userId: OWNER_USER_ID,
+  actor: OWNER_ACTOR,
   whileApproved: (write) =>
     revoked ? Effect.fail(new DeviceRevoked({ message: "This device was removed from this hub." })) : write,
 });

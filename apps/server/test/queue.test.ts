@@ -1,6 +1,6 @@
 import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools, WorkHold } from "@hobbots/agents";
 import { MessageNotQueued } from "@hobbots/api";
-import { Agent, AgentId, type HobbotsEvent, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type HobbotsEvent, Message, MessageId, OWNER_ACTOR, Thread, ThreadId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -47,6 +47,7 @@ const leftQueued = Effect.gen(function* () {
     new Message({
       id: MessageId.make(id),
       threadId: THREAD_ID,
+      actor: role === "assistant" ? null : OWNER_ACTOR,
       role,
       content: id,
       status,

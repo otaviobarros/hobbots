@@ -1,4 +1,4 @@
-import type { DeviceId, DeviceKind } from "@hobbots/domain";
+import type { Actor, DeviceId, DeviceKind, UserId } from "@hobbots/domain";
 import { Context, type Effect, Schema } from "effect";
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";
 
@@ -10,10 +10,10 @@ export class DeviceRevoked extends Schema.TaggedError<DeviceRevoked>()(
 ) {}
 
 /**
- * The person using Hobbots, behind a request from an approved device (PE-006, ADR 015, ADR 021).
- * Only the hub's device middleware provides it, so a hob, a Charm or a runtime tool, which has no
- * device token, has no way to decide a request, save a grant or remove one: the services that do
- * require it.
+ * The person using Hobbots, behind a request from an approved device (PE-006, ADR 015, ADR 021): the
+ * device and the user it belongs to (ADR 039). Only the hub's device middleware provides it, so a hob,
+ * a Charm or a runtime tool, which has no device token, has no way to decide a request, save a grant
+ * or remove one: the services that do require it.
  */
 export class UserSession extends Context.Service<
   UserSession,
@@ -21,6 +21,10 @@ export class UserSession extends Context.Service<
     readonly deviceId: DeviceId;
     readonly name: string;
     readonly kind: DeviceKind;
+    /** The person the device belongs to (ADR 039, Users as actors). */
+    readonly userId: UserId;
+    /** That person as the author of what the request writes: services name it, never a fixed owner. */
+    readonly actor: Actor;
     /**
      * Runs a write in one transaction that first checks the device is still approved, so a decision
      * that raced a Revoke is refused instead of saved.

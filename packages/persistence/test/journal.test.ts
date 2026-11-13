@@ -46,6 +46,7 @@ const message = (id: string, status: Message["status"], role: Message["role"] = 
   new Message({
     id: MessageId.make(id),
     threadId,
+    actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
     status,

@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { UserId } from "./user.ts";
 
 /**
  * Devices (ADR 021, DP-004): every client of the hub is an approved device. The hub's window is
@@ -40,6 +41,11 @@ export type TailscaleIdentity = typeof TailscaleIdentity.Type;
 /** An approved device, as the hub keeps it. Its token is never part of it: only its hash is stored. */
 export class Device extends Schema.Class<Device>("Device")({
   id: DeviceId,
+  /**
+   * The person the device acts for (ADR 039, Users as actors): every request it sends is theirs. Every
+   * device belongs to the owner until accounts exist.
+   */
+  userId: UserId,
   /** Untrusted text the device chose, cleaned by `deviceName`; always shown as plain text. */
   name: Schema.String,
   kind: DeviceKind,

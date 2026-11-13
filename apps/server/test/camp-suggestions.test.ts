@@ -44,6 +44,7 @@ import { SqlClient } from "effect/sql";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
+import { asOwner } from "./window-device.ts";
 
 // Issue #1385 (ADR 037): a chapter moved into a camp goes on there, on every runtime: the camp's next
 // turn starts a session from its pack, which carries the moved chapter's transcript, and the chat's
@@ -225,7 +226,9 @@ describe("a resting chapter moved into a camp", () => {
       const id = await start(runtime);
       await say(id, "What should I plant?");
       await run(
-        Records.use((records) => records.recordYours(id, { key: "beds", text: "Raised beds", replaces: null })),
+        asOwner(
+          Records.use((records) => records.recordYours(id, { key: "beds", text: "Raised beds", replaces: null })),
+        ),
       );
       const [first] = await run(ChapterService.use((chapters) => chapters.listChapters(id)));
       await startChapter(id, "miso", "Miso");
@@ -252,7 +255,11 @@ describe("camp suggestions", () => {
     const id = await start("claude-code");
     await say(id, "Let us plan the launch.");
     const decide = (n: number) =>
-      run(Records.use((records) => records.recordYours(id, { key: `d${n}`, text: `Decision ${n}`, replaces: null })));
+      run(
+        asOwner(
+          Records.use((records) => records.recordYours(id, { key: `d${n}`, text: `Decision ${n}`, replaces: null })),
+        ),
+      );
     for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) await decide(n);
     const [open] = await run(CampSuggestionService.use((service) => service.listOpen(id)));
     expect(open).toMatchObject({ threadId: id, reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }] });

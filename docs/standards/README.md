@@ -101,6 +101,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-SEC-003 | Delegation never widens authority | Active |
 | STD-SEC-004 | Hobbots MCP controls exclude administrative powers | Active |
 | STD-SEC-005 | Patterns on untrusted text run in linear time | Active |
+| STD-SEC-006 | A person's actor comes from the user session | Active |
 | STD-REACT-001 | Server state comes only from query hooks | Active |
 | STD-REACT-002 | Route-level state lives in the URL | Active |
 | STD-REACT-003 | Local UI state stays local | Active |

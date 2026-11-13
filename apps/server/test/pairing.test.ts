@@ -1,6 +1,12 @@
 import { type DevicePlace, DeviceRepository, DeviceService, EventPublisher, LOCAL } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
-import { type EventEnvelope, type TailscaleIdentity, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import {
+  type EventEnvelope,
+  OWNER_ACTOR,
+  OWNER_USER_ID,
+  type TailscaleIdentity,
+  WINDOW_DEVICE_ID,
+} from "@hobbots/domain";
 import { DeviceRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Exit, Layer, Option } from "effect";
@@ -46,6 +52,8 @@ const asWindow = Effect.gen(function* () {
     deviceId: WINDOW_DEVICE_ID,
     name: "This computer's Hobbots window",
     kind: "window",
+    userId: OWNER_USER_ID,
+    actor: OWNER_ACTOR,
     whileApproved: repo.whileApproved(WINDOW_DEVICE_ID),
   });
 });

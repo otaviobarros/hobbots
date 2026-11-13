@@ -48,3 +48,11 @@ const trimmed = trimTrailingSlashes(remote);
 - **Why:** one crafted string can stall the hub or the browser for every hob and person on it.
 - **Enforced by:** CodeQL code scanning on every pull request (`js/polynomial-redos`, `js/redos`) and review.
 - **Applies to:** all code.
+### STD-SEC-006 A person's actor comes from the user session
+
+A record a person writes names them through the request's user session (`UserSession.actor`, ADR 039), never a fixed owner. Code names `OWNER_ACTOR` only where it is defined, in the migrations that fill stored rows, and in the session default (`sessionActor` in `packages/agents/src/users.ts`), which names the owner for a message the hub's own code sends with no session.
+
+- **Why:** once a second person uses the hub, a fixed owner would put their words and decisions under someone else's name.
+- **Enforced by:** `scripts/check-owner-actor.mjs` in `pnpm check` (`pnpm lint:actor`), which fails on any other use of `OWNER_ACTOR` in the hub's and the apps' sources, tests aside; and review.
+- **Applies to:** `packages/*`, `apps/*`.
+

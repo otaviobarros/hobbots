@@ -6,7 +6,7 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Message, MessageId, OWNER_ACTOR, Thread, ThreadId } from "@hobbots/domain";
 import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
@@ -440,6 +440,7 @@ describe("reliable chat (#118)", () => {
           new Message({
             id: MessageId.make(id),
             threadId,
+            actor: role === "assistant" ? null : OWNER_ACTOR,
             role,
             content,
             status,

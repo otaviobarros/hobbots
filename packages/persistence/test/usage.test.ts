@@ -8,6 +8,7 @@ import {
   Message,
   MessageId,
   type MessageStatus,
+  OWNER_ACTOR,
   type ReplyUsage,
   Thread,
   ThreadId,
@@ -56,6 +57,7 @@ const reply = (
   new Message({
     id: MessageId.make(`m${++seq}`),
     threadId: ThreadId.make(threadId),
+    actor: options.role === "user" ? OWNER_ACTOR : null,
     role: options.role ?? "assistant",
     content: "…",
     status: options.status ?? "complete",
