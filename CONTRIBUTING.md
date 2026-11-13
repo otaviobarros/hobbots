@@ -5,6 +5,8 @@ Thanks for helping build Hobbots. Start here:
 - **Issues and planning:** [how issues, labels, triage and the project board work](docs/contributing/issues-and-board.md).
 - **Code and architecture:** the [engineering standards](docs/standards/README.md) hold the rules every change follows, each with a stable ID. [AGENTS.md](AGENTS.md) lists the docs to read for each area, for people and coding agents alike.
 - **Running it:** see [Run from source](README.md#run-from-source) in the README, and run `pnpm check` before opening a pull request.
+- **Migrations:** add one with `pnpm migration:new <name>`. It is named by the minute it was made, and no index or test lists it, so it never needs renumbering ([ADR 040](docs/decisions/040-parallel-pull-requests.md)).
+- **Pull requests:** open a pull request as a draft while you work on it. A draft runs only the SQLite checks; marking it ready for review also runs the PostgreSQL and browser suites its changes reach ([ADR 040](docs/decisions/040-parallel-pull-requests.md)).
 - **Commits:** use [Conventional Commits](https://www.conventionalcommits.org/); they decide the next version, as [Releases](docs/contributing/releases.md) explains.
 
 Report security vulnerabilities privately through the repository's Security tab, not in a public issue. The [security policy](SECURITY.md) explains how and what is in scope.

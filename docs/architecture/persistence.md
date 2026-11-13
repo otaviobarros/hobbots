@@ -1,6 +1,6 @@
 # Persistence, journal and durable work
 
-**Decided:** one SQLite database per installation, PostgreSQL-compatible SQL tested on both, PostgreSQL optional for a later server edition ([ADR 011](../decisions/011-sqlite-storage.md)), SQL-backed durable records with Effect integration, and Effect's built-in SQL migrator. The transaction/outbox/lease design below is a draft; the physical schema evolves through migrations.
+**Decided:** one SQLite database per installation, PostgreSQL-compatible SQL tested on both, PostgreSQL optional for a later server edition ([ADR 011](../decisions/011-sqlite-storage.md)), SQL-backed durable records with Effect integration, and a migrator that applies every migration a database lacks, named by the minute it was made ([ADR 040](../decisions/040-parallel-pull-requests.md)). The transaction/outbox/lease design below is a draft; the physical schema evolves through migrations.
 
 Persist agents/configuration versions, threads/messages/session bindings, Quests/tasks/dependencies/delegations, attempts, inbox/delivery/processing state, responsibilities, approvals/policy versions, executor identity/health, artifact metadata and event sequences. Store large artifacts outside relational rows with authorized stable references as appropriate; exact remote object storage is not locked.
 
