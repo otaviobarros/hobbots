@@ -12,7 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
-import { NOT_OFFERED_NAME_MAX, type RuntimeEvent, RuntimeLimitReached, type ToolAccess } from "@hobbots/agents";
+import {
+  NOT_OFFERED_NAME_MAX,
+  NOT_OFFERED_TURN_MAX,
+  type RuntimeEvent,
+  RuntimeLimitReached,
+  type ToolAccess,
+} from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, hobAppCommitIdentity, policySandbox, type ReplyUsage } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
@@ -680,6 +686,35 @@ describe("reading a Claude Code turn", () => {
       "Running a command",
       "Running echo w-299",
     ]);
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-21] one turn reports a bounded number of refused calls, however many it makes one after another", () => {
+    const read = turnEvents();
+    const reported = Array.from({ length: NOT_OFFERED_TURN_MAX + 40 }, (_, each) => {
+      const id = `s-${each}`;
+      read({
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: { content: [{ type: "tool_use", id, name: "github_comment", input: {} }] },
+      } as unknown as SDKMessage);
+      return read({
+        type: "user",
+        parent_tool_use_id: null,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: id,
+              is_error: true,
+              content: "<tool_use_error>Error: No such tool available: github_comment</tool_use_error>",
+            },
+          ],
+        },
+      } as unknown as SDKMessage);
+    }).flat();
+    expect(reported).toHaveLength(NOT_OFFERED_TURN_MAX);
   });
 
   it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {

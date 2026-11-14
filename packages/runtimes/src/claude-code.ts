@@ -26,6 +26,7 @@ import {
   clip,
   NOT_OFFERED_LABEL_MAX,
   NOT_OFFERED_NAME_MAX,
+  NOT_OFFERED_TURN_MAX,
   notOfferedDenial,
   operationDecision,
   type PromptRequest,
@@ -683,6 +684,7 @@ interface NotOfferedCall {
 const notOfferedCalls = (redact: (text: string) => string = redactSecrets) => {
   /** Only what a refusal needs of each call waiting for its result, each bounded, never its input. */
   const calls = new Map<string, NotOfferedCall>();
+  let reported = 0;
   /** What a refusal of a call keeps: its name, redacted whole and then bounded, and its label. */
   const projection = (named: string, input: Record<string, unknown>): NotOfferedCall => {
     // Redacted whole before it is bounded, so a secret the name holds is never cut first.
@@ -711,7 +713,9 @@ const notOfferedCalls = (redact: (text: string) => string = redactSecrets) => {
       calls.delete(block.tool_use_id);
       if (block.is_error !== true) return [];
       const said = NOT_OFFERED_RESULT.exec(resultText(block.content).trim())?.[1];
-      if (said === undefined) return [];
+      // Past a turn's bound the call is still refused by Claude Code, but no longer recorded.
+      if (said === undefined || reported >= NOT_OFFERED_TURN_MAX) return [];
+      reported += 1;
       // The call's own name, exact; the result's words may add a sentence after it.
       const refused = call ?? projection(said, {});
       return [notOfferedDenial({ id: block.tool_use_id, ...refused })];

@@ -20,6 +20,8 @@ const OPERATIONS: Record<RuntimeToolName, AnyOperation> = {
  */
 export const NOT_OFFERED_NAME_MAX = 128;
 export const NOT_OFFERED_LABEL_MAX = 200;
+/** How many refused calls one turn reports at most; past it the runtime still refuses them, unrecorded. */
+export const NOT_OFFERED_TURN_MAX = 64;
 
 /** What the hob and its reply are told of a call to a tool its session was not offered, until the hub says why. */
 export const notOfferedReason = (tool: string): string => `${tool} is not offered in this session, so it did not run.`;

@@ -4,6 +4,7 @@ import {
   clip,
   NOT_OFFERED_LABEL_MAX,
   NOT_OFFERED_NAME_MAX,
+  NOT_OFFERED_TURN_MAX,
   notOfferedDenial,
   type RuntimeEvent,
   type RuntimeToolName,
@@ -30,7 +31,7 @@ export const ROLLOUT_READ_LINES = 1024;
 /** How many reads the end of a turn takes at most to catch up, so a rollout gained a lot is read to its end. */
 export const ROLLOUT_DRAIN_READS = 16;
 /** How many refused calls one turn's rollout reports at most; past it a rollout the hob wrote adds none. */
-export const ROLLOUT_REFUSALS_MAX = 64;
+export const ROLLOUT_REFUSALS_MAX = NOT_OFFERED_TURN_MAX;
 /** How many calls still waiting for their output are kept; the oldest is dropped past it. */
 const PENDING_CALLS = 256;
 /** Opens the rollout only as itself, never through a symlink, nor waiting on a pipe put in its place. */
