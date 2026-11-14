@@ -284,6 +284,9 @@ describe("what a call writes", () => {
     expect(writes("cd docs; >plan.md 2>&1")).toEqual([`${project}/docs/plan.md`]);
     // A redirection written against the word before it still writes its file.
     expect(writes("printf changed>docs/plan.md")).toEqual([`${project}/docs/plan.md`]);
+    // A line run by `eval` or `sh -c` writes too.
+    expect(writes("eval 'printf changed > docs/plan.md'")).toEqual([`${project}/docs/plan.md`]);
+    expect(writes("cd docs && sh -c 'touch plan.md'")).toEqual([`${project}/docs/plan.md`]);
     expect(writes('echo "x">>docs/plan.md 2>&1')).toEqual([`${project}/docs/plan.md`]);
     // A Git command that rewrites the working tree is named by its folder, whichever files it reaches.
     const bash = (command: string) => callWrites({ id: "5", tool: "Bash", input: { command }, cwd: project }).trees;

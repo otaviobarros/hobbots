@@ -1157,22 +1157,27 @@ export const commandWritesTo = (
     const path = isAbsolute(word) ? word : relative && word !== "" ? joinedAsWritten(at, word) : null;
     if (path !== null && matches(path)) found.add(path);
   };
-  const tokens = commandLine(command);
-  const folders = folderFlow(cwd, home);
-  tokens.forEach((token, index) => {
-    if ("separator" in token) {
-      folders.separator(token.separator);
-      return;
-    }
-    const shell = folders.command(unwrap(token.words, cwd, home).words, separatorOf(tokens[index + 1]));
-    // The shell opens a redirection's file in its own folder, after any `cd` before it on the line.
-    for (const write of token.writes) add(write, shell);
-    const { words, folder } = unwrap(token.words, shell, home);
-    const [name, ...args] = words;
-    if (name !== undefined && PATH_WRITERS.has(basename(name))) {
-      for (const arg of args) if (!arg.startsWith("-")) add(arg, folder);
-    }
-  });
+  // A line run by `eval` or `sh -c` is read the same way, from the folder it runs in.
+  const visit = (line: string, at: string) => {
+    const tokens = commandLine(line);
+    const folders = folderFlow(at, home);
+    tokens.forEach((token, index) => {
+      if ("separator" in token) {
+        folders.separator(token.separator);
+        return;
+      }
+      const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+      // The shell opens a redirection's file in its own folder, after any `cd` before it on the line.
+      for (const write of token.writes) add(write, shell);
+      const { words, folder } = unwrap(token.words, shell, home);
+      const [name, ...args] = words;
+      const program = basename(name ?? "");
+      if (PATH_WRITERS.has(program)) for (const arg of args) if (!arg.startsWith("-")) add(arg, folder);
+      const nested = nestedLine(program, args);
+      if (nested !== undefined) visit(nested, folder);
+    });
+  };
+  visit(command, cwd);
   return [...found];
 };
 
