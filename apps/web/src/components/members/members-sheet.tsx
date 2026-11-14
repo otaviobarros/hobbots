@@ -5,7 +5,7 @@ import { Sheet, SheetCloseButton, SheetContent, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { membersToday } from "../../api/members.ts";
-import { agentsQuery } from "../../api/queries.ts";
+import { agentsQuery, archivedAgentsQuery } from "../../api/queries.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { PersonBadge } from "../sidebar/sidebar-faces.tsx";
 import { HobsSection } from "./hobs-section.tsx";
@@ -29,17 +29,20 @@ const shownMembers = (members: ReadonlyArray<ThreadMember>, lead: string): Reado
  */
 export function MembersSheet({ camp, onClose }: { camp: Thread; onClose: () => void }) {
   const read = useQuery(membersToday(camp.id));
-  // The sheet names hobs from the hob directory: until it is read too, the sheet waits or says why.
-  const directory = useQuery(agentsQuery);
-  const failed = read.isError || directory.isError;
+  // The sheet names hobs from the hob directory, retired ones too, since a hob that retired stays in
+  // the camp as left and keeps what it spent here: until both are read, the sheet waits or says why.
+  const active = useQuery(agentsQuery);
+  const retired = useQuery(archivedAgentsQuery);
+  const queries = [read, active, retired];
+  const failed = queries.some((query) => query.isError);
   const retry = () => {
-    if (read.isError) void read.refetch();
-    if (directory.isError) void directory.refetch();
+    for (const query of queries) if (query.isError) void query.refetch();
   };
+  const hobs = active.data && retired.data && [...active.data, ...retired.data];
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent aria-describedby={undefined} aria-busy={read.isPending || directory.isPending}>
-        {read.data === undefined || directory.data === undefined ? (
+      <SheetContent aria-describedby={undefined} aria-busy={queries.some((query) => query.isPending)}>
+        {read.data === undefined || hobs === undefined ? (
           <>
             <SheetHeader>
               <span className="text-meta font-semibold text-star">{copy.loading}</span>
@@ -61,7 +64,7 @@ export function MembersSheet({ camp, onClose }: { camp: Thread; onClose: () => v
             )}
           </>
         ) : (
-          <SheetBody camp={camp} report={read.data} hobs={directory.data} />
+          <SheetBody camp={camp} report={read.data} hobs={hobs} />
         )}
       </SheetContent>
     </Sheet>

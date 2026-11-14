@@ -1,3 +1,4 @@
+import type { ThreadArchived } from "@hobbots/api";
 import type { Actor, Committed, MemberRefused, ThreadId, ThreadMember } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
@@ -17,14 +18,15 @@ export class ThreadMemberRepository extends Context.Service<
      * `ThreadMemberAdded`; one who left or was removed comes back, journaled as `ThreadMemberChanged`.
      * Nothing is journaled for a member already active. A direct message takes no one but its person
      * and its hob: `MemberRefused`. Dies when the thread does not exist. `asMember`: `addedBy` must
-     * be an active member when the change is written, or it is refused `not-member`.
+     * be an active member when the change is written, or it is refused `not-member`, and the
+     * thread must not be archived by then: `ThreadArchived`.
      */
     readonly add: (
       threadId: ThreadId,
       actor: Actor,
       addedBy: Actor,
       asMember?: boolean,
-    ) => Effect.Effect<Committed<ThreadMember>, MemberRefused>;
+    ) => Effect.Effect<Committed<ThreadMember>, MemberRefused | ThreadArchived>;
     /**
      * The mentions of `actor` they have not read, per thread they are an active member of (ADR 039,
      * Users as actors): a count for each thread with any. Pass the session's actor, so each person

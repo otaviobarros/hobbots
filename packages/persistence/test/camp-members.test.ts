@@ -1,10 +1,12 @@
 import { HobbotsRepository, type SentTo, ThreadMemberRepository } from "@hobbots/agents";
+import type { ThreadArchived } from "@hobbots/api";
 import {
   type Actor,
   Agent,
   AgentId,
   type AgentStatus,
   hobActor,
+  type MemberRefused,
   Message,
   MessageId,
   type MessageStatus,
@@ -115,18 +117,27 @@ const plantJournalRow = Effect.gen(function* () {
   return sql`DELETE FROM event_journal WHERE id = 'planted'`;
 });
 
+/** Why a member change was refused: its reason, or the error's tag when it is not a membership refusal. */
+const refusal = (error: MemberRefused | ThreadArchived) => (error._tag === "MemberRefused" ? error.reason : error._tag);
+
 describe("a camp's hobs", () => {
   // covers ADR 039 (Members)
-  it("[TC-PE-1467-01] makes a camp with the hobs picked, each journaled after its first two, the lead once and a retired hob as left", async () => {
+  it("[TC-PE-1467-01] makes a camp with the hobs picked, each journaled after its first two, the lead once and a retired hob as left, and refuses its key asked again with other hobs", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         for (const id of [QUILL, PIP]) yield* repo.insertAgent(hob(id));
         yield* repo.insertAgent(hob(ROOK, "retired"));
         const made = yield* repo.makeCamp(camp(), [PIP, QUILL, PIP, ROOK]);
-        // The same camp asked again changes nothing.
-        const again = yield* repo.makeCamp(camp(), [PIP, ROOK]);
-        return { made: types(made.entries), again: types(again.entries), members: yield* members(CAMP) };
+        // The same camp asked again, its hobs in another order, changes nothing; with other hobs, its key is reused.
+        const again = yield* repo.makeCamp(camp(), [ROOK, QUILL, PIP]);
+        const otherHobs = yield* repo.makeCamp(camp(), [PIP]).pipe(Effect.flip);
+        return {
+          made: types(made.entries),
+          again: types(again.entries),
+          otherHobs: otherHobs._tag,
+          members: yield* members(CAMP),
+        };
       }),
     );
     expect(result.made).toEqual([
@@ -138,6 +149,7 @@ describe("a camp's hobs", () => {
       "ThreadMemberAdded",
     ]);
     expect(result.again).toEqual([]);
+    expect(result.otherHobs).toBe("ThreadKeyReused");
     expect(result.members).toEqual(["user:owner:active", "hob:pip:active", "hob:quill:active", "hob:rook:left"]);
   });
 
@@ -198,7 +210,7 @@ describe("a camp's hobs", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1467-04] refuses to take out a direct message's two, a camp's owner and lead, or someone not in it, and brings a removed hob back", async () => {
+  it("[TC-PE-1467-04] refuses to take out a direct message's two, a camp's owner and lead, or someone not in it, or any change once the camp is archived, and brings a removed hob back", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -206,7 +218,7 @@ describe("a camp's hobs", () => {
         yield* campOfThree;
         yield* repo.upsertThread(camp(CHAT, "chat"));
         const reason = (threadId: ThreadId, actor: Actor) =>
-          Effect.flip(repo.removeMember(threadId, actor, OWNER_ACTOR)).pipe(Effect.map((refused) => refused.reason));
+          Effect.flip(repo.removeMember(threadId, actor, OWNER_ACTOR)).pipe(Effect.map(refusal));
         const refusals = [
           yield* reason(CHAT, hobActor(QUILL)),
           yield* reason(CAMP, OWNER_ACTOR),
@@ -222,24 +234,35 @@ describe("a camp's hobs", () => {
         yield* sql`UPDATE tasks SET state = 'completed' WHERE id = 'task-pip'`;
         // One who is not in the camp, as the change is written, changes no one in it.
         const outsider = [
-          (yield* Effect.flip(repo.removeMember(CAMP, hobActor(PIP), BRUNA))).reason,
-          (yield* Effect.flip(repository.add(CAMP, hobActor(PIP), BRUNA, true))).reason,
+          refusal(yield* Effect.flip(repo.removeMember(CAMP, hobActor(PIP), BRUNA))),
+          refusal(yield* Effect.flip(repository.add(CAMP, hobActor(PIP), BRUNA, true))),
         ];
         yield* repo.removeMember(CAMP, hobActor(ROOK), OWNER_ACTOR);
         const back = yield* repository.add(CAMP, hobActor(ROOK), OWNER_ACTOR);
         const bruna = yield* repository.add(CAMP, BRUNA, OWNER_ACTOR);
+        const before = yield* members(CAMP);
+        // A camp archived after the change was asked, before it is written, changes no one.
+        yield* sql`UPDATE threads SET archived_at = '2026-11-14T10:00:00.000Z' WHERE id = ${CAMP}`;
+        const archived = [
+          refusal(yield* Effect.flip(repo.removeMember(CAMP, hobActor(ROOK), OWNER_ACTOR))),
+          refusal(yield* Effect.flip(repository.add(CAMP, hobActor(PIP), OWNER_ACTOR, true))),
+        ];
         return {
           refusals,
           outsider,
+          archived,
           leading,
           back: types(back.entries),
           bruna: shown(bruna.value),
-          members: yield* members(CAMP),
+          members: before,
+          after: yield* members(CAMP),
         };
       }),
     );
     expect(result.refusals).toEqual(["direct-message", "owner", "lead", "not-member"]);
     expect(result.outsider).toEqual(["not-member", "not-member"]);
+    expect(result.archived).toEqual(["ThreadArchived", "ThreadArchived"]);
+    expect(result.after).toEqual(result.members);
     expect(result.leading).toBe("leads-quest");
     expect(result.back).toEqual(["ThreadMemberChanged"]);
     expect(result.bruna).toBe("user:bruna:active");

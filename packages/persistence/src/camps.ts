@@ -47,21 +47,30 @@ export const threadColumns = (thread: Thread) => ({
   revision: thread.revision,
 });
 
+/** The hobs a camp is made with besides its lead, each once and sorted, as its request keeps them. */
+const otherHobs = (camp: Thread, hobs: ReadonlyArray<AgentId>) =>
+  JSON.stringify([...new Set(hobs)].filter((hobId) => hobId !== camp.agentId).sort());
+
 /** What Make a camp was asked under a key, as it was asked: a later rename does not change it. */
-const campRequestColumns = (camp: Thread) => ({
+const campRequestColumns = (camp: Thread, hobs: ReadonlyArray<AgentId>) => ({
   key: camp.id,
   agent_id: camp.agentId,
   title: camp.title,
   goal: camp.goal,
   private: camp.private ? 1 : 0,
+  hobs: otherHobs(camp, hobs),
 });
 
-/** Whether the request stored under a key is the one asked again: same hob, title, goal and privacy. */
-const sameRequest = (stored: Row, asked: Thread) =>
+/**
+ * Whether the request stored under a key is the one asked again: same hob, title, goal, privacy and
+ * other hobs. A request stored before camps kept their hobs was made with none.
+ */
+const sameRequest = (stored: Row, asked: Thread, hobs: ReadonlyArray<AgentId>) =>
   stored.agentId === asked.agentId &&
   stored.title === asked.title &&
   (stored.goal ?? null) === asked.goal &&
-  Boolean(Number(stored.private)) === asked.private;
+  Boolean(Number(stored.private)) === asked.private &&
+  (stored.hobs ?? "[]") === otherHobs(asked, hobs);
 
 // The chat changed between the read and the write: the change rolls back, and the caller reads again.
 class StaleChat extends Data.TaggedError("StaleChat") {}
@@ -130,11 +139,11 @@ export const makeCampWrites = (
       const stored = yield* readThread(camp.id);
       if (stored !== undefined) {
         const [request] = yield* sql<Row>`SELECT * FROM camp_requests WHERE key = ${camp.id}`;
-        if (request !== undefined && sameRequest(request, camp)) return { value: stored, events: [] };
+        if (request !== undefined && sameRequest(request, camp, hobs)) return { value: stored, events: [] };
         return yield* new ThreadKeyReused({ threadId: camp.id });
       }
       yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
-      yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
+      yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp, hobs))}`;
       const started = yield* firstChapterOf(camp, first + 1);
       // Its person and its hob are its first members (ADR 039).
       const members = yield* startMembers(camp, first + 1 + started.length);

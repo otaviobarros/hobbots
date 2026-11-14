@@ -1,4 +1,5 @@
 import type { HobbotsRepository } from "@hobbots/agents";
+import { ThreadArchived } from "@hobbots/api";
 import {
   type Actor,
   isActiveMember,
@@ -136,36 +137,42 @@ export const makeTurnRequestWrites = (
     ),
     threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),
     removeMember: (threadId, actor, by) =>
-      journaledChange<{ readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> }, MemberRefused>(
-        (revision) =>
-          Effect.gen(function* () {
-            const [thread] = yield* sql<Pick<Thread, "kind" | "agentId">>`SELECT kind, agent_id FROM threads
-            WHERE id = ${threadId}`;
-            if (thread === undefined) return yield* Effect.die(new Error(`No thread ${threadId}`));
-            const members = yield* selectMembers(sql, threadId);
-            // A person must still be in the camp as the change is written, not only when it was asked.
-            if (by.kind === "user" && !isActiveMember(members, by)) {
-              return yield* new MemberRefused({ threadId, actor: by, reason: "not-member" });
-            }
-            const plan = planMemberRemove(thread, members, actor);
-            if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
-            if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
-            // A Quest the hob leads here still comes back to the camp for its results and answers.
-            if (actor.kind === "hob" && (yield* leadsOpenQuest(threadId, actor.id))) {
-              return yield* new MemberRefused({ threadId, actor, reason: "leads-quest" });
-            }
-            const member = movedMember(plan.member, { _tag: "Remove" }, revision);
-            yield* saveState(sql, member);
-            // The hob owes nothing here any more: what it was waiting to answer, on any line, is dropped
-            // with it. The answer it is speaking now ends with its turn.
-            const dropped = actor.kind === "hob" ? yield* dropWaitingOf(threadId, actor.id, by) : [];
-            const dequeued = yield* dequeueUnowed(
-              dropped.map((request) => request.messageId),
-              revision + 1,
-            );
-            const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ThreadMemberChanged", member }, ...dequeued];
-            return { value: { member, dropped }, events };
-          }),
+      journaledChange<
+        { readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> },
+        MemberRefused | ThreadArchived
+      >((revision) =>
+        Effect.gen(function* () {
+          const [thread] = yield* sql<Pick<Thread, "kind" | "agentId" | "archivedAt">>`SELECT kind, agent_id,
+            archived_at FROM threads WHERE id = ${threadId}`;
+          if (thread === undefined) return yield* Effect.die(new Error(`No thread ${threadId}`));
+          // A camp archived since it was read is read-only by the time this is written.
+          if (thread.archivedAt !== null) {
+            return yield* new ThreadArchived({ threadId, archivedAt: thread.archivedAt });
+          }
+          const members = yield* selectMembers(sql, threadId);
+          // A person must still be in the camp as the change is written, not only when it was asked.
+          if (by.kind === "user" && !isActiveMember(members, by)) {
+            return yield* new MemberRefused({ threadId, actor: by, reason: "not-member" });
+          }
+          const plan = planMemberRemove(thread, members, actor);
+          if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
+          if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
+          // A Quest the hob leads here still comes back to the camp for its results and answers.
+          if (actor.kind === "hob" && (yield* leadsOpenQuest(threadId, actor.id))) {
+            return yield* new MemberRefused({ threadId, actor, reason: "leads-quest" });
+          }
+          const member = movedMember(plan.member, { _tag: "Remove" }, revision);
+          yield* saveState(sql, member);
+          // The hob owes nothing here any more: what it was waiting to answer, on any line, is dropped
+          // with it. The answer it is speaking now ends with its turn.
+          const dropped = actor.kind === "hob" ? yield* dropWaitingOf(threadId, actor.id, by) : [];
+          const dequeued = yield* dequeueUnowed(
+            dropped.map((request) => request.messageId),
+            revision + 1,
+          );
+          const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ThreadMemberChanged", member }, ...dequeued];
+          return { value: { member, dropped }, events };
+        }),
       ),
   };
 };

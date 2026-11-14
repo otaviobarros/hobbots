@@ -99,7 +99,7 @@ test("[TC-CH-1467-06] the members sheet lists the camp's hobs and people, adds a
   const { url, aldric, members, api, hub } = await aldricHub(undefined, ["Quill", "Pip"], {
     HOBBOTS_TEST_PEOPLE: "on",
   });
-  const [quill] = members;
+  const [quill, pip] = members;
   const camp = await api("POST", `/agents/${aldric}/camps`, {
     key: crypto.randomUUID(),
     title: "Launch",
@@ -177,4 +177,10 @@ test("[TC-CH-1467-06] the members sheet lists the camp's hobs and people, adds a
   await expect(sheet).not.toContainText("Quill");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Members: 4" })).toBeVisible();
+
+  // A hob that retires stays in the camp as left, still named, with what it spent here.
+  await api("POST", `/agents/${pip}/retire`, { activeWork: "finish" });
+  await page.getByRole("button", { name: /^Members: / }).click();
+  await expect(hobRows(page)).toHaveCount(2);
+  await expect(hobRows(page).nth(1)).toContainText("Pip");
 });

@@ -172,6 +172,11 @@ const working = async (): Promise<ReadonlyArray<string>> =>
   (await request<{ working: ReadonlyArray<{ agentId: string }> }>("GET", "/api/activity")).body.working.map(
     (hob) => hob.agentId,
   );
+/** Whether the thread runs no reply and has no hob waiting next, as the hub's status shows it. */
+const idle = async (threadId: string) =>
+  !(await request<{ runs: ReadonlyArray<{ threadId: string }> }>("GET", "/api/status")).body.runs.some(
+    (run) => run.threadId === threadId,
+  );
 const replies = async (threadId: string) =>
   (await request<ReadonlyArray<Message>>("GET", `/api/threads/${threadId}/messages`)).body
     .filter((message) => message.role === "assistant")
@@ -234,8 +239,8 @@ describe("a camp's members over the API", () => {
     expect((await request("DELETE", `/api/threads/${camp.id}/members/hob/${ROOK}`)).status).toBe(200);
     // Pip, taken out while it speaks, stops.
     expect((await request("DELETE", `/api/threads/${camp.id}/members/hob/${PIP}`)).status).toBe(200);
-    await waitUntil(async () => (await working()).length === 0);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Done when Pip's reply is settled as stopped and the camp runs nothing, with no one next.
+    await waitUntil(async () => (await replies(camp.id)).join() === `${PIP}:stopped` && (await idle(camp.id)));
 
     expect(await working()).toEqual([]);
     expect(turns).toHaveLength(1);

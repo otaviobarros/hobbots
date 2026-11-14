@@ -1,4 +1,4 @@
-import type { ThreadKeyReused } from "@hobbots/api";
+import type { ThreadArchived, ThreadKeyReused } from "@hobbots/api";
 import type {
   Actor,
   Agent,
@@ -218,7 +218,7 @@ export class HobbotsRepository extends Context.Service<
      * owed leaves the queue said. The answer it is speaking stays for Stop to end. One already gone is
      * returned as it is, with nothing journaled. A direct message, its owner, the hob a camp leads
      * with and someone not in it are refused, and so is `by` when it is no longer an active member
-     * as the change is written.
+     * as the change is written, and the change itself when the camp was archived meanwhile.
      */
     readonly removeMember: (
       threadId: ThreadId,
@@ -226,7 +226,7 @@ export class HobbotsRepository extends Context.Service<
       by: Actor,
     ) => Effect.Effect<
       Committed<{ readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> }>,
-      MemberRefused
+      MemberRefused | ThreadArchived
     >;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
     readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
