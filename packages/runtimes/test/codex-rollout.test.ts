@@ -5,6 +5,7 @@ import { NOT_OFFERED_LABEL_MAX, NOT_OFFERED_NAME_MAX, type RuntimeEvent } from "
 import { Effect } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  NOT_OFFERED_STEP,
   ROLLOUT_CHUNK_BYTES,
   ROLLOUT_DRAIN_READS,
   ROLLOUT_READ_BYTES,
@@ -54,13 +55,12 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported).toEqual([
       expect.objectContaining({
         _tag: "ToolDenied",
-        id: "c-2",
         tool: "exec_command",
         operation: "run-commands",
         label: "Running git diff",
         notOffered: { runtimeTool: "commands" },
       }),
-      expect.objectContaining({ id: "c-1", tool: "github_review", notOffered: { runtimeTool: null } }),
+      expect.objectContaining({ tool: "github_review", notOffered: { runtimeTool: null } }),
     ]);
   });
 
@@ -71,7 +71,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     const refusals = rolloutRefusals(path, (event) => reported.push(event));
     await Effect.runPromise(refusals.start);
     const refused = (ids: ReadonlyArray<string>) =>
-      ids.map((id) => `${call(id, "github_comment", {})}${output(id, "unsupported call: github_comment")}`).join("");
+      ids.map((id) => `${call(id, id, {})}${output(id, `unsupported call: ${id}`)}`).join("");
     // Codex's requests are answered at once, each reading the rollout first.
     const overlapping = Effect.all(
       Array.from({ length: 8 }, () => refusals.read),
@@ -81,7 +81,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     await Effect.runPromise(overlapping);
     appendFileSync(path, refused(["b-1"]));
     await Effect.runPromise(overlapping);
-    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual([
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag))).toEqual([
       "a-1",
       "a-2",
       "a-3",
@@ -91,10 +91,10 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
 
   // covers SEC-002, ADR 014 (#1356)
   it("[TC-PE-1356-09] reads a rollout the hob's commands can write as untrusted: no symlink, a bounded amount per read, a shrunk file read on from its end", async () => {
-    const refused = (id: string) =>
-      `${call(id, "github_comment", {})}${output(id, "unsupported call: github_comment")}`;
+    // Each call is named after its id, so which refusals were read shows in their tools.
+    const refused = (id: string) => `${call(id, id, {})}${output(id, `unsupported call: ${id}`)}`;
     const idsOf = (events: ReadonlyArray<RuntimeEvent>) =>
-      events.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag));
+      events.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag));
 
     // A symlink put in the rollout's place is never followed.
     const target = join(folder, "elsewhere.jsonl");
@@ -141,11 +141,11 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     const reported: Array<RuntimeEvent> = [];
     const refusals = rolloutRefusals(path, (event) => reported.push(event));
     await Effect.runPromise(refusals.start);
-    const far = `${call("far", "github_comment", {})}${output("far", "unsupported call: github_comment")}`;
+    const far = `${call("far", "far", {})}${output("far", "unsupported call: far")}`;
     truncateSync(path, 3 * ROLLOUT_READ_BYTES);
     appendFileSync(path, `\n${far}`);
     await Effect.runPromise(refusals.drain);
-    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["far"]);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag))).toEqual(["far"]);
     // A drain is bounded too: what lies past its last read waits for the next.
     const beyond = join(folder, "beyond.jsonl");
     writeFileSync(beyond, "");
@@ -176,7 +176,6 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported).toEqual(
       names.map((name) =>
         expect.objectContaining({
-          id: name,
           tool: name,
           operation: "outside-folders",
           notOffered: { runtimeTool: null },
@@ -248,10 +247,10 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     await Effect.runPromise(refusals.start);
     appendFileSync(
       path,
-      `${"\n".repeat(2 * ROLLOUT_CHUNK_BYTES)}${call("after", "github_comment", {})}${output("after", "unsupported call: github_comment")}`,
+      `${"\n".repeat(2 * ROLLOUT_CHUNK_BYTES)}${call("after", "after", {})}${output("after", "unsupported call: after")}`,
     );
     await Effect.runPromise(refusals.drain);
-    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["after"]);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag))).toEqual(["after"]);
   });
 
   // covers SEC-002, ADR 014 (#1356)
@@ -268,7 +267,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     appendFileSync(path, output("p-299", "unsupported call: exec_command"));
     await Effect.runPromise(refusals.read);
     expect(reported).toEqual([
-      expect.objectContaining({ id: "p-299", tool: "exec_command", notOffered: { runtimeTool: "commands" } }),
+      expect.objectContaining({ tool: "exec_command", notOffered: { runtimeTool: "commands" } }),
     ]);
     const [denied] = reported;
     expect(denied?._tag === "ToolDenied" ? denied.label.length : 0).toBeLessThanOrEqual(NOT_OFFERED_LABEL_MAX);
@@ -277,7 +276,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
 
   // covers SEC-002, ADR 014 (#1356)
   it("[TC-PE-1356-17] a refused call's name is redacted whole before it is shortened, from its call or only its output", async () => {
-    const path = join(folder, "names.jsonl");
+    const path = join(folder, "secret-names.jsonl");
     writeFileSync(path, "");
     const secret = "plain-known-value-7f3a9c";
     const reported: Array<RuntimeEvent> = [];
@@ -316,7 +315,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     const lookalike = `${line({ type: "function_call" })}`;
     appendFileSync(
       path,
-      `${"x\n".repeat(ROLLOUT_READ_BYTES / 2)}${lookalike.repeat(ROLLOUT_READ_LINES + 1)}${call("late", "github_comment", {})}${output("late", "unsupported call: github_comment")}`,
+      `${"x\n".repeat(ROLLOUT_READ_BYTES / 2)}${lookalike.repeat(ROLLOUT_READ_LINES + 1)}${call("late", "late", {})}${output("late", "unsupported call: late")}`,
     );
     const started = Date.now();
     await Effect.runPromise(refusals.read);
@@ -325,7 +324,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported).toEqual([]);
     await Effect.runPromise(refusals.drain);
     expect(Date.now() - started).toBeLessThan(5_000);
-    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["late"]);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag))).toEqual(["late"]);
   });
 
   // covers SEC-002, ADR 014 (#1356)
@@ -350,6 +349,36 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported).toEqual([expect.objectContaining({ label: "Running git push" })]);
     const [denied] = reported;
     expect(denied?._tag === "ToolDenied" ? denied.id : "").not.toContain(secret.slice(0, 8));
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-23] a refused call's step is named by Hobbots, so a rollout's id can never stand for a step of a call that ran", async () => {
+    const path = join(folder, "step-ids.jsonl");
+    writeFileSync(path, "");
+    const read = async () => {
+      const reported: Array<RuntimeEvent> = [];
+      const refusals = rolloutRefusals(path, (event) => reported.push(event));
+      await Effect.runPromise(refusals.start);
+      // An id a call that ran has, and two ids that look alike once bounded.
+      const alike = "a".repeat(NOT_OFFERED_NAME_MAX + 10);
+      appendFileSync(
+        path,
+        [
+          call("call_ran", "exec_command", { cmd: "git push" }),
+          output("call_ran", "unsupported call: exec_command"),
+          output(`${alike}1`, "unsupported call: one"),
+          output(`${alike}2`, "unsupported call: two"),
+        ].join(""),
+      );
+      await Effect.runPromise(refusals.read);
+      return reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag));
+    };
+    const first = await read();
+    const second = await read();
+    expect(first).toHaveLength(3);
+    for (const id of [...first, ...second]) expect(id.startsWith(NOT_OFFERED_STEP)).toBe(true);
+    // Distinct within a turn, and from another turn's on the same reply.
+    expect(new Set([...first, ...second]).size).toBe(6);
   });
 
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {

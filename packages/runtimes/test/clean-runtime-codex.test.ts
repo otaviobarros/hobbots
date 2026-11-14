@@ -296,8 +296,16 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
       (event) => event._tag === "ToolDenied",
     );
     expect(refused).toEqual([
-      expect.objectContaining({ id: "call-comment", tool: "github_comment", notOffered: { runtimeTool: null } }),
-      expect.objectContaining({ id: "call-review", tool: "github_review", notOffered: { runtimeTool: null } }),
+      expect.objectContaining({
+        id: expect.stringMatching(/^not-offered-/),
+        tool: "github_comment",
+        notOffered: { runtimeTool: null },
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/^not-offered-/),
+        tool: "github_review",
+        notOffered: { runtimeTool: null },
+      }),
     ]);
     // Neither reached the hub or was recorded as started.
     expect(contract.order).toEqual([]);

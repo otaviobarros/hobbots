@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import {
@@ -36,6 +37,9 @@ export const ROLLOUT_REFUSALS_MAX = NOT_OFFERED_TURN_MAX;
 const PENDING_CALLS = 256;
 /** Opens the rollout only as itself, never through a symlink, nor waiting on a pipe put in its place. */
 const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
+
+/** What every refused call's step id starts with, which no runtime's own step id does. */
+export const NOT_OFFERED_STEP = "not-offered-";
 
 /** The outputs Codex answers a call to a tool it has none of with. */
 const UNSUPPORTED = ["unsupported call: ", "unsupported custom tool call: "];
@@ -153,6 +157,14 @@ export const rolloutRefusals = (
   >();
   let offset: number | null = null;
   let reported = 0;
+  /**
+   * A call's id is the rollout's text, which the hob can write, so it never names a step: it is kept
+   * only as a keyed digest that pairs a call with its output, and each refusal's step is named by
+   * Hobbots, unique to this turn, so it can never stand for a step of a call that ran.
+   */
+  const key = randomBytes(32);
+  const turn = randomBytes(6).toString("hex");
+  const keyOf = (id: string) => createHmac("sha256", key).update(id).digest("hex");
   const turns = Semaphore.makeUnsafe(1);
   /** Keeps a call until its output is read, dropping the oldest past PENDING_CALLS. */
   const keep = (id: string, item: ResponseItem) => {
@@ -176,14 +188,13 @@ export const rolloutRefusals = (
     const tool = call?.tool ?? nameOf(named);
     const runtimeTool = call?.runtimeTool ?? RUNTIME_TOOLS.get(named) ?? null;
     const label = call?.label ?? labelOf(tool, runtimeTool, undefined, redact);
-    return notOfferedDenial({ id, tool, label, runtimeTool });
+    return notOfferedDenial({ id: `${NOT_OFFERED_STEP}${turn}-${reported}`, tool, label, runtimeTool });
   };
   /** Reports the refusal one line holds, if it is Codex's answer to a call it has no tool for. */
   const readLine = (line: string) => {
     const item = itemOf(line);
     if (item === null || typeof item.call_id !== "string") return;
-    // The id is the rollout's own text too, so it is kept as a name is: redacted whole, then bounded.
-    const id = nameOf(item.call_id);
+    const id = keyOf(item.call_id);
     if (item.type === "function_call" || item.type === "custom_tool_call") keep(id, item);
     if (item.type !== "function_call_output" && item.type !== "custom_tool_call_output") return;
     const refusal = refusalOf(id, item.output);
