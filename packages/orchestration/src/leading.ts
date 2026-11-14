@@ -9,6 +9,7 @@ import {
   NoteId,
   pendingApprovalsOn,
   type Question,
+  questsAbove,
   type RuntimeKind,
   reportsOn,
   type Task,
@@ -194,7 +195,10 @@ const sentText = (task: Task, held: Held | undefined, delivery: ReturnType<typeo
 
 /** The acceptance criteria of the Quest on `root`, as read_tasks shows them (#1445); nothing when it has none. */
 const criteriaOn = (scope: CallScope, root: Task) => {
-  const quest = scope.tree.quests.find((each) => each.taskId === root.id);
+  // The nearest Quest the caller leads at or above what it reads, so a member's Task shows them too (#1555).
+  const quest = questsAbove(root, scope.tree.tasks, scope.tree.quests).find(
+    (each) => each.leadId === scope.caller.agentId,
+  );
   return quest === undefined || quest.criteria.length === 0
     ? {}
     : { quest_id: quest.id as string, criteria: quest.criteria.map(describeCriterion) };

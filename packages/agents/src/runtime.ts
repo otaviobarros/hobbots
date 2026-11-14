@@ -470,7 +470,7 @@ export interface CallSteering {
   readonly holdsCommit?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
   /**
    * Why a call's writes are refused, or null when they may run: a write to a path or branch you
-   * took over from a Task (#1449), which is yours until the Task ends.
+   * took over from a Task (#1449), which is yours until you give it back or the Task ends.
    */
   readonly takenByYou?: ((writes: CallWrites) => Effect.Effect<string | null>) | undefined;
 }

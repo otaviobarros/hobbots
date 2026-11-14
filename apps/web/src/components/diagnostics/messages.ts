@@ -145,6 +145,7 @@ export const messages = {
     "hob-proposal": "a hob proposal's outcome",
     "claim-clash": "a claim clash",
     "claims-taken": "a takeover of its claims",
+    "claims-given-back": "its claims given back",
     progress: "progress",
   },
   questStates: {

@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useReducer, useState } from "react";
 import { chaptersQuery, useMergeChapter, useSplitChapter } from "../../api/chapters.ts";
+import { useThreadRuns } from "../../api/hub-status.ts";
 import { CampSuggestions, chapterName } from "../camps/camp-suggestions.tsx";
 import { type CampFrom, MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
@@ -54,6 +55,9 @@ export function ChapterTranscript({
   renderMessage: (message: Message, split: ReactNode) => ReactNode;
 }) {
   const chapters = useQuery(chaptersQuery(thread.id));
+  // The hub keeps a chat's chapters in place while its run is busy: a reply runs or waits there, or
+  // waits on your approval (#1551). The hub publishes that run, so the chat shows it as it is.
+  const moveHeld = useThreadRuns()[thread.id] !== undefined;
   const sections = chapterSections(transcript, chapters.data);
   const [choices, dispatchFold] = useReducer(foldStep, new Map());
   const [split, dispatchSplit] = useReducer(splitStep, SPLIT_CLOSED);
@@ -167,8 +171,16 @@ export function ChapterTranscript({
       {split.step !== "closed" && (
         <SplitChapterSheet hob={hob} state={split} dispatch={dispatchSplit} onSend={sendSplit} />
       )}
-      {open && <CampSuggestions hob={hob} thread={thread} chapters={chapters.data ?? []} onMake={setCampFrom} />}
-      {campFrom && <MakeCampSheet hob={hob} from={campFrom} onClose={() => setCampFrom(undefined)} />}
+      {open && (
+        <CampSuggestions
+          hob={hob}
+          thread={thread}
+          chapters={chapters.data ?? []}
+          busy={moveHeld}
+          onMake={setCampFrom}
+        />
+      )}
+      {campFrom && <MakeCampSheet hob={hob} from={campFrom} held={moveHeld} onClose={() => setCampFrom(undefined)} />}
     </>
   );
 }

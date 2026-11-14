@@ -3,29 +3,36 @@ import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenuItem, DropdownMenuLabel } from "@hobbots/ui/components/menu";
 import { useTaskClaims } from "../../api/task-claims.ts";
 import { Outcome, Refusal } from "../quest/room-controls.tsx";
-import { canTakeOver } from "./lane-actions-model.ts";
+import { canGiveBack, canTakeOver } from "./lane-actions-model.ts";
 import { messages } from "./messages.ts";
 import type { LaneActions } from "./use-lane-actions.ts";
 
 /**
- * What you took over of a Task (#1449), as the claims register holds it, while Take over is on its
- * way, and why it did not go through. A read that failed says so, with Try again, rather than
+ * What you took over of a Task (#1449), as the claims register holds it, while Take over or Give
+ * back (#1538) is on its way, and why it did not go through. A read that failed says so, with Try again, rather than
  * showing the Task as holding nothing.
  */
 export function TakenClaims({ task, actions }: { task: Task; actions: LaneActions }) {
   const read = useTaskClaims(task);
   const taken = (read.claims ?? []).filter(Claims.isTaken);
-  const refusal = actions.takeOverRefusal(task.id);
+  const refusal =
+    actions.takeOverRefusal(task.id) !== null
+      ? messages.takeOverFailed
+      : actions.giveBackRefusal(task.id) !== null
+        ? messages.giveBackFailed
+        : null;
   return (
     <>
       <Outcome>
         {actions.takingOver(task.id)
           ? messages.takingOver
-          : taken.length > 0
-            ? messages.taken({ claims: taken })
-            : null}
+          : actions.givingBack(task.id)
+            ? messages.givingBack
+            : taken.length > 0
+              ? messages.taken({ claims: taken })
+              : null}
       </Outcome>
-      <Refusal>{refusal === null ? null : messages.takeOverFailed}</Refusal>
+      <Refusal>{refusal}</Refusal>
       {read.failed && (
         <p className="m-0 flex flex-wrap items-center gap-2 text-meta text-text-secondary">
           <span role="alert">{messages.claimsUnread}</span>
@@ -57,6 +64,29 @@ export function TakeOverItems({ task, owner, actions }: { task: Task; owner: str
         {messages.takeOver}
       </DropdownMenuItem>
       <DropdownMenuLabel>{messages.takeOverKeeps({ name: owner })}</DropdownMenuLabel>
+    </>
+  );
+}
+
+/**
+ * Give back in a lane's ⋯ menu (#1538), next to Take over, once the hub says the Task holds files or
+ * branches you took over, with what it gives the hob. The menu stays open until the hub gave them back.
+ */
+export function GiveBackItems({ task, owner, actions }: { task: Task; owner: string; actions: LaneActions }) {
+  const { claims } = useTaskClaims(task);
+  if (!canGiveBack(task, claims)) return null;
+  return (
+    <>
+      <DropdownMenuItem
+        disabled={actions.busy}
+        onSelect={(event) => {
+          event.preventDefault();
+          actions.giveBack(task.id);
+        }}
+      >
+        {messages.giveBack}
+      </DropdownMenuItem>
+      <DropdownMenuLabel>{messages.giveBackLets({ name: owner })}</DropdownMenuLabel>
     </>
   );
 }

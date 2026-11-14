@@ -46,6 +46,7 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [The Quest room on real Claude Code](checklists/quest-room.md)
 - [Hobs see each other with real models](checklists/hobs-see-each-other.md)
 - [Hobs manage hobs with real models](checklists/hob-management.md)
+- [Quests run on their own, on real Claude Code and Codex](checklists/quests-run-on-their-own.md)
 
 ## Records
 
@@ -92,3 +93,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-09 Hobs search and read the web end to end: sources, site rules, data going out and robots.txt](2026-11-09-web-end-to-end.md)
 - [2026-11-12 A long chat's turns start from the context pack, with fewer tokens](2026-11-12-context-pack-tokens.md)
 - [2026-11-12 Two windows show the status the hub publishes, the same on each](2026-11-12-hub-status-web.md)
+- [2026-11-14 Quests run on their own, end to end, at hub level](2026-11-14-quests-run-on-their-own.md)

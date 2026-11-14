@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
+  AdditionalRuntimes,
   ApprovalService,
   type Charms as CharmRegistry,
   ChatService,
@@ -13,6 +14,7 @@ import {
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
+  type RuntimeAdapterShape,
   type RuntimeEvent,
   TaskControls,
   TaskRepository,
@@ -27,6 +29,7 @@ import {
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
+  type RuntimeKind,
   type SafetyPreset,
   type Task,
   type TaskTree,
@@ -47,7 +50,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FAKE_HUB_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FAKE_HUB_DIRECTIVE, FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import type { HubCallRuntime, ScriptedHubCall } from "@hobbots/runtimes/testing";
 import { Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Scope, Stream } from "effect";
 import type { SqlClient } from "effect/sql";
@@ -80,12 +83,12 @@ export const holdStarted = (name: string) => `fake:hold-started ${name}`;
 
 export const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const hob = (id: AgentId, name: string) =>
+const hob = (id: AgentId, name: string, runtime: RuntimeKind) =>
   new Agent({
     id,
     name,
     roleTitle: "Engineering",
-    runtime: "claude-code",
+    runtime,
     model: null,
     effort: null,
     instructions: "",
@@ -147,6 +150,10 @@ interface Script {
   readonly members: HubCallRuntime | null;
   /** The tool calls the fake runtime's turns had refused, with why, in order. */
   readonly denied: Array<Extract<RuntimeEvent, { readonly _tag: "ToolDenied" }>>;
+  /** The tool calls the fake runtime's turns started, as the policy allowed them, in order. */
+  readonly started: Array<Extract<RuntimeEvent, { readonly _tag: "ToolStarted" }>>;
+  /** Hub calls held by their key until the gate resolves, as a model makes a call only once something happened. */
+  readonly callGates: Map<string, () => Promise<void>>;
 }
 
 const gateOf = (script: Script, name: string) => {
@@ -157,12 +164,21 @@ const gateOf = (script: Script, name: string) => {
   return made;
 };
 
-/** The request with its hub calls' answers kept by the call's key. */
-const answering = (request: PromptRequest, answers: Map<string, string>): PromptRequest => {
+/** The request with its hub calls' answers kept by the call's key, each call held first by its gate, if any. */
+const answering = (
+  request: PromptRequest,
+  answers: Map<string, string>,
+  gates: ReadonlyMap<string, () => Promise<void>>,
+): PromptRequest => {
   const hubTools = request.hubTools;
   if (!hubTools) return request;
+  const heldBy = (input: unknown) => {
+    const key = (input as { readonly key?: unknown } | null)?.key;
+    const gate = typeof key === "string" ? gates.get(key) : undefined;
+    return gate === undefined ? Effect.void : Effect.promise(gate);
+  };
   const call: typeof hubTools.call = (name, input, step) =>
-    Effect.tap(hubTools.call(name, input, step), (answer) =>
+    Effect.tap(Effect.andThen(heldBy(input), hubTools.call(name, input, step)), (answer) =>
       Effect.sync(() => {
         const key = (input as { readonly key?: unknown } | null)?.key;
         if (typeof key === "string") answers.set(key, answer.text);
@@ -193,40 +209,69 @@ const hubCalls = (prompt: string): ReadonlyArray<ScriptedHubCall> =>
 const named = (lines: ReadonlyArray<string>, prefix: string) =>
   lines.find((line) => line.startsWith(`${prefix} `))?.slice(prefix.length + 1);
 
-const scripted = (script: Script, sandbox: "on" | "unavailable" = "on") =>
-  Layer.effect(
-    RuntimeAdapter,
-    Effect.gen(function* () {
-      const fake = yield* RuntimeAdapter;
-      return RuntimeAdapter.of({
-        ...fake,
-        sendPrompt: (sent) => {
-          const request = answering({ ...sent, prompt: reacted(sent.prompt, script) }, script.answers);
-          script.requests.push(request);
-          if (script.members !== null && toTask(request.prompt)) {
-            return script.members.events(request, hubCalls(request.prompt));
-          }
-          const stream = Stream.tap(fake.sendPrompt(request), (event) =>
-            Effect.sync(() => {
-              if (event._tag === "ToolDenied") script.denied.push(event);
-            }),
-          );
-          const lines = request.prompt.split("\n").map((line) => line.trim());
-          const started = named(lines, "fake:hold-started");
-          if (started !== undefined) {
-            let running = false;
-            return Stream.mapEffect(stream, (event) => {
-              const wait = running ? Deferred.await(gateOf(script, started)) : Effect.void;
-              running = running || event._tag === "SessionStarted";
-              return Effect.as(wait, event);
-            });
-          }
-          const held = named(lines, "fake:hold");
-          return held === undefined ? stream : Stream.unwrap(Effect.as(Deferred.await(gateOf(script, held)), stream));
-        },
+/** The request with each tool call its turn records as started kept in `script.started` too. */
+const watchingStarts = (request: PromptRequest, script: Script): PromptRequest => {
+  const record = request.recordToolStart;
+  if (record == null) return request;
+  return {
+    ...request,
+    recordToolStart: (event) =>
+      Effect.tap(record(event), (ran) =>
+        Effect.sync(() => {
+          if (ran) script.started.push(event);
+        }),
+      ),
+  };
+};
+
+/** The fake, with each prompt it is sent recorded and played as the test scripts it. */
+const scriptedAdapter = (script: Script, fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
+  ...fake,
+  sendPrompt: (sent) => {
+    const request = watchingStarts(
+      answering({ ...sent, prompt: reacted(sent.prompt, script) }, script.answers, script.callGates),
+      script,
+    );
+    script.requests.push(request);
+    if (script.members !== null && toTask(request.prompt)) {
+      return script.members.events(request, hubCalls(request.prompt));
+    }
+    const stream = Stream.tap(fake.sendPrompt(request), (event) =>
+      Effect.sync(() => {
+        if (event._tag === "ToolDenied") script.denied.push(event);
+        if (event._tag === "ToolStarted") script.started.push(event);
+      }),
+    );
+    const lines = request.prompt.split("\n").map((line) => line.trim());
+    const started = named(lines, "fake:hold-started");
+    if (started !== undefined) {
+      let running = false;
+      return Stream.mapEffect(stream, (event) => {
+        const wait = running ? Deferred.await(gateOf(script, started)) : Effect.void;
+        running = running || event._tag === "SessionStarted";
+        return Effect.as(wait, event);
       });
-    }),
-  ).pipe(Layer.provide(FakeRuntimeLayer({ sandbox }).pipe(Layer.provide(PolicyEngine.node))));
+    }
+    const held = named(lines, "fake:hold");
+    return held === undefined ? stream : Stream.unwrap(Effect.as(Deferred.await(gateOf(script, held)), stream));
+  },
+});
+
+/** The fake Claude Code and the fake Codex beside it, each played as the test scripts it. */
+const scripted = (script: Script, sandbox: "on" | "unavailable" = "on") =>
+  Layer.merge(
+    Layer.effect(
+      RuntimeAdapter,
+      Effect.map(RuntimeAdapter, (fake) => scriptedAdapter(script, fake)),
+    ).pipe(Layer.provide(FakeRuntimeLayer({ sandbox }))),
+    Layer.effect(
+      AdditionalRuntimes,
+      Effect.map(
+        AdditionalRuntimes,
+        (others) => new Map([...others].map(([kind, fake]) => [kind, scriptedAdapter(script, fake)])),
+      ),
+    ).pipe(Layer.provide(FakeAdditionalRuntimesLayer({ sandbox }))),
+  ).pipe(Layer.provide(PolicyEngine.node));
 
 /** The backpack, frozen once the hub has stopped: every call it is asked from then on waits forever. */
 const stoppable = (script: Script) =>
@@ -247,14 +292,20 @@ const stoppable = (script: Script) =>
     }),
   ).pipe(Layer.provide(BackpackLive));
 
-const party = Effect.gen(function* () {
-  const repo = yield* HobbotsRepository;
-  const all = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
-  for (const each of all) yield* repo.insertAgent(each);
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Dependencies", createdAt: now, updatedAt: now }),
-  );
-});
+const party = (runtime: RuntimeKind) =>
+  Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    const all = [
+      hob(ALDRIC, "Aldric", runtime),
+      hob(QUILL, "Quill", runtime),
+      hob(ROOK, "Rook", runtime),
+      hob(PIP, "Pip", runtime),
+    ];
+    for (const each of all) yield* repo.insertAgent(each);
+    yield* repo.upsertThread(
+      new Thread({ id: threadId, agentId: ALDRIC, title: "Dependencies", createdAt: now, updatedAt: now }),
+    );
+  });
 
 type Database = Layer.Layer<Layer.Success<typeof TestDatabase>>;
 
@@ -330,12 +381,12 @@ export const givePolicy = (policy: HobPolicy) =>
     ),
   );
 
-/** One database that outlives the hubs started over it, with the party stored. */
-export const sharedDatabase = async (): Promise<Database> => {
+/** One database that outlives the hubs started over it, with the party stored, every hob on `runtime`. */
+export const sharedDatabase = async (runtime: RuntimeKind = "claude-code"): Promise<Database> => {
   const scope = await Effect.runPromise(Scope.make());
   databaseScope = scope;
   const database = Layer.succeedContext(await Effect.runPromise(Layer.buildWithScope(TestDatabase, scope)));
-  await Effect.runPromise(Effect.provide(party, HobbotsRepositoryLive.pipe(Layer.provideMerge(database))));
+  await Effect.runPromise(Effect.provide(party(runtime), HobbotsRepositoryLive.pipe(Layer.provideMerge(database))));
   return database;
 };
 
@@ -358,6 +409,8 @@ export const startHub = async (
     stopped: false,
     members,
     denied: [],
+    started: [],
+    callGates: new Map(),
   };
   const runtime = ManagedRuntime.make(makeHub(database, script, charms, policy));
   open.push(runtime);
@@ -369,6 +422,8 @@ export const startHub = async (
     requests: script.requests,
     answers: script.answers,
     denied: script.denied,
+    started: script.started,
+    callGates: script.callGates,
     release: (name: string) => run(Deferred.succeed(gateOf(script, name), undefined)),
     stop: () => {
       script.stopped = true;

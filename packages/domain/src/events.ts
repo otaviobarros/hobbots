@@ -278,6 +278,11 @@ const ClaimContested = Schema.TaggedStruct("ClaimContested", { claim: Claim });
 const ClaimCleared = Schema.TaggedStruct("ClaimCleared", { claim: Claim });
 /** You took over the claim's Task (#1449), so the claim is yours and its hob may not write to it. */
 const ClaimTakenOver = Schema.TaggedStruct("ClaimTakenOver", { claim: Claim });
+/**
+ * You gave a claim you took over back to its Task's hob (#1538), `by` you, so its hob may write to it
+ * again: held, or contested when another Task's open claim clashes with it.
+ */
+const ClaimGivenBack = Schema.TaggedStruct("ClaimGivenBack", { claim: Claim, by: Actor });
 /** The claim's Task ended, so the claim was released; a released number is never handed out again. */
 const ClaimReleased = Schema.TaggedStruct("ClaimReleased", { claim: Claim });
 /** You pinned a message, so it shows under Mine (ADR 037); pinning it again journals nothing. */
@@ -558,6 +563,7 @@ export const JournaledEvent = Schema.Union([
   ClaimContested,
   ClaimCleared,
   ClaimTakenOver,
+  ClaimGivenBack,
   ClaimReleased,
   DecisionRecorded,
   DecisionSuperseded,
@@ -701,6 +707,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ClaimContested: 1,
   ClaimCleared: 1,
   ClaimTakenOver: 1,
+  ClaimGivenBack: 1,
   ClaimReleased: 1,
   DecisionRecorded: 1,
   DecisionSuperseded: 1,
