@@ -36,11 +36,18 @@ describe("the gh a command line runs (#1349)", () => {
     expect(found("echo `gh pr list`")).toEqual(["pr", "list"]);
     expect(found('n=$(echo "$(gh issue list | wc -l)")')).toEqual(["issue", "list"]);
     expect(found("cat <(gh pr list)")).toEqual(["pr", "list"]);
+    // An apostrophe inside double quotes opens no single quotes, so what follows still runs.
+    expect(found(`echo "PR's $(gh pr view 1)"`)).toEqual(["pr", "view", "1"]);
+    expect(found('echo "PR\'s `gh pr list`"')).toEqual(["pr", "list"]);
+    expect(found(`echo "it's" '$(no)' "$(gh repo view)"`)).toEqual(["repo", "view"]);
+    expect(found(`x=$(echo ")" && gh issue list)`)).toEqual(["issue", "list"]);
     for (const command of [
       "git push origin main",
       "echo gh pr create",
       "ghq list",
       "echo '$(gh pr view 1)'",
+      `echo 'say "$(gh pr view 1)"'`,
+      `echo "a" 'b $(gh pr list) c'`,
       "echo 'if gh pr view 1'",
       "if test -f gh; then echo gh; fi",
       "cat gh.md",

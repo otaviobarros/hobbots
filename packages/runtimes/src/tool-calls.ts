@@ -733,14 +733,32 @@ const afterKeywords = (words: ReadonlyArray<string>): ReadonlyArray<string> => {
   return words.slice(i);
 };
 
-/** Where the `$(` body that starts at `start` ends: its closing parenthesis, or the line's end. */
+/** A shell quote a scan is inside: none, single quotes or double quotes. */
+type Quoting = "" | "'" | '"';
+
+/**
+ * The quoting after `char`, read in `quoting`: an apostrophe opens or closes single quotes only
+ * outside double quotes, and a double quote opens or closes double quotes only outside single ones.
+ */
+const nextQuoting = (quoting: Quoting, char: string | undefined): Quoting => {
+  if (quoting === "'") return char === "'" ? "" : "'";
+  if (char === '"') return quoting === '"' ? "" : '"';
+  return quoting === "" && char === "'" ? "'" : quoting;
+};
+
+/**
+ * Where the `$(` body that starts at `start` ends: its closing parenthesis, or the line's end.
+ * Parentheses in quotes inside it do not count.
+ */
 const closingParen = (line: string, start: number): number => {
   let depth = 1;
+  let quoting: Quoting = "";
   for (let i = start; i < line.length; i++) {
     const char = line[i];
-    if (char === "\\") i++;
-    else if (char === "(") depth++;
-    else if (char === ")" && --depth === 0) return i;
+    if (quoting !== "'" && char === "\\") i++;
+    else if (char === "'" || char === '"' || quoting === "'") quoting = nextQuoting(quoting, char);
+    else if (quoting === "" && char === "(") depth++;
+    else if (quoting === "" && char === ")" && --depth === 0) return i;
   }
   return line.length;
 };
@@ -754,27 +772,33 @@ const closingBacktick = (line: string, start: number): number => {
   return line.length;
 };
 
+/** The substitution that starts at `i`, its body and where it ends, or null when none starts there. */
+const substitutionAt = (line: string, i: number): { readonly body: string; readonly end: number } | null => {
+  if (line[i] === "$" && line[i + 1] === "(") {
+    const end = closingParen(line, i + 2);
+    return { body: line.slice(i + 2, end), end };
+  }
+  if (line[i] !== "`") return null;
+  const end = closingBacktick(line, i + 1);
+  return { body: line.slice(i + 1, end), end };
+};
+
 /**
  * The command lines a line's `$(…)` and backtick substitutions run, also inside double quotes, which
- * the shell runs too; single quotes keep them literal. Read in one pass, so in linear time.
+ * the shell runs too, an apostrophe there included; only single quotes keep them literal. Read in one
+ * pass, so in linear time.
  */
 const substitutions = (line: string): ReadonlyArray<string> => {
   const found: Array<string> = [];
-  let single = false;
+  let quoting: Quoting = "";
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    if (single) single = char !== "'";
-    else if (char === "'") single = true;
-    else if (char === "\\") i++;
-    else if (char === "$" && line[i + 1] === "(") {
-      const end = closingParen(line, i + 2);
-      found.push(line.slice(i + 2, end));
-      i = end;
-    } else if (char === "`") {
-      const end = closingBacktick(line, i + 1);
-      found.push(line.slice(i + 1, end));
-      i = end;
-    }
+    const substitution = quoting === "'" ? null : substitutionAt(line, i);
+    if (substitution !== null) {
+      found.push(substitution.body);
+      i = substitution.end;
+    } else if (quoting !== "'" && char === "\\") i++;
+    else quoting = nextQuoting(quoting, char);
   }
   return found;
 };
