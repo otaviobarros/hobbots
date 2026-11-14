@@ -522,6 +522,14 @@ export const TASK_TOOLS: ReadonlyArray<{
 
 export const isTaskToolName = (name: string): name is TaskToolName => Object.hasOwn(TaskToolInputs, name);
 
+/**
+ * Whether a session that keeps the hub tools it started with holds every Task tool this hub offers
+ * (#1543). One that started before a Task tool existed, or whose tools are not known, does not: a
+ * Quest lead in it could never call `check_criterion`, so it is not resumed.
+ */
+export const holdsEveryTaskTool = (held: ReadonlyArray<string> | undefined): boolean =>
+  held !== undefined && TASK_TOOLS.every((tool) => held.includes(tool.name));
+
 /** The JSON Schema a runtime advertises for a tool's input. */
 export const toolInputJsonSchema = (schema: Schema.Top): Record<string, unknown> => {
   const document = Schema.toJsonSchemaDocument(schema);
