@@ -54,3 +54,19 @@ export function SidebarRowFrame({
 /** The row's link: its name in the row's second column, its hit area the whole row. */
 export const sidebarRowLink =
   "col-start-2 row-start-1 min-w-0 truncate text-ui text-text-strong no-underline after:absolute after:inset-0 after:rounded-control focus-visible:outline-none focus-visible:after:outline-(--focus-outline) focus-visible:after:-outline-offset-2 max-wide:absolute max-wide:inset-0";
+
+/**
+ * On the rail, where a row shows only its face, a dot at the face's top corner for what you have not
+ * read: lantern for a mention of you, else the strong text color. The row's name says it too.
+ */
+export function RailUnread({ unread, mention }: { unread: boolean; mention: boolean }) {
+  if (!unread && !mention) return null;
+  return (
+    <span
+      className={cn(
+        "absolute -end-0.5 -top-0.5 size-2.5 rounded-dot border-(length:--edge) border-panel wide:hidden",
+        mention ? "bg-lantern" : "bg-text-strong",
+      )}
+    />
+  );
+}

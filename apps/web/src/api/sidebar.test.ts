@@ -86,4 +86,17 @@ describe("the sidebar's read", () => {
     }
     list.unsubscribe();
   });
+
+  it("[TC-UX-1469-13] reads again when a person's message lands, which may mention you, and not on each update of a hob's reply", async () => {
+    const list = watched();
+    list.pending[0]?.(read());
+    await list.settled();
+    applySidebarEvent(list.client, { _tag: "MessageUpserted", message: { role: "assistant" } } as never);
+    await list.settled();
+    expect(list.pending).toHaveLength(1);
+    applySidebarEvent(list.client, { _tag: "MessageUpserted", message: { role: "user" } } as never);
+    await list.settled();
+    expect(list.pending).toHaveLength(2);
+    list.unsubscribe();
+  });
 });

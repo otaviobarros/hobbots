@@ -11,7 +11,7 @@ import type { SidebarData } from "./sidebar-data.ts";
 import { FaceStack } from "./sidebar-faces.tsx";
 import { SidebarFailed } from "./sidebar-failed.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
-import { SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
+import { RailUnread, SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type CampRow, campRows, rowTime } from "./sidebar-rows.ts";
 
 /** The camp the address names, if any. */
@@ -136,11 +136,15 @@ function CampLink({ row, current, wide }: { row: CampRow; current: boolean; wide
   );
 }
 
-/** A shared camp's stack of faces, or the hob's tile; on the rail, a lantern dot when it needs you. */
+/**
+ * A shared camp's stack of faces, or the hob's tile; on the rail, a lantern dot when it needs you and
+ * a dot for what you have not read.
+ */
 function CampFace({ row, wide }: { row: CampRow; wide: boolean }) {
   return (
     <>
       {row.place.section === "shared-camp" ? <FaceStack faces={row.faces} /> : <HobTile hob={row.hob} tile="sm" />}
+      <RailUnread unread={row.unread > 0} mention={row.place.mentions > 0} />
       {!wide && row.needs && (
         <span className="absolute -end-0.5 -bottom-0.5 size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern" />
       )}

@@ -59,7 +59,15 @@ const SIDEBAR_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "TaskStateChanged",
 ]);
 
+/**
+ * Whether an event changes what the sidebar lists: one of `SIDEBAR_EVENTS`, or a person's message,
+ * which may mention you or leave you a reply to read with no turn after it. A hob's reply streams
+ * many updates, so its unread mark follows `unreadChanged` instead.
+ */
+const changesSidebar = (event: HobbotsEvent) =>
+  SIDEBAR_EVENTS.has(event._tag) || (event._tag === "MessageUpserted" && event.message.role === "user");
+
 /** Reads the sidebar again after an event that changes what it lists; the event's own handling goes on. */
 export const applySidebarEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
-  if (SIDEBAR_EVENTS.has(event._tag)) void sidebarChanged(queryClient);
+  if (changesSidebar(event)) void sidebarChanged(queryClient);
 };

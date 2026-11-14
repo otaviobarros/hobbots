@@ -156,16 +156,34 @@ describe("threadsNeedingYou", () => {
     const blocked = ThreadId.make("blocked");
     const failed = ThreadId.make("failed");
     const decided = ThreadId.make("decided");
+    const toLead = ThreadId.make("to-lead");
     const needing = threadsNeedingYou({
       approvals: [
         { threadId: asked, state: "pending" },
         { threadId: decided, state: "approved" },
       ],
       blockers: [{ threadId: blocked }, { threadId: null }],
-      questions: [{ task: { threadId: questioned } }],
+      questions: [
+        { question: { recipientId: null }, task: { threadId: questioned } },
+        // A question still on its way up to a lead waits on the lead, not on you.
+        { question: { recipientId: AgentId.make("aldric") }, task: { threadId: toLead } },
+      ],
       failed: [{ task: { threadId: failed } }, { task: { threadId: null } }],
+      decides: () => true,
     });
     expect([...needing].sort()).toEqual([asked, blocked, failed, questioned].sort());
+  });
+
+  it("[TC-DM-1469-07] marks a shared camp only for the person who decides there, not for the members waiting on them", () => {
+    const shared = ThreadId.make("shared");
+    const input = {
+      approvals: [{ threadId: shared, state: "pending" as const }],
+      blockers: [],
+      questions: [{ question: { recipientId: null }, task: { threadId: shared } }],
+      failed: [],
+    };
+    expect([...threadsNeedingYou({ ...input, decides: () => true })]).toEqual([shared]);
+    expect([...threadsNeedingYou({ ...input, decides: () => false })]).toEqual([]);
   });
 
   it("[TC-DM-1469-06] carries the mark onto the thread's place, and a reply waiting on commands does not set it", () => {

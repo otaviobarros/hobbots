@@ -1,6 +1,8 @@
 import {
   ApprovalRepository,
+  ForYouRepository,
   HobbotsRepository,
+  hubOwner,
   sessionActor,
   TaskRepository,
   ThreadMemberRepository,
@@ -9,8 +11,10 @@ import {
 import { HobbotsApi } from "@hobbots/api";
 import {
   type Actor,
+  deciderOf,
   hobActor,
   type SidebarThread,
+  sameActor,
   sidebarOf,
   type Thread,
   type ThreadId,
@@ -25,7 +29,7 @@ import { HttpApiBuilder } from "effect/http-api";
 
 // The sidebar (ADR 039, The sidebar; #1469), for user sessions only (PE-006): the hub reads the open
 // threads of every hob you can talk to, hob by hob, with their members and what you have not read,
-// and what waits on you there, and sorts them with `sidebarOf`. Nothing of it is stored. A hub built without members or users, as
+// and what waits on you there as its decider (as For you decides it), and sorts them with `sidebarOf`. Nothing of it is stored. A hub built without members or users, as
 // in some tests, counts each thread as yours and its hob's.
 
 /** Who you are when the hub has no list of users: your session's actor, named after its id. */
@@ -49,6 +53,8 @@ export const SidebarHandlers = HttpApiBuilder.group(HobbotsApi, "sidebar", (hand
     const approvals = yield* ApprovalRepository;
     const backpack = yield* Backpack;
     const tasks = yield* TaskRepository;
+    // A hub built without For you's reads, as in some tests, leaves every decision to its owner.
+    const forYou = yield* Effect.serviceOption(ForYouRepository);
     const membersOf = (thread: Thread, you: Actor): Effect.Effect<SidebarThread["members"]> =>
       Option.match(members, {
         onNone: () =>
@@ -77,7 +83,13 @@ export const SidebarHandlers = HttpApiBuilder.group(HobbotsApi, "sidebar", (hand
             tasks.listWaitingQuestions,
             tasks.listFailedTasks,
           ]);
-          const needing = threadsNeedingYou({ approvals: pending, blockers, questions, failed });
+          const owners = yield* Option.match(forYou, {
+            onNone: () => Effect.succeed<ReadonlyMap<ThreadId, Actor>>(new Map()),
+            onSome: (reads) => reads.owners,
+          });
+          const decides = (threadId: ThreadId) =>
+            sameActor(deciderOf({ requester: null, owner: owners.get(threadId) ?? null, hubOwner }), you);
+          const needing = threadsNeedingYou({ approvals: pending, blockers, questions, failed, decides });
           const entries: ReadonlyArray<SidebarThread> = yield* Effect.forEach(threads, (thread) =>
             Effect.map(membersOf(thread, you), (list) => ({
               thread,

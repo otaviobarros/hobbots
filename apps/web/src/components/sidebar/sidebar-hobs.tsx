@@ -12,7 +12,7 @@ import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sideba
 import type { SidebarData } from "./sidebar-data.ts";
 import { SidebarFailed } from "./sidebar-failed.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
-import { SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
+import { RailUnread, SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type DirectRow, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
 
 /** The state dot on a hob's face: lantern when it needs you, mint while it works, a ring while paused. */
@@ -85,7 +85,12 @@ function DirectLink({ row, current, wide }: { row: DirectRow; current: boolean; 
   return (
     <SidebarRowFrame
       tall
-      face={<DirectFace hob={hob} state={state} />}
+      face={
+        <>
+          <DirectFace hob={hob} state={state} />
+          <RailUnread unread={unread > 0} mention={(place?.mentions ?? 0) > 0} />
+        </>
+      }
       link={
         <SidebarTip label={name} wide={wide}>
           <Link
