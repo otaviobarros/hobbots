@@ -9,11 +9,12 @@ import {
   OWNER_ACTOR,
   Thread,
   ThreadId,
+  TurnRequests,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Layer, PubSub, Schedule } from "effect";
+import { Context, Effect, Layer, PubSub, Schedule } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -57,20 +58,52 @@ const campOfTwo = Effect.gen(function* () {
   yield* members.add(CAMP, hobActor(PIP), OWNER_ACTOR);
 });
 
-const hub = ChatService.layer.pipe(
-  Layer.provide(HobTools.chatOnly),
-  Layer.provideMerge(
-    Layer.mergeAll(
-      Layer.effectDiscard(Effect.orDie(campOfTwo)).pipe(
-        Layer.provideMerge(
-          Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(Layer.provideMerge(TestDatabase)),
-        ),
-      ),
-      EventBus.layer,
-      HobAdmission.layer,
-      FakeRuntimeLayer({ delay: "2 millis" }),
+const camp = Layer.mergeAll(
+  Layer.effectDiscard(Effect.orDie(campOfTwo)).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(Layer.provideMerge(TestDatabase)),
     ),
   ),
+  EventBus.layer,
+  HobAdmission.layer,
+  FakeRuntimeLayer({ delay: "2 millis" }),
+);
+
+const hub = ChatService.layer.pipe(Layer.provide(HobTools.chatOnly), Layer.provideMerge(camp));
+
+/**
+ * The camp's hub where, under LateRead, the first read of what is owed sees none of the speaking turn's
+ * own request, as for a turn that answers none (a carried backpack's), and returns only after that
+ * turn's reply is saved complete: Stop all reads, the turn ends and relays, then the stop comes.
+ */
+const LateRead = Context.Reference<{ armed: boolean }>("test/LateRead", { defaultValue: () => ({ armed: false }) });
+const LateReads = Layer.effect(
+  HobbotsRepository,
+  Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    const replied = repo.listMessages(CAMP).pipe(
+      Effect.flatMap((messages) =>
+        messages.some((m) => m.role === "assistant" && m.status === "complete") ? Effect.void : Effect.fail("not yet"),
+      ),
+      Effect.retry(Schedule.spaced("2 millis")),
+      Effect.orDie,
+    );
+    const openTurnRequests: typeof repo.openTurnRequests = (at) =>
+      Effect.gen(function* () {
+        const open = yield* repo.openTurnRequests(at);
+        const late = yield* LateRead;
+        if (!late.armed) return open;
+        late.armed = false;
+        yield* replied;
+        return open.filter((request) => request !== TurnRequests.speaking(open));
+      });
+    return { ...repo, openTurnRequests };
+  }),
+);
+const lateHub = ChatService.layer.pipe(
+  Layer.provide(HobTools.chatOnly),
+  Layer.provide(LateReads),
+  Layer.provideMerge(camp),
 );
 
 /** The camp's line as the hub publishes it now; null when it publishes none. */
@@ -200,5 +233,33 @@ describe("the relay budget", () => {
     // Let them go on with nothing paused starts nothing.
     expect(hobReplies(result.messages)).toHaveLength(hobReplies(result.before).length);
     expect(result.line?.paused ?? []).toEqual([]);
+  }, 30_000);
+
+  // covers ADR 039 (Hobs talking to hobs, Stop all)
+  it("[TC-CH-1463-08] Stop all drops the relays of a turn that ended after it read what was owed", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      yield* chat.sendPrompt(CAMP, "@quill @pip work out the launch checklist between you");
+      yield* repo.listMessages(CAMP).pipe(
+        Effect.flatMap((messages) =>
+          messages.some((m) => m.role === "assistant" && m.status === "streaming")
+            ? Effect.void
+            : Effect.fail("not yet"),
+        ),
+        Effect.retry(Schedule.spaced("1 millis")),
+      );
+      yield* chat.stopAll(CAMP).pipe(Effect.provideService(LateRead, { armed: true }));
+      return { messages: yield* settled, requests: yield* allRequests };
+    }).pipe(Effect.provide(lateHub), Effect.scoped, Effect.runPromise);
+
+    // The turn completed before the stop reached it, so only its reply was said.
+    expect(hobReplies(result.messages)).toEqual([[QUILL, "complete"]]);
+    // Pip's answer to you and the relay Quill's reply wrote are both dropped, by you.
+    expect(result.requests.map((r) => [r.hobId, r.relayDepth, r.state, r.droppedById])).toEqual([
+      [QUILL, 0, "answered", null],
+      [PIP, 0, "dropped", OWNER_ACTOR.id],
+      [PIP, 1, "dropped", OWNER_ACTOR.id],
+    ]);
   }, 30_000);
 });

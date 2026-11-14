@@ -49,7 +49,7 @@ import {
   type UnreadThreads,
   waitedSteps,
 } from "@hobbots/domain";
-import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
+import { Context, DateTime, Deferred, Effect, Layer, Option, Ref, Semaphore } from "effect";
 import { HobAdmission, withThreadLock } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
@@ -683,15 +683,23 @@ export class ChatService extends Context.Service<
       // What is owed is dropped first, so the stopped turn's end finds nothing to start next. Both run
       // under the thread's lock, which every turn is admitted under, so a turn admitted meanwhile is
       // either running for the stop to reach, or never takes its dropped request. Work a dispatch is
-      // putting through before its turn launched is held, so that turn never starts.
+      // putting through before its turn launched is held, so that turn never starts. A turn that
+      // answers no request, as a carried backpack's, can complete between the drop and the stop, and
+      // the relays its reply wrote then are dropped after the stop: once the stop is saved, it writes none.
       const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
         yield* withThreadLock(
           admission,
           yield* findThread(threadId),
-          dropOwed(threadId, TurnRequests.stoppingAll).pipe(
-            Effect.andThen(stop(threadId)),
-            Effect.andThen(holdDispatch(threadId)),
-          ),
+          Effect.gen(function* () {
+            const reply = yield* runningReply(threadId);
+            const running = reply === null ? null : (yield* Ref.get(reply.current)).id;
+            yield* dropOwed(threadId, TurnRequests.stoppingAll);
+            yield* stop(threadId);
+            if (running !== null) {
+              yield* dropOwed(threadId, (open) => open.filter((request) => request.messageId === running));
+            }
+            yield* holdDispatch(threadId);
+          }),
         );
       });
 
