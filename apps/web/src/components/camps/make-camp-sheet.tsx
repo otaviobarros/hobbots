@@ -7,6 +7,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useReducer } from "react";
 import { useMoveChapter } from "../../api/camp-suggestions.ts";
 import { useMakeCamp } from "../../api/camps.ts";
+import type { ArchiveBlock } from "../archive/archive-rules.ts";
 import { AlongRow, CampField } from "./camp-parts.tsx";
 import {
   type CampDraft,
@@ -31,15 +32,19 @@ export interface CampFrom {
 /**
  * Make a camp (ADR 037): its name, its goal and whether it is private, with the hob's memory always
  * coming along, and the chat's chapter it is made from, which moves into it unless you switch it
- * off. The camp opens once it is made; a failure keeps what you typed and says why.
+ * off. The camp opens once it is made; a failure keeps what you typed and says why. `hold` is why
+ * the chat's chapter cannot move now, as while a reply runs there: the hub refuses the move until it
+ * ends, so Make the camp waits for it, unless you switch the chapter off.
  */
 export function MakeCampSheet({
   hob,
   from,
+  hold = null,
   onClose,
 }: {
   hob: Agent;
   from?: CampFrom | undefined;
+  hold?: ArchiveBlock | null;
   onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(makeCampStep, undefined, () =>
@@ -50,6 +55,8 @@ export function MakeCampSheet({
   const navigate = useNavigate();
   const { draft } = state;
   const saving = state.step === "saving";
+  // The chapter comes along but cannot move yet: Make the camp waits until it can.
+  const held = !saving && from !== undefined && draft.chapter && hold !== null ? hold : null;
   const problems = campProblems(draft);
   // A field's problem shows once it lost focus, or once a send found it.
   const problemOf = (field: keyof CampDraft) => {
@@ -62,7 +69,7 @@ export function MakeCampSheet({
 
   const send = () => {
     // The reducer decides whether it saves and under which key; the request follows its answer.
-    const event: MakeCampEvent = { _tag: "Send", key: ThreadId.make(crypto.randomUUID()) };
+    const event: MakeCampEvent = { _tag: "Send", key: ThreadId.make(crypto.randomUUID()), held: held !== null };
     const next = makeCampStep(state, event);
     dispatch(event);
     if (next.step !== "saving") return;
@@ -144,16 +151,22 @@ export function MakeCampSheet({
               onChange={(value) => edit({ private: value })}
             />
           </fieldset>
-          {state.step === "failed" && (
-            <p role="alert" className="m-0 text-ui text-rose">
-              {copy.errors[state.error]({ name: hob.name })}
+          {held !== null ? (
+            <p role="status" className="m-0 text-ui text-text-secondary">
+              {copy.held[held]({ name: hob.name })}
             </p>
+          ) : (
+            state.step === "failed" && (
+              <p role="alert" className="m-0 text-ui text-rose">
+                {copy.errors[state.error]({ name: hob.name })}
+              </p>
+            )
           )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
               {copy.cancel}
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || held !== null}>
               {saving ? copy.making : copy.make}
             </Button>
           </div>
