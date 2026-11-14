@@ -34,7 +34,7 @@ import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { makeFakeJudgments } from "./fake-judgments.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { mountName } from "./skills.ts";
-import { commandOf, toolLabel, toolRequests, WEB_SEARCH_TOOL } from "./tool-calls.ts";
+import { claudeCodeRuntimeTool, commandOf, toolLabel, toolRequests, WEB_SEARCH_TOOL } from "./tool-calls.ts";
 import { recordSearched } from "./web-search.ts";
 
 /**
@@ -714,7 +714,13 @@ export const scriptedHubEvents = (
           // A tool the turn was not offered never reaches the hub: the runtime refuses it, as Claude
           // Code and Codex do, and the turn reads that it did not run (#1356).
           if (!hub.tools.some((tool) => tool.name === call.name)) {
-            const denied = notOfferedDenial({ id: call.id, tool: call.name, label: call.name, runtimeTool: null });
+            // Its own tools are named as Claude Code names them, so a refused one names its runtime tool.
+            const denied = notOfferedDenial({
+              id: call.id,
+              tool: call.name,
+              label: call.name,
+              runtimeTool: claudeCodeRuntimeTool(call.name),
+            });
             report(denied);
             answers.push(`${call.name}: ${denied.reason}`);
             yield* Queue.end(queue);

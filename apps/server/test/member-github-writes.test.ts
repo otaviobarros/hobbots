@@ -480,6 +480,28 @@ describe("A call to a tool a member's session was not offered (#1356)", () => {
     }
   }, 300_000);
 
+  // covers PE-001, PE-005, ADR 014 (Enforcement)
+  it("[TC-OR-1356-03] a member's command, where its runtime cannot start its sandbox, is refused on its Task naming that, as its lead's delegation does", async () => {
+    const { run } = await startGitHubHub(null, "unavailable");
+    await run(
+      delegate("Rook", [
+        hub("Bash", { command: "pnpm test" }),
+        hub("complete_task", { delivered: false, key: "no-box-done", summary: "Could not run the tests" }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, ROOK)?.state === "completed"));
+    expect(tree.refusals).toEqual([
+      expect.objectContaining({
+        agentId: ROOK,
+        taskId: taskOf(tree, ROOK).id,
+        tool: "Bash",
+        reason: "not-offered",
+        message:
+          "Bash is not offered in this session, so it did not run. It is not offered because Rook's runtime cannot start its sandbox on this hub.",
+      }),
+    ]);
+  }, 60_000);
+
   // covers PE-001, ADR 014 (Enforcement)
   it("[TC-OR-1356-02] a lead's call in chat to a tool its turn was not offered shows as a refused step, recorded on the Task it works on", async () => {
     const { run } = await startGitHubHub();

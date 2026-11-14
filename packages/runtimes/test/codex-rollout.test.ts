@@ -57,6 +57,31 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     ]);
   });
 
+  it("[TC-PE-1356-08] reports each call once when reads overlap, and never reads back past where the last one ended", async () => {
+    const path = join(folder, "overlapping.jsonl");
+    writeFileSync(path, line({ type: "session_meta" }));
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    const refused = (ids: ReadonlyArray<string>) =>
+      ids.map((id) => `${call(id, "github_comment", {})}${output(id, "unsupported call: github_comment")}`).join("");
+    // Codex's requests are answered at once, each reading the rollout first.
+    const overlapping = Effect.all(
+      Array.from({ length: 8 }, () => refusals.read),
+      { concurrency: "unbounded" },
+    );
+    appendFileSync(path, refused(["a-1", "a-2", "a-3"]));
+    await Effect.runPromise(overlapping);
+    appendFileSync(path, refused(["b-1"]));
+    await Effect.runPromise(overlapping);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual([
+      "a-1",
+      "a-2",
+      "a-3",
+      "b-1",
+    ]);
+  });
+
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {

@@ -1,6 +1,6 @@
 import { open, stat } from "node:fs/promises";
 import { notOfferedDenial, type RuntimeEvent, type RuntimeToolName } from "@hobbots/agents";
-import { Effect } from "effect";
+import { Effect, Semaphore } from "effect";
 import { toolLabel } from "../tool-calls.ts";
 
 /**
@@ -74,11 +74,13 @@ const labelOf = (tool: string, runtimeTool: RuntimeToolName | null, call: Respon
  * Reads the calls Codex answered as unsupported from what its thread's rollout gains, as it gains
  * it: the calls of a Codex turn arrive before the hub hears of the model's next call, and those of
  * a call it makes last once the turn has completed. Each read takes the whole lines appended since
- * the last; a call and its output may be read apart.
+ * the last; a call and its output may be read apart. Codex's requests are answered concurrently, so
+ * reads take turns: each one starts where the last ended and reports what it read before the next.
  */
 export const rolloutRefusals = (path: string | null | undefined, report: (event: RuntimeEvent) => void) => {
   const calls = new Map<string, ResponseItem>();
   let offset: number | null = null;
+  const turns = Semaphore.makeUnsafe(1);
   const refusedIn = (lines: ReadonlyArray<string>) => {
     for (const line of lines) {
       const item = itemOf(line);
@@ -121,32 +123,38 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
   };
   return {
     /** Starts reading where the rollout ends now, so only what this turn's run appends is read. */
-    start: Effect.suspend(() =>
-      path == null || offset !== null
-        ? Effect.void
-        : Effect.tryPromise(() => stat(path)).pipe(
-            Effect.map((info) => info.size),
-            Effect.orElseSucceed(() => 0),
-            Effect.flatMap((end) =>
-              Effect.sync(() => {
-                offset = end;
-              }),
+    start: Semaphore.withPermit(
+      turns,
+      Effect.suspend(() =>
+        path == null || offset !== null
+          ? Effect.void
+          : Effect.tryPromise(() => stat(path)).pipe(
+              Effect.map((info) => info.size),
+              Effect.orElseSucceed(() => 0),
+              Effect.flatMap((end) =>
+                Effect.sync(() => {
+                  offset = end;
+                }),
+              ),
             ),
-          ),
+      ),
     ),
     /** Reports the unsupported calls in what the rollout gained since the last read; a rollout it cannot read adds none. */
-    read: Effect.suspend(() => {
-      if (path == null || offset === null) return Effect.void;
-      const from = offset;
-      return Effect.tryPromise(() => appended(path, from)).pipe(
-        Effect.flatMap(({ lines, end }) =>
-          Effect.sync(() => {
-            offset = end;
-            refusedIn(lines);
-          }),
-        ),
-        Effect.orElseSucceed(() => undefined),
-      );
-    }),
+    read: Semaphore.withPermit(
+      turns,
+      Effect.suspend(() => {
+        if (path == null || offset === null) return Effect.void;
+        const from = offset;
+        return Effect.tryPromise(() => appended(path, from)).pipe(
+          Effect.flatMap(({ lines, end }) =>
+            Effect.sync(() => {
+              offset = end;
+              refusedIn(lines);
+            }),
+          ),
+          Effect.orElseSucceed(() => undefined),
+        );
+      }),
+    ),
   };
 };

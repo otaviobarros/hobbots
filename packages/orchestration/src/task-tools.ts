@@ -658,13 +658,15 @@ export class TaskTools extends Context.Service<
              */
             const notOffered = (call: NotOfferedCall) =>
               Effect.gen(function* () {
-                const hob = yield* hobs.findAgent(caller.agentId);
+                const hob = Option.getOrUndefined(yield* hobs.findAgent(caller.agentId));
+                // Its commands also need its runtime's sandbox, as its lead's delegation reads them.
                 const described = yield* describeOffer({
                   agentId: caller.agentId,
                   access: yield* turn.currentAccess,
                   offered: [...offered],
+                  ...(hob === undefined ? {} : { runtime: hob.runtime }),
                 });
-                const who = Option.isSome(hob) ? hob.value.name : "this hob";
+                const who = hob?.name ?? "this hob";
                 return yield* notOfferedRecord(from, call.tool, notOfferedWords(call, described, who));
               });
             return {
