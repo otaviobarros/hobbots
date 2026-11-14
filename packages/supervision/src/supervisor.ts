@@ -14,6 +14,7 @@ import {
   hobStanding,
   isCancellingTask,
   isOverdue,
+  isQueuedTask,
   isTerminalTask,
   liveAttemptOn,
   NoteId,
@@ -159,7 +160,9 @@ export class Supervisor extends Context.Service<
 
         /** Whether `task` is still held by the hob and the Attempt `decided` was. */
         const sameWork = (task: Task, decided: Task) =>
-          task.ownerId === decided.ownerId && task.currentAttemptId === decided.currentAttemptId;
+          task.ownerId === decided.ownerId &&
+          task.currentAttemptId === decided.currentAttemptId &&
+          !isQueuedTask(task.state);
 
         /** Whether `ownerId` and the Task's tree have room for one more open Task, read in the change's transaction. */
         const roomFor = (task: Task) =>

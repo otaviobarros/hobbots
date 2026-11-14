@@ -12,6 +12,7 @@ import {
   isFailedAttempt,
   isFailedTask,
   isOverdue,
+  isQueuedTask,
   isRoutedSupervision,
   isStoppedSupervision,
   isTaskToolName,
@@ -161,6 +162,8 @@ const cleared = (task: Task, record: Supervision, facts: Facts): Act | undefined
 const allowance = (task: Task, attempt: Attempt, record: Supervision, facts: Facts): Act | undefined => {
   if (!isFailedAttempt(attempt.state) || !isUsageLimitOutcome(attempt.outcome)) return undefined;
   if (!isOpen(task) && !isFailedTask(task.state)) return undefined;
+  // A retry queued it again: the hold its usage limit set is released (heldByAllowance).
+  if (isQueuedTask(task.state)) return undefined;
   const reset = usageResetOf(attempt.outcome);
   const reason = `The usage limit of hob ${task.ownerId}'s runtime ended its turn on Task ${task.id}${reset === null ? ", and the provider did not say when it resets" : `; it resets at ${reset}`}. Hobbots stopped it rather than try again before then. Retry it once the limit resets, or reassign it to a hob on another runtime.`;
   const next = after(record, { _tag: "AllowanceOut", at: facts.at, attemptId: attempt.id, reason });

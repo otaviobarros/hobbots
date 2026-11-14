@@ -205,8 +205,8 @@ const model = (f: Fixture): Act["_tag"] | "none" => {
   const refuses = (state: SupervisionState, ...from: ReadonlyArray<SupervisionState>) => !from.includes(state);
   if (fresh) {
     const limited = last.state === "failed" && last.outcome === LIMITED;
-    // Allowance: a usage limit ended its turn.
-    if (limited && (open || f.pageState === "failed") && record.state !== "stopped")
+    // Allowance: a usage limit ended its turn, unless a retry queued it again since.
+    if (limited && f.pageState !== "queued" && (open || f.pageState === "failed") && record.state !== "stopped")
       return f.pageState === "failed" ? "Tell" : "Fail";
     // Unknown outcome: a stop never confirmed, or a step cut off by a restart.
     const unknown =
