@@ -60,6 +60,7 @@ import {
   DeviceRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
+  knownMigrationIds,
   knownSchemaVersion,
   migrations,
   RestoreRepository,
@@ -456,6 +457,20 @@ describe("backup and restore", () => {
     await writeFile(
       join(folder, "manifest.json"),
       JSON.stringify({ ...manifest, schemaVersion: knownSchemaVersion() + 1 }),
+    );
+    await refused(folder, /newer Hobbots/);
+    // A newer Hobbots can add a migration below this one's highest (ADR 040): same schema version,
+    // one id this Hobbots never applied.
+    expect(manifest.migrations).toEqual([...knownMigrationIds()].sort((a, b) => a - b));
+    let unknownId = knownSchemaVersion() - 1;
+    while (knownMigrationIds().has(unknownId)) unknownId--;
+    await writeFile(
+      join(folder, "manifest.json"),
+      JSON.stringify({
+        ...manifest,
+        schemaVersion: knownSchemaVersion(),
+        migrations: [...manifest.migrations, unknownId].sort((a: number, b: number) => a - b),
+      }),
     );
     await refused(folder, /newer Hobbots/);
     await writeFile(join(folder, "manifest.json"), JSON.stringify({ ...manifest, database: "external" }));

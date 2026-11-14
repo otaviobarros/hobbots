@@ -38,3 +38,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [037 — Chat and camps](037-chat-and-camps.md)
 - [038 — Charm writes in Task sessions](038-charm-writes-in-task-sessions.md)
 - [039 — Shared camps with hobs and people](039-shared-camps.md)
+- [040 — Migrations and CI for many pull requests at once](040-parallel-pull-requests.md)

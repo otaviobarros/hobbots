@@ -1,14 +1,20 @@
 name: CI
 
+# A pull request runs the SQLite checks on every push, and the PostgreSQL and browser suites only
+# when its files reach them and it is not a draft (scripts/ci-changes.mjs). A push to `main` and a
+# merge queue's group (`merge_group`) run everything (ADR 040).
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
   push:
     branches: [main]
 
 permissions:
   contents: read
 
-# A new push to a pull request cancels its older run; every push to main gets its own group and result.
+# A new push to a pull request cancels its older run; every push to main and every merge queue
+# group gets its own group and result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
@@ -18,6 +24,27 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
 
 jobs:
+  # Which of the slower suites this run needs (scripts/ci-changes.mjs). A pull request's checkout is
+  # it merged into its base, so its first parent is the base and the difference is the change.
+  changes:
+    name: Find the suites this change reaches
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      database: ${{ steps.suites.outputs.database }}
+      browser: ${{ steps.suites.outputs.browser }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: suites
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft == true }}
+        run: |
+          files=$([[ "$EVENT" == pull_request ]] && git diff --name-only HEAD^1 HEAD || true)
+          node scripts/ci-changes.mjs "$EVENT" "$DRAFT" <<< "$files" | tee -a "$GITHUB_OUTPUT"
+
   # `pnpm check` runs in three jobs side by side: every check but the server suite in one, and the
   # server suite, the longest task, in two shards of its own (#1442). The check the main ruleset
   # requires is the job after them, which passes only when all three pass.
@@ -83,9 +110,12 @@ jobs:
 
   # The PostgreSQL suites run in two shards side by side, each half of every suite's files, so the
   # job takes about as long as the SQLite one (#1066). The check the main ruleset requires is the
-  # job after them, which passes only when both shards pass.
+  # job after them, which passes when both shards pass, or when a pull request reaches no SQL and
+  # skips them; `main` and the merge queue always run them.
   postgres-shards:
     name: Persistence and server tests (PostgreSQL ${{ matrix.shard }}/2)
+    needs: changes
+    if: needs.changes.outputs.database == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -133,23 +163,27 @@ jobs:
 
   postgres:
     name: Persistence and server tests (PostgreSQL)
-    needs: postgres-shards
+    needs: [changes, postgres-shards]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - env:
           RESULT: ${{ needs.postgres-shards.result }}
+          DATABASE: ${{ needs.changes.outputs.database }}
         run: |
           echo "The PostgreSQL shards ended: $RESULT."
-          [[ "$RESULT" == success ]]
+          [[ "$RESULT" == success || ("$RESULT" == skipped && "$DATABASE" == false) ]]
 
   # The browser tests run in eight shards side by side, balanced by recorded test times
   # (apps/web/e2e/shards.ts), with two workers to a runner so each hub and browser gets a CPU
   # (#985). Each shard is a Turbo task with its own cache, so a change that touches neither the web
-  # client nor the server and its packages replays the last result.
+  # client nor the server and its packages replays the last result. A pull request runs them only
+  # when it reaches the web client (scripts/ci-changes.mjs); `main` and the merge queue always do.
   browser-tests:
     name: Browser tests (${{ matrix.shard }}/8)
+    needs: changes
+    if: needs.changes.outputs.browser == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -221,7 +255,7 @@ jobs:
   # limit is raised to fit, as the flake hunt does.
   burn-in:
     name: Burn in changed browser tests
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
