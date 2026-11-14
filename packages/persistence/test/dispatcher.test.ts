@@ -883,6 +883,41 @@ describe("Handing items to a running turn", () => {
     expect(Option.isNone(result.stopped)).toBe(true);
     expect(result.item).toMatchObject({ state: "pending", claim: null });
   });
+
+  // covers IN-003, OR-007
+  it("[TC-IN-1345-05] sends an item back to pending when its hand-off is interrupted while it is still being delivered", async () => {
+    // The hand-off is interrupted once the item is claimed and while it is being delivered, before
+    // it reaches the runtime, as a slow database lets happen.
+    const delivering = Deferred.makeUnsafe<void>();
+    const SlowDelivery = Layer.effect(
+      Backpack,
+      Effect.map(Effect.service(Backpack), (backpack) =>
+        Backpack.of({
+          ...backpack,
+          deliver: (...args) =>
+            Deferred.succeed(delivering, undefined).pipe(
+              Effect.andThen(Effect.sleep("50 millis")),
+              Effect.andThen(backpack.deliver(...args)),
+            ),
+        }),
+      ),
+    );
+    const slow = Dispatcher.layer(LIMITS).pipe(
+      Layer.provide(Host),
+      Layer.provide(SlowDelivery),
+      Layer.provideMerge(Stores),
+    );
+    const item = await Effect.gen(function* () {
+      const { item } = yield* campaign;
+      const dispatcher = yield* Dispatcher;
+      const handing = yield* Effect.forkChild(dispatcher.handToLive([item.id], turn, () => Effect.never));
+      yield* Deferred.await(delivering);
+      yield* Fiber.interrupt(handing);
+      return yield* Effect.flatMap(Effect.service(Backpack), (backpack) => backpack.find(item.id));
+    }).pipe(Effect.provide(slow), Effect.runPromise);
+
+    expect(item).toMatchObject({ state: "pending", claim: null });
+  });
 });
 
 const silentTurn =
