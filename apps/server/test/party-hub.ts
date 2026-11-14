@@ -52,6 +52,7 @@ import {
   ChapterRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
+  SupervisionRecordsLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
   UsageLedger,
@@ -59,6 +60,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import type { HubCallRuntime, ScriptedHubCall } from "@hobbots/runtimes/testing";
+import { Supervisor } from "@hobbots/supervision";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
@@ -257,6 +259,8 @@ export const partyHub = (
     readonly chapters?: boolean;
     /** The installed runtime every turn runs on instead of the fake, with its stand-in model (STD-TEST-002). */
     readonly turnsOn?: HubCallRuntime;
+    /** Whether the supervisor (#1447) looks over the work, each time a test calls its `pass`. */
+    readonly supervisor?: boolean;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -368,7 +372,14 @@ export const partyHub = (
     }
   });
 
-  const app = Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
+  const app = Layer.mergeAll(
+    WakeOnArrival,
+    HobLifecycle.layer,
+    TaskControls.layer,
+    options.supervisor === true
+      ? Supervisor.layer({ every: null }).pipe(Layer.provideMerge(SupervisionRecordsLive))
+      : Layer.empty,
+  ).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
     Layer.provideMerge(

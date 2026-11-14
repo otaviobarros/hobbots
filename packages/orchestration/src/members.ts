@@ -26,6 +26,7 @@ import {
   type AttemptId,
   AttemptId as AttemptIdSchema,
   type Committed,
+  isOverdue,
   isTerminalTask,
   liveAttemptOn,
   pausedHolder,
@@ -451,8 +452,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         // An Attempt still live on the Task holds it: no turn starts until that one ends, which
         // wakes the runner again (ADR 019).
         if (liveAttemptOn(task, tree)) return;
-        // Nothing starts on work you paused until you resume it (#1446).
-        if (pausedHolder(task, tree.tasks) !== undefined) return;
+        // Nothing starts on work you paused until you resume it (#1446), nor on work past its
+        // deadline, which the supervisor stops (#1447).
+        if (pausedHolder(task, tree.tasks) !== undefined || isOverdue(task, tree, yield* nowIso)) return;
         // Its work waits, queued, until every Task it comes after has completed: that completion
         // wakes the runner again, as it does for a step (ADR 018).
         if (TaskReadiness.of(task, tree.tasks)._tag !== "Ready") return;

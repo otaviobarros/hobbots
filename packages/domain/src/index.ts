@@ -75,6 +75,7 @@ export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export * from "./steering.ts";
 export * from "./summoning.ts";
+export * from "./supervision.ts";
 export * from "./task.ts";
 export * from "./task-files.ts";
 export * from "./task-tools.ts";

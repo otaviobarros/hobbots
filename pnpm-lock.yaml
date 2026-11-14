@@ -289,6 +289,9 @@ importers:
       '@hobbots/skills':
         specifier: workspace:*
         version: link:../../packages/skills
+      '@hobbots/supervision':
+        specifier: workspace:*
+        version: link:../../packages/supervision
       '@hobbots/web-access':
         specifier: workspace:*
         version: link:../../packages/web-access
@@ -760,6 +763,28 @@ importers:
       yazl:
         specifier: 3.3.1
         version: 3.3.1
+
+  packages/supervision:
+    dependencies:
+      '@hobbots/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@hobbots/domain':
+        specifier: workspace:*
+        version: link:../domain
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.0
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.5
+        version: 26.6.5
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/ui:
     dependencies:

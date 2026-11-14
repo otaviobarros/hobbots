@@ -9,6 +9,7 @@ import {
   type CheckpointKind,
   DEFAULT_QUEST_LIMITS,
   HandOff,
+  HUB_ACTOR,
   IDLE_QUEST,
   type JournaledEvent,
   NoteId,
@@ -311,6 +312,25 @@ describe("backpackItemsFor", () => {
       expect(lateness(held, tasks)).toBeNull();
       expect(arrivalsText([held], "prompt")).toContain(`The user left a note about Task ${step.id}: Shorter`);
     }
+  });
+
+  // covers IN-004, OR-005
+  it("[TC-IN-1447-01] names Hobbots, not you, as the author of a note the supervisor left", () => {
+    const note = new TaskNote({
+      id: NoteId.make("supervisor:copy:deadline"),
+      taskId: copy.id,
+      recipientId: ALDRIC,
+      text: "It passed its deadline",
+      createdAt: at,
+      revision: 4,
+      author: HUB_ACTOR,
+    });
+    const [item] = backpackItemsFor([{ _tag: "NoteLeft", note }], context);
+    expect(item).toMatchObject({ payload: { _tag: "message", byHub: true, text: "It passed its deadline" } });
+    const held = { ...item, kind: "message", actionable: true } as unknown as BackpackItem;
+    const text = arrivalsText([held], "prompt");
+    expect(text).toContain("Hobbots left a note about Task copy: It passed its deadline");
+    expect(text).not.toContain("The user left a note");
   });
 
   it("keys an item from a tool call by the call's key and the item's role in it", () => {

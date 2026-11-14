@@ -62,6 +62,7 @@ export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export { nextSteps } from "./steps.ts";
 export * from "./summoning.ts";
+export * from "./supervision-records.ts";
 export * from "./task-files.ts";
 export * from "./task-turns.ts";
 export * from "./tasks.ts";

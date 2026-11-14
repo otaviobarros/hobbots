@@ -231,6 +231,8 @@ const noteLeft: Rule<"NoteLeft"> = ({ note }, trees) => {
         noteId: note.id,
         // A note that may reach a running turn says how, so the runner can hand it to that turn (#1345).
         ...(note.delivery === "next-turn" ? {} : { delivery: note.delivery }),
+        // One Hobbots wrote is never told to its hob as yours (#1447).
+        ...(note.author?.kind === "hub" ? { byHub: true as const } : {}),
       },
       record: `note:${note.id}`,
       version: null,

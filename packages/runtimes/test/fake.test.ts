@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   FAKE_DIRECTIVES,
   FAKE_FAIL_DIRECTIVE,
+  FAKE_LIMIT_DIRECTIVE,
   FAKE_ONCE_DIRECTIVE,
   fakeCutOffError,
   fakeInstructionsPrompt,
@@ -88,6 +89,11 @@ describe("fake runtime", () => {
       .pipe(Stream.runCollect, Effect.flip, Effect.runPromise);
     expect(error).toBeInstanceOf(RuntimeLimitReached);
     expect(error._tag === "RuntimeLimitReached" && error.resetsAt).toMatch(/^\d{4}-/);
+    // A line of its own anywhere in the prompt does too, so a step's or member's brief can (#1447).
+    const later = await makeFakeRuntime()
+      .sendPrompt(request(`Write the notes\n  ${FAKE_LIMIT_DIRECTIVE}  \nmore`))
+      .pipe(Stream.runCollect, Effect.flip, Effect.runPromise);
+    expect(later).toBeInstanceOf(RuntimeLimitReached);
   });
 
   it("refuses turns while it reports a brain that is not ready", async () => {

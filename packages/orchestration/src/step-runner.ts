@@ -32,6 +32,8 @@ import {
   CheckpointId,
   type Committed,
   carriedFrom,
+  HUB_STOPPED_OUTCOME,
+  isOverdue,
   isTerminalTask,
   liveAttemptOn,
   pausedHolder,
@@ -454,6 +456,10 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
        * member's Task where work waits. A step that returned its result keeps running until its
        * session ends.
        */
+      /** Nothing starts under a Task you paused, until you resume it (#1446), nor on work past its deadline (#1447). */
+      const startable = (step: Task, tree: TaskTree) =>
+        Effect.map(nowIso, (now) => pausedHolder(step, tree.tasks) === undefined && !isOverdue(step, tree, now));
+
       const round: Effect.Effect<void> = Effect.gen(function* () {
         for (const [id, run] of running) {
           const task = yield* currentTask(id);
@@ -475,8 +481,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
-          // Nothing starts under a Task you paused, until you resume it (#1446).
-          if (pausedHolder(step, tree.tasks) !== undefined) continue;
+          if (!(yield* startable(step, tree))) continue;
           // A step starts once every step it comes after has completed (ADR 018).
           if (TaskReadiness.of(step, tree.tasks)._tag === "Ready") yield* start(step, tree);
         }
@@ -493,7 +498,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         yield* recover(
           tasks.updateAttempt(live.id, {
             _tag: "Ended",
-            end: { _tag: "Stopped", reason: "Hobbots stopped while this ran." },
+            end: { _tag: "Stopped", reason: HUB_STOPPED_OUTCOME },
             at,
           }),
           "end an Attempt left from before a restart",
@@ -508,11 +513,11 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       yield* Effect.forkScoped(Effect.forever(Effect.andThen(signal.next, round)));
       yield* signal.notify;
 
-      const stopWhere = (reason: StopReason, matches: (run: Running) => Effect.Effect<boolean>) =>
+      const stopWhere = (reason: StopReason, matches: (run: Running, taskId: TaskId) => Effect.Effect<boolean>) =>
         Effect.gen(function* () {
           const chosen = yield* Semaphore.withPermit(
             authority,
-            Effect.suspend(() => Effect.filter(Array.from(running), ([, run]) => matches(run))).pipe(
+            Effect.suspend(() => Effect.filter(Array.from(running), ([id, run]) => matches(run, id))).pipe(
               Effect.tap((found) =>
                 Effect.sync(() => {
                   for (const [, run] of found) run.stop = reason;
@@ -536,6 +541,10 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   narrows(run.access, access),
                 ),
           ),
+        stopOverdue: (taskIds) => {
+          const overdue = new Set<TaskId>(taskIds);
+          return stopWhere("deadline", (_, taskId) => Effect.succeed(overdue.has(taskId)));
+        },
       });
     }),
   );
