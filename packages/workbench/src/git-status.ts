@@ -429,6 +429,12 @@ const refNamed = (ref: string): boolean => {
   return ref.split("/").every((name) => name !== "" && !name.startsWith(".") && !name.endsWith(".lock"));
 };
 
+/** What closes the loose ref `names` that is there: the file, or for a link, its folder, since a write may go through it. */
+const looseClosed = async (base: string, names: ReadonlyArray<string>): Promise<Array<string>> =>
+  (await lstat(join(base, ...names)).catch(() => null))?.isSymbolicLink() === true
+    ? await closedAround(base, [...names, ""])
+    : [join(base, ...names)];
+
 /** The files whose change moves ref `ref` (`refs/...`), from `depth` symbolic refs away (see `branchFiles`). */
 const refFiles = async (places: RefPlaces, ref: string, depth: number): Promise<Array<string>> => {
   // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
@@ -445,12 +451,7 @@ const refFiles = async (places: RefPlaces, ref: string, depth: number): Promise<
   }
   if (await present(loose)) {
     const target = depth < MAX_SYMBOLIC_DEPTH ? await symbolicTarget(loose).catch(() => null) : null;
-    // A link as the ref itself is closed with its folder, since a write may go through it.
-    const link = (await lstat(loose).catch(() => null))?.isSymbolicLink() === true;
-    return [
-      ...(link ? await closedAround(base, [...names, ""]) : [loose]),
-      ...(target === null ? [] : await refFiles(places, target, depth + 1)),
-    ];
+    return [...(await looseClosed(base, names)), ...(target === null ? [] : await refFiles(places, target, depth + 1))];
   }
   // A ref a symbolic branch names moves the branch once made, and a packed branch whose loose ref
   // could not be written back moves through a file not closed yet: close around either. A branch
