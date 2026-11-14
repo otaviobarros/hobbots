@@ -337,4 +337,48 @@ describe("thread members", () => {
     }
     expect(result.members.map((member) => member.state)).toEqual(["active", "active"]);
   });
+  // covers ADR 039 (The sidebar, read markers per member)
+  it("[TC-PE-1469-01] counts each person's unread replies per thread for them alone, and clears them as they read", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        const sql = yield* SqlClient.SqlClient;
+        yield* repo.insertAgent(hob(ALDRIC));
+        yield* sql`INSERT INTO users ${sql.insert({ id: "bruna", name: "Bruna", initials: "B", color: "moss", state: "active" })}`;
+        yield* repo.makeCamp(thread(CAMP, "camp"));
+        yield* Effect.flatMap(ThreadMemberRepository, (repository) => repository.add(CAMP, BRUNA, OWNER_ACTOR));
+        const reply = (id: string, content: string) =>
+          repo.upsertMessage(
+            new Message({
+              id: MessageId.make(id),
+              threadId: CAMP,
+              role: "assistant",
+              actor: null,
+              content,
+              status: "complete",
+              error: null,
+              configVersion: 1 as Message["configVersion"],
+              createdAt: NOW,
+            }),
+          );
+        yield* reply("one", "First.");
+        // A blank reply is not one to read.
+        yield* reply("blank", "  ");
+        const last = yield* reply("two", "Second.");
+        const unread = (actor: Actor) =>
+          Effect.flatMap(ThreadMemberRepository, (repository) => repository.unreadReplies(actor));
+        const before = { owner: yield* unread(OWNER_ACTOR), bruna: yield* unread(BRUNA) };
+        yield* repo
+          .markThreadRead(CAMP, last.value.id, last.value.revision)
+          .pipe(Effect.provideService(UserSession, brunaSession));
+        const after = { owner: yield* unread(OWNER_ACTOR), bruna: yield* unread(BRUNA) };
+        return { before, after };
+      }),
+    );
+    expect(result.before).toEqual({
+      owner: [{ threadId: CAMP, count: 2 }],
+      bruna: [{ threadId: CAMP, count: 2 }],
+    });
+    expect(result.after).toEqual({ owner: [{ threadId: CAMP, count: 2 }], bruna: [] });
+  });
 });

@@ -35,6 +35,7 @@ import { DeviceGate } from "./devices.ts";
 import { DiagnosticsHandlers } from "./diagnostics.ts";
 import { ExportsHandlers } from "./exports.ts";
 import { ForYouHandlers } from "./for-you.ts";
+import { SidebarHandlers } from "./sidebar.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobChangesHandlers } from "./hob-changes.ts";
@@ -275,6 +276,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     CampSuggestionsHandlers,
     NotesHandlers,
     ForYouHandlers,
+    SidebarHandlers,
     ClaimsHandlers,
     SystemHandlers,
     SetupHandlers,
