@@ -33,3 +33,18 @@ Read the [MVP requirements](docs/product/mvp-requirements.md) and [open question
 ## Workflow
 
 The [project workflow guide](docs/agent-engineering.md) says where each authority lives and lists the checks. It routes each task to an agent-engineering skill: `deliver-change` for a full implementation, or the phase skill for a narrower request. The task's own limits and this file govern. If a skill is missing, report it. This file does not authorize you to install plugins, commit, push or publish.
+
+## Review guidelines
+
+This is a public open-source project, so be strict about what reaches main. Check the change against [the standards](docs/standards/README.md) and cite the rule ID in each finding. Mark a breach of a rule as P1. A preference that no rule backs is not a finding.
+
+- Bugs come first: reachable failures, wrong state transitions, races, lost work on restart, duplicate delivery on retry, and missing error handling. Trace callers and callees beyond the diff when the bug depends on them.
+- Security: untrusted input from hobs, models, files, Git or HTTP crossing a trust boundary, leaked secrets, missing permission checks and data exposure ([security](docs/standards/security.md)).
+- Proper tooling: a hand-rolled parser, validator, retry loop, timer, cache or queue where an established library or Effect module already does the job (STD-DUP-007). A new helper that duplicates an existing one (STD-DUP-001).
+- Unnecessary complexity: speculative abstractions, options nobody uses, functions over cyclomatic complexity 15 (STD-ARCH-012), dead code (STD-DUP-005) and copied blocks (STD-DUP-006). Name the simpler form that keeps the behavior.
+- Runtime parity: a change to how hobs run, resume, stop, use tools or ask for permission covers Claude Code, Codex and the fake runtime, with a test for each, or says why one does not apply.
+- Dependencies are pinned to exact versions (STD-DOCS-006). Effect packages use `catalog:` and the catalog pins the exact version (STD-EFFECT-005).
+- A new migration comes from `pnpm migration:new` and is named by its UTC second ([ADR 040](docs/decisions/040-parallel-pull-requests.md)). Never renumber an existing one.
+- Commit messages and the PR description carry no attribution footer, such as "Generated with" or "Co-Authored-By" for an AI tool.
+- Scope: flag changes beyond what the linked issue asks (STD-DOCS-008), and a contract or ADR the change leaves out of date.
+- Skip formatting that Biome enforces. Each finding states the trigger, the wrong result, its impact and the fix.
