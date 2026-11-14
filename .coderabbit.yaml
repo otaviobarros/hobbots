@@ -366,6 +366,13 @@ reviews:
           `<14-digit UTC timestamp>_<name>.ts`, renames or renumbers an existing migration, or
           changes the body of a migration that exists on the base branch (ADR 040). Pass when no
           migration changed.
+      - name: No open serious review findings
+        mode: error
+        instructions: >-
+          Fail when any review thread CodeRabbit started on this PR has severity Critical or Major
+          and is not addressed: its code status is not `addressed`, or it is a new finding from the
+          latest review. Name each such thread with its file and line. Pass otherwise. Minor,
+          Trivial and Info findings never fail this check.
       - name: Closes its issue and keeps contracts current
         mode: warning
         instructions: >-
@@ -426,14 +433,24 @@ knowledge_base:
     enabled: true
   code_guidelines:
     enabled: true
+    # A guideline file under docs/ applies only to docs/ unless applyTo maps it to the code it governs.
     filePatterns:
       - "AGENTS.md"
       - "**/CLAUDE.md"
       - "CONTRIBUTING.md"
-      - "docs/agent-engineering.md"
-      - "docs/standards/*.md"
-      - "docs/product/glossary.md"
-      - ".agents/skills/hobbots-standards/SKILL.md"
+      - files: "docs/agent-engineering.md, docs/product/glossary.md, docs/standards/README.md"
+        applyTo: "**"
+      - files: "docs/standards/architecture.md, docs/standards/duplication.md, docs/standards/security.md, docs/standards/testing.md, docs/standards/docs.md"
+        applyTo: "**"
+      - files: "docs/standards/effect.md, docs/standards/data.md"
+        applyTo: "apps/server/**, packages/**"
+      - files: "docs/standards/react.md, docs/standards/ui.md, docs/standards/i18n.md"
+        applyTo: "apps/web/**, apps/desktop/**, packages/ui/**"
+      - files: "docs/standards/desktop.md"
+        applyTo: "apps/desktop/**"
+      # The review method of the agent-engineering skills, read from that repository's default branch.
+      - files: "agent-engineering:references/review.md, agent-engineering:skills/review-change/SKILL.md"
+        applyTo: "**"
   learnings:
     scope: auto
   issues:
