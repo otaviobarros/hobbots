@@ -177,6 +177,14 @@ A field that says who did something, such as `requestedBy`, `addedBy` or `author
 - **Enforced by:** `checkRecords` in `scripts/owner-actor.mjs`, run by `scripts/check-standards.mjs` and `pnpm lint:actor`, which fails on a schema field whose name ends in `By` (or is `author`, `actor`, `creator`, `requester`) and whose schema is a bare `UserId`, `AgentId` or `HobId`. The two fields that predate the rule are listed in `KNOWN_BARE_AUTHORS`, and that list only shrinks. Review covers the rest.
 - **Applies to:** `packages/*`, `apps/*`.
 
+### STD-ARCH-021 A turn names its speaker, never the thread's hob
+
+A camp has one floor and many speakers (ADR 039), so a thread's `agentId` means one thing: the hob the thread belongs to, for listing, ownership, its lock and its own default answerer. Code that asks which hob a turn, a reply or a message is for never answers with it. Inside a turn, the hob is the turn's `Speaker` (`packages/agents/src/speaker.ts`): its thread, line, hob, reason and role. Outside one, it is the run's `speaking`, or the message's author through `authorOf` and `replyHobOf` (`packages/domain/src/message.ts`), the one place a message not stored yet falls back to the thread's hob.
+
+- **Why:** #1461 turned one hob per thread into one floor with many speakers, and about seventeen review findings on it were code that still read the turn's hob from `thread.agentId`.
+- **Enforced by:** `scripts/speaker.mjs`, run by `pnpm lint:speaker`, which fails on every read of `agentId` from a thread in `packages/agents/src` and `apps/server/src`. A read that means the owner says so with `// standards-allow STD-ARCH-021: <reason>` on its line or the line above. Review covers the web app, which reads authors through `replyHobOf`.
+- **Applies to:** `packages/agents`, `apps/server`, `apps/web`.
+
 ## Guidance
 
 - Add a DTO or a mapping layer only where a boundary needs a different shape. Pass Schemas through otherwise.

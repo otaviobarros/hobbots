@@ -84,6 +84,7 @@ export class Notes extends Context.Service<
       // order and no archive lands between the check and the write.
       const write = (threadId: ThreadId, key: MessageId, content: string) =>
         Effect.flatMap(threadOf(threadId), (thread) =>
+          // standards-allow STD-ARCH-021: the camp's lock is its owner's
           admission.withHob(thread.agentId, writeIn(threadId, key, content)),
         );
 

@@ -59,6 +59,7 @@ import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
 import { mentionedSkill, namedSkills } from "./skill-turn.ts";
+import { speakerIn } from "./speaker.ts";
 import { uncertainCalls } from "./steps.ts";
 import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
@@ -478,11 +479,13 @@ export class ChatService extends Context.Service<
         body: (thread: Thread, agent: Agent) => Effect.Effect<A, E, R>,
       ) =>
         Effect.gen(function* () {
+          // standards-allow STD-ARCH-021: the camp's lock is its owner's
           const { agentId } = yield* findThread(threadId);
           return yield* admission.withHob(
             agentId,
             Effect.gen(function* () {
               const thread = yield* findThread(threadId);
+              // standards-allow STD-ARCH-021: the hob the thread belongs to, its default answerer
               const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
               return yield* body(thread, agent);
             }),
@@ -635,16 +638,19 @@ export class ChatService extends Context.Service<
               return { userMessage: saved, assistantMessage: null };
             }
             // The first hob it is owed by takes the floor at once; the others wait their turn.
-            const begun = yield* beginTurn(thread, speaker.agent, saved, (reply) => saveSpeaking(reply, [first.id]), {
-              slot: speaker.slot,
-              reason: { cause: first.cause, by: first.causedBy },
-            });
+            const begun = yield* beginTurn(
+              speakerIn(thread, speaker.agent, { cause: first.cause, by: first.causedBy }),
+              saved,
+              (reply) => saveSpeaking(reply, [first.id]),
+              { slot: speaker.slot },
+            );
             return { userMessage: saved, assistantMessage: begun?.saved ?? null };
           }),
         );
       });
 
       const removeQueued = Effect.fn("ChatService.removeQueued")(function* (threadId: ThreadId, messageId: MessageId) {
+        // standards-allow STD-ARCH-021: the camp's lock is its owner's
         const { agentId } = yield* findThread(threadId);
         yield* admission.withHob(
           agentId,
@@ -661,6 +667,7 @@ export class ChatService extends Context.Service<
 
       // The choice is held in memory: after a restart the queue simply keeps its order.
       const sendNow = Effect.fn("ChatService.sendNow")(function* (threadId: ThreadId, messageId: MessageId) {
+        // standards-allow STD-ARCH-021: the camp's lock is its owner's
         const { agentId } = yield* findThread(threadId);
         yield* admission.withHob(
           agentId,
@@ -697,9 +704,9 @@ export class ChatService extends Context.Service<
         );
         // Work the turn carried waits for you instead of starting again on its own.
         // The hob held is the one this reply's run named, read before the stop: by now its turn may
-        // have ended, or another started.
-        if (Option.isSome(requested) && reply.carries) {
-          yield* step(threadId, { _tag: "Hold", hobId: run.speaking ?? (yield* findThread(threadId)).agentId });
+        // have ended, or another started. A run with a reply always names its speaker.
+        if (Option.isSome(requested) && reply.carries && run.speaking !== null) {
+          yield* step(threadId, { _tag: "Hold", hobId: run.speaking });
         }
         if (Option.isNone(requested)) return;
         // The turn's request, and those its mentions caused, are dropped with it; a person's stay.
@@ -721,6 +728,7 @@ export class ChatService extends Context.Service<
       // either running for the stop to reach, or never takes its dropped request. Work a dispatch is
       // putting through before its turn launched is held, so that turn never starts.
       const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
+        // standards-allow STD-ARCH-021: the camp's lock is its owner's
         const { agentId } = yield* findThread(threadId);
         yield* admission.withHob(
           agentId,
@@ -785,7 +793,7 @@ export class ChatService extends Context.Service<
             const saved = yield* saveMessage(
               new Message({ ...resumed, configVersion: config.version, runtime: brain.runtime, model: brain.model }),
             ).pipe(Effect.onError(() => slot.release));
-            yield* launch(agent, config, thread, continuePrompt(message), saved, null, message, { slot });
+            yield* launch(speakerIn(thread, agent), config, continuePrompt(message), saved, null, message, { slot });
             return saved;
           }),
         );
@@ -833,7 +841,10 @@ export class ChatService extends Context.Service<
         // A hob that wakes takes up its work in its threads.
         const threads = yield* threadsWaiting(agentId);
         const own = yield* Effect.filter(threads, (threadId) =>
-          repo.findThread(threadId).pipe(Effect.map((t) => Option.isSome(t) && t.value.agentId === agentId)),
+          repo.findThread(threadId).pipe(
+            // standards-allow STD-ARCH-021: a hob that wakes takes up the threads it owns
+            Effect.map((thread) => Option.isSome(thread) && thread.value.agentId === agentId),
+          ),
         );
         // And the requests it owes in camps it joined, which wait for it there.
         const owed = yield* Effect.filter(threads, (threadId) =>
@@ -862,9 +873,12 @@ export class ChatService extends Context.Service<
           if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
           const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
           const live = transcript.filter((m) => m.chapterId === thread.value.liveChapterId);
-          const people = yield* packPeople(thread.value, thread.value.agentId);
+          // The pack shown is the one the hob the thread belongs to would start its next session from.
+          // standards-allow STD-ARCH-021: the dev view shows the owner's pack, not a turn's
+          const owner = thread.value.agentId;
+          const people = yield* packPeople({ thread: thread.value, agent: { id: owner } });
           const sources = yield* packSources(thread.value, live, transcript, people, null);
-          const agent = yield* repo.findAgent(thread.value.agentId);
+          const agent = yield* repo.findAgent(owner);
           const memory = Option.isNone(agent)
             ? null
             : yield* inputs.memoryBriefFor(agent.value, yield* hobTools.access(agent.value), undefined);

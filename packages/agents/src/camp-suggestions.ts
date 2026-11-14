@@ -103,6 +103,7 @@ export class CampSuggestionService extends Context.Service<
           Effect.gen(function* () {
             const thread = yield* threadOf(threadId);
             const committed = yield* admission.withHob(
+              // standards-allow STD-ARCH-021: the camp's lock is its owner's
               thread.agentId,
               DateTime.now.pipe(
                 Effect.flatMap((now) => suggestions.keep(threadId, suggestionId, DateTime.formatIso(now))),

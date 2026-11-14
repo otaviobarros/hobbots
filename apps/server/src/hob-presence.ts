@@ -9,7 +9,6 @@ import {
   leadsNeedingYou,
   type ReplyActivity,
   type ThreadId,
-  type ThreadRunStatus,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { Context, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule } from "effect";
@@ -37,24 +36,19 @@ const CHANGES_PRESENCE: ReadonlySet<string> = new Set([
 const changesPresence = (event: BusEvent) =>
   event._tag === "Journaled" ? CHANGES_PRESENCE.has(event.entry.payload._tag) : event.event._tag === "ThreadRunChanged";
 
-/** The chats whose hob a presence needs to know: those with a run, and those something waits on you in. */
+/** The chats whose hob a presence needs to know: those something waits on you in. */
 const chatsToOwn = ({
-  runs,
   pending,
   blockers,
   failed,
 }: {
-  readonly runs: ReadonlyArray<Pick<ThreadRunStatus, "threadId">>;
   readonly pending: ReadonlyArray<Pick<ApprovalRequest, "threadId">>;
   readonly blockers: ReadonlyArray<Pick<BackpackItem, "threadId">>;
   readonly failed: ReadonlyArray<FailedTask>;
 }): ReadonlyArray<ThreadId> => {
-  const ids = [
-    ...runs.map((run) => run.threadId),
-    ...[...pending, ...blockers, ...failed.map(({ task }) => task)].flatMap((each) =>
-      each.threadId === null ? [] : [each.threadId],
-    ),
-  ];
+  const ids = [...pending, ...blockers, ...failed.map(({ task }) => task)].flatMap((each) =>
+    each.threadId === null ? [] : [each.threadId],
+  );
   return [...new Set(ids)];
 };
 
@@ -133,11 +127,15 @@ export class HobPresences extends Context.Service<
           tasks.listWaitingQuestions,
           tasks.listFailedTasks,
         ]);
-        const chats = chatsToOwn({ runs, pending, blockers, failed });
+        const chats = chatsToOwn({ pending, blockers, failed });
         const owners = new Map(
           yield* Effect.forEach(chats, (threadId) =>
             Effect.map(repo.findThread(threadId), (thread) =>
-              Option.match(thread, { onNone: () => [], onSome: (found) => [[threadId, found.agentId] as const] }),
+              Option.match(thread, {
+                onNone: () => [],
+                // standards-allow STD-ARCH-021: what a chat waits on asks for the hob it belongs to
+                onSome: (found) => [[threadId, found.agentId] as const],
+              }),
             ),
           ).pipe(Effect.map((pairs) => pairs.flat())),
         );
@@ -148,11 +146,10 @@ export class HobPresences extends Context.Service<
           failed,
           leadOf: (threadId) => owners.get(threadId),
         });
-        // A running reply is the hob's that holds the floor, in a camp it joined too (ADR 039).
+        // A running reply is the hob's that holds the floor, in a camp it joined too (ADR 039): a run
+        // with a reply always names its speaker.
         const replies = (agentId: AgentId): ReadonlyArray<ReplyActivity> =>
-          runs.flatMap((run) =>
-            run.reply !== null && (run.speaking ?? owners.get(run.threadId)) === agentId ? [run.reply] : [],
-          );
+          runs.flatMap((run) => (run.reply !== null && run.speaking === agentId ? [run.reply] : []));
         return hobs.map((hob) => ({
           agentId: hob.id,
           state: hobPresenceState({ status: hob.status, needsYou: needsYou.has(hob.id), replies: replies(hob.id) }),

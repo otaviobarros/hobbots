@@ -83,6 +83,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-ARCH-018 | A turn reads records, not the transcript | Active |
 | STD-ARCH-019 | Records move, and every author is named | Active |
 | STD-ARCH-020 | A record names who did something with an Actor | Active |
+| STD-ARCH-021 | A turn names its speaker, never the thread's hob | Active |
 | STD-DUP-001 | Search before writing | Active |
 | STD-DUP-002 | Extract logic at its second real copy | Active |
 | STD-DUP-003 | Shared code lives in the layer that owns it | Active |

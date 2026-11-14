@@ -1,7 +1,7 @@
 import { AgentNotFound, type ExportFailed, type ExportResult, type InvalidFolder, ThreadNotFound } from "@hobbots/api";
 import {
   type Agent,
-  AgentId,
+  type AgentId,
   type ArtifactNotCopied,
   type ArtifactRef,
   EXPORT_FORMAT,
@@ -23,6 +23,7 @@ import {
   type MemoryScope,
   type Message,
   type Quest,
+  replyHobOf,
   safeFileName,
   type Task,
   type TaskTree,
@@ -92,13 +93,11 @@ const exportedHob = (agent: Agent): ExportedHob => ({
   status: agent.status,
 });
 
-// A reply's author is the hob that wrote it, which in a camp may be a member (ADR 039); a reply
-// saved before authors were recorded is the thread's hob's.
-const exportedMessage = (message: Message, agentId: AgentId): ExportedMessage => ({
+// A reply's author is the hob that wrote it, which in a camp may be a member (ADR 039).
+const exportedMessage = (message: Message, thread: Thread): ExportedMessage => ({
   id: message.id,
   role: message.role,
-  authorId:
-    message.role !== "assistant" ? null : message.actor?.kind === "hob" ? AgentId.make(message.actor.id) : agentId,
+  authorId: replyHobOf(message, thread),
   content: message.content,
   status: message.status,
   error: message.error,
@@ -480,6 +479,7 @@ export class DataExport extends Context.Service<
           trees: ReadonlyArray<ExportedTree>,
         ) => {
           if (scope._tag === "Everything") return gathered.hobs;
+          // standards-allow STD-ARCH-021: an export names whose threads it holds
           const named = new Set<string>(gathered.threads.map((thread) => thread.agentId));
           for (const thread of threads) {
             for (const message of thread.messages) if (message.authorId !== null) named.add(message.authorId);
@@ -503,6 +503,7 @@ export class DataExport extends Context.Service<
                 repo.listMessages(thread.id),
                 (messages): ExportedThread => ({
                   id: thread.id,
+                  // standards-allow STD-ARCH-021: an export names whose thread it is
                   agentId: thread.agentId,
                   title: thread.title,
                   createdAt: thread.createdAt,
@@ -511,7 +512,7 @@ export class DataExport extends Context.Service<
                   file: "",
                   messages: messages
                     .filter((message) => message.status !== "queued")
-                    .map((message) => exportedMessage(message, thread.agentId)),
+                    .map((message) => exportedMessage(message, thread)),
                 }),
               ),
             );

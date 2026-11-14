@@ -45,7 +45,38 @@ const idKey = (declaration) => {
   return fromType ?? idKeyOf(init.callee.name, init.typeArguments);
 };
 
-const OPT_OUT = new RegExp(`^\\s*standards-allow ${RULE}:\\s*\\S`);
+/**
+ * The lines an opt-out of `rule` covers: a real comment, with a reason, ending on a line or the line
+ * above it. Shared with the speaker check (scripts/speaker.mjs).
+ */
+export const optOutLines = (text, comments, rule) => {
+  const optOut = new RegExp(`^\\s*standards-allow ${rule}:\\s*\\S`);
+  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
+  const ends = (comments ?? []).filter((comment) => optOut.test(comment.value)).map((comment) => lineOf(comment.end));
+  return { has: (line) => ends.includes(line) || ends.includes(line - 1) };
+};
+
+/**
+ * A file's syntax tree, how to find a node's line, and the lines an opt-out of `rule` covers; null
+ * when the file does not parse.
+ */
+export const parsedWithOptOuts = (file, text, rule) => {
+  const { program, errors, comments } = parseSync(file, text);
+  if (errors.length > 0) return null;
+  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
+  return { program, lineOf, optedOut: optOutLines(text, comments, rule) };
+};
+
+/** Calls `visit` on every node under `root`, parents first. */
+export const eachNode = (root, visit) => {
+  if (root === null || typeof root !== "object" || typeof root.type !== "string") return;
+  visit(root);
+  for (const key of visitorKeys[root.type] ?? []) {
+    const child = root[key];
+    if (Array.isArray(child)) for (const item of child) eachNode(item, visit);
+    else eachNode(child, visit);
+  }
+};
 
 const isFunction = (node) =>
   node.type === "FunctionExpression" || node.type === "FunctionDeclaration" || node.type === "ArrowFunctionExpression";
@@ -113,13 +144,10 @@ const comparedIn = (node) => {
  * machine as `{ name, exportName, field, states, module }`, for the state-comparison rule.
  */
 export const checkFile = (file, text, machines = []) => {
-  const { program, errors, comments } = parseSync(file, text);
-  if (errors.length > 0) return [];
-  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
+  const source = parsedWithOptOuts(file, text, RULE);
+  if (source === null) return [];
   // An opt-out is a real comment, with a reason, ending on the declaration's line or the line above.
-  const optOutLines = new Set(
-    (comments ?? []).filter((comment) => OPT_OUT.test(comment.value)).map((comment) => lineOf(comment.end)),
-  );
+  const { program, lineOf, optedOut } = source;
   const problems = [];
 
   const walk = (node) => {
@@ -151,7 +179,7 @@ export const checkFile = (file, text, machines = []) => {
           continue;
         }
         const line = lineOf(each.start);
-        if (optOutLines.has(line) || optOutLines.has(line - 1)) continue;
+        if (optedOut.has(line)) continue;
         problems.push(
           `${file}:${line}: \`${each.id?.name ?? "collection"}\` is a collection keyed by ${key} held for a service's or module's life; make it one explicit machine, or move a fold into a plain function (${RULE})`,
         );
@@ -183,21 +211,16 @@ export const checkFile = (file, text, machines = []) => {
     const machine = machineOf(field, state);
     if (machine === undefined) return;
     const line = lineOf(node.start);
-    if (optOutLines.has(line) || optOutLines.has(line - 1)) return;
+    if (optedOut.has(line)) return;
     problems.push(
       `${file}:${line}: compares \`.${field}\` with "${state}", a state of the ${machine.name} machine in ${machine.module}; outside that module ask the machine, through \`can\` or a helper it exports, and a field of another lifecycle is declared as its own machine (${RULE})`,
     );
   };
-  const comparisons = (node) => {
-    if (node === null || typeof node !== "object" || typeof node.type !== "string") return;
-    for (const [at, field, state] of comparedIn(node)) compared(at, field, state);
-    for (const key of visitorKeys[node.type] ?? []) {
-      const child = node[key];
-      if (Array.isArray(child)) for (const item of child) comparisons(item);
-      else comparisons(child);
-    }
-  };
-  if (inScope.length > 0) comparisons(program);
+  if (inScope.length > 0) {
+    eachNode(program, (node) => {
+      for (const [at, field, state] of comparedIn(node)) compared(at, field, state);
+    });
+  }
   return problems;
 };
 
