@@ -145,7 +145,7 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await page.getByRole("link", { name: "Open in the chat" }).click();
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
-  await expect(inboxLink(page)).toHaveAccessibleName("Inbox");
+  await expect(inboxLink(page)).toHaveAccessibleName("For you");
   await expect(chief(page)).toHaveAccessibleName(/^Hobbots home/);
 });
 
