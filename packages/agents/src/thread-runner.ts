@@ -59,6 +59,19 @@ import { workHeld } from "./work-hold.ts";
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
+/**
+ * Whether a member hob's turn, registered after it launched at `launchedAt`, has to stop: the hob
+ * is gone, its running work was stopped (at `stoppedAt`) since the turn launched, or it retired
+ * with its work stopped. A pause, or a retirement that lets running replies finish, stops none
+ * (ADR 039). Times are epoch milliseconds.
+ */
+export const memberTurnLeft = (hob: Option.Option<Agent>, stoppedAt: number | null, launchedAt: number): boolean => {
+  if (Option.isNone(hob)) return true;
+  if (stoppedAt === null) return false;
+  const { status, retiredAt } = hob.value;
+  return stoppedAt >= launchedAt || (status === "retired" && retiredAt !== null && stoppedAt >= Date.parse(retiredAt));
+};
+
 /** The transcript before `saved`, the turn's reply, without the turn's own prompt. */
 const earlierThan = (transcript: ReadonlyArray<Message>, saved: Message, promptId: MessageId | null) =>
   transcript
@@ -145,6 +158,10 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const taskRecords = yield* Effect.serviceOption(TaskRepository);
     const scope = yield* Effect.scope;
     const turns = yield* FiberMap.make<ThreadId>();
+    // When each hob's running work was last stopped, in epoch milliseconds, so a member turn that
+    // registered after the sweep still stops (ADR 039).
+    const stops = yield* Ref.make(HashMap.empty<AgentId, number>());
+    const nowMillis = DateTime.now.pipe(Effect.map(DateTime.toEpochMillis));
     // Every line's run (ADR 037, ADR 039), changed only through `ThreadRunMachine`, keyed by
     // `lineKey`. In memory, as turns are; what waits is the stored `TurnRequest`s and backpack items.
     // A line with no entry is idle. `revision` counts every transition, so clients can order what
@@ -334,6 +351,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       start: TurnStart = {},
     ) =>
       Effect.gen(function* () {
+        const launchedAt = yield* nowMillis;
         const brain = brainFor(thread, config);
         // A note to self never reaches a turn (ADR 037).
         const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));
@@ -409,17 +427,32 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           ),
         );
         yield* announceTurn(thread.id, agent.id, turn);
-        yield* stopIfLeft(thread, agent.id);
+        yield* stopIfLeft(thread, agent.id, launchedAt);
         return { turn, reply };
       }).pipe(Effect.onError(() => start.slot?.release ?? Effect.void));
 
-    // A member hob is admitted under the camp's lock, not its own, so a retirement may have swept
-    // its running turns before this one was there to see. Read again once the turn is registered: a
-    // member hob retiring or gone by now stops (ADR 039).
-    const stopIfLeft = (thread: Thread, agentId: AgentId) =>
+    // A member hob is admitted under the camp's lock, not its own, so a stop of its running work may
+    // have swept them before this turn was there to see. Read again once the turn is registered: it
+    // stops when the hob is gone, when its work was stopped since the turn launched, or when it
+    // retired with its work stopped. A pause, or a retirement that lets running replies finish,
+    // leaves the turn to finish (ADR 039).
+    const stopIfLeft = (thread: Thread, agentId: AgentId, launchedAt: number) =>
       Effect.gen(function* () {
         if (agentId === thread.agentId) return;
-        if ((yield* activeHobs(thread, [agentId])).size === 0) yield* endTurn(thread.id);
+        const stopped = HashMap.get(yield* Ref.get(stops), agentId);
+        const left = memberTurnLeft(yield* repo.findAgent(agentId), Option.getOrNull(stopped), launchedAt);
+        if (left) yield* endTurn(thread.id);
+      });
+
+    // Stops every turn where the hob holds the floor, in its own threads or in camps it joined, and
+    // records when, so a member turn admitted meanwhile stops once it registers.
+    const stopHob = (agentId: AgentId) =>
+      Effect.gen(function* () {
+        const at = yield* nowMillis;
+        yield* Ref.update(stops, HashMap.set(agentId, at));
+        for (const threadId of yield* activeThreads) {
+          if ((yield* runOf(threadId)).speaking === agentId) yield* endTurn(threadId);
+        }
       });
 
     // Tells clients when a turn joins the running turns and when it has left them, so a read of
@@ -846,6 +879,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       lineUp,
       drainThreads,
       endTurn,
+      stopHob,
       workRidesAlong,
       hobsOf,
       activeThreads,

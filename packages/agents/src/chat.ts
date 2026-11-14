@@ -454,6 +454,7 @@ export class ChatService extends Context.Service<
         lineUp,
         drainThreads,
         endTurn,
+        stopHob,
         workRidesAlong,
         hobsOf,
         activeThreads,
@@ -777,10 +778,7 @@ export class ChatService extends Context.Service<
       });
 
       const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
-        // The hob's turns are those where it holds the floor, in its own threads or in camps it joined.
-        for (const threadId of yield* activeThreads) {
-          if ((yield* runOf(threadId)).speaking === agentId) yield* endTurn(threadId);
-        }
+        yield* stopHob(agentId);
         if (Option.isSome(taskTurns)) yield* taskTurns.value.interruptAgent(agentId);
       });
 
