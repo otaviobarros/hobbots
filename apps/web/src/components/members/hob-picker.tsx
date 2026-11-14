@@ -114,7 +114,7 @@ export function CheckBox({ checked }: { checked: boolean }) {
     <span
       aria-hidden
       className={cn(
-        "inline-flex size-[18px] items-center justify-center rounded-[4px] border-2 text-meta font-bold",
+        "inline-flex size-[18px] items-center justify-center rounded-[calc(var(--corner-control)*3/8)] border-(length:--edge) text-meta font-bold",
         checked ? "border-focus-ring bg-focus-ring text-ground" : "border-control",
       )}
     >
