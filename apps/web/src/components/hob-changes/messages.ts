@@ -46,6 +46,38 @@ export const messages = {
     showDiff: "Show what changed",
     hideDiff: "Hide what changed",
   },
+  /** Changes to the hub settings that change what hobs may do (#1357), in Settings and each hob's History. */
+  settings: {
+    heading: "Hub settings",
+    intro: "Changes to the settings that decide what every hob may do, newest first, with who made them.",
+    hobsHeading: "Hobs",
+    names: {
+      safetyPreset: "How careful hobs are",
+      approvedFolders: "Folders hobs can open",
+      summoningForEveryHob: "Summoning for every hob",
+    },
+    turnedOn: ({ setting }: { setting: string }) => `${setting} turned on`,
+    turnedOff: ({ setting }: { setting: string }) => `${setting} turned off`,
+    changed: ({ setting }: { setting: string }) => `${setting} changed`,
+    from: ({ setting }: { setting: string }) => `From ${setting}`,
+    gave: ({ name }: { name: string }) => `Gave ${name} the Summoning Charm.`,
+    tookAway: ({ name }: { name: string }) => `Took the Summoning Charm from ${name}.`,
+    changedFor: ({ name }: { name: string }) => `Changed what ${name} may do with the Summoning Charm.`,
+    presetFor: ({ name }: { name: string }) => `Changed how often ${name} asks you first.`,
+    foldersFor: ({ name }: { name: string }) => `Changed the folders ${name} can open.`,
+    byHub: "By Hobbots",
+    on: "On",
+    off: "Off",
+    parts: {
+      preset: "How careful",
+      folders: "Folders",
+      state: "Turned",
+      scope: "Summoning manages",
+      answers: "Answers",
+    },
+    more: ({ count }: { count: number }) => `Showing the newest ${count} setting changes.`,
+    openSettings: "Open the setting",
+  },
   /** A hob that is no longer kept, or whose name is not read yet. */
   someHob: "another hob",
   fields: {

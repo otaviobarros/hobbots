@@ -3,7 +3,7 @@ import { ConnectedHubSettings } from "../devices/connected-hub.tsx";
 import { DeviceList } from "../devices/device-list.tsx";
 import { DiagnosticsSettings } from "../diagnostics/diagnostics-settings.tsx";
 import { messages as diagnosticsMessages } from "../diagnostics/messages.ts";
-import { ChangesLog } from "../hob-changes/changes-log.tsx";
+import { ChangesSection } from "../hob-changes/changes-section.tsx";
 import type { ChangesSearch } from "../hob-changes/hob-changes-model.ts";
 import { WaitingDevices } from "../pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "../remote-access/remote-access-settings.tsx";
@@ -39,7 +39,7 @@ export function SectionContent({
     case "web":
       return <WebSection />;
     case "changes":
-      return <ChangesLog search={changes} />;
+      return <ChangesSection search={changes} />;
     case "connections":
       return <ConnectionsSection tab={tab} />;
     case "devices":

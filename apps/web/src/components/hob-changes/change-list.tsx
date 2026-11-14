@@ -11,10 +11,12 @@ import { DiffLines } from "../skills/skill-diff.tsx";
 import { canRevert, type FieldDiff, fieldDiffs, makerOf, type VersionChange } from "./hob-changes-model.ts";
 import { HobName, NamingHob, namedIn, useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
+import { settingLines, settingMakerLine, settingName, settingReachLine } from "./setting-change-model.ts";
 
 const copy = messages.row;
 
 const titleOf = (change: HobChange): string => {
+  if (change._tag === "Setting") return messages.settings.from({ setting: settingName(change.setting.diff) });
   if (change._tag === "Version") {
     return change.config.version === 1 ? copy.summoned : copy.version({ version: change.config.version });
   }
@@ -25,6 +27,7 @@ const titleOf = (change: HobChange): string => {
 
 /** Who made the change, with the hob behind it linked to its profile. */
 function MakerLine({ change, hobs }: { change: HobChange; hobs: ReadonlyMap<AgentId, Agent> }) {
+  if (change._tag === "Setting") return <span>{settingMakerLine(change.setting)}</span>;
   const maker = makerOf(change);
   if (maker.kind === "you") return <span>{copy.byYou}</span>;
   const line = maker.kind === "hob" ? (hob: string) => copy.byHob({ hob }) : (hob: string) => copy.byProposal({ hob });
@@ -58,7 +61,8 @@ function OriginLine({ change }: { change: HobChange }) {
   );
 }
 
-function FieldChange({ diff }: { diff: FieldDiff }) {
+/** One field or part of a setting a change moved, before and after. */
+export function FieldChange({ diff }: { diff: Omit<FieldDiff, "key"> }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-meta font-semibold text-label">{diff.label}</span>
@@ -108,6 +112,12 @@ function Revert({ change }: { change: VersionChange }) {
   );
 }
 
+/** What a change moved, part by part: a version's fields, or a setting's parts; none for a status change. */
+const changedParts = (change: HobChange, nameOf: (id: string) => string): ReadonlyArray<Omit<FieldDiff, "key">> => {
+  if (change._tag === "Version") return fieldDiffs(change, nameOf);
+  return change._tag === "Setting" ? settingLines(change.setting.diff, nameOf) : [];
+};
+
 /** One change: what happened and when, who made it and why, what it changed, and Revert when it can. */
 function ChangeRow({
   change,
@@ -124,8 +134,8 @@ function ChangeRow({
 }) {
   const [open, setOpen] = useState(latest);
   const target = hobs.get(change.hobId);
-  const diffs =
-    change._tag === "Version" ? fieldDiffs(change, (id) => hobs.get(id as AgentId)?.name ?? messages.someHob) : [];
+  const nameOf = (id: string) => hobs.get(id as AgentId)?.name ?? messages.someHob;
+  const diffs = changedParts(change, nameOf);
   const revertable = change._tag === "Version" && canRevert(change, target);
   return (
     <li
@@ -156,6 +166,11 @@ function ChangeRow({
           <MakerLine change={change} hobs={hobs} />
           <OriginLine change={change} />
         </div>
+        {change._tag === "Setting" && (
+          <span className="text-detail text-text-secondary">
+            {settingReachLine(change.setting.diff, nameOf(change.hobId))}
+          </span>
+        )}
         {diffs.length > 0 && (
           <>
             <Button
@@ -171,7 +186,7 @@ function ChangeRow({
             {open && (
               <div className="flex flex-col gap-2.5">
                 {diffs.map((diff) => (
-                  <FieldChange key={diff.key} diff={diff} />
+                  <FieldChange key={diff.label} diff={diff} />
                 ))}
               </div>
             )}
@@ -185,6 +200,10 @@ function ChangeRow({
     </li>
   );
 }
+
+/** What tells a change apart from the hob's other changes of its kind. */
+const changeKey = (change: HobChange): string | number =>
+  change._tag === "Version" ? change.config.version : change._tag === "Setting" ? change.setting.id : change.at;
 
 /** Changes to hobs, newest first, as a hob's History and the Changes log show them. */
 export function ChangeList({
@@ -201,7 +220,7 @@ export function ChangeList({
     <ol aria-label={label} className="m-0 flex list-none flex-col gap-1.5 p-0">
       {changes.map((change, at) => (
         <ChangeRow
-          key={`${change.hobId}/${change._tag}/${change._tag === "Version" ? change.config.version : change.at}`}
+          key={`${change.hobId}/${change._tag}/${changeKey(change)}`}
           change={change}
           hobs={hobs}
           showHob={showHob}
