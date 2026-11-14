@@ -15,9 +15,6 @@ import { questsAbove } from "./task-tools.ts";
 /** How many times the supervisor retries a Task whose turn failed before it asks the lead to decide. */
 export const SUPERVISED_RETRIES = 2;
 
-/** How many failed turns in a row a member's Task may have before the supervisor stops it. */
-export const FAILED_TURNS_LIMIT = 3;
-
 /** How many refused Task tool calls a Task's hob may make before its lead is told. */
 export const REFUSALS_LIMIT = 3;
 
@@ -187,13 +184,22 @@ export const SupervisionMachine = defineMachine<
       to: "escalated",
       apply: (record, e) => acted(record, "escalated", "refusals", e, { refusalsSeen: e.total }),
     },
-    Routed: { from: RETRYING, to: "routed", apply: (record, e) => acted(record, "routed", "missing-input", e) },
-    // A fresh budget: the lead or you decided, so earlier retries no longer count against the Task.
+    // A question is passed on whatever else the supervisor handed on, short of a stop.
+    Routed: { from: WATCHED, to: "routed", apply: (record, e) => acted(record, "routed", "missing-input", e) },
+    // A fresh budget once the lead or you decided, so earlier retries no longer count against the Task;
+    // an answered question decides nothing about its turns, so the retries spent stay spent.
     Cleared: {
       from: ["routed", "reconciling", "escalated", "stopped"],
       to: "watching",
       apply: (record, e) =>
-        new Supervision({ ...record, state: "watching", retries: 0, rule: null, reason: null, updatedAt: e.at }),
+        new Supervision({
+          ...record,
+          state: "watching",
+          retries: record.state === "routed" ? record.retries : 0,
+          rule: null,
+          reason: null,
+          updatedAt: e.at,
+        }),
     },
   },
   illegal: (record, _, to) => new IllegalSupervisionTransition({ taskId: record.taskId, from: record.state, to }),

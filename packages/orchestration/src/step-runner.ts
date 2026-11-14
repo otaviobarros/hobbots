@@ -541,9 +541,9 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   narrows(run.access, access),
                 ),
           ),
-        stopOverdue: (taskIds) => {
-          const overdue = new Set<TaskId>(taskIds);
-          return stopWhere("deadline", (_, taskId) => Effect.succeed(overdue.has(taskId)));
+        stopUnder: (taskIds, why) => {
+          const under = new Set<TaskId>(taskIds);
+          return stopWhere(why, (_, taskId) => Effect.succeed(under.has(taskId)));
         },
       });
     }),

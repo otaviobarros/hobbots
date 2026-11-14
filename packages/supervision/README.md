@@ -7,7 +7,7 @@ Application layer for the supervisor ([#1447](https://github.com/otaviobarros/ho
 | Function       | What it does                                                                                                                                                                              |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `decide`       | The acts the supervisor makes on one Task tree, at most one per Task, by the first rule that applies: deadline, allowance, unknown outcome, bounded retry, refusals, missing input. Pure. |
-| `stopOrder`    | The Tasks a deadline stop fails, deepest first, so each ends before its parent.                                                                                                           |
+| `stopOrder`    | The Tasks a deadline stop or a failure fails, deepest first, so each ends before its parent.                                                                                              |
 | `nextDeadline` | When the next deadline of work still open falls, so the supervisor looks again then.                                                                                                      |
 
 ## Services

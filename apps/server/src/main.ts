@@ -567,7 +567,7 @@ const ServerLive = Layer.unwrap(
             // Two Tasks of one Quest changing the same file is a finding for their lead (#570).
             OverlappingChanges,
             // Delegation deadlines and recovery by fixed rules, with no model call (#1447).
-            Supervisor.layer(),
+            Supervisor.layer({ limits: config.taskLimits }),
             // Work that arrives for a hob wakes its thread (ADR 019).
             WakeOnArrival,
             // A retired hob's work fails as blockers that wait for you (IN-007).

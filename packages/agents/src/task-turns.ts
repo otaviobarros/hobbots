@@ -126,9 +126,9 @@ export class TaskTurns extends Context.Service<
     readonly reviewAuthority: (agentId?: AgentId) => Effect.Effect<void>;
     /**
      * Stops, and waits for, the turns running on these Tasks, steps' and party members' alike, as
-     * the supervisor does once their deadline has passed (#1447). A Task with no turn running is
-     * left as it is.
+     * the supervisor does before it ends their work (#1447): `deadline` once their deadline passed,
+     * `ended` when it fails the Task above them. A Task with no turn running is left as it is.
      */
-    readonly stopOverdue: (taskIds: ReadonlyArray<TaskId>) => Effect.Effect<void>;
+    readonly stopUnder: (taskIds: ReadonlyArray<TaskId>, why: "deadline" | "ended") => Effect.Effect<void>;
   }
 >()("@hobbots/agents/TaskTurns") {}

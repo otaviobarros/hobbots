@@ -12,14 +12,17 @@ import {
   descendantsOf,
   HUB_ACTOR,
   hobStanding,
+  isCancellingTask,
+  isOverdue,
   isTerminalTask,
   liveAttemptOn,
   NoteId,
+  type Task,
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
-import { Context, DateTime, Duration, Effect, Layer, Option } from "effect";
-import { type Act, decide, nextDeadline, stopOrder } from "./rules.ts";
+import { Context, Data, DateTime, Duration, Effect, Layer, Option } from "effect";
+import { type Act, decide, isOpen, nextDeadline, stopOrder } from "./rules.ts";
 
 /** How often the supervisor looks over the work, at the latest: sooner when a deadline falls first. */
 const DEFAULT_EVERY = Duration.seconds(15);
@@ -31,6 +34,15 @@ const involved = (tree: TaskTree): ReadonlyArray<AgentId> => [
     ...tree.questions.flatMap((each) => (each.recipientId === null ? [] : [each.recipientId])),
   ]),
 ];
+
+/** How many open Tasks a hob and a tree of work may hold, as the hub's Task tools allow (OR-004). */
+export interface OpenTaskLimits {
+  readonly maxOpenTasksPerHob: number;
+  readonly maxOpenTasksPerTree: number;
+}
+
+/** A retry that waits for the next look, as the hob or the tree has no room for one more open Task now. */
+class NoRoom extends Data.TaggedError("NoRoom")<{}> {}
 
 /** What one look over the work did. */
 export interface SupervisionPass {
@@ -54,9 +66,10 @@ export class Supervisor extends Context.Service<
 >()("@hobbots/supervision/Supervisor") {
   /**
    * The supervisor, looking again at least `every` (15 seconds by default) and as each deadline
-   * falls. With `every: null` it looks only when `pass` is called, as tests drive it.
+   * falls. With `every: null` it looks only when `pass` is called, as tests drive it. A retry it
+   * makes keeps to `limits`, as a lead's does.
    */
-  static readonly layer = (options: { readonly every?: Duration.Input | null } = {}) =>
+  static readonly layer = (options: { readonly every?: Duration.Input | null; readonly limits: OpenTaskLimits }) =>
     Layer.effect(
       Supervisor,
       Effect.gen(function* () {
@@ -102,43 +115,78 @@ export class Supervisor extends Context.Service<
           );
 
         /**
-         * Stops a Task past its deadline: the turns running in it and under it first, then, once none
-         * runs, every Task in it still open fails, deepest first, the Task itself with the reason its
-         * lead reads. A Task the runner already ended as its turn stopped is told instead. Undefined
-         * while a turn or a cancel under it has still to end: the next look ends it.
+         * Ends the work in `task` and under it while `holds` still says it should end, read again
+         * each time: the turns running there stop first, then, once none runs, every Task in it still
+         * open fails, deepest first, `task` itself with `reason`, which its lead reads. A Task that
+         * ended meanwhile, as when the runner fails a step as its turn stops, gets `ended` instead.
+         * Undefined while a turn or a cancel under it has still to end, or while `holds` no longer
+         * does: the next look decides again. Each move names the revision read, so a Task that moves
+         * on before the change commits refuses it (STD-ARCH-014).
          */
-        const stop = (act: Extract<Act, { _tag: "Stop" }>, at: string) =>
+        const endWork = (
+          task: Task,
+          reason: string,
+          why: "deadline" | "ended",
+          holds: (task: Task, tree: TaskTree) => boolean,
+          ended: Change,
+          at: string,
+        ) =>
           Effect.gen(function* () {
-            const before = yield* readTree(act.task.rootId);
-            if (before === undefined) return undefined;
-            const live = stopOrder(act.task, before).filter((each) => liveAttemptOn(each, before));
-            if (live.length > 0 && Option.isSome(turns)) yield* turns.value.stopOverdue(live.map((each) => each.id));
-            const tree = yield* readTree(act.task.rootId);
-            const task = tree?.tasks.find((each) => each.id === act.task.id);
-            if (tree === undefined || task === undefined) return undefined;
-            // The runner may have ended it as its turn stopped, as it fails a step: its lead is told instead.
-            if (isTerminalTask(task.state)) return act.first ? tell(task.id, "deadline", act.reason, at) : NOTHING;
-            const ending = stopOrder(task, tree);
+            const now = (tree: TaskTree | undefined) => tree?.tasks.find((each) => each.id === task.id);
+            const before = yield* readTree(task.rootId);
+            const first = now(before);
+            if (before === undefined || first === undefined) return undefined;
+            if (isTerminalTask(first.state)) return ended;
+            if (!holds(first, before)) return undefined;
+            const live = stopOrder(first, before).filter((each) => liveAttemptOn(each, before));
+            if (live.length > 0 && Option.isSome(turns)) yield* turns.value.stopUnder(live.map((each) => each.id), why);
+            const tree = yield* readTree(task.rootId);
+            const current = now(tree);
+            if (tree === undefined || current === undefined) return undefined;
+            if (isTerminalTask(current.state)) return ended;
+            if (!holds(current, tree)) return undefined;
+            const ending = stopOrder(current, tree);
             if (ending.some((each) => liveAttemptOn(each, tree))) return undefined;
-            if (descendantsOf(task, tree.tasks).some((each) => each.state === "cancelling")) return undefined;
+            if (descendantsOf(current, tree.tasks).some((each) => isCancellingTask(each.state))) return undefined;
             return Effect.forEach(ending, (each) =>
-              tasks.moveTask(each.id, each.revision, "failed", at, each.id === task.id ? { reason: act.reason } : {}),
+              tasks.moveTask(each.id, each.revision, "failed", at, each.id === current.id ? { reason } : {}),
             ) as Change;
+          });
+
+        /** Whether `ownerId` and the Task's tree have room for one more open Task, read in the change's transaction. */
+        const roomFor = (task: Task) =>
+          Effect.gen(function* () {
+            const own = yield* tasks.openTaskCount(task.ownerId);
+            const tree = yield* readTree(task.rootId);
+            const inTree = tree?.tasks.filter((each) => !isTerminalTask(each.state)).length ?? 0;
+            return own < options.limits.maxOpenTasksPerHob && inTree < options.limits.maxOpenTasksPerTree;
+          });
+
+        /** A retry within the limits on open Tasks, or none until the next look when they are full. */
+        const retry = (act: Extract<Act, { _tag: "Retry" }>, at: string): Change =>
+          Effect.gen(function* () {
+            if (!(yield* roomFor(act.task))) return yield* new NoRoom();
+            const by = { actor: HUB_ACTOR, reason: act.reason };
+            return [yield* tasks.retryTask(act.task.id, act.task.revision, at, by)];
           });
 
         /** The change an act makes, or undefined when it waits for the next look. */
         const changeFor = (act: Act, at: string): Effect.Effect<Change | undefined> => {
           switch (act._tag) {
+            // Past its deadline, the Task's lead is told once, even when it ended meanwhile.
             case "Stop":
-              return stop(act, at);
+              return endWork(
+                act.task,
+                act.reason,
+                "deadline",
+                (task, tree) => isOverdue(task, tree, at),
+                act.first ? tell(act.task.id, "deadline", act.reason, at) : NOTHING,
+                at,
+              );
             case "Retry":
-              return Effect.succeed(
-                one(tasks.retryTask(act.task.id, act.task.revision, at, { actor: HUB_ACTOR, reason: act.reason })),
-              );
+              return Effect.succeed(retry(act, at));
             case "Fail":
-              return Effect.succeed(
-                one(tasks.moveTask(act.task.id, act.task.revision, "failed", at, { reason: act.reason })),
-              );
+              return endWork(act.task, act.reason, "ended", isOpen, NOTHING, at);
             case "Tell":
               return Effect.succeed(tell(act.task.id, act.key, act.text, at));
             case "Route":
@@ -165,6 +213,11 @@ export class Supervisor extends Context.Service<
             for (const each of committed) yield* publisher.publish(each.entries);
             return true;
           }).pipe(
+            // A retry with no room waits for the next look, which decides again.
+            Effect.catchIf(
+              (error): error is NoRoom => error instanceof NoRoom,
+              () => Effect.succeed(false),
+            ),
             Effect.catchCause((cause) =>
               Effect.logWarning(`The supervisor could not act (${act._tag})`, cause).pipe(Effect.as(false)),
             ),

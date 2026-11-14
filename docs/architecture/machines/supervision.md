@@ -43,6 +43,8 @@ stateDiagram-v2
   watching --> routed: Routed
   retrying --> routed: Routed
   routed --> routed: Routed
+  reconciling --> routed: Routed
+  escalated --> routed: Routed
   routed --> watching: Cleared
   reconciling --> watching: Cleared
   escalated --> watching: Cleared
@@ -57,5 +59,5 @@ stateDiagram-v2
 | Failed | watching, retrying, routed | retrying | yes |
 | Failed | watching, retrying, routed, escalated | escalated | no |
 | Refused | watching, retrying, routed, escalated | escalated | no |
-| Routed | watching, retrying, routed | routed | no |
+| Routed | watching, retrying, routed, reconciling, escalated | routed | no |
 | Cleared | routed, reconciling, escalated, stopped | watching | no |

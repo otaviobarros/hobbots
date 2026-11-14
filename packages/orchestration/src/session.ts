@@ -330,7 +330,7 @@ export const runSessionTurn = (
   );
 
 /** Why a running session was stopped, which decides what its Task becomes. */
-export type StopReason = "cancel" | "authority" | "hob" | "interrupt" | "pause" | "deadline";
+export type StopReason = "cancel" | "authority" | "hob" | "interrupt" | "pause" | "deadline" | "ended";
 
 export const STOPPED: Record<StopReason, string> = {
   cancel: "Cancelled.",
@@ -339,6 +339,7 @@ export const STOPPED: Record<StopReason, string> = {
   hob: "Stopped by Hobbots before it finished, with its hob's other work.",
   interrupt: "Stopped by its lead's message, which the next turn starts with.",
   deadline: "Stopped because its Task passed its deadline.",
+  ended: "Stopped because Hobbots failed the Task above it.",
 };
 
 /** A session the runner holds open for a Task: a step's, or a party member's turn. */

@@ -82,11 +82,18 @@ const stepModel = (model: View, event: SupervisionEvent): View | "refused" => {
         ? "refused"
         : set(model, "escalated", "refusals", event, { refusalsSeen: event.total });
     case "Routed":
-      return handedOn || model.state === "stopped" ? "refused" : set(model, "routed", "missing-input", event);
+      return model.state === "stopped" ? "refused" : set(model, "routed", "missing-input", event);
     case "Cleared":
       return model.state === "watching" || model.state === "retrying"
         ? "refused"
-        : { ...model, state: "watching", retries: 0, rule: null, reason: null, updatedAt: event.at };
+        : {
+            ...model,
+            state: "watching",
+            retries: model.state === "routed" ? model.retries : 0,
+            rule: null,
+            reason: null,
+            updatedAt: event.at,
+          };
   }
 };
 

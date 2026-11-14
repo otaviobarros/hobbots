@@ -5,7 +5,6 @@ import {
   awaitsNewAttempt,
   deadlineOf,
   descendantsOf,
-  FAILED_TURNS_LIMIT,
   type HobStanding,
   HUB_STOPPED_OUTCOME,
   isCancellingTask,
@@ -15,6 +14,7 @@ import {
   isOverdue,
   isRoutedSupervision,
   isStoppedSupervision,
+  isTaskToolName,
   isTerminalTask,
   isUsageLimitOutcome,
   liveAttemptOn,
@@ -63,7 +63,7 @@ export type Act =
     }
   /** A failed Task goes back in the queue for a new Attempt (bounded retry rule). */
   | { readonly _tag: "Retry"; readonly task: Task; readonly reason: string; readonly record: Supervision }
-  /** An open Task fails with `reason`, which its lead reads (allowance and bounded retry rules). */
+  /** An open Task fails with `reason`, which its lead reads, once the work under it has ended (allowance rule). */
   | { readonly _tag: "Fail"; readonly task: Task; readonly reason: string; readonly record: Supervision }
   /** A note from Hobbots on the Task for its nearest lead at work, once per `key`. */
   | {
@@ -96,15 +96,8 @@ const outcomeOf = (attempt: Attempt) => cut(attempt.outcome ?? "its runtime gave
 const aboveGoesOn = (task: Task, tree: TaskTree) =>
   ancestorsOf(task, tree.tasks).every((each) => !isTerminalTask(each.state) && !isCancellingTask(each.state));
 
-/** The failed turns at the end of the Task's Attempts, newest first, none of them ended by a usage limit. */
-const failedRun = (task: Task, tree: TaskTree) => {
-  const attempts = tree.attempts.filter((each) => each.taskId === task.id).sort((a, b) => b.number - a.number);
-  const run = attempts.findIndex((each) => !isFailedAttempt(each.state) || isUsageLimitOutcome(each.outcome));
-  return run === -1 ? attempts.length : run;
-};
-
 /** Whether the Task is still to be worked on: not ended, not being cancelled, and not paused by you. */
-const isOpen = (task: Task) =>
+export const isOpen = (task: Task) =>
   !isTerminalTask(task.state) && !isCancellingTask(task.state) && !TaskPauses.isPaused(task);
 
 /**
@@ -121,7 +114,11 @@ const stuckQuestion = (task: Task, facts: Facts): Question | undefined =>
     return !leading || facts.standing(lead) !== "active";
   });
 
-/** The refused calls made on the Task, counting each try, and the latest few in words. */
+/**
+ * The refused calls made on the Task, counting each try, and the latest few: only the hub's own
+ * words, the tool's name and the refusal's code, never what the hob sent, so a note from Hobbots
+ * carries nothing a hob wrote (SECURITY.md).
+ */
 const refusalsOn = (task: Task, tree: TaskTree) => {
   const refused = tree.refusals.filter((each) => each.taskId === task.id);
   const total = refused.reduce((sum, each) => sum + each.tries, 0);
@@ -129,7 +126,7 @@ const refusalsOn = (task: Task, tree: TaskTree) => {
     .slice(-3)
     .map(
       (each) =>
-        `${each.tool} (${each.reason}${each.tries > 1 ? `, ${each.tries} tries` : ""}): ${cut(each.message, 200)}`,
+        `${isTaskToolName(each.tool) ? each.tool : "a tool it was not given"} (${each.reason}${each.tries > 1 ? `, ${each.tries} tries` : ""})`,
     );
   return { total, latest };
 };
@@ -179,13 +176,10 @@ const unknownOutcome = (task: Task, attempt: Attempt, record: Supervision, facts
   // A step Hobbots stopped with the hub failed, since what it did is not known; a member's turn goes on in its session.
   const cutOff = attempt.state === "interrupted" && attempt.outcome === HUB_STOPPED_OUTCOME && isFailedTask(task.state);
   if ((!unresolved && !cutOff) || isCompletedTask(task.state)) return undefined;
-  const lastReport = facts.tree.checkpoints.findLast(
-    (each) => each.taskId === task.id && each.attemptId === attempt.id && each.source !== "automatic",
-  );
-  const said = lastReport === undefined ? "" : ` Its last report: "${cut(lastReport.summary, 200)}".`;
+  // Its hob's own reports stay on the Task, where read_tasks shows them as the hob's: a note from Hobbots carries only its own words.
   const reason = unresolved
-    ? `Task ${task.id}'s last turn was asked to stop and never confirmed it did, so whether it changed anything after that is not known.${said} Hobbots will not start it again on its own: check its folders and branches before you retry or reassign it.`
-    : `Hobbots stopped while Task ${task.id}'s turn ran, so what it did after its last report is not known.${said} Hobbots will not start it again on its own: check its folders and branches, then retry or reassign it.`;
+    ? `Task ${task.id}'s last turn was asked to stop and never confirmed it did, so whether it changed anything after that is not known. Read what it reported with read_tasks. Hobbots will not start it again on its own: check its folders and branches before you retry or reassign it.`
+    : `Hobbots stopped while Task ${task.id}'s turn ran, so what it did after its last report is not known. Read what it reported with read_tasks. Hobbots will not start it again on its own: check its folders and branches, then retry or reassign it.`;
   const next = after(record, { _tag: "OutcomeUnknown", at: facts.at, attemptId: attempt.id, reason });
   return next === undefined
     ? undefined
@@ -193,40 +187,32 @@ const unknownOutcome = (task: Task, attempt: Attempt, record: Supervision, facts
 };
 
 /**
- * The bounded retry rule. A Task whose turn failed is retried while the supervisor's budget lasts,
- * when its hob can work and the work above it goes on; past the budget its lead decides. A member's
- * Task whose turns keep failing, which its dispatcher tries again by itself, is stopped once too
- * many in a row have.
+ * The bounded retry rule. A failed Task whose turn failed is retried while the supervisor's budget
+ * lasts, when its hob can work and the work above it goes on; past the budget its lead decides. An
+ * open Task's failed turn is its dispatcher's to try again, within its own bound (IN-007).
  */
 const failure = (task: Task, attempt: Attempt, record: Supervision, facts: Facts): Act | undefined => {
   if (!isFailedAttempt(attempt.state) || isUsageLimitOutcome(attempt.outcome)) return undefined;
-  if (!aboveGoesOn(task, facts.tree)) return undefined;
-  if (isFailedTask(task.state)) {
-    // A paused hob's retry waits until it wakes; a retired or retiring one takes no work again.
-    const standing = facts.standing(task.ownerId);
-    const retryable = standing === "active" || standing === "paused";
-    const tries = record.retries + 1;
-    const reason = `Its turn failed (${outcomeOf(attempt)}), so Hobbots retried it: try ${tries} of ${SUPERVISED_RETRIES}.`;
-    const next = after(record, { _tag: "Failed", at: facts.at, attemptId: attempt.id, retryable, reason });
-    if (next === undefined) return undefined;
-    // The machine counted another try only when it is within the budget.
-    if (next.retries > record.retries) return { _tag: "Retry", task, reason, record: next };
-    const text = retryable
-      ? `Task ${task.id} failed again after Hobbots retried it ${record.retries} times: ${outcomeOf(attempt)}. Decide what comes next: retry it with what it needs, reassign it, or cancel it.`
-      : `Task ${task.id} failed (${outcomeOf(attempt)}), and Hobbots cannot retry it, since hob ${task.ownerId} is ${standing ?? "gone"}. Reassign it, or cancel it.`;
-    return {
-      _tag: "Tell",
-      task,
-      key: `retries-spent:${attempt.id}`,
-      text,
-      record: new Supervision({ ...next, reason: text }),
-    };
-  }
-  const failed = failedRun(task, facts.tree);
-  if (!isOpen(task) || liveAttemptOn(task, facts.tree) || failed < FAILED_TURNS_LIMIT) return undefined;
-  const reason = `Its last ${failed} turns failed (${outcomeOf(attempt)}), so Hobbots stopped trying. Retry it once what broke is fixed, reassign it, or cancel it.`;
-  const next = after(record, { _tag: "Failed", at: facts.at, attemptId: attempt.id, retryable: false, reason });
-  return next === undefined ? undefined : { _tag: "Fail", task, reason, record: next };
+  if (!aboveGoesOn(task, facts.tree) || !isFailedTask(task.state)) return undefined;
+  // A paused hob's retry waits until it wakes; a retired or retiring one takes no work again.
+  const standing = facts.standing(task.ownerId);
+  const retryable = standing === "active" || standing === "paused";
+  const tries = record.retries + 1;
+  const reason = `Its turn failed (${outcomeOf(attempt)}), so Hobbots retried it: try ${tries} of ${SUPERVISED_RETRIES}.`;
+  const next = after(record, { _tag: "Failed", at: facts.at, attemptId: attempt.id, retryable, reason });
+  if (next === undefined) return undefined;
+  // The machine counted another try only when it is within the budget.
+  if (next.retries > record.retries) return { _tag: "Retry", task, reason, record: next };
+  const text = retryable
+    ? `Task ${task.id} failed again after Hobbots retried it ${record.retries} times: ${outcomeOf(attempt)}. Decide what comes next: retry it with what it needs, reassign it, or cancel it.`
+    : `Task ${task.id} failed (${outcomeOf(attempt)}), and Hobbots cannot retry it, since hob ${task.ownerId} is ${standing ?? "gone"}. Reassign it, or cancel it.`;
+  return {
+    _tag: "Tell",
+    task,
+    key: `retries-spent:${attempt.id}`,
+    text,
+    record: new Supervision({ ...next, reason: text }),
+  };
 };
 
 /** The refusals rule: the Task's hob made call after call the hub refused, so its lead is told. */
@@ -235,13 +221,8 @@ const refusals = (task: Task, record: Supervision, facts: Facts): Act | undefine
   const { total, latest } = refusalsOn(task, facts.tree);
   if (total - record.refusalsSeen < REFUSALS_LIMIT) return undefined;
   const text = `Hobbots refused ${total - record.refusalsSeen} Task tool calls hob ${task.ownerId} made on Task ${task.id}. The latest: ${latest.join("; ")}. Check its brief and what it may do, and tell it what to do instead.`;
-  const next = after(record, {
-    _tag: "Refused",
-    at: facts.at,
-    attemptId: task.currentAttemptId,
-    total,
-    reason: text,
-  });
+  // It keeps the Attempt it last acted on: refused calls decide nothing about how the turn ends.
+  const next = after(record, { _tag: "Refused", at: facts.at, attemptId: record.attemptId, total, reason: text });
   return next === undefined ? undefined : { _tag: "Tell", task, key: `refusals:${total}`, text, record: next };
 };
 
