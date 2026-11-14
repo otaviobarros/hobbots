@@ -74,6 +74,7 @@ import { RemoteAccessGroup } from "./remote-access.ts";
 import { HandOverRefused, OpenWork, RetireAgentPayload } from "./retire.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
+import { SidebarGroup } from "./sidebar.ts";
 import { SkillHealthGroup } from "./skill-health.ts";
 import { SkillProposalsGroup } from "./skill-proposals.ts";
 import { SkillRepositoriesGroup } from "./skill-repositories.ts";
@@ -503,6 +504,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(CampSuggestionsGroup)
   .add(NotesGroup)
   .add(ForYouGroup)
+  .add(SidebarGroup)
   .add(ClaimsGroup)
   .add(SystemGroup)
   .add(SetupGroup)

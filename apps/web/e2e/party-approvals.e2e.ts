@@ -87,11 +87,11 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
 
   // Quill asks you, not Aldric: the Inbox has Quill's request, and Aldric's chat shows it in its
   // Needs-you tray, never as one of Aldric's own (#698).
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
   const tray = page.getByRole("region", { name: /^Needs you/ });
   await expect(tray.getByRole("region", { name: "Quill asks permission" })).toHaveCount(1);
   await expect(page.getByRole("region", { name: "Aldric asks permission" })).toHaveCount(0);
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click();
   // It waits under Aldric's quest, as asked by Quill through Aldric.
   const requests = page.getByRole("list", { name: "Requests" });
   const questGroup = requests.locator(`[title^="Aldric's quest · "]`);

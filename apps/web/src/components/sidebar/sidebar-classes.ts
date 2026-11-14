@@ -1,27 +1,33 @@
 /**
  * The sidebar's layout classes, shared by the sidebar and the window frame index.html paints before
- * the app loads (app-frame.tsx), so the two line up.
+ * the app loads (app-frame.tsx), so the two line up. The sidebar is 276px from the wide breakpoint
+ * and a 76px rail of icons below it, on 960 and 1024 wide windows (Design System › Sidebar).
  */
 
-/** The column the sidebar takes in the window: 72px, or its expanded width from the wide breakpoint. */
-export const sidebarColumn = "relative w-sidebar flex-none wide:w-auto";
+/** The column the sidebar takes in the window. */
+export const sidebarColumn = "relative w-sidebar flex-none wide:w-sidebar-open";
 
-/**
- * The sidebar itself. It collapses to 72px; expanded it is 256px, and below the wide breakpoint it
- * opens over the page.
- */
-export const sidebarNav =
-  "group/side flex h-full w-sidebar flex-col gap-0.5 overflow-hidden bg-panel p-3 transition-[width] duration-(--dur-sheet) data-[open=true]:w-sidebar-open max-wide:absolute max-wide:inset-y-0 max-wide:start-0 max-wide:z-30 max-wide:data-[open=true]:shadow-sheet";
+/** The sidebar itself: a column that never hides; only its camps and direct messages scroll. */
+export const sidebarNav = "flex h-full w-full flex-col overflow-hidden bg-panel max-wide:items-center";
 
-/** The chief's row at the top of the sidebar. */
-export const sidebarChief = "flex flex-none items-center gap-2 pb-2";
+/** The chief, the wordmark and Make a camp, at the top. */
+export const sidebarTop =
+  "flex w-full flex-none items-center gap-2.5 px-3 pt-3 pb-2 max-wide:justify-center max-wide:px-0";
 
-/** A sidebar row: a 48px icon column, then the label once the sidebar is expanded. */
-export const sidebarItem =
-  "relative flex min-h-row-min w-full flex-none items-center gap-2 rounded-control py-0.5 text-start text-body text-text-strong no-underline transition-colors duration-(--dur-fade) hover:bg-hover hover:text-text-strong focus-visible:-outline-offset-2 aria-[current=page]:bg-selected";
+/** A row of the narrow rail: a 48 × 44 hit area, the current one filled. */
+export const sidebarIcon =
+  "relative inline-flex h-11 w-12 flex-none items-center justify-center rounded-control text-text-secondary no-underline hover:bg-hover hover:text-text-strong aria-[current=page]:bg-selected aria-[current=page]:text-text-strong";
 
-/** The icon column every row lines up on, so collapsed rows keep their place when it expands. */
-export const sidebarIcon = "inline-flex no-underline w-12 flex-none items-center justify-center";
+/** The hairline between the rail's groups. */
+export const sidebarRule = "my-1.5 h-px w-9 flex-none bg-line wide:hidden";
 
-/** The line between the sections and the hobs. */
-export const sidebarDivider = "mx-1.5 my-2 h-px flex-none bg-line";
+/** A section's heading: its label and its + button. Only the wide sidebar shows it. */
+export const sidebarSection = "flex w-full flex-none items-center gap-1.5 pt-3 pe-2 pb-1 ps-2.5 max-wide:hidden";
+
+/** Show more under the camps, and All your hobs under the direct messages. */
+export const sidebarMore =
+  "flex w-full flex-none cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent py-1.5 ps-[54px] pe-2.5 text-start text-detail text-text-secondary no-underline hover:bg-hover hover:text-text-strong aria-[current=page]:bg-selected max-wide:hidden";
+
+/** A count on a row: replies you have not read, or `@` in lantern for a mention of you. */
+export const sidebarCount =
+  "min-w-[18px] rounded-full bg-[color-mix(in_srgb,var(--color-text-strong)_14%,transparent)] px-[5px] text-center text-meta font-bold text-text-strong";

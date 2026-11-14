@@ -106,7 +106,7 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   await expect(page).toHaveURL(new RegExp(`#/archive/hobs/${hob.id}/${thread.id}$`));
   await page.goto(`${current.url}/#/archive/hobs/${hob.id}/thread_not_pips`);
   await expect(page.getByText("This chat is not one of Pip's.")).toBeVisible();
-  await expect(page.getByText("Echo: Plan my week", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("main").getByText("Echo: Plan my week", { exact: true })).toHaveCount(0);
 });
 
 // covers AG-006
@@ -173,7 +173,7 @@ test("[TC-AG-116] a retired hob comes back from the Archive with its chats, and 
   const composer = page.getByRole("main", { name: "Chat" }).getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Plan next week too");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: Plan next week too", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: Plan next week too", { exact: true })).toBeVisible();
 });
 
 // covers AG-006

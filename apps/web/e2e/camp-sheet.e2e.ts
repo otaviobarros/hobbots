@@ -141,6 +141,59 @@ test("[TC-CH-1387-11] offers a grown chat chapter as a camp and moves it into th
   expect(left).toEqual([]);
 });
 
+// covers CH-001, ADR 037 (Records). Issue #1551: a chat's chapter stays put while a reply runs there.
+test("[TC-CH-1551-01] a camp suggestion waits while a reply runs, and Make a camp holds the chapter until it ends", async ({
+  page,
+}) => {
+  const { url, aldric, api, hub } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, /^Message Aldric/, ["Let us plan the launch."]);
+  const chat = threadOf(page);
+  for (let n = 1; n <= 5; n++) {
+    await api("POST", `/threads/${chat}/decisions`, { key: `d${n}`, text: `Decision ${n}`, replaces: null });
+  }
+  const card = main.getByRole("region", { name: "Make Chapter 1 a camp?" });
+  await expect(card).toBeVisible();
+  const longReply = () =>
+    api("POST", `/threads/${chat}/messages`, { content: "Run the long job\nfake:tool Bash sleep 600" });
+  const stop = async () => {
+    const stopped = await fetch(`${url}/api/threads/${chat}/stop-all`, { method: "POST", headers: hub.headers });
+    expect(stopped.ok).toBe(true);
+  };
+
+  // The suggestion waits while Aldric replies, and comes back once the reply ends.
+  await longReply();
+  await expect(page.getByRole("button", { name: "Stop" }).first()).toBeVisible();
+  await expect(card).toBeHidden();
+  await stop();
+  await expect(card).toBeVisible();
+
+  // A reply that starts while Make a camp is open holds Make the camp, with why, until it ends.
+  await card.getByRole("button", { name: "Make it a camp" }).click();
+  const sheet = page.getByRole("dialog", { name: "Make a camp" });
+  await sheet.getByRole("textbox", { name: "Name" }).fill("Launch");
+  await longReply();
+  const make = sheet.getByRole("button", { name: "Make the camp" });
+  await expect(sheet.getByRole("status")).toContainText("The chapter can move once");
+  await expect(make).toBeDisabled();
+  await expectAccessible(page, sheet);
+  // Without the chapter, the camp can be made now.
+  const chapter = sheet.getByRole("switch", { name: "The Chapter 1 chapter" });
+  await chapter.click();
+  await expect(make).toBeEnabled();
+  await chapter.click();
+  await expect(make).toBeDisabled();
+  await stop();
+  await expect(make).toBeEnabled();
+  await expect(sheet.getByRole("status")).toBeHidden();
+  await make.click();
+  await expect(sheet).toBeHidden();
+  await expect(page).not.toHaveURL(new RegExp(chat));
+  await expect(main.locator("header").first()).toContainText("Launch");
+  await expect(main.getByText("Echo: Let us plan the launch.")).toBeVisible();
+});
+
 // covers CH-001, ADR 037 (Catch-up)
 test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async ({ page }) => {
   const { url, aldric, api, hub } = await aldricHub();
@@ -347,4 +400,46 @@ test("[TC-UX-1431-02] the camp sheet's tabs fit it without a sideways scroll, ho
   const close = await boxOf(page.getByRole("button", { name: "Close Find" }));
   expect(close.x + close.width).toBeLessThanOrEqual(field.x + field.width - 4);
   expect(close.y).toBeGreaterThanOrEqual(field.y + 2);
+});
+
+// covers CH-001, ADR 037 (Records: CampSuggestion). Issue #1557: a suggestion takes one topic's
+// chapter, and Make a camp prefills the name the hub suggests, never "Chapter N".
+test("[TC-CH-1557-12] makes a camp from the suggested chapter alone, named as the hub suggests", async ({ page }) => {
+  const { url, aldric, api, hub } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, /^Message Aldric/, ["My cat is called Miso."]);
+  await say(page, /^Message Aldric/, ["Now the garden plans."]);
+  const chat = threadOf(page);
+  const garden = (
+    (await (
+      await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+    ).json()) as ReadonlyArray<Message>
+  ).find((message) => message.content === "Now the garden plans.");
+  const split = await fetch(`${url}/api/threads/${chat}/chapters/split`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...hub.headers },
+    body: JSON.stringify({ key: "garden", messageId: garden?.id, title: "Garden plans" }),
+  });
+  expect(split.status).toBe(200);
+  for (let n = 1; n <= 5; n++) {
+    await api("POST", `/threads/${chat}/decisions`, { key: `g${n}`, text: `Plant bed ${n}`, replaces: null });
+  }
+
+  // Under No AI the hub names the camp after the chapter's own title, with no goal.
+  const card = main.getByRole("region", { name: "Make Garden plans a camp?" });
+  await card.getByRole("button", { name: "Make it a camp" }).click();
+  const sheet = page.getByRole("dialog", { name: "Make a camp" });
+  await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue("Garden plans");
+  await expect(sheet.getByRole("textbox", { name: /^Goal/ })).toHaveValue("");
+  await sheet.getByRole("button", { name: "Make the camp" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(main.locator("header").first()).toContainText("Garden plans");
+  await expect(main.getByText("Echo: Now the garden plans.")).toBeVisible();
+
+  // The chat keeps the talk from before the garden.
+  const left = (await (
+    await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+  ).json()) as ReadonlyArray<Message>;
+  expect(left.map((message) => message.content)).toEqual(["My cat is called Miso.", "Echo: My cat is called Miso."]);
 });

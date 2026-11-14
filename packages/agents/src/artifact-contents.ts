@@ -77,6 +77,7 @@ export class ArtifactContents extends Context.Service<
           const thread = yield* repo.findThread(threadId);
           if (Option.isNone(thread)) return [];
           const maker = artifact.actor.kind === "hob" ? [AgentId.make(artifact.actor.id)] : [];
+          // standards-allow STD-ARCH-021: an artifact may sit in the folders of the hob the thread belongs to
           const hobs = yield* Effect.forEach([...new Set([thread.value.agentId, ...maker])], (id) =>
             repo.findAgent(id),
           );

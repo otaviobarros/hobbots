@@ -3,13 +3,17 @@ import { JUDGMENT_INSTRUCTIONS, type PromptRequest } from "@hobbots/agents";
 /**
  * A prompt line `fake:judgment <word> <JSON>` keeps the JSON as the fake's reply to the next
  * judgment the hub asks it whose prompt holds `<word>`, in any session (ADR 037). A judgment the
- * fake has no answer for is echoed, which the hub cannot decode, so its rule stands. The word keeps
+ * fake has no answer for gets `NO_FAKE_JUDGMENT`, which the hub cannot decode, so its rule stands:
+ * at once, since the hub asks one for every message a person sends (#1557). The word keeps
  * the answer for the judgment a test means, such as Ask's question, when the hub's projectors ask
  * their own judgments meanwhile.
  */
 const FAKE_JUDGMENT_DIRECTIVE = "fake:judgment";
 
 const isJudgment = (request: PromptRequest) => request.instructions === JUDGMENT_INSTRUCTIONS;
+
+/** What the fake answers a judgment no turn scripted an answer for: no JSON, so the hub's rule stands. */
+const NO_FAKE_JUDGMENT = "No scripted judgment.";
 
 /** The judgment answers one fake keeps from the turns it ran. */
 export const makeFakeJudgments = () => {
@@ -26,11 +30,19 @@ export const makeFakeJudgments = () => {
         if (space > 0) kept.push({ word: rest.slice(0, space), answer: rest.slice(space + 1).trim() });
       }
     },
-    /** The kept answer for a judgment whose prompt holds its word, used once; undefined for anything else. */
+    /**
+     * The kept answer for a judgment whose prompt holds its word, used once, else `NO_FAKE_JUDGMENT`;
+     * undefined for anything but a judgment.
+     */
     answer: (request: PromptRequest): string | undefined => {
       if (!isJudgment(request)) return undefined;
-      const at = kept.findIndex((judgment) => request.prompt.includes(judgment.word));
-      return at === -1 ? undefined : kept.splice(at, 1)[0]?.answer;
+      // A judgment that quotes the line scripting the answer, as one on the message that holds it, is not it.
+      const at = kept.findIndex(
+        (judgment) =>
+          request.prompt.includes(judgment.word) &&
+          !request.prompt.includes(`${FAKE_JUDGMENT_DIRECTIVE} ${judgment.word}`),
+      );
+      return at === -1 ? NO_FAKE_JUDGMENT : (kept.splice(at, 1)[0]?.answer ?? NO_FAKE_JUDGMENT);
     },
   };
 };

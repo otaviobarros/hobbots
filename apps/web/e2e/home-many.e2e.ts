@@ -169,11 +169,12 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
 
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
-  await expect(finder.getByRole("option")).toHaveCount(20);
+  // Every hob, then the pages the sidebar leaves out: Memory and Skills.
+  await expect(finder.getByRole("option")).toHaveCount(22);
   const chosen = finder.getByRole("option", { selected: true });
   await expect(chosen).toBeInViewport();
 
-  // Up from the first hob wraps to the last one, below the fold of the list.
+  // Up from the first hob wraps to the last option, below the fold of the list.
   await page.keyboard.press("ArrowUp");
   await expect(finder.getByRole("option").last()).toHaveAttribute("aria-selected", "true");
   await expect(chosen).toBeInViewport();
@@ -183,7 +184,9 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
   await expect(finder.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
   await expect(chosen).toBeInViewport();
 
-  await page.keyboard.press("ArrowUp");
+  // Up past Skills and Memory reaches the last hob.
+  for (const _ of [1, 2, 3]) await page.keyboard.press("ArrowUp");
+  await expect(chosen).toHaveId(/^hob-jump-hob-/);
   const hobId = (await chosen.getAttribute("id"))?.replace("hob-jump-hob-", "");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}$`));

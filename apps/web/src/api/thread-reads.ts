@@ -3,6 +3,7 @@ import { type QueryClient, queryOptions, useQuery, useQueryClient } from "@tanst
 import { useEffect, useSyncExternalStore } from "react";
 import { call } from "./client.ts";
 import { followsEvents, queryKeys } from "./queries.ts";
+import { mentionsYou, sidebarChanged, sidebarQuery } from "./sidebar.ts";
 import { syncedUnread } from "./sync.ts";
 
 /**
@@ -32,6 +33,8 @@ export const useUnreadThreads = (): ReadonlySet<ThreadId> => useKnownUnreadThrea
  * first (STD-REACT-012).
  */
 export const unreadChanged = async (queryClient: QueryClient) => {
+  // The sidebar's unread counts come from the same markers.
+  void sidebarChanged(queryClient);
   await queryClient.cancelQueries({ queryKey: queryKeys.unreadThreads, exact: true });
   await queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true });
 };
@@ -56,6 +59,8 @@ export const showUnread = (queryClient: QueryClient, message: Message) => {
     ?.find((each) => each.id === message.id);
   if (held !== undefined && leavesUnread(held)) return;
   setUnread(queryClient, message.threadId, true);
+  // The sidebar counts the new reply.
+  void sidebarChanged(queryClient);
 };
 
 const onVisibility = (changed: () => void) => {
@@ -93,8 +98,9 @@ export const readThrough = (
 
 /**
  * Marks the open chat read on the hub while it is in view, on a page in front, and the thread shows
- * unread, so its dot clears on every device of yours (ADR 027). A chat folded away beside a quest's
- * Workbench is not in view. The dot clears here at once; your member row's event brings the rest.
+ * unread, a reply or a mention of you the sidebar counts, so its dot and `@` clear on every device of
+ * yours (ADR 027, ADR 039). A chat folded away beside a quest's Workbench is not in view. The dot
+ * clears here at once; your member row's event and a fresh read of the sidebar bring the rest.
  */
 export const useReadThread = (
   thread: Thread | undefined,
@@ -107,11 +113,15 @@ export const useReadThread = (
   const messageId = through?.messageId;
   const revision = through?.revision;
   const threadId = thread?.id;
-  const unread = useUnreadThreads().has(threadId as ThreadId);
+  const replies = useUnreadThreads().has(threadId as ThreadId);
+  // A person's message that mentions you leaves no unread reply, so the sidebar's `@` counts too.
+  const { data: sidebar } = useQuery(sidebarQuery);
+  const unread = replies || (threadId !== undefined && mentionsYou(sidebar, threadId));
   useEffect(() => {
     if (!shown || !unread || threadId === undefined || messageId === undefined || revision === undefined) return;
     setUnread(queryClient, threadId, false);
-    call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId, revision } })).catch(
+    call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId, revision } })).then(
+      () => void sidebarChanged(queryClient),
       // The dot comes back with the next read of the list; nothing else depends on it.
       () => void unreadChanged(queryClient),
     );

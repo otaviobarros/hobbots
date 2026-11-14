@@ -74,6 +74,24 @@ describe("Make a camp", () => {
     });
   });
 
+  // Issue #1551: while a reply runs in the chat, its chapter cannot move, so the camp it comes along with waits.
+  it("holds a camp whose chapter cannot move yet, and makes one without the chapter at once", () => {
+    const along = run([{ _tag: "Edit", draft: draft({ chapter: true }) }]);
+    expect(run([{ _tag: "Send", key: K1, held: true }], along)).toBe(along);
+    expect(run([{ _tag: "Send", key: K1, held: false }], along)).toEqual({
+      step: "saving",
+      draft: draft({ chapter: true }),
+      key: K1,
+    });
+    const without = run([{ _tag: "Edit", draft: draft({ chapter: false }) }]);
+    expect(run([{ _tag: "Send", key: K1, held: true }], without)).toMatchObject({ step: "saving", key: K1 });
+  });
+
+  it("tells a reply still running from a chapter that changed meanwhile", () => {
+    expect(makeCampError(new ApiError("", "ChapterMoveRefused", { reason: "reply-running" }))).toBe("chapter-busy");
+    expect(makeCampError(new ApiError("", "ChapterMoveRefused", { reason: "moved" }))).toBe("chapter-refused");
+  });
+
   it("tells a paused or retired hob from a request that got no answer", () => {
     expect(makeCampError(new ApiError("", "HobUnavailable"))).toBe("hob-unavailable");
     expect(makeCampError(new ApiError("", "ThreadKeyReused"))).toBe("unreachable");
@@ -81,6 +99,10 @@ describe("Make a camp", () => {
     expect(makeCampError(new ApiError("", "ChapterMissing"))).toBe("chapter-refused");
     expect(makeCampError(new TypeError("Failed to fetch"))).toBe("unreachable");
   });
+
+  // A send the model makes: one with no problems, whose chapter, if it comes along, can move now.
+  const sends = (event: MakeCampEvent & { _tag: "Send" }, typed: CampDraft) =>
+    !(event.held === true && typed.chapter) && Object.keys(campProblems(typed)).length === 0;
 
   // A model of the flow: any run of events agrees with it step by step.
   it("agrees with its model for any run of events", () => {
@@ -93,9 +115,11 @@ describe("Make a camp", () => {
     const anyEvent: fc.Arbitrary<MakeCampEvent> = fc.oneof(
       anyDraft.map((each) => ({ _tag: "Edit" as const, draft: each })),
       fc.constantFrom("title", "goal", "private").map((field) => ({ _tag: "Leave" as const, field })),
-      fc.integer({ min: 1, max: 99 }).map((n) => ({ _tag: "Send" as const, key: ThreadId.make(`k${n}`) })),
       fc
-        .constantFrom("hob-unavailable", "chapter-refused", "unreachable")
+        .tuple(fc.integer({ min: 1, max: 99 }), fc.boolean())
+        .map(([n, held]) => ({ _tag: "Send" as const, key: ThreadId.make(`k${n}`), held })),
+      fc
+        .constantFrom("hob-unavailable", "chapter-busy", "chapter-refused", "unreachable")
         .map((error) => ({ _tag: "Failed" as const, error })),
     );
     fc.assert(
@@ -113,7 +137,7 @@ describe("Make a camp", () => {
             failed = false;
             key = null;
           }
-          if (event._tag === "Send" && !saving && Object.keys(campProblems(typed)).length === 0) {
+          if (event._tag === "Send" && !saving && sends(event, typed)) {
             key = failed ? key : event.key;
             saving = true;
             failed = false;

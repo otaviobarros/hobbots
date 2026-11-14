@@ -18,27 +18,36 @@ export const chapterName = (chapter: Chapter): string =>
 const reasonsOf = (suggestion: CampSuggestion): ReadonlyArray<string> =>
   suggestion.reasons.map((reason) => copy.reason[reason.code](reason));
 
-/** What Make a camp moves for a suggestion: its chapter and why it was suggested. */
-const suggestedFrom = (suggestion: CampSuggestion, chapter: Chapter): CampFrom => ({
+/**
+ * What Make a camp moves for a suggestion: its chapter and why it was suggested, with the camp's name
+ * and goal the hub suggests, which it prefills (#1557). One raised before them takes the chapter's own
+ * title, never its number.
+ */
+export const suggestedFrom = (suggestion: CampSuggestion, chapter: Chapter): CampFrom => ({
   chapter,
   title: chapterName(chapter),
   detail: formatList(reasonsOf(suggestion)),
+  name: suggestion.title ?? chapter.title ?? "",
+  goal: suggestion.goal ?? "",
 });
 
 /**
  * The hub's camp suggestions in a chat (ADR 037, #1385): a card for each open one, with Make it a
  * camp, which opens Make a camp with its chapter coming along, and Keep it in my chat, after which
- * it never comes back.
+ * it never comes back. While the chat is `busy`, as while a reply runs there, its chapters cannot
+ * move, so the cards wait and show again once it is idle.
  */
 export function CampSuggestions({
   hob,
   thread,
   chapters,
+  busy,
   onMake,
 }: {
   hob: Agent;
   thread: Thread;
   chapters: ReadonlyArray<Chapter>;
+  busy: boolean;
   onMake: (from: CampFrom) => void;
 }) {
   const suggestions = useQuery({ ...campSuggestionsQuery(thread.id), enabled: thread.kind === "chat" });
@@ -46,7 +55,7 @@ export function CampSuggestions({
   const kept = keep.data === undefined ? undefined : chapters.find((each) => each.id === keep.data.chapterId);
   return (
     <>
-      {(suggestions.data ?? []).map((suggestion) => {
+      {(busy ? [] : (suggestions.data ?? [])).map((suggestion) => {
         const chapter = chapters.find((each) => each.id === suggestion.chapterId);
         return chapter === undefined ? null : (
           <SuggestionCard
@@ -89,7 +98,7 @@ function SuggestionCard({
   onMake: () => void;
   onKeep: () => void;
 }) {
-  const heading = copy.heading({ title: chapterName(chapter) });
+  const heading = copy.heading({ title: suggestion.title ?? chapterName(chapter) });
   return (
     <section
       aria-label={heading}

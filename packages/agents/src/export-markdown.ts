@@ -55,6 +55,7 @@ const messageBlock = (message: ExportedMessage, names: ExportNames): string => {
 /** One thread: who wrote each message and when, the replies, and each tool step as one line with its outcome. */
 export const threadMarkdown = (thread: ExportedThread, names: ExportNames): string => {
   const about = [
+    // standards-allow STD-ARCH-021: an export names whose thread it is
     nameOf(names, thread.agentId),
     `started ${when(thread.createdAt)}`,
     ...(thread.archivedAt === null ? [] : [`archived ${when(thread.archivedAt)}`]),

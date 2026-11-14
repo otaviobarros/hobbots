@@ -68,7 +68,7 @@ const stuckCopy = async (page: import("@playwright/test").Page, after: ReadonlyA
   );
   await composer.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
   return current;
 };
 
@@ -109,7 +109,7 @@ test("[TC-IN-1087-03] cancelling a stuck member's Task from its lane closes its 
   await expect(laneHead(page, "Quill")).toContainText("Stuck");
   await cancelInLane(page, "Quill");
   await expect(laneHead(page, "Quill")).not.toContainText("Stuck");
-  await expect(page.getByRole("link", { name: "Inbox", exact: true, includeHidden: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "For you", exact: true, includeHidden: true })).toBeVisible();
   await page.goto(`${current.url}/#/inbox`);
   await expect(page.getByText("Nothing needs you")).toBeVisible();
 });
@@ -169,7 +169,7 @@ test("[TC-IN-1087-05] Retry in a stuck lane gives the hob a fresh try, which fin
   await expect(lane(page, "Quill")).toContainText("Result · Three headlines.", { timeout: 20_000 });
   await expect(laneHead(page, "Quill")).not.toContainText("Stuck");
   await expect(lane(page, "Quill").getByRole("alert")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Inbox", exact: true, includeHidden: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "For you", exact: true, includeHidden: true })).toBeVisible();
   await expect((await laneMenu(page, "Quill")).getByRole("menuitem", { name: "Retry" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto(`${current.url}/#/inbox`);

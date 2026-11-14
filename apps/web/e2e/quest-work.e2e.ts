@@ -116,6 +116,37 @@ const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string
   }
 };
 
+// covers UX-001, CH-009
+test("[TC-UX-1567-01] Home's Pick up where you left off leaves out a Quest whose camp is archived until it is restored", async ({
+  page,
+}) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ids = {
+    aldric: await summon("Aldric", 1001),
+    quill: await summon("Quill", 1338),
+    ada: await summon("Ada", 1675),
+    pip: await summon("Pip", 2012),
+  };
+  const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
+  campaign(ids, thread.id);
+
+  await page.goto(hub.url);
+  const pickUp = page.getByRole("region", { name: "Pick up where you left off" });
+  const entry = pickUp.getByRole("link", { name: /Black Friday campaign/ });
+  await expect(entry).toBeVisible();
+
+  // Archiving the camp ends nothing, but its Quests leave Home with it.
+  await call("POST", `/threads/${thread.id}/archive`);
+  await expect(entry).toBeHidden();
+  await expect(pickUp.getByRole("listitem")).toHaveCount(0);
+
+  await call("POST", `/threads/${thread.id}/restore`);
+  await expect(entry).toBeVisible();
+  await expect(pickUp.getByRole("listitem")).toHaveCount(2);
+});
+
 // covers UX-001, CH-005, OR-001
 test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldric's quest and open it, never as her thread", async ({
   page,

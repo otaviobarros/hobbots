@@ -1,15 +1,5 @@
 import type { Page } from "@playwright/test";
-import {
-  campAt,
-  emptyDataDir,
-  expandSidebar,
-  expect,
-  type Hub,
-  removeDataDir,
-  sidebarThread,
-  startHub,
-  test,
-} from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
 // thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
@@ -58,7 +48,6 @@ const summonPip = async (current: Hub) => {
 };
 
 // The open hob's threads show under it in the expanded sidebar.
-test.beforeEach(({ context }) => expandSidebar(context));
 const threadLink = sidebarThread;
 
 /** Makes a camp with Pip named by the prompt, sends the prompt there and waits for its echo. */
@@ -67,7 +56,7 @@ const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => 
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(prompt);
   await composer.press("Enter");
-  await expect(page.getByText(`Echo: ${prompt}`, { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText(`Echo: ${prompt}`, { exact: true })).toBeVisible();
   await expect(threadLink(page, prompt)).toBeVisible();
 };
 

@@ -78,8 +78,8 @@ Every size in `size` is a `--spacing-*` token in `styles.css`, so Tailwind reads
 | Size | Value | Used for |
 | --- | --- | --- |
 | `title-strip` | 30px | The title strip with the window controls |
-| `sidebar` | 72px | The sidebar, collapsed |
-| `sidebar-open` | 256px | The sidebar, expanded |
+| `sidebar` | 76px | The sidebar's rail of icons, below the wide breakpoint |
+| `sidebar-open` | 276px | The sidebar, from the wide breakpoint |
 | `sheet` | 340px | A side sheet from the shared Sheet component |
 | `room-chat` | 360px | The chat column beside the Quest room at 1280 and wider |
 | `room-chat-narrow` | 300px | The chat column beside the Quest room at 1024 |

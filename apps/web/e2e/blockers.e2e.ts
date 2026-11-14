@@ -75,7 +75,7 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   await expect(stuck.getByRole("button", { name: "Retry" })).toBeVisible();
   // The tray keeps to Retry and Dismiss; Reassign… is on the card in the Inbox and the Quest room.
   await expect(stuck.getByRole("button", { name: "Reassign…" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible();
 
   // Help and about's plain check counts it as the Inbox does, and opens the Inbox.
   const chat = page.url();
@@ -117,11 +117,11 @@ test("[TC-IN-097] Dismiss takes stuck work out of the chat's tray and out of Nee
   const stuck = page
     .getByRole("region", { name: /^Needs you/ })
     .getByRole("region", { name: /^Aldric's work is stuck/ });
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
   await stuck.getByRole("button", { name: "Dismiss" }).click();
   await expect(stuck).toBeHidden();
-  await expect(page.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Inbox", exact: true }).click();
+  await expect(page.getByRole("link", { name: "For you", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "For you", exact: true }).click();
   await expect(page.getByText("Nothing needs you")).toBeVisible();
   await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Stuck/ })).toBeHidden();
 });

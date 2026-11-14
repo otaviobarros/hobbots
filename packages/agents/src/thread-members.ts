@@ -31,5 +31,12 @@ export class ThreadMemberRepository extends Context.Service<
     readonly unreadMentions: (
       actor: Actor,
     ) => Effect.Effect<ReadonlyArray<{ readonly threadId: ThreadId; readonly count: number }>>;
+    /**
+     * The replies `actor` has not read, per thread they are an active member of (ADR 039, read markers
+     * per member): a count for each thread with any, counted as the unread threads are.
+     */
+    readonly unreadReplies: (
+      actor: Actor,
+    ) => Effect.Effect<ReadonlyArray<{ readonly threadId: ThreadId; readonly count: number }>>;
   }
 >()("@hobbots/agents/ThreadMemberRepository") {}

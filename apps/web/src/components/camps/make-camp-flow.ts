@@ -18,8 +18,11 @@ export interface CampDraft {
 /** Why a field cannot be sent yet. */
 export type CampProblem = "title-missing" | "title-long" | "goal-long";
 
-/** Why the hub did not make the camp. */
-export type MakeCampError = "hob-unavailable" | "chapter-refused" | "unreachable";
+/**
+ * Why the hub did not make the camp. `chapter-busy`: a reply still runs in the chat, so its chapter
+ * stays put until it ends. `chapter-refused`: the chapter moved or changed meanwhile.
+ */
+export type MakeCampError = "hob-unavailable" | "chapter-busy" | "chapter-refused" | "unreachable";
 
 export type MakeCamp =
   | {
@@ -34,14 +37,20 @@ export type MakeCamp =
 export type MakeCampEvent =
   | { readonly _tag: "Edit"; readonly draft: CampDraft }
   | { readonly _tag: "Leave"; readonly field: keyof CampDraft }
-  /** `key` is a new key, used unless a failed camp is tried again unchanged. */
-  | { readonly _tag: "Send"; readonly key: ThreadId }
+  /**
+   * `key` is a new key, used unless a failed camp is tried again unchanged. `held`: the chat's
+   * chapter cannot move now, as while a reply runs there, so a camp it comes along with waits.
+   */
+  | { readonly _tag: "Send"; readonly key: ThreadId; readonly held?: boolean }
   | { readonly _tag: "Failed"; readonly error: MakeCampError };
 
-/** A new camp's sheet, named `title`, with the chapter it is made from moving into it when `chapter`. */
-export const startMakeCamp = (title = "", chapter = false): MakeCamp => ({
+/**
+ * A new camp's sheet, named `title`, with `goal`, and the chapter it is made from moving into it when
+ * `chapter`.
+ */
+export const startMakeCamp = (title = "", chapter = false, goal = ""): MakeCamp => ({
   step: "editing",
-  draft: { title, goal: "", private: false, chapter },
+  draft: { title, goal, private: false, chapter },
   shown: new Set(),
 });
 
@@ -78,6 +87,8 @@ export const makeCampStep = (state: MakeCamp, event: MakeCampEvent): MakeCamp =>
       return state.step === "editing" ? { ...state, shown: new Set([...state.shown, event.field]) } : state;
     case "Send": {
       if (state.step === "saving") return state;
+      // The hub would refuse the move; the sheet holds the camp until the chapter can move.
+      if (event.held === true && state.draft.chapter) return state;
       if (Object.keys(campProblems(state.draft)).length > 0) return { ...state, step: "editing", shown: ALL_FIELDS };
       // Trying a failed camp again, unchanged, keeps its key, so a camp made before its answer was lost
       // is not made twice. An edit after a failure goes back to editing, and asks under a new key.
@@ -93,6 +104,8 @@ export const makeCampStep = (state: MakeCamp, event: MakeCampEvent): MakeCamp =>
 export const makeCampError = (error: unknown): MakeCampError => {
   if (!(error instanceof ApiError)) return "unreachable";
   if (error.tag === "HobUnavailable") return "hob-unavailable";
-  // The chapter moved, merged or started a reply meanwhile; the camp was not made.
+  // A reply runs in the chat, or a quest in the chapter is led by a hob the camp does not admit.
+  if (error.tag === "ChapterMoveRefused" && error.fields["reason"] === "reply-running") return "chapter-busy";
+  // The chapter moved or merged meanwhile; the camp was not made.
   return error.tag === "ChapterMoveRefused" || error.tag === "ChapterMissing" ? "chapter-refused" : "unreachable";
 };

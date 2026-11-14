@@ -107,21 +107,23 @@ const questMoved = (group: QuestInProgress): string =>
   group.quest.createdAt;
 
 /**
- * Recent chats and Quests in progress in one list, the most recently active first. A chat that
- * follows a Quest shows once, as that Quest.
+ * Recent chats and Quests in progress in one list, the most recently active first. `chats` are the
+ * open threads, so a Quest followed in a thread that is not among them, as in an archived camp, is
+ * left out until the thread opens again; a Quest with no thread shows. A chat that follows a Quest
+ * shows once, as that Quest.
  */
 export const pickUpRows = <H, T extends Pick<Thread, "id" | "updatedAt">>(
   chats: ReadonlyArray<{ readonly hob: H; readonly thread: T }>,
   quests: ReadonlyArray<QuestInProgress>,
 ): ReadonlyArray<PickUpRow<H, T>> => {
-  const questThreads = new Set(
-    quests.flatMap((group) => (group.quest.threadId === null ? [] : [group.quest.threadId])),
-  );
+  const open = new Set(chats.map(({ thread }) => thread.id));
+  const shown = quests.filter(({ quest }) => quest.threadId === null || open.has(quest.threadId));
+  const questThreads = new Set(shown.flatMap((group) => (group.quest.threadId === null ? [] : [group.quest.threadId])));
   const rows: Array<PickUpRow<H, T>> = [
     ...chats
       .filter(({ thread }) => !questThreads.has(thread.id))
       .map(({ hob, thread }) => ({ kind: "thread" as const, hob, thread, at: thread.updatedAt })),
-    ...quests.map((group) => ({ kind: "quest" as const, group, at: questMoved(group) })),
+    ...shown.map((group) => ({ kind: "quest" as const, group, at: questMoved(group) })),
   ];
   return rows.toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, PICK_UP_LIMIT);
 };

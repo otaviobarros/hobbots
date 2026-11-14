@@ -126,7 +126,7 @@ test("[TC-PE-129] double-clicking Allow once or Save the rule runs the action on
   const push = await ask(page, PUSH);
   await push.getByRole("button", { name: "Allow once" }).dblclick();
   await expect(push.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
-  await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: Ship it/)).toBeVisible();
   // One push step, run once.
   await expect(replySteps(page).locator('[data-state="done"]', { hasText: "git push" })).toHaveCount(1);
 
@@ -134,7 +134,7 @@ test("[TC-PE-129] double-clicking Allow once or Save the rule runs the action on
   await tidy.getByRole("button", { name: "Always for this file" }).click();
   await tidy.getByRole("button", { name: "Save the rule and allow" }).dblclick();
   await expect(tidy.getByRole("status")).toHaveText("✓ Allowed, and the rule is saved. Pip carries on.");
-  await expect(page.getByText(/^Echo: Tidy up/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: Tidy up/)).toBeVisible();
 
   const approvals = await api<ReadonlyArray<Approval>>(current, "/api/approvals");
   expect(approvals.map(({ state, lifetime }) => [state, lifetime])).toEqual([

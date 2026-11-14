@@ -133,7 +133,8 @@ export const ChapterStates = {
  * `same-thread`: a chapter moves only into another thread. `not-a-camp`: a chapter moves only into
  * an open camp of the same hob. `reply-running`: a reply runs or waits in the thread, or an approval
  * waits there, or a Quest in the chapter is led by a hob the camp does not admit, so its chapters
- * stay put until it ends.
+ * stay put until it ends. `chapter-changed`: the chapter the hub judged before splitting it changed
+ * meanwhile, so its judgment no longer fits (#1557).
  */
 export const ChapterRefusal = Schema.Literals([
   "thread-closed",
@@ -146,6 +147,7 @@ export const ChapterRefusal = Schema.Literals([
   "same-thread",
   "not-a-camp",
   "reply-running",
+  "chapter-changed",
 ]);
 export type ChapterRefusal = typeof ChapterRefusal.Type;
 
@@ -160,7 +162,7 @@ export class ChapterNotFound extends Schema.TaggedError<ChapterNotFound>()("Chap
 }) {}
 
 /** `text` as one line cut at `max` characters, marked with an ellipsis when cut; null when it has no text. */
-const oneLineUpTo = (text: string, max: number): string | null => {
+export const oneLineUpTo = (text: string, max: number): string | null => {
   const line = text.replace(/\s+/g, " ").trim();
   if (line.length === 0) return null;
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;

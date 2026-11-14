@@ -21,35 +21,46 @@ import { messages } from "./messages.ts";
 
 const copy = messages.make;
 
-/** A chat's chapter a camp is made from, which moves into it, and what it holds, in words. */
+/**
+ * A chat's chapter a camp is made from, which moves into it, and what it holds, in words: `title` names
+ * the chapter. `name` and `goal` prefill the camp's, as a camp suggestion offers them (#1557).
+ */
 export interface CampFrom {
   readonly chapter: Chapter;
   readonly title: string;
   readonly detail: string;
+  readonly name?: string;
+  readonly goal?: string;
 }
 
 /**
  * Make a camp (ADR 037): its name, its goal and whether it is private, with the hob's memory always
  * coming along, and the chat's chapter it is made from, which moves into it unless you switch it
- * off. The camp opens once it is made; a failure keeps what you typed and says why.
+ * off. The camp opens once it is made; a failure keeps what you typed and says why. `held`: the
+ * chat's chapter cannot move now, as while a reply runs there: the hub refuses the move until it
+ * ends, so Make the camp waits for it, unless you switch the chapter off.
  */
 export function MakeCampSheet({
   hob,
   from,
+  held: chapterHeld = false,
   onClose,
 }: {
   hob: Agent;
   from?: CampFrom | undefined;
+  held?: boolean;
   onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(makeCampStep, undefined, () =>
-    startMakeCamp(from?.title ?? "", from !== undefined),
+    startMakeCamp(from?.name ?? "", from !== undefined, from?.goal ?? ""),
   );
   const make = useMakeCamp(hob.id);
   const move = useMoveChapter(from?.chapter.threadId ?? ("" as ThreadId));
   const navigate = useNavigate();
   const { draft } = state;
   const saving = state.step === "saving";
+  // The chapter comes along but cannot move yet: Make the camp waits until it can.
+  const held = !saving && from !== undefined && draft.chapter && chapterHeld;
   const problems = campProblems(draft);
   // A field's problem shows once it lost focus, or once a send found it.
   const problemOf = (field: keyof CampDraft) => {
@@ -62,7 +73,7 @@ export function MakeCampSheet({
 
   const send = () => {
     // The reducer decides whether it saves and under which key; the request follows its answer.
-    const event: MakeCampEvent = { _tag: "Send", key: ThreadId.make(crypto.randomUUID()) };
+    const event: MakeCampEvent = { _tag: "Send", key: ThreadId.make(crypto.randomUUID()), held };
     const next = makeCampStep(state, event);
     dispatch(event);
     if (next.step !== "saving") return;
@@ -144,16 +155,22 @@ export function MakeCampSheet({
               onChange={(value) => edit({ private: value })}
             />
           </fieldset>
-          {state.step === "failed" && (
-            <p role="alert" className="m-0 text-ui text-rose">
-              {copy.errors[state.error]({ name: hob.name })}
+          {held ? (
+            <p role="status" className="m-0 text-ui text-text-secondary">
+              {copy.held({ name: hob.name })}
             </p>
+          ) : (
+            state.step === "failed" && (
+              <p role="alert" className="m-0 text-ui text-rose">
+                {copy.errors[state.error]({ name: hob.name })}
+              </p>
+            )
           )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
               {copy.cancel}
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || held}>
               {saving ? copy.making : copy.make}
             </Button>
           </div>

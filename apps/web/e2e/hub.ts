@@ -244,10 +244,6 @@ export const test = base.extend<{
 
 export { expect } from "@playwright/test";
 
-/** Opens the sidebar on every page this context loads, as a user who keeps it expanded would. */
-export const expandSidebar = (context: BrowserContext) =>
-  context.addInitScript(() => localStorage.setItem("sidebar.open", "true"));
-
 /**
  * A camp for the hob, made as Make a camp makes one (ADR 037), titled `title`: a thread of its own
  * beside the hob's one chat. Gives back its address in the web client.
@@ -263,9 +259,12 @@ export const campAt = async (current: Pick<Hub, "url" | "headers">, hobId: strin
   return { id: camp.id, url: `${current.url}/#/hobs/${hobId}/threads/${camp.id}` };
 };
 
-/** The open hob's chat and camps in the expanded sidebar, each a link named by its title; its chat is "Chat". */
+/** A camp in the sidebar's Camps, a link named by its title (ADR 039, The sidebar). */
 export const sidebarThread = (page: Page, title: string) =>
-  page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: title, exact: true });
+  page
+    .getByRole("navigation", { name: "Sections" })
+    .getByRole("list", { name: "Camps" })
+    .getByRole("link", { name: title, exact: true });
 
 const stopProcess = (child: ChildProcess, signal: NodeJS.Signals = "SIGTERM") =>
   new Promise<void>((done) => {

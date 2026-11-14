@@ -1,116 +1,224 @@
-import type { Agent, Thread } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { campsOf, openChatOf } from "../../api/camps.ts";
-import { threadsQuery } from "../../api/queries.ts";
-import { useUnreadThreads } from "../../api/thread-reads.ts";
-import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
-import { messages as campCopy } from "../camps/messages.ts";
-import { campList } from "./camp-list.ts";
+import { useKnownUnreadThreads } from "../../api/thread-reads.ts";
+import { formatCount } from "../../lib/format.ts";
+import { HobTile } from "../hob-sprite/hob-sprite.tsx";
+import { campList, foldedNews } from "./camp-list.ts";
 import { messages as copy } from "./messages.ts";
-import { sidebarItem } from "./sidebar-classes.ts";
-
-const sub = cn(sidebarItem, "animate-hb-in ps-14 pe-2 text-text-secondary hover:text-text-strong");
-
-/** Where the open hob's chat is, as the address shows it: its own page, or the thread it is. */
-const isChatAt = (pathname: string, hobId: string, chat: Thread | undefined) =>
-  pathname === `/hobs/${hobId}/chat` || (chat !== undefined && pathname === `/hobs/${hobId}/threads/${chat.id}`);
+import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
+import type { SidebarData } from "./sidebar-data.ts";
+import { FaceStack } from "./sidebar-faces.tsx";
+import { SidebarFailed } from "./sidebar-failed.tsx";
+import { SidebarTip } from "./sidebar-item.tsx";
+import { RailUnread, SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
+import { type CampRow, campRows, rowTime } from "./sidebar-rows.ts";
+import { SidebarEmpty, SidebarLoading } from "./sidebar-states.tsx";
 
 /** The camp the address names, if any. */
-const openCampOf = (pathname: string, hobId: string) =>
-  pathname.startsWith(`/hobs/${hobId}/threads/`) ? pathname.split("/")[4] : undefined;
+const openCampOf = (pathname: string) => /^\/hobs\/[^/]+\/threads\/([^/]+)/.exec(pathname)?.[1];
 
 /**
- * Under the open hob, while the sidebar is expanded (ADR 037): its Chat first, then its camps,
- * pinned ones first, then Make a camp. Only the first five camps show, and the open one, with Show
- * N more for the rest, so a hob with many camps never pushes the other hobs away. A row with
- * messages you have not read carries the lantern dot, and so does Show more when it hides one.
+ * Camps (ADR 039, The sidebar): the camps you share first, as rows with stacked faces, the last line
+ * and its time, then the camps a hob runs alone with you, as compact rows. The first five show, and
+ * the open one, with Show N more for the rest; the rail lists them all. The + makes a camp.
  */
-export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }) {
-  const threads = useQuery(threadsQuery(hob.id));
-  const chat = openChatOf(threads.data);
-  const [making, setMaking] = useState(false);
+export function SidebarCamps({
+  data,
+  pathname,
+  wide,
+  onMake,
+}: {
+  data: SidebarData;
+  pathname: string;
+  wide: boolean;
+  onMake: (() => void) | undefined;
+}) {
   const [all, setAll] = useState(false);
-  const unread = useUnreadThreads();
-  const camps = campsOf(threads.data);
-  const folded = campList(camps, openCampOf(pathname, hob.id), unread);
-  const shown = all ? camps : folded.shown;
+  const rows = campRows({
+    places: data.read?.sidebar.camps ?? [],
+    threads: data.threads,
+    hobs: data.hobs,
+    you: data.read?.you,
+    people: data.read?.people ?? [],
+    unread: useKnownUnreadThreads(),
+  });
+  const open = openCampOf(pathname);
+  const folded = campList(
+    rows.map((row) => ({ ...row, id: row.thread.id })),
+    open,
+  );
+  // The rail has no room for Show more, so it lists every camp and scrolls.
+  const shown = all || !wide ? rows : folded.shown;
   return (
     <>
-      <ul aria-label={campCopy.sidebar.camps({ name: hob.name })} className="m-0 flex list-none flex-col gap-0.5 p-0">
-        <li className="flex">
-          <Link
-            to="/hobs/$hobId/chat"
-            params={{ hobId: hob.id }}
-            aria-current={isChatAt(pathname, hob.id, chat) ? "page" : undefined}
-            aria-description={chat !== undefined && unread.has(chat.id) ? copy.unreadThread : undefined}
-            className={sub}
-          >
-            <Glyph>{copy.glyph.chat}</Glyph>
-            <span className="min-w-0 flex-1 truncate">{campCopy.sidebar.chat}</span>
-            {chat !== undefined && unread.has(chat.id) && <UnreadDot />}
-          </Link>
-        </li>
-        {shown.map((camp) => (
-          <li key={camp.id} className="flex">
-            <Link
-              to="/hobs/$hobId/threads/$threadId"
-              params={{ hobId: hob.id, threadId: camp.id }}
-              aria-current={pathname === `/hobs/${hob.id}/threads/${camp.id}` ? "page" : undefined}
-              // The link keeps the camp's title as its name, so the dot is told as its description.
-              aria-description={unread.has(camp.id) ? copy.unreadThread : undefined}
-              className={sub}
-            >
-              <Glyph>{copy.glyph.camp}</Glyph>
-              <span className="min-w-0 flex-1 truncate">{camp.title}</span>
-              {unread.has(camp.id) && <UnreadDot />}
-            </Link>
-          </li>
-        ))}
-        {folded.hidden > 0 && (
-          <li className="flex">
-            <button
-              type="button"
-              aria-expanded={all}
-              aria-description={!all && folded.hiddenUnread ? copy.unreadThread : undefined}
-              className={cn(sub, "cursor-pointer border-0 bg-transparent")}
-              onClick={() => setAll(!all)}
-            >
-              <Glyph>{copy.glyph.more}</Glyph>
-              <span className="min-w-0 flex-1 truncate">
-                {all ? copy.fewerCamps : copy.moreCamps({ count: folded.hidden })}
-              </span>
-              {!all && folded.hiddenUnread && <UnreadDot />}
-            </button>
-          </li>
-        )}
-        <li className="flex">
-          <button
-            type="button"
-            aria-label={campCopy.sidebar.makeCampFor({ name: hob.name })}
-            className={cn(sub, "cursor-pointer border-0 bg-transparent")}
-            onClick={() => setMaking(true)}
-          >
-            <Glyph>{copy.glyph.add}</Glyph>
-            <span className="min-w-0 flex-1 truncate">{campCopy.sidebar.makeCamp}</span>
-          </button>
-        </li>
-      </ul>
-      {making && <MakeCampSheet hob={hob} onClose={() => setMaking(false)} />}
+      <div className={sidebarSection}>
+        <b className="lbl flex-1 text-detail">{copy.camps}</b>
+        {onMake !== undefined && <MakeButton onMake={onMake} />}
+      </div>
+      <span aria-hidden className={sidebarRule} />
+      {data.campsFailed && <SidebarFailed message={copy.campsLoadFailed} onRetry={data.retry} />}
+      <CampsList data={data} rows={rows} shown={shown} open={open} wide={wide} />
+      {wide && folded.hidden.length > 0 && <ShowMore all={all} hidden={folded.hidden} onToggle={() => setAll(!all)} />}
     </>
   );
 }
 
-function Glyph({ children }: { children: string }) {
+/** The camps, or still rows while none are read yet, or a line saying there are none. */
+function CampsList({
+  data,
+  rows,
+  shown,
+  open,
+  wide,
+}: {
+  data: SidebarData;
+  rows: ReadonlyArray<CampRow>;
+  shown: ReadonlyArray<CampRow>;
+  open: string | undefined;
+  wide: boolean;
+}) {
+  if (rows.length === 0 && data.campsLoading) return <SidebarLoading label={copy.camps} />;
+  if (rows.length === 0 && !data.campsFailed) return <SidebarEmpty message={copy.noCamps} />;
   return (
-    <span aria-hidden className="w-4 flex-none text-center text-meta text-label">
-      {children}
+    <ul aria-label={copy.camps} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
+      {shown.map((row) => (
+        <li key={row.thread.id} className="flex w-full justify-center">
+          <CampLink row={row} current={row.thread.id === open} wide={wide} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Show N more, or Show fewer, under the first camps. While folded, a dot shows that a hidden camp
+ * holds what you have not read, as the rail's dot does: lantern for a mention of you. Its description
+ * says so.
+ */
+function ShowMore({ all, hidden, onToggle }: { all: boolean; hidden: ReadonlyArray<CampRow>; onToggle: () => void }) {
+  const { unread, mentions } = foldedNews(all ? [] : hidden);
+  const news = copy.campNews({ unread, mentions, needs: false });
+  return (
+    <button
+      type="button"
+      aria-expanded={all}
+      aria-description={news === "" ? undefined : news}
+      className={sidebarMore}
+      onClick={onToggle}
+    >
+      {all ? copy.fewerCamps : copy.moreCamps({ count: hidden.length })}
+      {news !== "" && (
+        <span
+          aria-hidden
+          className={cn("size-2 flex-none rounded-dot", mentions > 0 ? "bg-lantern" : "bg-text-strong")}
+        />
+      )}
+    </button>
+  );
+}
+
+/** The + beside Camps. */
+function MakeButton({ onMake }: { onMake: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={copy.makeCamp}
+      onClick={onMake}
+      className="inline-flex size-6 cursor-pointer items-center justify-center rounded-control border-0 bg-transparent text-text-secondary hover:bg-hover hover:text-text-strong"
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 16 16"
+        className="size-3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      >
+        <path d="M8 3v10M3 8h10" />
+      </svg>
+    </button>
+  );
+}
+
+/** A camp's row: shared ones with their faces and last line, a hob's own compact with its tile. */
+function CampLink({ row, current, wide }: { row: CampRow; current: boolean; wide: boolean }) {
+  const { place, thread, hob, needs } = row;
+  const shared = place.section === "shared-camp";
+  const news = copy.campNews({ unread: row.unread, mentions: place.mentions, needs });
+  return (
+    <SidebarRowFrame
+      tall={shared}
+      face={<CampFace row={row} wide={wide} />}
+      link={
+        <SidebarTip label={thread.title} wide={wide}>
+          <Link
+            to="/hobs/$hobId/threads/$threadId"
+            params={{ hobId: hob.id, threadId: thread.id }}
+            aria-current={current ? "page" : undefined}
+            // The link keeps the camp's name as its name; what is new is told as its description.
+            aria-label={thread.title}
+            aria-description={news === "" ? undefined : news}
+            className={cn(sidebarRowLink, shared || row.unread > 0 ? "font-semibold" : "font-normal")}
+          >
+            <span className="max-wide:sr-only">{thread.title}</span>
+          </Link>
+        </SidebarTip>
+      }
+      line={shared && thread.lastLine !== null ? <CampLine row={row} /> : undefined}
+      aside={<CampAside row={row} />}
+    />
+  );
+}
+
+/**
+ * A shared camp's stack of faces, or the hob's tile; on the rail, a lantern dot when it needs you and
+ * a dot for what you have not read.
+ */
+function CampFace({ row, wide }: { row: CampRow; wide: boolean }) {
+  return (
+    <>
+      {row.place.section === "shared-camp" ? <FaceStack faces={row.faces} /> : <HobTile hob={row.hob} tile="sm" />}
+      <RailUnread unread={row.unread > 0} mention={row.place.mentions > 0} />
+      {!wide && row.needs && (
+        <span className="absolute -end-0.5 -bottom-0.5 size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern" />
+      )}
+    </>
+  );
+}
+
+/**
+ * A shared camp's last line after who wrote it, "Marina: one caption idea each?", in bold while it
+ * holds what you have not read.
+ */
+function CampLine({ row }: { row: CampRow }) {
+  const line = row.thread.lastLine ?? "";
+  return (
+    <span className={cn(row.unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary")}>
+      {row.lastAuthor === null ? line : copy.lastLine({ author: row.lastAuthor, line })}
     </span>
   );
 }
 
-function UnreadDot() {
-  return <span aria-hidden className="size-2 flex-none rounded-dot bg-lantern" />;
+/** A shared camp's time, or the hob whose camp it is; then Needs you, `@` for a mention of you, and the unread count. */
+function CampAside({ row }: { row: CampRow }) {
+  const shared = row.place.section === "shared-camp";
+  const aside = shared ? rowTime(row.thread.updatedAt) : row.needs ? "" : row.hob.name;
+  return (
+    <>
+      {aside !== "" && <span className="text-meta text-label">{aside}</span>}
+      <span className="flex items-center gap-1">
+        {row.needs && (
+          <span className="rounded-tag bg-lantern px-[7px] py-px text-meta font-semibold whitespace-nowrap text-on-lantern">
+            {copy.needsYou}
+          </span>
+        )}
+        {row.place.mentions > 0 && (
+          <span className={cn(sidebarCount, "bg-lantern text-on-lantern")}>{copy.mention}</span>
+        )}
+        {row.unread > 0 && <span className={sidebarCount}>{formatCount(row.unread)}</span>}
+      </span>
+    </>
+  );
 }

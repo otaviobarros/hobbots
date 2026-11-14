@@ -79,6 +79,7 @@ export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
 
     const checkBrainSwitch = Effect.fn("ChatService.checkBrainSwitch")(function* (threadId: ThreadId) {
       const thread = yield* findThread(threadId);
+      // standards-allow STD-ARCH-021: a thread's brain follows the hob it belongs to
       const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
       if (agent.status === "retired") yield* requireActive(agent);
       yield* requireLive(thread);
@@ -148,6 +149,7 @@ export const makeThreadCommands = (deps: ThreadCommandsDeps) =>
         (thread, agent) =>
           Effect.gen(function* () {
             if (!ThreadLifecycle.isArchived(thread)) return thread;
+            // standards-allow STD-ARCH-021: a restored thread goes back among its owner's threads
             const others = yield* repo.listThreads(thread.agentId);
             return yield* changeLifecycle(thread, {
               _tag: "Restore",

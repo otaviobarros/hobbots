@@ -1,5 +1,6 @@
 import { ThreadNotFound } from "@hobbots/api";
 import {
+  type CampSuggestionId,
   type Chapter,
   type ChapterId,
   type ChapterNotFound,
@@ -12,9 +13,22 @@ import {
   ThreadLifecycle,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
+
+/** A split: the new chapter's id, the message it starts at, its title, and the suggestion it is made for. */
+export interface SplitInput {
+  readonly id: ChapterId;
+  readonly messageId: MessageId;
+  readonly title: string;
+  readonly withdraw?: CampSuggestionId;
+  /**
+   * For a split the hub judged: the chapter it judged, at the revision it read, and the highest
+   * revision of its messages when the judgment read them all.
+   */
+  readonly judged?: { readonly chapterId: ChapterId; readonly revision: number; readonly messagesRevision?: number };
+}
 
 /** Where a thread's chapters are kept (ADR 037). Each command runs its rules and journals its event in one transaction. */
 export class ChapterRepository extends Context.Service<
@@ -32,11 +46,15 @@ export class ChapterRepository extends Context.Service<
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
      * Cuts the chapter `messageId` is in, so its messages from there on make chapter `id`, journaled
-     * as `ChapterSplit`. `id` is the idempotency key, as for `startChapter`.
+     * as `ChapterSplit`. `id` is the idempotency key, as for `startChapter`. In the same
+     * transaction (#1557), the cut chapter's pending camp suggestion is withdrawn when it is `withdraw`,
+     * the one the hub split it for, or when its thresholds no longer hold; and chapter `id` is
+     * suggested if it reaches a threshold on its own. A split with `judged` is refused as
+     * `chapter-changed` when the message is no longer in that chapter as it was judged.
      */
     readonly splitChapter: (
       threadId: ThreadId,
-      input: { readonly id: ChapterId; readonly messageId: MessageId; readonly title: string },
+      input: SplitInput,
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
      * Merges `chapterId` into the chapter before it, journaled as `ChapterMerged`. Merging a chapter
@@ -65,10 +83,7 @@ export class ChapterService extends Context.Service<
       threadId: ThreadId,
       input: { readonly id: ChapterId; readonly title: string },
     ) => Effect.Effect<ChapterPlan, ChapterErrors>;
-    readonly splitChapter: (
-      threadId: ThreadId,
-      input: { readonly id: ChapterId; readonly messageId: MessageId; readonly title: string },
-    ) => Effect.Effect<ChapterPlan, ChapterErrors>;
+    readonly splitChapter: (threadId: ThreadId, input: SplitInput) => Effect.Effect<ChapterPlan, ChapterErrors>;
     readonly mergeChapters: (threadId: ThreadId, chapterId: ChapterId) => Effect.Effect<ChapterPlan, ChapterErrors>;
   }
 >()("@hobbots/agents/ChapterService") {
@@ -88,8 +103,9 @@ export class ChapterService extends Context.Service<
         Effect.gen(function* () {
           const found = yield* repo.findThread(threadId);
           if (Option.isNone(found)) return yield* new ThreadNotFound({ threadId });
-          const committed = yield* admission.withHob(
-            found.value.agentId,
+          const committed = yield* withThreadLock(
+            admission,
+            found.value,
             Effect.gen(function* () {
               const thread = yield* repo.findThread(threadId);
               if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
