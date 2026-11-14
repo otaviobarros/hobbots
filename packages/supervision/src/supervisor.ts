@@ -157,6 +157,10 @@ export class Supervisor extends Context.Service<
             ) as Change;
           });
 
+        /** Whether `task` is still held by the hob and the Attempt `decided` was. */
+        const sameWork = (task: Task, decided: Task) =>
+          task.ownerId === decided.ownerId && task.currentAttemptId === decided.currentAttemptId;
+
         /** Whether `ownerId` and the Task's tree have room for one more open Task, read in the change's transaction. */
         const roomFor = (task: Task) =>
           Effect.gen(function* () {
@@ -189,8 +193,16 @@ export class Supervisor extends Context.Service<
               );
             case "Retry":
               return Effect.succeed(retry(act, at));
+            // Only while the hob and the Attempt that ran out are still the Task's: work you reassigned is not failed.
             case "Fail":
-              return endWork(act.task, act.reason, "ended", isOpen, NOTHING, at);
+              return endWork(
+                act.task,
+                act.reason,
+                "ended",
+                (task) => isOpen(task) && sameWork(task, act.task),
+                NOTHING,
+                at,
+              );
             case "Tell":
               return Effect.succeed(tell(act.task.id, act.key, act.text, at));
             case "Route":
