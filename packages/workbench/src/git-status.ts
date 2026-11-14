@@ -416,15 +416,29 @@ const refPlacesOf = async (repository: Repository): Promise<RefPlaces> => {
   return { common, gitdir, writable: linked };
 };
 
+/**
+ * Whether `ref` is a ref name Git accepts (`git check-ref-format`): under `refs/`, no part empty,
+ * starting with a dot or ending with `.lock`, no `..`, `@{`, backslash, control character, space or
+ * any of `~^:?*[`, and not ending with a dot. So its file is always inside the refs folder, whatever
+ * separator the platform's paths take.
+ */
+const refNamed = (ref: string): boolean => {
+  if (!ref.startsWith("refs/") || ref.endsWith(".") || ref.includes("..") || ref.includes("@{")) return false;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Git refuses control characters in ref names.
+  if (/[\x00-\x20\x7f~^:?*[\\]/.test(ref)) return false;
+  return ref.split("/").every((name) => name !== "" && !name.startsWith(".") && !name.endsWith(".lock"));
+};
+
 /** The files whose change moves ref `ref` (`refs/...`), from `depth` symbolic refs away (see `branchFiles`). */
 const refFiles = async (places: RefPlaces, ref: string, depth: number): Promise<Array<string>> => {
-  const names = ref.split("/");
   // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
-  if (names.some((name) => name === "" || name === "." || name === ".." || name.endsWith(".lock"))) return [];
+  if (!refNamed(ref)) return [];
+  const names = ref.split("/");
   // A worktree's own refs are in its own Git folder, and never packed.
   const own = PER_WORKTREE.some((pattern) => pattern.test(ref));
   const base = own ? places.gitdir : places.common;
   const loose = join(base, ...names);
+  if (!within(loose, join(base, "refs"))) return [];
   const packed = join(places.common, "packed-refs");
   if (!own && places.writable && !(await present(loose)) && (await present(packed))) {
     await restoreLooseRef(places.common, names);

@@ -175,6 +175,10 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     expect(gitIn(repo, "show-ref", "--verify", "refs/heads/feat/shop").toString()).toContain(commit);
     expect(await read((git) => git.branchFiles(repo, "feat/new"))).toEqual([packed]);
     expect(await read((git) => git.branchFiles(repo, "../../config"))).toEqual([packed]);
+    // A name Git refuses, with a backslash or a part starting with a dot, names no ref file.
+    for (const name of ["feat\\..\\..\\config", "feat/.hidden", "feat:shop", "feat/shop."]) {
+      expect(await read((git) => git.branchFiles(repo, name))).toEqual([packed]);
+    }
     // A linked worktree's branches are in the main repository's Git folder.
     const camp = join(work, "camp");
     gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
