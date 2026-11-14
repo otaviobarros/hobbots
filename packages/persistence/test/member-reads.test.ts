@@ -221,20 +221,19 @@ describe("read markers per member", () => {
       }),
       TestDatabaseAt(earlier),
     );
+    // The versions this migration writes; a later migration may raise them again.
     expect(result.rows.map((row) => [row.type, Number(row.schemaVersion)])).toEqual([
-      ["ThreadUpserted", EVENT_SCHEMA_VERSIONS.ThreadUpserted],
-      ["CampMade", EVENT_SCHEMA_VERSIONS.CampMade],
-      ["ChatStartedFresh", EVENT_SCHEMA_VERSIONS.ChatStartedFresh],
+      ["ThreadUpserted", 6],
+      ["CampMade", 3],
+      ["ChatStartedFresh", 3],
     ]);
     expect(result.rows.every((row) => !row.payload.includes('"unread"'))).toBe(true);
     expect(result.decoded).toEqual(["ThreadUpserted", "CampMade", "ChatStartedFresh"]);
-    // The migration lists every event type that carries a thread, at the version it writes.
-    expect(EVENT_SCHEMA_VERSIONS).toMatchObject({
-      ThreadUpserted: 6,
-      CampMade: 3,
-      ChatStartedFresh: 3,
-      ChapterMoved: 2,
-    });
+    // The migration lists every event type that carries a thread, at the version it writes or later.
+    expect(EVENT_SCHEMA_VERSIONS.ThreadUpserted).toBeGreaterThanOrEqual(6);
+    expect(EVENT_SCHEMA_VERSIONS.CampMade).toBeGreaterThanOrEqual(3);
+    expect(EVENT_SCHEMA_VERSIONS.ChatStartedFresh).toBeGreaterThanOrEqual(3);
+    expect(EVENT_SCHEMA_VERSIONS.ChapterMoved).toBeGreaterThanOrEqual(2);
   });
 
   // covers ADR 039 (Members: unread counts, the unread line and catch-up are per person)
