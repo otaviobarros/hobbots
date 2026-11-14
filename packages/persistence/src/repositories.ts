@@ -206,7 +206,7 @@ const usageColumns = (usage: ReplyUsage | null) => ({
 });
 
 // A message's steps are one JSON text column (migration 0017).
-const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
+export const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
   rows.map((row) => ({
     ...row,
     revision: Number(row.revision),

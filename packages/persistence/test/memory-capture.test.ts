@@ -1,5 +1,5 @@
 import { HobbotsRepository, MemoryCaptureLog, PrivateCamps } from "@hobbots/agents";
-import { Agent, AgentId, TaskId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Message, MessageId, OWNER_ACTOR, TaskId, Thread, ThreadId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -62,7 +62,7 @@ describe("MemoryCaptureLog", () => {
       yield* log.save(1, [session], [], { privateThreads: [], excluded: ["attempt:a1"] });
       const afterOne = yield* journal.compact;
       const held = yield* log.hold;
-      yield* log.save(2, [], [threadId], { privateThreads: [], excluded: ["attempt:a1", "message:m2"] });
+      yield* log.save(2, [], [session], { privateThreads: [], excluded: ["attempt:a1", "message:m2"] });
       const ended = yield* log.hold;
       yield* log.release;
       const released = yield* journal.compact;
@@ -163,5 +163,49 @@ describe("MemoryCaptureLog", () => {
     expect(result.held.exclusions.privateThreads).toEqual(["camp"]);
     expect(result.followed.exclusions.privateThreads).toEqual([]);
     expect(result.none).toEqual({ privateNow: new Set(), taskThreads: new Map() });
+  });
+
+  // covers ADR 039 (Memory in a shared thread)
+  it("[TC-GEN-1466-01] keeps a thread's session open in each hob's memory, ends each on its own, and reads the messages hobs took", async () => {
+    const result = await Effect.gen(function* () {
+      const log = yield* MemoryCaptureLog;
+      const repo = yield* HobbotsRepository;
+      yield* seed;
+      const started = yield* log.hold;
+      const quill = AgentId.make("quill");
+      const pips = { sessionId: threadId, agentId, lastAt: now, lastKey: "entry:e1" };
+      const quills = { sessionId: threadId, agentId: quill, lastAt: now, lastKey: "entry:e2" };
+      yield* log.save(started.sequence, [pips, quills], [], { privateThreads: [], excluded: [] });
+      const both = yield* log.hold;
+      // Pip's session goes on, and only Quill's ends.
+      const later = { ...pips, lastKey: "entry:e3" };
+      yield* log.save(started.sequence, [later], [quills], { privateThreads: [], excluded: [] });
+      const one = yield* log.hold;
+      const asked = new Message({
+        id: MessageId.make("m1"),
+        threadId,
+        actor: OWNER_ACTOR,
+        role: "user",
+        content: "Draft the offer letter.",
+        status: "complete",
+        error: null,
+        configVersion: null,
+        createdAt: now,
+      });
+      yield* repo.upsertMessage(asked);
+      const read = yield* log.messages([asked.id, MessageId.make("gone")]);
+      const none = yield* log.messages([]);
+      return { both, one, read, none };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.both.sessions).toEqual([
+      { sessionId: threadId, agentId, lastAt: now, lastKey: "entry:e1" },
+      { sessionId: threadId, agentId: "quill", lastAt: now, lastKey: "entry:e2" },
+    ]);
+    expect(result.one.sessions).toEqual([{ sessionId: threadId, agentId, lastAt: now, lastKey: "entry:e3" }]);
+    expect(result.read.map((message) => [message.id, message.content, message.actor])).toEqual([
+      ["m1", "Draft the offer letter.", OWNER_ACTOR],
+    ]);
+    expect(result.none).toEqual([]);
   });
 });

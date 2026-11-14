@@ -28,7 +28,7 @@ import {
   memorySearchTerms,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema, Semaphore } from "effect";
-import { acknowledgedPrefix, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
+import { acknowledgedPrefix, engineSessionOf, HOOK_BATCH_MAX, HookBatchJson, hookEventOf } from "./capture.ts";
 import {
   type EngineCaller,
   type EngineClient,
@@ -536,6 +536,10 @@ const makeStore = (client: EngineClient, authors: MemoryVersionAuthorsShape): Me
       return found;
     }).pipe(orEmpty([] as Array<MemoryPageSummary>));
 
+  /** A session's summary page, by the name ai-memory keeps the session under (ADR 039). */
+  const sessionPage = (scope: MemoryScope, sessionId: MemorySessionId) =>
+    MemoryPath.make(`sessions/${engineSessionOf(engineProjectOf(scope), sessionId)}.md`);
+
   const store: MemoryStoreShape = {
     search: (actor, scopes, query, limit) => {
       const fts = ftsQuery(query);
@@ -698,6 +702,7 @@ const makeStore = (client: EngineClient, authors: MemoryVersionAuthorsShape): Me
         yield* recordAuthor(scope, path, restored, memoryAuthorOf(actor));
         return yield* stampedYours(actor, scope, path, restored);
       }).pipe(refusalIsOutage, changing.withPermit),
+    sessionPage,
     capture: (actor, scope, sessionId, items) =>
       Effect.gen(function* () {
         const where = engineProjectOf(scope);
@@ -717,7 +722,7 @@ const makeStore = (client: EngineClient, authors: MemoryVersionAuthorsShape): Me
         return acknowledged;
       }).pipe(refusalIsOutage),
     endSession: (actor, scope, sessionId, key) => {
-      const path = MemoryPath.make(`sessions/${sessionId}.md`);
+      const path = sessionPage(scope, sessionId);
       return Effect.flatMap(pageOf(scope, path), (note) =>
         // The engine writes a session's page again at every end, pinned or not, so the end of a
         // session whose chat note you pinned is not sent: the note stays as it is, and the capture

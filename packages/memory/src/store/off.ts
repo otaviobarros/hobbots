@@ -1,5 +1,5 @@
 import { guardMemoryStore, type MemoryStoreShape } from "@hobbots/agents";
-import { MemoryUnavailable } from "@hobbots/domain";
+import { MemoryPath, MemoryUnavailable } from "@hobbots/domain";
 import { Effect } from "effect";
 
 /**
@@ -23,6 +23,7 @@ export const makeMemoryStoreOff = (message: string): MemoryStoreShape => {
     restore: () => off,
     capture: () => off,
     endSession: () => off,
+    sessionPage: (_scope, sessionId) => MemoryPath.make(`sessions/${sessionId}.md`),
     check: () => off,
     health: off,
   });

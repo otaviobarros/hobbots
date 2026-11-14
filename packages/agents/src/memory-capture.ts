@@ -1,5 +1,5 @@
 import {
-  type AgentId,
+  AgentId,
   type Attempt,
   type AttemptId,
   answerHow,
@@ -11,7 +11,6 @@ import {
   claimsTakenText,
   type EventEnvelope,
   type HobProposal,
-  hobReads,
   isLiveAttempt,
   isTerminalTask,
   MEMORY_SAVE_TOOL,
@@ -22,6 +21,7 @@ import {
   type MemorySessionId,
   MemoryUnavailable,
   type Message,
+  type MessageId,
   type MessageStatus,
   type Question,
   type ReplyStep,
@@ -40,6 +40,7 @@ import {
   type MemoryCaptureState,
   type MemoryCaptureWork,
   MemorySaves,
+  type MemorySessionRef,
   MemoryStore,
 } from "./memory.ts";
 import { EventPublisher } from "./ports.ts";
@@ -47,9 +48,11 @@ import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
 
 /**
  * Memory capture (ADR 028, Capture and summaries, When memory is down). The event journal is the
- * outbox: the worker reads it after its cursor and sends what happened in each thread (your
- * messages, the hob's replies and their tool steps, and the Quests it led) to that thread's session
- * in its hob's own memory, and what a hob did on a Task outside any chat, as a party member or in a
+ * outbox: the worker reads it after its cursor and sends what happened in each thread to that
+ * thread's session in each hob's own memory (ADR 039, Memory in a shared thread): a hob's replies and
+ * their tool steps, the person's messages it took a turn on, with the person as their source, and the
+ * Quests it led. Another hob's replies are never sent to a hob's memory, nor a person's message no turn
+ * of its took. What a hob did on a Task outside any chat, as a party member or in a
  * step (the Task's goal, its finished tool steps and each turn's reply), to its Attempt's session in
  * that hob's memory (#1012). The work that wakes a hob, such as an answer to its question, goes to
  * the session of the turn that took it in, either one (#1028). It moves the cursor once memory
@@ -118,7 +121,11 @@ const replyItems = (entry: EventEnvelope, message: Message): Array<MemoryCapture
 /** What one journal entry adds to a memory session, a thread's or an Attempt's, in its hob's memory. */
 export interface CapturedEntry {
   readonly sessionId: MemorySessionId;
-  readonly agentId: AgentId;
+  /**
+   * The hob whose memory the session is in. Null for an entry that only ends the thread's session in
+   * every hob's memory, as an archive does: a thread with several hobs has a session in each one's.
+   */
+  readonly agentId: AgentId | null;
   /**
    * What starts the session when it is not open: its start, and for an Attempt its Task's goal once
    * it is known. Null for an entry that only adds to a session already open, as an archive does.
@@ -312,17 +319,44 @@ const attemptStepsOf = (
       };
 };
 
-/** What a message adds to its thread's session: yours once it is no longer queued, a reply once its turn ends. */
-const messageOf = (entry: EventEnvelope, message: Message, redacted: Redacting): CapturedEntry | null => {
-  const agentId = entry.correlation.agentId;
-  // A note to self is yours alone: it never reaches the hob's memory (ADR 037).
-  if (agentId === null || !hobReads(message)) return null;
-  const items =
-    message.role === "user"
-      ? message.status === "complete"
-        ? [{ key: `message:${message.id}`, kind: "message" as const, text: message.content }]
-        : []
-      : replyItems(entry, message);
+/** The people's messages hobs took a turn on, by id, as capture reads them with the replies to them. */
+export type CapturedPrompts = ReadonlyMap<MessageId, Message>;
+
+/** The hob that wrote a reply: its author, or the thread's hob for a reply stored before authors were. */
+const replyHob = (entry: EventEnvelope, message: Message): AgentId | null =>
+  message.actor?.kind === "hob" ? AgentId.make(message.actor.id) : entry.correlation.agentId;
+
+/** A person's message as a hob's memory keeps it: its text, then who wrote it (ADR 039). */
+const promptText = (prompt: Message): string =>
+  prompt.actor === null ? prompt.content : `${prompt.content}\n\n(from ${prompt.actor.kind} ${prompt.actor.id})`;
+
+/**
+ * The person's message a reply's turn took (its prompt), as the replying hob's memory keeps it, by the
+ * message's own id: a second turn on it, as Continue runs, sends nothing new. A note to self is yours
+ * alone, and never reaches a hob's memory (ADR 037).
+ */
+const promptItems = (reply: Message, prompts: CapturedPrompts): Array<MemoryCaptureItem> => {
+  const prompt = reply.promptId === null ? undefined : prompts.get(reply.promptId);
+  if (prompt === undefined || prompt.role !== "user" || prompt.content.trim() === "") return [];
+  return [{ key: `message:${prompt.id}`, kind: "message", text: promptText(prompt), at: prompt.createdAt }];
+};
+
+/**
+ * What a message adds to its thread's session in its hob's memory: a reply once its turn ends, after
+ * the person's message the turn took (ADR 039, Memory in a shared thread). A person's message adds
+ * nothing by itself: only the hobs that take a turn on it keep it, each in its own memory.
+ */
+const messageOf = (
+  entry: EventEnvelope,
+  message: Message,
+  redacted: Redacting,
+  prompts: CapturedPrompts,
+): CapturedEntry | null => {
+  if (message.role !== "assistant") return null;
+  const agentId = replyHob(entry, message);
+  const reply = replyItems(entry, message);
+  if (agentId === null || reply.length === 0) return null;
+  const items = [...promptItems(message, prompts), ...reply];
   return items.length === 0
     ? null
     : {
@@ -386,12 +420,16 @@ const settledSaveOf = (
  * goal, its finished tool steps and each turn's reply. Either keeps the work that woke a turn, and
  * whether a `memory_save` it made landed.
  */
-export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): CapturedEntry | null => {
+export const capturedEntryOf = (
+  entry: EventEnvelope,
+  redactor: Redactor,
+  prompts: CapturedPrompts = new Map(),
+): CapturedEntry | null => {
   const event = entry.payload;
   const redacted: Redacting = (items) => items.map((item) => ({ ...item, text: cut(redactor.text(item.text)) }));
   switch (event._tag) {
     case "MessageUpserted":
-      return messageOf(entry, event.message, redacted);
+      return messageOf(entry, event.message, redacted, prompts);
     case "QuestStarted": {
       // A top Quest started in a thread is led by the thread's hob. A member's own Quest is in its
       // Attempt's session already, by the tool step that started it.
@@ -407,17 +445,15 @@ export const capturedEntryOf = (entry: EventEnvelope, redactor: Redactor): Captu
       };
     }
     case "ThreadUpserted": {
-      // Archived, or made a private camp (ADR 037): either ends the session.
+      // Archived, or made a private camp (ADR 037): either ends the session in every hob's memory.
       const { thread } = event;
       return thread.archivedAt === null && !thread.private
         ? null
-        : { sessionId: thread.id, agentId: thread.agentId, opening: null, items: [], ends: true };
+        : { sessionId: thread.id, agentId: null, opening: null, items: [], ends: true };
     }
-    // A chat started fresh ends its session; the new chat opens its own with its first message.
-    case "ChatStartedFresh": {
-      const { superseded } = event;
-      return { sessionId: superseded.id, agentId: superseded.agentId, opening: null, items: [], ends: true };
-    }
+    // A chat started fresh ends its sessions; the new chat opens its own with its first reply.
+    case "ChatStartedFresh":
+      return { sessionId: event.superseded.id, agentId: null, opening: null, items: [], ends: true };
     case "TaskStateChanged":
       return taskChangeOf(entry, event, redacted);
     case "BackpackItemChanged":
@@ -435,23 +471,32 @@ const hobActor = (agentId: AgentId): MemoryActor => ({ _tag: "Hob", agentId, pro
 const ownScope = (agentId: AgentId) => ({ _tag: "Hob", agentId }) as const;
 const endKey = (session: MemoryCaptureSession) => `end:${session.sessionId}:${session.lastKey}`;
 
+/**
+ * What names a session among the open ones: its hob and its id, since a thread with several hobs has
+ * a session of the same id in each one's memory (ADR 039).
+ */
+export type SessionKey = string;
+export const sessionKeyOf = (session: MemorySessionRef): SessionKey => `${session.agentId}\0${session.sessionId}`;
+
 /** The keys of the items memory acknowledged in each open session, so a page does not send them again. */
-export type SentKeys = ReadonlyMap<MemorySessionId, ReadonlySet<string>>;
+export type SentKeys = ReadonlyMap<SessionKey, ReadonlySet<string>>;
+
+/** One session's items in a round, in order, all sent to its hob's own memory. */
+interface Group extends MemorySessionRef {
+  readonly items: Array<MemoryCaptureItem>;
+}
 
 /** A page of the journal, as the worker sends it: each session's items in order, and the sessions it ends. */
 interface Round {
   readonly sequence: number;
-  readonly groups: ReadonlyMap<
-    MemorySessionId,
-    { readonly agentId: AgentId; readonly items: Array<MemoryCaptureItem> }
-  >;
-  readonly sessions: Map<MemorySessionId, MemoryCaptureSession>;
-  readonly touched: Set<MemorySessionId>;
+  readonly groups: ReadonlyMap<SessionKey, Group>;
+  readonly sessions: Map<SessionKey, MemoryCaptureSession>;
+  readonly touched: Set<SessionKey>;
   readonly ended: Array<MemoryCaptureSession>;
   /** Entries with something to send that were committed longer ago than memory skips a replay. */
   readonly stale: number;
   /** The keys sent to each session it touched, those sent before included. */
-  readonly sent: ReadonlyMap<MemorySessionId, ReadonlySet<string>>;
+  readonly sent: ReadonlyMap<SessionKey, ReadonlySet<string>>;
   /** The camps private as of the page's last entry, and the units the page kept out for the first time. */
   readonly exclusions: MemoryCaptureExclusions;
   /** Every unit kept out as of the page's last entry. */
@@ -526,10 +571,27 @@ export interface CapturedPage {
   readonly marks: ReadonlyArray<EntryMarks | null>;
 }
 
+/** The people's messages the replies that end in a page took, to read them for their hobs' memory. */
+const promptIdsOf = (entries: ReadonlyArray<EventEnvelope>): ReadonlyArray<MessageId> => {
+  const ids = new Set<MessageId>();
+  for (const { payload } of entries) {
+    if (payload._tag !== "MessageUpserted") continue;
+    const { message } = payload;
+    if (message.role === "assistant" && message.promptId !== null && ENDED_REPLY.has(message.status)) {
+      ids.add(message.promptId);
+    }
+  }
+  return [...ids];
+};
+
 /** What memory keeps of each entry of a page, redacted by `redactor`, and where each belongs. */
-const capturePage = (entries: ReadonlyArray<EventEnvelope>, redactor: Redactor): CapturedPage => ({
+const capturePage = (
+  entries: ReadonlyArray<EventEnvelope>,
+  redactor: Redactor,
+  prompts: CapturedPrompts,
+): CapturedPage => ({
   entries,
-  found: entries.map((entry) => capturedEntryOf(entry, redactor)),
+  found: entries.map((entry) => capturedEntryOf(entry, redactor, prompts)),
   marks: entries.map(entryMarksOf),
 });
 
@@ -574,11 +636,13 @@ const followPrivacy = (entry: EventEnvelope, privateThreads: Set<ThreadId>) => {
 /**
  * Plans what a page of entries sends, from the sessions open before it and the keys already sent to
  * them. An entry that only ends a session, as an archive does, does nothing when its session is not
- * open; any other entry opens its session again, which memory continues. Nothing of a private camp
- * is sent (ADR 037): an entry is skipped when its camp was private when it was written, as the
- * journal says, or is private now, and so is every later entry of its unit. A session of it still
- * open from before the camp was made private ends, so what memory has of it stays and nothing more
- * is added.
+ * open; any other entry opens its session again, which memory continues. Each entry goes to its own
+ * hob's session only (ADR 039): a thread with several hobs has a session in each one's memory, and an
+ * end of the thread's ends them all. Nothing of a private camp is sent (ADR 037): an entry is skipped
+ * when its camp was private when it was written, as the journal says, or is private now, and so is
+ * every later entry of its unit, and a person's message once its own unit is kept out. A session of
+ * it still open from before the camp was made private ends, in every hob's memory, so what memory has
+ * of it stays and nothing more is added.
  */
 export const planRound = (
   page: CapturedPage,
@@ -601,31 +665,42 @@ export const planRound = (
     }
     return isPrivate;
   };
-  const sessions = new Map(open.map((session) => [session.sessionId, session]));
-  const groups = new Map<MemorySessionId, { readonly agentId: AgentId; readonly items: Array<MemoryCaptureItem> }>();
-  const planned = new Map<MemorySessionId, Set<string>>();
-  const touched = new Set<MemorySessionId>();
-  const ending = new Map<MemorySessionId, MemoryCaptureSession>();
+  const sessions = new Map(open.map((session) => [sessionKeyOf(session), session]));
+  const groups = new Map<SessionKey, Group>();
+  const planned = new Map<SessionKey, Set<string>>();
+  const touched = new Set<SessionKey>();
+  const ending = new Map<SessionKey, MemoryCaptureSession>();
   let stale = 0;
+  /** The open sessions `found` names: its hob's, or every hob's session of its id. */
+  const openOf = (found: CapturedEntry): Array<readonly [SessionKey, MemoryCaptureSession]> =>
+    [...sessions].filter(
+      ([, session]) =>
+        session.sessionId === found.sessionId && (found.agentId === null || session.agentId === found.agentId),
+    );
   /** Adds what `found` brings that its session was not sent yet, and answers whether it brought anything. */
-  const add = (entry: EventEnvelope, found: CapturedEntry, opened: boolean) => {
-    const { sessionId } = found;
-    const keys = planned.get(sessionId) ?? new Set(sent.get(sessionId));
-    planned.set(sessionId, keys);
+  const add = (entry: EventEnvelope, found: CapturedEntry & MemorySessionRef, key: SessionKey, opened: boolean) => {
+    const { sessionId, agentId } = found;
+    const keys = planned.get(key) ?? new Set(sent.get(key));
+    planned.set(key, keys);
     // A session that goes on later keeps its first start: the opening's keys never change.
     // An item keeps the time it happened, its entry's when it has none of its own, however late it is sent.
+    // A person's message kept out, as one written while its camp was private, is never sent with a reply to it.
     const items = [...(opened ? [] : (found.opening ?? [])), ...found.items]
-      .filter((item) => !keys.has(item.key))
+      .filter((item) => !keys.has(item.key) && !excluded.has(item.key))
       .map((item) => (item.at === undefined ? { ...item, at: entry.occurredAt } : item));
     if (items.length === 0) return false;
     if (entry.occurredAt < staleBefore) stale += 1;
-    const group = groups.get(sessionId) ?? { agentId: sessions.get(sessionId)?.agentId ?? found.agentId, items: [] };
-    groups.set(sessionId, group);
+    const group = groups.get(key) ?? { sessionId, agentId, items: [] };
+    groups.set(key, group);
     for (const item of items) keys.add(item.key);
     group.items.push(...items);
     const last = items.at(-1) as MemoryCaptureItem;
-    sessions.set(sessionId, { sessionId, agentId: group.agentId, lastAt: entry.occurredAt, lastKey: last.key });
+    sessions.set(key, { sessionId, agentId, lastAt: entry.occurredAt, lastKey: last.key });
     return true;
+  };
+  /** Ends every open session `found` names: a private camp's in every hob's memory, whichever hob's entry it is. */
+  const endAll = (found: CapturedEntry) => {
+    for (const [key, session] of openOf(found)) ending.set(key, session);
   };
   page.entries.forEach((entry, at) => {
     followPrivacy(entry, privateThreads);
@@ -633,25 +708,29 @@ export const planRound = (
     const isPrivate = keepsOut(marks);
     const found = page.found[at] ?? null;
     if (found === null) return;
-    const { sessionId } = found;
     if (isPrivate) {
-      const session = sessions.get(sessionId);
-      if (session !== undefined) ending.set(sessionId, session);
+      endAll({ ...found, agentId: null });
       return;
     }
     if (marks?.unit != null && excluded.has(marks.unit)) return;
-    const opened = sessions.has(sessionId);
-    if (!opened && found.opening === null) return;
-    if (add(entry, found, opened)) {
-      touched.add(sessionId);
-      ending.delete(sessionId);
+    const { agentId } = found;
+    if (agentId === null) {
+      if (found.ends) endAll(found);
+      return;
     }
-    const session = sessions.get(sessionId);
-    if (found.ends && session !== undefined) ending.set(sessionId, session);
+    const key = sessionKeyOf({ sessionId: found.sessionId, agentId });
+    const opened = sessions.has(key);
+    if (!opened && found.opening === null) return;
+    if (add(entry, { ...found, agentId }, key, opened)) {
+      touched.add(key);
+      ending.delete(key);
+    }
+    const session = sessions.get(key);
+    if (found.ends && session !== undefined) ending.set(key, session);
   });
-  for (const sessionId of ending.keys()) {
-    sessions.delete(sessionId);
-    touched.delete(sessionId);
+  for (const key of ending.keys()) {
+    sessions.delete(key);
+    touched.delete(key);
   }
   const sequence = page.entries.at(-1)?.sequence ?? 0;
   return {
@@ -692,7 +771,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
       let state: MemoryCaptureState | null = null;
       // What each open session was sent, so an Attempt's steps, which every change carries again, go
       // once. Kept only in the worker: after a restart memory skips what it has seen by its keys.
-      let sent = new Map<MemorySessionId, ReadonlySet<string>>();
+      let sent = new Map<SessionKey, ReadonlySet<string>>();
       const now = Effect.map(DateTime.now, DateTime.formatIso);
       const before = (duration: Duration.Duration) =>
         Effect.map(DateTime.now, (at) => DateTime.formatIso(DateTime.subtractDuration(at, duration)));
@@ -763,7 +842,8 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
         Effect.gen(function* () {
           const entries = yield* log.readAfter(current.sequence, PAGE);
           if (entries.length === 0) return true;
-          const page = capturePage(entries, redactor);
+          const prompts = new Map((yield* log.messages(promptIdsOf(entries))).map((m) => [m.id, m] as const));
+          const page = capturePage(entries, redactor, prompts);
           const privacy = { atCursor: current.exclusions, now: yield* log.privacy(workOfPage(page)) };
           const round = planRound(page, current.sessions, yield* before(MEMORY_KEY_WINDOW), sent, privacy);
           if (round.stale > 0) {
@@ -771,11 +851,12 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
               `Memory capture is sending ${round.stale} journal entries older than memory's 30-day replay window; if any reached memory before, it may keep them twice.`,
             );
           }
-          for (const [sessionId, group] of round.groups) {
+          // Each session goes to its own hob's memory, as that hob: never another hob's (ADR 039).
+          for (const group of round.groups.values()) {
             const acknowledged = yield* store.capture(
               hobActor(group.agentId),
               ownScope(group.agentId),
-              sessionId,
+              group.sessionId,
               group.items,
             );
             if (acknowledged < group.items.length) {
@@ -785,9 +866,9 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           // An end memory put off, under a chat note you pinned, keeps its session open to send again.
           const waiting: Array<MemoryCaptureSession> = [];
           for (const session of round.ended) if (!(yield* endSession(session))) waiting.push(session);
-          for (const session of waiting) round.sessions.set(session.sessionId, session);
+          for (const session of waiting) round.sessions.set(sessionKeyOf(session), session);
           const active = [
-            ...[...round.touched].map((sessionId) => round.sessions.get(sessionId) as MemoryCaptureSession),
+            ...[...round.touched].map((key) => round.sessions.get(key) as MemoryCaptureSession),
             ...waiting,
           ];
           // Saved as soon as memory acknowledged the page: a crash before this sends it once more, and
@@ -795,7 +876,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           yield* log.save(
             round.sequence,
             active,
-            round.ended.filter((session) => !waiting.includes(session)).map((session) => session.sessionId),
+            round.ended.filter((session) => !waiting.includes(session)),
             round.exclusions,
           );
           state = {
@@ -803,9 +884,9 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
             sessions: [...round.sessions.values()],
             exclusions: { privateThreads: round.exclusions.privateThreads, excluded: round.excluded },
           };
-          for (const [sessionId, keys] of round.sent) {
-            if (round.sessions.has(sessionId)) sent.set(sessionId, keys);
-            else sent.delete(sessionId);
+          for (const [key, keys] of round.sent) {
+            if (round.sessions.has(key)) sent.set(key, keys);
+            else sent.delete(key);
           }
           return entries.length < PAGE;
         });
@@ -817,15 +898,15 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           const quiet = current.sessions.filter((session) => session.lastAt < quietBefore);
           if (quiet.length === 0) return;
           // An end memory put off stays open, and is sent again at the next round.
-          const ended = new Set<MemorySessionId>();
-          for (const session of quiet) if (yield* endSession(session)) ended.add(session.sessionId);
+          const ended = new Map<SessionKey, MemoryCaptureSession>();
+          for (const session of quiet) if (yield* endSession(session)) ended.set(sessionKeyOf(session), session);
           if (ended.size === 0) return;
-          yield* log.save(current.sequence, [], [...ended], {
+          yield* log.save(current.sequence, [], [...ended.values()], {
             privateThreads: current.exclusions.privateThreads,
             excluded: [],
           });
-          state = { ...current, sessions: current.sessions.filter((session) => !ended.has(session.sessionId)) };
-          for (const sessionId of ended) sent.delete(sessionId);
+          state = { ...current, sessions: current.sessions.filter((session) => !ended.has(sessionKeyOf(session))) };
+          for (const key of ended.keys()) sent.delete(key);
         });
 
       const round = Effect.gen(function* () {
