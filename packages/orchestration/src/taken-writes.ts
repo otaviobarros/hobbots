@@ -43,6 +43,27 @@ const below = (top: string, inner: string, path: string, separator: PathSeparato
 const joinedInside = (folder: string, path: string) =>
   folder === "" ? path : path === "" ? folder : `${folder}/${path}`;
 
+/**
+ * A taken path's keys inside the repository at `top`: as it was claimed and where it lands with its
+ * links followed, so a claim on `docs`, a link to `content`, holds writes to either spelling. Each
+ * is read once per use of the function.
+ */
+const makeKeysOf = (git: GitWorkspace["Service"], separator: PathSeparator) => {
+  const followedKeys = new Map<string, ReadonlyArray<string>>();
+  return (top: string, key: string) =>
+    Effect.gen(function* () {
+      const known = followedKeys.get(`${top}\0${key}`);
+      if (known !== undefined) return known;
+      const place = key === "" ? null : yield* git.placeOf(`${top}${separator}${key.split("/").join(separator)}`);
+      // A link may land in a repository inside this one: its target is then read from this top.
+      const landed =
+        place === null ? null : place.top === top ? place.path : below(top, place.top, place.path, separator);
+      const keys = landed === null || landed === key ? [key] : [key, landed];
+      followedKeys.set(`${top}\0${key}`, keys);
+      return keys;
+    });
+};
+
 /** Pushes whose words name the checked-out branch, as the runtimes' Push requests spell them. */
 const CURRENT_BRANCH = new Set(["(current branch)", "(HEAD)", "(@)", "(+HEAD)", "(+@)"]);
 
@@ -97,21 +118,7 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             read.set(repository, claims);
             return claims;
           });
-        // A taken path is matched as it was claimed and where it lands with its links followed, so
-        // a claim on `docs`, a link to `content`, holds writes to either spelling.
-        const followedKeys = new Map<string, ReadonlyArray<string>>();
-        const keysOf = (top: string, key: string) =>
-          Effect.gen(function* () {
-            const known = followedKeys.get(`${top}\0${key}`);
-            if (known !== undefined) return known;
-            const place = key === "" ? null : yield* git.placeOf(`${top}${separator}${key.split("/").join(separator)}`);
-            // A link may land in a repository inside this one: its target is then read from this top.
-            const landed =
-              place === null ? null : place.top === top ? place.path : below(top, place.top, place.path, separator);
-            const keys = landed === null || landed === key ? [key] : [key, landed];
-            followedKeys.set(`${top}\0${key}`, keys);
-            return keys;
-          });
+        const keysOf = makeKeysOf(git, separator);
         const branchClaim = (claims: ReadonlyArray<Claim>, branch: string | null) =>
           branch === null ? undefined : claims.find((claim) => claim.scope === "branch" && claim.key === branch);
 
@@ -188,5 +195,63 @@ export const makeTakenWrites = (separator: PathSeparator) =>
           if (hit !== undefined) return takenWriteText(hit);
         }
         return null;
+      });
+  });
+
+/**
+ * What a hob's turn may not write at all, because you took it over from a Task (#1537): for every
+ * repository its folders reach, and every repository around those, each taken path by absolute
+ * path, as claimed and where its links land. The turn's sandbox closes them, so a write the
+ * call-level check cannot see, from a script, a variable or an interpreter, fails too. A taken
+ * branch is left to the call-level check: the sandbox closes paths, and Git keeps every branch of a
+ * repository in the same files. Every hob's turn gets them, whatever Task it works
+ * on. Empty when nothing is taken there, or when the hub keeps no claims register.
+ */
+export const makeTakenPlaces = (separator: PathSeparator) =>
+  Effect.gen(function* () {
+    const register = yield* Effect.serviceOption(ClaimRegister);
+    const workspace = yield* Effect.serviceOption(GitWorkspace);
+    const identityOf = yield* makeRepositoryIdentity(separator);
+    if (Option.isNone(register) || Option.isNone(workspace)) {
+      return (_folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> => Effect.succeed([]);
+    }
+    const git = workspace.value;
+    const claims = register.value;
+
+    // A repository inside another is a folder of it, whose taken paths may hold it.
+    const withOuter = (top: string, tops: Set<string>) =>
+      Effect.gen(function* () {
+        let at: string | null = top;
+        while (at !== null && !tops.has(at)) {
+          tops.add(at);
+          const up = at.lastIndexOf(separator);
+          const outer: string | null = up <= 0 ? null : yield* git.repository(at.slice(0, up));
+          at = outer !== null && outer.length < at.length ? outer : null;
+        }
+      });
+    // What one taken path closes in the repository at `top`: as claimed and where its links land.
+    const closedBy = (top: string, key: string, keysOf: ReturnType<typeof makeKeysOf>) =>
+      Effect.map(keysOf(top, key), (keys) =>
+        keys.map((each) => (each === "" ? top : `${top}${separator}${each.split("/").join(separator)}`)),
+      );
+
+    return (folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
+      Effect.gen(function* () {
+        const tops = new Set<string>();
+        const closed = new Set<string>();
+        for (const folder of folders) {
+          const reached = yield* git.repositoriesIn(folder);
+          for (const top of reached.tops) yield* withOuter(top, tops);
+          // A folder too big to scan whole may hold a repository with something taken: closed whole.
+          if (!reached.complete && (yield* claims.anyTakenPath)) closed.add(folder);
+        }
+        const keysOf = makeKeysOf(git, separator);
+        for (const top of tops) {
+          for (const claim of yield* claims.takenIn(yield* identityOf(top))) {
+            if (claim.scope !== "path") continue;
+            for (const path of yield* closedBy(top, claim.key, keysOf)) closed.add(path);
+          }
+        }
+        return [...closed].sort();
       });
   });

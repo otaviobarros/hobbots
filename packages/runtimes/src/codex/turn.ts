@@ -582,6 +582,7 @@ const prepareSandbox = (
       ...(signingAgent ? { signingAgent } : {}),
       ...(tools.commitAs ? { commitAs: tools.commitAs } : {}),
       ...skillFolderScope(skills),
+      taken: tools.taken,
       allowedHosts: CODEX_MODEL_HOSTS,
       decideHost: grantedHosts(policy.engine, tools.context, request.approvals),
     });
