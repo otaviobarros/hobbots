@@ -5,6 +5,7 @@ import {
   checkpointText,
   choicesText,
   claimClashText,
+  claimsTakenText,
   hobProposalOutcomeText,
   type Question,
   skillProposalText,
@@ -159,16 +160,21 @@ const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
       return `The deadline on Task ${payload.taskId} passed at ${payload.dueAt}.`;
     case "task":
       return `${about(payload.task)} is yours to work on.`;
-    case "claim-clash":
-      return claimClashText(payload.claim, payload.clashes);
     default:
       return describeRoutine(item);
   }
 };
 
-/** A routine item, as the digest lists it: a Task's progress, or how a skill proposal ended (ADR 029). */
-const describeRoutine = (item: BackpackItem): string =>
-  item.payload._tag === "skill-proposal" ? skillProposalText(item.payload.proposal) : (progressDigest([item])[0] ?? "");
+/**
+ * A claim the hub tells of (ADR 037): a clash, or your takeover of a Task's claims (#1449); else a
+ * routine item, as the digest lists it: a Task's progress, or how a skill proposal ended (ADR 029).
+ */
+const describeRoutine = (item: BackpackItem): string => {
+  const payload = item.payload;
+  if (payload._tag === "claim-clash") return claimClashText(payload.claim, payload.clashes);
+  if (payload._tag === "claims-taken") return claimsTakenText(payload.taskId, payload.claims);
+  return payload._tag === "skill-proposal" ? skillProposalText(payload.proposal) : (progressDigest([item])[0] ?? "");
+};
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 

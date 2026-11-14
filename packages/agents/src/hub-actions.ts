@@ -526,6 +526,25 @@ export const makeHubActions =
         return yield* sendWrite(action, { ...write, send: decided }, keyed, step, "");
       });
 
+    /**
+     * Why the hub refuses a planned push to a branch the user took over (#1449), or null. A Charm's
+     * push, such as the GitHub Charm's, is a write to the branch as much as a hob's own `git push` is.
+     */
+    const takenPush = (request: R): Effect.Effect<string | null> => {
+      const push = request as R & { readonly cwd?: unknown; readonly branch?: unknown };
+      if (turn.takenByYou === undefined || request._tag !== "Push") return Effect.succeed(null);
+      if (typeof push.cwd !== "string" || typeof push.branch !== "string") return Effect.succeed(null);
+      return turn.takenByYou({ paths: [], pushes: [{ cwd: push.cwd, branch: push.branch }], commits: [], trees: [] });
+    };
+
+    /** A write that sends nothing when what it pushes was taken over while its card waited (#1449). */
+    const unlessTaken = (request: R, write: HubWritePlan<R>["write"]): HubWritePlan<R>["write"] => ({
+      ...write,
+      send: Effect.flatMap(takenPush(request), (refused) =>
+        refused === null ? write.send : Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: refused }),
+      ),
+    });
+
     /** Decides, asks, records and sends a planned call. */
     const decideAndSend = (
       action: HubAction<R>,
@@ -598,7 +617,12 @@ export const makeHubActions =
               }),
         );
         if ("_tag" in plan) return plan.text;
-        const rest = decideAndSend(action, plan, access, keyed, step);
+        // A push to a branch the user took over is refused before it asks, and sends nothing if it
+        // was taken over while its card waited (#1449).
+        const taken = yield* takenPush(plan.request);
+        if (taken !== null) return yield* refuse(taken);
+        const guarded = "write" in plan ? { ...plan, write: unlessTaken(plan.request, plan.write) } : plan;
+        const rest = decideAndSend(action, guarded, access, keyed, step);
         return yield* plan.pinned === undefined ? rest : plan.pinned(rest);
       }).pipe(Effect.scoped);
 

@@ -23,6 +23,7 @@ import {
   type ApprovalOutcome,
   type AskableVerdict,
   actionDigest,
+  type CallWrites,
   CharmCallService,
   CharmCalls,
   type HubActionOwner,
@@ -440,6 +441,10 @@ interface WriteScenario {
   readonly readBack?: () => boolean;
   /** What recording the step answers. */
   readonly records?: boolean;
+  /** Pip's write is a push of the shelf's branch, which Pip takes over, rather than its own request. */
+  readonly push?: boolean;
+  /** Why the hub refuses a write the user took over, each time it is asked (#1449); never asked when absent. */
+  readonly taken?: () => string | null;
 }
 
 const SHELVE_INPUT = Schema.Struct({ shelf: Schema.String, note: Schema.optionalKey(Schema.String) });
@@ -452,6 +457,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
   const happened: Array<string> = [];
   const planned: Array<{ readonly input: unknown; readonly redacted: unknown }> = [];
   const decided: Array<unknown> = [];
+  const askedTaken: Array<CallWrites> = [];
   const outcomes = [...(scenario.outcomes ?? [])];
   const readBack: ReadBack | undefined =
     scenario.readBack === undefined
@@ -471,8 +477,19 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
       Effect.sync(() => {
         planned.push({ input, redacted: context.redacted });
         happened.push(`planned ${input.shelf}`);
+        const request = scenario.push
+          ? {
+              _tag: "Push",
+              remote: "github.com/me/app",
+              branch: input.shelf,
+              force: false,
+              toDefaultBranch: false,
+              cwd: "/work/app",
+              exact: true,
+            }
+          : { _tag: "Charm", charm: "pip", operation: "pip.shelve", site: { shelf: input.shelf } };
         return {
-          request: { _tag: "Charm", charm: "pip", operation: "pip.shelve", site: { shelf: input.shelf } },
+          request,
           card: { arguments: { ...input }, label: `Shelving on ${input.shelf}` },
           write: {
             site: `pip ${input.shelf}`,
@@ -520,6 +537,15 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
         scope: () => "reply:m1",
         currentAccess: Effect.succeed(access()),
         redactor: makeRedactor(),
+        ...(scenario.taken === undefined
+          ? {}
+          : {
+              takenByYou: (writes: CallWrites) =>
+                Effect.sync(() => {
+                  askedTaken.push(writes);
+                  return scenario.taken?.() ?? null;
+                }),
+            }),
         approvals: {
           request: (asking) =>
             Effect.gen(function* () {
@@ -553,7 +579,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
       const result = yield* tools.call("pip_shelve", input, step);
       return { answer: result, asked, events, offered: tools.tools };
     }).pipe(Effect.scoped, Effect.provide(calls), Effect.runPromise);
-  return { call, happened, planned, decided, rows, calls };
+  return { call, happened, planned, decided, askedTaken, rows, calls };
 };
 
 const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state, row.result]);
@@ -590,6 +616,37 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     for (const request of hub.decided) {
       expect(request).toMatchObject({ _tag: "Charm", operation: "pip.shelve", sends: true });
     }
+  });
+
+  // covers OR-006, #1449
+  it("[TC-OR-1449-06] refuses a Charm's push to a branch you took over, before it asks and again just before it sends", async () => {
+    const TAKEN =
+      "The user took over branch feat/shop in github.com/me/app from Task build, so Hobbots refuses your writes to it.";
+    const yours = pipWrites({ push: true, taken: () => TAKEN });
+    const refused = await yours.call({ shelf: "feat/shop", key: "s-1" });
+    expect(refused.answer).toEqual({ text: TAKEN, refused: true });
+    expect(refused.asked).toEqual([]);
+    expect(yours.happened).toEqual(["planned feat/shop"]);
+    expect(yours.askedTaken).toEqual([
+      { paths: [], pushes: [{ cwd: "/work/app", branch: "feat/shop" }], commits: [], trees: [] },
+    ]);
+
+    // Taken over while the card waited: approved, but nothing is sent.
+    const answers = [null, TAKEN];
+    const waited = pipWrites({ push: true, taken: () => answers.shift() ?? null });
+    const late = await waited.call({ shelf: "feat/shop", key: "s-1" });
+    expect(late.answer.refused).toBe(true);
+    expect(late.answer.text).toContain(TAKEN);
+    expect(late.asked).toHaveLength(1);
+    expect(waited.happened).not.toContain("sent");
+
+    // A push elsewhere, and a Charm's own request, are sent as before.
+    const elsewhere = pipWrites({ push: true, taken: () => null });
+    expect((await elsewhere.call({ shelf: "main", key: "s-1" })).answer.refused).toBe(false);
+    expect(elsewhere.happened).toContain("sent");
+    const own = pipWrites({ taken: () => TAKEN });
+    expect((await own.call({ shelf: "top", key: "s-1" })).answer.refused).toBe(false);
+    expect(own.askedTaken).toEqual([]);
   });
 
   // covers IN-003, EX-003, ADR 020

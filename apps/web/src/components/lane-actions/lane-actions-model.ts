@@ -1,5 +1,15 @@
 import type { WaitingCharmCall } from "@hobbots/api";
-import { type Attempt, type AttemptId, type Question, saysMore, type Task, type TaskTree } from "@hobbots/domain";
+import {
+  type Attempt,
+  type AttemptId,
+  type Claim,
+  Claims,
+  isTerminalTask,
+  type Question,
+  saysMore,
+  type Task,
+  type TaskTree,
+} from "@hobbots/domain";
 import { taskControls, topCancel } from "../quest/control-room.ts";
 import { questionForYou } from "../quest/work-model.ts";
 
@@ -148,3 +158,7 @@ export const laneCharmCalls = (
   const ids = new Set(tasks.map((task) => task.id));
   return waiting.filter((each) => ids.has(each.task.id));
 };
+
+/** Whether Take over would move anything (#1449): the Task is open and holds a claim you have not taken over. */
+export const canTakeOver = (task: Task, claims: ReadonlyArray<Claim> | undefined): boolean =>
+  !isTerminalTask(task.state) && (claims ?? []).some((claim) => !Claims.isTaken(claim));

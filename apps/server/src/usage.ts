@@ -1,6 +1,13 @@
-import { runtimeAdapters, TurnSlots } from "@hobbots/agents";
-import { HobbotsApi } from "@hobbots/api";
-import { DEFAULT_TURN_LIMITS, RuntimeKind, type TurnSlotsReport, unreportedPlan } from "@hobbots/domain";
+import { runtimeAdapters, TaskRepository, TurnSlots } from "@hobbots/agents";
+import { HobbotsApi, QuestNotFound } from "@hobbots/api";
+import {
+  DEFAULT_TURN_LIMITS,
+  type QuestId,
+  questCost,
+  RuntimeKind,
+  type TurnSlotsReport,
+  unreportedPlan,
+} from "@hobbots/domain";
 import { UsageLedger } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -25,6 +32,21 @@ export const periodStart = (now: DateTime.Utc, days: number, since: string | und
 export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers) =>
   Effect.gen(function* () {
     const ledger = yield* UsageLedger;
+    const tasks = yield* TaskRepository;
+    /** The Quest at the top of a Quest's tree, which its usage counts for. */
+    const topQuest = (questId: QuestId) =>
+      Effect.gen(function* () {
+        let found = yield* tasks.findQuest(questId);
+        if (Option.isNone(found)) return yield* new QuestNotFound({ questId });
+        // A parent the hub lost leaves the Quest as the top it can find.
+        for (let parent = found.value.parentQuestId; parent !== null; ) {
+          const above = yield* tasks.findQuest(parent);
+          if (Option.isNone(above)) break;
+          found = above;
+          parent = above.value.parentQuestId;
+        }
+        return found.value;
+      });
     const adapters = yield* runtimeAdapters;
     const plans = Effect.forEach(
       RuntimeKind.literals,
@@ -45,6 +67,11 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
           return { since, until, hobs: used.hobs, quests: used.quests, minutes: used.minutes };
         }),
       plans: () => plans,
+      questCost: ({ params }) =>
+        Effect.gen(function* () {
+          const top = yield* topQuest(params.questId);
+          return questCost(top.id, yield* ledger.spentOn(top.id), top.criteria);
+        }),
       turns: () => turns,
       setTurnLimits: ({ payload }) =>
         slots === undefined ? Effect.succeed(unlimited) : Effect.andThen(slots.setLimits(payload), slots.report),

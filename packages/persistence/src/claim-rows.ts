@@ -67,10 +67,11 @@ export const movedClaim = (claim: Claim, event: ClaimEvent, revision: number): C
   return new Claim({ ...next, revision });
 };
 
-/** Writes a claim's new state over its row. */
+/** Writes a claim's new state, and who holds it now (#1449), over its row. */
 export const saveClaim = (sql: SqlClient.SqlClient, claim: Claim) =>
-  sql`UPDATE claims SET state = ${claim.state}, updated_at = ${claim.updatedAt}, released_at = ${claim.releasedAt},
-    revision = ${claim.revision} WHERE id = ${claim.id}`;
+  sql`UPDATE claims SET state = ${claim.state}, actor_kind = ${claim.actor.kind}, actor_id = ${claim.actor.id},
+    updated_at = ${claim.updatedAt}, released_at = ${claim.releasedAt}, revision = ${claim.revision}
+    WHERE id = ${claim.id}`;
 
 /** The Tasks the events end, at any depth: their claims are released with them (ADR 037). */
 const endedTasks = (events: ReadonlyArray<JournaledEvent>): ReadonlyArray<TaskId> => [

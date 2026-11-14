@@ -8,7 +8,7 @@ A hob's backpack is not your Inbox. Your Inbox holds what needs you: approval re
 
 Kinds are Task, result, failure, checkpoint (milestone, finding or blocker), question, answer, hand-off, message, approval outcome, deadline and progress. [ADR 019](../decisions/019-hob-backpack-and-continuations.md#item-kinds) says who makes each and who receives it. A skill proposal you decided ([ADR 029](../decisions/029-skills.md)) and a hob proposal that settled after the manager's call stopped waiting ([ADR 034](../decisions/034-summoning-charm.md#asking-is-a-proposal), kind `hob-proposal`) reach the hob that made them the same way, as an outcome it is told once.
 
-A clash of claims ([chat and camps](chat-and-camps.md#the-claims-register), kind `claim-clash`) goes to the lead of each Task whose claim on a path or branch clashes with another's. It is actionable, and stops neither Task.
+A clash of claims ([chat and camps](chat-and-camps.md#the-claims-register), kind `claim-clash`) goes to the lead of each Task whose claim on a path or branch clashes with another's. It is actionable, and stops neither Task. When you take over a Task's files and branches, its hob gets one `claims-taken` item naming them: actionable, and its Task keeps running.
 
 Every kind except progress is **actionable** and can wake the hob. Progress, including the hub's started and waiting states, is **routine**. It updates the screens at once and reaches the hob as a digest in its next turn, but never wakes it on its own (IN-005). Deadline reminders support existing work; this does not introduce the deferred general recurring-automation product.
 

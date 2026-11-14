@@ -1,0 +1,58 @@
+import { type Claim, isTerminalTask, type Task, type TaskId } from "@hobbots/domain";
+import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { call } from "./client.ts";
+import { followsEvents } from "./queries.ts";
+
+// A Task's files and branches as the claims register holds them (ADR 037), and Take over, which
+// moves them to you so the hub refuses its hob's writes to them (#1449).
+
+const taskClaimsKey = (taskId: TaskId) => ["task-claims", taskId] as const;
+
+/** A Task's open claims, oldest first; the `Claim*` events say when to read them again. */
+const taskClaimsQuery = (taskId: TaskId) =>
+  queryOptions({
+    queryKey: taskClaimsKey(taskId),
+    queryFn: () => call((c) => c.claims.taskClaims({ params: { taskId } })),
+    ...followsEvents,
+  });
+
+const NO_CLAIMS: ReadonlyArray<Claim> = [];
+
+/** A Task's claims as the lane reads them: what it holds once read, and whether the read failed. */
+export interface TaskClaimsRead {
+  /** Its open claims, or undefined while they are read or could not be. */
+  readonly claims: ReadonlyArray<Claim> | undefined;
+  /** The read failed after its retries, so what the Task holds is unknown, not none. */
+  readonly failed: boolean;
+  readonly retry: () => void;
+}
+
+/**
+ * A Task's open claims. An ended Task holds none: its claims were released when it ended, so a read
+ * cached while it ran is never shown as still holding them.
+ */
+export const useTaskClaims = (task: Task): TaskClaimsRead => {
+  const ended = isTerminalTask(task.state);
+  const read = useQuery({ ...taskClaimsQuery(task.id), enabled: !ended });
+  if (ended) return { claims: NO_CLAIMS, failed: false, retry: () => undefined };
+  return { claims: read.data, failed: read.isError && read.data === undefined, retry: () => void read.refetch() };
+};
+
+/** A claim was made, contested, cleared, taken over or released: every Task's claims are read again. */
+export const refreshTaskClaims = async (queryClient: QueryClient): Promise<void> => {
+  await queryClient.cancelQueries({ queryKey: ["task-claims"] });
+  await queryClient.invalidateQueries({ queryKey: ["task-claims"] });
+};
+
+/**
+ * Takes over a Task's files and branches. The hub answers with the claims it moved to you, which
+ * the Task's read shows at once, before their events arrive.
+ */
+export const useTakeOver = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: TaskId): Promise<ReadonlyArray<Claim>> =>
+      call((c) => c.claims.takeOver({ params: { taskId } })),
+    onSuccess: (_taken, taskId) => queryClient.invalidateQueries({ queryKey: taskClaimsKey(taskId) }),
+  });
+};

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
 import { Effect, Layer } from "effect";
 import git from "isomorphic-git";
@@ -196,6 +196,68 @@ const namesOnMain = async (top: string, directory: string): Promise<ReadonlyArra
   return null;
 };
 
+/** The nearest folder above `path`, or `path` itself, that exists, by its real path, with the names left below it. */
+const nearestReal = async (path: string): Promise<{ readonly real: string; readonly below: ReadonlyArray<string> }> => {
+  const below: Array<string> = [];
+  for (let at = path; ; at = dirname(at)) {
+    const real = await realpath(at).catch(() => null);
+    if (real !== null) return { real, below };
+    if (dirname(at) === at) return { real: at, below };
+    below.unshift(basename(at));
+  }
+};
+
+/**
+ * An absolute path as the file system reads it: each existing name is followed through its links
+ * before the `..` after it steps up, so `link/../plan.md` is the file beside the link's target, as a
+ * write there lands. Names below the first one that does not exist are read as written.
+ */
+const followed = async (path: string): Promise<string> => {
+  const root = parse(path).root;
+  let at = root;
+  let exists = true;
+  // The root, such as `C:\` or a UNC share, is kept as it is and not read as a name.
+  for (const name of path
+    .slice(root.length)
+    .split(/[\\/]/)
+    .filter((each) => each !== "" && each !== ".")) {
+    if (name === "..") {
+      at = dirname(at);
+      continue;
+    }
+    const next = join(at, name);
+    const real: string | null = exists ? await realpath(next).catch(() => null) : null;
+    exists = real !== null;
+    at = real ?? next;
+  }
+  return at;
+};
+
+/**
+ * The repository an absolute path is in and the path inside it, for the claims register (#1449),
+ * or null when it is in none. Links are followed before each `..`, so `..` cannot step out of it.
+ */
+const placeOf = async (path: string): Promise<{ readonly top: string; readonly path: string } | null> => {
+  if (!isAbsolute(path)) return null;
+  const { real, below } = await nearestReal(await followed(path));
+  const found = await repositoryOf(real, new Map());
+  if (found === null) return null;
+  const top = await realpath(found.dir);
+  const file = join(real, ...below);
+  const inside = file === top ? "" : insideOf(top, file);
+  // The top folder itself is "", which holds every path: deleting it deletes what you took over.
+  return inside === null ? null : { top, path: inside };
+};
+
+/** The branch checked out in the repository whose top is `top`, by its short name, or null. */
+const currentBranch = async (top: string): Promise<string | null> => {
+  const repository = await repositoryOf(top, new Map());
+  if (repository === null) return null;
+  const files = repository.common === null ? fs : worktreeFs(repository.gitdir, repository.common);
+  const branch = await git.currentBranch({ fs: files, gitdir: repository.gitdir, fullname: false });
+  return branch ?? null;
+};
+
 /** The hub's reader of Git state. */
 export const GitWorkspaceLive = Layer.succeed(
   GitWorkspace,
@@ -205,5 +267,7 @@ export const GitWorkspaceLive = Layer.succeed(
     realFolder: (folder) =>
       Effect.promise(() => (isAbsolute(folder) ? realpath(folder).catch(() => null) : Promise.resolve(null))),
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
+    placeOf: (path) => Effect.promise(() => placeOf(path).catch(() => null)),
+    currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
   }),
 );

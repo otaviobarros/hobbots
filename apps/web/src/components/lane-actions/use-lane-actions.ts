@@ -1,6 +1,7 @@
 import type { Agent, BackpackItem, TaskId } from "@hobbots/domain";
 import { useState } from "react";
 import { useDecideBlocker } from "../../api/blockers.ts";
+import { useTakeOver } from "../../api/task-claims.ts";
 import { type TaskControl, useTaskControl } from "../../api/task-controls.ts";
 
 /**
@@ -20,11 +21,13 @@ export type MenuView = "items" | "reassign" | "cancel";
 export const useLaneActions = () => {
   const control = useTaskControl();
   const decide = useDecideBlocker();
+  const takeOver = useTakeOver();
   // The Task whose stuck work Retry was last sent for.
   const [retried, setRetried] = useState<TaskId | null>(null);
   const reset = () => {
     control.reset();
     decide.reset();
+    takeOver.reset();
   };
   // The lane whose menu is open, named by its header's Task, and the Task the view acts on.
   const [menu, setMenu] = useState<{ readonly lane: TaskId; readonly taskId: TaskId; readonly view: MenuView } | null>(
@@ -73,8 +76,18 @@ export const useLaneActions = () => {
     },
     /** Why Retry on the Task's stuck work was not saved, while it was not; else null. */
     stuckRefusal: (taskId: TaskId): unknown => (decide.isError && retried === taskId ? decide.error : null),
+    /** Takes over the Task's files and branches (#1449); once the hub moved them to you, the menu closes. */
+    takeOver: (taskId: TaskId) => {
+      reset();
+      takeOver.mutate(taskId, { onSuccess: () => setMenu(null) });
+    },
+    /** Whether Take over is on its way for the Task. */
+    takingOver: (taskId: TaskId): boolean => takeOver.isPending && takeOver.variables === taskId,
+    /** Why the hub refused to take the Task over, while it did; else null. */
+    takeOverRefusal: (taskId: TaskId): unknown =>
+      takeOver.isError && takeOver.variables === taskId ? takeOver.error : null,
     /** Any control is on its way, so none can be sent twice. */
-    busy: control.isPending || decide.isPending,
+    busy: control.isPending || decide.isPending || takeOver.isPending,
     /** The kind of control on its way for the Task, else null. */
     sending: (taskId: TaskId): TaskControl["kind"] | null =>
       control.isPending && on(taskId) ? (control.variables?.kind ?? null) : null,

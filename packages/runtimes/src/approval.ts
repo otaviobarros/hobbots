@@ -1,7 +1,8 @@
-import { sep } from "node:path";
+import { isAbsolute, sep } from "node:path";
 import {
   type AskedDecision,
   askUntilDecided,
+  type CallWrites,
   type PromptRequest,
   type Redactor,
   type RuntimeEvent,
@@ -30,6 +31,7 @@ import {
   overridesCommitIdentity,
   toolLabel,
   toolRequests,
+  treeRewriteFolders,
 } from "./tool-calls.ts";
 
 export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
@@ -113,7 +115,49 @@ export interface CallSteers {
   readonly initTool?: string | undefined;
   /** Why a `git commit` in a folder is held, when the hub holds it (#742). */
   readonly holdsCommit?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+  /** Why a call's writes are refused: a path or branch you took over from a Task (#1449). */
+  readonly takenByYou?: ((writes: CallWrites) => Effect.Effect<string | null>) | undefined;
 }
+
+/**
+ * `path` against `folder` as written, `..` and links kept: the hub follows each link before the `..`
+ * after it, as the write lands, so collapsing `link/..` here would check another file (#1449).
+ */
+const unresolved = (folder: string, path: string) =>
+  isAbsolute(path) ? path : `${folder.endsWith(sep) ? folder : `${folder}${sep}`}${path}`;
+
+/**
+ * What a call writes, read from the call alone (#1449): the files a file tool or a patch changes or
+ * deletes, the absolute paths a command line writes by redirection or names to a program that
+ * writes them, the branches it pushes, the folders it commits in and the folders where a Git command
+ * rewrites the working tree. Relative paths resolve against
+ * the folder each request is made from.
+ */
+export const callWrites = (call: ToolCall): CallWrites => {
+  const requests = toolRequests(call.tool, call.input, call.cwd) ?? [];
+  const files = requests.flatMap((request) =>
+    request._tag === "Files" && request.operation !== "read-files"
+      ? request.paths.map((path) => unresolved(request.cwd ?? call.cwd, path))
+      : [],
+  );
+  return {
+    paths: [...new Set([...files, ...commandWritesTo(call.tool, call.input, call.cwd, () => true)])],
+    pushes: requests.flatMap((request) =>
+      request._tag === "Push" ? [{ cwd: request.cwd ?? call.cwd, branch: request.branch }] : [],
+    ),
+    commits: commitFolders(call.tool, call.input, call.cwd),
+    trees: treeRewriteFolders(call.tool, call.input, call.cwd),
+  };
+};
+
+/** Why `steers` refuses what the call writes, or null; a call that writes nothing is not asked about. */
+const takenWrites = (call: ToolCall, steers: CallSteers): Effect.Effect<string | null> => {
+  if (steers.takenByYou === undefined) return Effect.succeed(null);
+  const writes = callWrites(call);
+  return writes.paths.length + writes.pushes.length + writes.commits.length + writes.trees.length === 0
+    ? Effect.succeed(null)
+    : steers.takenByYou(writes);
+};
 
 /**
  * Why a `git push` command is refused when a Charm the hob holds takes Push over for its folder, as
@@ -170,8 +214,8 @@ const decideIn = (
 /**
  * Decides a tool call: the policy's answer, and for Ask the user's (PE-003). While the user decides,
  * `report` gets ToolAwaitingApproval. An approved call is decided again under the hob's policy as
- * it is now, just before it runs (PE-008). A call `steers` points elsewhere or holds is refused
- * with why, before the policy decides it.
+ * it is now, just before it runs (PE-008), and against what you took over (#1449). A call `steers`
+ * points elsewhere or holds is refused with why, before the policy decides it.
  */
 export const decideCall = (
   engine: PolicyEngine["Service"],
@@ -198,15 +242,29 @@ export const decideCall = (
             decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
           report,
           unknown: UNKNOWN_TOOL(call.tool),
-        }).pipe(Effect.map((decision) => withGitHint(withTempHint(call, decision), initTool)));
+        }).pipe(
+          Effect.flatMap((decision) => takenSinceAsked(call, steers, decision)),
+          Effect.map((decision) => withGitHint(withTempHint(call, decision), initTool)),
+        );
   });
+
+/**
+ * A call the user approved is checked again against what they took over just before it runs, since
+ * they may have taken its Task's files or branches over while its card waited (#1449).
+ */
+const takenSinceAsked = (call: ToolCall, steers: CallSteers, decision: CallDecision): Effect.Effect<CallDecision> =>
+  decision._tag !== "Run" || decision.approval === undefined
+    ? Effect.succeed(decision)
+    : Effect.map(takenWrites(call, steers), (reason) =>
+        reason === null ? decision : { _tag: "Refuse", verdict: decision.verdict, reason },
+      );
 
 /**
  * Why a call is refused before the policy decides it, pointing the hob to what works from its
  * sandbox, or null: a `git push` a Charm takes over, as the GitHub Charm does (ADR 020, ADR 031),
  * any `gh`, which cannot sign in there, to the GitHub Charm's tool for what it tried (#1349),
  * a commit identity of the command's own, since the hub sets it (#700), a commit the hub holds, as
- * a lead's of a member's open work (#742), a `git init`, which the hub makes (ADR 014), and a write
+ * a lead's of a member's open work (#742), a write to a path or branch you took over (#1449), a `git init`, which the hub makes (ADR 014), and a write
  * in a shared temporary folder, for which the turn has its own (#578).
  */
 const steeredAway = (context: PolicyContext, call: ToolCall, steers: CallSteers): Effect.Effect<string | null> =>
@@ -218,6 +276,8 @@ const steeredAway = (context: PolicyContext, call: ToolCall, steers: CallSteers)
     if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(steers.commitsAs);
     const held = yield* firstAnswer(commitFolders(call.tool, call.input, call.cwd), steers.holdsCommit);
     if (held !== null) return held;
+    const yours = yield* takenWrites(call, steers);
+    if (yours !== null) return yours;
     const { initTool } = steers;
     if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
     const temp = sharedTempWrites(context, call);

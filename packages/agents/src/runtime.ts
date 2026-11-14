@@ -431,6 +431,19 @@ export interface Takeover {
 }
 
 /**
+ * What a tool call writes, as the hub reads it from the call itself (#1449): the files it changes or
+ * deletes, by absolute path, the branches it pushes from which folders, the folders it commits
+ * in, and the folders where a Git command such as `git reset --hard` or `git switch` may rewrite the
+ * working tree or move a branch. A write a command hides, such as a path held in a variable, is not known here.
+ */
+export interface CallWrites {
+  readonly paths: ReadonlyArray<string>;
+  readonly pushes: ReadonlyArray<{ readonly cwd: string; readonly branch: string }>;
+  readonly commits: ReadonlyArray<string>;
+  readonly trees: ReadonlyArray<string>;
+}
+
+/**
  * How the hub points a turn's own tool calls elsewhere, or holds them, before the policy decides
  * them (ADR 031): the same for every runtime, which hands it to the shared approval module.
  */
@@ -442,6 +455,11 @@ export interface CallSteering {
    * lead's commit where a member's open Task left changes, which are that member's to commit (#742).
    */
   readonly holdsCommit?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+  /**
+   * Why a call's writes are refused, or null when they may run: a write to a path or branch you
+   * took over from a Task (#1449), which is yours until the Task ends.
+   */
+  readonly takenByYou?: ((writes: CallWrites) => Effect.Effect<string | null>) | undefined;
 }
 
 /** What a turn is offered of the hub: the tools it serves, and how it steers the runtime's own calls. */

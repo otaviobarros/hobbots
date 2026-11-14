@@ -1,6 +1,7 @@
-import { PlanUsage, TurnLimits, TurnSlotsReport, UsagePeriod, UsageReport } from "@hobbots/domain";
+import { PlanUsage, QuestCost, QuestId, TurnLimits, TurnSlotsReport, UsagePeriod, UsageReport } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { QuestNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 export class UsageGroup extends HttpApiGroup.make("usage")
@@ -27,6 +28,15 @@ export class UsageGroup extends HttpApiGroup.make("usage")
   .add(
     // Keeps new turn limits across restarts; turns that fit under them start at once.
     HttpApiEndpoint.put("setTurnLimits", "/usage/turns/limits", { payload: TurnLimits, success: TurnSlotsReport }),
+  )
+  .add(
+    // A Quest's cost per accepted outcome (#1449): what its whole party used, from the same records as
+    // the report above, over the criteria accepted on evidence. A sub-quest answers for its top Quest.
+    HttpApiEndpoint.get("questCost", "/quests/:questId/cost", {
+      params: { questId: QuestId },
+      success: QuestCost,
+      error: [QuestNotFound],
+    }),
   )
   .middleware(DeviceSession)
   .prefix("/api") {}

@@ -11,7 +11,7 @@ import type {
   WebReadMark,
 } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
-import type { HubTools } from "./runtime.ts";
+import type { CallWrites, HubTools } from "./runtime.ts";
 
 /** A chat turn that may work on a Task: the hob, its thread, the prompt and the brain it runs on. */
 export interface ChatTurn {
@@ -56,6 +56,8 @@ export interface ChatTaskTurn {
    * lead's commit where a member's open Task left changes, which are that member's to commit (#742).
    */
   readonly holdsCommit?: (cwd: string) => Effect.Effect<string | null>;
+  /** Why a call's writes are refused: a path or branch you took over from a Task (#1449). */
+  readonly takenByYou?: (writes: CallWrites) => Effect.Effect<string | null>;
   /**
    * What the turn's session needs to know of the open Task: the state, checkpoints and results of
    * the Tasks under it, never their sessions. Null when the hob works on no open Task here.
