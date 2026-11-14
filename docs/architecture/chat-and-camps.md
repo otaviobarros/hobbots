@@ -70,6 +70,7 @@ Each answer a hob owes a conversation is a `TurnRequest` ([ADR 039](../decisions
 - Stop drops the speaking request and the requests its turn caused, and keeps those a person caused. Stop all (`POST /api/threads/:threadId/stop-all`) drops every request still owed; a queued message left with nothing owed leaves the queue as said. Each dropped request records who stopped it. Removing a queued message drops what was owed for it.
 - At start, a request that was speaking is answered by its interrupted reply, which Continue resumes, and the waiting requests start again in their order: the queue is the records.
 - Migration (20261114003401): each queued message gets a waiting request for its thread's hob. Built in [#1461](https://github.com/otaviobarros/hobbots/issues/1461).
+- Who a turn belongs to is its `Speaker` (`packages/agents/src/speaker.ts`): the thread, the line, the hob that holds the floor, the reason its request records, and whether that hob is the one the thread belongs to or a member. A turn's prompt, brief, skills, pack and tools read the hob from it, and the run publishes it as `speaking`. A message's author is its `actor`, read through `authorOf` and `replyHobOf`. A thread's `agentId` only says which hob the thread belongs to: its owner, its lock and its own default answerer (STD-ARCH-021, `pnpm lint:speaker`). Built in [#1549](https://github.com/otaviobarros/hobbots/issues/1549).
 
 ## Chapters
 

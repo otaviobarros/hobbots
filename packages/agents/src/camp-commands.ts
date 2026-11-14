@@ -104,6 +104,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         }
         const chat = new Thread({
           id: key,
+          // standards-allow STD-ARCH-021: the new chat belongs to the same hob
           agentId: thread.agentId,
           title: DEFAULT_THREAD_TITLE,
           kind: "chat",
@@ -143,6 +144,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         const now = yield* nowIso;
         const camp = new Thread({
           id: request.key,
+          // standards-allow STD-ARCH-021: a camp made from a chapter belongs to the same hob
           agentId: thread.agentId,
           title: request.title,
           kind: "camp",

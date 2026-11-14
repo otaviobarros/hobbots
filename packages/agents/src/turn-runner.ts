@@ -1,5 +1,4 @@
 import {
-  type Agent,
   type AgentConfiguration,
   type AgentId,
   type Brain,
@@ -46,6 +45,7 @@ import {
   TurnSkillsInUse,
   withUsedSkill,
 } from "./skill-turn.ts";
+import type { Speaker } from "./speaker.ts";
 import { nextSteps, replyStepId } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
@@ -190,9 +190,8 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
     // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
     // Its tools are the exception: a narrower policy stops it (reviewAuthority).
     const runTurn = (
-      agent: Agent,
+      speaker: Speaker,
       config: AgentConfiguration,
-      thread: Thread,
       brain: Brain,
       prompt: string,
       // What the turn tells its session ahead of the prompt, and for a new session, what its context
@@ -204,6 +203,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
       yours: Message | undefined,
     ) =>
       Effect.gen(function* () {
+        const { agent, thread } = speaker;
         const adapter = adapters(brain.runtime);
         if (adapter === undefined) {
           yield* transition(
@@ -439,7 +439,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         const roster = yield* rosterFor(agent, tools, expected, adapter);
         session.briefed({ memory, roster });
         const pack = yield* packTurn(packReports, thread.id, told.pack, memory);
-        const skills = yield* skillsFor(agent, config, tools, thread, yours);
+        const skills = yield* skillsFor(speaker, config, tools, yours);
         // A chat that tries a draft never runs without it: the hub lost its files, as a restore does,
         // so the reply says how to bring it back instead of answering as if it were loaded.
         if (skills.trial !== null && skills.mounts.length === 0) {
@@ -546,7 +546,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         // Runs after the runtime's stream has closed, so "stopped" means the turn really ended.
         Effect.onInterrupt(() => transition(reply, MessageTransitions.interrupt, saveMessage)),
         // A reply already replaced by a newer turn's changes nothing.
-        Effect.ensuring(turnEnded(thread.id, reply).pipe(Effect.andThen(release(thread.id)))),
+        Effect.ensuring(turnEnded(speaker.thread.id, reply).pipe(Effect.andThen(release(speaker.thread.id)))),
       );
 
     return { runTurn } as const;

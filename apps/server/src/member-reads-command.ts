@@ -35,6 +35,7 @@ const report = (before: ReadonlyArray<ThreadUnread>, after: ReadonlyArray<Thread
       if (moved !== thread.unread) differ += 1;
       const mark = moved === thread.unread ? "" : "  differs";
       yield* Console.log(
+        // standards-allow STD-ARCH-021: the listing shows whose thread it is
         `${row([thread.threadId, thread.title, thread.agentId, String(thread.unread), String(moved ?? "gone")], widths)}${mark}`,
       );
     }
