@@ -38,7 +38,11 @@ const BOM = "\uFEFF";
  * which the syntax tree only gives decoded.
  */
 const eventsOf = (text: string) =>
-  postprocess(parse({ extensions: [frontmatter()] }).document().write(preprocess()(text, undefined, true)));
+  postprocess(
+    parse({ extensions: [frontmatter()] })
+      .document()
+      .write(preprocess()(text, undefined, true)),
+  );
 
 const attributesIn = (html: string, offset: number): ReadonlyArray<LinkTarget> =>
   [...html.matchAll(HTML_ATTRIBUTE)].map((match) => {
@@ -76,8 +80,7 @@ export const readSkillMarkdown = (path: string, file: string): SkillMarkdown => 
     if (type === "yamlValue") {
       if (yaml.from === -1) yaml.from = from;
       yaml.to = to;
-    }
-    else if (DESTINATIONS.has(type)) links.push({ from, to, target: text.slice(from, to) });
+    } else if (DESTINATIONS.has(type)) links.push({ from, to, target: text.slice(from, to) });
     else if (markdown && HTML.has(type)) links.push(...attributesIn(text.slice(from, to), from));
   }
   return {

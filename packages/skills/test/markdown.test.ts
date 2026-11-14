@@ -9,10 +9,10 @@ const targets = (path: string, text: string) => readSkillMarkdown(path, text).li
 describe("a skill's Markdown", () => {
   it("reads links, images, reference definitions, autolinks and raw HTML, and nothing in code", () => {
     const text = [
-      "See [rules](../shared/rules.md \"Rules\") and ![logo](<img/logo one.png>).",
+      'See [rules](../shared/rules.md "Rules") and ![logo](<img/logo one.png>).',
       "",
       "[ref]: <docs/ref.md>",
-      "<file:///etc/passwd> and <img src=\"pic.png\">",
+      '<file:///etc/passwd> and <img src="pic.png">',
       "",
       "`[span](span.md)` and",
       "",
