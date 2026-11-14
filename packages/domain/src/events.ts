@@ -606,11 +606,13 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // added with a default, compatibly. 4: its `kind`, `goal`, `private`, `origin` and `state` (ADR 037).
   // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0099).
   // 6: no `unread`, which is each person's own now (ADR 039, migration 20261114004500).
-  ThreadUpserted: 6,
+  // 7: each session's `agentId` (ADR 039, migration 20261114005209_hob_sessions).
+  ThreadUpserted: 7,
   // 2: its threads' sessions' `chapterId` and `liveChapterId`, as `ThreadUpserted` 5 (migration 0099).
   // 3: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 20261114004500).
-  CampMade: 3,
-  ChatStartedFresh: 3,
+  // 4: its threads' sessions' `agentId`, as `ThreadUpserted` 7 (migration 20261114005209_hob_sessions).
+  CampMade: 4,
+  ChatStartedFresh: 4,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
   // `chapterId` (ADR 037, migration 0099). 6: its `actor` (ADR 037, migration 0101). A message's
