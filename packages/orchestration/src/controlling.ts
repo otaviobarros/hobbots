@@ -101,6 +101,8 @@ export const makeControlling = (deps: Deps) => {
     retry_task: (scope: CallScope, input: Omit<TaskToolInput<"retry_task">, "key">) =>
       Effect.gen(function* () {
         const before = yield* controllable(scope, input);
+        // A failed Task counts toward no limit, so reopening it adds one open Task to its hob and tree.
+        if (before.state === "failed") yield* deps.capacity(scope, before.ownerId, 1, 1);
         const journal = journalOf();
         const by = { actor: hobActor(scope.caller.agentId), reason: input.reason };
         const task = journal.keep(

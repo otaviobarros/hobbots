@@ -513,6 +513,29 @@ describe("hob tools for Tasks and Quests", () => {
     expect(moved.details).toMatchObject({ task_id: moving.id, hob: "Pip" });
   });
 
+  // covers OR-001, OR-006
+  it("[TC-OR-1446-25] a retry of a failed Task at the tree's limit is refused, as it adds an open Task", async () => {
+    await run(seed);
+    const failing = await delegate(ALDRIC, TOP, "Pip", "x");
+    const before = (await tree()).tasks.find((each) => each.id === failing);
+    if (before === undefined) throw new Error("no Task");
+    const failed = await run(
+      TaskRepository.use((tasks) => Effect.orDie(tasks.moveTask(failing, before.revision, "failed", now))),
+    );
+    for (const key of ["a", "b", "c", "d"]) await delegate(ALDRIC, TOP, "Quill", key);
+    for (const key of ["e", "f", "g", "h"]) await delegate(ALDRIC, TOP, "Ada", key);
+    await delegate(ALDRIC, TOP, "Rook", "i");
+    // Ten open Tasks besides the failed one: reopening it would make eleven.
+    const retried = await refused(ALDRIC, TOP, "retry_task", {
+      key: "again",
+      task_id: failing,
+      reason: "Try again",
+      expected_revision: failed.value.revision,
+    });
+    expect(retried.reason).toBe("concurrency-limit");
+    expect((await tree()).tasks.find((each) => each.id === failing)?.state).toBe("failed");
+  });
+
   // covers OR-001, OR-003, OR-006
   it("[TC-OR-016] questions climb, results hand off, waits record and cancels reach the subtree", async () => {
     await run(seed);
