@@ -71,6 +71,10 @@ import { HobToolsLive } from "../src/tools.ts";
 import { WebToolsWith } from "../src/web-access.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the web tools' answers, which a hob reads in the turn that made the call.";
+
 // #1267 and #1269 at hub level: hobs read pages with `web_fetch` on the hub action pipeline (ADR 036), with the
 // hub's own composition, the fake runtime making the scripted calls, a local test site and the found
 // URLs on SQLite or PostgreSQL (TestDatabase). Claude Code and Codex serve the same hub tool with no
@@ -154,7 +158,7 @@ beforeAll(async () => {
     },
   });
   const runtime = Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(
-    Layer.provide(FakeRuntimeLayer()),
+    Layer.provide(FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS })),
     Layer.provide(PolicyEngine.node),
   );
   const reach = WebAccessWith({

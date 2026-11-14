@@ -29,7 +29,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FAKE_SAY_ANSWERS_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Option, PubSub, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -739,6 +739,8 @@ describe("hob tools for Tasks and Quests", () => {
       'fake:hub read_tasks {"key":"look"}',
       `fake:hub cancel_task {"key":"drop-copy","task_id":"${quill}"}`,
       'fake:hub complete_task {"delivered":true,"key":"wrap","summary":"Campaign launched without copy or art"}',
+      // The reply repeats the hub's answers, so the test reads them in the turn that made the calls (#1560).
+      FAKE_SAY_ANSWERS_DIRECTIVE,
     ].join("\n");
     const turn = Effect.gen(function* () {
       const tools = yield* TaskTools;
@@ -895,6 +897,8 @@ describe("hob tools for Tasks and Quests", () => {
       'fake:hub plan_steps {"key":"s","steps":[{"brief":"Research"}]}',
       'fake:hub delegate_task {"key":"d","hob":"Quill","brief":"Draft the copy"}',
       'fake:hub delegate_task {"key":"loop","hob":"Aldric","brief":"Back to me"}',
+      // The reply repeats the hub's answers, so the test reads them in the turn that made the calls (#1560).
+      FAKE_SAY_ANSWERS_DIRECTIVE,
     ].join("\n");
     const turn = Effect.gen(function* () {
       const tools = yield* TaskTools;

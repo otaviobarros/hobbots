@@ -30,7 +30,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FAKE_SAY_ANSWERS_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { GitWorkspaceLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -228,6 +228,8 @@ describe("Completing a Task that changed a Git repository", () => {
       "Wrap up the Quest",
       'fake:hub complete_task {"delivered":true,"key":"done-1","summary":"Spec wrapped up"}',
       'fake:hub complete_task {"delivered":true,"key":"done-2","summary":"Spec wrapped up","leave_uncommitted":"You asked to review the spec before it is committed."}',
+      // The reply repeats the hub's answers, so the test reads the refusal's words (#1560).
+      FAKE_SAY_ANSWERS_DIRECTIVE,
     ].join("\n");
     const result = await run(
       Effect.gen(function* () {

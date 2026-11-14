@@ -55,6 +55,10 @@ import { agentsSkillsFolder, SkillsLive } from "../src/skills.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the Skill tools' answers, which a hob reads in the turn that made the call.";
+
 // #1065: the skills library end to end on the hub (ADR 029, with the skill sets of #1143 and the
 // read-only `~/.agents/skills` of #1139), through its HTTP routes, with the hub's
 // own composition: the skills store and import, `~/.agents/skills` read from a fake home, the skill
@@ -124,7 +128,7 @@ const given: Array<{ readonly runtime: RuntimeKind; readonly skills: ReadonlyArr
 
 /** A fake runtime that records the skills each turn was given before it answers. */
 const recording = (runtime: RuntimeKind): RuntimeAdapterShape => {
-  const fake = makeFakeRuntime({ runtime });
+  const fake = makeFakeRuntime({ runtime, saysAnswers: SAYS_ANSWERS });
   return {
     ...fake,
     sendPrompt: (request: PromptRequest) => {
