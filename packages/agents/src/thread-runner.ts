@@ -24,6 +24,7 @@ import {
   ThreadLifecycle,
   ThreadMembers,
   type ThreadRunStatus,
+  type TurnRequest,
   type TurnRequestId,
   TurnRequests,
   titleFromPrompt,
@@ -31,6 +32,7 @@ import {
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
+import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
@@ -57,6 +59,18 @@ import { workHeld } from "./work-hold.ts";
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
+/** The transcript before `saved`, the turn's reply, without the turn's own prompt. */
+const earlierThan = (transcript: ReadonlyArray<Message>, saved: Message, promptId: MessageId | null) =>
+  transcript
+    .slice(
+      0,
+      Math.max(
+        0,
+        transcript.findIndex((m) => m.id === saved.id),
+      ),
+    )
+    .filter((m) => m.id !== promptId);
+
 /** What a turn carries when it carries no backpack items. */
 const NOTHING_CARRIED: Carry = {
   holding: [],
@@ -73,6 +87,11 @@ interface TurnStart {
   readonly carry?: Carry | null;
   /** False when whoever started the turn starts what waits next, once it has settled the turn's work. */
   readonly drain?: boolean;
+  /**
+   * Why the turn runs, as the floor's `TurnRequest` records it (#1461). Without one, it is worked
+   * out from the turn's prompt with `turnReasonOf`.
+   */
+  readonly reason?: TurnReason | null;
   /**
    * The slot the turn runs in (#1448), freed when it ends. Absent for a turn that carries backpack
    * work, which runs in its dispatch's slot.
@@ -111,6 +130,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const { brief, instructionsChanged } = inputs;
     const repo = yield* HobbotsRepository;
     const packSources = yield* makePackSources;
+    const packPeople = yield* makePackPeople;
     const bus = yield* EventPublisher;
     const admission = yield* HobAdmission;
     // Without a backpack, a thread starts only your queued messages.
@@ -317,15 +337,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         const brain = brainFor(thread, config);
         // A note to self never reaches a turn (ADR 037).
         const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));
-        const before = transcript
-          .slice(
-            0,
-            Math.max(
-              0,
-              transcript.findIndex((m) => m.id === saved.id),
-            ),
-          )
-          .filter((m) => m.id !== promptId);
+        const before = earlierThan(transcript, saved, promptId);
         // A reply continued on another brain is told too, with the text and tool steps its first
         // brain left, so the new one does not redo or contradict that work.
         const switched = continued !== null && continued.runtime !== brain.runtime;
@@ -333,9 +345,15 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // the live chapter since. Only the live chapter is ever replayed (ADR 037).
         const inChapter = before.filter((m) => m.chapterId === thread.liveChapterId);
         const told = switched ? [...inChapter, continued] : inChapter;
-        const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched);
+        const people = yield* packPeople(thread, agent.id);
+        const reason =
+          start.reason ??
+          turnReasonOf(transcript.find((m) => m.id === promptId) ?? null, thread, people.rows, agent.id, people.quest);
+        const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched, people, reason);
         const pack =
-          liveSession(thread, brain.runtime, agent.id) === undefined ? yield* packSources(thread, told, before) : null;
+          liveSession(thread, brain.runtime, agent.id) === undefined
+            ? yield* packSources(thread, told, before, people, reason)
+            : null;
         // Every turn hears of every call the thread left uncertain, whichever brain runs it, since a
         // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
         // Continue names the continued reply's own.
@@ -391,14 +409,18 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           ),
         );
         yield* announceTurn(thread.id, agent.id, turn);
-        // A member hob is admitted under the camp's lock, not its own, so a retirement may have
-        // swept its running turns before this one was there to see. Read again now that it is: a
-        // member hob retiring or gone by now stops (ADR 039).
-        if (agent.id !== thread.agentId && (yield* activeHobs(thread, [agent.id])).size === 0) {
-          yield* endTurn(thread.id);
-        }
+        yield* stopIfLeft(thread, agent.id);
         return { turn, reply };
       }).pipe(Effect.onError(() => start.slot?.release ?? Effect.void));
+
+    // A member hob is admitted under the camp's lock, not its own, so a retirement may have swept
+    // its running turns before this one was there to see. Read again once the turn is registered: a
+    // member hob retiring or gone by now stops (ADR 039).
+    const stopIfLeft = (thread: Thread, agentId: AgentId) =>
+      Effect.gen(function* () {
+        if (agentId === thread.agentId) return;
+        if ((yield* activeHobs(thread, [agentId])).size === 0) yield* endTurn(thread.id);
+      });
 
     // Tells clients when a turn joins the running turns and when it has left them, so a read of
     // `activeThreads` made on either event already agrees with it. The map drops a turn in the
@@ -496,6 +518,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         .openTurnRequests(mainLine(threadId))
         .pipe(Effect.map((open) => TurnRequests.waiting(open).some((request) => request.hobId === agentId)));
 
+    // Why a turn runs, as its request records it.
+    const reasonOf = (request: TurnRequest): TurnReason => ({ cause: request.cause, by: request.causedBy });
+
     // How a turn starts in its slot: one that carries work runs in its dispatch's slot, and one
     // handed a slot runs in it; any other takes its own, or waits for one (#1448): null then.
     const withSlot = (thread: Thread, agent: Agent, start: TurnStart) =>
@@ -526,7 +551,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         }
         const { request: next, agent } = chosen;
         // A turn that waits for a slot leaves the line saying who waits.
-        const begin = yield* withSlot(found.value, agent, start);
+        // The turn runs for the request, which says why (#1465).
+        const begin = yield* withSlot(found.value, agent, { ...start, reason: reasonOf(next) });
         if (begin === null) return yield* lineUp(threadId).pipe(Effect.as(null));
         yield* step(threadId, { _tag: "Unchoose", messageId: null });
         const message = yield* repo.findMessage(next.messageId);

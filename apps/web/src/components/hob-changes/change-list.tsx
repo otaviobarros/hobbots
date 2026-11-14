@@ -11,14 +11,16 @@ import { DiffLines } from "../skills/skill-diff.tsx";
 import { canRevert, type FieldDiff, fieldDiffs, makerOf, type VersionChange } from "./hob-changes-model.ts";
 import { HobName, NamingHob, namedIn, useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
+import { RestoreAnswers } from "./restore-answers.tsx";
 import { settingLines, settingMakerLine, settingName, settingReachLine } from "./setting-change-model.ts";
 
 const copy = messages.row;
 
-const titleOf = (change: HobChange): string => {
+const titleOf = (change: HobChange, hob: Agent | undefined): string => {
   if (change._tag === "Setting") return messages.settings.from({ setting: settingName(change.setting.diff) });
   if (change._tag === "Version") {
-    return change.config.version === 1 ? copy.summoned : copy.version({ version: change.config.version });
+    if (change.config.version > 1) return copy.version({ version: change.config.version });
+    return change.actor._tag === "Hob" && hob?.summonedUnattended === true ? copy.summonedUnattended : copy.summoned;
   }
   if (change.status === "paused") return copy.paused;
   if (change.status === "retired") return copy.retired;
@@ -157,7 +159,7 @@ function ChangeRow({
               <HobName hobId={change.hobId} hobs={hobs} />
             </span>
           )}
-          <span className="text-ui font-semibold text-text-strong">{titleOf(change)}</span>
+          <span className="text-ui font-semibold text-text-strong">{titleOf(change, target)}</span>
           <time dateTime={change.at} className="text-meta text-label">
             {formatMoment(change.at)}
           </time>
@@ -195,6 +197,7 @@ function ChangeRow({
         {change._tag === "Version" && diffs.length === 0 && (
           <span className="text-meta text-label">{copy.unchanged}</span>
         )}
+        <RestoreAnswers change={change} hob={target} />
         {revertable && change._tag === "Version" && <Revert change={change} />}
       </div>
     </li>

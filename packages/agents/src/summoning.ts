@@ -36,6 +36,7 @@ import {
   POLICY_OPERATIONS,
   type PolicyDecision,
   type PolicyLayer,
+  type PolicyOperation,
   type PolicyOverrides,
   RETIRE_OPERATION,
   SELF_FIELD_OF,
@@ -63,6 +64,7 @@ import {
   type TaskId,
   unattendedSummonsBy,
   unattendedSummonsIn,
+  unusableCommands,
   withSummoningForEveryHob,
   YOU,
 } from "@hobbots/domain";
@@ -130,8 +132,68 @@ export const UnattendedSummonLimits = Context.Reference<SummonLimits>("@hobbots/
   defaultValue: () => DEFAULT_SUMMON_LIMITS,
 });
 
+const ANSWER_WORDS: Readonly<Record<PolicyDecision, string>> = { allow: "Allow", ask: "Ask", deny: "Never" };
+
+/**
+ * The fields a change sets, in words: each answer it names with its new answer, and Charms only
+ * when it gives the Charms the hob holds (#1352).
+ */
+export const changedFieldWords = (change: SummoningChange): string =>
+  fieldsSet(change)
+    .flatMap((field) => {
+      if (field !== "charms") return [field];
+      const answers = Object.entries(change.answers ?? {}).flatMap(([operation, answer]) =>
+        answer === undefined ? [] : [`${operation} ${ANSWER_WORDS[answer]}`],
+      );
+      return [
+        ...(change.charms === undefined ? [] : ["Charms"]),
+        ...(answers.length === 0 ? [] : [`answers (${answers.join(", ")})`]),
+      ];
+    })
+    .join(", ");
+
+/**
+ * A change's folders, Charms and answers, as the Charms tab's change, never touching the Summoning
+ * Charm. The answers it names are merged over the hob's own, built-in and Charm alike, so every
+ * answer it leaves out stays as it was (ADR 034, #1352).
+ */
+export const summoningPermissions = (
+  change: SummoningChange,
+  target: HobPolicy,
+): UpdateHobPermissionsPayload | null => {
+  const keys = [...DRAFT_FIELDS.folders, ...DRAFT_FIELDS.charms];
+  if (keys.every((key) => change[key] === undefined)) return null;
+  const answers = Object.entries((change.answers ?? {}) as PolicyLayer).filter(([, answer]) => answer !== undefined);
+  const builtIn = answers.filter(([operation]) => !isCharmOperation(operation as AnyOperation));
+  const charmAnswers = answers.filter(([operation]) => isCharmOperation(operation as AnyOperation));
+  // The Summoning Charm's own grant and answers are yours alone, so a change keeps them.
+  const summoning = Object.fromEntries(
+    Object.entries(target.charms?.overrides ?? {}).filter(([op]) => op.startsWith(`${SUMMONING_CHARM_ID}.`)),
+  );
+  const keepsSummoning = holdsCharm(target, SUMMONING_CHARM_ID);
+  const granted = change.charms && [...change.charms, ...(keepsSummoning ? [SUMMONING_CHARM_ID] : [])];
+  const overrides =
+    charmAnswers.length === 0
+      ? undefined
+      : ({ ...target.charms?.overrides, ...Object.fromEntries(charmAnswers), ...summoning } as CharmOverrides);
+  const charms =
+    granted === undefined && overrides === undefined
+      ? undefined
+      : { ...(granted === undefined ? {} : { granted }), ...(overrides === undefined ? {} : { overrides }) };
+  const payload = {
+    ownFolders: change.own_folders,
+    hiddenSharedFolders: change.hidden_shared_folders,
+    overrides:
+      builtIn.length === 0 ? undefined : ({ ...target.overrides, ...Object.fromEntries(builtIn) } as PolicyOverrides),
+    charms,
+  };
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as UpdateHobPermissionsPayload;
+};
+
 /** What a change allowed on a proposal row made, and when it applies (#1347). */
-const changedWords = (change: SummoningChange) => `Changed ${fieldsSet(change).join(", ")}. ${whenItApplies("It")}`;
+const changedWords = (change: SummoningChange) => `Changed ${changedFieldWords(change)}. ${whenItApplies("It")}`;
 
 /** A hob's unattended summons against the caps, as the Charms tab shows them (ADR 034). */
 export const summonCapsOf = (agents: ReadonlyArray<Agent>, agentId: AgentId, limits: SummonLimits): SummonCaps => ({
@@ -606,6 +668,42 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
       return self === null ? null : selfFieldOperation(self);
     };
 
+    /**
+     * The commands a summoned hob would hold but could never use, since its file answers close them
+     * (ADR 014): refused when the draft's own answers make the gap, a warning when the manager's
+     * leave it, as `delegate_task` does (#1352).
+     */
+    const commandsGap = (draft: SummoningDraft, manager: Authority) => {
+      const asked = (draft.answers ?? {}) as PolicyLayer;
+      const decide = (operation: PolicyOperation) => {
+        const given = asked[operation];
+        return given === undefined ? manager.answer(operation) : narrowest(given, manager.answer(operation));
+      };
+      const gap = unusableCommands(decide);
+      if (gap === null) return null;
+      const name = draft.name?.trim() || "It";
+      const closing = gap.closing.map((operation) => `${operation} ${decide(operation)}`).join(" and ");
+      const rule = `commands, Git's included, need read-files allow and edit-files allow, or edit-files deny for read-only commands, and ${name} would have ${closing}`;
+      const gives = gap.commands.filter((operation) => asked[operation] !== undefined);
+      const takes = gap.closing.filter((operation) => (asked[operation] ?? "allow") !== "allow");
+      return gives.length > 0 && takes.length > 0
+        ? ({
+            _tag: "Refused",
+            text: `authority-unusable: ${name} could not use ${gives.join(" or ")}: ${rule}. Give ${takes.join(" and ")} allow, or give ${gives.join(" and ")} deny.`,
+          } as const)
+        : ({
+            _tag: "Warning",
+            text: `${name} cannot use ${gap.commands.join(" or ")} though it has them: ${rule}.`,
+          } as const);
+    };
+
+    /** The warnings of the drafts a summon made, one line each. */
+    const gapWarnings = (drafts: ReadonlyArray<SummoningDraft>, manager: Authority) =>
+      drafts.flatMap((draft) => {
+        const gap = commandsGap(draft, manager);
+        return gap?._tag === "Warning" ? [gap.text] : [];
+      });
+
     /** What a summon draft lacks, or gets wrong, against the manager. */
     const checkDraft = (
       draft: SummoningDraft,
@@ -622,6 +720,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         problems.push(...(yield* fieldProblems(draft, manager.agent, services)));
         problems.push(...neverFields(fieldsSet(draft), manager.answer, false));
         problems.push(...(yield* authorityProblems(draft, manager, services, shared)));
+        const gap = commandsGap(draft, manager);
+        if (gap?._tag === "Refused") problems.push(gap.text);
         const asks = [SUMMON_OPERATION].filter((operation) => manager.answer(operation) === "ask").map(wordsOf);
         return { label: draft.name?.trim() || "A new hob", problems, asks } satisfies Row;
       });
@@ -660,7 +760,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         }
         const authority = yield* authorityOf(agent.id, policy, context.access.policy, services);
         if (!self) {
-          const permissions = permissionsPayload(change, agent.policy);
+          const permissions = summoningPermissions(change, agent.policy);
           if (permissions !== null) {
             const after = yield* effectivePolicy(
               new Agent({ ...agent, policy: changedPolicy(agent.policy, permissions) }),
@@ -797,36 +897,6 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
       return defined(fields) as UpdateAgentPayload;
     };
 
-    /** A change's folders, Charms and answers, as the Charms tab's change, never touching the Summoning Charm. */
-    const permissionsPayload = (change: SummoningChange, target: HobPolicy): UpdateHobPermissionsPayload | null => {
-      const keys = [...DRAFT_FIELDS.folders, ...DRAFT_FIELDS.charms];
-      if (keys.every((key) => change[key] === undefined)) return null;
-      const answers = change.answers as PolicyLayer | undefined;
-      const builtIn =
-        answers && Object.fromEntries(Object.entries(answers).filter(([op]) => !isCharmOperation(op as AnyOperation)));
-      const charmAnswers =
-        answers && Object.fromEntries(Object.entries(answers).filter(([op]) => isCharmOperation(op as AnyOperation)));
-      // The Summoning Charm's own grant and answers are yours alone, so a change keeps them.
-      const summoning = Object.fromEntries(
-        Object.entries(target.charms?.overrides ?? {}).filter(([op]) => op.startsWith(`${SUMMONING_CHARM_ID}.`)),
-      );
-      const keepsSummoning = holdsCharm(target, SUMMONING_CHARM_ID);
-      const granted = change.charms && [...change.charms, ...(keepsSummoning ? [SUMMONING_CHARM_ID] : [])];
-      const charms =
-        granted === undefined && charmAnswers === undefined
-          ? undefined
-          : {
-              ...(granted === undefined ? {} : { granted }),
-              ...(charmAnswers === undefined ? {} : { overrides: { ...charmAnswers, ...summoning } as CharmOverrides }),
-            };
-      return defined({
-        ownFolders: change.own_folders,
-        hiddenSharedFolders: change.hidden_shared_folders,
-        overrides: builtIn as PolicyOverrides | undefined,
-        charms,
-      }) as UpdateHobPermissionsPayload;
-    };
-
     const card = (input: object, summary: string) => ({ arguments: { ...input }, summary });
 
     const describeHob = (agent: Agent) =>
@@ -915,7 +985,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
      */
     const changeOne = (agent: Agent, each: SummoningChange, services: SummoningServices, actor: ChangeActor) => {
       const profile = updatePayload(each);
-      const permissions = permissionsPayload(each, agent.policy);
+      const permissions = summoningPermissions(each, agent.policy);
       // Profile and permissions are one version, so a change either part refuses stores nothing.
       const write = services.hobs.change(
         agent.id,
@@ -1093,6 +1163,10 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             const text = [
               `Summoned ${created.length === 1 ? "1 hob" : `${created.length} hobs`}:`,
               ...created.map(describeHob),
+              ...gapWarnings(
+                input.hobs.filter((_, index) => created.some((hob) => hob.id === ids[index])),
+                manager,
+              ),
               ...(failed.length === 0 ? [] : ["These could not be summoned:", ...failed]),
             ].join("\n");
             return { _tag: "Applied", text } as const;
@@ -1167,9 +1241,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
               const each = input.changes[index] as SummoningChange;
               const applied = yield* changeOne(row.agent, each, services, actor).pipe(Effect.result);
               if (applied._tag === "Success") {
-                done.push(
-                  [`- ${row.agent.name}: changed ${fieldsSet(each).join(", ")}.`, ...applied.success].join(" "),
-                );
+                done.push([`- ${row.agent.name}: changed ${changedFieldWords(each)}.`, ...applied.success].join(" "));
               } else failed.push(applied.failure);
             }
             if (done.length === 0)
@@ -1405,7 +1477,12 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
                 unattended: false,
               }).pipe(Effect.result);
               return made._tag === "Success"
-                ? ({ _tag: "Applied", text: `Summoned ${describeHob(made.success).slice(2)}` } as const)
+                ? ({
+                    _tag: "Applied",
+                    text: [`Summoned ${describeHob(made.success).slice(2)}`, ...gapWarnings([draft], manager)].join(
+                      " ",
+                    ),
+                  } as const)
                 : ({ _tag: "Failed", text: made.failure.slice(2) } as const);
             }
             case "change": {

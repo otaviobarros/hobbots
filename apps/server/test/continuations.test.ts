@@ -538,6 +538,15 @@ describe("continuing a hob when work arrives", () => {
         ),
       ),
     );
+    // Once its turn runs, so the stop reaches it.
+    await run(
+      retry(
+        Effect.flatMap(
+          ChatService.use((chat) => chat.activeThreads),
+          (active) => (active.includes(threadId) ? Effect.void : Effect.fail("not yet" as const)),
+        ),
+      ),
+    );
     await run(ChatService.use((chat) => chat.stop(threadId)));
     await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
     holdContinuations = false;

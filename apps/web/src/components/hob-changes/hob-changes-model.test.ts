@@ -17,6 +17,7 @@ import {
   makerOf,
   matchesFilters,
   NO_FILTERS,
+  restoreOf,
   searchFromFilters,
   type VersionChange,
 } from "./hob-changes-model.ts";
@@ -165,5 +166,36 @@ describe("the Changes log's address", () => {
     expect(searchFromFilters(NO_FILTERS)).toEqual({});
     expect(filtersFromSearch({})).toEqual(NO_FILTERS);
     expect(filtersFromSearch({ charm: "github" })).toEqual({ ...NO_FILTERS, charm: "github" });
+  });
+});
+
+describe("answers a Summoning change dropped (#1352)", () => {
+  const held = {
+    ...EMPTY_HOB_POLICY,
+    overrides: { push: "deny", "delete-files": "deny" },
+    charms: { granted: ["github"], overrides: { "github.open-pull-request": "deny" } },
+  } as const;
+  const dropped = {
+    ...EMPTY_HOB_POLICY,
+    overrides: {},
+    charms: { granted: ["github"], overrides: { "github.comment": "ask" } },
+  } as const;
+
+  it("[TC-UX-1352-01] offers to restore what a Summoning change dropped and the hob still lacks, as your change", () => {
+    const change = version(3, { policy: dropped }, byChief, config(2, { policy: held }));
+    const restore = restoreOf(change, { policy: { ...dropped, overrides: { push: "ask" } } });
+    expect(restore?.words).toBe("Delete files: Never, Open pull requests: Never");
+    expect(restore?.payload).toEqual({
+      overrides: { push: "ask", "delete-files": "deny" },
+      charms: { overrides: { "github.comment": "ask", "github.open-pull-request": "deny" } },
+    });
+  });
+
+  it("[TC-UX-1352-02] offers nothing for your own change, or once the hob holds the answers again", () => {
+    expect(
+      restoreOf(version(3, { policy: dropped }, YOU, config(2, { policy: held })), { policy: dropped }),
+    ).toBeNull();
+    const change = version(3, { policy: dropped }, byChief, config(2, { policy: held }));
+    expect(restoreOf(change, { policy: held })).toBeNull();
   });
 });

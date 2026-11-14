@@ -43,6 +43,7 @@ export * from "./memory-capture.ts";
 export * from "./memory-shares.ts";
 export * from "./memory-views.ts";
 export * from "./notes.ts";
+export * from "./pack-people.ts";
 export * from "./permissions.ts";
 export * from "./ports.ts";
 export * from "./questions.ts";
