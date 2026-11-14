@@ -49,6 +49,21 @@ export interface GitWorkspaceShape {
    * none is (a detached HEAD) or the repository cannot be read. Read without running Git.
    */
   readonly currentBranch: (top: string) => Effect.Effect<string | null>;
+  /**
+   * The repositories a folder reaches, by the real path of each top folder: the one Git finds from
+   * `folder`, and those inside it a few folders down, past dependency and hidden folders, as a
+   * folder of several checkouts holds them (#1537). Read without running Git.
+   */
+  readonly repositoriesIn: (folder: string) => Effect.Effect<ReadonlyArray<string>>;
+  /**
+   * The files whose change moves the branch `branch` of the repository whose top is `top`, by
+   * absolute path (#1537): its loose ref and the packed refs, in the Git folder every worktree of it
+   * shares, or the whole ref table of a repository that keeps one. Only files that are there: a
+   * branch only the packed refs hold gets its loose ref written first, with the same commit, as Git
+   * writes one to move it, and a branch not made yet has none. Empty when the repository cannot be
+   * read. Runs no Git.
+   */
+  readonly branchFiles: (top: string, branch: string) => Effect.Effect<ReadonlyArray<string>>;
 }
 
 /** Reads the Git state of a hob's folders for the hub, without running Git. */

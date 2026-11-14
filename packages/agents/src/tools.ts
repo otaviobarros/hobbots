@@ -70,12 +70,22 @@ const summoningScopeNarrows = (before: ToolPolicy["hob"], after: ToolPolicy["hob
 };
 
 /**
- * Whether `after` takes away anything `before` gave: a folder, the tools altogether, the user's
- * signing agent (`signCommits`), a Charm the hob held (ADR 031), or an operation whose answer gets
- * narrower, a Charm's included. A turn granted `before` must then stop, since its calls and commands
- * already run under what it was given (PE-008).
+ * Whether `after` closes a path to writes that `before` left open, because you took it over from
+ * a Task since (#1537): a turn granted `before` must then stop, since its sandbox and the commands
+ * already running in it were started without that path closed.
  */
-export const narrows = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
+export const takesMore = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
+  if (before === null || after === null) return false;
+  const closed = new Set(before.taken ?? []);
+  return (after.taken ?? []).some((path) => !closed.has(path));
+};
+
+/**
+ * Whether `after`'s policy takes away anything `before`'s gave: a folder, the tools altogether, the
+ * user's signing agent (`signCommits`), a Charm the hob held (ADR 031), or an operation whose answer
+ * gets narrower, a Charm's included. What you took over is `takesMore`.
+ */
+export const narrowsPolicy = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
   if (before === null) return false;
   if (after === null || after.policy.dataFolder !== before.policy.dataFolder) return true;
   if (before.folders.some((folder) => !after.folders.includes(folder))) return true;
@@ -90,6 +100,14 @@ export const narrows = (before: ToolAccess | null, after: ToolAccess | null): bo
     return is !== was && isNarrowerOrEqual(is, was);
   });
 };
+
+/**
+ * Whether `after` takes away anything `before` gave: what its policy narrows (`narrowsPolicy`), or a
+ * path you took over since (`takesMore`). A turn granted `before` must then stop, since its calls
+ * and commands already run under what it was given (PE-008).
+ */
+export const narrows = (before: ToolAccess | null, after: ToolAccess | null): boolean =>
+  narrowsPolicy(before, after) || takesMore(before, after);
 
 /**
  * What a hob may do with tools on its next turn (ADR 014): the installation's preset and shared

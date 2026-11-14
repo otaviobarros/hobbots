@@ -93,6 +93,11 @@ export interface SandboxScope {
   readonly path?: string;
   /** The closed places outside the home folder; USER_DATA_ROOTS that exist by default. */
   readonly roots?: ReadonlyArray<string>;
+  /**
+   * What you took over from a Task, which no process of the turn may write even inside its folders
+   * (#1537): taken files and folders, and the Git files that move a taken branch (`ToolAccess.taken`).
+   */
+  readonly taken?: ReadonlyArray<string>;
 }
 
 /**
@@ -163,6 +168,32 @@ const userClaudeCode = (home: string) => {
 };
 
 /**
+ * What stays closed to writes even inside the turn's folders: Hobbots' data, the turn's skills, the
+ * user's own Claude Code state, Git's hooks and config, and what you took over from a Task.
+ */
+const closedToWrites = (scope: SandboxScope, home: string): Array<string> => [
+  scope.dataFolder,
+  join(scope.runtimeFolder, SKILL_MOUNTS),
+  // Loaded later by the user's own Claude Code, outside any policy.
+  ...userClaudeCode(home),
+  // Git's hooks and config, in each folder and in any repository below it, submodules' included:
+  // the user's own Git would run what a hob writes there outside the sandbox. sandbox-runtime
+  // protects these only under the hub's own working folder on macOS. A repository a hob lays out
+  // itself, such as one a `.git` file points to, is not covered (ADR 014).
+  ...scope.folders.flatMap((folder) => [
+    join(folder, ".git", "hooks"),
+    join(folder, ".git", "config"),
+    `${folder}/**/.git/**/hooks/**`,
+    `${folder}/**/.git/**/config`,
+    `${folder}/**/.git/hooks/**`,
+    `${folder}/**/.git/config`,
+  ]),
+  // What you took over from a Task: a script, an interpreter or Git's own config cannot write it
+  // either, nor move a taken branch, whatever the call-level check read of the command (#1537).
+  ...(scope.taken ?? []),
+];
+
+/**
  * The turn's filesystem rules. The home folder and the other places people keep files are closed
  * except for the folders, the hob's runtime state and the tools on PATH, so other projects, keys,
  * dotfiles and the user's own Claude Code state stay out of reach.
@@ -204,24 +235,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
       ...(scope.runtimeAccess?.write ?? [scope.runtimeFolder]),
       scope.tempFolder,
     ],
-    denyWrite: [
-      scope.dataFolder,
-      join(scope.runtimeFolder, SKILL_MOUNTS),
-      // Loaded later by the user's own Claude Code, outside any policy.
-      ...userClaudeCode(home),
-      // Git's hooks and config, in each folder and in any repository below it, submodules' included:
-      // the user's own Git would run what a hob writes there outside the sandbox. sandbox-runtime
-      // protects these only under the hub's own working folder on macOS. A repository a hob lays out
-      // itself, such as one a `.git` file points to, is not covered (ADR 014).
-      ...scope.folders.flatMap((folder) => [
-        join(folder, ".git", "hooks"),
-        join(folder, ".git", "config"),
-        `${folder}/**/.git/**/hooks/**`,
-        `${folder}/**/.git/**/config`,
-        `${folder}/**/.git/hooks/**`,
-        `${folder}/**/.git/config`,
-      ]),
-    ],
+    denyWrite: closedToWrites(scope, home),
   };
 };
 

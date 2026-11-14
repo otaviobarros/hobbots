@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import {
@@ -32,7 +32,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
-import { TaskTools } from "@hobbots/orchestration";
+import { makeTakenPlaces, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -357,6 +357,9 @@ const hub = () => {
           ORDER BY recipient_id, task_id, created_at`,
       ),
     );
+  /** What every hob turn's sandbox closes in `folders`, as the hub reads it when the turn starts (#1537). */
+  const takenPlaces = (folders: ReadonlyArray<string>) =>
+    run(Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)));
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
       (tree) => Option.getOrThrow(tree).tasks[0],
@@ -379,6 +382,7 @@ const hub = () => {
     giveBack,
     takenWrite,
     takenItems,
+    takenPlaces,
     dispose: () => runtime.dispose(),
   };
 };
@@ -624,6 +628,60 @@ describe("the claims register", () => {
       expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["released", "released", "released"]);
       expect((await h.claimsOf(B)).map((claim) => claim.state)).toEqual(["held"]);
       expect(await h.takenWrite({ paths: [join(checkout, "docs", "a.md")] })).toBeNull();
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers OR-006, PE-005, #1537
+  it("[TC-OR-1537-03] closes what you took over in every turn's sandbox, in each clone, until you give it back or the Task ends", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      await h.request(FRODO, A, false);
+      await h.request(SAM, B, false);
+      await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
+      // The worktree's branch, and a link that lands in a folder of its own.
+      await h.call(FRODO, A, { key: "b", scope: "branch", branch: "camp" });
+      symlinkSync(join(checkout, "web"), join(checkout, "web-link"));
+      mkdirSync(join(checkout, "web"), { recursive: true });
+      await h.call(FRODO, A, { key: "l", scope: "path", path: "web-link" });
+      // Nothing is yours yet, so nothing is closed.
+      expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
+
+      await h.takeOver(A);
+      // Both clones share the branch's refs, in the checkout's Git folder; each closes its own `docs`.
+      const refs = join(checkout, ".git", "refs", "heads", "camp");
+      expect(await h.takenPlaces([checkout])).toEqual(
+        [join(checkout, "docs"), join(checkout, "web"), join(checkout, "web-link"), refs].sort(),
+      );
+      expect(await h.takenPlaces([worktree])).toEqual(
+        expect.arrayContaining([join(worktree, "docs"), join(worktree, "web-link"), refs]),
+      );
+      // A hob given only a folder inside the repository, or a folder holding it, gets the same.
+      expect(await h.takenPlaces([join(checkout, "docs", "decisions")])).toContain(join(checkout, "docs"));
+      expect(await h.takenPlaces([root])).toEqual(
+        expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs"), refs]),
+      );
+      // A repository with nothing taken closes nothing.
+      expect(await h.takenPlaces([outside])).toEqual([]);
+
+      // A branch only the packed refs hold gets its loose ref back, with its commit, so it can be closed.
+      const camp = git(checkout, "rev-parse", "camp").toString().trim();
+      git(checkout, "pack-refs", "--all");
+      expect(await h.takenPlaces([checkout])).toEqual(
+        expect.arrayContaining([refs, join(checkout, ".git", "packed-refs")]),
+      );
+      expect(readFileSync(refs, "utf8").trim()).toBe(camp);
+      expect(git(checkout, "rev-parse", "camp").toString().trim()).toBe(camp);
+
+      // Given back, nothing is closed; taken again, then the Task ends: nothing is closed either.
+      await h.giveBack(A);
+      expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
+      await h.takeOver(A);
+      expect(await h.takenPlaces([checkout])).not.toEqual([]);
+      await h.end(A);
+      expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
     } finally {
       await h.dispose();
     }

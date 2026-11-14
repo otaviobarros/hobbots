@@ -126,3 +126,51 @@ describe("The repository Git finds from a folder (#742)", () => {
     expect(await repositoryFrom("ledger")).toBeNull();
   });
 });
+
+describe("What the sandbox closes for what you took over (#1537)", () => {
+  const read = <A>(use: (git: GitWorkspace["Service"]) => Effect.Effect<A>) =>
+    Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-05] finds the repositories a folder reaches: the one around it and those a few folders down", async () => {
+    const ledger = join(work, "projects", "ledger");
+    const vendor = join(ledger, "vendor", "lib");
+    const deep = join(work, "projects", "a", "b", "c", "deep");
+    for (const dir of [join(ledger, "src"), vendor, deep, join(work, "projects", "node_modules", "pkg")]) {
+      mkdirSync(dir, { recursive: true });
+    }
+    for (const dir of [ledger, vendor, deep, join(work, "projects", "node_modules", "pkg")]) gitIn(dir, "init", "-q");
+    // From inside a repository: that one. From a folder of checkouts: each, past installed packages,
+    // but not one deeper than the scan reaches, which the call-level check still covers.
+    expect(await read((git) => git.repositoriesIn(join(ledger, "src")))).toEqual([ledger]);
+    expect([...(await read((git) => git.repositoriesIn(join(work, "projects"))))].sort()).toEqual([ledger, vendor]);
+    expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual([]);
+  });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-06] names the files that move a branch, writing back a packed-only branch's loose ref, and none for a branch not made", async () => {
+    const repo = join(work, "repo");
+    write(join(repo, "a.md"), "a\n");
+    gitIn(repo, "init", "-q", "-b", "main");
+    gitIn(repo, "add", ".");
+    gitIn(repo, "commit", "-q", "-m", "one");
+    gitIn(repo, "branch", "feat/shop");
+    const loose = join(repo, ".git", "refs", "heads", "feat", "shop");
+    const packed = join(repo, ".git", "packed-refs");
+    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([loose]);
+    const commit = gitIn(repo, "rev-parse", "feat/shop").toString().trim();
+    gitIn(repo, "pack-refs", "--all");
+    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([loose, packed]);
+    expect(gitIn(repo, "rev-parse", "feat/shop").toString().trim()).toBe(commit);
+    expect(gitIn(repo, "show-ref", "--verify", "refs/heads/feat/shop").toString()).toContain(commit);
+    expect(await read((git) => git.branchFiles(repo, "feat/new"))).toEqual([packed]);
+    expect(await read((git) => git.branchFiles(repo, "../../config"))).toEqual([packed]);
+    // A linked worktree's branches are in the main repository's Git folder.
+    const camp = join(work, "camp");
+    gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
+    expect(await read((git) => git.branchFiles(camp, "camp"))).toEqual([
+      join(repo, ".git", "refs", "heads", "camp"),
+      packed,
+    ]);
+  });
+});

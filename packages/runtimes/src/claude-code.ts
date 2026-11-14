@@ -962,6 +962,8 @@ export interface ToolTurn extends CallSteers {
   readonly runtimeFolder: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
   readonly commitAs?: CommitIdentity;
+  /** What you took over from a Task, which the turn's sandbox closes to writes (#1537). */
+  readonly taken: ReadonlyArray<string>;
 }
 
 /**
@@ -1040,6 +1042,7 @@ export const toolTurn = (
     ...hubSteers(hub),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
     commitsAs: access.commitsAs,
+    taken: access.taken ?? [],
   };
 };
 
@@ -1442,6 +1445,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   ...(signingAgent ? { signingAgent } : {}),
                   ...(commitAs ? { commitAs } : {}),
                   ...skillFolderScope(skills),
+                  taken: tools.taken,
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   // The hob's own grants as they are now can answer the preset's Ask for a host (ADR 015).
                   decideHost: grantedHosts(engine, tools.context, request.approvals),

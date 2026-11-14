@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
 import { Effect, Layer } from "effect";
@@ -258,6 +258,84 @@ const currentBranch = async (top: string): Promise<string | null> => {
   return branch ?? null;
 };
 
+/** How far below a folder `repositoriesIn` looks, and how many folders it reads at most. */
+const REPOSITORY_DEPTH = 3;
+const REPOSITORY_SCAN_LIMIT = 2_000;
+/** Folders that hold installed dependencies, never a checkout someone works in. */
+const SKIPPED = new Set(["node_modules"]);
+
+/**
+ * The repositories `folder` reaches (#1537): the one Git finds from it, and those inside it up to a
+ * few folders down, by the real path of each top folder. Links are not followed and hidden or
+ * dependency folders are skipped, so the scan stays small; a repository nested deeper is still
+ * covered by the call-level check (#1449).
+ */
+const repositoriesIn = async (folder: string): Promise<ReadonlyArray<string>> => {
+  if (!isAbsolute(folder)) return [];
+  const real = await realpath(folder);
+  const found = new Set<string>();
+  const holding = await repositoryOf(real, new Map());
+  if (holding !== null) found.add(await realpath(holding.dir));
+  let level: Array<string> = [real];
+  let read = 0;
+  for (let depth = 0; depth < REPOSITORY_DEPTH && level.length > 0; depth++) {
+    const next: Array<string> = [];
+    for (const dir of level) {
+      if (read++ >= REPOSITORY_SCAN_LIMIT) return [...found];
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED.has(entry.name)) continue;
+        const child = join(dir, entry.name);
+        if ((await gitdirIn(child)) !== null) found.add(child);
+        next.push(child);
+      }
+    }
+    level = next;
+  }
+  return [...found];
+};
+
+/** Whether `path` is there, as a file or folder, without following a link at it. */
+const present = async (path: string) => (await lstat(path).catch(() => null)) !== null;
+
+/**
+ * The files whose change moves branch `branch` of the repository whose top is `top` (#1537), in the
+ * Git folder the repository's worktrees share: its loose ref, and the packed refs, which Git rewrites
+ * to delete or repack a branch; or the whole ref table, in a repository that keeps its refs in one,
+ * since each of its files may hold any branch. A branch that only the packed refs hold gets its loose
+ * ref written first, with the same commit, as Git itself writes one to move it: a ref file the sandbox
+ * closes then stands where Git would write. Only files that are there are named, since a sandbox
+ * cannot close a missing file without hiding it from Git's reads; a branch not made yet is left to
+ * the call-level check (#1449).
+ */
+const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<string>> => {
+  const repository = await repositoryOf(top, new Map());
+  if (repository === null) return [];
+  const shared = repository.common ?? repository.gitdir;
+  const common = await realpath(shared).catch(() => shared);
+  const table = join(common, "reftable");
+  if ((await lstat(table).catch(() => null))?.isDirectory() === true) return [table];
+  const packed = join(common, "packed-refs");
+  const names = branch.split("/");
+  // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
+  if (names.some((name) => name === "" || name === "." || name === "..")) {
+    return (await present(packed)) ? [packed] : [];
+  }
+  const loose = join(common, "refs", "heads", ...names);
+  if (!(await present(loose)) && (await present(packed))) {
+    const files = repository.common === null ? fs : worktreeFs(repository.gitdir, repository.common);
+    const oid = await git
+      .resolveRef({ fs: files, gitdir: repository.gitdir, ref: `refs/heads/${branch}` })
+      .catch(() => null);
+    if (oid !== null && /^[0-9a-f]{40,64}$/.test(oid)) {
+      await mkdir(dirname(loose), { recursive: true });
+      // Never over a ref Git wrote meanwhile: `wx` fails if one is there now.
+      await writeFile(loose, `${oid}\n`, { flag: "wx" }).catch(() => undefined);
+    }
+  }
+  return [...((await present(loose)) ? [loose] : []), ...((await present(packed)) ? [packed] : [])];
+};
+
 /** The hub's reader of Git state. */
 export const GitWorkspaceLive = Layer.succeed(
   GitWorkspace,
@@ -269,5 +347,7 @@ export const GitWorkspaceLive = Layer.succeed(
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
     placeOf: (path) => Effect.promise(() => placeOf(path).catch(() => null)),
     currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
+    repositoriesIn: (folder) => Effect.promise(() => repositoriesIn(folder).catch(() => [])),
+    branchFiles: (top, branch) => Effect.promise(() => branchFiles(top, branch).catch(() => [])),
   }),
 );
