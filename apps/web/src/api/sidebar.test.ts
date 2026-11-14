@@ -1,4 +1,5 @@
 import type { SidebarRead } from "@hobbots/api";
+import { ThreadId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,7 +9,7 @@ vi.mock("./client.ts", () => ({
   call: () => new Promise<SidebarRead>((resolve) => answers.push(resolve)),
 }));
 
-const { applySidebarEvent, sidebarChanged, sidebarQuery } = await import("./sidebar.ts");
+const { applySidebarEvent, mentionsYou, sidebarChanged, sidebarQuery } = await import("./sidebar.ts");
 const { startGeneration } = await import("./sync.ts");
 
 // Issue #1469 (ADR 039, The sidebar): the hub sorts the sidebar; the client reads it again after an
@@ -87,7 +88,7 @@ describe("the sidebar's read", () => {
     list.unsubscribe();
   });
 
-  it("[TC-UX-1469-13] reads again when a person's message lands, which may mention you, and not on each update of a hob's reply", async () => {
+  it("[TC-UX-1469-13] reads again when a person's message lands or a queued one is taken back, and not on each update of a hob's reply", async () => {
     const list = watched();
     list.pending[0]?.(read());
     await list.settled();
@@ -97,6 +98,29 @@ describe("the sidebar's read", () => {
     applySidebarEvent(list.client, { _tag: "MessageUpserted", message: { role: "user" } } as never);
     await list.settled();
     expect(list.pending).toHaveLength(2);
+    list.pending.at(-1)?.(read());
+    await list.settled();
+    // A queued message that starts its turn changes nothing here; one taken back takes its mention.
+    applySidebarEvent(list.client, { _tag: "MessageDequeued", reason: "started" } as never);
+    await list.settled();
+    expect(list.pending).toHaveLength(2);
+    applySidebarEvent(list.client, { _tag: "MessageDequeued", reason: "removed" } as never);
+    await list.settled();
+    expect(list.pending).toHaveLength(3);
     list.unsubscribe();
+  });
+
+  it("[TC-UX-1469-14] counts a mention you have not read as unread, so opening its camp marks it read", () => {
+    const camp = ThreadId.make("camp");
+    const withMention = {
+      sidebar: { camps: [{ threadId: camp, mentions: 1 }], directMessages: [] },
+    } as unknown as SidebarRead;
+    const read = {
+      sidebar: { camps: [{ threadId: camp, mentions: 0 }], directMessages: [] },
+    } as unknown as SidebarRead;
+    expect(mentionsYou(withMention, camp)).toBe(true);
+    expect(mentionsYou(read, camp)).toBe(false);
+    expect(mentionsYou(withMention, ThreadId.make("other"))).toBe(false);
+    expect(mentionsYou(undefined, camp)).toBe(false);
   });
 });

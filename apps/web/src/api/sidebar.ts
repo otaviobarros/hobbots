@@ -1,4 +1,5 @@
-import type { HobbotsEvent } from "@hobbots/domain";
+import type { SidebarRead } from "@hobbots/api";
+import type { HobbotsEvent, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
@@ -24,6 +25,12 @@ export const sidebarQuery = queryOptions({
     }
   },
 });
+
+/** Whether the sidebar counts a mention of you in `threadId` that you have not read. */
+export const mentionsYou = (read: SidebarRead | undefined, threadId: ThreadId): boolean =>
+  [...(read?.sidebar.camps ?? []), ...(read?.sidebar.directMessages ?? [])].some(
+    (place) => place.threadId === threadId && place.mentions > 0,
+  );
 
 /**
  * A thread was made, archived or restored, a hob came or went, a member joined or left, or what you
@@ -60,12 +67,14 @@ const SIDEBAR_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 ]);
 
 /**
- * Whether an event changes what the sidebar lists: one of `SIDEBAR_EVENTS`, or a person's message,
- * which may mention you or leave you a reply to read with no turn after it. A hob's reply streams
- * many updates, so its unread mark follows `unreadChanged` instead.
+ * Whether an event changes what the sidebar lists: one of `SIDEBAR_EVENTS`, a person's message, which
+ * may mention you with no turn after it, or a queued message taken back, whose mention goes with it.
+ * A hob's reply streams many updates, so its unread mark follows `unreadChanged` instead.
  */
 const changesSidebar = (event: HobbotsEvent) =>
-  SIDEBAR_EVENTS.has(event._tag) || (event._tag === "MessageUpserted" && event.message.role === "user");
+  SIDEBAR_EVENTS.has(event._tag) ||
+  (event._tag === "MessageUpserted" && event.message.role === "user") ||
+  (event._tag === "MessageDequeued" && event.reason === "removed");
 
 /** Reads the sidebar again after an event that changes what it lists; the event's own handling goes on. */
 export const applySidebarEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
