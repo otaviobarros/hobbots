@@ -592,6 +592,67 @@ describe("reading a Claude Code turn", () => {
     expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
   });
 
+  // covers PE-001, ADR 014 (#1356)
+  it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
+    const read = turnEvents();
+    const said = (parent: string | null, content: ReadonlyArray<unknown>) =>
+      ({ type: "assistant", parent_tool_use_id: parent, message: { content } }) as unknown as SDKMessage;
+    const results = (parent: string | null, content: ReadonlyArray<unknown>) =>
+      ({ type: "user", parent_tool_use_id: parent, message: { role: "user", content } }) as unknown as SDKMessage;
+    const noSuch = (id: string, name: string, more = "") => ({
+      type: "tool_result",
+      tool_use_id: id,
+      is_error: true,
+      content: `<tool_use_error>Error: No such tool available: ${name}${more}</tool_use_error>`,
+    });
+    expect(
+      read(
+        said(null, [
+          { type: "tool_use", id: "t-1", name: "mcp__hobbots__github_comment", input: { body: "Hi" } },
+          { type: "tool_use", id: "t-2", name: "Bash", input: { command: "git diff" } },
+          { type: "tool_use", id: "t-3", name: "Read", input: { file_path: "/w/a.txt" } },
+        ]),
+      ),
+    ).toEqual([]);
+    expect(
+      read(
+        results(null, [
+          noSuch("t-1", "mcp__hobbots__github_comment"),
+          noSuch("t-2", "Bash", ". Bash is disabled for this session, in subagents as well as here."),
+          // Any other failure is the tool's own, reported by its hooks.
+          { type: "tool_result", tool_use_id: "t-3", is_error: true, content: "File does not exist." },
+        ]),
+      ),
+    ).toEqual([
+      {
+        _tag: "ToolDenied",
+        id: "t-1",
+        tool: "github_comment",
+        operation: "outside-folders",
+        targets: [],
+        label: "Using github_comment",
+        reason: "github_comment is not offered in this session, so it did not run.",
+        decidedBy: "policy",
+        notOffered: { runtimeTool: null },
+      },
+      expect.objectContaining({
+        id: "t-2",
+        tool: "Bash",
+        operation: "run-commands",
+        label: "Running git diff",
+        notOffered: { runtimeTool: "commands" },
+      }),
+    ]);
+    // A result in text blocks, for a call it never saw, is read by the name the result gives.
+    expect(
+      read(
+        results(null, [{ ...noSuch("t-4", "Edit"), content: [{ type: "text", text: noSuch("t-4", "Edit").content }] }]),
+      ),
+    ).toEqual([expect.objectContaining({ id: "t-4", tool: "Edit", notOffered: { runtimeTool: "file_edits" } })]);
+    // A subagent's calls are its own.
+    expect(read(results("task-1", [noSuch("t-5", "Bash")]))).toEqual([]);
+  });
+
   // regression for #1027
   it("[TC-RT-1019] reports a compacted session, so the hub tells it again what it relied on it holding", () => {
     const boundary = {

@@ -42,6 +42,7 @@ export * from "./memory-brief.ts";
 export * from "./memory-capture.ts";
 export * from "./memory-shares.ts";
 export * from "./memory-views.ts";
+export * from "./not-offered.ts";
 export * from "./notes.ts";
 export * from "./permissions.ts";
 export * from "./ports.ts";

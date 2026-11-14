@@ -14,6 +14,8 @@ import {
   joinHubTools,
   makeRedactor,
   makeWebProvenance,
+  type NotOfferedCall,
+  notOfferedReason,
   type Redactor,
   SecretRedaction,
   TaskRepository,
@@ -59,7 +61,7 @@ import {
   type TaskToolCaller,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import { makeCharmRecords } from "./charm-records.ts";
+import { type CharmCaller, makeCharmRecords } from "./charm-records.ts";
 import { draftScope, makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeClaiming } from "./claiming.ts";
 import { makeCriteria } from "./criteria.ts";
@@ -69,6 +71,7 @@ import { flagIdleQuest } from "./empty-quests.ts";
 import { makeHeldCommits } from "./held-commits.ts";
 import { makeLeading } from "./leading.ts";
 import { accessGiven } from "./member-access.ts";
+import { notOfferedWords } from "./not-offered.ts";
 import { makePlanning } from "./planning.ts";
 import { routineReply, waitingForYou } from "./quiet-replies.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
@@ -421,6 +424,12 @@ export class TaskTools extends Context.Service<
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
         const refusals = makeRefusals(ledger, announce, redactor);
         const charmRecords = makeCharmRecords(tasks, refusals, announce);
+        /** Records a call to a tool the turn was not offered as refused, with `why`, which it returns (#1356). */
+        const notOfferedRecord = (from: CharmCaller, tool: string, why: string) =>
+          Effect.as(
+            refusals.record({ ...from, tool, raw: {} }, new TaskToolRefused({ reason: "not-offered", message: why })),
+            why,
+          );
 
         const call = (caller: TaskToolCaller, name: string, raw: unknown, shown = new Map<string, CarriedItem>()) =>
           callFrom(
@@ -589,6 +598,12 @@ export class TaskTools extends Context.Service<
               workingOn: chat.workingOn,
               scope: source.scope,
               recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
+              notOffered: (call) =>
+                notOfferedRecord(
+                  { agentId: turn.agentId, scope: source.scope, taskOf: () => known },
+                  call.tool,
+                  notOfferedReason(call.tool),
+                ),
               attempt: Effect.sync(() => attemptId),
               readWeb: (mark) =>
                 Effect.suspend(() =>
@@ -628,18 +643,50 @@ export class TaskTools extends Context.Service<
             const scope = () => callScope.task(caller.taskId);
             const offer = yield* sessionOffer(caller, turn);
             const charms = anyTools(offer.hubTools);
-            const recorded = charmRecords({ agentId: caller.agentId, scope, taskOf: () => caller.taskId })(charms);
+            const from = { agentId: caller.agentId, scope, taskOf: () => caller.taskId };
+            const recorded = charmRecords(from)(charms);
             const tools = forTurn(caller, only);
+            const joined =
+              joinHubTools([
+                { owner: "the Task tools", tools },
+                { owner: "the hub's other tools", tools: recorded },
+              ]) ?? tools;
+            const offered = new Set(joined.tools.map((tool) => tool.name));
+            /**
+             * Why the session lacks a tool, from the offer it is built from, as its lead's delegation
+             * reads it (#1348), recorded as a refusal on its Task (#1356).
+             */
+            const notOffered = (call: NotOfferedCall) =>
+              Effect.gen(function* () {
+                const hob = Option.getOrUndefined(yield* hobs.findAgent(caller.agentId));
+                // Its commands also need its runtime's sandbox, as its lead's delegation reads them.
+                const described = yield* describeOffer({
+                  agentId: caller.agentId,
+                  access: yield* turn.currentAccess,
+                  offered: [...offered],
+                  ...(hob === undefined ? {} : { runtime: hob.runtime }),
+                });
+                const who = hob?.name ?? "this hob";
+                return yield* notOfferedRecord(from, call.tool, notOfferedWords(call, described, who));
+              });
             return {
-              hubTools:
-                joinHubTools([
-                  { owner: "the Task tools", tools },
-                  { owner: "the hub's other tools", tools: recorded },
-                ]) ?? tools,
+              hubTools: {
+                tools: joined.tools,
+                // A call to a tool the session lacks, as a resumed Codex thread can still make to one it
+                // started with (#1245), is refused as one its runtime refused (#1356).
+                call: (name, input, step) =>
+                  offered.has(name)
+                    ? joined.call(name, input, step)
+                    : Effect.map(notOffered({ tool: name, runtimeTool: null }), (why) => {
+                        showRefusal(step, why);
+                        return { text: why, refused: true };
+                      }),
+              } satisfies HubTools,
               steering: {
                 takeovers: offer.steering?.takeovers ?? [],
                 holdsCommit: (cwd: string) => heldCommit(caller.taskId, cwd),
               },
+              notOffered,
             };
           });
 

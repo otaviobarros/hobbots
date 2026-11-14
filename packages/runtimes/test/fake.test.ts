@@ -125,7 +125,7 @@ describe("fake runtime's scripted hub calls", () => {
   it("lets a later call, in any session, refer to what an earlier call gave back by its key", async () => {
     const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
     const hubTools = {
-      tools: [],
+      tools: ["delegate_task", "hand_off"].map((name) => ({ name, description: name, inputSchema: {}, label: name })),
       call: (name: string, input: unknown) =>
         Effect.sync(() => {
           calls.push({ name, input });
@@ -149,5 +149,29 @@ describe("fake runtime's scripted hub calls", () => {
       { key: "build", depends_on: ["t1"] },
       { key: "hand", artifact_id: "a1", to_task_id: "t2", x: "$none.id" },
     ]);
+  });
+
+  // covers PE-001 (#1356)
+  it("[TC-PE-1356-04] refuses a call to a hub tool the turn was not offered, as a runtime does, without the hub", async () => {
+    const calls: Array<string> = [];
+    const hubTools = {
+      tools: [{ name: "read_tasks", description: "Read", inputSchema: {}, label: "Reading" }],
+      call: (name: string) =>
+        Effect.sync(() => {
+          calls.push(name);
+          return { text: "Read.", refused: false };
+        }),
+    };
+    const events = await makeFakeRuntime()
+      .sendPrompt({ ...request(`fake:hub github_comment {"body":"Hi"}\nfake:hub read_tasks {"key":"r"}`), hubTools })
+      .pipe(Stream.runCollect, Effect.runPromise);
+    expect(calls).toEqual(["read_tasks"]);
+    expect(events.filter((event) => event._tag === "ToolDenied")).toEqual([
+      expect.objectContaining({ id: "fake-hub-1", tool: "github_comment", notOffered: { runtimeTool: null } }),
+    ]);
+    const completed = events.find((event) => event._tag === "Completed");
+    expect(completed?._tag === "Completed" ? completed.text : "").toContain(
+      "github_comment: github_comment is not offered in this session, so it did not run.",
+    );
   });
 });

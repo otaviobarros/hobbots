@@ -269,6 +269,37 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     ]);
   });
 
+  // covers PE-001, ADR 014 (#1356)
+  it("[TC-PE-1356-02] a call to a tool the thread was not offered is reported as refused, new or resumed", {
+    timeout: 120_000,
+  }, async () => {
+    const contract = stepRecordingContract();
+    const first = await turn(
+      { hubTools: contract.hubTools, recordToolStart: contract.recordToolStart, tools: access },
+      [functionCall("github_comment", { body: "Looks good." }, "call-comment"), { say: "Done." }],
+    );
+    expect(Exit.isSuccess(first.exit), String(first.exit)).toBe(true);
+    const events = Exit.isSuccess(first.exit) ? first.exit.value : [];
+    const started = events.find((event) => event._tag === "SessionStarted");
+    const sessionId = started?._tag === "SessionStarted" ? started.sessionId : null;
+    expect(sessionId).not.toBeNull();
+    // A resumed thread, whose App Server reports no raw items, is read the same way.
+    const resumed = await turn(
+      { hubTools: contract.hubTools, recordToolStart: contract.recordToolStart, tools: access, sessionId },
+      [functionCall("github_review", { body: "Approve." }, "call-review"), { say: "Done." }],
+    );
+    expect(Exit.isSuccess(resumed.exit), String(resumed.exit)).toBe(true);
+    const refused = [...events, ...(Exit.isSuccess(resumed.exit) ? resumed.exit.value : [])].filter(
+      (event) => event._tag === "ToolDenied",
+    );
+    expect(refused).toEqual([
+      expect.objectContaining({ id: "call-comment", tool: "github_comment", notOffered: { runtimeTool: null } }),
+      expect.objectContaining({ id: "call-review", tool: "github_review", notOffered: { runtimeTool: null } }),
+    ]);
+    // Neither reached the hub or was recorded as started.
+    expect(contract.order).toEqual([]);
+  });
+
   // covers ADR 039 (The context pack with several hobs), RT-001
   it("[TC-RT-1464-02] two hobs' sessions in one workspace each resume their own history, never the other's", {
     timeout: 180_000,

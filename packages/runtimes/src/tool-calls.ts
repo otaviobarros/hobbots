@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { type CommandStart, operationDecision } from "@hobbots/agents";
+import { type CommandStart, operationDecision, type RuntimeToolName } from "@hobbots/agents";
 import { narrowest, openTools, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
@@ -63,6 +63,21 @@ export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "re
         return open.edit;
     }
   });
+};
+
+/** The runtime tool a Claude Code tool belongs to, as a session's offer names them (#1348); null for any other name. */
+export const claudeCodeRuntimeTool = (tool: string): RuntimeToolName | null => {
+  if (!(CLAUDE_CODE_TOOLS as ReadonlyArray<string>).includes(tool)) return null;
+  switch (tool) {
+    case "Read":
+    case "Glob":
+    case "Grep":
+      return "file_reads";
+    case "Bash":
+      return "commands";
+    default:
+      return "file_edits";
+  }
 };
 
 /**

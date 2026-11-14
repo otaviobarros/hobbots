@@ -22,6 +22,7 @@ import {
   type WebReadMark,
 } from "@hobbots/domain";
 import { Context, Effect, Option, Schema, type Stream } from "effect";
+import type { RuntimeToolName } from "./not-offered.ts";
 import type { Redactor } from "./secrets.ts";
 
 /** A shell command a tool call runs, as the Workbench's Terminal records it (ADR 023). */
@@ -148,6 +149,12 @@ export type RuntimeEvent =
       readonly reason: string;
       /** Who refused it: the policy hook, the user answering an Ask, or the OS sandbox around the runtime. */
       readonly decidedBy: "policy" | "user" | "sandbox";
+      /**
+       * Set when the session was never offered the tool, so the runtime refused the call before any
+       * hook of Hobbots saw it (#1356). `runtimeTool` names the runtime's own tools it belongs to, as
+       * the session's offer names them, or is null for any other name, such as a hub or Charm tool.
+       */
+      readonly notOffered?: { readonly runtimeTool: RuntimeToolName | null };
     }
   /**
    * A started call ended without a clear result: it may or may not have taken effect, so it must not
@@ -445,9 +452,21 @@ export interface CallSteering {
 }
 
 /** What a turn is offered of the hub: the tools it serves, and how it steers the runtime's own calls. */
+/** A call the runtime refused because its session was not offered the tool (#1356), as its `ToolDenied` names it. */
+export interface NotOfferedCall {
+  readonly tool: string;
+  readonly runtimeTool: RuntimeToolName | null;
+}
+
 export interface HubOffer {
   readonly hubTools: HubTools | null;
   readonly steering: CallSteering | null;
+  /**
+   * Records a call to a tool the session was not offered as refused, on the Task it works on, and
+   * says why the session lacks it, in place of the runtime's own words (#1356). Absent, nothing is
+   * recorded and the runtime's words stand.
+   */
+  readonly notOffered?: (call: NotOfferedCall) => Effect.Effect<string>;
 }
 
 /**
