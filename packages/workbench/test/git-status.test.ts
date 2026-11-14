@@ -158,7 +158,7 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-06] names the files that move a branch, writing back a packed-only branch's loose ref, and none for a branch not made", async () => {
+  it("[TC-PE-1537-06] names the files that move a branch, the folder a packed-only branch's loose ref goes in, and none for a branch not made", async () => {
     const repo = join(work, "repo");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
@@ -170,9 +170,12 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([loose]);
     const commit = gitIn(repo, "rev-parse", "feat/shop").toString().trim();
     gitIn(repo, "pack-refs", "--all");
-    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([loose, packed]);
+    // Only the packed refs hold it now, and Git pruned its empty folder: the deepest folder Git would
+    // write its loose ref in is closed, and the hub writes nothing in the repository.
+    const heads = join(repo, ".git", "refs", "heads");
+    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([heads, packed]);
+    expect(existsSync(loose)).toBe(false);
     expect(gitIn(repo, "rev-parse", "feat/shop").toString().trim()).toBe(commit);
-    expect(gitIn(repo, "show-ref", "--verify", "refs/heads/feat/shop").toString()).toContain(commit);
     expect(await read((git) => git.branchFiles(repo, "feat/new"))).toEqual([packed]);
     expect(await read((git) => git.branchFiles(repo, "../../config"))).toEqual([packed]);
     // A name Git refuses, with a backslash or a part starting with a dot, names no ref file.
@@ -189,7 +192,7 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-07] leaves a packed-only branch's loose ref unwritten while Git holds its lock or a link stands in its path, and closes the folder around it instead", async () => {
+  it("[TC-PE-1537-07] closes the folder around a packed-only branch's loose ref while Git holds its lock, and around a link in its path", async () => {
     const repo = join(work, "locked");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
@@ -200,15 +203,14 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     gitIn(repo, "pack-refs", "--all");
     const heads = join(repo, ".git", "refs", "heads");
     const packed = join(repo, ".git", "packed-refs");
-    // Git is moving the branch: its lock is held, so nothing is written over it, and the folder
-    // Git would publish the ref in is closed.
+    // Git is moving the branch: its lock is held, and the folder Git would publish the ref in is closed.
     mkdirSync(join(heads, "feat"), { recursive: true });
     write(join(heads, "feat", "shop.lock"), "moving\n");
     expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([join(heads, "feat"), packed]);
     expect(existsSync(join(heads, "feat", "shop"))).toBe(false);
     expect(readFileSync(join(heads, "feat", "shop.lock"), "utf8")).toBe("moving\n");
-    // A link where a folder of the ref should be is never followed out of the repository: the folder
-    // it stands in and the folder it leads to are closed.
+    // A link where a folder of the ref should be: the folder it stands in and the folder it leads to
+    // are closed.
     const outside = join(work, "outside");
     mkdirSync(outside);
     symlinkSync(outside, join(heads, "side"));
@@ -227,12 +229,19 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     gitIn(repo, "symbolic-ref", "refs/heads/loop", "refs/heads/loop");
     const heads = join(repo, ".git", "refs", "heads");
     expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([join(heads, "alias"), join(heads, "main")]);
+    // A branch that names HEAD moves with the branch HEAD names.
+    gitIn(repo, "symbolic-ref", "refs/heads/current", "HEAD");
+    expect(await read((git) => git.branchFiles(repo, "current"))).toEqual([
+      join(heads, "current"),
+      join(repo, ".git", "HEAD"),
+      join(heads, "main"),
+    ]);
     // A ref that names itself is followed only a few times.
     expect(await read((git) => git.branchFiles(repo, "loop"))).toEqual([join(heads, "loop")]);
   });
 
   // covers PE-005, STD-SEC-002, #1537
-  it("[TC-PE-1537-10] writes no ref in a Git folder a hob's .git file points to outside, and closes around it instead", async () => {
+  it("[TC-PE-1537-10] writes nothing in a Git folder a hob's .git file points to outside, and closes around the ref there", async () => {
     const outside = join(work, "elsewhere");
     write(join(outside, "a.md"), "a\n");
     gitIn(outside, "init", "-q", "-b", "main");

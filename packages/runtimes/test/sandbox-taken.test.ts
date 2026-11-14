@@ -10,8 +10,8 @@ import { type PreparedSandbox, ProcessSandbox } from "../src/sandbox.ts";
 // #1537: what you took over from a Task stays closed in every hob turn's sandbox, whatever the hob
 // runs. A script writes a taken file through a variable, and Git moves a taken branch through any
 // of its commands or its config: each fails in the sandbox, which closes the taken folder and the
-// files that move the branch (its loose ref and the packed refs), while the rest of the folder and
-// the other branches stay writable. A branch not made yet has no file to close: the call-level
+// files that move the branch (its loose ref, or the folder it would go in, and the packed refs),
+// while the rest of the folder and the other branches stay writable. A branch not made yet has no file to close: the call-level
 // check (#1449) refuses making it.
 
 // The real OS sandbox runs on macOS, and on Linux with HOBBOTS_SANDBOX_TESTS=1 where bubblewrap,
@@ -82,21 +82,20 @@ describe("what you took over, in a hob turn's sandbox", () => {
       hubGit("branch", "feat/shop", "HEAD~1");
       // A remote that fetches into the taken branch, as a hob could set in the repository's config.
       hubGit("remote", "add", "self", project);
-      // Both taken branches end up only in the packed refs, and the hub wrote their loose refs back
-      // with the same commit before the turn (see GitWorkspace.branchFiles).
+      // Both taken branches are in the packed refs; feat/shop moved since, so it has a loose ref
+      // too, and feat/packed has none: the hub closes the folder its loose ref would go in (see
+      // GitWorkspace.branchFiles).
       hubGit("branch", "feat/packed", "HEAD~1");
       hubGit("pack-refs", "--all");
       const git = join(project, ".git");
       mkdirSync(join(git, "refs", "heads", "feat"), { recursive: true });
-      for (const branch of ["shop", "packed"]) {
-        writeFileSync(join(git, "refs", "heads", "feat", branch), `${hubGit("rev-parse", `feat/${branch}`)}\n`);
-      }
+      writeFileSync(join(git, "refs", "heads", "feat", "shop"), `${hubGit("rev-parse", "feat/shop")}\n`);
       const shop = hubGit("rev-parse", "feat/shop");
       // What the hub closes for `docs` and the two branches.
       const taken = [
         join(project, "docs"),
         join(git, "refs", "heads", "feat", "shop"),
-        join(git, "refs", "heads", "feat", "packed"),
+        join(git, "refs", "heads", "feat"),
         join(git, "packed-refs"),
       ];
 

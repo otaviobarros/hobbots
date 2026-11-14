@@ -121,5 +121,7 @@ describe("what you took over, for a running turn", () => {
     expect(takesMore(closing("/work/repo/docs/plan.md"), closing("/work/repo/docs"))).toBe(true);
     expect(takesMore(closing("C:\\work\\docs"), closing("C:\\work\\docs\\plan.md"))).toBe(false);
     expect(takesMore(closing("/work/repo/docs"), closing())).toBe(false);
+    // On macOS and Linux a backslash is part of a name, so this file is outside the closed folder.
+    expect(takesMore(closing("/work/repo/docs"), closing("/work/repo/docs\\other/plan.md"))).toBe(true);
   });
 });
