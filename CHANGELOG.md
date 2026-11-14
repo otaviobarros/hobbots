@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.0.6](https://github.com/otaviobarros/hobbots/compare/v0.0.5...v0.0.6) (2026-11-14)
+
+
+### Features
+
+* **agents:** give each device a user and put the user on the session ([#1510](https://github.com/otaviobarros/hobbots/issues/1510)) ([7682f46](https://github.com/otaviobarros/hobbots/commit/7682f46df91f4a35d4fdd130310c16640403d56d))
+* **agents:** key runtime sessions by hob ([#1520](https://github.com/otaviobarros/hobbots/issues/1520)) ([8e6dd57](https://github.com/otaviobarros/hobbots/commit/8e6dd57336bb6456a21db6ad7e8d77651b37d5ac))
+* **agents:** limit active turns per hob, runtime and Quest ([#1521](https://github.com/otaviobarros/hobbots/issues/1521)) ([0ed37d1](https://github.com/otaviobarros/hobbots/commit/0ed37d1dfe51c11f9325fd8f76dc8f50747e88f4))
+* **charms:** let hobs open GitHub issues and sub-issues ([#1519](https://github.com/otaviobarros/hobbots/issues/1519)) ([420e422](https://github.com/otaviobarros/hobbots/commit/420e4224c8b55cb74c5f080fa6144af19630a865))
+* check a Quest's acceptance criteria against evidence ([#1509](https://github.com/otaviobarros/hobbots/issues/1509)) ([3962c64](https://github.com/otaviobarros/hobbots/commit/3962c648656fac337eca87e955981d71a0573115))
+* **domain:** decide who answers a message with answerersFor ([#1514](https://github.com/otaviobarros/hobbots/issues/1514)) ([63ba420](https://github.com/otaviobarros/hobbots/commit/63ba4206e0e3f70bb6f791c3314b99ac14ee3518))
+* move unread markers to each member's read marker ([#1517](https://github.com/otaviobarros/hobbots/issues/1517)) ([4bfb093](https://github.com/otaviobarros/hobbots/commit/4bfb093c0436408b767ba2f3ddbf2fd3f13d33c5))
+* **orchestration:** show a member's tools and answers before it starts ([#1512](https://github.com/otaviobarros/hobbots/issues/1512)) ([78ad478](https://github.com/otaviobarros/hobbots/commit/78ad4786d4a6a6108a7551044ca464ead91d44f5))
+* **persistence:** add the User record and make the owner a user ([#1506](https://github.com/otaviobarros/hobbots/issues/1506)) ([0a6f93f](https://github.com/otaviobarros/hobbots/commit/0a6f93faf4c3c2c1462800b32abd65dfcd9bcb2b)), closes [#1451](https://github.com/otaviobarros/hobbots/issues/1451)
+* **persistence:** add thread members, owner and hob in every thread ([#1511](https://github.com/otaviobarros/hobbots/issues/1511)) ([36dbc65](https://github.com/otaviobarros/hobbots/commit/36dbc65ec9b3b6959ee27f2fa099578ccfc5d690))
+* **persistence:** name migrations by second, and run slower CI suites only where needed ([#1518](https://github.com/otaviobarros/hobbots/issues/1518)) ([6664a67](https://github.com/otaviobarros/hobbots/commit/6664a675b56e6297ad9ed76dfbf2419ab71f2695))
+* **persistence:** store each message's mentions and count unread mentions per person ([#1516](https://github.com/otaviobarros/hobbots/issues/1516)) ([6a11154](https://github.com/otaviobarros/hobbots/commit/6a11154f097035c152a39d94b203d65ecf645530))
+* **runtimes:** steer gh commands to the GitHub Charm ([#1513](https://github.com/otaviobarros/hobbots/issues/1513)) ([403dc40](https://github.com/otaviobarros/hobbots/commit/403dc40246461d973d1001b734c0fcd5d8730ac5))
+* say when a change to a hob applies, and what a session still misses ([#1508](https://github.com/otaviobarros/hobbots/issues/1508)) ([bbd7f7a](https://github.com/otaviobarros/hobbots/commit/bbd7f7a595f33b24881e3de1f14b24141ca12bbe))
+* **web:** scope the Needs-you tray and the Inbox to the open chat or camp ([#1433](https://github.com/otaviobarros/hobbots/issues/1433)) ([88dc428](https://github.com/otaviobarros/hobbots/commit/88dc428aed20b6285facd1017ab405fb0890f91e))
+
+
+### Bug Fixes
+
+* **persistence:** check member reads at the versions its migration writes ([#1531](https://github.com/otaviobarros/hobbots/issues/1531)) ([796d353](https://github.com/otaviobarros/hobbots/commit/796d353d4b05e0ca9942b7722b7f70c88ced7c5e))
+
 ## [0.0.5](https://github.com/otaviobarros/hobbots/compare/v0.0.4...v0.0.5) (2026-11-13)
 
 
