@@ -10,6 +10,7 @@ import {
   pauseTargets,
   Quest,
   QuestId,
+  QuestStates,
   resumedAs,
   resumeNote,
   resumeRecipients,
@@ -120,6 +121,16 @@ describe("pause targets", () => {
   });
 });
 
+describe("a paused Quest's criteria", () => {
+  it("[TC-OR-1446-30] still change, so a turn that ran as you paused finishes its checks, and never once the Quest ended", () => {
+    expect(QuestStates.checksCriteria({ state: "paused" })).toBe(true);
+    expect(QuestStates.checksCriteria({ state: "active" })).toBe(true);
+    for (const state of ["stopping", "stopped", "completed", "failed", "cancelled"] as const) {
+      expect(QuestStates.checksCriteria({ state })).toBe(false);
+    }
+  });
+});
+
 describe("cancelling while a pause settles", () => {
   it("[TC-OR-1446-28] confirms the cancel of a pausing Task whose turn has ended, on a move its machine allows", () => {
     const pausing = task("ada", ADA, null, "pausing");
@@ -150,6 +161,12 @@ describe("resumeNote", () => {
     expect(
       resumeRecipients([work.tasks[0] as Task, before, task("ada-b", ADA, "top", "paused")]).map((each) => each.id),
     ).toEqual(["top", "ada", "ada-b"]);
+    // A member that goes back to blocked waits for its blocker to be decided, so nothing wakes it.
+    const blocked = new Task({
+      ...task("bob", BOB, "top", "paused"),
+      pause: { from: "blocked", at, by: you, now: false },
+    });
+    expect(resumeRecipients([work.tasks[0] as Task, blocked]).map((each) => each.id)).toEqual(["top"]);
     expect(resumeNote(before, tree([before]), later)).toContain("Nothing else in the work changed");
   });
 });

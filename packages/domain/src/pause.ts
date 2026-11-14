@@ -55,10 +55,16 @@ const CHANGES_LIMIT = 8;
 /**
  * The Tasks a resume tells about, top first: each resumed Task that runs in a session of its own.
  * A step of its owner's Task shares that Task's session, so it hears through the Task above it; a
- * member's Task runs its own session, so each one hears, even two of the same hob's.
+ * member's Task runs its own session, so each one hears, even two of the same hob's. A Task that
+ * goes back to blocked is told nothing: the note would wake it, and it waits for its owner or lead
+ * to decide its blocker, as it did before the pause.
  */
 export const resumeRecipients = (resumed: ReadonlyArray<Task>): ReadonlyArray<Task> =>
-  resumed.filter((task) => !resumed.some((above) => above.id === task.parentId && above.ownerId === task.ownerId));
+  resumed.filter(
+    (task) =>
+      task.pause?.from !== "blocked" &&
+      !resumed.some((above) => above.id === task.parentId && above.ownerId === task.ownerId),
+  );
 
 /**
  * What Resume tells the hob that owns `task` (#1446), read from the records: when the work was

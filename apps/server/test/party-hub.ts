@@ -335,6 +335,39 @@ export const partyHub = (
     }),
   );
 
+  // The runner waits for a signal before each round, so each wait after the first follows a round it
+  // finished: `settledRound` waits on that count, never on elapsed time (STD-TEST-009).
+  let waits = 0;
+  const counted = Layer.effect(
+    TaskSignal,
+    Effect.gen(function* () {
+      const signal = yield* TaskSignal;
+      return TaskSignal.of({
+        ...signal,
+        next: Effect.suspend(() => {
+          waits += 1;
+          return signal.next;
+        }),
+      });
+    }),
+  ).pipe(Layer.provide(TaskSignal.layer));
+  /**
+   * Waits until the runner has run a whole round that began after this was called. Two signals, each
+   * waited out, cover a round already running when the first arrives.
+   */
+  const settledRound = Effect.gen(function* () {
+    const signal = yield* TaskSignal;
+    for (let round = 0; round < 2; round++) {
+      const seen = waits;
+      yield* signal.notify;
+      yield* waitUntil(
+        Effect.sync(() => waits),
+        (now) => now > seen,
+        { what: "the runner's next round" },
+      );
+    }
+  });
+
   const app = Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
@@ -342,7 +375,7 @@ export const partyHub = (
       StepRunnerLive().pipe(
         Layer.provideMerge(MemberContinuationsLive),
         Layer.provideMerge(TaskTools.layer("/")),
-        Layer.provideMerge(TaskSignal.layer),
+        Layer.provideMerge(counted),
       ),
     ),
     Layer.provideMerge(Dispatcher.layer().pipe(Layer.provideMerge(DispatcherHostLive))),
@@ -397,7 +430,7 @@ export const partyHub = (
     await runtime.dispose();
     rmSync(temp, { recursive: true, force: true });
   };
-  return { run, dispose, requests, answers, reactions, gates, project, temp };
+  return { run, dispose, requests, answers, reactions, gates, project, temp, settledRound };
 };
 
 export const isLive = (state: string) => state === "starting" || state === "running";

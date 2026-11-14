@@ -185,6 +185,11 @@ export const QuestStates = {
   ...QuestMachine,
   /** Whether its lead may still take work on: under way and not being stopped. */
   takesWork: (quest: Pick<Quest, "state">): boolean => quest.state === "active",
+  /**
+   * Whether its criteria still change: under way, or paused, where a turn that was running as you
+   * paused finishes its checks, and no new turn starts until you resume it (#1446).
+   */
+  checksCriteria: (quest: Pick<Quest, "state">): boolean => quest.state === "active" || quest.state === "paused",
   /** Whether you paused it (#1446). */
   isPaused: (quest: Pick<Quest, "state">): boolean => quest.state === "paused",
   /** Whether its lead stopped it at your request, whether or not the work under it has ended yet. */

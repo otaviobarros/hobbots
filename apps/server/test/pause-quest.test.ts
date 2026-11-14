@@ -2,7 +2,20 @@ import { HobbotsRepository, TaskControls } from "@hobbots/agents";
 import { noteReceipt, OWNER_ACTOR, type RuntimeKind, type TaskTree } from "@hobbots/domain";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, hub, isLive, ownedBy, PIP, partyHub, QUILL, ROOK, send, threadId, treeWhen } from "./party-hub.ts";
+import {
+  FRODO,
+  hub,
+  isLive,
+  messagesWhen,
+  ownedBy,
+  PIP,
+  partyHub,
+  QUILL,
+  ROOK,
+  send,
+  threadId,
+  treeWhen,
+} from "./party-hub.ts";
 
 // Issue #1446: you pause a Quest, or pause it now, and resume it; a lead retries and reassigns its
 // members' Tasks itself; and your @mention of a member reaches that member without waking the lead.
@@ -41,7 +54,7 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
   it("[TC-OR-1446-21] Pause now stops the member's turn, starts nothing while paused, and Resume tells it what changed", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
-    const { run, gates, requests } = party;
+    const { run, gates, requests, settledRound } = party;
     gates.set("hold", never);
     await run(delegated);
     const running = await run(treeWhen(pipRuns));
@@ -56,7 +69,8 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     expect(paused.tasks[0]?.state).toBe("paused");
     expect(ownedBy(paused, PIP)?.pause).toMatchObject({ now: true, by: OWNER_ACTOR });
     const sent = requests.length;
-    await run(Effect.sleep("300 millis"));
+    // A whole round of the runner after the pause starts no turn on the paused work.
+    await run(settledRound);
     expect(requests).toHaveLength(sent);
 
     gates.delete("hold");
@@ -87,14 +101,20 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     expect(note).toMatchObject({ recipientId: PIP, senderId: null, author: OWNER_ACTOR, delivery: "steer" });
     if (note === undefined) throw new Error("no note");
     expect(noteReceipt(note, tree)).toEqual({ _tag: "Held", reason: "turn-running" });
-    await run(Effect.sleep("300 millis"));
-    expect(leadTurns()).toBe(before);
+    // Your next message to the lead is answered after anything your mention could have woken, so
+    // once its reply is in, the lead has answered that message only (STD-TEST-009).
+    const asked = await run(send(["How is it going?"]));
+    const replies = await run(
+      messagesWhen((all) => all.some((each) => each.promptId === asked.userMessage.id && each.status === "complete")),
+    );
+    expect(replies.filter((each) => each.promptId === userMessage.id)).toEqual([]);
+    expect(leadTurns()).toBe(before + 1);
     // A mention of a hob that cannot hear the thread refuses the whole message, as any message's does
     // (ADR 039): it is not stored, and the member it also mentions gets no note.
     const refused = await run(Effect.flip(send(["@Pip @Rook use the red theme"])));
     expect(refused).toMatchObject({ _tag: "MentionRefused", hobs: [ROOK] });
     const messages = await run(HobbotsRepository.use((repo) => repo.listMessages(threadId)));
-    expect(messages.at(-1)?.id).toBe(userMessage.id);
+    expect(messages.map((each) => each.id)).toEqual(replies.map((each) => each.id));
     expect((await run(treeWhen(() => true))).notes.filter((each) => each.text.includes("red theme"))).toEqual([]);
   }, 30_000);
 });
