@@ -6,6 +6,7 @@ export const messages = {
       `Every change to ${name}, newest first, with who made it. Revert undoes the latest change as a new version made by you.`,
     empty: "No changes yet.",
     failed: "Hobbots could not read the changes.",
+    retry: "Try again",
     waiting: "Reading the changes…",
   },
   log: {
