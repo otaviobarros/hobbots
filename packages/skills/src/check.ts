@@ -21,6 +21,7 @@ import { Schema } from "effect";
 import { parseDocument } from "yaml";
 import { type FoundSet, type FoundSkill, PLUGIN_ONLY } from "./find.ts";
 import { revisionHash, type SkillContent, sha256, skillsCliHash } from "./hash.ts";
+import { type LinkTarget, readSkillMarkdown } from "./markdown.ts";
 import { insideOf, type SkillTree } from "./tree.ts";
 
 /** A skill that passed every check, as a revision would hold it. */
@@ -74,51 +75,15 @@ const textOf = (bytes: Uint8Array): string | null => {
 
 const URL = /\bhttps?:\/\/[^\s<>"'`)\]\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]+/g;
 const SCRIPT_EXTENSIONS = /\.(?:sh|bash|zsh|fish|py|js|mjs|cjs|ts|rb|pl|php|ps1|psm1|bat|cmd|exe|bin)$/i;
-const LINK_TARGETS = [/\]\(\s*<?([^)\s>]+)>?/g, /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi];
-/** A reference definition, `[name]: target`, on a line that has been trimmed. */
-const REFERENCE = /^\[[^\]]+\]:[ \t]*(\S+)/;
 /** What ends a URL in prose rather than belonging to it. */
 const URL_TRAILING: ReadonlySet<string> = new Set([".", ",", ";", ":", "!", "?"]);
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-
-/**
- * Markdown with its fenced code taken out, so an example in a code block is not read as a link. One
- * pass over the lines (STD-SEC-005). A fence that is never closed is kept, so it hides nothing.
- */
-const withoutCode = (text: string) => {
-  const kept: Array<string> = [];
-  let fence: { readonly marker: string; readonly lines: Array<string> } | null = null;
-  for (const line of text.split("\n")) {
-    if (fence !== null) {
-      if (line.startsWith(fence.marker)) fence = null;
-      else fence.lines.push(line);
-      continue;
-    }
-    const marker = line.startsWith("```") ? "```" : line.startsWith("~~~") ? "~~~" : null;
-    if (marker === null) kept.push(line);
-    else fence = { marker, lines: [line] };
-  }
-  if (fence !== null) kept.push(...fence.lines);
-  return kept.join("\n");
-};
 
 /** The URL without the punctuation that ends its sentence, cut by hand (STD-SEC-005). */
 const withoutTrailingPunctuation = (url: string) => {
   let end = url.length;
   while (end > 0 && URL_TRAILING.has(url[end - 1] ?? "")) end -= 1;
   return url.slice(0, end);
-};
-
-/** The link targets of a file: inline links, `src` and `href`, and reference definitions. */
-const linkTargetsOf = (source: string): ReadonlyArray<string> => {
-  const targets = LINK_TARGETS.flatMap((pattern) => [...source.matchAll(pattern)].map((match) => match[1] ?? ""));
-  for (const line of source.split("\n")) {
-    const target = REFERENCE.exec(line.trim())?.[1];
-    if (target === undefined) continue;
-    const opened = target.startsWith("<") ? target.slice(1) : target;
-    targets.push(opened.endsWith(">") ? opened.slice(0, -1) : opened);
-  }
-  return targets;
 };
 
 /** Whether a link in the file at `path` reaches outside the skill: an absolute path, a `file:` URL, or `..` past the top. */
@@ -135,9 +100,8 @@ const reachesOutside = (path: string, target: string): boolean => {
   return resolved === ".." || resolved.startsWith("../");
 };
 
-const checkLinks = (path: string, text: string) => {
-  const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
-  for (const target of linkTargetsOf(source)) {
+const checkLinks = (path: string, links: ReadonlyArray<LinkTarget>) => {
+  for (const { target } of links) {
     if (reachesOutside(path, target)) refuse("outside-path", path, `${path} links to ${target}, outside the skill.`);
   }
 };
@@ -160,9 +124,9 @@ const flagsOf = (file: SkillContent, text: string | null): ReadonlyArray<SkillFl
 
 /** Reads `SKILL.md`, and writes it again without `allowed-tools` when it has them. */
 const readSkillFile = (text: string, at: string) => {
-  const match = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
-  if (match === null) return refuse("front-matter", at, `${at} has no front matter between --- lines.`);
-  const document = parseDocument(match[1] ?? "");
+  const { frontMatter: found, links } = readSkillMarkdown("SKILL.md", text);
+  if (found === null) return refuse("front-matter", at, `${at} has no front matter between --- lines.`);
+  const document = parseDocument(found.yaml);
   if (document.errors.length > 0) {
     return refuse("front-matter", at, `${at} has front matter that is not YAML: ${document.errors[0]?.message}`);
   }
@@ -172,10 +136,10 @@ const readSkillFile = (text: string, at: string) => {
   } catch (error) {
     return refuse("front-matter", at, `${at} has front matter Hobbots cannot use: ${(error as Error).message}`);
   }
-  if (frontMatter["allowed-tools"] === undefined) return { frontMatter, text, droppedTools: false };
+  if (frontMatter["allowed-tools"] === undefined) return { frontMatter, text, links, droppedTools: false };
   document.delete("allowed-tools");
-  const rest = text.slice(match[0].length);
-  return { frontMatter, text: `---\n${document.toString()}---\n${rest}`, droppedTools: true };
+  // The text after the front matter is kept as it is, and so are its links.
+  return { frontMatter, text: `---\n${document.toString()}---\n${found.rest}`, links, droppedTools: true };
 };
 
 /** Reads Codex's `agents/openai.yaml`, and writes it again without its tool dependencies. */
@@ -282,8 +246,11 @@ const checkFolder = async (tree: SkillTree, found: FoundSkill): Promise<CheckedS
         bytes = encoder.encode(codex.text);
       }
     }
-    const text = textOf(bytes);
-    if (text !== null) checkLinks(file.path, text);
+    if (file.path === "SKILL.md") checkLinks(file.path, skill.links);
+    else {
+      const text = textOf(bytes);
+      if (text !== null) checkLinks(file.path, readSkillMarkdown(file.path, text).links);
+    }
     contents.push({ path: file.path, mode: file.mode, bytes });
   }
   return {
@@ -336,8 +303,7 @@ const linkedPath = (path: string, target: string): string | null => {
  * lays them out: a link to a folder names the folder. Anchors, URLs and links outside the set are left out.
  */
 export const setLinksOf = (path: string, text: string): ReadonlyArray<string> => {
-  const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
-  const linked = linkTargetsOf(source).flatMap((target) => {
+  const linked = readSkillMarkdown(path, text).links.flatMap(({ target }) => {
     const at = linkedPath(path, target);
     return at === null || at === ".." || at.startsWith("../") || at.startsWith("/") ? [] : [at];
   });
@@ -358,20 +324,13 @@ export const rewriteSetLinks = (path: string, text: string, to: (linked: string)
     const at = target.search(/[?#]/);
     return at === -1 ? moved : `${moved}${target.slice(at)}`;
   };
-  const inline = LINK_TARGETS.reduce(
-    (current, pattern) =>
-      current.replace(pattern, (match: string, target: string) => match.replace(target, retarget(target))),
-    text,
-  );
-  return inline
-    .split("\n")
-    .map((line) => {
-      const target = REFERENCE.exec(line.trim())?.[1];
-      if (target === undefined) return line;
-      const bare = target.replace(/^<|>$/g, "");
-      return line.replace(bare, retarget(bare));
-    })
-    .join("\n");
+  const bom = text.startsWith("\uFEFF") ? "\uFEFF" : "";
+  let rewritten = text.slice(bom.length);
+  // From the last link back, so each target's offsets still hold when it is replaced.
+  for (const { from, to, target } of [...readSkillMarkdown(path, text).links].reverse()) {
+    rewritten = `${rewritten.slice(0, from)}${retarget(target)}${rewritten.slice(to)}`;
+  }
+  return `${bom}${rewritten}`;
 };
 
 /** Whether a set's path is a part of the plugin import never keeps, such as its hooks or its manifest. */
@@ -425,8 +384,7 @@ const setFiles = async (tree: SkillTree, set: FoundSet, skillFolders: ReadonlyAr
     bytes.set(path, read);
     const text = textOf(read);
     if (text === null) continue;
-    const source = path.toLowerCase().endsWith(".md") ? withoutCode(text) : text;
-    for (const target of linkTargetsOf(source)) {
+    for (const { target } of readSkillMarkdown(path, text).links) {
       if (reachesOutside(path, target)) {
         refuse("outside-path", inSet(set, path), `${inSet(set, path)} links to ${target}, outside the set.`);
       }
