@@ -1,134 +1,124 @@
-import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useHobPresence } from "../../api/hub-status.ts";
-import { agentsQuery, threadsQuery } from "../../api/queries.ts";
-import { useUnreadThreads } from "../../api/thread-reads.ts";
+import { useKnownUnreadThreads } from "../../api/thread-reads.ts";
+import { formatCount } from "../../lib/format.ts";
 import { presenceState } from "../../lib/hob-state.ts";
-import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
+import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
-import { SidebarCamps } from "./sidebar-camps.tsx";
-import { sidebarDivider, sidebarIcon, sidebarItem } from "./sidebar-classes.ts";
+import { sidebarCount, sidebarMore, sidebarRow, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
+import type { SidebarData } from "./sidebar-data.ts";
 import { SidebarTip } from "./sidebar-item.tsx";
+import { type DirectRow, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
 
-const MARK: Partial<Record<SidebarState, string>> = { "needs-you": "bg-lantern", working: "bg-mint" };
+/** The state dot on a hob's face: lantern when it needs you, mint while it works, a ring while paused. */
+const DOT: Partial<Record<SidebarState, string>> = {
+  "needs-you": "bg-lantern",
+  working: "bg-mint",
+  paused: "bg-panel shadow-[inset_0_0_0_2px_var(--color-control)]",
+};
 
-/** The hob whose page or chat is open, read from the address. */
-const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.exec(pathname)?.[1];
+/** Whether the address is the hob's page or its direct message. */
+const isOpen = (pathname: string, row: DirectRow) =>
+  pathname === `/hobs/${row.hob.id}` ||
+  pathname === `/hobs/${row.hob.id}/chat` ||
+  (row.chat !== undefined && pathname === `/hobs/${row.hob.id}/threads/${row.chat.id}`);
 
 /**
- * Every hob, each with a still state mark: lantern when it needs you, mint while it works, and a
- * lantern dot at the top when it wrote in a chat you have not read (ADR 027). Only the lead whose
- * chat something waits in is marked as needing you, since you talk only to the lead. A hob's tile
- * opens its chat. The hob whose page, chat or camp is open lists its chat, then its camps,
- * under its name while the sidebar is expanded (ADR 037). Only the list scrolls: its heading and "Summon a hob" stay put.
+ * Direct messages (ADR 039, The sidebar): one row per hob, with its state dot, its last line and its
+ * time, closed by All your hobs. A hob's row opens its chat. The + summons a hob.
  */
-export function SidebarHobs({ expanded }: { expanded: boolean }) {
-  const agents = useQuery(agentsQuery);
-  const presence = useHobPresence();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const open = openHobOf(pathname);
-
+export function SidebarHobs({ data, pathname, wide }: { data: SidebarData; pathname: string; wide: boolean }) {
+  const rows = directRows({ hobs: data.hobs, places: data.read?.sidebar.directMessages ?? [], threads: data.threads });
   return (
     <>
-      <div aria-hidden className={sidebarDivider} />
-      <Link
-        to="/hobs"
-        aria-label={copy.allHobs}
-        className="lbl hidden flex-none self-start rounded-control px-3 pb-1 text-label no-underline hover:text-text-strong group-data-[open=true]/side:block"
-      >
-        {copy.hobs}
-      </Link>
-      {agents.isError && <p className="sidebar-label px-3 text-detail text-rose">{copy.hobsLoadFailed}</p>}
-      {/* The list keeps a 10px scrollbar gutter (styles.css), so its end padding is 2px, not 12px:
-          the gutter sits in the sidebar's padding and the rows stay as wide as the sections'. */}
-      <div className="-mx-3 flex min-h-0 flex-col gap-0.5 overflow-x-hidden overflow-y-auto ps-3 pe-0.5">
-        {agents.data?.map((hob) => (
-          <SidebarHob
-            key={hob.id}
-            hob={hob}
-            expanded={expanded}
-            open={hob.id === open}
-            full={presenceState(presence[hob.id], hob.status)}
-            pathname={pathname}
-          />
-        ))}
-      </div>
-      <SidebarTip label={copy.summonLabel} expanded={expanded}>
-        <Link to="/summon" className={sidebarItem}>
-          <span aria-hidden className={cn(sidebarIcon, "text-xl leading-none")}>
-            +
-          </span>
-          <span className="sidebar-label flex-1">{copy.summonLabel}</span>
+      <div className={sidebarSection}>
+        <b className="lbl flex-1 text-detail">{copy.directMessages}</b>
+        <Link
+          to="/summon"
+          aria-label={copy.summonLabel}
+          className="inline-flex size-6 items-center justify-center rounded-control text-text-secondary hover:bg-hover hover:text-text-strong"
+        >
+          <svg
+            aria-hidden
+            viewBox="0 0 16 16"
+            className="size-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.6}
+            strokeLinecap="round"
+          >
+            <path d="M8 3v10M3 8h10" />
+          </svg>
         </Link>
-      </SidebarTip>
+      </div>
+      <span aria-hidden className={sidebarRule} />
+      {data.failed && <p className="px-3 text-detail text-rose max-wide:hidden">{copy.hobsLoadFailed}</p>}
+      <ul aria-label={copy.directMessages} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
+        {rows.map((row) => (
+          <li key={row.hob.id} className="flex w-full justify-center">
+            <DirectLink row={row} current={isOpen(pathname, row)} wide={wide} />
+          </li>
+        ))}
+      </ul>
+      <Link to="/hobs" aria-current={pathname === "/hobs" ? "page" : undefined} className={sidebarMore}>
+        {copy.allHobs}
+      </Link>
     </>
   );
 }
 
-function SidebarHob({
-  hob,
-  expanded,
-  open,
-  full,
-  pathname,
-}: {
-  hob: Agent;
-  expanded: boolean;
-  open: boolean;
-  /** Its state as the hub published its presence. */
-  full: HobState;
-  pathname: string;
-}) {
-  const threads = useQuery(threadsQuery(hob.id));
-  const state = sidebarState(full);
+function DirectLink({ row, current, wide }: { row: DirectRow; current: boolean; wide: boolean }) {
+  const presence = useHobPresence();
+  const known = useKnownUnreadThreads();
+  const { hob, place, chat } = row;
+  const state = sidebarState(presenceState(presence[hob.id], hob.status));
   const word = copy.state[state];
-  const mark = MARK[state];
-  const unreadThreads = useUnreadThreads();
-  const unread = threads.data?.some((thread) => unreadThreads.has(thread.id)) ?? false;
-  const showThreads = expanded && open;
-
+  const unread = place === undefined ? 0 : unreadCount(place, known);
+  const needs = state === "needs-you";
+  const line = needs || state === "working" || chat?.lastLine == null ? word : chat.lastLine;
+  const dot = DOT[state];
   return (
-    <div className="flex flex-none flex-col">
-      <SidebarTip label={copy.hobTip({ name: hob.name, state: word, unread })} expanded={expanded}>
-        <Link
-          to="/hobs/$hobId/chat"
-          params={{ hobId: hob.id }}
-          aria-label={copy.hob({ name: hob.name, state: word, unread })}
-          aria-current={pathname === `/hobs/${hob.id}` ? "page" : undefined}
-          className={sidebarItem}
-        >
-          <span className={sidebarIcon}>
-            <span className="relative inline-flex size-hob-tile items-center justify-center rounded-tile bg-tile">
-              <HobSprite hob={hob} size={28} />
-              {unread && (
-                <span
-                  aria-hidden
-                  className="absolute -end-[3px] -top-[3px] size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern"
-                />
-              )}
-              {mark && (
-                <span
-                  aria-hidden
-                  className={cn(
-                    "absolute -end-[3px] -bottom-[3px] size-3 rounded-dot border-(length:--edge) border-panel",
-                    mark,
-                  )}
-                />
-              )}
-            </span>
+    <SidebarTip label={copy.hob({ name: hob.name, state: word, unread: unread > 0 })} wide={wide}>
+      <Link
+        to="/hobs/$hobId/chat"
+        params={{ hobId: hob.id }}
+        aria-label={copy.hob({ name: hob.name, state: word, unread: unread > 0 })}
+        aria-current={current ? "page" : undefined}
+        className={cn(sidebarRow, "min-h-12")}
+      >
+        <span aria-hidden className="relative inline-flex size-hob-tile items-center justify-center max-wide:size-7.5">
+          <span className="hidden wide:inline-flex">
+            <HobTile hob={hob} tile="lg" />
           </span>
-          <span className="sidebar-label flex min-w-0 flex-1 flex-col">
-            <span className="truncate font-heading font-semibold">{hob.name}</span>
-            <span className={cn("text-detail", state === "needs-you" ? "text-lantern" : "text-text-secondary")}>
-              {word}
-            </span>
+          <span className="inline-flex wide:hidden">
+            <HobTile hob={hob} tile="md" />
           </span>
-        </Link>
-      </SidebarTip>
-      {showThreads && <SidebarCamps hob={hob} pathname={pathname} />}
-    </div>
+          {dot !== undefined && (
+            <span className={cn("absolute -end-px -bottom-px size-[11px] rounded-dot border-2 border-panel", dot)} />
+          )}
+        </span>
+        <span aria-hidden className="flex min-w-0 flex-col max-wide:hidden">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate text-ui font-semibold">{hob.name}</span>
+            {chat !== undefined && (
+              <span className="ms-auto flex-none text-meta text-label">{rowTime(chat.updatedAt)}</span>
+            )}
+          </span>
+          <span
+            className={cn(
+              "truncate text-detail",
+              needs ? "text-lantern" : unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary",
+            )}
+          >
+            {line}
+          </span>
+        </span>
+        <span aria-hidden className="flex items-center max-wide:hidden">
+          {unread > 0 && <span className={sidebarCount}>{formatCount(unread)}</span>}
+        </span>
+      </Link>
+    </SidebarTip>
   );
 }

@@ -1,24 +1,14 @@
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@hobbots/ui/components/tooltip";
-import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 import { ICONS, LINE_ICONS, type SectionName } from "../../art/icons.ts";
-import { messages as inboxCopy } from "../inbox/messages.ts";
-import { sidebarIcon, sidebarItem } from "./sidebar-classes.ts";
+import { formatCount } from "../../lib/format.ts";
 
-/** While the sidebar is collapsed, hovering or focusing a row names it beside the sidebar. */
-export function SidebarTip({
-  label,
-  expanded,
-  children,
-}: {
-  label: string;
-  expanded: boolean;
-  children: ReactElement;
-}) {
+/** On the narrow rail, hovering or focusing a row names it beside the sidebar. */
+export function SidebarTip({ label, wide, children }: { label: string; wide: boolean; children: ReactElement }) {
   return (
-    <Tooltip open={expanded ? false : undefined}>
+    <Tooltip open={wide ? false : undefined}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent side="right" sideOffset={8}>
         {label}
@@ -27,38 +17,45 @@ export function SidebarTip({
   );
 }
 
-/** A section link; `badge` counts what waits there, such as the Inbox's requests that need you. */
-export function SidebarLink({
+/**
+ * One of the four places above the camps: its icon with its label under it, or the icon alone on the
+ * rail. `count` is what waits there, such as For you's; `name` is the link's accessible name.
+ */
+export function SidebarNavLink({
   label,
+  name,
+  icon,
   to,
   active,
-  expanded,
-  badge = 0,
+  wide,
+  count = 0,
 }: {
-  label: SectionName;
+  label: string;
+  name: string;
+  icon: SectionName;
   to: string;
   active: boolean;
-  expanded: boolean;
-  badge?: number;
+  wide: boolean;
+  count?: number;
 }) {
   return (
-    <SidebarTip label={label} expanded={expanded}>
+    <SidebarTip label={label} wide={wide}>
       <Link
         to={to}
         aria-current={active ? "page" : undefined}
-        aria-label={badge > 0 ? inboxCopy.sidebar({ count: badge }) : undefined}
-        className={sidebarItem}
+        aria-label={name}
+        className="relative inline-flex flex-1 flex-col items-center gap-px rounded-control pt-1.5 pb-1 text-meta text-text-secondary no-underline hover:bg-hover hover:text-text-strong aria-[current=page]:bg-selected aria-[current=page]:font-semibold aria-[current=page]:text-text-strong max-wide:h-11 max-wide:w-12 max-wide:flex-none max-wide:justify-center max-wide:p-0"
       >
-        <span className={cn(sidebarIcon, active ? "text-text-strong" : "text-text-secondary")}>
-          <SectionIcon name={label} />
+        <SectionIcon name={icon} />
+        <span aria-hidden className="max-wide:hidden">
+          {label}
         </span>
-        <span className="sidebar-label flex-1">{label}</span>
-        {badge > 0 && (
+        {count > 0 && (
           <span
             aria-hidden
-            className="absolute start-7 top-0 rounded-tag bg-lantern px-[5px] text-meta font-bold text-on-lantern group-data-[open=true]/side:static group-data-[open=true]/side:me-2"
+            className="absolute start-[calc(50%+4px)] top-0.5 rounded-tag bg-lantern px-[5px] text-meta font-bold text-on-lantern max-wide:start-auto max-wide:end-0.5"
           >
-            {inboxCopy.count({ count: badge })}
+            {formatCount(count)}
           </span>
         )}
       </Link>
@@ -70,13 +67,13 @@ export function SidebarLink({
 const PIXEL_PALETTE = { "#": "currentColor", o: "var(--color-control)" };
 
 /** A section's icon: the skin shows the line icon in Lamplight and the pixel icon in Workshop. */
-function SectionIcon({ name }: { name: SectionName }) {
+export function SectionIcon({ name }: { name: SectionName }) {
   return (
     <>
       <svg
         aria-hidden
         viewBox="0 0 20 20"
-        className="line-icon size-5"
+        className="line-icon size-[18px] max-wide:size-5"
         fill="none"
         stroke="currentColor"
         strokeWidth={1.6}
@@ -85,7 +82,7 @@ function SectionIcon({ name }: { name: SectionName }) {
       >
         <path d={LINE_ICONS[name]} />
       </svg>
-      <PixelArt rows={ICONS[name]} palette={PIXEL_PALETTE} size={24} className="pixel-icon" />
+      <PixelArt rows={ICONS[name]} palette={PIXEL_PALETTE} size={20} className="pixel-icon" />
     </>
   );
 }

@@ -3,6 +3,7 @@ import { type QueryClient, queryOptions, useQuery, useQueryClient } from "@tanst
 import { useEffect, useSyncExternalStore } from "react";
 import { call } from "./client.ts";
 import { followsEvents, queryKeys } from "./queries.ts";
+import { sidebarChanged } from "./sidebar.ts";
 import { syncedUnread } from "./sync.ts";
 
 /**
@@ -32,6 +33,8 @@ export const useUnreadThreads = (): ReadonlySet<ThreadId> => useKnownUnreadThrea
  * first (STD-REACT-012).
  */
 export const unreadChanged = async (queryClient: QueryClient) => {
+  // The sidebar's unread counts come from the same markers.
+  void sidebarChanged(queryClient);
   await queryClient.cancelQueries({ queryKey: queryKeys.unreadThreads, exact: true });
   await queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true });
 };
@@ -56,6 +59,8 @@ export const showUnread = (queryClient: QueryClient, message: Message) => {
     ?.find((each) => each.id === message.id);
   if (held !== undefined && leavesUnread(held)) return;
   setUnread(queryClient, message.threadId, true);
+  // The sidebar counts the new reply.
+  void sidebarChanged(queryClient);
 };
 
 const onVisibility = (changed: () => void) => {

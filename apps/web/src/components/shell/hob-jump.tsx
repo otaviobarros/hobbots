@@ -9,6 +9,11 @@ import { ArchivedTag, ResultDetail, resultLink, type SearchResult, useSearchResu
 
 const copy = messages.jump;
 
+const JUMP_EVENT = "hobbots:jump";
+
+/** Opens the finder, as Find or jump to in the sidebar does. */
+export const openJump = () => window.dispatchEvent(new Event(JUMP_EVENT));
+
 /** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a thread by its title or messages. */
 export function HobJump() {
   const [open, setOpen] = useState(false);
@@ -21,8 +26,13 @@ export function HobJump() {
       event.preventDefault();
       setOpen((current) => !current);
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(JUMP_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(JUMP_EVENT, onOpen);
+    };
   }, []);
 
   // A modal dialog keeps focus inside, closes on Escape and gives focus back when it closes.

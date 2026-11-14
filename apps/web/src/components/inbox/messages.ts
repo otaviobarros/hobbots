@@ -198,6 +198,6 @@ export const messages = {
       { keys: ["D"], does: "deny" },
     ],
   },
-  sidebar: ({ count }: { count: number }) => `Inbox, ${formatCount(count)} waiting on you`,
+  forYou: ({ count }: { count: number }) => `For you, ${formatCount(count)} waiting on you`,
   count: ({ count }: { count: number }) => formatCount(count),
 } as const;
