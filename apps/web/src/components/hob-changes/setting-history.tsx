@@ -8,6 +8,7 @@ import { useId, useState } from "react";
 import { settingChangesQuery } from "../../api/hob-changes.ts";
 import { formatMoment } from "../../lib/format.ts";
 import type { SettingsSection } from "../settings/sections.ts";
+import { ReadFailed } from "../web/read-failed.tsx";
 import { FieldChange } from "./change-list.tsx";
 import { useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
@@ -118,14 +119,7 @@ function SettingHistoryBody({
     );
   }
   if (log.isError) {
-    return (
-      <p className="m-0 flex flex-wrap items-center gap-3 text-ui text-text-secondary">
-        <span role="alert">{copy.failed}</span>
-        <Button type="button" variant="chip" size="xs" onClick={() => void log.refetch()}>
-          {messages.history.retry}
-        </Button>
-      </p>
-    );
+    return <ReadFailed text={copy.failed} onRetry={() => void log.refetch()} />;
   }
   const { changes, more } = log.data;
   if (changes.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.empty}</p>;

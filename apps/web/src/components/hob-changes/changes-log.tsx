@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useId } from "react";
 import { changesLogQuery } from "../../api/hob-changes.ts";
+import { ReadFailed } from "../web/read-failed.tsx";
 import { ChangeList } from "./change-list.tsx";
 import {
   type ChangeFilters,
@@ -90,14 +91,7 @@ export function ChangesLog({ search }: { search: ChangesSearch }) {
     );
   }
   if (log.isError) {
-    return (
-      <p className="m-0 flex flex-wrap items-center gap-3 text-ui text-text-secondary">
-        <span role="alert">{messages.history.failed}</span>
-        <Button type="button" variant="chip" size="xs" onClick={() => void log.refetch()}>
-          {messages.history.retry}
-        </Button>
-      </p>
-    );
+    return <ReadFailed text={messages.history.failed} onRetry={() => void log.refetch()} />;
   }
   if (changes.length === 0) return <p className="m-0 text-ui text-text-secondary">{messages.history.empty}</p>;
   return (
