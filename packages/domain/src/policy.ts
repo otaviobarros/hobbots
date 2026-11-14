@@ -288,6 +288,29 @@ export const openTools = (decide: (operation: PolicyOperation) => PolicyDecision
   };
 };
 
+/** The operations that run commands, Git's included (ADR 014). */
+export const COMMAND_OPERATIONS: ReadonlyArray<PolicyOperation> = ["run-commands", "local-git"];
+
+/** The file answers that close commands (ADR 014): Read files other than Allow, or Edit files Ask. */
+export const closesCommands = (operation: PolicyOperation, decision: PolicyDecision): boolean =>
+  operation === "read-files" ? decision !== "allow" : operation === "edit-files" && decision === "ask";
+
+/**
+ * The command operations a hob has open under `decide` but can never use, since its file answers
+ * close commands (`openTools`), and those file operations; null when it can use every one it has.
+ */
+export const unusableCommands = (
+  decide: (operation: PolicyOperation) => PolicyDecision,
+): { readonly commands: ReadonlyArray<PolicyOperation>; readonly closing: ReadonlyArray<PolicyOperation> } | null => {
+  if (openTools(decide).commands) return null;
+  const commands = COMMAND_OPERATIONS.filter((operation) => decide(operation) !== "deny");
+  if (commands.length === 0) return null;
+  const closing = (["read-files", "edit-files"] as const).filter((operation) =>
+    closesCommands(operation, decide(operation)),
+  );
+  return { commands, closing };
+};
+
 /** Per-hob answers. Each may only narrow the preset; a widening needs a separately recorded user grant. */
 export const PolicyOverrides = Schema.Struct({
   "read-files": Schema.optionalKey(PolicyDecision),

@@ -25,6 +25,7 @@ export const messages = {
   row: {
     version: ({ version }: { version: number }) => `Version ${version}`,
     summoned: "Summoned",
+    summonedUnattended: "Summoned without asking you",
     paused: "Paused",
     woke: "Woke up",
     retired: "Retired",
@@ -43,6 +44,11 @@ export const messages = {
     revertFailed: "Hobbots could not revert this change.",
     notLatest: "Another change came after this one, so it can no longer be reverted.",
     unchanged: "Nothing in the settings changed.",
+    dropped: ({ answers }: { answers: string }) =>
+      `This change also dropped answers it did not name: ${answers}. Those operations fell back to your preset.`,
+    restore: "Restore them",
+    restoring: "Restoring…",
+    restoreFailed: "Hobbots could not restore these answers.",
     showDiff: "Show what changed",
     hideDiff: "Hide what changed",
   },
@@ -106,7 +112,8 @@ export const messages = {
     charms: { github: "GitHub", summoning: "Summoning" } as Record<string, string>,
   },
   profile: {
-    summonedBy: ({ hob }: { hob: string }) => `Summoned by ${hob}`,
+    summonedBy: ({ hob, unattended }: { hob: string; unattended: boolean }) =>
+      unattended ? `Summoned by ${hob} without asking you` : `Summoned by ${hob}`,
   },
   home: {
     changedBy: ({ hob }: { hob: string }) => `Changed by ${hob}`,

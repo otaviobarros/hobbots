@@ -523,7 +523,10 @@ describe("the Summoning Charm, end to end", () => {
       hiddenSharedFolders: [shared],
     });
     const refusals = [
-      [{ hob: bo.id, answers: {} }, "authority-wider: answers, since run-commands would be wider than your own."],
+      [
+        { hob: bo.id, answers: { "run-commands": "allow" } },
+        "authority-wider: answers, since run-commands would be wider than your own.",
+      ],
       [
         { hob: bo.id, hidden_shared_folders: [] },
         `authority-wider: shared folders, since ${shared} is hidden from you.`,
@@ -551,10 +554,48 @@ describe("the Summoning Charm, end to end", () => {
         changes: [{ hob: bo.id, name: "Bo", answers: { "edit-files": "deny", "run-commands": "deny" } }],
       }),
     );
-    expect(kept.reply?.content).toContain("- Bo: changed name, charms.");
+    expect(kept.reply?.content).toContain("- Bo: changed name, answers (edit-files Never, run-commands Never).");
     expect((await hob(bo.id)).configVersion).toBe(before.configVersion + 1);
     await permissions(chief, { overrides: {}, hiddenSharedFolders: [] });
     await permissions(bo, { overrides: { "edit-files": "ask" }, hiddenSharedFolders: [] });
+  });
+
+  // covers #1352 (a change merges the answers it names), ADR 034 (No escalation)
+  it("[TC-AG-1352-05] a change that sets one Charm answer keeps every other answer of the hob, is checked by the policy it leaves, and names what changed", async () => {
+    await chiefAnswers({ "summoning.charms": "allow" });
+    const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
+    const kept = (await hob(bo.id)).policy;
+    // The chief may not push. Bo holds Delete files and Push at Never, and a Never on a GitHub write.
+    await permissions(chief, { overrides: { push: "deny" } });
+    await permissions(bo, {
+      overrides: { "delete-files": "deny", push: "deny" },
+      charms: { granted: ["github"], overrides: { "github.write": "deny" } },
+    });
+    const before = await hob(bo.id);
+    const changed = await turn(
+      chief,
+      hub("summoning_change", { key: "one-answer", changes: [{ hob: bo.id, answers: { "github.read": "ask" } }] }),
+    );
+    expect(changed.reply?.content).toContain("- Bo: changed answers (github.read Ask).");
+    expect(changed.reply?.content).not.toContain("Charms");
+    const after = await hob(bo.id);
+    expect(after.configVersion).toBe(before.configVersion + 1);
+    expect(after.policy.overrides).toEqual({ "delete-files": "deny", push: "deny" });
+    expect(after.policy.charms?.overrides).toEqual({ "github.write": "deny", "github.read": "ask" });
+    expect(after.policy.charms?.granted).toEqual(["github"]);
+
+    // A summon whose own answers open commands and close the file reads they run with is refused.
+    const checked = await turn(
+      chief,
+      hub("summoning_check", { summon: [draft("Gap", { answers: { "read-files": "ask", "run-commands": "allow" } })] }),
+    );
+    expect(checked.reply?.content).toContain("authority-unusable: Gap could not use run-commands");
+
+    await permissions(chief, { overrides: {} });
+    await permissions(bo, {
+      overrides: kept.overrides,
+      charms: { granted: kept.charms?.granted ?? [], overrides: kept.charms?.overrides ?? {} },
+    });
   });
 
   // covers PE-008, ADR 034 (The same use cases as the screens)
@@ -583,7 +624,7 @@ describe("the Summoning Charm, end to end", () => {
         changes: [{ hob: bo.id, answers: { "delete-files": "deny" } }],
       }),
     );
-    expect(narrowed.reply?.content).toContain("- Bo: changed charms.");
+    expect(narrowed.reply?.content).toContain("- Bo: changed answers (delete-files Never).");
     const [grant] = await grantsOf();
     expect(grant).toMatchObject({ revokedBy: "hub", revokeReason: "narrowed" });
     await permissions(bo, { overrides: { "edit-files": "ask" } });
@@ -837,7 +878,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (The Charm: Every hob), #406 (granted per hob or to every hob)
-  it("[TC-AG-406-09] Summoning for every hob reaches the hobs you made, never a hob a hob summoned, and a hob's own tab can take it away", async () => {
+  it("[TC-AG-406-09] Summoning for every hob reaches the hobs you made, never a hob a hob summoned, read_hob says where it comes from, and a hob's own tab can take it away", async () => {
     const plain = await create("Plain", 4003);
     const set = await request<{ summoningForEveryHob: unknown }>("PATCH", "/api/setup", {
       summoningForEveryHob: { scope: { summoned: true, hobs: [], self: false }, overrides: {} },
@@ -846,6 +887,13 @@ describe("the Summoning Charm, end to end", () => {
     expect(set.body.summoningForEveryHob).toMatchObject({ overrides: SUMMONING_DEFAULTS });
     const tools = async (agent: Agent) => (await turn(agent)).sent?.hubTools?.tools.map((tool) => tool.name) ?? [];
     expect(await tools(plain)).toContain("summoning_summon");
+    // read_hob says where Plain's Summoning comes from, and says nothing of it for a hob granted its own (#1352).
+    const card = await turn(chief, hub("read_hob", { key: "plain", hob: "Plain" }));
+    expect(card.reply?.content).toContain(
+      '- Charms: GitHub, Summoning (Summoning comes from the "Summoning for every hob" setting, not from its own grant)',
+    );
+    const own = await turn(other, hub("read_hob", { key: "chief", hob: "Chief" }));
+    expect(own.reply?.content).not.toContain("Summoning for every hob");
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
     expect(await tools(bo)).not.toContain("summoning_summon");
     await permissions(plain, { charms: { withheld: ["summoning"] } });
@@ -1397,7 +1445,7 @@ describe("the Summoning Charm, end to end", () => {
     expect(read.proposal.rows[0]).toMatchObject({
       state: "allowed",
       outcome:
-        "Changed instructions, charms. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops. In a Task, Rook is still not offered the GitHub Charm's writes: that Charm offers them only in chats.",
+        "Changed instructions, Charms. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops. In a Task, Rook is still not offered the GitHub Charm's writes: that Charm offers them only in chats.",
     });
     expect((await onProposal(view, `rows/${rookRow?.id}/deny`)).status).toBe(409);
     await decideProposal(retone, "deny-all");

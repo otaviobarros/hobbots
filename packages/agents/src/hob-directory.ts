@@ -11,6 +11,7 @@ import {
   type RosterMark,
   RUNTIME_NAMES,
   readHobJsonSchema,
+  SUMMONING_CHARM_ID,
   SUMMONING_CHARM_NAME,
   type SummoningForEveryHob,
   starterRole,
@@ -52,6 +53,8 @@ export interface HobCard {
   readonly brain: { readonly runtime: string; readonly model: string; readonly effort: string };
   /** The display names of the Charms it holds that are connected now. */
   readonly charms: ReadonlyArray<string>;
+  /** Set when it holds the Summoning Charm only from "Summoning for every hob" (ADR 034, #1352). */
+  readonly summoningFromEveryHob?: true;
 }
 
 /** The card of `agent`, holding `charms`. A retired hob has none: the directory never lists it. */
@@ -119,6 +122,12 @@ export const rosterLine = (card: HobCard, shared: ReadonlySet<string>): string =
     ...(card.goodAt === null ? [] : [`good at ${quoted(card.goodAt, 200)}`]),
   ].join("; ");
 
+/** Where a card's Summoning Charm comes from, when it is "Summoning for every hob" rather than its own grant. */
+const fromEveryHobWords = (card: HobCard) =>
+  card.summoningFromEveryHob === true && card.charms.includes(SUMMONING_CHARM_NAME)
+    ? ` (${SUMMONING_CHARM_NAME} comes from the "Summoning for every hob" setting, not from its own grant)`
+    : "";
+
 /** A hob's full card, as `read_hob` answers it. */
 export const cardText = (card: HobCard, shared: ReadonlySet<string>): string =>
   [
@@ -127,7 +136,7 @@ export const cardText = (card: HobCard, shared: ReadonlySet<string>): string =>
     `- Good at: ${card.goodAt === null ? "(not set)" : quoted(card.goodAt, 200)}`,
     `- Status: ${card.status === "retiring" ? "retiring, takes no new work" : card.status}`,
     `- Brain: ${brainWords(card)}`,
-    `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}`,
+    `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}${fromEveryHobWords(card)}`,
   ].join("\n");
 
 /** The roster's budgets, in characters (ADR 032). */
@@ -262,11 +271,24 @@ export class HobDirectory extends Context.Service<
           },
         ).pipe(Effect.map((held) => held.map((charm) => charm.name)));
 
+      /** The card of `agent`, marked when its Summoning Charm comes from `setting` alone. */
+      const cardOf = (agent: Agent, held: ReadonlyArray<string>, setting: SummoningForEveryHob | null): HobCard => {
+        const card = hobCard(agent, held);
+        const fromSetting =
+          !holdsCharm(agent.policy, SUMMONING_CHARM_ID) &&
+          holdsCharm(withSummoningForEveryHob(agent, setting), SUMMONING_CHARM_ID);
+        return fromSetting ? { ...card, summoningFromEveryHob: true } : card;
+      };
+
       const cardsOf = (agents: ReadonlyArray<Agent>) =>
         Effect.flatMap(everyHob, (setting) =>
-          Effect.forEach(agents, (agent) => Effect.map(charmsOf(agent, setting), (held) => hobCard(agent, held)), {
-            concurrency: "unbounded",
-          }),
+          Effect.forEach(
+            agents,
+            (agent) => Effect.map(charmsOf(agent, setting), (held) => cardOf(agent, held, setting)),
+            {
+              concurrency: "unbounded",
+            },
+          ),
         ).pipe(Effect.map((cards) => [...cards].sort(byRosterOrder)));
 
       /** The names the reader's view shares: its own and every hob it sees. */

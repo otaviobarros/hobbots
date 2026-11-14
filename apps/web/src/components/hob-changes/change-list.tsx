@@ -5,18 +5,20 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { useRevertChange } from "../../api/hob-changes.ts";
+import { useUpdatePermissions } from "../../api/queries.ts";
 import { formatMoment } from "../../lib/format.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { DiffLines } from "../skills/skill-diff.tsx";
-import { canRevert, type FieldDiff, fieldDiffs, makerOf, type VersionChange } from "./hob-changes-model.ts";
+import { canRevert, type FieldDiff, fieldDiffs, makerOf, restoreOf, type VersionChange } from "./hob-changes-model.ts";
 import { HobName, NamingHob, namedIn, useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.row;
 
-const titleOf = (change: HobChange): string => {
+const titleOf = (change: HobChange, hob: Agent | undefined): string => {
   if (change._tag === "Version") {
-    return change.config.version === 1 ? copy.summoned : copy.version({ version: change.config.version });
+    if (change.config.version > 1) return copy.version({ version: change.config.version });
+    return change.actor._tag === "Hob" && hob?.summonedUnattended === true ? copy.summonedUnattended : copy.summoned;
   }
   if (change.status === "paused") return copy.paused;
   if (change.status === "retired") return copy.retired;
@@ -108,6 +110,37 @@ function Revert({ change }: { change: VersionChange }) {
   );
 }
 
+/**
+ * What a Summoning change dropped without naming it, with Restore them, which gives those answers
+ * back as a change made by you (#1352). Nothing is restored until you press it.
+ */
+function RestoreAnswers({ change, hob }: { change: HobChange; hob: Agent | undefined }) {
+  const restore = restoreOf(change, hob);
+  const update = useUpdatePermissions(change.hobId);
+  if (restore === null) return null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-control border border-line bg-deep px-3 py-2">
+      <span className="text-meta text-text-secondary">{copy.dropped({ answers: restore.words })}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          disabled={update.isPending}
+          onClick={() => update.mutate(restore.payload)}
+        >
+          {update.isPending ? copy.restoring : copy.restore}
+        </Button>
+        {update.isError && (
+          <span role="alert" className="text-meta text-rose">
+            {copy.restoreFailed}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** One change: what happened and when, who made it and why, what it changed, and Revert when it can. */
 function ChangeRow({
   change,
@@ -147,7 +180,7 @@ function ChangeRow({
               <HobName hobId={change.hobId} hobs={hobs} />
             </span>
           )}
-          <span className="text-ui font-semibold text-text-strong">{titleOf(change)}</span>
+          <span className="text-ui font-semibold text-text-strong">{titleOf(change, target)}</span>
           <time dateTime={change.at} className="text-meta text-label">
             {formatMoment(change.at)}
           </time>
@@ -180,6 +213,7 @@ function ChangeRow({
         {change._tag === "Version" && diffs.length === 0 && (
           <span className="text-meta text-label">{copy.unchanged}</span>
         )}
+        <RestoreAnswers change={change} hob={target} />
         {revertable && change._tag === "Version" && <Revert change={change} />}
       </div>
     </li>
