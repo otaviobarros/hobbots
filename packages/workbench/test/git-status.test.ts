@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -142,7 +143,7 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-05] finds the repositories a folder reaches: the one around it and those a few folders down", async () => {
+  it("[TC-PE-1537-05] finds the repositories a folder reaches: the one around it and every one below it", async () => {
     const ledger = join(work, "projects", "ledger");
     const vendor = join(ledger, "vendor", "lib");
     const deep = join(work, "projects", "a", "b", "c", "deep");
@@ -150,11 +151,13 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
       mkdirSync(dir, { recursive: true });
     }
     for (const dir of [ledger, vendor, deep, join(work, "projects", "node_modules", "pkg")]) gitIn(dir, "init", "-q");
-    // From inside a repository: that one. From a folder of checkouts: each, past installed packages,
-    // but not one deeper than the scan reaches, which the call-level check still covers.
-    expect(await read((git) => git.repositoriesIn(join(ledger, "src")))).toEqual([ledger]);
-    expect([...(await read((git) => git.repositoriesIn(join(work, "projects"))))].sort()).toEqual([ledger, vendor]);
-    expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual([]);
+    // From inside a repository: that one. From a folder of checkouts: each, however deep, past
+    // installed packages, and the scan saw every folder.
+    expect(await read((git) => git.repositoriesIn(join(ledger, "src")))).toEqual({ tops: [ledger], complete: true });
+    const reached = await read((git) => git.repositoriesIn(join(work, "projects")));
+    expect([...reached.tops].sort()).toEqual([deep, ledger, vendor]);
+    expect(reached.complete).toBe(true);
+    expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual({ tops: [], complete: true });
   });
 
   // covers PE-005, #1537
@@ -281,5 +284,27 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     symlinkSync(store, join(repo, ".git", "reftable"));
     write(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
     expect(await read((git) => git.branchFiles(repo, "main"))).toEqual([join(repo, ".git", "reftable"), store]);
+    // A ref table Git may not read, in a repository whose refs are files: both stores are closed.
+    const both = join(work, "both");
+    write(join(both, "a.md"), "a\n");
+    gitIn(both, "init", "-q", "-b", "main");
+    gitIn(both, "add", ".");
+    gitIn(both, "commit", "-q", "-m", "one");
+    mkdirSync(join(both, ".git", "reftable"));
+    expect(await read((git) => git.branchFiles(both, "main"))).toEqual([
+      join(both, ".git", "reftable"),
+      join(both, ".git", "refs", "heads", "main"),
+    ]);
+    // Packed refs read through a link close the Git folder and where it leads.
+    gitIn(both, "branch", "packed");
+    gitIn(both, "pack-refs", "--all");
+    renameSync(join(both, ".git", "packed-refs"), join(work, "packed-elsewhere"));
+    symlinkSync(join(work, "packed-elsewhere"), join(both, ".git", "packed-refs"));
+    expect(await read((git) => git.branchFiles(both, "packed"))).toEqual([
+      join(both, ".git", "reftable"),
+      join(both, ".git"),
+      join(work, "packed-elsewhere"),
+      join(both, ".git", "packed-refs"),
+    ]);
   });
 });

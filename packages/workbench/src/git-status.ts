@@ -258,41 +258,36 @@ const currentBranch = async (top: string): Promise<string | null> => {
   return branch ?? null;
 };
 
-/** How far below a folder `repositoriesIn` looks, and how many folders it reads at most. */
-const REPOSITORY_DEPTH = 3;
-const REPOSITORY_SCAN_LIMIT = 2_000;
+/** How many folders `repositoriesIn` reads at most before it says it did not see them all. */
+const REPOSITORY_SCAN_LIMIT = 20_000;
 /** Folders that hold installed dependencies, never a checkout someone works in. */
 const SKIPPED = new Set(["node_modules"]);
 
 /**
- * The repositories `folder` reaches (#1537): the one Git finds from it, and those inside it up to a
- * few folders down, by the real path of each top folder. Links are not followed and hidden or
- * dependency folders are skipped, so the scan stays small; a repository nested deeper is still
- * covered by the call-level check (#1449).
+ * The repositories `folder` reaches (#1537): the one Git finds from it, and every one inside it, by
+ * the real path of each top folder, and whether the scan saw every folder. Links are not followed
+ * and hidden or dependency folders are skipped; a scan that reads more folders than its limit stops
+ * and says so, and the caller closes the folder whole rather than miss one.
  */
-const repositoriesIn = async (folder: string): Promise<ReadonlyArray<string>> => {
-  if (!isAbsolute(folder)) return [];
-  const real = await realpath(folder);
+const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<string>; complete: boolean }> => {
+  // A folder that is not there holds no repository.
+  const real = isAbsolute(folder) ? await realpath(folder).catch(() => null) : null;
+  if (real === null) return { tops: [], complete: true };
   const found = new Set<string>();
   const holding = await repositoryOf(real, new Map());
   if (holding !== null) found.add(await realpath(holding.dir));
-  let level: Array<string> = [real];
-  let read = 0;
-  for (let depth = 0; depth < REPOSITORY_DEPTH && level.length > 0; depth++) {
-    const next: Array<string> = [];
-    for (const dir of level) {
-      if (read++ >= REPOSITORY_SCAN_LIMIT) return [...found];
-      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-      for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED.has(entry.name)) continue;
-        const child = join(dir, entry.name);
-        if ((await gitdirIn(child)) !== null) found.add(child);
-        next.push(child);
-      }
+  const queue: Array<string> = [real];
+  for (let read = 0; read < queue.length; read++) {
+    if (read >= REPOSITORY_SCAN_LIMIT) return { tops: [...found], complete: false };
+    const entries = await readdir(queue[read] as string, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED.has(entry.name)) continue;
+      const child = join(queue[read] as string, entry.name);
+      if ((await gitdirIn(child)) !== null) found.add(child);
+      queue.push(child);
     }
-    level = next;
   }
-  return [...found];
+  return { tops: [...found], complete: true };
 };
 
 /** Whether `path` is there, as a file or folder, without following a link at it. */
@@ -364,7 +359,11 @@ const refFiles = async (places: RefPlaces, names: ReadonlyArray<string>): Promis
     const text = await readFile(loose, { encoding: "utf8", flag: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW });
     return LOOSE_COMMIT.test(text) ? [loose] : await whole(loose);
   }
-  const packed = await packedHolds(join(places.common, "packed-refs"), names.join("/")).catch(() => false);
+  const packedFile = join(places.common, "packed-refs");
+  const packedStats = await lstat(packedFile).catch(() => null);
+  // Packed refs Git reads through a link may hold the branch where it is not read here.
+  if (packedStats !== null && !packedStats.isFile()) return await whole(packedFile);
+  const packed = await packedHolds(packedFile, names.join("/")).catch(() => false);
   return packed ? await closedAround(places.common, names) : [];
 };
 
@@ -390,11 +389,13 @@ const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<s
   if (repository === null) return [];
   const places = await refPlacesOf(repository);
   const table = join(places.common, "reftable");
-  if (await present(table)) return [...new Set([table, await realpath(table).catch(() => table)])];
+  // Git reads the ref table only when the repository's config says so: with one there, both stores
+  // are closed, the table whole and where a link to it leads.
+  const tables = (await present(table)) ? [table, await realpath(table).catch(() => table)] : [];
   const packed = join(places.common, "packed-refs");
   const files = branchNamed(branch) ? await refFiles(places, ["refs", "heads", ...branch.split("/")]) : [];
   const packedFiles = (await present(packed)) ? [packed, await realpath(packed).catch(() => packed)] : [];
-  return [...new Set([...files, ...packedFiles])];
+  return [...new Set([...tables, ...files, ...packedFiles])];
 };
 
 /** The hub's reader of Git state. */
@@ -408,7 +409,8 @@ export const GitWorkspaceLive = Layer.succeed(
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
     placeOf: (path) => Effect.promise(() => placeOf(path).catch(() => null)),
     currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
-    repositoriesIn: (folder) => Effect.promise(() => repositoriesIn(folder).catch(() => [])),
+    repositoriesIn: (folder) =>
+      Effect.promise(() => repositoriesIn(folder).catch(() => ({ tops: [], complete: false }))),
     branchFiles: (top, branch) => Effect.promise(() => branchFiles(top, branch).catch(() => [])),
   }),
 );

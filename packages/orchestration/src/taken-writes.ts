@@ -241,11 +241,14 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
     return (folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
       Effect.gen(function* () {
         const tops = new Set<string>();
+        const closed = new Set<string>();
         for (const folder of folders) {
-          for (const top of yield* git.repositoriesIn(folder)) yield* withOuter(top, tops);
+          const reached = yield* git.repositoriesIn(folder);
+          for (const top of reached.tops) yield* withOuter(top, tops);
+          // A folder too big to scan whole may hold a repository with something taken: closed whole.
+          if (!reached.complete && (yield* claims.anyTaken)) closed.add(folder);
         }
         const keysOf = makeKeysOf(git, separator);
-        const closed = new Set<string>();
         for (const top of tops) {
           for (const claim of yield* claims.takenIn(yield* identityOf(top))) {
             for (const path of yield* closedBy(top, claim, keysOf)) closed.add(path);

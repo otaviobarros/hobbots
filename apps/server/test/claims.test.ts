@@ -5,6 +5,7 @@ import { join, sep } from "node:path";
 import {
   type CallWrites,
   ClaimRegister,
+  GitWorkspace,
   giveBackTask,
   HobbotsRepository,
   HobTools,
@@ -360,6 +361,19 @@ const hub = () => {
   /** What every hob turn's sandbox closes in `folders`, as the hub reads it when the turn starts (#1537). */
   const takenPlaces = (folders: ReadonlyArray<string>) =>
     run(Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)));
+  /** The same, when the scan of the folders stops at its limit before it sees them all. */
+  const takenPlacesPartly = (folders: ReadonlyArray<string>) =>
+    run(
+      Effect.flatMap(Effect.service(GitWorkspace), (git) =>
+        Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)).pipe(
+          Effect.provideService(GitWorkspace, {
+            ...git,
+            repositoriesIn: (folder) =>
+              Effect.map(git.repositoriesIn(folder), (reached) => ({ ...reached, complete: false })),
+          }),
+        ),
+      ),
+    );
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
       (tree) => Option.getOrThrow(tree).tasks[0],
@@ -383,6 +397,7 @@ const hub = () => {
     takenWrite,
     takenItems,
     takenPlaces,
+    takenPlacesPartly,
     dispose: () => runtime.dispose(),
   };
 };
@@ -646,8 +661,9 @@ describe("the claims register", () => {
       symlinkSync(join(checkout, "web"), join(checkout, "web-link"));
       mkdirSync(join(checkout, "web"), { recursive: true });
       await h.call(FRODO, A, { key: "l", scope: "path", path: "web-link" });
-      // Nothing is yours yet, so nothing is closed.
+      // Nothing is yours yet, so nothing is closed, even where the scan stops short.
       expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
+      expect(await h.takenPlacesPartly([outside])).toEqual([]);
 
       await h.takeOver(A);
       // Both clones share the branch's refs, in the checkout's Git folder; each closes its own `docs`.
@@ -663,8 +679,10 @@ describe("the claims register", () => {
       expect(await h.takenPlaces([root])).toEqual(
         expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs"), refs]),
       );
-      // A repository with nothing taken closes nothing.
+      // A repository with nothing taken closes nothing, but a folder the scan could not see whole
+      // may hold one with something taken, so it is closed whole.
       expect(await h.takenPlaces([outside])).toEqual([]);
+      expect(await h.takenPlacesPartly([outside])).toEqual([outside]);
 
       // A branch only the packed refs hold has no loose ref: the folder Git would write one in is
       // closed, with the packed refs, and the hub writes nothing in the repository.

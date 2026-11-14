@@ -80,6 +80,8 @@ export class ClaimRegister extends Context.Service<
     readonly giveBack: (request: GiveBackRequest) => Effect.Effect<Committed<ReadonlyArray<Claim>>>;
     /** The claims you took over in a repository, by its identity across clones, oldest first. */
     readonly takenIn: (repository: string) => Effect.Effect<ReadonlyArray<Claim>>;
+    /** Whether you took over any claim at all, in any repository (#1537). */
+    readonly anyTaken: Effect.Effect<boolean>;
   }
 >()("@hobbots/agents/ClaimRegister") {}
 

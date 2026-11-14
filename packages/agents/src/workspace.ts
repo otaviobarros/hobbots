@@ -51,17 +51,20 @@ export interface GitWorkspaceShape {
   readonly currentBranch: (top: string) => Effect.Effect<string | null>;
   /**
    * The repositories a folder reaches, by the real path of each top folder: the one Git finds from
-   * `folder`, and those inside it a few folders down, past dependency and hidden folders, as a
-   * folder of several checkouts holds them (#1537). Read without running Git.
+   * `folder`, and every one inside it, past dependency and hidden folders, as a folder of several
+   * checkouts holds them (#1537), and whether the scan saw every folder (`complete`), since it stops
+   * after a limit. Read without running Git.
    */
-  readonly repositoriesIn: (folder: string) => Effect.Effect<ReadonlyArray<string>>;
+  readonly repositoriesIn: (
+    folder: string,
+  ) => Effect.Effect<{ readonly tops: ReadonlyArray<string>; readonly complete: boolean }>;
   /**
-   * The files whose change moves the branch `branch` of the repository whose top is `top`, by
+   * The paths whose change moves the branch `branch` of the repository whose top is `top`, by
    * absolute path (#1537): its loose ref and the packed refs, in the Git folder every worktree of it
-   * shares, or the whole ref table of a repository that keeps one. Only files that are there: a
-   * branch only the packed refs hold gets its loose ref written first, with the same commit, as Git
-   * writes one to move it, and a branch not made yet has none. Empty when the repository cannot be
-   * read. Runs no Git.
+   * shares, or the ref table too in a repository that has one. Only paths that are there: a branch
+   * only the packed refs hold closes the folder its loose ref would go in, one held any other way
+   * (a symbolic ref, a link) closes the Git folders whole, and a branch not made yet has none. Empty
+   * when the repository cannot be read. Reads only, and runs no Git.
    */
   readonly branchFiles: (top: string, branch: string) => Effect.Effect<ReadonlyArray<string>>;
 }
