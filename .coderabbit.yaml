@@ -1,0 +1,459 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit reviews every pull request against this repository's own rules: AGENTS.md, the
+# engineering standards in docs/standards (STD-* IDs), the ADRs and the area contracts. It
+# complements the maintainer's review and the agent-engineering review-pr skill; it never merges.
+
+language: en-US
+tone_instructions: >-
+  Direct and specific. Lead with the defect and its impact, cite the STD-* rule or ADR it breaks,
+  and give the fix. Short, plain sentences. No praise, filler or emoji.
+
+reviews:
+  profile: assertive
+  # Keep the PR description as the author wrote it; the summary goes in the walkthrough comment.
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  review_details: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  poem: false
+  in_progress_fortune: false
+  enable_prompt_for_ai_agents: true
+  abort_on_close: true
+  slop_detection:
+    enabled: true
+
+  labeling_instructions:
+    - label: "area: runtime"
+      instructions: Changes to packages/runtimes or to how hobs run on Claude Code, Codex or the fake runtime.
+    - label: "area: persistence"
+      instructions: Changes to packages/persistence, SQL, repositories or migrations.
+    - label: "area: orchestration"
+      instructions: Changes to delegation, Tasks, Quests, scheduling or the backpack (packages/orchestration, packages/inbox, packages/execution, packages/supervision).
+    - label: "area: permissions"
+      instructions: Changes to packages/permissions, sandboxing, approvals or tool policy.
+    - label: "area: server"
+      instructions: Changes to apps/server or packages/api.
+    - label: "area: web"
+      instructions: Changes to apps/web or packages/ui.
+    - label: "area: desktop"
+      instructions: Changes to apps/desktop.
+    - label: "area: site"
+      instructions: Changes to apps/site.
+    - label: "area: ci"
+      instructions: Changes to .github/workflows, .github/actions or CI scripts.
+    - label: "area: docs"
+      instructions: Changes only under docs/ or to Markdown files.
+
+  merge_risk_instructions: >-
+    Rate risk high when a change touches durable state (migrations, journal events, repository
+    writes), the runtime adapters, permissions or sandboxing, device pairing and authentication, the
+    Electron main process or preload, or CI workflows. A change that touches only docs or tests is low
+    risk unless it weakens a check.
+  security_risk_instructions: >-
+    Hobs run untrusted model output with real tools on the user's machine. Rate security risk high when
+    a change widens what a hob may do, moves enforcement from a real boundary into prompt text
+    (STD-SEC-002), widens delegated authority (STD-SEC-003), adds administrative powers to the Hobbots
+    MCP tools (STD-SEC-004), runs a backtracking regex on untrusted text (STD-SEC-005), takes a person's
+    actor from anything but the user session (STD-SEC-006), loosens Electron isolation, IPC checks or
+    CSP (STD-DESKTOP-*), or adds a workflow step that runs untrusted input or widens token permissions.
+
+  path_filters:
+    - "!pnpm-lock.yaml"
+    - "!CHANGELOG.md"
+    - "!.release-please-manifest.json"
+    - "!apps/web/e2e/durations.json"
+    - "!docs/architecture/machines/**"
+    - "!**/__snapshots__/**"
+    - "!**/dist/**"
+    - "!**/out/**"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.icns"
+    - "!**/*.ico"
+
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Review deeply. This is a public open-source project, so be strict about what reaches main.
+        Look for, in this order:
+        1. Bugs: reachable failures, wrong state transitions, races, lost work on restart, retries
+           and duplicate delivery, missing error handling, off-by-one and null cases. Trace callers
+           and callees beyond the diff when it matters.
+        2. Security: trust boundaries, untrusted input from hobs, models, files, Git or HTTP,
+           secrets, permissions and data exposure (docs/standards/security.md).
+        3. Standards: check the change against docs/standards and cite the rule ID, for example
+           "STD-ARCH-013". Separate a rule breach (blocking) from a preference (non-blocking).
+        4. Proper tooling: STD-DUP-007 says use an established, maintained library before writing
+           our own parser, validator, format reader, retry loop, timer, cache or queue. Flag
+           hand-rolled versions of solved problems and name the library already installed or the
+           standard one. Reuse Effect (Schema, Schedule, Cache, Queue, Stream, Duration) before
+           anything new. STD-DUP-001: search the workspace before adding a helper; flag duplicates
+           of existing helpers, Schemas, hooks or services.
+        5. Unnecessary complexity: speculative abstractions, needless indirection, options nobody
+           uses, functions over cyclomatic complexity 15 (STD-ARCH-012), dead code (STD-DUP-005)
+           and copied blocks (STD-DUP-006). Propose the simpler form that keeps the behavior.
+        6. Scope: STD-DOCS-008. Flag changes that go beyond what the linked issue asks.
+        Do not comment on formatting that Biome already enforces.
+        Every comment states the trigger, the wrong result and its impact, and the fix.
+
+    - path: "**/*.{ts,tsx,mts,mjs}"
+      instructions: |
+        - Every lint or check opt-out names its rule and a reason (STD-REACT-020). Avoid `any` and
+          double casts; parse untrusted data with an Effect Schema instead.
+        - Types derive from Effect Schemas; never declare a contract's shape again by hand
+          (STD-DUP-004).
+        - Regexes that read text from outside the code must not backtrack (STD-SEC-005).
+        - Markdown is read through the CommonMark parser (micromark / mdast-util-from-markdown /
+          remark), never with regexes or string methods on fences, headings, links or front matter.
+        - Imports follow the four layers (STD-ARCH-001); domain code is pure (STD-ARCH-002).
+        - UI words and code names follow the glossary (STD-DOCS-011).
+
+    - path: "packages/domain/**"
+      instructions: |
+        Domain code is pure (STD-ARCH-002): no I/O, no `node:*`, no SQL, no runtime SDKs, no React,
+        no other workspace package; only `effect` and other domain modules. Every lifecycle is one
+        explicit machine declared with `defineMachine` (STD-ARCH-013), with a pure
+        `transition(state, event)` that returns the next state or its typed illegal-transition error
+        (STD-EFFECT-004). Guards read only the state and the event. Each transition journals exactly
+        one past-tense event (STD-ARCH-015). A field that says who did something holds an `Actor`,
+        never a bare id (STD-ARCH-019, STD-ARCH-020). Domain IDs never become runtime session IDs
+        (STD-ARCH-008). Pure logic has unit tests (STD-TEST-003).
+
+    - path: "packages/persistence/**"
+      instructions: |
+        - Durable state lives in the database, not in fibers, queues or memory (STD-DATA-001).
+        - Every query and migration runs on both SQLite and PostgreSQL (STD-DATA-002). Flag
+          engine-specific SQL, types, functions, upserts, JSON operators or date handling.
+        - A command writes state, journal entries and backpack items in one transaction with an
+          idempotency key, at an expected revision, and does nothing external before the commit
+          (STD-ARCH-014).
+        - Database tests take their database from `TestDatabase` in
+          `@hobbots/persistence/testing` (STD-TEST-006).
+        - When a repository writes a new column, the read path, the row mapping and the tests that
+          build rows are updated too.
+
+    - path: "packages/persistence/src/migrations/**"
+      instructions: |
+        - A new migration file is named `<UTC second>_<name>.ts`, made by `pnpm migration:new`
+          (ADR 040). Flag any hand-numbered id such as `0115_...`, any renumbered or renamed
+          existing migration, and any edit to the body of a migration that has already merged.
+        - Migrations are never listed by hand; the index reads the folder.
+        - The migration runs on SQLite and PostgreSQL (STD-DATA-002), is safe on existing data, and
+          rewrites journaled payloads so every old entry still decodes when an event's shape changes.
+        - Large tables are processed in pages, never loaded whole.
+
+    - path: "packages/runtimes/**"
+      instructions: |
+        Runtime work covers every supported runtime: Claude Code, Codex and the fake runtime
+        (`packages/runtimes/src/fake.ts`) used by tests. A change to one adapter's behavior, tool
+        handling, sandbox, skills, hub tools or capability report that is not matched in the others
+        is a blocking finding unless the PR says why the runtime differs. Adapters report the
+        capabilities the installed runtime actually has (STD-ARCH-009); every hob has the same
+        capabilities (STD-ARCH-010). Permissions are enforced by a real boundary (sandbox, the
+        runtime's permission mode or the tool policy engine), never by prompt text (STD-SEC-002).
+        Process spawning, streams and output parsing must handle partial lines, exit codes, timeouts
+        and cancellation. A runtime session id is adapter data, never a domain id (STD-ARCH-008).
+        Verify with fakes first, then the real runtime (STD-TEST-002).
+
+    - path: "packages/{orchestration,inbox,execution,supervision}/**"
+      instructions: |
+        Read docs/architecture/orchestration.md, inbox.md and attempt-lifecycle.md. Delegation never
+        widens authority (STD-SEC-003). Work for a hob goes in its backpack, never in a second queue;
+        the bus only wakes things up and a receiver re-reads durable state (STD-ARCH-017). Derived
+        work runs in cursor projectors that are idempotent by entry id (STD-ARCH-016). Check restart
+        recovery, duplicate delivery, cancellation and concurrent attempts for each change.
+
+    - path: "packages/agents/**"
+      instructions: |
+        Use cases live in their feature package and reach the outside world only through ports
+        (STD-ARCH-003, STD-ARCH-006). A turn reads records, not the transcript, and the context pack
+        never exceeds its budget or silently drops an active decision (STD-ARCH-018). A person's actor
+        comes from the user session, never a fixed owner (STD-SEC-006).
+
+    - path: "packages/{permissions,charms,web-access}/**"
+      instructions: |
+        Treat as security-sensitive. Check every path from a hob's tool input to a filesystem, network
+        or credential effect. Enforcement must happen at a real boundary (STD-SEC-002). Credentials
+        never reach logs, records, prompts or error messages. The Hobbots MCP tools never grant
+        approvals, manage credentials, delete records administratively or start, stop or remove
+        computers (STD-SEC-004).
+
+    - path: "packages/{memory,skills}/**"
+      instructions: |
+        Markdown is parsed once with the CommonMark parser; flag regex or string-method parsing of
+        Markdown structure. Private camps capture and save nothing to memory.
+
+    - path: "{apps/server,packages/api}/**"
+      instructions: |
+        Backend code and the HTTP API use Effect v4 (STD-EFFECT-001). Expected failures are tagged
+        errors in the error channel; throw only for defects (STD-EFFECT-002). Dependencies are
+        `Context.Service`s provided by Layers (STD-EFFECT-003). Contracts are Effect Schemas that
+        validate input and encode output. apps/server only composes Layers and exposes transports;
+        new use cases belong in their feature package (STD-ARCH-005, STD-ARCH-006). Every request
+        needs an approved device except health and pairing; check authentication on each new route.
+        One hub serves every client (STD-ARCH-011).
+
+    - path: "{apps/web/src,packages/ui}/**"
+      instructions: |
+        Read docs/standards/react.md, ui.md and i18n.md.
+        - Server state comes only from query hooks (STD-REACT-001); clients render hub state and never
+          derive it (STD-REACT-028). Route-level state lives in the URL (STD-REACT-002).
+        - `useEffect` only syncs with external systems (STD-REACT-004). No components defined inside
+          components (STD-REACT-021). Memoize only for a measured problem (STD-REACT-010).
+        - No `any`, `@ts-ignore` or `as unknown as`; `@ts-expect-error` only with a reason
+          (STD-REACT-019).
+        - Styles use theme tokens only (STD-UI-001), build on the shared primitives (STD-UI-002),
+          variants come from cva and classes join through cn (STD-UI-011, STD-UI-012).
+        - Every control works by keyboard and has an accessible name (STD-UI-003). Motion respects
+          Reduce motion (STD-UI-004). Every failure says what went wrong and how to recover
+          (STD-UI-009). Data sections show loading, empty and error states (STD-REACT-015).
+        - User-facing copy lives in the feature's `messages.ts` module, never as literals in
+          components (STD-I18N-001). User-facing text calls an agent a "hob" (STD-UI-007).
+        - A UI change to a flow adds or updates its end-to-end test (STD-TEST-004).
+
+    - path: "apps/web/e2e/**"
+      instructions: |
+        - Every test title starts with a case ID `[TC-<AREA>-NNN]`; IDs are never reused or
+          renumbered (STD-TEST-001).
+        - Tests run against the fake runtime and select elements by role and accessible name
+          (STD-TEST-004). Each screen visited passes the shared axe scan (STD-TEST-007).
+        - Tests wait on state with web-first assertions or `expect.poll`, never on fixed timeouts,
+          `waitForTimeout` or retry counts (STD-TEST-009). Flag any new source of flakiness.
+        - Import `test` from `apps/web/e2e/hub.ts` so each context gets a device.
+
+    - path: "**/*.test.{ts,tsx,mjs}"
+      instructions: |
+        Integration and regression tests carry a `[TC-<AREA>-NNN]` case ID (STD-TEST-001). Tests
+        assert behavior, not implementation details, and fail when the defect they guard returns.
+        No fixed sleeps (STD-TEST-009). Database tests use `TestDatabase` (STD-TEST-006). Flag a
+        skipped, disabled or weakened test.
+
+    - path: "apps/desktop/**"
+      instructions: |
+        Read docs/standards/desktop.md. Renderers are isolated and sandboxed (STD-DESKTOP-001). The
+        preload exposes a narrow, typed bridge (STD-DESKTOP-002). Every IPC handler checks its
+        sender and parses its input (STD-DESKTOP-003). Navigation, new windows and external links
+        are limited (STD-DESKTOP-004). Permission requests are denied unless allowed
+        (STD-DESKTOP-005). Pages load over the app protocol with a strict CSP (STD-DESKTOP-006). The
+        main process never blocks (STD-DESKTOP-008).
+
+    - path: "apps/site/**"
+      instructions: |
+        The public website. Check form input validation, that no secret reaches the client, and that
+        SQL migrations under apps/site/migrations are safe for existing rows.
+
+    - path: "{.github/workflows,.github/actions}/**"
+      instructions: |
+        - Give each job the least `permissions` it needs, and keep tokens out of steps that run
+          untrusted code.
+        - Never interpolate untrusted event data (titles, bodies, branch names) into `run:`; pass it
+          through `env:`. Flag `pull_request_target` that checks out PR code.
+        - PRs run the PostgreSQL and browser shards only when `scripts/ci-changes.mjs` says their
+          paths changed, and drafts skip them (ADR 040). A new path that those suites depend on
+          must be added there.
+
+    - path: "scripts/**"
+      instructions: |
+        These are the repository's checks (`pnpm check`). A change must not weaken a check silently,
+        widen a baseline file without reason, or skip files it used to cover. A new check needs a
+        `*.test.mjs` beside it.
+
+    - path: "{package.json,**/package.json,pnpm-workspace.yaml}"
+      instructions: |
+        - Every dependency is pinned to an exact version: no `^`, `~`, `*`, `latest` or ranges
+          (STD-DOCS-006). Alpha, beta and nightly releases are not allowed; release candidates are.
+        - `effect` and `@effect/*` use `catalog:`, and the catalog holds one exact version for all of
+          them (STD-EFFECT-005).
+        - Flag a new dependency that duplicates one already installed, or one that is unmaintained.
+        - Flag a dependency nothing imports (STD-DUP-005).
+
+    - path: "docs/**"
+      instructions: |
+        Docs use short, plain sentences in the active voice, one idea per sentence, one name for one
+        thing (STD-DOCS-007). Public text links only public sources and never private artifacts or
+        secrets (STD-DOCS-003). Check every factual claim about code against the code and flag
+        contradictions. A changed decision needs an ADR (STD-DOCS-001). Words follow the glossary
+        (STD-DOCS-011).
+
+    - path: "docs/decisions/**"
+      instructions: |
+        Every ADR ends with a `## Validation` section that lists scenarios, each naming the test case
+        or evidence record that checks it, or "Not proven yet" with the issue that will
+        (STD-DOCS-009). A decided ADR changes only through a new or updated ADR with its rationale.
+
+    - path: "docs/standards/**"
+      instructions: |
+        A new rule takes the next free number in its area; IDs are never reused or renumbered. A
+        rule and its row in docs/standards/README.md change in the same PR. Each rule has Why,
+        Enforced by and Applies to fields.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    ignore_title_keywords:
+      - "chore(main): release"
+      - "refresh the recorded browser test times"
+
+  # Review only. CodeRabbit does not write code, commits or docstrings here.
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: false
+    autofix:
+      enabled: false
+    fix_ci:
+      enabled: false
+    resolve_merge_conflict:
+      enabled: false
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: error
+      requirements: >-
+        A Conventional Commit header (STD-DOCS-004): `type(scope): summary`, where type is one of
+        feat, fix, docs, style, refactor, perf, test, build, ci, chore or revert, with an optional
+        `!` for a breaking change. The summary is lowercase, imperative and has no trailing period.
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+    custom_checks:
+      - name: Every runtime covered
+        mode: error
+        instructions: >-
+          Fail when the PR changes runtime behavior (packages/runtimes, hub tools, sandboxing,
+          skills, or how a hob runs a turn) for Claude Code, Codex or the fake runtime without the
+          matching change and tests for the others, unless the description explains why that runtime
+          differs. Pass when no runtime behavior changed.
+      - name: No attribution footers
+        mode: error
+        instructions: >-
+          Fail when the PR description or any commit message contains an attribution footer or
+          trailer: "Generated with Claude Code" or similar tool credits, "Co-Authored-By" naming an
+          AI assistant, "Requested by ... project thread", or links to claude.ai sessions, artifacts
+          or other private pages (STD-DOCS-003).
+      - name: Exact dependency versions
+        mode: error
+        instructions: >-
+          Fail when any package.json or pnpm-workspace.yaml in the PR adds or changes a dependency
+          with a range (^, ~, *, x, >=, latest) instead of an exact version, uses an alpha, beta,
+          canary or nightly release, or gives an effect or @effect/* package a version other than
+          `catalog:` (STD-DOCS-006, STD-EFFECT-005). Pass when no dependency changed.
+      - name: Timestamp migrations
+        mode: error
+        instructions: >-
+          Fail when the PR adds a file under packages/persistence/src/migrations whose name is not
+          `<14-digit UTC timestamp>_<name>.ts`, renames or renumbers an existing migration, or
+          changes the body of a migration that exists on the base branch (ADR 040). Pass when no
+          migration changed.
+      - name: Closes its issue and keeps contracts current
+        mode: warning
+        instructions: >-
+          Warn when the description has no `Closes #N` (STD-DOCS-004), when a change to an area does
+          not update the contract in docs/architecture that it contradicts (STD-DOCS-002), or when a
+          new integration or end-to-end test has no `[TC-<AREA>-NNN]` case ID (STD-TEST-001).
+
+  tools:
+    biome:
+      enabled: true
+    ast-grep:
+      essential_rules: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    semgrep:
+      enabled: true
+    osvScanner:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    github-checks:
+      enabled: true
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    trivy:
+      enabled: true
+    reactDoctor:
+      enabled: true
+    # Biome is the linter here; these would duplicate it with configs we do not have.
+    eslint:
+      enabled: false
+    oxc:
+      enabled: false
+    # Prose and spelling are reviewed against STD-DOCS-007 instead.
+    languagetool:
+      enabled: false
+
+chat:
+  art: false
+  auto_reply: true
+  integrations:
+    jira:
+      usage: disabled
+    linear:
+      usage: disabled
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - "**/CLAUDE.md"
+      - "CONTRIBUTING.md"
+      - "docs/agent-engineering.md"
+      - "docs/standards/*.md"
+      - "docs/product/glossary.md"
+      - ".agents/skills/hobbots-standards/SKILL.md"
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
+  jira:
+    usage: disabled
+  linear:
+    usage: disabled
+  linked_repositories:
+    - repository: otaviobarros/agent-engineering
+      instructions: >-
+        The review method this project uses. skills/review-change/SKILL.md and
+        references/review.md define the review axes (standards, spec, bugs, quality, security,
+        performance) and the labels: Important (fix before merge), Nit (optional, at most three per
+        review) and Pre-existing (never blocks). Review the same way and label findings the same way.
+
+issue_enrichment:
+  auto_enrich:
+    enabled: false
+  planning:
+    enabled: false
