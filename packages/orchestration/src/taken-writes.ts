@@ -201,9 +201,10 @@ export const makeTakenWrites = (separator: PathSeparator) =>
 /**
  * What a hob's turn may not write at all, because you took it over from a Task (#1537): for every
  * repository its folders reach, and every repository around those, each taken path by absolute
- * path, as claimed and where its links land, and the whole ref store of a repository with a taken
- * branch, so no branch there moves. The turn's sandbox closes them, so a write the call-level check
- * cannot see, from a script, a variable, an interpreter or Git's own config, fails too. Every hob's turn gets them, whatever Task it works
+ * path, as claimed and where its links land. The turn's sandbox closes them, so a write the
+ * call-level check cannot see, from a script, a variable or an interpreter, fails too. A taken
+ * branch is left to the call-level check: the sandbox closes paths, and Git keeps every branch of a
+ * repository in the same files. Every hob's turn gets them, whatever Task it works
  * on. Empty when nothing is taken there, or when the hub keeps no claims register.
  */
 export const makeTakenPlaces = (separator: PathSeparator) =>
@@ -228,16 +229,11 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
           at = outer !== null && outer.length < at.length ? outer : null;
         }
       });
-    // What one taken claim closes in the repository at `top`.
-    const closedBy = (top: string, claim: Claim, keysOf: ReturnType<typeof makeKeysOf>) =>
-      claim.scope === "path"
-        ? Effect.map(keysOf(top, claim.key), (keys) =>
-            keys.map((key) => (key === "" ? top : `${top}${separator}${key.split("/").join(separator)}`)),
-          )
-        : claim.scope === "branch"
-          ? // No branch of the repository moves while one is taken: its whole ref store is closed.
-            git.refStores(top)
-          : Effect.succeed([]);
+    // What one taken path closes in the repository at `top`: as claimed and where its links land.
+    const closedBy = (top: string, key: string, keysOf: ReturnType<typeof makeKeysOf>) =>
+      Effect.map(keysOf(top, key), (keys) =>
+        keys.map((each) => (each === "" ? top : `${top}${separator}${each.split("/").join(separator)}`)),
+      );
 
     return (folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
       Effect.gen(function* () {
@@ -247,12 +243,13 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
           const reached = yield* git.repositoriesIn(folder);
           for (const top of reached.tops) yield* withOuter(top, tops);
           // A folder too big to scan whole may hold a repository with something taken: closed whole.
-          if (!reached.complete && (yield* claims.anyTaken)) closed.add(folder);
+          if (!reached.complete && (yield* claims.anyTakenPath)) closed.add(folder);
         }
         const keysOf = makeKeysOf(git, separator);
         for (const top of tops) {
           for (const claim of yield* claims.takenIn(yield* identityOf(top))) {
-            for (const path of yield* closedBy(top, claim, keysOf)) closed.add(path);
+            if (claim.scope !== "path") continue;
+            for (const path of yield* closedBy(top, claim.key, keysOf)) closed.add(path);
           }
         }
         return [...closed].sort();

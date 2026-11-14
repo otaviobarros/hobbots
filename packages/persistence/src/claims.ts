@@ -257,8 +257,11 @@ export const ClaimRegisterLive = Layer.effect(
             claimsFromRows,
           ),
         ),
-      anyTaken: sqlOrDie(
-        Effect.map(sql<{ id: string }>`SELECT id FROM claims WHERE state = 'taken' LIMIT 1`, (rows) => rows.length > 0),
+      anyTakenPath: sqlOrDie(
+        Effect.map(
+          sql<{ id: string }>`SELECT id FROM claims WHERE state = 'taken' AND scope = 'path' LIMIT 1`,
+          (rows) => rows.length > 0,
+        ),
       ),
       clashesIn: (threadId) => sqlOrDie(clashesIn(threadId)),
       claim,

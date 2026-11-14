@@ -267,8 +267,8 @@ const SKIPPED = new Set([".git", "node_modules"]);
  * The repositories `folder` reaches (#1537): the one Git finds from it, and every one inside it, by
  * the real path of each top folder, and whether the scan saw every folder. Links are not followed
  * and Git's own and dependency folders are skipped, hidden ones are not; a scan that reads more
- * folders than its limit stops and says so, and the caller closes the folder whole rather than miss
- * one.
+ * folders than its limit, or meets a folder it cannot read, stops and says so, and the caller closes
+ * the folder whole rather than miss one.
  */
 const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<string>; complete: boolean }> => {
   // A folder that is not there holds no repository.
@@ -280,7 +280,9 @@ const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<str
   const queue: Array<string> = [real];
   for (let read = 0; read < queue.length; read++) {
     if (read >= REPOSITORY_SCAN_LIMIT) return { tops: [...found], complete: false };
-    const entries = await readdir(queue[read] as string, { withFileTypes: true }).catch(() => []);
+    const entries = await readdir(queue[read] as string, { withFileTypes: true }).catch(() => null);
+    // A folder the hub cannot read may hold a checkout: the scan did not see it whole.
+    if (entries === null) return { tops: [...found], complete: false };
     for (const entry of entries) {
       if (!entry.isDirectory() || SKIPPED.has(entry.name)) continue;
       const child = join(queue[read] as string, entry.name);
@@ -289,48 +291,6 @@ const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<str
     }
   }
   return { tops: [...found], complete: true };
-};
-
-/** What each Git folder keeps that moves a branch: its refs, its HEAD and where its shared folder is. */
-const OWN_REF_STORE = ["refs", "HEAD", "commondir"];
-
-/**
- * Where the repository whose top is `top` keeps its refs, by absolute path (#1537): in the Git
- * folder its worktrees share, its `refs`, `HEAD`, packed refs and ref table, in every worktree's own
- * Git folder its `refs`, `HEAD` and the file naming the shared folder, and the `.git` file a
- * worktree's top names its Git folder in, each that is there, and where a link among them leads.
- * Closing them all stops any branch of the repository moving, however Git holds it, without reading
- * how it does: the list is fixed, so nothing a hob lays out in the repository changes what is closed.
- * A sandbox cannot close a missing file without hiding it from Git's reads, so when there are no
- * packed refs, which a hob could otherwise write a branch into, the shared Git folder is closed
- * whole. The hub only reads here, never writes.
- */
-const refStores = async (top: string): Promise<ReadonlyArray<string>> => {
-  const repository = await repositoryOf(top, new Map());
-  if (repository === null) return [];
-  const real = (path: string) => realpath(path).catch(() => path);
-  const gitdir = await real(repository.gitdir);
-  const common = repository.common === null ? gitdir : await real(repository.common);
-  const worktrees = join(common, "worktrees");
-  const linked = (await readdir(worktrees, { withFileTypes: true }).catch(() => []))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(worktrees, entry.name));
-  const stores = new Set<string>();
-  const close = async (path: string) => {
-    const stats = await lstat(path).catch(() => null);
-    if (stats === null) return false;
-    stores.add(path);
-    if (stats.isSymbolicLink()) stores.add(await real(path));
-    return true;
-  };
-  if (!(await close(join(common, "packed-refs")))) stores.add(common);
-  await close(join(common, "reftable"));
-  for (const folder of new Set([common, gitdir, ...linked])) {
-    for (const name of OWN_REF_STORE) await close(join(folder, name));
-  }
-  const dotGit = join(repository.dir, ".git");
-  if ((await lstat(dotGit).catch(() => null))?.isDirectory() === false) await close(dotGit);
-  return [...stores];
 };
 
 /** The hub's reader of Git state. */
@@ -346,6 +306,5 @@ export const GitWorkspaceLive = Layer.succeed(
     currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
     repositoriesIn: (folder) =>
       Effect.promise(() => repositoriesIn(folder).catch(() => ({ tops: [], complete: false }))),
-    refStores: (top) => Effect.promise(() => refStores(top).catch(() => [])),
   }),
 );

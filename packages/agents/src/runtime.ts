@@ -277,8 +277,8 @@ export interface ToolAccess {
   /**
    * What no process of the turn may write, because you took it over from a Task (#1537): each
    * taken file or folder in the turn's folders, by absolute path (as claimed and where its links
-   * land), and the Git files whose change would move a taken branch. The runtime's sandbox closes
-   * them to writes for the whole turn, beside the call-level refusal (#1449). Absent or empty, none.
+   * land). The runtime's sandbox closes them to writes for the whole turn, beside the call-level
+   * refusal (#1449), which alone holds taken branches. Absent or empty, none.
    */
   readonly taken?: ReadonlyArray<string>;
 }

@@ -8,10 +8,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { type PreparedSandbox, ProcessSandbox } from "../src/sandbox.ts";
 
 // #1537: what you took over from a Task stays closed in every hob turn's sandbox, whatever the hob
-// runs. A script writes a taken file through a variable, and Git moves a branch through any of its
-// commands or its config: each fails in the sandbox, which closes the taken folder and, while a
-// branch of the repository is taken, the repository's whole ref store (see GitWorkspace.refStores),
-// so no branch there moves. The rest of the folder stays writable.
+// runs. A script writes a taken file through a variable, an interpreter or a move: each fails in the
+// sandbox, which closes the taken folder, while the rest of the folder and Git's own work stay open.
+// A taken branch is left to the call-level check (#1449).
 
 // The real OS sandbox runs on macOS, and on Linux with HOBBOTS_SANDBOX_TESTS=1 where bubblewrap,
 // socat and sandbox-runtime's seccomp helper are installed (as in sandbox-hub.test.ts).
@@ -68,7 +67,7 @@ const AS_NETTLE = "-c user.name=Nettle -c user.email=nettle@example.com -c commi
 describe("what you took over, in a hob turn's sandbox", () => {
   // covers PE-005, OR-006, #1537
   it.runIf(sandboxed)(
-    "[TC-PE-1537-02] fails every write to a taken folder and every branch move in a repository with a taken branch, and leaves the rest open",
+    "[TC-PE-1537-02] fails every write to a taken folder, and leaves the rest of the folder and Git open",
     async () => {
       hubGit("init", "--quiet", "-b", "main");
       mkdirSync(join(project, "docs"));
@@ -76,24 +75,9 @@ describe("what you took over, in a hob turn's sandbox", () => {
       writeFileSync(join(project, "README.md"), "hello\n");
       hubGit("add", ".");
       hubGit("commit", "--quiet", "-m", "First");
-      writeFileSync(join(project, "README.md"), "hello again\n");
-      hubGit("commit", "--quiet", "-am", "Second");
-      hubGit("branch", "feat/shop", "HEAD~1");
-      // A remote that fetches into the taken branch, as a hob could set in the repository's config.
-      hubGit("remote", "add", "self", project);
-      // feat/packed is held only in the packed refs, feat/shop also as a loose ref.
-      hubGit("branch", "feat/packed", "HEAD~1");
-      hubGit("pack-refs", "--all");
-      const git = join(project, ".git");
-      mkdirSync(join(git, "refs", "heads", "feat"), { recursive: true });
-      writeFileSync(join(git, "refs", "heads", "feat", "shop"), `${hubGit("rev-parse", "feat/shop")}\n`);
-      const shop = hubGit("rev-parse", "feat/shop");
-      const main = hubGit("rev-parse", "main");
-      // What the hub closes for `docs` and a taken branch: the repository's ref store.
-      const taken = [join(project, "docs"), join(git, "packed-refs"), join(git, "refs"), join(git, "HEAD")];
 
-      await turnWith(taken, async (prepared) => {
-        // A script that names the file only through a variable, and an interpreter.
+      await turnWith([join(project, "docs")], async (prepared) => {
+        // A script that names the file only through a variable, an interpreter, a delete and a move.
         for (const write of [
           'f=docs/plan.md; echo changed > "$f"',
           "sh -c 'echo new > docs/new.md'",
@@ -103,25 +87,13 @@ describe("what you took over, in a hob turn's sandbox", () => {
           const result = await runIn(prepared, write);
           expect(result.ok, `${write} should fail`).toBe(false);
         }
-        // Every way Git moves, makes or deletes a branch, its config included, leaves them all where they were.
-        for (const branch of ["feat/shop", "feat/packed", "main", "review"]) {
-          for (const move of [
-            `git update-ref refs/heads/${branch} HEAD`,
-            `git branch -f ${branch} HEAD`,
-            `git branch -D ${branch}`,
-            `git fetch --quiet self +refs/heads/main:refs/heads/${branch}`,
-            `git -c remote.self.fetch=+refs/heads/main:refs/heads/${branch} fetch --quiet self`,
-            "git pack-refs --all --prune",
-            `git checkout --quiet ${branch} && git ${AS_NETTLE} commit --quiet --allow-empty -m Third`,
-          ]) {
-            await runIn(prepared, `${move}; git checkout --quiet main`);
-            expect(hubGit("rev-parse", "feat/shop"), `${move} should leave feat/shop alone`).toBe(shop);
-            expect(hubGit("rev-parse", "feat/packed"), `${move} should leave feat/packed alone`).toBe(shop);
-            expect(hubGit("rev-parse", "main"), `${move} should leave main alone`).toBe(main);
-          }
-        }
-        // The rest of the folder stays open, and Git still reads the repository.
-        for (const write of ["echo notes > notes.md", "git status --short", "git log -1 --format=%s feat/shop"]) {
+        // The rest of the folder stays open, and so does Git's own work there.
+        for (const write of [
+          "echo notes > notes.md",
+          "git add notes.md",
+          `git ${AS_NETTLE} commit --quiet -m Second`,
+          "git branch review",
+        ]) {
           const result = await runIn(prepared, write);
           expect(result.ok, `${write} should run: ${result.stderr}`).toBe(true);
         }
@@ -130,14 +102,15 @@ describe("what you took over, in a hob turn's sandbox", () => {
       expect(readFileSync(join(project, "docs", "plan.md"), "utf8")).toBe("plan\n");
       expect(existsSync(join(project, "docs", "new.md"))).toBe(false);
       expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("notes\n");
-      expect(hubGit("branch", "--list", "review")).toBe("");
+      expect(hubGit("log", "-1", "--format=%s", "main")).toBe("Second");
+      expect(hubGit("branch", "--list", "review")).toContain("review");
 
-      // Given back, the next turn's sandbox lets Git move the branch again.
+      // Given back, the next turn's sandbox lets the folder be written again.
       await turnWith([], async (prepared) => {
-        const moved = await runIn(prepared, "git branch -f feat/shop main");
-        expect(moved.ok, moved.stderr).toBe(true);
+        const written = await runIn(prepared, "echo changed > docs/plan.md");
+        expect(written.ok, written.stderr).toBe(true);
       });
-      expect(hubGit("rev-parse", "feat/shop")).toBe(hubGit("rev-parse", "main"));
+      expect(readFileSync(join(project, "docs", "plan.md"), "utf8")).toBe("changed\n");
     },
     120_000,
   );

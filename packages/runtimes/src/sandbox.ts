@@ -95,7 +95,7 @@ export interface SandboxScope {
   readonly roots?: ReadonlyArray<string>;
   /**
    * What you took over from a Task, which no process of the turn may write even inside its folders
-   * (#1537): taken files and folders, and the Git files that move a taken branch (`ToolAccess.taken`).
+   * (#1537): taken files and folders (`ToolAccess.taken`).
    */
   readonly taken?: ReadonlyArray<string>;
 }
@@ -190,8 +190,8 @@ const closedToWrites = (scope: SandboxScope, home: string): Array<FilesystemEntr
     `${folder}/**/.git/hooks/**`,
     `${folder}/**/.git/config`,
   ]),
-  // What you took over from a Task: a script, an interpreter or Git's own config cannot write it
-  // either, nor move a taken branch, whatever the call-level check read of the command (#1537).
+  // What you took over from a Task: a script or an interpreter cannot write it either, whatever the
+  // call-level check read of the command (#1537).
   // Each is a path, never a pattern, whatever characters its name holds.
   ...(scope.taken ?? []).map((path) => ({ path, literal: true as const })),
 ];

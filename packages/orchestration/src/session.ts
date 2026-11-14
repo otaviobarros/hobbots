@@ -342,7 +342,7 @@ export const STOPPED: Record<StopReason, string> = {
   cancel: "Cancelled.",
   pause: "Stopped because you paused its work with Pause now; it goes on when you resume it.",
   authority: "Stopped because its hob's permissions were narrowed.",
-  taken: "Stopped because you took over files or branches its commands could write; it goes on without them.",
+  taken: "Stopped because you took over files its commands could write; it goes on without them.",
   hob: "Stopped by Hobbots before it finished, with its hob's other work.",
   interrupt: "Stopped by its lead's message, which the next turn starts with.",
   deadline: "Stopped because its Task passed its deadline.",

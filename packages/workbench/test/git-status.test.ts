@@ -1,15 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorkspace } from "@hobbots/agents";
@@ -162,103 +152,19 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual({ tops: [], complete: true });
   });
 
-  const committed = (repo: string) => {
-    write(join(repo, "a.md"), "a\n");
-    gitIn(repo, "init", "-q", "-b", "main");
-    gitIn(repo, "add", ".");
-    gitIn(repo, "commit", "-q", "-m", "one");
-  };
-  const listing = (folder: string): ReadonlyArray<string> =>
-    readdirSync(folder, { recursive: true, encoding: "utf8" }).sort();
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-06] closes a repository's refs and HEAD, its packed refs, or its whole Git folder while it has none, and writes nothing", async () => {
-    const repo = join(work, "repo");
-    committed(repo);
-    gitIn(repo, "branch", "feat/shop");
-    const dotGit = join(repo, ".git");
-    const before = listing(dotGit);
-    // No packed refs yet, which a hob could write a branch into: the Git folder is closed whole.
-    expect(await read((git) => git.refStores(repo))).toEqual([dotGit, join(dotGit, "refs"), join(dotGit, "HEAD")]);
-    expect(listing(dotGit)).toEqual(before);
-    // With packed refs, the same fixed list: what the branches are named or how they are held is not read.
-    gitIn(repo, "pack-refs", "--all");
-    const stores = [join(dotGit, "packed-refs"), join(dotGit, "refs"), join(dotGit, "HEAD")];
-    expect(await read((git) => git.refStores(repo))).toEqual(stores);
-    gitIn(repo, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
-    expect(await read((git) => git.refStores(join(repo, "a.md")))).toEqual(stores);
-    expect(await read((git) => git.refStores(join(work, "outside")))).toEqual([]);
-  });
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-07] closes the shared refs and every worktree's own, and the .git file a worktree names its Git folder in", async () => {
-    const repo = join(work, "main-repo");
-    committed(repo);
-    gitIn(repo, "pack-refs", "--all");
-    const camp = join(work, "camp");
-    gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
-    const dotGit = join(repo, ".git");
-    const own = join(dotGit, "worktrees", "camp");
-    const shared = [join(dotGit, "packed-refs"), join(dotGit, "refs"), join(dotGit, "HEAD")];
-    const ownStores = ["refs", "HEAD", "commondir"].map((name) => join(own, name)).filter((path) => existsSync(path));
-    expect(ownStores).toContain(join(own, "HEAD"));
-    // From the worktree and from the main checkout alike, since a branch of either moves in both.
-    expect(await read((git) => git.refStores(camp))).toEqual([...shared, ...ownStores, join(camp, ".git")]);
-    expect(await read((git) => git.refStores(repo))).toEqual([...shared, ...ownStores]);
-  });
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-09] closes where a link among the ref stores leads, as well as the link", async () => {
-    const repo = join(work, "linked");
-    committed(repo);
-    gitIn(repo, "pack-refs", "--all");
-    const dotGit = join(repo, ".git");
-    renameSync(join(dotGit, "packed-refs"), join(work, "packed-elsewhere"));
-    symlinkSync(join(work, "packed-elsewhere"), join(dotGit, "packed-refs"));
-    renameSync(join(dotGit, "refs"), join(work, "refs-elsewhere"));
-    symlinkSync(join(work, "refs-elsewhere"), join(dotGit, "refs"));
-    expect(gitIn(repo, "rev-parse", "--abbrev-ref", "HEAD").toString().trim()).toBe("main");
-    expect(await read((git) => git.refStores(repo))).toEqual([
-      join(dotGit, "packed-refs"),
-      join(work, "packed-elsewhere"),
-      join(dotGit, "refs"),
-      join(work, "refs-elsewhere"),
-      join(dotGit, "HEAD"),
-    ]);
-  });
-
   // covers PE-005, STD-SEC-002, #1537
-  it("[TC-PE-1537-10] reads a Git folder a hob's .git file points to outside, writes nothing there, and closes its ref stores", async () => {
-    const outside = join(work, "elsewhere");
-    committed(outside);
-    gitIn(outside, "pack-refs", "--all");
-    const folder = join(work, "allowed");
-    write(join(folder, ".git"), `gitdir: ${join(outside, ".git")}\n`);
-    const before = listing(join(outside, ".git"));
-    expect(await read((git) => git.refStores(folder))).toEqual([
-      join(outside, ".git", "packed-refs"),
-      join(outside, ".git", "refs"),
-      join(outside, ".git", "HEAD"),
-      join(folder, ".git"),
-    ]);
-    expect(listing(join(outside, ".git"))).toEqual(before);
-  });
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-12] closes a repository's ref table, and where a link to it leads", async () => {
-    const repo = join(work, "tabled");
-    committed(repo);
-    gitIn(repo, "pack-refs", "--all");
-    const dotGit = join(repo, ".git");
-    const store = join(work, "store");
-    mkdirSync(store);
-    symlinkSync(store, join(dotGit, "reftable"));
-    expect(await read((git) => git.refStores(repo))).toEqual([
-      join(dotGit, "packed-refs"),
-      join(dotGit, "reftable"),
-      store,
-      join(dotGit, "refs"),
-      join(dotGit, "HEAD"),
-    ]);
-  });
+  it.skipIf(process.getuid?.() === 0)(
+    "[TC-PE-1537-13] says a scan did not see every folder when one below it cannot be read",
+    async () => {
+      const locked = join(work, "projects", "locked");
+      mkdirSync(join(locked, "checkout"), { recursive: true });
+      gitIn(join(locked, "checkout"), "init", "-q");
+      chmodSync(locked, 0o000);
+      try {
+        expect((await read((git) => git.repositoriesIn(join(work, "projects")))).complete).toBe(false);
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+    },
+  );
 });

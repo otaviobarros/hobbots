@@ -96,7 +96,7 @@ The rows "Send messages" and "Pay for things" leave the Safety step: they are Ch
 - Folders are stored canonical. A symlink inside a folder that points outside it is outside.
 - Inside a folder, `.git/hooks` and `.git/config` are read-only for hobs, because a hook or config a hob writes would later run outside the sandbox when the user runs Git. This protects the user's own Git use; it is not enough for the Push Charm, which never runs repository code (see Charms), since `core.hooksPath` can point at a writable folder such as `.husky`. Commits, branches and the index still work.
 - The Hobbots data folder (database, backups, logs) is never readable or writable from the sandbox, even when a shared folder contains it.
-- What you took over from a Task stays closed to writes inside a folder for every hob's turn, from the takeover until you give it back or the Task ends: each taken file or folder, and while a branch of a repository is taken, that repository's whole ref store (its refs, HEAD, packed refs and ref table in every Git folder of it, or its shared Git folder while it has no packed refs), so no branch there moves, so no script or Git config reaches them past the call-level check ([#1537](https://github.com/otaviobarros/hobbots/issues/1537)).
+- What you took over from a Task stays closed to writes inside a folder for every hob's turn, from the takeover until you give it back or the Task ends: each taken file or folder (a taken branch is held by the call-level check alone, see [#1569](https://github.com/otaviobarros/hobbots/issues/1569)), so no script reaches them past the call-level check ([#1537](https://github.com/otaviobarros/hobbots/issues/1537)).
 
 ### Enforcement
 

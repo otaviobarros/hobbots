@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import {
@@ -666,36 +666,26 @@ describe("the claims register", () => {
       expect(await h.takenPlacesPartly([outside])).toEqual([]);
 
       await h.takeOver(A);
-      // Both clones share the repository's ref stores, in the checkout's Git folder, which has no
-      // packed refs yet and so is closed whole; each closes its own `docs`.
+      // Each clone closes its own `docs`, as claimed and where its link lands. The taken branch is
+      // left to the call-level check: the sandbox closes nothing of Git's for it.
       const dotGit = join(checkout, ".git");
       expect(await h.takenPlaces([checkout])).toEqual(
-        expect.arrayContaining([join(checkout, "docs"), join(checkout, "web"), join(checkout, "web-link"), dotGit]),
+        [join(checkout, "docs"), join(checkout, "web"), join(checkout, "web-link")].sort(),
       );
       expect(await h.takenPlaces([worktree])).toEqual(
-        expect.arrayContaining([join(worktree, "docs"), join(worktree, "web-link"), dotGit]),
+        expect.arrayContaining([join(worktree, "docs"), join(worktree, "web-link")]),
       );
       // A hob given only a folder inside the repository, or a folder holding it, gets the same.
       expect(await h.takenPlaces([join(checkout, "docs", "decisions")])).toContain(join(checkout, "docs"));
       expect(await h.takenPlaces([root])).toEqual(
-        expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs"), dotGit]),
+        expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs")]),
       );
       // A repository with nothing taken closes nothing, but a folder the scan could not see whole
       // may hold one with something taken, so it is closed whole.
       expect(await h.takenPlaces([outside])).toEqual([]);
       expect(await h.takenPlacesPartly([outside])).toEqual([outside]);
 
-      // With packed refs, the fixed ref stores are closed rather than the Git folder, and the hub
-      // writes nothing in the repository.
-      const camp = git(checkout, "rev-parse", "camp").toString().trim();
-      git(checkout, "pack-refs", "--all");
-      const places = await h.takenPlaces([checkout]);
-      expect(places).toEqual(
-        expect.arrayContaining([join(dotGit, "packed-refs"), join(dotGit, "refs"), join(dotGit, "HEAD")]),
-      );
-      expect(places).not.toContain(dotGit);
-      expect(existsSync(join(dotGit, "refs", "heads", "camp"))).toBe(false);
-      expect(git(checkout, "rev-parse", "camp").toString().trim()).toBe(camp);
+      expect((await h.takenPlaces([root])).some((path) => path.startsWith(dotGit))).toBe(false);
 
       // Given back, nothing is closed; taken again, then the Task ends: nothing is closed either.
       await h.giveBack(A);
