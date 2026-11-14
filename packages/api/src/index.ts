@@ -12,6 +12,7 @@ export * from "./devices.ts";
 export * from "./diagnostics.ts";
 export * from "./errors.ts";
 export * from "./export.ts";
+export * from "./for-you.ts";
 export * from "./github.ts";
 export * from "./hob-changes.ts";
 export * from "./hob-github-app.ts";

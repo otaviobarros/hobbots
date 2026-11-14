@@ -30,6 +30,8 @@ const message = (id: string, revision: number, fields: Partial<Row> = {}): Row =
   quiet: false,
   revision,
   createdAt: at(revision),
+  actor: HOB,
+  mentions: [],
   ...fields,
 });
 
@@ -72,6 +74,7 @@ const quest = (id: string, revision: number, fields: Partial<CatchUpQuest["summa
 });
 
 const input = (fields: Partial<CatchUpInput>): CatchUpInput => ({
+  you: OWNER_ACTOR,
   marker: 10,
   messages: [],
   decisions: [],
@@ -86,7 +89,7 @@ describe("catchUpOf", () => {
       input({
         messages: [
           message("read", 9),
-          message("yours", 11, { role: "user" }),
+          message("yours", 11, { role: "user", actor: OWNER_ACTOR }),
           message("first", 12),
           message("quiet", 13, { quiet: true }),
           message("running", 14, { status: "streaming" }),
@@ -136,7 +139,10 @@ describe("catchUpOf", () => {
       input({
         decisions: [decision("mine", 11, { actor: OWNER_ACTOR })],
         artifacts: [artifact("upload", 12, { actor: OWNER_ACTOR })],
-        messages: [message("note", 13, { role: "note" })],
+        messages: [
+          message("note", 13, { role: "note", actor: OWNER_ACTOR, mentions: [OWNER_ACTOR] }),
+          message("self", 14, { role: "user", actor: OWNER_ACTOR, mentions: [OWNER_ACTOR] }),
+        ],
       }),
     );
     expect(caught).toMatchObject({ replies: 0, items: [] });

@@ -21,6 +21,7 @@ import {
   DataExport,
   DeviceService,
   FindIndexer,
+  ForYouList,
   GrantService,
   HobAdmission,
   HobLifecycle,
@@ -103,6 +104,7 @@ import {
   DeviceRepositoryLive,
   EventJournal,
   FindIndexLogLive,
+  ForYouRepositoryLive,
   GitHubAccountRepository,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -361,6 +363,8 @@ const ServerLive = Layer.unwrap(
       // Pins, and what catch-up reads: your read marker and the Quests of each chat and camp (ADR 037).
       PinRepositoryLive,
       CatchUpRepositoryLive,
+      // What each person's For you list reads past their read markers (ADR 039).
+      ForYouRepositoryLive,
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,
@@ -676,8 +680,9 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
       // Keep in chat and the chat's camp suggestions (ADR 037).
       .pipe(Layer.provideMerge(CampSuggestionService.layer))
-      // Notes to self, pins and catch-up (ADR 037).
-      .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer)))
+      // Notes to self, pins and catch-up (ADR 037), and each person's For you list (ADR 039), after the
+      // hub's own questions, which it lists.
+      .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(

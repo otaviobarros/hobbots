@@ -27,6 +27,7 @@ export * from "./directory.ts";
 export * from "./events.ts";
 export * from "./export.ts";
 export * from "./find.ts";
+export * from "./for-you.ts";
 export * from "./github.ts";
 export * from "./github-account.ts";
 export * from "./github-cli.ts";

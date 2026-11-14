@@ -59,7 +59,7 @@ export const mentionsToStore = (
  * Whether message `m` mentions the actor: the actor's JSON is one element of `m.mentions`. SQLite
  * reads the array with `json_each`, PostgreSQL with `jsonb` containment.
  */
-const mentionsActor = (sql: SqlClient.SqlClient, actor: Actor) =>
+export const mentionsActor = (sql: SqlClient.SqlClient, actor: Actor) =>
   sql.onDialectOrElse({
     pg: () =>
       sql`m.mentions::jsonb @> jsonb_build_array(jsonb_build_object('kind', ${actor.kind}::text, 'id', ${actor.id}::text))`,
