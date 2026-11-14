@@ -309,8 +309,10 @@ describe("applyEvent", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-UX-1462-01] drops the reply of a hob that passed, which leaves no message", () => {
+  it("[TC-UX-1462-01] drops the reply of a hob that passed, which leaves no message, and reads what is unread again", async () => {
     const client = new QueryClient();
+    // The passed reply had ended, so the camp showed as unread.
+    client.setQueryData(queryKeys.unreadThreads, [threadId]);
     const said = new Message({
       ...reply("complete", "What should we plant?"),
       id: MessageId.make("plan"),
@@ -338,6 +340,7 @@ describe("applyEvent", () => {
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.map((m) => m.id)).toEqual([
       "plan",
     ]);
+    await vi.waitFor(() => expect(client.getQueryState(queryKeys.unreadThreads)?.isInvalidated).toBe(true));
   });
 
   it("takes a reply's steps from its upsert, so a replayed entry restores them", () => {

@@ -219,6 +219,11 @@ export class HobbotsRepository extends Context.Service<
       by: Actor | null,
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
+     * The configuration versions of the turns `agentId` passed in `threadId`, whose replies were
+     * removed (#1462), so a resumed session still hears instructions changed since.
+     */
+    readonly passedConfigVersions: (threadId: ThreadId, agentId: AgentId) => Effect.Effect<ReadonlyArray<number>>;
+    /**
      * At start: requests whose turn was speaking when the hub stopped are answered by its interrupted
      * reply, or passed, with its reply removed, when its hob had passed.
      */

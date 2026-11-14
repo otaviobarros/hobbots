@@ -9,7 +9,8 @@ import { SqlClient } from "effect/sql";
 // before this was never passed, so each reads as having no reason.
 //
 // A pass leaves no message, but its turn still ran on a runtime: `passed_turns` keeps what the
-// removed reply used (OP-002), with its runtime and model, so usage counts it as one more reply.
+// removed reply used (OP-002), with its runtime and model, so usage counts it as one more reply,
+// and the configuration version it ran on, so a resumed session still hears changed instructions.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`ALTER TABLE turn_requests ADD COLUMN pass_reason TEXT`;
@@ -19,6 +20,7 @@ export default Effect.gen(function* () {
     agent_id TEXT NOT NULL,
     runtime TEXT,
     model TEXT,
+    config_version INTEGER,
     created_at TEXT NOT NULL,
     input_tokens BIGINT,
     output_tokens BIGINT,

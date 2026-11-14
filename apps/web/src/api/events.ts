@@ -435,6 +435,9 @@ const removeGone = (
   queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
     old?.filter((message) => message.id !== event.messageId),
   );
+  // A passed reply that already ended may have left its camp unread: the hub works out again
+  // whether any reply there still is.
+  if (event._tag === "TurnPassed") void unreadChanged(queryClient);
 };
 
 type MemoryEvent = Extract<

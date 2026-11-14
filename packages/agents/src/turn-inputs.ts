@@ -133,6 +133,8 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
               : [],
           ),
         );
+        // A turn the hob passed ran in the same session, though its reply is gone.
+        for (const version of yield* repo.passedConfigVersions(thread.id, agent.id)) versions.add(version);
         for (const version of versions) {
           const config = yield* repo.findAgentConfig(agent.id, version);
           if (Option.isNone(config) || systemInstructions(config.value.name, config.value) !== instructions)

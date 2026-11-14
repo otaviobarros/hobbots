@@ -148,6 +148,7 @@ describe("passing", () => {
           messages: (yield* repo.listMessages(CAMP)).map((m) => m.id),
           reply: yield* repo.findMessage(replyId),
           kept: yield* sql`SELECT reply_id, thread_id, agent_id FROM passed_turns`,
+          versions: yield* repo.passedConfigVersions(CAMP, PIP),
           open: yield* repo.openTurnRequests(mainLine(CAMP)),
         };
       }),
@@ -175,6 +176,8 @@ describe("passing", () => {
     expect(Option.isNone(result.reply)).toBe(true);
     // What the removed reply's turn used stays, under the hob that passed (OP-002).
     expect(result.kept).toEqual([{ replyId: "reply-pip", threadId: CAMP, agentId: PIP }]);
+    // The configuration its session ran on stays too, so changed instructions still reach it.
+    expect(result.versions).toEqual([1]);
     expect(result.open.map((r: TurnRequest) => [r.hobId, r.state])).toEqual([[QUILL, "waiting"]]);
   });
 
@@ -257,5 +260,41 @@ describe("passing", () => {
       { hobId: QUILL, state: "waiting", passReason: null },
     ]);
     expect(result.messages).toEqual(["plan"]);
+  });
+
+  // covers ADR 039 (One hob speaks at a time), STD-DATA-001
+  it("[TC-PE-1462-05] keeps, when the hub starts again, the reply of a hob that passed and then changed something", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* asked;
+        const replyId = yield* pipSpeaks;
+        yield* repo.markPassing(replyId, "Quill covered it");
+        // After passing, the turn edited a file, then the hub stopped.
+        const [reply] = (yield* repo.listMessages(CAMP)).filter((m) => m.id === replyId);
+        if (reply === undefined) throw new Error("Pip's reply is stored");
+        yield* repo.upsertMessage(
+          new Message({
+            ...reply,
+            steps: [
+              {
+                id: "s-1",
+                kind: "tool",
+                label: "Editing notes.md",
+                state: "done",
+                call: { tool: "Edit", operation: "edit-files", targets: ["/notes.md"] },
+              },
+            ],
+          }),
+        );
+        yield* repo.answerUnfinishedTurnRequests;
+        return { rows: yield* stored, messages: (yield* repo.listMessages(CAMP)).map((m) => m.id) };
+      }),
+    );
+    expect(result.rows.map((r) => [r.hobId, r.state])).toEqual([
+      [PIP, "answered"],
+      [QUILL, "waiting"],
+    ]);
+    expect(result.messages).toEqual(["plan", "reply-pip"]);
   });
 });

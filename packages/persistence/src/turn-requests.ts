@@ -1,4 +1,4 @@
-import type { HobbotsRepository } from "@hobbots/agents";
+import { type HobbotsRepository, passStands } from "@hobbots/agents";
 import {
   type Actor,
   type JournaledEvent,
@@ -33,6 +33,7 @@ type Writes = Pick<
   | "turnRequestsOf"
   | "passTurnRequests"
   | "markPassing"
+  | "passedConfigVersions"
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
   | "threadsWithWaitingRequests"
@@ -94,10 +95,10 @@ export const makeTurnRequestWrites = (
         yield* stepRequests(sql, speaking, { _tag: "Answer" });
         return none;
       }
-      yield* sql`INSERT INTO passed_turns (reply_id, thread_id, agent_id, runtime, model, created_at, input_tokens,
-          output_tokens, cache_read_tokens, cache_write_tokens)
-        SELECT id, thread_id, actor_id, runtime, model, created_at, input_tokens, output_tokens, cache_read_tokens,
-          cache_write_tokens
+      yield* sql`INSERT INTO passed_turns (reply_id, thread_id, agent_id, runtime, model, config_version, created_at,
+          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
+        SELECT id, thread_id, actor_id, runtime, model, config_version, created_at, input_tokens, output_tokens,
+          cache_read_tokens, cache_write_tokens
         FROM messages WHERE id = ${replyId}`;
       yield* sql`DELETE FROM messages WHERE id = ${replyId}`;
       const passed = yield* stepRequests(sql, speaking, { _tag: "Pass", reason });
@@ -149,7 +150,8 @@ export const makeTurnRequestWrites = (
       ),
     // A turn that was speaking when the hub stopped was ended as an interrupted reply, which Continue
     // resumes; that reply is its answer, so its request does not start a second turn. A turn whose
-    // hob had passed passes now, as its end would have.
+    // hob had passed passes now, as its end would have, unless its reply holds text or work a removed
+    // reply would hide: steps after the pass, or any a continued reply carried from before, keep it.
     answerUnfinishedTurnRequests: journaledChange<void, never>(() =>
       Effect.gen(function* () {
         const speaking = yield* selectRequestsIn(sql, "speaking");
@@ -157,7 +159,9 @@ export const makeTurnRequestWrites = (
         for (const replyId of new Set(speaking.flatMap((request) => request.replyId ?? []))) {
           const turn = speaking.filter((request) => request.replyId === replyId);
           const reason = turn.find((request) => request.passReason !== null)?.passReason ?? null;
-          if (reason === null) yield* stepRequests(sql, turn, { _tag: "Answer" });
+          const reply = yield* readMessage(replyId);
+          const stands = reason !== null && Option.isSome(reply) && passStands(reply.value, 0);
+          if (!stands) yield* stepRequests(sql, turn, { _tag: "Answer" });
           else events.push(...(yield* passReply(replyId, turn, reason)).events);
         }
         yield* stepRequests(
@@ -169,5 +173,11 @@ export const makeTurnRequestWrites = (
       }),
     ),
     threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),
+    passedConfigVersions: (threadId, agentId) =>
+      sql<{ readonly configVersion: number }>`SELECT DISTINCT config_version FROM passed_turns
+        WHERE thread_id = ${threadId} AND agent_id = ${agentId} AND config_version IS NOT NULL`.pipe(
+        Effect.map((rows) => rows.map((row) => Number(row.configVersion))),
+        Effect.orDie,
+      ),
   };
 };
