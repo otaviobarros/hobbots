@@ -24,6 +24,7 @@ import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../qu
 import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
 import { QuestCriteria } from "./criteria.tsx";
 import { messages } from "./messages.ts";
+import { QuestCost } from "./quest-cost.tsx";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
 import { QuestThreadView } from "./quest-thread-view.tsx";
@@ -188,6 +189,7 @@ function QuestBody({
         </Button>
       </span>
       <QuestCriteria tree={tree} hobs={hobs} />
+      <QuestCost tree={tree} />
       <Team tree={tree} hobs={hobs} pins={pins} moves={moves} />
       <QuestThreadView tree={tree} threadId={threadId} lead={card.leadId} hobs={hobs} />
     </>

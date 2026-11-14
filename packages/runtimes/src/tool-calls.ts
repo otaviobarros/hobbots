@@ -82,7 +82,10 @@ const text = (input: Record<string, unknown>, key: string): string | undefined =
 type Separator = ";" | "&&" | "||" | "|" | "&" | "(" | ")";
 
 /** One piece of a command line: a simple command's words, or the separator between commands. */
-type CommandToken = { readonly words: ReadonlyArray<string> } | { readonly separator: Separator };
+/** A simple command's words, and the files its `>` redirections write, as written; or a separator. */
+type CommandToken =
+  | { readonly words: ReadonlyArray<string>; readonly writes: ReadonlyArray<string> }
+  | { readonly separator: Separator };
 
 /** The quoted text from `start` up to the closing `quote`, and where reading carries on. */
 const readQuoted = (command: string, start: number, quote: "'" | '"'): { text: string; next: number } => {
@@ -119,18 +122,25 @@ const REDIRECTION = /^(\d*|&)(>>|>\||>&|>|<<<|<<|<&|<>|<)/;
  * The words of one simple command as they are read, with redirections left out. `plain` is the part
  * of the word before its first quote or escape: only an operator there is a redirection, so
  * `rm '>' file` still names both files while `2>"log"` is a redirection with a quoted target. A bare
- * operator (`> out`) also takes the next word, its target.
+ * operator (`> out`) also takes the next word, its target. `writes` keeps the targets of the
+ * operators that write a file, such as `>`, `>>` or `&>`, but not a descriptor's copy (`2>&1`).
  */
 const commandWords = () => {
   const words: Array<string> = [];
-  let target = false;
+  const writes: Array<string> = [];
+  let target: "none" | "skip" | "write" = "none";
   return {
     words,
+    writes,
     add: (word: string, plain: string) => {
       const operator = REDIRECTION.exec(plain)?.[0];
-      if (target) target = false;
-      else if (operator === undefined) words.push(word);
-      else target = operator === word && plain === word;
+      const writing = operator?.includes(">") === true && !operator.endsWith("&");
+      if (target !== "none") {
+        if (target === "write") writes.push(word);
+        target = "none";
+      } else if (operator === undefined) words.push(word);
+      else if (operator === word && plain === word) target = writing ? "write" : "skip";
+      else if (writing) writes.push(word.slice(operator.length));
     },
   };
 };
@@ -155,7 +165,8 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
   };
   const endCommand = () => {
     endWord();
-    if (current.words.length > 0) tokens.push({ words: current.words });
+    if (current.words.length > 0 || current.writes.length > 0)
+      tokens.push({ words: current.words, writes: current.writes });
     current = commandWords();
   };
   const take = (text: string) => {
@@ -182,6 +193,9 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
     } else {
       if (c === " " || c === "\t") endWord();
       else {
+        // A redirection may follow a word without a space, as in `printf x>out`: the word ends there,
+        // unless what came before is the descriptor or operator it belongs to, as `2>` or `>>`.
+        if ((c === ">" || c === "<") && started && (quoted || !/^(\d*|&)[<>]*$/.test(word))) endWord();
         if (!quoted) plain += c;
         take(c);
       }
@@ -624,7 +638,7 @@ export const commandRequests = (
   const folders = folderFlow(cwd, home);
   // The reader splits a line it can read where this does, so its commands line up one to one.
   const read = readCommandLine(command);
-  const simple = tokens.filter((token) => "words" in token).length;
+  const simple = tokens.filter((token) => "words" in token && token.words.length > 0).length;
   const literal = read !== null && read.length === simple ? read : null;
   const plain = !/[<>]/.test(command);
   let position = 0;
@@ -633,6 +647,8 @@ export const commandRequests = (
       folders.separator(token.separator);
       return;
     }
+    // A bare redirection such as `> out` runs no program.
+    if (token.words.length === 0) return;
     const literalWords = literal?.[position++] ?? null;
     // A wrapper such as `command cd` still moves the shell, so the flow sees the unwrapped words.
     const preview = unwrap(token.words, cwd, home).words;
@@ -683,44 +699,146 @@ export const initsRepository = (
   );
 
 /**
- * The folders a tool call's command line runs `git commit` from, as the line spells them, after any
- * `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or `sh -c` (#742). Which repository
- * each is in is the hub's to find. Only what the line says is read: an alias or a script that
- * commits is not seen.
+ * Each simple command of a command line run from `at`, with the folder the shell is in when it runs
+ * it, after any `cd` before it, and its words with wrappers taken off and the folder they move it to.
  */
-export const commitFolders = (
+const eachCommand = (
+  line: string,
+  at: string,
+  home: string,
+  each: (token: { readonly writes: ReadonlyArray<string> }, shell: string, command: Unwrapped) => void,
+) => {
+  const tokens = commandLine(line);
+  const folders = folderFlow(at, home);
+  tokens.forEach((token, index) => {
+    if ("separator" in token) {
+      folders.separator(token.separator);
+      return;
+    }
+    // A wrapper such as `env -C` moves the command it runs, so the folder is the unwrapped one.
+    const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+    each(token, shell, unwrap(token.words, shell, home));
+  });
+};
+
+/**
+ * The folders a tool call's command line runs a `git` subcommand from that `matches` picks (with
+ * `every`, also its `--git-dir` repository and `--work-tree`), as the line spells them, after any `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or
+ * `sh -c` (#742). Which repository each is in is the hub's to find. Only what the line says is read:
+ * an alias or a script that runs Git is not seen.
+ */
+const gitFoldersWhere = (
   tool: string,
   input: Record<string, unknown>,
   cwd: string,
-  home: string = homedir(),
+  home: string,
+  matches: (sub: string, rest: ReadonlyArray<string>, settings: ReadonlyArray<string>) => boolean,
+  every = false,
 ): ReadonlyArray<string> => {
   const found = new Set<string>();
-  const visit = (line: string, at: string) => {
-    const tokens = commandLine(line);
-    const folders = folderFlow(at, home);
-    tokens.forEach((token, index) => {
-      if ("separator" in token) {
-        folders.separator(token.separator);
-        return;
-      }
-      // A wrapper such as `env -C` moves the command it runs, so the folder is the unwrapped one.
-      const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
-      const { words, folder } = unwrap(token.words, shell, home);
+  const visit = (line: string, at: string) =>
+    eachCommand(line, at, home, (_token, _shell, { words, folder }) => {
       const [name, ...args] = words;
       const program = basename(name ?? "");
       if (program === "git") {
         const git = gitFolders(args, folder, home);
-        if (args[git.sub] === "commit") found.add(git.folders[0] as string);
+        const sub = args[git.sub];
+        if (sub !== undefined && matches(sub, args.slice(git.sub + 1), git.settings))
+          for (const reached of every ? git.folders : git.folders.slice(0, 1)) found.add(reached);
       } else {
         const nested = nestedLine(program, args);
         if (nested !== undefined) visit(nested, folder);
       }
     });
-  };
   const command = tool === "Bash" ? text(input, "command") : undefined;
   if (command !== undefined) visit(command, cwd);
   return [...found];
 };
+
+/** The folders a tool call's command line runs `git commit` from (#742); see `gitFoldersWhere`. */
+export const commitFolders = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> => gitFoldersWhere(tool, input, cwd, home, (sub) => sub === "commit");
+
+/**
+ * Git subcommands known to leave the working tree's files alone. Every other subcommand, such as
+ * `reset` in any mode, `checkout`, `checkout-index -f`, `clean` or one Git adds later, is read as one
+ * that may rewrite them, so a subcommand missing here is refused rather than let through.
+ */
+const TREE_KEEPS = new Set([
+  "add",
+  "blame",
+  "cat-file",
+  "commit",
+  "config",
+  "describe",
+  "diff",
+  "fetch",
+  "for-each-ref",
+  "grep",
+  "help",
+  "log",
+  "ls-files",
+  "ls-remote",
+  "ls-tree",
+  "merge-base",
+  "push",
+  "reflog",
+  "remote",
+  "rev-list",
+  "rev-parse",
+  "shortlog",
+  "show",
+  "show-ref",
+  "status",
+  "tag",
+  "version",
+]);
+/** `git branch` long options that move, copy or delete a branch; without them it only lists or makes one. */
+const BRANCH_MOVES = new Set(["--force", "--delete", "--move", "--copy"]);
+/** Short `git branch` options that move, copy or delete a branch, alone or bundled, as in `-Df`. */
+const BRANCH_MOVE_LETTERS = /^-[a-zA-Z]*[fdDmMcC]/;
+
+const movesBranch = (word: string) =>
+  BRANCH_MOVES.has(word.split("=")[0] ?? word) || (!word.startsWith("--") && BRANCH_MOVE_LETTERS.test(word));
+/** `git stash` forms that only read. */
+const STASH_READS = new Set(["list", "show", "create"]);
+
+const rewritesTree = (sub: string, rest: ReadonlyArray<string>, settings: ReadonlyArray<string>) => {
+  // A setting given on the line, such as `-c remote.origin.fetch=...:refs/heads/taken`, can make
+  // any subcommand write where its words don't say, so the line is read as a rewrite.
+  if (settings.length > 0) return true;
+  if (sub === "branch") return rest.some(movesBranch);
+  // A fetch whose refspec names where it lands, such as `HEAD:refs/heads/taken`, may move a local
+  // branch, as may one given `--refmap`, which maps fetched branches onto local ones.
+  if (sub === "fetch")
+    return rest.some(
+      (word) =>
+        word === "--update-head-ok" ||
+        word === "--refmap" ||
+        word.startsWith("--refmap=") ||
+        (!word.startsWith("-") && word.includes(":")),
+    );
+  if (sub === "stash") return rest[0] === undefined || !STASH_READS.has(rest[0]);
+  return !TREE_KEEPS.has(sub);
+};
+
+/**
+ * The folders a tool call's command line runs a Git subcommand from that rewrites the working tree,
+ * or may move a branch, such as `git reset --hard`, `git switch`, `git clean` or `git branch -f`, or
+ * any subcommand not known to leave both alone (#1449), with any `--git-dir` or `--work-tree` it
+ * names. Which files or branches each reaches is not read from the line, so the hub treats the
+ * whole repository as written.
+ */
+export const treeRewriteFolders = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> => gitFoldersWhere(tool, input, cwd, home, rewritesTree, true);
 
 /** The arguments of the first `gh` a command line runs, behind any wrapper, `eval` or `sh -c`, or null. */
 /** Shell words that start or join a compound command, before the command that runs. */
@@ -1041,32 +1159,35 @@ export const commandWritesTo = (
   cwd: string,
   matches: (path: string) => boolean,
   home: string = homedir(),
+  relative = false,
 ): ReadonlyArray<string> => {
   const command = tool === "Bash" ? text(input, "command") : undefined;
   if (command === undefined) return [];
   const found = new Set<string>();
-  const add = (word: string) => {
-    if (isAbsolute(word) && matches(word)) found.add(word);
+  // With `relative`, a relative word is joined to the folder it is written from, as written, so the
+  // hub follows its links before any `..` (#1449); otherwise only absolute words are read.
+  const add = (word: string, at: string) => {
+    const path = isAbsolute(word) ? word : relative && word !== "" ? joinedAsWritten(at, word) : null;
+    if (path !== null && matches(path)) found.add(path);
   };
-  const raw = rawTokens(command);
-  raw.forEach((token, index) => {
-    if (!("word" in token)) return;
-    const operator = REDIRECTION.exec(token.word)?.[0];
-    if (operator === undefined || !operator.includes(">") || operator.endsWith("&")) return;
-    const rest = token.word.slice(operator.length);
-    const next = raw[index + 1];
-    const target = rest !== "" ? rest : next !== undefined && "word" in next ? next.word : "";
-    add(unquoted(target));
-  });
-  for (const token of commandLine(command)) {
-    if (!("words" in token)) continue;
-    const [name, ...args] = unwrap(token.words, cwd, home).words;
-    if (name !== undefined && PATH_WRITERS.has(basename(name))) {
-      for (const arg of args) if (!arg.startsWith("-")) add(arg);
-    }
-  }
+  // A line run by `eval` or `sh -c` is read the same way, from the folder it runs in.
+  const visit = (line: string, at: string) =>
+    eachCommand(line, at, home, (token, shell, { words, folder }) => {
+      // The shell opens a redirection's file in its own folder, after any `cd` before it on the line.
+      for (const write of token.writes) add(write, shell);
+      const [name, ...args] = words;
+      const program = basename(name ?? "");
+      if (PATH_WRITERS.has(program)) for (const arg of args) if (!arg.startsWith("-")) add(arg, folder);
+      const nested = nestedLine(program, args);
+      if (nested !== undefined) visit(nested, folder);
+    });
+  visit(command, cwd);
   return [...found];
 };
+
+/** `path` joined to `folder` as written, without collapsing `..`, which the hub reads after links. */
+const joinedAsWritten = (folder: string, path: string) =>
+  `${folder.endsWith("/") || folder.endsWith("\\") ? folder : `${folder}${sep}`}${path}`;
 
 /**
  * The policy requests a tool call makes, or null for a tool Hobbots does not know. Relative paths

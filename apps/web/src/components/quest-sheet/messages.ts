@@ -1,4 +1,4 @@
-import { formatCount, plural } from "../../lib/format.ts";
+import { formatCompact, formatCount, plural } from "../../lib/format.ts";
 
 interface Named {
   readonly name: string;
@@ -51,6 +51,24 @@ export const messages = {
     byHub: "Hobbots",
     /** A lead asked you to waive a required criterion, and your answer decides it. */
     waiverAsked: "Waiting on your answer to waive it",
+    /** What the quest cost per criterion accepted on evidence (#1449), from the usage its party reported. */
+    cost: "Cost",
+    costPerOutcome: ({ tokens, accepted, criteria }: { tokens: number; accepted: number; criteria: number }) =>
+      `${formatCompact(tokens)} tokens per accepted outcome · ${formatCount(accepted)} of ${formatCount(criteria)} accepted`,
+    costNoneAccepted: "No outcome accepted yet, so there is no cost per outcome.",
+    costSpent: ({ tokens, turns }: { tokens: number; turns: number }) =>
+      plural(turns, {
+        one: `${formatCompact(tokens)} tokens spent in 1 reply or turn`,
+        other: `${formatCompact(tokens)} tokens spent in ${formatCount(turns)} replies and turns`,
+      }),
+    costUnreported: ({ count }: { count: number }) =>
+      plural(count, {
+        one: "1 of them reported no usage, so it is not counted.",
+        other: `${formatCount(count)} of them reported no usage, so they are not counted.`,
+      }),
+    costReading: "Counting what it cost…",
+    costUnread: "What it cost could not be read.",
+    costRetry: "Try again",
     showWork: "Show the work",
     showWorkHint: "Changes, files and terminals, in the Workbench beside the chat",
     team: "Who's on it",

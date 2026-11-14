@@ -37,7 +37,7 @@ import { EXPORT_LIMITS, type ExportLimits, exportedContents, overLimits } from "
 import { type ExportNames, readmeMarkdown, threadMarkdown, treeMarkdown } from "./export-markdown.ts";
 import { MemoryStore } from "./memory.ts";
 import { hobFoldersNow } from "./permissions.ts";
-import { FolderChecks, InstallationSettings } from "./ports.ts";
+import { FolderChecks, InstallationSettings, SettingHistory } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
 import { HobFiles } from "./task-files.ts";
@@ -46,6 +46,9 @@ import { WebRecords } from "./web-usage.ts";
 
 /** The most searches, and the most pages, one export holds: the newest. */
 const EXPORT_WEB_RECORDS = 100_000;
+
+/** The most setting changes one export holds: the newest. */
+const EXPORT_SETTING_CHANGES = 100_000;
 
 /**
  * Exports of ADR 026: one thread, one hob or everything, as a folder of Markdown and versioned
@@ -258,6 +261,8 @@ export class DataExport extends Context.Service<
         const memoryStore = yield* Effect.serviceOption(MemoryStore);
         // A hub without web records exports none (ADR 036).
         const webRecords = yield* Effect.serviceOption(WebRecords);
+        // A hub that keeps no settings history exports none (#1357).
+        const settingHistory = yield* Effect.serviceOption(SettingHistory);
         // Without the hub's redactor, secret shapes are still redacted.
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
 
@@ -510,6 +515,10 @@ export class DataExport extends Context.Service<
               }
             }
             const web = yield* gatherWeb(scope, gathered.hobs);
+            const settingChanges =
+              scope._tag === "Everything" && Option.isSome(settingHistory)
+                ? yield* settingHistory.value.latest(EXPORT_SETTING_CHANGES)
+                : null;
             const data: HobbotsExport = {
               format: EXPORT_FORMAT,
               version: EXPORT_VERSION,
@@ -521,6 +530,7 @@ export class DataExport extends Context.Service<
               quests: trees,
               memory,
               ...(web === null ? {} : { web }),
+              ...(settingChanges === null ? {} : { settingChanges }),
             };
             return { data, sources };
           });

@@ -468,3 +468,30 @@ export const effectiveDecision = (
   const override = answers[operation];
   return override === undefined ? answer : narrowest(answer, override);
 };
+
+/**
+ * One operation's answer for a hob: the decision it gets, and whether the hob's own override set it
+ * rather than the preset. An override the preset is already narrower than decides nothing, so it is
+ * not marked.
+ */
+export interface EffectiveAnswer {
+  readonly operation: AnyOperation;
+  readonly decision: PolicyDecision;
+  readonly override: boolean;
+}
+
+/**
+ * A hob's answers under `preset`: each built-in operation, then each of `declared`, in order, after
+ * the hob's overrides. The Permissions tab and the hob's public card (ADR 032) both read these.
+ */
+export const effectiveAnswers = (
+  preset: SafetyPreset,
+  policy: HobPolicy,
+  declared: ReadonlyArray<CharmOperation>,
+): ReadonlyArray<EffectiveAnswer> => {
+  const answers = hobAnswers(policy);
+  return [...POLICY_OPERATIONS, ...declared.map((operation) => operation.id)].map((operation) => {
+    const decision = effectiveDecision(preset, answers, operation, declared);
+    return { operation, decision, override: answers[operation] !== undefined && answers[operation] === decision };
+  });
+};

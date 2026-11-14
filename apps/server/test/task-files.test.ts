@@ -15,6 +15,7 @@ import {
   FileChange,
   FileChangeId,
   type FileChangeKind,
+  OWNER_ACTOR,
   PREVIEW_TEXT_BYTES,
   SERVED_FILE_BYTES,
   TaskId,
@@ -137,7 +138,7 @@ const Records = Layer.succeed(
 
 const Seed = Layer.effectDiscard(
   Effect.gen(function* () {
-    yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] });
+    yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] }, OWNER_ACTOR);
     yield* (yield* HobbotsRepository).insertAgent(
       new Agent({
         id: ALDRIC,
