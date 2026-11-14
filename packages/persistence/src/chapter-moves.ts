@@ -41,6 +41,7 @@ import { keepReadersRead } from "./thread-member-rows.ts";
 /** The records that name a message and its thread, which follow the message to the camp. */
 const BY_MESSAGE = [
   "approval_requests",
+  "turn_requests",
   "charm_calls",
   "memory_saves",
   "memory_shares",
@@ -77,7 +78,7 @@ export const makeChapterMoves = (
           Effect.map((rows) => rows.length === 0),
         );
 
-  // A reply under way or queued, or an approval its reply waits on, holds a thread's chapters where
+  // A reply under way or queued, a turn still owed, or an approval its reply waits on, holds a thread's chapters where
   // they are. A party member's approval waits in its own Task's session, not in the thread's reply,
   // so it moves with its quest instead (#1389).
   const busy = (threadId: ThreadId) =>
@@ -86,8 +87,21 @@ export const makeChapterMoves = (
         AND status IN ('queued', 'streaming', 'stopping') LIMIT 1`;
       const approvals = yield* sql`SELECT 1 FROM approval_requests WHERE thread_id = ${threadId}
         AND state = 'pending' AND message_id IS NOT NULL LIMIT 1`;
-      return replies.length > 0 || approvals.length > 0;
+      // A turn still owed, as one a paused member hob owes, stays in the camp it was asked in.
+      const owed = yield* sql`SELECT 1 FROM turn_requests WHERE thread_id = ${threadId}
+        AND state IN ('waiting', 'paused', 'speaking') LIMIT 1`;
+      return replies.length > 0 || approvals.length > 0 || owed.length > 0;
     });
+
+  // A Quest that moves goes on in the camp as its lead's work, so the camp must admit that lead. A
+  // member's Quest still open in the chapter, once its request is answered, holds the chapter where
+  // it is unless that member is in the camp too (ADR 039).
+  const strandsLead = (from: ThreadId, chapterId: ChapterId, camp: Thread) =>
+    sql`SELECT 1 FROM tasks t WHERE t.chapter_id = ${chapterId} AND t.thread_id = ${from}
+      AND t.parent_id IS NULL AND t.state NOT IN ('completed', 'failed', 'cancelled')
+      AND t.owner_id <> ${camp.agentId} AND NOT EXISTS (SELECT 1 FROM thread_members m
+        WHERE m.thread_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = t.owner_id
+        AND m.state = 'active') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
 
   // The thread as this transaction wrote it.
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
@@ -269,6 +283,9 @@ export const makeChapterMoves = (
           at: input.at,
         });
         if (!isPlan(planned)) return yield* Effect.fail(planned);
+        if (yield* strandsLead(from.id, input.chapterId, made.camp)) {
+          return yield* new ChapterRefused({ threadId: from.id, reason: "reply-running" });
+        }
         const plan = stamped(planned, revision);
         yield* writeChapters(sql, plan.from);
         yield* writeChapters(sql, plan.camp);

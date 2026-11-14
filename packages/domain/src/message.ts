@@ -389,4 +389,12 @@ export const QueuedMessageTransitions = {
     message.role === "user" && message.status === "queued"
       ? new Message({ ...message, status: "complete" })
       : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "start" }),
+  /**
+   * Nothing is owed for it any more, as after Stop all (ADR 039): it leaves the queue said where it
+   * was, and no turn answers it.
+   */
+  drop: (message: Message): Message | InvalidMessageTransition =>
+    message.role === "user" && message.status === "queued"
+      ? new Message({ ...message, status: "complete" })
+      : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "drop" }),
 };

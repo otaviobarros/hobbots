@@ -16,6 +16,7 @@ import {
   AttemptId,
   ChapterId,
   ContentId,
+  EMPTY_HOB_POLICY,
   OWNER_ACTOR,
   RegisteredArtifactId,
   type StoredVersion,
@@ -37,9 +38,12 @@ const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-artifact-contents-
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
 const outside = join(temp, "outside");
+/** A member hob's own folder, which the camp's hob does not work in. */
+const workshop = join(temp, "workshop");
 
 const AT = "2026-11-12T10:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
+const BRYN = AgentId.make("bryn");
 const CAMP = ThreadId.make("camp");
 const HUB_SECRET = "hub-credential-0123456789";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -51,7 +55,7 @@ const write = (folder: string, path: string, contents: string | Uint8Array) => {
   writeFileSync(join(folder, path), contents);
 };
 
-const artifact = (id: string, locator: string) =>
+const artifact = (id: string, locator: string, maker: AgentId = ALDRIC) =>
   new Artifact({
     id: RegisteredArtifactId.make(id),
     threadId: CAMP,
@@ -61,7 +65,7 @@ const artifact = (id: string, locator: string) =>
     locator,
     latestVersion: 2,
     origin: { kind: "attempt", id: ATTEMPT },
-    actor: { kind: "hob", id: ALDRIC },
+    actor: { kind: "hob", id: maker },
     createdAt: AT,
     updatedAt: AT,
     revision: 1,
@@ -89,6 +93,8 @@ const STORED: ReadonlyArray<StoredArtifact> = [
     versions: [version(1, { _tag: "text", text: `Use ${HUB_SECRET}.` })],
   },
   { artifact: artifact("pr", "https://github.com/me/app/pull/7"), versions: [version(1)] },
+  { artifact: artifact("plan", join(workshop, "plan.md"), BRYN), versions: [version(1)] },
+  { artifact: artifact("sketch", join(workshop, "sketch.md")), versions: [version(1)] },
 ];
 
 const Records = Layer.succeed(
@@ -117,20 +123,23 @@ const Seed = Layer.effectDiscard(
   Effect.gen(function* () {
     yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] }, OWNER_ACTOR);
     const repo = yield* HobbotsRepository;
+    const aldric = new Agent({
+      id: ALDRIC,
+      name: "Aldric",
+      roleTitle: "Writer",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "moss",
+      configVersion: 1,
+      createdAt: AT,
+    });
+    yield* repo.insertAgent(aldric);
+    // A member of the camp, working in a folder of its own.
     yield* repo.insertAgent(
-      new Agent({
-        id: ALDRIC,
-        name: "Aldric",
-        roleTitle: "Writer",
-        runtime: "claude-code",
-        model: null,
-        effort: null,
-        instructions: "",
-        lookSeed: 1,
-        lookColor: "moss",
-        configVersion: 1,
-        createdAt: AT,
-      }),
+      new Agent({ ...aldric, id: BRYN, name: "Bryn", policy: { ...EMPTY_HOB_POLICY, ownFolders: [workshop] } }),
     );
     yield* repo.upsertThread(new Thread({ id: CAMP, agentId: ALDRIC, title: "Launch", createdAt: AT, updatedAt: AT }));
   }),
@@ -159,6 +168,8 @@ beforeAll(async () => {
   write(project, ".env", "API_TOKEN=x\n");
   write(project, "data.bin", "\u0000\u0001");
   write(outside, "notes.md", "Not for hobs.\n");
+  write(workshop, "plan.md", "# Plan\n");
+  write(workshop, "sketch.md", "# Sketch\n");
   // A link the hob left in its folder, to a file outside every folder of its.
   symlinkSync(join(outside, "notes.md"), join(project, "escape.md"));
   runtime = ManagedRuntime.make(App);
@@ -210,5 +221,12 @@ describe("an artifact's contents", () => {
       ArtifactContents.use((contents) => contents.content(CAMP, RegisteredArtifactId.make("chart"), 1)),
     );
     expect([...image]).toEqual([...PNG]);
+  });
+
+  // covers ADR 039 (camps), ADR 037 (Records: Artifact), PE-006
+  it("[TC-CH-1461-23] serves a file a member hob made in its own folders, and no other file there", async () => {
+    expect(await content("plan", 1)).toEqual(Exit.succeed(expect.stringContaining("# Plan")));
+    // The camp's hob made this one, and the member's folder is not one of its.
+    expect(refused(await content("sketch", 1))).toEqual(["outside-folders"]);
   });
 });

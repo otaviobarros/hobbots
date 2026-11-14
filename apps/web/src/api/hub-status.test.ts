@@ -15,8 +15,11 @@ const chat = ThreadId.make("t1");
 
 const run = (revision: number, reply: ThreadRunStatus["reply"] = "working"): ThreadRunStatus => ({
   threadId: chat,
+  rootMessageId: null,
   run: reply === null ? "idle" : "running",
   reply,
+  speaking: reply === null ? null : wren,
+  next: [],
   revision,
 });
 const presence = (revision: number, state: HobPresence["state"]): HobPresence => ({ agentId: wren, state, revision });

@@ -163,22 +163,24 @@ export class TaskControls extends Context.Service<
       /**
        * Whether a reply in the thread of the Task you asked for may work on it: the Task has an
        * Attempt running, or it is the one its hob's turns there work on. A later turn works on the
-       * Task without an Attempt of its own, so the Attempt alone does not tell.
+       * Task without an Attempt of its own, so the Attempt alone does not tell. In a camp a member's
+       * turns work on the member's own Task there, as the camp's hob's do on its (ADR 039).
        */
       const repliedOn = (task: Task, tree: TaskTree) =>
         Effect.gen(function* () {
           if (task.parentId !== null || task.threadId === null) return false;
           if (tree.attempts.some((each) => each.id === task.currentAttemptId && isLiveAttempt(each.state))) return true;
-          const thread = yield* repo.findThread(task.threadId);
-          if (Option.isNone(thread) || thread.value.agentId !== task.ownerId) return false;
           return openThreadTask(yield* tasks.readThreadTrees(task.threadId), task.ownerId)?.top.id === task.id;
         });
 
-      /** Stops the thread's reply, which the stop leaves as stopped once it ended. */
+      /**
+       * Stops the thread's reply while the Task's hob speaks, which the stop leaves as stopped once
+       * it ended. In a camp another hob may speak there, on work that is not this Task (ADR 039).
+       */
       const stopReply = (task: Task) =>
         task.threadId === null
           ? Effect.void
-          : chat.stop(task.threadId).pipe(Effect.catchTag("ThreadNotFound", () => Effect.void));
+          : chat.stop(task.threadId, task.ownerId).pipe(Effect.catchTag("ThreadNotFound", () => Effect.void));
 
       const requestCancel = (taskId: TaskId) =>
         Effect.gen(function* () {

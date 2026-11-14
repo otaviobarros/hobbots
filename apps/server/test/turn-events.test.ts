@@ -12,8 +12,19 @@ import {
   PermissionSummary,
   RuntimeAdapter,
   type RuntimeEvent,
+  ThreadMemberRepository,
 } from "@hobbots/agents";
-import { type Agent, AgentId, Agent as HobRecord, type Message, roleFields, type ThreadId } from "@hobbots/domain";
+import {
+  type Agent,
+  AgentId,
+  Agent as HobRecord,
+  hobActor,
+  type Message,
+  OWNER_ACTOR,
+  roleFields,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -23,6 +34,7 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
+  ThreadMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
@@ -48,6 +60,42 @@ const hob = {
   instructions: "",
 };
 
+const QUILL = AgentId.make("quill");
+const PIP = AgentId.make("pip");
+const CAMP = ThreadId.make("camp");
+
+/** Quill's camp, which Pip joined. */
+const CampSeed = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    const at = "2026-11-14T10:00:00.000Z";
+    for (const [id, name] of [
+      [QUILL, "Quill"],
+      [PIP, "Pip"],
+    ] as const) {
+      yield* repo.insertAgent(
+        new HobRecord({
+          id,
+          name,
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 3,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: at,
+        }),
+      );
+    }
+    yield* repo.upsertThread(
+      new Thread({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: at, updatedAt: at }),
+    );
+    yield* Effect.orDie((yield* ThreadMemberRepository).add(CAMP, hobActor(PIP), OWNER_ACTOR));
+  }),
+);
+
 let turn: Queue.Queue<RuntimeEvent, Cause.Done>;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -69,15 +117,20 @@ beforeEach(() => {
     ),
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.mergeAll(
-          HobbotsRepositoryLive,
-          ApprovalRepositoryLive,
-          GrantRepositoryLive,
-          TaskRepositoryLive,
-          EventJournal.layer,
-          BackpackLive,
-          SetupRepository.layer,
-          SearchIndex.layer,
+        CampSeed.pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(
+              ThreadMemberRepositoryLive,
+              HobbotsRepositoryLive,
+              ApprovalRepositoryLive,
+              GrantRepositoryLive,
+              TaskRepositoryLive,
+              EventJournal.layer,
+              BackpackLive,
+              SetupRepository.layer,
+              SearchIndex.layer,
+            ),
+          ),
         ).pipe(Layer.provideMerge(TestDatabase)),
         EventBus.layer,
         HobAdmission.layer,
@@ -161,6 +214,16 @@ const followTurns = async () => {
 };
 
 describe("turn events", () => {
+  // covers DP-002, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-27] names the member hob speaking in a camp as the one working", async () => {
+    await request("POST", `/api/threads/${CAMP}/messages`, { content: "@pip what do you think?" });
+    await waitUntil(async () => (await activity()).length > 0);
+    const { working } = (await request("GET", "/api/activity")).body;
+    expect(working).toEqual([{ agentId: PIP, name: "Pip", threadId: CAMP }]);
+    Effect.runSync(Queue.end(turn));
+    await waitUntil(async () => (await activity()).length === 0);
+  });
+
   // covers DP-002, UX-001
   it("[TC-DP-054] a read of /api/activity made on each turn event already agrees with it, even while the runtime is slow to exit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;

@@ -1,4 +1,4 @@
-import { type Agent, type Message, mentionTargets, NoteId, type TaskNote, type ThreadId } from "@hobbots/domain";
+import { type Message, mentionTargets, NoteId, type TaskNote, type ThreadId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -13,14 +13,14 @@ export const makeMentionNotes = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   const bus = yield* EventPublisher;
 
-  /** The members' Tasks `content` mentions in a Quest the chat leads; none when it mentions no one there. */
-  const targets = (threadId: ThreadId, lead: Agent, content: string) =>
+  /** The members' Tasks `content` mentions in a Quest led from the chat; none when it mentions no one there. */
+  const targets = (threadId: ThreadId, content: string) =>
     Effect.gen(function* () {
       if (Option.isNone(tasks) || !content.includes("@")) return [];
       const trees = yield* tasks.value.readThreadTrees(threadId);
       if (trees.length === 0) return [];
       // Parsed as the hub parses the message it stores, so a mention in Markdown code reaches nobody.
-      return mentionTargets(trees, lead.id, yield* repo.mentionsIn(content));
+      return mentionTargets(trees, yield* repo.mentionsIn(content));
     });
 
   /**
@@ -34,14 +34,18 @@ export const makeMentionNotes = Effect.gen(function* () {
     targeted: ReadonlyArray<{ readonly id: TaskNote["taskId"]; readonly ownerId: TaskNote["recipientId"] }>,
   ) =>
     Effect.gen(function* () {
-      if (Option.isNone(tasks)) return message;
+      if (Option.isNone(tasks)) return { message, requests: [] };
       const store = tasks.value;
       const { stored, notes } = yield* store.atomically(
         Effect.gen(function* () {
           // Stored as every message you send is, so a mention of a hob that cannot hear it refuses the
           // whole message, and nothing reaches the member either (ADR 039). The member's turn takes
-          // it from its note, so the answerers decided here start no turn.
-          const sent = yield* repo.sendMessage(message, { mentions: [], repliesTo: null });
+          // it from its note, so it owes no answer here; another hob the message mentions still does.
+          const sent = yield* repo.sendMessage(message, {
+            mentions: [],
+            repliesTo: null,
+            takenElsewhere: targeted.map((task) => task.ownerId),
+          });
           const stored = { ...sent, value: sent.value.message };
           const left = yield* Effect.forEach(targeted, (task) =>
             store
@@ -67,12 +71,12 @@ export const makeMentionNotes = Effect.gen(function* () {
                 ),
               ),
           );
-          return { stored, notes: left.flat() };
+          return { stored: { ...stored, requests: sent.value.requests }, notes: left.flat() };
         }),
       );
       yield* bus.publish(stored.entries);
       for (const note of notes) yield* bus.publish(note.entries);
-      return stored.value;
+      return { message: stored.value, requests: stored.requests };
     });
 
   return { targets, send } as const;

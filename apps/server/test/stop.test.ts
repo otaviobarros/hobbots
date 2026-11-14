@@ -159,6 +159,29 @@ describe("Stopping a reply", () => {
     expect(result.next.status).toBe("streaming");
   });
 
+  // covers CH-007, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-16] a stop meant for one hob's turn leaves another hob's reply running", async () => {
+    const result = await run((events, confirm) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const thread = yield* chat.createThread(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "write a poem");
+        if (assistantMessage === null) return yield* Effect.die("the first message did not start");
+        // As cancelling another hob's Task asks: Wren speaks, so the reply runs on.
+        yield* chat.stop(thread.id, AgentId.make("rook"));
+        const untouched = yield* statusOf(thread.id, assistantMessage.id);
+        yield* chat.stop(thread.id, HOB_ID);
+        yield* Deferred.succeed(confirm, undefined);
+        const stopped = yield* waitFor(thread.id, assistantMessage.id, "stopped");
+        return { untouched, stopped, events: stopEvents(events) };
+      }),
+    );
+
+    expect(result.untouched?.status).toBe("streaming");
+    expect(result.stopped.status).toBe("stopped");
+    expect(result.events.filter((each) => each === "TurnStopRequested")).toHaveLength(1);
+  });
+
   // covers CH-007
   it("[TC-CH-003] treats repeated stops, and stops with no reply running, as harmless", async () => {
     const result = await run((events, confirm) =>

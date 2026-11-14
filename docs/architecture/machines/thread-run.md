@@ -24,10 +24,11 @@ stateDiagram-v2
   draining --> idle: Drained
   idle --> idle: Drained
   dispatching --> idle: Delivered
-  dispatching --> dispatching: WakeLater
-  running --> running: WakeLater
-  carrying --> carrying: WakeLater
-  draining --> draining: WakeLater
+  idle --> idle: Lined (guarded)
+  dispatching --> dispatching: Lined (guarded)
+  running --> running: Lined (guarded)
+  carrying --> carrying: Lined (guarded)
+  draining --> draining: Lined (guarded)
   idle --> idle: Choose
   dispatching --> dispatching: Choose
   running --> running: Choose
@@ -62,10 +63,11 @@ stateDiagram-v2
 | Drained | draining | idle | no |
 | Drained | idle | idle | no |
 | Delivered | dispatching | idle | no |
-| WakeLater | dispatching | dispatching | no |
-| WakeLater | running | running | no |
-| WakeLater | carrying | carrying | no |
-| WakeLater | draining | draining | no |
+| Lined | idle | idle | yes |
+| Lined | dispatching | dispatching | yes |
+| Lined | running | running | yes |
+| Lined | carrying | carrying | yes |
+| Lined | draining | draining | yes |
 | Choose | idle | idle | no |
 | Choose | dispatching | dispatching | no |
 | Choose | running | running | no |

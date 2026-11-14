@@ -51,6 +51,26 @@ A message's @mentions ([ADR 039](../decisions/039-shared-camps.md#who-answers)) 
 - Mentions of you are yours alone. `ThreadMemberRepository.unreadMentions(actor)` counts, per thread the person is an active member of, the messages that mention them past their own read marker. Their own messages, notes to self and a lead's quiet progress never count.
 - Migration (20261114003022): `messages.mentions` is JSON, empty for messages from before, and `messages.mentions_through` is how much of the text was parsed, in UTF-16 code units.
 
+## The floor
+
+Each answer a hob owes a conversation is a `TurnRequest` ([ADR 039](../decisions/039-shared-camps.md#one-hob-speaks-at-a-time)), written in the transaction that stores the message that caused it, one per hob `answerersFor` names, in that order. A conversation is a thread's main line or, once they come, one of its reply threads.
+
+| Field | Meaning |
+| --- | --- |
+| `threadId`, `rootMessageId` | The conversation: null `rootMessageId` for the main line |
+| `hobId` | The hob that owes the answer |
+| `messageId`, `causedBy`, `cause` | The message that caused it, its author, and why (`mention`, `reply`, `relay`, `only-hob`, `lead`) |
+| `relayDepth` | 0 for a person's message; a hob's mention adds one to its own turn's depth |
+| `state` | [TurnRequest](machines/turn-request.md): waiting, paused, speaking, answered, passed, dropped |
+| `replyId`, `droppedBy` | The reply of the turn that took it, and who stopped it |
+| `queuedAt`, `position` | Floor order: the causing message's revision, then its place among that message's requests |
+
+- `ThreadRun` is one run per conversation, in memory. When its floor is free it gives it to the oldest waiting request whose hob takes work (the message Send now picked first), or the dispatcher delivers backpack work. The request moves to `speaking` in the transaction that saves its turn's reply, together with its queued message's start, and is `answered` when the turn ends. The run publishes the hob speaking and the hobs next (`ThreadRunChanged`).
+- A person's message is stored and shown at once. It is queued while a turn runs or a request waits, and starts with its first request's turn; a message several hobs owe is the prompt of each later turn.
+- Stop drops the speaking request and the requests its turn caused, and keeps those a person caused. Stop all (`POST /api/threads/:threadId/stop-all`) drops every request still owed; a queued message left with nothing owed leaves the queue as said. Each dropped request records who stopped it. Removing a queued message drops what was owed for it.
+- At start, a request that was speaking is answered by its interrupted reply, which Continue resumes, and the waiting requests start again in their order: the queue is the records.
+- Migration (20261114003401): each queued message gets a waiting request for its thread's hob. Built in [#1461](https://github.com/otaviobarros/hobbots/issues/1461).
+
 ## Chapters
 
 | Field | Meaning |

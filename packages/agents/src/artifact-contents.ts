@@ -1,5 +1,6 @@
 import { ArtifactContentUnavailable, ArtifactNotFound } from "@hobbots/api";
 import {
+  AgentId,
   type Artifact,
   type ArtifactContentRefusal,
   type ArtifactVersions,
@@ -27,8 +28,8 @@ import { HobFiles, previewText, REDACTION_MARGIN } from "./task-files.ts";
  * An artifact's versions and their contents, as the camp sheet and its viewer show them (ADR 037,
  * #1434). Read only. A version's contents are what the hub kept of it when its Attempt changed the
  * file, or, for the latest version only, the file as it is now. A file is served only while it is
- * inside the folders of the hob whose chat or camp it is in, and never when its name marks it as one
- * that may hold secrets. Text is redacted, as a turn's tool output is, and cut to what a preview
+ * inside the folders of the hob whose chat or camp it is in, or of the hob that made its latest
+ * version there, and never when its name marks it as one that may hold secrets. Text is redacted, as a turn's tool output is, and cut to what a preview
  * shows; an image is served as it is, up to what the hub serves.
  */
 export class ArtifactContents extends Context.Service<
@@ -67,15 +68,23 @@ export class ArtifactContents extends Context.Service<
           }),
         );
 
-      /** The folders of the hob whose chat or camp it is, now, canonical; none once it is gone. */
-      const foldersOf = (threadId: ThreadId) =>
+      /**
+       * The folders, now and canonical, of the hob whose chat or camp it is and of the hob that made
+       * the artifact's latest version there, such as a member of a camp; none for a hob that is gone.
+       */
+      const foldersOf = (threadId: ThreadId, artifact: Artifact) =>
         Effect.gen(function* () {
           const thread = yield* repo.findThread(threadId);
           if (Option.isNone(thread)) return [];
-          const agent = yield* repo.findAgent(thread.value.agentId);
-          if (Option.isNone(agent)) return [];
+          const maker = artifact.actor.kind === "hob" ? [AgentId.make(artifact.actor.id)] : [];
+          const hobs = yield* Effect.forEach([...new Set([thread.value.agentId, ...maker])], (id) =>
+            repo.findAgent(id),
+          );
           const { approvedFolders } = yield* setup.get;
-          return yield* hobFoldersNow(folderChecks, approvedFolders, agent.value.policy);
+          const folders = yield* Effect.forEach(hobs.flatMap(Option.toArray), (agent) =>
+            hobFoldersNow(folderChecks, approvedFolders, agent.policy),
+          );
+          return folders.flat();
         });
 
       /** Text redacted and cut to what a preview shows; anything else as it is. */
@@ -104,7 +113,7 @@ export class ArtifactContents extends Context.Service<
         Effect.gen(function* () {
           if (isSecretFile(artifact.locator)) return "secret" as const;
           if (!isImageFile(artifact.locator) && previewOf(artifact.locator) === "none") return "no-contents" as const;
-          const folder = (yield* foldersOf(threadId)).find((each) => within(artifact.locator, each));
+          const folder = (yield* foldersOf(threadId, artifact)).find((each) => within(artifact.locator, each));
           if (folder === undefined) return "outside-folders" as const;
           if (version.source._tag === "kept") {
             const bytes = yield* store.get(version.source.contentId);

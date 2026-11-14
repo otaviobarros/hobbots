@@ -16,7 +16,15 @@ const { activeSummariesQuery, questSummaryChanged } = await import("./quest-summ
 
 const runFrame = JSON.stringify({
   _tag: "ThreadRunChanged",
-  run: { threadId: "t1", run: "running", reply: "working", revision: 1 },
+  run: {
+    threadId: "t1",
+    rootMessageId: null,
+    run: "running",
+    reply: "working",
+    speaking: "wren",
+    next: [],
+    revision: 1,
+  },
 });
 const summary = {
   questId: "q1",

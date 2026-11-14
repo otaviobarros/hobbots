@@ -22,6 +22,7 @@ import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
 import {
   agentsQuery,
+  archivedAgentsQuery,
   messagesQuery,
   runtimesQuery,
   threadBrain,
@@ -41,6 +42,7 @@ import { useReadThread } from "../../api/thread-reads.ts";
 import { threadWebQuery } from "../../api/web.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
+import { replyAuthor } from "../../lib/reply-author.ts";
 import { minutesSince, type ReplyWait, replyRun, replyRuns, replyWait } from "../../lib/reply-wait.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
@@ -188,8 +190,12 @@ export function ChatView({
   // Only the thread's latest reply can be continued, and only while nothing else runs; a note after
   // it changes nothing.
   const latest = transcript?.findLast((m) => m.role !== "note");
+  // The hob that wrote it continues it, so its own status decides (ADR 039).
+  const allHobs = useEveryHob();
+  const latestAuthor =
+    latest !== undefined && hob.data !== undefined ? replyAuthor(latest, hob.data, allHobs) : undefined;
   const resumable =
-    latest?.role === "assistant" && isResumable(latest.status) && !streaming && hob.data?.status === "active"
+    latest?.role === "assistant" && isResumable(latest.status) && !streaming && latestAuthor?.status === "active"
       ? latest
       : undefined;
 
@@ -517,36 +523,41 @@ function Transcript({
   const unreadFrom = (catchUp.open ?? catchUp.folded)?.firstUnread ?? null;
   const caughtAt = transcript.some((message) => message.id === unreadFrom) ? unreadFrom : null;
   const catchUpAt = <CatchUpAt hob={hob} view={catchUp} onJump={onJump} />;
-  const row = (message: Message, split: ReactNode) => (
-    <>
-      {message.id === caughtAt && catchUpAt}
-      {switches.has(message.id) && message.runtime !== null && (
-        <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
-      )}
-      {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
-      {!isQuietReply(message, previous.get(message.id)) && (
-        <MessageRow
-          message={message}
-          hob={hob}
-          focused={message.id === focusMessageId}
-          resume={resume(message)}
-          web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
-          actions={split}
-          after={
-            <>
-              <SkillUsedLines message={message} hob={hob} />
-              <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={hob} />
-            </>
-          }
-        >
-          <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
-        </MessageRow>
-      )}
-      {receipts.of(message)}
-      {work.after(message.id)}
-      {headsUps.after(message.id)}
-    </>
-  );
+  // In a camp a member answers as itself, so each reply shows the hob that wrote it (ADR 039).
+  const hobs = useEveryHob();
+  const row = (message: Message, split: ReactNode) => {
+    const author = replyAuthor(message, hob, hobs);
+    return (
+      <>
+        {message.id === caughtAt && catchUpAt}
+        {switches.has(message.id) && message.runtime !== null && (
+          <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
+        )}
+        {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
+        {!isQuietReply(message, previous.get(message.id)) && (
+          <MessageRow
+            message={message}
+            hob={author}
+            focused={message.id === focusMessageId}
+            resume={resume(message)}
+            web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
+            actions={split}
+            after={
+              <>
+                <SkillUsedLines message={message} hob={author} />
+                <MemorySavedLines saves={replySaves(saves.data, message.id)} hob={author} />
+              </>
+            }
+          >
+            <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={author} />
+          </MessageRow>
+        )}
+        {receipts.of(message)}
+        {work.after(message.id)}
+        {headsUps.after(message.id)}
+      </>
+    );
+  };
   return (
     <>
       {work.before}
@@ -600,3 +611,10 @@ function useContinueOn(
       })),
   };
 }
+
+/** Every hob, retired ones too, so a reply keeps the hob that wrote it after that hob retires (ADR 039). */
+const useEveryHob = (): ReadonlyArray<Agent> | undefined => {
+  const active = useQuery(agentsQuery).data;
+  const retired = useQuery(archivedAgentsQuery).data;
+  return active === undefined ? undefined : [...active, ...(retired ?? [])];
+};

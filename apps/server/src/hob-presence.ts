@@ -148,8 +148,11 @@ export class HobPresences extends Context.Service<
           failed,
           leadOf: (threadId) => owners.get(threadId),
         });
+        // A running reply is the hob's that holds the floor, in a camp it joined too (ADR 039).
         const replies = (agentId: AgentId): ReadonlyArray<ReplyActivity> =>
-          runs.flatMap((run) => (run.reply !== null && owners.get(run.threadId) === agentId ? [run.reply] : []));
+          runs.flatMap((run) =>
+            run.reply !== null && (run.speaking ?? owners.get(run.threadId)) === agentId ? [run.reply] : [],
+          );
         return hobs.map((hob) => ({
           agentId: hob.id,
           state: hobPresenceState({ status: hob.status, needsYou: needsYou.has(hob.id), replies: replies(hob.id) }),

@@ -1,6 +1,16 @@
 import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools, WorkHold } from "@hobbots/agents";
 import { MessageNotQueued } from "@hobbots/api";
-import { Agent, AgentId, type HobbotsEvent, Message, MessageId, OWNER_ACTOR, Thread, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type HobbotsEvent,
+  Message,
+  MessageId,
+  mainLine,
+  OWNER_ACTOR,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -57,8 +67,9 @@ const leftQueued = Effect.gen(function* () {
     });
   yield* repo.upsertMessage(message("first", "user", "complete"));
   yield* repo.upsertMessage(message("reply", "assistant", "interrupted"));
-  yield* repo.upsertMessage(message("second", "user", "queued"));
-  yield* repo.upsertMessage(message("third", "user", "queued"));
+  // Each was sent while the reply ran, so each waits with a request for the floor (ADR 039).
+  yield* repo.sendMessage(message("second", "user", "queued"), { mentions: [], repliesTo: null }).pipe(Effect.orDie);
+  yield* repo.sendMessage(message("third", "user", "queued"), { mentions: [], repliesTo: null }).pipe(Effect.orDie);
 });
 
 /**
@@ -74,6 +85,8 @@ const crashedAfterStart = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* leftQueued;
   const second = yield* repo.nextQueuedMessage(THREAD_ID).pipe(Effect.map(Option.getOrThrow));
+  // Its request took the floor in the same transaction.
+  const [request] = yield* repo.openTurnRequests(mainLine(THREAD_ID));
   yield* repo.startQueuedMessage(
     new Message({ ...second, status: "complete" }),
     new Message({
@@ -84,6 +97,7 @@ const crashedAfterStart = Effect.gen(function* () {
       status: "streaming",
       configVersion: 1,
     }),
+    request === undefined ? [] : [request.id],
   );
 });
 
