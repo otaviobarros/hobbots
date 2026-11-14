@@ -70,7 +70,13 @@ describe("HobbotsRepository", () => {
           agentId,
           title: "Renamed",
           sessions: [
-            { runtime: "claude-code", sessionId: "s1", chapterId: ChapterId.make("chapter-1"), seenThrough: null },
+            {
+              runtime: "claude-code",
+              agentId,
+              sessionId: "s1",
+              chapterId: ChapterId.make("chapter-1"),
+              seenThrough: null,
+            },
           ],
           brain: { runtime: "codex", model: "gpt", effort: null },
           createdAt: now,

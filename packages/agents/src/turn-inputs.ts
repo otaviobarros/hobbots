@@ -4,6 +4,7 @@
 import {
   type Agent,
   type AgentConfiguration,
+  type AgentId,
   liveSession,
   Message,
   type RuntimeKind,
@@ -34,6 +35,10 @@ const missedBy = (runtime: RuntimeKind, seenThrough: string | null, before: Read
   const own = before.findLastIndex((m) => m.role === "assistant" && m.runtime === runtime);
   return before.slice(own + 1);
 };
+
+/** Whether a reply is `agentId`'s own; one from before replies named their author is the thread's hob's. */
+const isHobsOwn = (message: Message, agentId: AgentId): boolean =>
+  message.actor === null || (message.actor.kind === "hob" && message.actor.id === agentId);
 
 /** Why a trial chat's turn did not start, and how to try the draft again (ADR 029, Try in a chat). */
 export const draftGoneText = (name: string) =>
@@ -106,12 +111,13 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
     // not have delivered its own, and threads from before #164 never received theirs. So a thread
     // whose replies all ran on the current instructions needs nothing, and any other carries them.
+    // Only the hob's own replies count, since only they ran in its session (ADR 039).
     const instructionsChanged = (thread: Thread, runtime: RuntimeKind, agent: Agent, instructions: string) =>
       Effect.gen(function* () {
-        if (liveSession(thread, runtime) === undefined) return false;
+        if (liveSession(thread, runtime, agent.id) === undefined) return false;
         const versions = new Set(
           (yield* repo.listMessages(thread.id)).flatMap((m) =>
-            m.role === "assistant" && m.configVersion !== null ? [m.configVersion] : [],
+            m.role === "assistant" && m.configVersion !== null && isHobsOwn(m, agent.id) ? [m.configVersion] : [],
           ),
         );
         for (const version of versions) {
@@ -127,9 +133,15 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // chapter since it last replied. `before` is the live chapter's transcript before the turn's own
     // prompt and reply. `switched` when the reply itself moves from another brain, as on Continue.
     // A new session starts from the context pack instead (ADR 037), so this is null for one.
-    const brief = (thread: Thread, runtime: RuntimeKind, before: ReadonlyArray<Message>, switched: boolean) =>
+    const brief = (
+      thread: Thread,
+      runtime: RuntimeKind,
+      agentId: AgentId,
+      before: ReadonlyArray<Message>,
+      switched: boolean,
+    ) =>
       Effect.sync(() => {
-        const session = liveSession(thread, runtime);
+        const session = liveSession(thread, runtime, agentId);
         if (session === undefined) return null;
         const missed = missedBy(runtime, session.seenThrough, before);
         // Only a switch needs one: a session is told what other brains wrote that it did not see.
