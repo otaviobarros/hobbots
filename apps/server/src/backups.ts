@@ -261,6 +261,7 @@ export const writeBackup = (options: WriteBackupOptions) =>
       storage: "sqlite",
       database: "included",
       schemaVersion: finished.schemaVersion,
+      migrations: finished.migrations,
       installationId: options.installationId,
       counts: finished.counts,
       hobFolders: finished.hobFolders,
