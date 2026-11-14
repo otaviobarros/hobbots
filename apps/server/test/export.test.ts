@@ -33,6 +33,7 @@ import {
   type ExportScope,
   FileChangeId,
   HobbotsExport,
+  hobActor,
   MemoryPath,
   Message,
   MessageId,
@@ -561,5 +562,25 @@ describe("exports", () => {
     } finally {
       memory.controls.setDown(false);
     }
+  });
+
+  // covers OP-003, ADR 039 (A member hob works as itself)
+  it("[TC-CH-1461-17] a reply a member hob wrote in a camp is exported as that hob's, with its name", async () => {
+    await runtime.runPromise(
+      HobbotsRepository.use((repo) =>
+        repo.upsertMessage(
+          new Message({
+            ...message("m-quill", NOTES, "assistant", "Quill adds a line.", LATER),
+            actor: hobActor(QUILL),
+          }),
+        ),
+      ),
+    );
+    const files = filesIn((await run({ _tag: "Thread", threadId: NOTES })).folder);
+    const data = decode(files["export.json"]?.toString());
+    expect(data.threads[0]?.messages.map((each) => each.authorId)).toEqual([null, QUILL]);
+    expect(data.hobs.map((each) => each.name)).toEqual(["Aldric", "Quill"]);
+    const [transcript] = Object.entries(files).filter(([path]) => path.startsWith("threads/"));
+    expect(transcript?.[1].toString()).toContain("**Quill** ·");
   });
 });

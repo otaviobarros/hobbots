@@ -120,11 +120,14 @@ export class TaskControls extends Context.Service<
           return openThreadTask(yield* tasks.readThreadTrees(task.threadId), task.ownerId)?.top.id === task.id;
         });
 
-      /** Stops the thread's reply, which the stop leaves as stopped once it ended. */
+      /**
+       * Stops the thread's reply while the Task's hob speaks, which the stop leaves as stopped once
+       * it ended. In a camp another hob may speak there, on work that is not this Task (ADR 039).
+       */
       const stopReply = (task: Task) =>
         task.threadId === null
           ? Effect.void
-          : chat.stop(task.threadId).pipe(Effect.catchTag("ThreadNotFound", () => Effect.void));
+          : chat.stop(task.threadId, task.ownerId).pipe(Effect.catchTag("ThreadNotFound", () => Effect.void));
 
       const requestCancel = (taskId: TaskId) =>
         Effect.gen(function* () {

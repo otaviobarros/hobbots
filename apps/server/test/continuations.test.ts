@@ -525,9 +525,12 @@ describe("continuing a hob when work arrives", () => {
   });
 
   // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-12] a member hob's continuation you stop in a camp starts again once that hob wakes", async () => {
+  // Starts Frodo's continuation in Sam's camp and stops it before it writes.
+  const stopFrodosContinuation = async (
+    run: ReturnType<typeof setUp>["run"],
+    release: ReturnType<typeof setUp>["release"],
+  ) => {
     holdContinuations = true;
-    const { run, release } = setUp(SamsCamp);
     await run(failedStep);
     await run(ChatService.use((chat) => chat.wake(threadId)));
     // Frodo's continuation starts in Sam's camp, and you stop it before it writes.
@@ -553,6 +556,12 @@ describe("continuing a hob when work arrives", () => {
     await release();
     await run(Effect.sleep("300 millis"));
     expect((await run(messages())).map((m) => m.status)).toEqual(["stopped"]);
+  };
+
+  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-12] a member hob's continuation you stop in a camp starts again once that hob wakes", async () => {
+    const { run, release } = setUp(SamsCamp);
+    await stopFrodosContinuation(run, release);
 
     // Sam waking leaves Frodo's stopped work held; Frodo waking takes it up.
     await run(HobLifecycle.use((hobs) => hobs.pause(SAM).pipe(Effect.andThen(hobs.wake(SAM)))));
@@ -564,6 +573,23 @@ describe("continuing a hob when work arrives", () => {
       ["stopped", FRODO],
       ["complete", FRODO],
     ]);
+  });
+
+  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-15] another hob's work starts in a camp while the work you stopped stays held", async () => {
+    const { run, release } = setUp(SamsCamp);
+    await stopFrodosContinuation(run, release);
+
+    // Sam's step fails in his camp: his work starts, and Frodo's stays held.
+    await run(failedStepOf(SAM, "sam-"));
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    const all = await run(messagesWhen((each) => each.length === 2 && each[1]?.status === "complete"));
+    expect(all.map((m) => [m.status, m.actor?.kind === "hob" ? m.actor.id : null])).toEqual([
+      ["stopped", FRODO],
+      ["complete", SAM],
+    ]);
+    await run(Effect.sleep("300 millis"));
+    expect(await run(messages())).toHaveLength(2);
   });
 
   // covers AG-006, ADR 039 (One hob speaks at a time)

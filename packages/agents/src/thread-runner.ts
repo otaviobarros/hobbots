@@ -585,19 +585,22 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         if ((yield* runOf(threadId)).held && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
           yield* step(threadId, { _tag: "Release" });
         }
-        if (Option.isNone(continuations) || (yield* runOf(threadId)).held) {
+        if (Option.isNone(continuations)) {
           yield* startQueued(threadId);
           return;
         }
         const thread = yield* repo.findThread(threadId);
         if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return;
         // The hob whose request is next carries its own work along: another hob's work waits its
-        // hob's turn. With nobody waiting, the first hob with work there carries it.
+        // hob's turn. With nobody waiting, the first hob with work there carries it. Work you
+        // stopped stays held, and only its own hob's: another hob's work still runs (ADR 039).
         const next = yield* floorNext(thread.value);
         const found =
           next === null
             ? yield* carrierOf(continuations.value, thread.value)
-            : yield* workable(threadId, next.agent.id);
+            : (yield* holds(threadId, next.agent.id))
+              ? null
+              : yield* workable(threadId, next.agent.id);
         if (found === null) {
           yield* startQueued(threadId);
           return;
@@ -620,14 +623,21 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // there; its own hob when none has, so the dispatch still reads the records again.
     const carrierOf = (service: Continuations["Service"], thread: Thread) =>
       Effect.gen(function* () {
-        return (yield* withWork(service, thread)) ?? (yield* workable(thread.id));
+        const found = yield* withWork(service, thread);
+        if (found !== null || (yield* holds(thread.id, thread.agentId))) return found;
+        return yield* workable(thread.id);
       });
 
-    // The first of the thread's hobs, its own first, that takes work now and has work waiting there.
+    // Whether the hob's work in the thread is held, because you stopped its turn there.
+    const holds = (threadId: ThreadId, agentId: AgentId) =>
+      runOf(threadId).pipe(Effect.map((run) => run.held === agentId));
+
+    // The first of the thread's hobs, its own first, that takes work now and has work waiting
+    // there that you did not stop.
     const withWork = (service: Continuations["Service"], thread: Thread) =>
       Effect.gen(function* () {
         for (const hobId of yield* hobsOf(thread)) {
-          if (!(yield* workWaits(service, thread.id, hobId))) continue;
+          if ((yield* holds(thread.id, hobId)) || !(yield* workWaits(service, thread.id, hobId))) continue;
           const found = yield* workable(thread.id, hobId);
           if (found !== null) return found;
         }
@@ -650,7 +660,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
                 threadId,
                 Effect.gen(function* () {
                   const found = yield* workable(threadId, agentId);
-                  if (found === null || (yield* runOf(threadId)).held) return null;
+                  if (found === null || (yield* holds(threadId, agentId))) return null;
                   if (routineOnly && !(yield* requestWaitsFor(threadId, agentId))) return null;
                   return MessageId.make(crypto.randomUUID());
                 }),
@@ -707,7 +717,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           threadId,
           Effect.gen(function* () {
             const found = yield* workable(threadId, agentId);
-            if (found === null || (yield* runOf(threadId)).held) return null;
+            if (found === null || (yield* holds(threadId, agentId))) return null;
             // Work rides along only a request of the hob it is for.
             const queued = yield* startQueued(threadId, { ...start, context: work.text("context") }, agentId);
             if (queued !== null) return queued.turn;
@@ -797,7 +807,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.gen(function* () {
         if (Option.isNone(continuations)) return false;
         const service = continuations.value;
-        if ((yield* runOf(threadId)).held && (yield* service.waiting(agentId)).includes(threadId)) return true;
+        if ((yield* holds(threadId, agentId)) && (yield* service.waiting(agentId)).includes(threadId)) return true;
         return yield* service.progressWaits(threadId, agentId);
       });
 

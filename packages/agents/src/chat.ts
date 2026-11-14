@@ -136,9 +136,9 @@ export class ChatService extends Context.Service<
     /**
      * Asks the thread's current turn to stop and returns once the request is recorded: the reply shows
      * as stopping, then as stopped when the runtime confirms the turn ended. Asking again, or with no
-     * turn in progress, changes nothing.
+     * turn in progress, changes nothing. Given a hob, stops the turn only while that hob speaks.
      */
-    readonly stop: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    readonly stop: (threadId: ThreadId, speaker?: AgentId) => Effect.Effect<void, ThreadNotFound>;
     /**
      * Stop all (ADR 039, One hob speaks at a time): stops the turn speaking in the thread and drops
      * every request still owed there, each recording who stopped it. Work in the backpack is never
@@ -643,9 +643,11 @@ export class ChatService extends Context.Service<
           Effect.map((run) => run.reply),
         );
 
-      const stop = Effect.fn("ChatService.stop")(function* (threadId: ThreadId) {
-        const reply = yield* runningReply(threadId);
-        if (reply === null) return;
+      const stop = Effect.fn("ChatService.stop")(function* (threadId: ThreadId, speaker?: AgentId) {
+        yield* findThread(threadId);
+        const run = yield* runOf(threadId);
+        const reply = run.reply;
+        if (reply === null || (speaker !== undefined && run.speaking !== speaker)) return;
         // Only the first request moves the reply to stopping and interrupts the turn.
         const requested = yield* transition(
           reply,

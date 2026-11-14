@@ -1,7 +1,7 @@
 import { AgentNotFound, type ExportFailed, type ExportResult, type InvalidFolder, ThreadNotFound } from "@hobbots/api";
 import {
   type Agent,
-  type AgentId,
+  AgentId,
   type ArtifactNotCopied,
   type ArtifactRef,
   EXPORT_FORMAT,
@@ -92,10 +92,13 @@ const exportedHob = (agent: Agent): ExportedHob => ({
   status: agent.status,
 });
 
+// A reply's author is the hob that wrote it, which in a camp may be a member (ADR 039); a reply
+// saved before authors were recorded is the thread's hob's.
 const exportedMessage = (message: Message, agentId: AgentId): ExportedMessage => ({
   id: message.id,
   role: message.role,
-  authorId: message.role === "assistant" ? agentId : null,
+  authorId:
+    message.role !== "assistant" ? null : message.actor?.kind === "hob" ? AgentId.make(message.actor.id) : agentId,
   content: message.content,
   status: message.status,
   error: message.error,
@@ -470,9 +473,17 @@ export class DataExport extends Context.Service<
           });
 
         /** The hobs the export names: every hob for everything, else those its records mention. */
-        const namedHobs = (scope: ExportScope, gathered: Gathered, trees: ReadonlyArray<ExportedTree>) => {
+        const namedHobs = (
+          scope: ExportScope,
+          gathered: Gathered,
+          threads: ReadonlyArray<ExportedThread>,
+          trees: ReadonlyArray<ExportedTree>,
+        ) => {
           if (scope._tag === "Everything") return gathered.hobs;
           const named = new Set<string>(gathered.threads.map((thread) => thread.agentId));
+          for (const thread of threads) {
+            for (const message of thread.messages) if (message.authorId !== null) named.add(message.authorId);
+          }
           for (const tree of trees) {
             for (const task of tree.tasks) {
               named.add(task.ownerId);
@@ -525,7 +536,7 @@ export class DataExport extends Context.Service<
               exportedAt,
               hobbotsVersion: version,
               scope,
-              hobs: namedHobs(scope, gathered, trees).map(exportedHob),
+              hobs: namedHobs(scope, gathered, threads, trees).map(exportedHob),
               threads,
               quests: trees,
               memory,
