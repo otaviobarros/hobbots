@@ -264,6 +264,10 @@ describe("what a call writes", () => {
       cwd: project,
     });
     expect(patch.paths).toEqual([PLAN, join(project, "old.md")]);
+    // A `..` after a link is kept for the hub, which follows the link first, as the write lands.
+    expect(
+      callWrites({ id: "4", tool: "Write", input: { file_path: "link/../plan.md", content: "" }, cwd: project }).paths,
+    ).toEqual([`${join(project, "link")}/../plan.md`]);
     expect(callWrites({ id: "3", tool: "Read", input: { file_path: PLAN }, cwd: project })).toEqual({
       paths: [],
       pushes: [],

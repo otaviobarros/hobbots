@@ -1,4 +1,4 @@
-import { resolve, sep } from "node:path";
+import { isAbsolute, sep } from "node:path";
 import {
   type AskedDecision,
   askUntilDecided,
@@ -119,6 +119,13 @@ export interface CallSteers {
 }
 
 /**
+ * `path` against `folder` as written, `..` and links kept: the hub follows each link before the `..`
+ * after it, as the write lands, so collapsing `link/..` here would check another file (#1449).
+ */
+const unresolved = (folder: string, path: string) =>
+  isAbsolute(path) ? path : `${folder.endsWith(sep) ? folder : `${folder}${sep}`}${path}`;
+
+/**
  * What a call writes, read from the call alone (#1449): the files a file tool or a patch changes or
  * deletes, the absolute paths a command line writes by redirection or names to a program that
  * writes them, the branches it pushes and the folders it commits in. Relative paths resolve against
@@ -128,7 +135,7 @@ export const callWrites = (call: ToolCall): CallWrites => {
   const requests = toolRequests(call.tool, call.input, call.cwd) ?? [];
   const files = requests.flatMap((request) =>
     request._tag === "Files" && request.operation !== "read-files"
-      ? request.paths.map((path) => resolve(request.cwd ?? call.cwd, path))
+      ? request.paths.map((path) => unresolved(request.cwd ?? call.cwd, path))
       : [],
   );
   return {
