@@ -2,7 +2,8 @@
 
 - **Date:** 2026-11-14
 - **Issue:** [#1466](https://github.com/otaviobarros/hobbots/issues/1466)
-- **Branch:** `claude/project-thread-w3652y`, based on `main` at `be37ae7`
+- **Pull request:** [#1539](https://github.com/otaviobarros/hobbots/pull/1539)
+- **Commit:** `acc6b19` on the pull request branch `claude/project-thread-w3652y`, based on `main` at `be37ae7`
 - **Setup:** a Linux x86_64 cloud container, from a source checkout. The bundled ai-memory 3.4.2 and the fake memory. Replies from Claude Code and Codex as the journal records them, and the fake runtime acting as Claude Code and as Codex in the hub. SQLite, and PostgreSQL 16.
 - **Result:** Passed with gaps: in a camp where two hobs answer, each hob's memory kept its own replies and the person's messages it took a turn on, with the person as their source, and nothing of the other hob's turn or of a message no hob answered. A private camp reached no hob's memory, and making a camp private ended both hobs' sessions. Every write went to the writing hob's own memory, as that hob. Nothing was run with a real model.
 
