@@ -105,6 +105,8 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
       "I ran git init, so Pip can commit now",
       hubCall("read_tasks", { key: "look" }),
       hubCall("message_task", { key: "tell-pip", task_id: "$commit.task_id", text: "git init is done. Commit now." }),
+      // The reply repeats message_task's answer, so the test reads it in the turn that made the call (#1560).
+      "fake:say-answers",
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
@@ -179,6 +181,8 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
         text: "The product is now Hobbots.",
         delivery: "next-turn",
       }),
+      // The reply repeats message_task's answer, so the test reads it in the turn that made the call (#1560).
+      "fake:say-answers",
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();

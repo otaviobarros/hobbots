@@ -28,6 +28,8 @@ const steeredTurn = async (runtime: HubCallRuntime) => {
   let waiting = false;
   const handed: Array<{ readonly text: string; readonly took: boolean }> = [];
   const calls: Array<string> = [];
+  // What reached the model, in order: each hub call, and the message once the runtime took it.
+  const order: Array<string> = [];
   const steers: TurnSteers = {
     waiting: Stream.fromQueue(arrived),
     deliver: (handOff) =>
@@ -35,6 +37,7 @@ const steeredTurn = async (runtime: HubCallRuntime) => {
         if (!waiting) return Effect.void;
         return Effect.map(handOff(STEER), (took) => {
           handed.push({ text: STEER, took });
+          if (took) order.push(STEER);
           if (took) waiting = false;
         });
       }),
@@ -47,6 +50,7 @@ const steeredTurn = async (runtime: HubCallRuntime) => {
     call: (name) =>
       Effect.gen(function* () {
         calls.push(name);
+        order.push(name);
         if (name !== "list_files") return { text: SECOND_ANSWER, refused: false };
         // The lead's message arrives while the first call runs.
         waiting = true;
@@ -75,7 +79,7 @@ const steeredTurn = async (runtime: HubCallRuntime) => {
       ),
     ).pipe(Effect.exit),
   );
-  return { events, handed, calls };
+  return { events, handed, calls, order };
 };
 
 const completedText = (exit: Exit.Exit<ReadonlyArray<RuntimeEvent>, unknown>) =>
@@ -85,22 +89,16 @@ describe("a message that reaches a running turn", () => {
   // covers OR-007, RT-002
   it("[TC-RT-1345-01] reaches the model after the call it arrived during and before the next call, on each runtime", async () => {
     for (const runtime of all.runtimes) {
-      const { events, handed, calls } = await steeredTurn(runtime);
+      const { events, handed, calls, order } = await steeredTurn(runtime);
       expect(Exit.isSuccess(events), runtime.name).toBe(true);
       expect(calls, runtime.name).toEqual(["list_files", "write_report"]);
       // Handed over once, and the runtime took it.
       expect(handed, runtime.name).toEqual([{ text: STEER, took: true }]);
       if (runtime.name === "fake") {
-        // The fake's reply lists what reached it in order: the first call, the message, the second call.
-        const text = completedText(events) ?? "";
-        const order = [`list_files: ${FIRST_ANSWER}`, `${FAKE_STEERED}${STEER}`, `write_report: ${SECOND_ANSWER}`].map(
-          (part) => text.indexOf(part),
-        );
-        expect(
-          order.every((index) => index >= 0),
-          runtime.name,
-        ).toBe(true);
-        expect(order, runtime.name).toEqual([...order].sort((a, b) => a - b));
+        // The message reached the fake between the two calls, and its reply shows it. The reply leaves
+        // the hub's answers out (#1560), so the order is read from what the hub saw.
+        expect(order, runtime.name).toEqual(["list_files", STEER, "write_report"]);
+        expect(completedText(events) ?? "", runtime.name).toContain(`${FAKE_STEERED}${STEER}`);
         continue;
       }
       // The first request that carries the message carries the first call's answer and not the

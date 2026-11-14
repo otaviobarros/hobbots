@@ -85,6 +85,8 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
       }),
       hubCall("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
       `fake:then ${hubCall("wait_for", { key: "wait-again", tasks: ["$copy.task_id"] })}`,
+      // That turn's reply repeats what the wait answered, so the test can read it (#1560).
+      "fake:then fake:say-answers",
       `fake:then ${hubCall("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })}`,
       `fake:then fake:then ${hubCall("complete_task", { delivered: true, key: "wrap", summary: "Release shipped" })}`,
     ].join("\n"),

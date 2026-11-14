@@ -45,6 +45,10 @@ import { Installation } from "../src/installation.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of read_hob's answers, which a hob reads in the turn that made the call.";
+
 // #1234 at hub level: every chat turn carries the roster of the other visible hobs, and `read_hob`
 // reads one card on the hub action pipeline (ADR 032), with the hub's own composition, the fake
 // runtime, a GitHub Charm and the hub's redactor, on SQLite or PostgreSQL (TestDatabase). Claude Code
@@ -72,7 +76,7 @@ beforeAll(() => {
     },
   });
   const runtime = Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(
-    Layer.provide(FakeRuntimeLayer()),
+    Layer.provide(FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS })),
     Layer.provide(PolicyEngine.node),
   );
   const App = Layer.mergeAll(HobLifecycle.layer)

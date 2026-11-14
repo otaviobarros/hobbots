@@ -72,6 +72,10 @@ import { SummoningCharm } from "../src/summoning.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the Summoning tools' answers, which a hob reads in the turn that made the call.";
+
 // #412: hob management end to end (ADR 034), on a hub that runs the Summoning Charm beside the Task
 // tools, questions, the roster of other hobs and the SQL Charm call records, as the hub composes
 // them, with the real policy engine and the fake runtime, on SQLite or PostgreSQL (TestDatabase).
@@ -118,7 +122,7 @@ const recorded = (fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
   },
 });
 const runtime = Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(
-  Layer.provide(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node))),
+  Layer.provide(FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS }).pipe(Layer.provide(PolicyEngine.node))),
 );
 const Database = Layer.mergeAll(
   HobbotsRepositoryLive,

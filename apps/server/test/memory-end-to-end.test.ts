@@ -62,6 +62,10 @@ import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the Memory tools' answers, which a hob reads in the turn that made the call.";
+
 // #955 at hub level: hobs reach memory only through the hub's memory tools (ADR 028), with the hub's
 // own composition (the memory tools beside the Task tools), the fake runtime making the scripted
 // calls, the in-memory store, and the save records on SQLite or PostgreSQL (TestDatabase). Claude
@@ -136,7 +140,7 @@ beforeAll(() => {
           EventBus.layer,
           HobAdmission.layer,
           NodeFolderChecks,
-          FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
+          FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS }).pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
           SecretRedaction.layer([]),
           ToolLogsLive(join(dataDir, "tool-logs")),

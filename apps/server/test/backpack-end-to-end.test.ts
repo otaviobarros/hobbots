@@ -43,7 +43,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FAKE_SAY_ANSWERS_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Exit, Layer, ManagedRuntime, Schedule, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
@@ -484,9 +484,16 @@ describe("the backpack end to end", () => {
       database,
       makeFaults([
         // Quill's result: Aldric brings Ada in, and the provider cuts his turn off before it ends.
-        { cut: true, lines: [bringInAda] },
+        // Both replies repeat the hub's answers, so the test can read which Task each call got (#1560).
+        { cut: true, lines: [bringInAda, FAKE_SAY_ANSWERS_DIRECTIVE] },
         // Delivered again, he makes the same call with the same key, and waits for Ada.
-        { lines: [bringInAda, hub("wait_for", { key: "wait-review", tasks: ["$review.task_id"] })] },
+        {
+          lines: [
+            bringInAda,
+            hub("wait_for", { key: "wait-review", tasks: ["$review.task_id"] }),
+            FAKE_SAY_ANSWERS_DIRECTIVE,
+          ],
+        },
         // Ada's result: he wraps up.
         { lines: [wrapUp()] },
       ]),
@@ -527,8 +534,9 @@ describe("the backpack end to end", () => {
     const database = await sharedDatabase();
     const faults = makeFaults([
       // The first continuation stalls before the runtime starts it, and its claim stops renewing.
-      { stall: true, lines: [wrapUp()] },
-      { lines: [wrapUp("wrap-again")] },
+      // Each reply repeats the hub's answers, so the test can see which turn's call landed (#1560).
+      { stall: true, lines: [wrapUp(), FAKE_SAY_ANSWERS_DIRECTIVE] },
+      { lines: [wrapUp("wrap-again"), FAKE_SAY_ANSWERS_DIRECTIVE] },
     ]);
     const { run, requests, releaseCall, unstall } = await start(database, faults, { ...LIMITS, lease: SHORT_LEASE });
     await run(party);
@@ -584,8 +592,9 @@ describe("the backpack end to end", () => {
     const lateReview = hub("delegate_task", { key: "late-review", hob: "Ada", brief: "Review the launch copy" });
     const faults = makeFaults([
       // The first continuation is accepted, then its delegation is held while its claim runs out.
-      { lines: [lateReview, wrapUp()] },
-      { lines: [wrapUp("wrap-again")] },
+      // Each reply repeats the hub's answers, so the test can read which calls were refused (#1560).
+      { lines: [lateReview, wrapUp(), FAKE_SAY_ANSWERS_DIRECTIVE] },
+      { lines: [wrapUp("wrap-again"), FAKE_SAY_ANSWERS_DIRECTIVE] },
     ]);
     const { run, requests, releaseCall } = await start(database, faults, { ...LIMITS, lease: SHORT_LEASE });
     await run(party);
