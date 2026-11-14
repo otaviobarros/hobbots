@@ -92,7 +92,9 @@ export const skillMountsHash = (mounts: ReadonlyArray<SkillMount>): string =>
  * The YAML front matter at the top of a `SKILL.md` and the text after it, as a CommonMark parser
  * reads them (STD-DUP-008), or null when the file opens with none.
  */
-const frontMatterOf = (text: string): { readonly yaml: string; readonly rest: string } | null => {
+const frontMatterOf = (file: string): { readonly yaml: string; readonly rest: string } | null => {
+  // The parser skips a byte order mark without counting it, so offsets count from after it.
+  const text = file.startsWith("\uFEFF") ? file.slice(1) : file;
   const tree = fromMarkdown(text, { extensions: [frontmatter()], mdastExtensions: [frontmatterFromMarkdown()] });
   const first = tree.children[0];
   const end = first?.position?.end.offset;

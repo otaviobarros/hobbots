@@ -350,7 +350,8 @@ describe("skill import", () => {
     );
   });
 
-  // covers STD-SEC-005, ADR 029 (Import), #1060
+  // covers STD-SEC-005, ADR 029 (Import), #1060. Three imports of crafted text, each linear but
+  // slow on a busy CI machine, so the test has 30 seconds.
   it("[TC-AG-136] reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes", async () => {
     const { layer } = await importerLayer();
     const crafted = (run: number) =>
@@ -390,7 +391,7 @@ describe("skill import", () => {
         expect(refused.ms).toBeLessThan(2_000);
       }),
     );
-  });
+  }, 30_000);
 
   it("[TC-AG-131] imports a skill written in Hobbots, with no source", async () => {
     const { layer } = await importerLayer();

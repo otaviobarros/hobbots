@@ -68,6 +68,7 @@ describe("reading the camp's artifacts", () => {
       "# not a heading",
     ]);
     expect(firstLines("- one\n- two", true)).toEqual(["one", "two"]);
+    expect(firstLines("foo  \nbar", true)).toEqual(["foo", "bar"]);
     expect(firstLines("# kept\n<p>as written</p>", false)).toEqual(["# kept", "<p>as written</p>"]);
     expect(firstLines("x".repeat(200), false, 2, 10)).toEqual([`${"x".repeat(9)}…`]);
     expect(firstLines("   \n\n", true)).toEqual([]);

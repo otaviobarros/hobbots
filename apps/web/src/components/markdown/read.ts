@@ -15,10 +15,16 @@ type Block = ReturnType<typeof parser.parse>["children"][number];
 const titleHeading = (markdown: string) =>
   parser.parse(markdown).children.find((node) => node.type === "heading" && node.depth === 1);
 
-/** The text of a page's first `# ` heading, or undefined when it has none. */
+/**
+ * The text of a page's first `# ` heading as it is written, its Markdown kept, or undefined when it
+ * has none: the title memory keeps for the page.
+ */
 export const pageHeading = (markdown: string): string | undefined => {
   const heading = titleHeading(markdown);
-  return heading === undefined ? undefined : textOf(heading).trim() || undefined;
+  const text = heading?.type === "heading" ? heading.children : [];
+  const from = text[0]?.position?.start.offset;
+  const to = text.at(-1)?.position?.end.offset;
+  return from === undefined || to === undefined ? undefined : markdown.slice(from, to).trim() || undefined;
 };
 
 /** A page's text without the `# ` heading it opens with, which the page shows as its title. */
@@ -28,9 +34,13 @@ export const withoutTitle = (markdown: string): string => {
   return (end === undefined ? markdown : markdown.slice(end)).trim();
 };
 
+/** A block's text with its marks dropped, each hard line break kept as one. */
+const inlineText = (node: Block & { readonly children: ReadonlyArray<unknown> }) =>
+  node.children.map((child) => ((child as Block).type === "break" ? "\n" : textOf(child as Block))).join("");
+
 /** The text blocks of a document, in order, with their marks dropped: headings, paragraphs, cells and code. */
 const textBlocks = (node: Block): ReadonlyArray<string> => {
-  if (node.type === "heading" || node.type === "paragraph" || node.type === "tableCell") return [textOf(node)];
+  if (node.type === "heading" || node.type === "paragraph" || node.type === "tableCell") return [inlineText(node)];
   if (node.type === "code" || node.type === "html") return [node.value];
   return "children" in node ? node.children.flatMap((child) => textBlocks(child as Block)) : [];
 };
