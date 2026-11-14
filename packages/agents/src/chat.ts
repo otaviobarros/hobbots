@@ -71,7 +71,6 @@ import { HobTools } from "./tools.ts";
 import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources, PackReports } from "./turn-pack.ts";
-import type { TurnSlot } from "./turn-slots.ts";
 import { sessionActor } from "./users.ts";
 
 /**
@@ -454,16 +453,15 @@ export class ChatService extends Context.Service<
         runOf,
         step,
         transition,
-        beginTurn,
         launch,
         slotFor,
-        startNext,
+        advance,
+        sendsAtOnce,
         lineUp,
         drainThreads,
         endTurn,
         stopHob,
         holdDispatch,
-        workRidesAlong,
         hobsOf,
         activeThreads,
         activeTurns,
@@ -498,30 +496,6 @@ export class ChatService extends Context.Service<
           );
         });
 
-      // The hob that takes the floor now for a request of `hobId`, with its slot: the thread's own
-      // hob in the slot taken for it, or a member hob that takes work, in a slot of its own; null
-      // while it cannot speak now. A member hob that is retiring takes a turn in a camp it joined
-      // only for a Task of its own open there.
-      const speakerFor = (thread: Thread, own: Agent, hobId: AgentId, slot: TurnSlot | null) =>
-        Effect.gen(function* () {
-          if (slot === null) return null;
-          if (hobId === own.id) return { agent: own, slot };
-          yield* slot.release;
-          // Only a hob of the camp speaks here, with its own policy (ADR 039): a Quest member that
-          // is not one takes your mention from its Task instead (#1446).
-          if (!(yield* hobsOf(thread)).includes(hobId)) return null;
-          // Work of its own that rides along starts through the dispatcher, as the floor starts it.
-          if (yield* workRidesAlong(thread.id, hobId)) return null;
-          const hob = yield* repo.findAgent(hobId);
-          if (Option.isNone(hob) || hob.value.status !== "active") return null;
-          const mayWork = yield* requireOpenTaskWhileRetiring(hob.value, thread.id).pipe(
-            Effect.match({ onFailure: () => false, onSuccess: () => true }),
-          );
-          if (!mayWork) return null;
-          const its = yield* slotFor(thread, hob.value);
-          return its === null ? null : { agent: hob.value, slot: its };
-        });
-
       // Drops what `pick` chooses among the line's requests still owed, as the person stopping.
       const dropOwed = (threadId: ThreadId, pick: (open: ReadonlyArray<TurnRequest>) => ReadonlyArray<TurnRequest>) =>
         Effect.gen(function* () {
@@ -536,11 +510,6 @@ export class ChatService extends Context.Service<
             .pipe(Effect.flatMap(announce));
           yield* lineUp(threadId);
         });
-
-      // A message nobody takes at once waits for the floor. A line left idle behind a request its
-      // hob cannot take yet gives the floor to the next one that can.
-      const waitForFloor = (threadId: ThreadId, idle: boolean) =>
-        (idle ? startNext(threadId) : Effect.void).pipe(Effect.andThen(lineUp(threadId)));
 
       /** Your message as stored in the thread, `queued` while it waits for its turn. */
       const yourMessage = (
@@ -568,24 +537,6 @@ export class ChatService extends Context.Service<
           });
         });
 
-      // How a message you send starts: now, in a slot of its own hob's; through the dispatcher,
-      // carrying work (`carries`); or waiting for the floor (no slot either way).
-      const howItStarts = (thread: Thread, agent: Agent) =>
-        Effect.gen(function* () {
-          // A message waits while its hob is paused, while a reply runs, and behind any request
-          // already waiting for the floor, so the thread's messages start in the order they were
-          // sent (CH-008, ADR 039). It is stored and shown at once either way.
-          const busy = isBusy(yield* runOf(thread.id));
-          const lined = TurnRequests.waiting(yield* repo.openTurnRequests(mainLine(thread.id))).length > 0;
-          const waits = agent.status === "paused" || busy || lined;
-          // Work you stopped here, and routine progress, ride along: the message starts through the
-          // dispatcher, under their claims.
-          const carries = !waits && (yield* workRidesAlong(thread.id, agent.id));
-          // A message that would start now waits, queued, while its turn has no slot (#1448).
-          const slot = waits || carries ? null : yield* slotFor(thread, agent);
-          return { busy, carries, slot, limited: !waits && !carries && slot === null };
-        });
-
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
@@ -611,11 +562,17 @@ export class ChatService extends Context.Service<
               // here may start again with that answer, as with any message you send.
               if (sent.requests.length > 0) {
                 yield* step(threadId, { _tag: "Release" });
-                yield* waitForFloor(threadId, !isBusy(yield* runOf(threadId)));
+                yield* advance(threadId, null, sent.message.id);
               }
               return { userMessage: sent.message, assistantMessage: null };
             }
-            const { busy, carries, slot, limited } = yield* howItStarts(thread, agent);
+            // A message waits while its hob is paused, while a reply runs, behind any request ahead
+            // of it, and while work of its hob goes first, so the thread's messages start in the
+            // order they were sent (CH-008, ADR 039). It is stored and shown at once either way. One
+            // that would start now waits, queued, while its turn has no slot (#1448).
+            const by = yield* sessionActor;
+            const atOnce = yield* sendsAtOnce(threadId, agent.id, by, yield* nowIso);
+            const slot = atOnce ? yield* slotFor(thread, agent) : null;
             const free = slot?.release ?? Effect.void;
             const userMessage = yield* yourMessage(thread, agent, content, askedSkill, slot === null);
             // Who answers is decided in the transaction that stores the message (ADR 039, Who
@@ -629,28 +586,16 @@ export class ChatService extends Context.Service<
               Effect.map((value) => value.message),
               Effect.onError(() => free),
             );
-            const [first] = sent.value.requests;
-            if (first === undefined) {
+            if (sent.value.requests.length === 0) {
               yield* free;
               return { userMessage: saved, assistantMessage: null };
             }
             // Work you stopped in this thread may start again once this message is answered.
             yield* step(threadId, { _tag: "Release" });
-            if (carries) yield* startNext(threadId);
-            const speaker = yield* speakerFor(thread, agent, first.hobId, slot);
-            if (speaker === null) {
-              // One that waits for its own hob's slot is woken once a slot may be its.
-              yield* waitForFloor(threadId, !busy && !carries && !(limited && first.hobId === agent.id));
-              return { userMessage: saved, assistantMessage: null };
-            }
-            // The first hob it is owed by takes the floor at once; the others wait their turn.
-            const begun = yield* beginTurn(
-              speakerIn(thread, speaker.agent, { cause: first.cause, by: first.causedBy }),
-              saved,
-              (reply) => saveSpeaking(reply, [first.id]),
-              { slot: speaker.slot },
-            );
-            return { userMessage: saved, assistantMessage: begun?.saved ?? null };
+            // The floor goes on from here as from anywhere else: the first hob the message is owed
+            // by takes it at once, in the slot taken for it when it is the thread's own hob.
+            const begun = yield* advance(threadId, slot === null ? null : { hobId: agent.id, slot }, saved.id);
+            return { userMessage: saved, assistantMessage: begun?.request.messageId === saved.id ? begun.saved : null };
           }),
         );
       });
@@ -664,8 +609,7 @@ export class ChatService extends Context.Service<
             yield* step(threadId, { _tag: "Unchoose", messageId });
             // An idle floor that waited on the removed message's hob goes to the next one waiting,
             // which may have a slot of its own (ADR 039).
-            if (!isBusy(yield* runOf(threadId))) yield* startNext(threadId);
-            yield* lineUp(threadId);
+            yield* advance(threadId);
           }),
         );
       });
@@ -683,7 +627,7 @@ export class ChatService extends Context.Service<
             yield* step(threadId, { _tag: "Choose", messageId });
             // The chosen message starts in the drain once the stopped turn has ended.
             if (isBusy(yield* runOf(threadId))) yield* stop(threadId);
-            else yield* startNext(threadId);
+            else yield* advance(threadId);
           }),
         );
       });

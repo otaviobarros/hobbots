@@ -228,6 +228,18 @@ Building `TurnRequest` and one floor per conversation settled what the decision 
 - **Paused and passed are declared, not reached.** The relay budget ([#1463](https://github.com/otaviobarros/hobbots/issues/1463)) writes `paused` requests and the `pass` tool ([#1462](https://github.com/otaviobarros/hobbots/issues/1462)) ends one `passed`.
 - **Proven.** `[TC-DM-1461-03]` plays random sends, mentions, hob relays, starts, stops, Stop all and restarts across three hobs against a model of the floor; `[TC-PE-1461-03]` plays them on the records, on SQLite and PostgreSQL, with removals; `[TC-CH-1461-01]` to `[TC-CH-1461-03]` run the turns through the chat, a restart and Stop all included.
 
+## Amendment: one place decides the floor ([#1549](https://github.com/otaviobarros/hobbots/issues/1549))
+
+The floor of [#1461](https://github.com/otaviobarros/hobbots/issues/1461) was decided in several places, each with its own copy of the rules, and its review found the copies disagreeing. Its rules now live in one place.
+
+- **One decision.** `decideFloor` in `packages/domain/src/floor.ts` reads a `FloorSnapshot`, everything the decision needs, and returns one `FloorAction`: nobody, a request's turn, a hob's backpack work, or a continuation of that work. It does no I/O, so a model test plays it against the rules written apart.
+- **One entry point.** The thread runner's `advance(line)` reads the snapshot under the line's lock and performs the action. Your message, a turn's end, a dispatch's end, a wake, removing a queued message and Send now all call it, and nothing else starts a turn or a dispatch in a line. Continue on a stopped reply is the one exception: you ask for that turn by name, and it is refused while the line is busy.
+- **No empty dispatch.** A dispatch starts only for a hob with work waiting there, so the camp's own hob no longer dispatches to read the records again. This replaces the first amendment's empty dispatch: a dispatch whose work went elsewhere hands its slot to its hob's request when that one is next, and otherwise the floor is decided again.
+- **The line's lock is the camp's own hob's admission lock** (`withThreadLock`). A retirement of that hob takes the lock to stop and refuse its turns there, so one lock keeps a turn from being admitted between the two. A member's turn is admitted under it too, and is read again once it is registered, as before. A lock per line apart from admission was not chosen for that reason.
+- **Your message after a restore.** While the hub holds what waited after a restore ([ADR 026](026-backup-export-diagnostics.md)), a message you send still starts, in its turn behind the requests already owed, and carries none of the work that waited. Only its first hob answers then: a message several hobs owe waits for the others until you resume work, as before.
+- **Only a hob of the camp takes the floor.** A request whose hob has left the camp waits, and no turn starts for it, as no backpack work rides along it.
+- **Proven.** `[TC-DM-1549-01]` plays random snapshots against a model of the floor, `[TC-DM-1549-02]` checks its invariants, and `[TC-DM-1549-03]` to `[TC-DM-1549-21]` are the review findings of pull request #1527, each as the case that broke.
+
 ## Validation
 
 The scenarios that would show this decision holds. None is proven yet. Each slice will file its proof issues from these ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)).

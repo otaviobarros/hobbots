@@ -72,3 +72,4 @@ Change a row here in the same pull request that renames the word or the code.
 | brief | `Brief` | | |
 | quest | `Quest` | | |
 | (not shown) | `Attempt` | `execution` | `execution` except "execution environment", "execution rules" |
+| (not shown) | `FloorAction` | `floor` | |
