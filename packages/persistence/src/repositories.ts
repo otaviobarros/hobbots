@@ -1,4 +1,4 @@
-import { HobbotsRepository, type SendMessage, type SentMessage, type SentTo, sessionActor } from "@hobbots/agents";
+import { HobbotsRepository, type SentMessage, type SentTo, sessionActor } from "@hobbots/agents";
 import {
   type Actor,
   Agent,
@@ -22,6 +22,7 @@ import {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  UnreadThreads,
   YOU,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
@@ -31,8 +32,9 @@ import { makeCampWrites, threadColumns } from "./camps.ts";
 import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
+import { joinedMentions, mentionsToStore, type StoredMentions } from "./message-mentions.ts";
 import { insertSkillUse } from "./skill-uses.ts";
-import { liveChapterColumn, unreadColumn } from "./thread-columns.ts";
+import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
@@ -148,18 +150,15 @@ export const threadRows = (
     readonly brain?: unknown;
     readonly skillTrial?: unknown;
     readonly lastContent?: unknown;
-    readonly readRevision?: unknown;
-    readonly unread?: unknown;
   }>,
 ) =>
-  rows.map(({ lastContent, readRevision: _readRevision, unread, originThreadId, originChapterId, ...row }) => ({
+  rows.map(({ lastContent, originThreadId, originChapterId, ...row }) => ({
     ...row,
     private: Number(row.private ?? 0) === 1,
     origin: originThreadId == null ? null : { threadId: originThreadId, chapterId: originChapterId ?? null },
     liveChapterId: row.liveChapterId ?? null,
     liveChapterMerges: Number(row.liveChapterMerges ?? 0),
     lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
-    unread: Number(unread ?? 0) === 1,
     revision: Number(row.revision),
     sessions: JSON.parse(String(row.sessions ?? "[]")),
     brain: row.brain == null ? null : JSON.parse(String(row.brain)),
@@ -217,6 +216,7 @@ const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
     skills: row.skills === null || row.skills === undefined ? null : JSON.parse(String(row.skills)),
     skillsUsed: JSON.parse(String(row.skillsUsed ?? "[]")),
     askedSkill: row.askedSkill ?? null,
+    mentions: JSON.parse(String(row.mentions ?? "[]")),
     // Its author is two columns (migration 0101).
     actor: row.actorKind == null ? null : { kind: row.actorKind, id: row.actorId },
   }));
@@ -268,21 +268,21 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
+        sql`SELECT threads.*, ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
           ORDER BY updated_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const listArchivedThreads = SqlSchema.findAll({
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
+        sql`SELECT threads.*, ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
           ORDER BY archived_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Thread,
       execute: (id) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${id}`.pipe(
+        sql`SELECT threads.*, ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${id}`.pipe(
           Effect.map(threadRows),
         ),
     });
@@ -427,22 +427,20 @@ export const HobbotsRepositoryLive = Layer.effect(
     const startFirstChapter = startFirstChapterIn(sql);
     const startMembers = startMembersIn(sql);
 
-    // The thread as a read shows it: its last line, unread mark and live chapter are read, never
+    // The thread as a read shows it: its last line and live chapter are read, never
     // written, so the event that journals it carries what a read would show.
     const asRead = (thread: Thread) =>
       Effect.gen(function* () {
         const [read] = threadRows(
           yield* sql<{
             readonly lastContent: unknown;
-            readonly unread: unknown;
             readonly liveChapterId: unknown;
             readonly liveChapterMerges: unknown;
-          }>`SELECT ${lastContent(sql)}, ${unreadColumn(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${thread.id}`,
+          }>`SELECT ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${thread.id}`,
         );
         return new Thread({
           ...thread,
           lastLine: read?.lastLine ?? null,
-          unread: read?.unread ?? false,
           liveChapterId: read?.liveChapterId == null ? null : ChapterId.make(String(read.liveChapterId)),
           liveChapterMerges: read?.liveChapterMerges ?? 0,
         });
@@ -480,33 +478,38 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
-    // Moves the read marker forward to the newest revision of the messages up to this one, capped at
-    // the revision you saw, so a reply continued since stays unread, never back, and announces the
-    // thread with its new revision, so every device clears its unread dot (ADR 027).
+    // Moves the reader's marker forward to the newest revision of the messages up to this one, capped
+    // at the revision they saw, so a reply continued since stays unread, never back, and journals
+    // their member row, so every device of theirs clears its unread dot (ADR 027, ADR 039).
     const markThreadRead = (threadId: ThreadId, messageId: MessageId, seenRevision: number) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
           const seen = sql`(SELECT MAX(m.revision) FROM messages m
             WHERE m.thread_id = ${threadId} AND m.revision <= ${seenRevision}
               AND m.seq <= (SELECT seq FROM messages WHERE id = ${messageId} AND thread_id = ${threadId}))`;
-          const moved = yield* sql`UPDATE threads SET read_revision = ${seen}, revision = ${revision}
-            WHERE id = ${threadId} AND ${seen} > COALESCE(read_revision, 0)
-            RETURNING id`;
-          if (moved.length === 0) return null;
-          // The reader's own marker moves with it (ADR 039); unread counts move onto it later.
-          const [marker] = yield* sql<{ readonly readRevision: unknown }>`SELECT read_revision FROM threads
-            WHERE id = ${threadId}`;
-          yield* markMemberRead(sql, threadId, yield* sessionActor, Number(marker?.readRevision));
-          const [thread] = yield* findThread(threadId).pipe(Effect.orDie, Effect.map(Option.toArray));
-          if (thread === undefined) return null;
-          return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
+          const moved = yield* markMemberRead(sql, threadId, yield* sessionActor, seen, revision);
+          if (Option.isNone(moved)) return null;
+          return { value: moved.value, events: [{ _tag: "ThreadMemberChanged", member: moved.value }] };
         }),
       );
 
+    // The threads with a reply the person asking has not read (ADR 039), with the journal's head
+    // read first, so a reply that lands meanwhile is either listed or after `through`.
+    const listUnreadThreads = Effect.gen(function* () {
+      const reader = yield* sessionActor;
+      const [head] = yield* sql<{ readonly through: unknown }>`SELECT COALESCE(MAX(sequence), 0) AS through
+        FROM event_journal`;
+      const rows = yield* sql<{ readonly threadId: ThreadId }>`SELECT thread_id FROM thread_members
+        WHERE actor_kind = ${reader.kind} AND actor_id = ${reader.id} AND ${memberUnread(sql)}
+        ORDER BY ${bytewise("thread_id")}`;
+      return new UnreadThreads({ threadIds: rows.map((row) => row.threadId), through: Number(head?.through ?? 0) });
+    }).pipe(Effect.orDie);
+
     // Writes the message row only; the caller journals its events in the same transaction. A new
     // message joins its thread's live chapter (ADR 037); a stored one stays in its chapter. Returns
-    // the message as stored, with its chapter.
-    const writeMessage = (message: Message) =>
+    // the message as stored, with its chapter. `parsed` is its mentions when the caller parsed them
+    // already in the same transaction.
+    const writeMessage = (message: Message, parsed?: StoredMentions) =>
       Effect.suspend(() => {
         const usage = usageColumns(message.usage);
         // A new message names its author as it is stored (ADR 037): the person who sent it, or its
@@ -515,14 +518,16 @@ export const HobbotsRepositoryLive = Layer.effect(
         if (author === null && message.role !== "assistant") {
           return Effect.die(new Error(`A ${message.role} message must name the person who wrote it`));
         }
-        return sql<{
-          readonly chapterId: string;
-          readonly actorKind: string;
-          readonly actorId: string;
-        }>`INSERT INTO messages (id, thread_id, chapter_id, actor_kind, actor_id, role, content, status, error, config_version, runtime, model,
+        return (parsed === undefined ? mentionsToStore(sql, message) : Effect.succeed(parsed)).pipe(
+          Effect.flatMap(({ mentions, through }) =>
+            sql<{
+              readonly chapterId: string;
+              readonly actorKind: string;
+              readonly actorId: string;
+            }>`INSERT INTO messages (id, thread_id, chapter_id, actor_kind, actor_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-          resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, created_at, revision, seq)
+          resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, mentions, mentions_through, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.threadId)}),
           ${author?.kind ?? "hob"},
@@ -535,7 +540,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           ${message.resetsAt}, ${JSON.stringify(message.steps)}, ${message.promptId},
           ${message.quiet ? 1 : 0},
           ${message.skills === null ? null : JSON.stringify(message.skills)},
-          ${JSON.stringify(message.skillsUsed)}, ${message.askedSkill},
+          ${JSON.stringify(message.skillsUsed)}, ${message.askedSkill}, ${JSON.stringify(mentions)}, ${through},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
         )
@@ -558,15 +563,20 @@ export const HobbotsRepositoryLive = Layer.effect(
           quiet = excluded.quiet,
           skills = excluded.skills,
           skills_used = excluded.skills_used,
+          mentions = excluded.mentions,
+          mentions_through = excluded.mentions_through,
           revision = excluded.revision
         RETURNING chapter_id, actor_kind, actor_id`.pipe(
-          Effect.map(
-            ([row]) =>
-              new Message({
-                ...message,
-                chapterId: ChapterId.make(String(row?.chapterId)),
-                actor: { kind: row?.actorKind as Actor["kind"], id: String(row?.actorId) },
-              }),
+              Effect.map(
+                ([row]) =>
+                  new Message({
+                    ...message,
+                    chapterId: ChapterId.make(String(row?.chapterId)),
+                    actor: { kind: row?.actorKind as Actor["kind"], id: String(row?.actorId) },
+                    mentions,
+                  }),
+              ),
+            ),
           ),
         );
       });
@@ -591,10 +601,14 @@ export const HobbotsRepositoryLive = Layer.effect(
           const [thread] = yield* sql<{ readonly kind: Thread["kind"] }>`SELECT kind FROM threads
             WHERE id = ${input.threadId}`;
           if (thread === undefined) return yield* Effect.die(new Error(`Thread ${input.threadId} does not exist`));
-          const answerers = yield* answerersIn(sql, { id: input.threadId, kind: thread.kind }, { ...input, ...to });
+          // Its mentions are parsed from its text first, so who answers reads the ones it stores.
+          const found = yield* mentionsToStore(sql, input);
+          const parsed = { ...found, mentions: joinedMentions(found.mentions, to.mentions) };
+          const said = { ...input, mentions: parsed.mentions, repliesTo: to.repliesTo };
+          const answerers = yield* answerersIn(sql, { id: input.threadId, kind: thread.kind }, said);
           // A message nobody answers starts no turn, so it never waits in the queue.
           const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
-          const message = yield* writeMessage(new Message({ ...input, status, revision }));
+          const message = yield* writeMessage(new Message({ ...input, status, revision }), parsed);
           return { value: { message, answerers }, events: messageEvents(message) };
         }),
       );
@@ -659,10 +673,11 @@ export const HobbotsRepositoryLive = Layer.effect(
       findThread: (id) => findThread(id).pipe(Effect.orDie),
       upsertThread,
       markThreadRead,
+      listUnreadThreads,
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
       findMessage: (id) => findMessage(id).pipe(Effect.orDie),
       upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),
-      sendMessage: sendMessage as SendMessage,
+      sendMessage,
       checkpointMessage: (message) =>
         sql`UPDATE messages SET content = ${message.content}
           WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),

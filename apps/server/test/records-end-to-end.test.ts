@@ -30,6 +30,7 @@ import {
   RECORD_DECISION_TOOL,
   roleFields,
   type Thread,
+  type UnreadThreads,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -296,8 +297,8 @@ describe("the camp sheet over the API", () => {
     expect((await request("POST", `/api/threads/${thread.id}/notes`, { key: "n2", content: "  " })).status).toBe(400);
     // No hob woke: the transcript ends at the note, with no reply after it.
     expect((await messages(thread)).map((each) => each.role)).toEqual(["user", "assistant", "note"]);
-    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
-    expect(listed.body.find((each) => each.id === thread.id)?.unread).toBe(true);
+    const listed = await request<UnreadThreads>("GET", "/api/unread-threads");
+    expect(listed.body.threadIds).toContain(thread.id);
     expect((await request("POST", "/api/threads/nope/notes", note)).status).toBe(404);
   });
 

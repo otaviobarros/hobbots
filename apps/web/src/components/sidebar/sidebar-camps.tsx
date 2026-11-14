@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { campsOf, openChatOf } from "../../api/camps.ts";
 import { threadsQuery } from "../../api/queries.ts";
+import { useUnreadThreads } from "../../api/thread-reads.ts";
 import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
 import { campList } from "./camp-list.ts";
@@ -32,8 +33,9 @@ export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }
   const chat = openChatOf(threads.data);
   const [making, setMaking] = useState(false);
   const [all, setAll] = useState(false);
+  const unread = useUnreadThreads();
   const camps = campsOf(threads.data);
-  const folded = campList(camps, openCampOf(pathname, hob.id));
+  const folded = campList(camps, openCampOf(pathname, hob.id), unread);
   const shown = all ? camps : folded.shown;
   return (
     <>
@@ -43,12 +45,12 @@ export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }
             to="/hobs/$hobId/chat"
             params={{ hobId: hob.id }}
             aria-current={isChatAt(pathname, hob.id, chat) ? "page" : undefined}
-            aria-description={chat?.unread ? copy.unreadThread : undefined}
+            aria-description={chat !== undefined && unread.has(chat.id) ? copy.unreadThread : undefined}
             className={sub}
           >
             <Glyph>{copy.glyph.chat}</Glyph>
             <span className="min-w-0 flex-1 truncate">{campCopy.sidebar.chat}</span>
-            {chat?.unread && <UnreadDot />}
+            {chat !== undefined && unread.has(chat.id) && <UnreadDot />}
           </Link>
         </li>
         {shown.map((camp) => (
@@ -58,12 +60,12 @@ export function SidebarCamps({ hob, pathname }: { hob: Agent; pathname: string }
               params={{ hobId: hob.id, threadId: camp.id }}
               aria-current={pathname === `/hobs/${hob.id}/threads/${camp.id}` ? "page" : undefined}
               // The link keeps the camp's title as its name, so the dot is told as its description.
-              aria-description={camp.unread ? copy.unreadThread : undefined}
+              aria-description={unread.has(camp.id) ? copy.unreadThread : undefined}
               className={sub}
             >
               <Glyph>{copy.glyph.camp}</Glyph>
               <span className="min-w-0 flex-1 truncate">{camp.title}</span>
-              {camp.unread && <UnreadDot />}
+              {unread.has(camp.id) && <UnreadDot />}
             </Link>
           </li>
         ))}

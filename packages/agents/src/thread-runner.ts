@@ -266,8 +266,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // the live chapter since. Only the live chapter is ever replayed (ADR 037).
         const inChapter = before.filter((m) => m.chapterId === thread.liveChapterId);
         const told = switched ? [...inChapter, continued] : inChapter;
-        const briefed = yield* brief(thread, brain.runtime, told, switched);
-        const pack = liveSession(thread, brain.runtime) === undefined ? yield* packSources(thread, told, before) : null;
+        const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched);
+        const pack =
+          liveSession(thread, brain.runtime, agent.id) === undefined ? yield* packSources(thread, told, before) : null;
         // Every turn hears of every call the thread left uncertain, whichever brain runs it, since a
         // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
         // Continue names the continued reply's own.

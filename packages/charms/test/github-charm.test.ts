@@ -98,6 +98,11 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
       gitObject: () => Effect.die("not used"),
       rateLimit: () => Effect.die("not used"),
       comment: () => Effect.die("not used"),
+      label: () => Effect.die("not used"),
+      openIssue: () => Effect.die("not used"),
+      issuesSince: () => Effect.die("not used"),
+      addSubIssue: () => Effect.die("not used"),
+      subIssues: () => Effect.die("not used"),
     }),
   );
 
@@ -248,6 +253,7 @@ describe("GitHub Charm", () => {
       "github_push",
       "github_open_pull_request",
       "github_comment",
+      "github_open_issue",
     ]);
     expect(answer.refused).toBe(false);
     expect(answer.text).toContain("37 matches for `repo:otaviobarros/hobbots is:issue is:open`.");
@@ -385,6 +391,7 @@ describe("GitHub Charm", () => {
       "github_push",
       "github_open_pull_request",
       "github_comment",
+      "github_open_issue",
     ]);
     expect(await offered({ asked }, access([project], undefined, false))).toBeNull();
     expect(await offered({ asked, connected: false }, access([project]))).toBeNull();
@@ -467,6 +474,7 @@ describe("GitHub Charm", () => {
       "github_push",
       "github_open_pull_request",
       "github_comment",
+      "github_open_issue",
     ];
     expect(await names(["github", "lark"])).toEqual([...github, "lark_read"]);
     expect(await names(["github"])).toEqual(github);

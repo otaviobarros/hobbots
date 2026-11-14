@@ -52,6 +52,7 @@ describe("per-hob rules", () => {
       "delete-files",
       "edit-files",
       "github.comment",
+      "github.open-issue",
       "github.open-pull-request",
       "github.read",
       "local-git",
