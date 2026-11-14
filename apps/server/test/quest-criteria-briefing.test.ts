@@ -2,8 +2,8 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PromptRequest } from "@hobbots/agents";
 import { CONTINUATION_HEADER, type RuntimeKind, type TaskTree } from "@hobbots/domain";
-import { afterEach, describe, expect, it } from "vitest";
-import { hub, partyHub, send, treeWhen } from "./party-hub.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { hub, ownedBy, PIP, partyHub, ROOK, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1555: a criterion's id reached its lead only in start_quest's result, and in read_tasks of
 // the Quest's own Task. A session never sees an earlier session's tool results, so a lead in a new
@@ -93,5 +93,46 @@ describe.each(RUNTIMES)("a Quest lead's criterion ids, on %s", (runtime) => {
     expect(party.answers.get("read-member")).toContain(`"criterion_id":"${date.id}"`);
     expect(party.answers.get("accept")).toContain("is accepted");
     expect(quest?.state).toBe("completed");
+  }, 30_000);
+
+  // covers OR-004, OR-006
+  it("[TC-OR-1555-03] reach a member that leads a nested Quest, in every turn it is woken for", async () => {
+    const party = partyHub({ lead: runtime, members: runtime });
+    dispose = party.dispose;
+    await party.run(
+      send([
+        "Write the launch page",
+        hub("start_quest", { key: "quest", goal: "Write the launch page" }),
+        hub("delegate_task", {
+          key: "page",
+          hob: "Pip",
+          brief: [
+            "Write the launch page with Rook",
+            hub("start_quest", { key: "nested", goal: "The launch page", acceptance: ["It names the date"] }),
+            hub("delegate_task", { key: "draft", hob: "Rook", brief: "Draft the page" }),
+            hub("wait_for", { key: "pip-wait", tasks: ["$draft.task_id"] }),
+          ].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$page.task_id"] }),
+      ]),
+    );
+    // Rook's result wakes Pip, whose turn reminds it of its Task.
+    const tree = await party.run(treeWhen((each) => ownedBy(each, ROOK)?.state === "completed"));
+    const pip = ownedBy(tree, PIP);
+    const nested = tree.quests.find((quest) => quest.taskId === pip?.id);
+    const [date] = nested?.criteria ?? [];
+    if (pip === undefined || date === undefined) throw new Error("Pip leads no Quest with a criterion");
+    const woken = await vi.waitFor(
+      () => {
+        const found = party.requests.find(
+          (request) =>
+            request.prompt.includes(`You work on Task ${pip.id}`) && request.prompt.includes(CONTINUATION_HEADER),
+        );
+        if (found === undefined) throw new Error("Pip was not woken yet");
+        return found;
+      },
+      { timeout: 10_000 },
+    );
+    expect(woken.prompt).toContain(`- criterion_id ${date.id}: "It names the date" (required, open)`);
   }, 30_000);
 });
