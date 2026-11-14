@@ -644,6 +644,9 @@ export class ChatService extends Context.Service<
           Effect.gen(function* () {
             if (!(yield* saveRemoved(threadId, messageId))) return yield* new MessageNotQueued({ messageId });
             yield* step(threadId, { _tag: "Unchoose", messageId });
+            // An idle floor that waited on the removed message's hob goes to the next one waiting,
+            // which may have a slot of its own (ADR 039).
+            if (!isBusy(yield* runOf(threadId))) yield* startNext(threadId);
             yield* lineUp(threadId);
           }),
         );
