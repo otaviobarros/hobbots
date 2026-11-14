@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { useRevertChange } from "../../api/hob-changes.ts";
-import { useUpdatePermissions } from "../../api/queries.ts";
+import { useSavingPermissions, useUpdatePermissions } from "../../api/queries.ts";
 import { formatMoment } from "../../lib/format.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { DiffLines } from "../skills/skill-diff.tsx";
@@ -117,6 +117,9 @@ function Revert({ change }: { change: VersionChange }) {
 function RestoreAnswers({ change, hob }: { change: HobChange; hob: Agent | undefined }) {
   const restore = restoreOf(change, hob);
   const update = useUpdatePermissions(change.hobId);
+  // Each payload is built from the hob's policy as it stands, so one restore waits for another of
+  // the same hob to save: two at once would each leave out what the other restores.
+  const saving = useSavingPermissions(change.hobId);
   if (restore === null) return null;
   return (
     <div className="flex flex-col gap-1.5 rounded-control border border-line bg-deep px-3 py-2">
@@ -126,7 +129,7 @@ function RestoreAnswers({ change, hob }: { change: HobChange; hob: Agent | undef
           type="button"
           variant="outline"
           size="xs"
-          disabled={update.isPending}
+          disabled={saving}
           onClick={() => update.mutate(restore.payload)}
         >
           {update.isPending ? copy.restoring : copy.restore}
