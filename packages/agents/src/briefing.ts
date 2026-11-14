@@ -123,15 +123,16 @@ const ending = (message: Message) => {
 
 /**
  * A message as a briefing or a context pack shows it in full: who said it, its text quoted, and its
- * tool steps. `text` stands for its content when it was cut.
+ * tool steps. `text` stands for its content when it was cut; `who` names its author, as the pack
+ * names every speaker (ADR 039).
  */
-export const messageBlock = (message: Message, text: string = message.content.trim()) => {
+export const messageBlock = (
+  message: Message,
+  text: string = message.content.trim(),
+  who: string = speaker(message),
+) => {
   const steps = toolSteps(message);
-  return [
-    `**${speaker(message)}:**${ending(message)}`,
-    quote(text || "(no text)"),
-    ...(steps === null ? [] : [steps]),
-  ].join("\n");
+  return [`**${who}:**${ending(message)}`, quote(text || "(no text)"), ...(steps === null ? [] : [steps])].join("\n");
 };
 
 /** A message in full, as the briefing's latest messages show it. */

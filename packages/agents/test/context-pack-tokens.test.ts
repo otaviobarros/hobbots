@@ -39,6 +39,9 @@ const lastTopicCosts = () => {
   const first = (TOPICS.length - 1) * PER_TOPIC;
   const pack = buildPack({
     memoryBrief: null,
+    members: null,
+    quests: [],
+    speaker: (m) => (m.role === "user" ? "Marina (person)" : "You"),
     campBrief: null,
     decisions: [],
     work: { tasks: [], trees: [], questions: [], items: [] },

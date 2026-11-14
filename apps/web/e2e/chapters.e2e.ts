@@ -189,6 +189,7 @@ test("[TC-CH-1382-02] the Focus chip lists the parts and sizes of the turn's Pac
   expect(sizes).toHaveLength(read.report.parts.length);
   const byRow = [
     "memory-brief",
+    "members",
     "camp-brief",
     "decisions",
     "open-work",
