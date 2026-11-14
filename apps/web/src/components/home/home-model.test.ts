@@ -1,4 +1,4 @@
-import { AgentId, type TaskTree, ThreadId } from "@hobbots/domain";
+import { AgentId, Quest, type TaskTree, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import type { HobState } from "../../lib/hob-state.ts";
 import { memberWork, quest } from "../../test/member-work.ts";
@@ -99,12 +99,19 @@ describe("pickUpRows", () => {
   });
 
   it("mixes chats and Quests, the most recently active first", () => {
-    const rows = pickUpRows([chat("t-old", 1), chat("t-new", 3)], [group(10)]);
+    const rows = pickUpRows([chat("t-old", 1), chat("t-new", 3), chat("q1-thread", 1)], [group(10)]);
     expect(rows.map((row) => (row.kind === "thread" ? row.thread.id : row.group.quest.id))).toEqual([
       "t-new",
       "t-old",
       "q1",
     ]);
+  });
+
+  it("leaves out a Quest whose thread is not open, as in an archived camp, and keeps one with no thread", () => {
+    const archived = pickUpRows([chat("t-old", 1)], [group(10)]);
+    expect(archived.map((row) => row.kind)).toEqual(["thread"]);
+    const threadless = { ...group(10), quest: new Quest({ ...launch, threadId: null }) };
+    expect(pickUpRows([chat("t-old", 1)], [threadless]).map((row) => row.kind)).toEqual(["thread", "quest"]);
   });
 
   it("shows a chat that follows a Quest once, as that Quest", () => {
