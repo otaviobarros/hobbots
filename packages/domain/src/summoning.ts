@@ -152,6 +152,18 @@ export const summoningScopeOf = (policy: HobPolicy): SummoningScope =>
   policy.charms?.summoning ?? DEFAULT_SUMMONING_SCOPE;
 
 /**
+ * Whether "Summoning for every hob" reaches a hob with this policy when it is on (ADR 034): a hob
+ * you made that neither holds the Summoning Charm on its own nor was withheld it.
+ */
+export const summoningForEveryHobReaches = (hob: {
+  readonly policy: HobPolicy;
+  readonly summonedBy: string | null;
+}): boolean =>
+  hob.summonedBy === null &&
+  !holdsCharm(hob.policy, SUMMONING_CHARM_ID) &&
+  !(hob.policy.charms?.withheld?.includes(SUMMONING_CHARM_ID) ?? false);
+
+/**
  * The policy a hob runs under once "Summoning for every hob" applies (ADR 034): a hob you made that
  * does not hold the Charm and was not withheld it gets it, with the setting's scope and answers.
  * A hob a hob summoned, one that holds it on its own, and one you took it away from are unchanged.
@@ -161,8 +173,7 @@ export const withSummoningForEveryHob = (
   everyHob: SummoningForEveryHob | null,
 ): HobPolicy => {
   const { policy } = hob;
-  if (everyHob === null || hob.summonedBy !== null || holdsCharm(policy, SUMMONING_CHARM_ID)) return policy;
-  if (policy.charms?.withheld?.includes(SUMMONING_CHARM_ID)) return policy;
+  if (everyHob === null || !summoningForEveryHobReaches(hob)) return policy;
   const granted = [...(policy.charms?.granted ?? DEFAULT_HOB_CHARMS), SUMMONING_CHARM_ID];
   const overrides: CharmOverrides = { ...everyHob.overrides, ...policy.charms?.overrides };
   return { ...policy, charms: { ...policy.charms, granted, overrides, summoning: everyHob.scope } };

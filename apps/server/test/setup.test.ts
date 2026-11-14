@@ -12,12 +12,14 @@ import {
   HobTools,
   PermissionSummary,
 } from "@hobbots/agents";
+import { type HobChange, OWNER_ACTOR, roleFields, type SettingChange } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  HobChangesLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
@@ -56,6 +58,7 @@ beforeEach(() => {
     EventJournal.layer,
     BackpackLive,
     SetupRepository.layer,
+    HobChangesLive,
     SearchIndex.layer,
   ).pipe(Layer.provideMerge(TestDatabase));
   const App = HobLifecycle.layer
@@ -214,5 +217,47 @@ describe("the setup API", () => {
     const response = await request("PATCH", "/api/setup", { connectedProviders: ["gemini"] });
     expect(response.status).toBe(400);
     expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual([]);
+  });
+
+  // covers PE-001, AG-002, #1357
+  it("[TC-OP-1357-03] keeps who turned Summoning for every hob on, changed its answers and turned it off, in Settings and in the History of the hob it reached", async () => {
+    const hob = (await (
+      await request("POST", "/api/agents", {
+        name: "Pip",
+        ...roleFields("writer"),
+        lookSeed: 4821,
+        lookColor: "violet",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+      })
+    ).json()) as { id: string };
+    const scope = { summoned: true, self: false, hobs: [] };
+    for (const summoningForEveryHob of [
+      { scope, overrides: {} },
+      { scope, overrides: { "summoning.summon": "allow" } },
+      // The same answers again change nothing, so they leave no record.
+      { scope, overrides: { "summoning.summon": "allow" } },
+      null,
+    ]) {
+      expect((await request("PATCH", "/api/setup", { summoningForEveryHob })).status).toBe(200);
+    }
+    // Completing setup changes no authority setting.
+    await request("PATCH", "/api/setup", { completed: true });
+
+    const log = (await (await request("GET", "/api/setup/changes")).json()) as {
+      changes: ReadonlyArray<SettingChange>;
+      more: boolean;
+    };
+    expect(log.more).toBe(false);
+    expect(log.changes.map((change) => change.actor)).toEqual([OWNER_ACTOR, OWNER_ACTOR, OWNER_ACTOR]);
+    const [off, answered, on] = log.changes.map((change) => change.diff);
+    expect(on).toMatchObject({ setting: "summoningForEveryHob", before: null, after: { scope } });
+    expect(answered).toMatchObject({ after: { overrides: { "summoning.summon": "allow" } } });
+    expect(off).toMatchObject({ before: { overrides: { "summoning.summon": "allow" } }, after: null });
+
+    const history = (await (await request("GET", `/api/agents/${hob.id}/changes`)).json()) as ReadonlyArray<HobChange>;
+    expect(history.filter((change) => change._tag === "Setting").map((change) => change.setting)).toEqual(log.changes);
   });
 });

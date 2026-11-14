@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HobGitHubApps, HobTools } from "@hobbots/agents";
-import { type Agent, EMPTY_HOB_POLICY, type HobGitHubApp } from "@hobbots/domain";
+import { type Agent, EMPTY_HOB_POLICY, type HobGitHubApp, OWNER_ACTOR } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Layer } from "effect";
@@ -29,7 +29,7 @@ const appsWith = (apps: Readonly<Record<string, HobGitHubApp>>) =>
 const accessWith = (approvedFolders: ReadonlyArray<string>, apps: Layer.Layer<never> = Layer.empty) =>
   Effect.gen(function* () {
     const setup = yield* SetupRepository;
-    yield* setup.update({ approvedFolders: [...approvedFolders] });
+    yield* setup.update({ approvedFolders: [...approvedFolders] }, OWNER_ACTOR);
     const tools = yield* HobTools;
     return yield* tools.access(hob);
   }).pipe(

@@ -27,6 +27,7 @@ import {
   type GitIdentity,
   type HobGitHubApp,
   type HubQuestion,
+  OWNER_ACTOR,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
@@ -211,7 +212,7 @@ const startHub = async (connected = true) => {
   };
   await runtime.runPromise(
     Effect.gen(function* () {
-      yield* SetupRepository.use((setup) => setup.update({ approvedFolders: [project] }));
+      yield* SetupRepository.use((setup) => setup.update({ approvedFolders: [project] }, OWNER_ACTOR));
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(nettle);
       yield* repo.insertAgent(fern);

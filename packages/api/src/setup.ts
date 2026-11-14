@@ -1,4 +1,4 @@
-import { InstallationSetup, RuntimeKind, SafetyPreset, SummoningForEveryHob } from "@hobbots/domain";
+import { InstallationSetup, RuntimeKind, SafetyPreset, SettingChange, SummoningForEveryHob } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { InvalidFolder, UndeclaredOperation } from "./errors.ts";
@@ -23,6 +23,16 @@ export const UpdateSetupPayload = Schema.Struct({
 });
 export type UpdateSetupPayload = typeof UpdateSetupPayload.Type;
 
+/** How many of the newest setting changes Settings › Changes reads at most. */
+export const SETTING_CHANGES_LIMIT = 500;
+
+/** The newest changes to the settings that change what hobs may do (#1357), and whether older ones were left out. */
+export const SettingChangesLog = Schema.Struct({
+  changes: Schema.Array(SettingChange),
+  more: Schema.Boolean,
+});
+export type SettingChangesLog = typeof SettingChangesLog.Type;
+
 export class SetupGroup extends HttpApiGroup.make("setup")
   .add(
     HttpApiEndpoint.get("get", "/setup", { success: InstallationSetup }),
@@ -31,6 +41,7 @@ export class SetupGroup extends HttpApiGroup.make("setup")
       success: InstallationSetup,
       error: [InvalidFolder, UndeclaredOperation],
     }),
+    HttpApiEndpoint.get("changes", "/setup/changes", { success: SettingChangesLog }),
   )
   .middleware(DeviceSession)
   .prefix("/api") {}
