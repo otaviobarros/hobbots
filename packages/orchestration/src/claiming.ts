@@ -2,6 +2,7 @@ import { type ClaimOutcome, ClaimRegister, GitWorkspace, type TaskRepository } f
 import {
   type Claim,
   ClaimId,
+  Claims,
   carriedFrom,
   claimBranch,
   claimClashText,
@@ -111,7 +112,7 @@ const doneOf = (outcome: ClaimOutcome, onMain: OnMain) => {
   const text =
     outcome._tag !== "Held"
       ? madeText(outcome.claim, onMain, outcome.taken)
-      : outcome.claim.state === "taken"
+      : Claims.isTaken(outcome.claim)
         ? takenWriteText(outcome.claim)
         : `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`;
   return {
