@@ -278,6 +278,8 @@ interface ThreadResumeParams extends ThreadSettings {
 interface Thread {
   /** The thread's ID, which Hobbots keeps as the Hobbots thread's Codex session. */
   readonly id: string;
+  /** Its rollout, the JSONL file Codex resumes it from; null for an ephemeral thread. */
+  readonly path?: string | null;
 }
 
 interface ThreadStartResponse {

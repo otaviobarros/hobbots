@@ -164,7 +164,14 @@ describe("member and step sessions offer git_init", () => {
       ["ledger_write", `task:${rook.id}`, null],
     ]);
     expect(tree.refusals).toEqual([
-      expect.objectContaining({ agentId: ROOK, taskId: rook.id, tool: "shelf_write", reason: "unknown-tool" }),
+      // Its runtime refuses the call, and the hub records why (#1356).
+      expect.objectContaining({
+        agentId: ROOK,
+        taskId: rook.id,
+        tool: "shelf_write",
+        reason: "not-offered",
+        message: expect.stringContaining("the Shelf Charm offers its writes only in chats, not in a Task"),
+      }),
     ]);
   }, 30_000);
 });
