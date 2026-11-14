@@ -260,14 +260,15 @@ const currentBranch = async (top: string): Promise<string | null> => {
 
 /** How many folders `repositoriesIn` reads at most before it says it did not see them all. */
 const REPOSITORY_SCAN_LIMIT = 20_000;
-/** Folders that hold installed dependencies, never a checkout someone works in. */
-const SKIPPED = new Set(["node_modules"]);
+/** Git's own folder, and folders that hold installed dependencies, never a checkout someone works in. */
+const SKIPPED = new Set([".git", "node_modules"]);
 
 /**
  * The repositories `folder` reaches (#1537): the one Git finds from it, and every one inside it, by
  * the real path of each top folder, and whether the scan saw every folder. Links are not followed
- * and hidden or dependency folders are skipped; a scan that reads more folders than its limit stops
- * and says so, and the caller closes the folder whole rather than miss one.
+ * and Git's own and dependency folders are skipped, hidden ones are not; a scan that reads more
+ * folders than its limit stops and says so, and the caller closes the folder whole rather than miss
+ * one.
  */
 const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<string>; complete: boolean }> => {
   // A folder that is not there holds no repository.
@@ -281,7 +282,7 @@ const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<str
     if (read >= REPOSITORY_SCAN_LIMIT) return { tops: [...found], complete: false };
     const entries = await readdir(queue[read] as string, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED.has(entry.name)) continue;
+      if (!entry.isDirectory() || SKIPPED.has(entry.name)) continue;
       const child = join(queue[read] as string, entry.name);
       if ((await gitdirIn(child)) !== null) found.add(child);
       queue.push(child);
@@ -393,7 +394,10 @@ const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<s
   // are closed, the table whole and where a link to it leads.
   const tables = (await present(table)) ? [table, await realpath(table).catch(() => table)] : [];
   const packed = join(places.common, "packed-refs");
-  const files = branchNamed(branch) ? await refFiles(places, ["refs", "heads", ...branch.split("/")]) : [];
+  // A ref store that changes under the read, as Git packs or prunes it, is closed whole.
+  const files = branchNamed(branch)
+    ? await refFiles(places, ["refs", "heads", ...branch.split("/")]).catch(() => [places.common, places.gitdir])
+    : [];
   const packedFiles = (await present(packed)) ? [packed, await realpath(packed).catch(() => packed)] : [];
   return [...new Set([...tables, ...files, ...packedFiles])];
 };

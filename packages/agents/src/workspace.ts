@@ -51,7 +51,7 @@ export interface GitWorkspaceShape {
   readonly currentBranch: (top: string) => Effect.Effect<string | null>;
   /**
    * The repositories a folder reaches, by the real path of each top folder: the one Git finds from
-   * `folder`, and every one inside it, past dependency and hidden folders, as a folder of several
+   * `folder`, and every one inside it, past dependency folders and Git's own, as a folder of several
    * checkouts holds them (#1537), and whether the scan saw every folder (`complete`), since it stops
    * after a limit. Read without running Git.
    */
