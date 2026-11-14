@@ -391,6 +391,12 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           ),
         );
         yield* announceTurn(thread.id, agent.id, turn);
+        // A member hob is admitted under the camp's lock, not its own, so a retirement may have
+        // swept its running turns before this one was there to see. Read again now that it is: a
+        // member hob retiring or gone by now stops (ADR 039).
+        if (agent.id !== thread.agentId && (yield* activeHobs(thread, [agent.id])).size === 0) {
+          yield* endTurn(thread.id);
+        }
         return { turn, reply };
       }).pipe(Effect.onError(() => start.slot?.release ?? Effect.void));
 
@@ -555,8 +561,10 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // The hob whose request is next carries its own work along: another hob's work waits its
         // hob's turn. With nobody waiting, the first hob with work there carries it.
         const next = yield* floorNext(thread.value);
-        const hobId = next?.agent.id ?? (yield* carrierOf(continuations.value, thread.value));
-        const found = hobId === null ? null : yield* workable(threadId, hobId);
+        const found =
+          next === null
+            ? yield* carrierOf(continuations.value, thread.value)
+            : yield* workable(threadId, next.agent.id);
         if (found === null) {
           yield* startQueued(threadId);
           return;
@@ -575,19 +583,21 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id, slot), scope);
       });
 
-    // The first of the thread's hobs, its own first, with work waiting there; its own hob when none
-    // has, so the dispatch still reads the records again.
+    // The first of the thread's hobs, its own first, that takes work now and has work waiting
+    // there; its own hob when none has, so the dispatch still reads the records again.
     const carrierOf = (service: Continuations["Service"], thread: Thread) =>
       Effect.gen(function* () {
         for (const hobId of yield* hobsOf(thread)) {
-          if (yield* workWaits(service, thread.id, hobId)) return hobId;
+          if (!(yield* workWaits(service, thread.id, hobId))) continue;
+          const found = yield* workable(thread.id, hobId);
+          if (found !== null) return found;
         }
-        return thread.agentId;
+        return yield* workable(thread.id);
       });
 
     // Delivers the work waiting in the thread, then frees the thread and starts what waits next.
-    // When no turn ran for it, the records are read again: work that arrived after the dispatch
-    // looked starts another dispatch, and otherwise only a request can be waiting.
+    // When no turn ran for it, the records are read again: work of the same hob that arrived after
+    // the dispatch looked starts another dispatch, and otherwise the next request starts.
     const carryWork = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId, slot: TurnSlot) => {
       // When no turn ran, the next request starts in the dispatch's slot: given up and asked for
       // again, the slot would go to the threads that waited longer, which would do the same (#1448).
@@ -617,12 +627,20 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           threadId,
           Effect.gen(function* () {
             yield* must(threadId, { _tag: "Delivered" });
-            if (ran || (yield* workWaitsIn(service, threadId))) {
+            // Only this hob's own work dispatches again: another hob's waits until the request
+            // that is next has been answered, so an empty dispatch never takes its place again.
+            if (ran || (yield* workWaits(service, threadId, agentId))) {
               yield* slot.release;
               yield* startNext(threadId);
               return;
             }
             handed = (yield* startQueued(threadId, { slot })) !== null;
+            // With no request to start, another hob's work there takes the floor.
+            if (!handed && (yield* workWaitsIn(service, threadId))) {
+              handed = true;
+              yield* slot.release;
+              yield* startNext(threadId);
+            }
           }),
         );
       }).pipe(Effect.ensuring(Effect.suspend(() => (handed ? Effect.void : slot.release))));

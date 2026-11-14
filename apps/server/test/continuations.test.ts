@@ -290,6 +290,21 @@ const Frodo: Before = Layer.effectDiscard(
   }),
 );
 
+const SAM = AgentId.make("sam");
+
+/** Sam's camp, which Frodo joined: Frodo's Tasks run from there. */
+const SamsCamp: Before = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    yield* repo.insertAgent(frodo);
+    yield* repo.insertAgent(new Agent({ ...frodo, id: SAM, name: "Sam", roleTitle: "Gardener" }));
+    yield* repo.upsertThread(
+      new Thread({ id: threadId, agentId: SAM, title: "The quest", kind: "camp", createdAt: now, updatedAt: now }),
+    );
+    yield* Effect.orDie(ThreadMemberRepository.use((members) => members.add(threadId, hobActor(FRODO), OWNER_ACTOR)));
+  }),
+);
+
 const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS, turnLimits: TurnLimits | null = null) => {
   const requests: Array<PromptRequest> = [];
   const gate = Deferred.makeUnsafe<void>();
@@ -328,24 +343,28 @@ const settledItems = (ids: ReadonlyArray<BackpackItem["id"]>) =>
     ),
   );
 
-/** Frodo's Task with one step, which fails: returns the Failure that arrives for Frodo. */
-const failedStep = Effect.gen(function* () {
-  const tasks = yield* TaskRepository;
-  const task = (id: string, parentId: string | null) => ({
-    id: TaskId.make(id),
-    ownerId: FRODO,
-    parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId,
-    brief: `Brief for ${id}`,
-    dependsOn: [],
-    createdAt: now,
+/** `owner`'s Task with one step, which fails: returns the Failure that arrives for `owner`. */
+const failedStepOf = (owner: AgentId, prefix = "") =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const task = (id: string, parentId: string | null) => ({
+      id: TaskId.make(`${prefix}${id}`),
+      ownerId: owner,
+      parentId: parentId === null ? null : TaskId.make(`${prefix}${parentId}`),
+      threadId,
+      brief: `Brief for ${id}`,
+      dependsOn: [],
+      createdAt: now,
+    });
+    yield* tasks.createTask({ task: task("quest", null), delegation: null, milestones: [] });
+    const step = yield* tasks.createTask({ task: task("pass", "quest"), delegation: null, milestones: [] });
+    const failed = yield* tasks.moveTask(step.value.id, step.value.revision, "failed", now);
+    const entry = failed.entries.find((each) => each.payload._tag === "BackpackItemRecorded");
+    return entry?.payload._tag === "BackpackItemRecorded" ? entry.payload.item : undefined;
   });
-  yield* tasks.createTask({ task: task("quest", null), delegation: null, milestones: [] });
-  const step = yield* tasks.createTask({ task: task("pass", "quest"), delegation: null, milestones: [] });
-  const failed = yield* tasks.moveTask(step.value.id, step.value.revision, "failed", now);
-  const entry = failed.entries.find((each) => each.payload._tag === "BackpackItemRecorded");
-  return entry?.payload._tag === "BackpackItemRecorded" ? entry.payload.item : undefined;
-});
+
+/** Frodo's Task with one step, which fails: returns the Failure that arrives for Frodo. */
+const failedStep = failedStepOf(FRODO);
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
@@ -452,30 +471,7 @@ describe("continuing a hob when work arrives", () => {
 
   // covers IN-004, ADR 039 (One hob speaks at a time)
   it("[TC-CH-1461-09] a member hob's work that arrives in a camp it joined starts its own continuation there once it wakes", async () => {
-    const sam = AgentId.make("sam");
-    const { run } = setUp(
-      Layer.effectDiscard(
-        Effect.gen(function* () {
-          const repo = yield* HobbotsRepository;
-          yield* repo.insertAgent(frodo);
-          yield* repo.insertAgent(new Agent({ ...frodo, id: sam, name: "Sam", roleTitle: "Gardener" }));
-          // Sam's camp, which Frodo joined: Frodo's Task runs from there.
-          yield* repo.upsertThread(
-            new Thread({
-              id: threadId,
-              agentId: sam,
-              title: "The quest",
-              kind: "camp",
-              createdAt: now,
-              updatedAt: now,
-            }),
-          );
-          yield* Effect.orDie(
-            ThreadMemberRepository.use((members) => members.add(threadId, hobActor(FRODO), OWNER_ACTOR)),
-          );
-        }),
-      ),
-    );
+    const { run } = setUp(SamsCamp);
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
@@ -489,6 +485,43 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
     const [settled] = await run(settledItems([failure.id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
+
+  // covers IN-004, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-10] the oldest request is answered before another hob's work, which then starts", async () => {
+    const { run, release } = setUp(SamsCamp);
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, ["@sam plan the road", HOLD].join("\n"))));
+    // While Sam's turn runs, Frodo's step fails and you ask Sam again.
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "@sam where are we?")));
+    await release();
+
+    // Sam answers you first, though his dispatch finds no work of his; then Frodo carries his.
+    const all = await run(messagesWhen((each) => each.length === 5));
+    expect(all.map((m) => [m.role, m.actor?.kind === "hob" ? m.actor.id : null])).toEqual([
+      ["user", null],
+      ["assistant", SAM],
+      ["user", null],
+      ["assistant", SAM],
+      ["assistant", FRODO],
+    ]);
+    expect(all[4]?.content).toContain("ended as failed.");
+  });
+
+  // covers IN-004, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-11] a member hob's work starts while the camp's own hob, with work of its own there, is paused", async () => {
+    const { run } = setUp(SamsCamp);
+    await run(HobLifecycle.use((hobs) => hobs.pause(SAM)));
+    await run(failedStepOf(SAM, "sam-"));
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    // The arrival wakes the camp, as the hub's wake on arrival does.
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+
+    const all = await run(messagesWhen((each) => each.length === 1));
+    expect(all[0]?.actor).toMatchObject({ kind: "hob", id: FRODO });
+    expect(all[0]?.content).toContain("ended as failed.");
   });
 
   // covers OR-004, IN-004, EX-004
@@ -757,8 +790,6 @@ describe("continuing a hob when work arrives", () => {
     ]);
   });
 });
-
-const SAM = AgentId.make("sam");
 
 /** Frodo and his thread, and Sam, who works a Task under Frodo's: stored before the hub starts. */
 const FrodoAndSam: Before = Layer.effectDiscard(
