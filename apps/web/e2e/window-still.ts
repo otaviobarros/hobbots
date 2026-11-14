@@ -5,7 +5,7 @@ import type { BrowserContext, Page } from "@playwright/test";
  * least 610px tall, so a window shorter than that may scroll to show the rest, and its scrolling and
  * height are not checked. An element placed outside the panel it scrolls in is wrong at any size.
  */
-const FRAME_LEAST_HEIGHT = 610;
+export const FRAME_LEAST_HEIGHT = 610;
 
 /** The name the page reports each break of the rule by, kept by the test, outside the page. */
 const REPORT = "__hobbotsWindowBroke";
