@@ -2,10 +2,12 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   AgentId,
+  Attempt,
   AttemptId,
   Delegation,
   DelegationId,
   deadlineOf,
+  heldByAllowance,
   IllegalSupervisionTransition,
   isOverdue,
   isUsageLimitOutcome,
@@ -219,12 +221,17 @@ const quest = (deadline: string | null) =>
     revision: 1,
   });
 
-const tree = (tasks: ReadonlyArray<Task>, delegations: ReadonlyArray<Delegation>, quests: ReadonlyArray<Quest> = []) =>
+const tree = (
+  tasks: ReadonlyArray<Task>,
+  delegations: ReadonlyArray<Delegation>,
+  quests: ReadonlyArray<Quest> = [],
+  attempts: ReadonlyArray<Attempt> = [],
+) =>
   new TaskTree({
     tasks,
     quests,
     delegations,
-    attempts: [],
+    attempts,
     milestones: [],
     checkpoints: [],
     questions: [],
@@ -270,5 +277,33 @@ describe("deadlines", () => {
     expect(isUsageLimitOutcome(usageLimitOutcome(null))).toBe(true);
     expect(isUsageLimitOutcome("The runtime ended without a result.")).toBe(false);
     expect(isUsageLimitOutcome(null)).toBe(false);
+  });
+
+  // covers OR-005
+  it("[TC-DM-1447-05] holds a Task whose turn ran out of allowance until it is taken on again", () => {
+    const ended = (outcome: string) =>
+      new Attempt({
+        id: AttemptId.make("a1"),
+        taskId: TaskId.make("page"),
+        number: 1,
+        agentId: PIP,
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        state: "failed",
+        outcome,
+        startedAt: at,
+        endedAt: at,
+      });
+    const member = (state: TaskState) =>
+      new Task({ ...task("page", "top", state), currentAttemptId: AttemptId.make("a1") });
+    const limited = [ended(usageLimitOutcome("2026-11-14T11:00:00.000Z"))];
+    expect(heldByAllowance(member("active"), tree([member("active")], [], [], limited))).toBe(true);
+    // A retry queues it for a new Attempt, and a reassign leaves it with no current one.
+    expect(heldByAllowance(member("queued"), tree([member("queued")], [], [], limited))).toBe(false);
+    expect(heldByAllowance(task("page", "top"), tree([task("page", "top")], [], [], limited))).toBe(false);
+    const failed = [ended("The runtime ended without a result.")];
+    expect(heldByAllowance(member("active"), tree([member("active")], [], [], failed))).toBe(false);
   });
 });

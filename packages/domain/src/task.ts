@@ -52,6 +52,9 @@ export const isCompletedTask = (state: TaskState): boolean => state === "complet
 /** Whether a Task ended without its result: it failed, and only a retry or a reassign opens it again. */
 export const isFailedTask = (state: TaskState): boolean => state === "failed";
 
+/** Whether a Task waits in the queue for its next Attempt, as a retry or a reassign leaves it. */
+export const isQueuedTask = (state: TaskState): boolean => state === "queued";
+
 /** The result a Task returned: a short summary and the Attempt that produced it. */
 export const TaskResult = Schema.Struct({
   summary: Schema.String,

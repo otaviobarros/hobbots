@@ -1,7 +1,17 @@
 import { Schema } from "effect";
 import { defineMachine } from "./machine.ts";
 import type { TaskTree } from "./quest.ts";
-import { AttemptId, ancestorsOf, isCancellingTask, isTerminalTask, type Task, TaskId, TaskPauses } from "./task.ts";
+import {
+  AttemptId,
+  ancestorsOf,
+  isCancellingTask,
+  isFailedAttempt,
+  isQueuedTask,
+  isTerminalTask,
+  type Task,
+  TaskId,
+  TaskPauses,
+} from "./task.ts";
 import { questsAbove } from "./task-tools.ts";
 
 /**
@@ -260,6 +270,17 @@ export const isUsageLimitOutcome = (outcome: string | null): boolean => outcome?
 /** When the usage allowance refills, as an Attempt's outcome says, or null when it does not say. */
 export const usageResetOf = (outcome: string | null): string | null =>
   outcome === null ? null : (/it resets at (\S+)\.$/.exec(outcome)?.[1] ?? null);
+
+/**
+ * Whether the usage limit of its hob's runtime ended the Task's current Attempt and nobody took the
+ * Task on again since, by a retry or a reassign: no turn starts on it before then, so the work it
+ * carries waits instead of spending its deliveries while the allowance is out (OR-005).
+ */
+export const heldByAllowance = (task: Task, tree: TaskTree): boolean => {
+  if (task.currentAttemptId === null || isQueuedTask(task.state)) return false;
+  const attempt = tree.attempts.find((each) => each.id === task.currentAttemptId);
+  return attempt !== undefined && isFailedAttempt(attempt.state) && isUsageLimitOutcome(attempt.outcome);
+};
 
 /**
  * Why an Attempt Hobbots was running ended when the hub stopped: what it did after its last record

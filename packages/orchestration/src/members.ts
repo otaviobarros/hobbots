@@ -26,6 +26,7 @@ import {
   type AttemptId,
   AttemptId as AttemptIdSchema,
   type Committed,
+  heldByAllowance,
   isOverdue,
   isTerminalTask,
   liveAttemptOn,
@@ -292,6 +293,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         // One that went live since the turn was started: a second could not start, so the work
         // waits for that one to end instead of spending its tries (ADR 019).
         if (liveAttemptOn(found.value.task, found.value.tree)) return null;
+        // Its hob's usage limit ended the last turn: the work waits for a lead or you to take it on again.
+        if (heldByAllowance(found.value.task, found.value.tree)) return null;
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
         // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
