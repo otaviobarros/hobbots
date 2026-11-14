@@ -668,7 +668,9 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ApprovalService.layer))
       // Before the Summoning Charm's hob use cases: a call that asks waits on its proposal (ADR 034).
       .pipe(Layer.provideMerge(HobProposals.layer))
-      .pipe(Layer.provideMerge(HobToolsLive))
+      // Every turn's sandbox closes what you took over from a Task, read from the claims register
+      // and the repositories' Git folders (#1537).
+      .pipe(Layer.provideMerge(HobToolsLive.pipe(Layer.provide(GitWorkspaceLive))))
       // Before every turn's tools: who a hob on your account commits as when your Git config sets no
       // one, which the hub asks you and keeps (#741).
       .pipe(
