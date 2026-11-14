@@ -91,7 +91,7 @@ const stepModel = (model: View, event: SupervisionEvent): View | "refused" => {
         : {
             ...model,
             state: "watching",
-            retries: model.state === "routed" ? model.retries : 0,
+            retries: model.state === "routed" || model.rule === "refusals" ? model.retries : 0,
             rule: null,
             reason: null,
             updatedAt: event.at,
@@ -166,6 +166,12 @@ describe("SupervisionMachine", () => {
       from: "stopped",
       to: "stopped",
     });
+    // A report of refused calls clears without giving the supervisor's own retries back.
+    const reported = SupervisionMachine.transition(
+      new Supervision({ ...watching(page, at), state: "escalated", rule: "refusals", retries: 2 }),
+      { _tag: "Cleared", at },
+    );
+    expect(reported).toMatchObject({ state: "watching", retries: 2 });
   });
 });
 

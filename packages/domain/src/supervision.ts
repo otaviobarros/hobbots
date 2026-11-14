@@ -126,6 +126,13 @@ export class IllegalSupervisionTransition extends Schema.TaggedError<IllegalSupe
   { taskId: TaskId, from: SupervisionState, to: SupervisionState },
 ) {}
 
+/**
+ * Whether clearing the record keeps its retry budget: after a question it passed on, or a report of
+ * refused calls, which the supervisor's own retry may have run into, nobody took the Task on again,
+ * so the budget only starts over after a failure or a stop it handed on.
+ */
+const keepsRetries = (record: Supervision): boolean => record.state === "routed" || record.rule === "refusals";
+
 type Acted = Extract<SupervisionEvent, { readonly reason: string }>;
 
 const acted = (
@@ -205,7 +212,7 @@ export const SupervisionMachine = defineMachine<
         new Supervision({
           ...record,
           state: "watching",
-          retries: record.state === "routed" ? record.retries : 0,
+          retries: keepsRetries(record) ? record.retries : 0,
           rule: null,
           reason: null,
           updatedAt: e.at,

@@ -295,6 +295,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         if (liveAttemptOn(found.value.task, found.value.tree)) return null;
         // Its hob's usage limit ended the last turn: the work waits for a lead or you to take it on again.
         if (heldByAllowance(found.value.task, found.value.tree)) return null;
+        // Past its deadline, no delivery starts a turn on it, a retry of an earlier one included.
+        if (isOverdue(found.value.task, found.value.tree, yield* nowIso)) return null;
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
         // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
