@@ -45,6 +45,7 @@ export const messages = {
       `${formatCount(done)} of ${formatCount(total)} done`,
     questState: {
       active: "Under way",
+      paused: "Paused",
       completed: "Done",
       failed: "Failed",
       cancelled: "Cancelled",

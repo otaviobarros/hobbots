@@ -207,6 +207,18 @@ export const ledTask = (scope: CallScope, id: string): Effect.Effect<Task, TaskT
     leads(scope, task) ? Effect.succeed(task) : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
   );
 
+/**
+ * A member's Task directly under one the caller owns, which it messages, retries or reassigns, or a
+ * refusal ending with what to do `instead`.
+ */
+export const memberTask = (scope: CallScope, id: string, instead: string): Effect.Effect<Task, TaskToolRefused> =>
+  Effect.flatMap(ledTask(scope, id), (task) => {
+    const parent = scope.tree.tasks.find((each) => each.id === task.parentId);
+    return parent?.ownerId !== scope.caller.agentId || task.ownerId === scope.caller.agentId
+      ? refuse("not-lead", `Task ${task.id} is not a member's Task directly under one of yours. ${instead}`)
+      : Effect.succeed(task);
+  });
+
 /** A Quest's deadline: the one asked for, never later than the one above it, and not passed. */
 const deadlineWithin = (scope: CallScope, above: string | null, asked: string | undefined) =>
   Effect.gen(function* () {
@@ -282,11 +294,15 @@ export const makeHobRoom = (limits: TaskToolLimits) =>
 export const makeCapacity = (limits: TaskToolLimits) =>
   Effect.gen(function* () {
     const hobRoom = yield* makeHobRoom(limits);
-    return (scope: CallScope, ownerId: AgentId, adding: number) =>
+    /**
+     * Whether `ownerId` can take `adding` more open Tasks, and the tree `toTree` more: a Task that only
+     * changes hands is already open in its tree, so it adds none there (#1446).
+     */
+    return (scope: CallScope, ownerId: AgentId, adding: number, toTree: number = adding) =>
       Effect.gen(function* () {
         yield* hobRoom(ownerId, adding);
         const inTree = scope.tree.tasks.filter((task) => !isTerminalTask(task.state)).length;
-        if (inTree + adding > limits.maxOpenTasksPerTree) {
+        if (toTree > 0 && inTree + toTree > limits.maxOpenTasksPerTree) {
           return yield* refuse(
             "concurrency-limit",
             `This work has ${inTree} open Tasks; the limit is ${limits.maxOpenTasksPerTree}. Wait for some to end.`,

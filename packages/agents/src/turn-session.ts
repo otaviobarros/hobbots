@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark } from "@hobbots/domain";
-import { isSessionOf, liveSession, Thread } from "@hobbots/domain";
+import { isSessionOf, isTaskToolName, liveSession, Thread } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";
@@ -26,18 +26,37 @@ const withSession = (
 
 /**
  * What a started session keeps of the session the thread knew: what it was told of its Task
- * (#1027) and its read-the-web mark (ADR 036) hold only for the same session.
+ * (#1027), its read-the-web mark (ADR 036) and the Task tools it holds (#1543) hold only for the
+ * same session.
  */
 const carriedMarks = (
   known: RuntimeSession | undefined,
   sessionId: string,
-): Pick<RuntimeSession, "taskBrief" | "readWeb"> => {
+): Pick<RuntimeSession, "taskBrief" | "readWeb" | "taskTools"> => {
   if (known?.sessionId !== sessionId) return {};
   return {
     ...(known.taskBrief === undefined ? {} : { taskBrief: known.taskBrief }),
     ...(known.readWeb == null ? {} : { readWeb: known.readWeb }),
+    ...(known.taskTools === undefined ? {} : { taskTools: known.taskTools }),
   };
 };
+
+/** Whether two lists of tool names are the same, both unknown included. */
+const sameTools = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string> | undefined) =>
+  a === b || (a !== undefined && b !== undefined && a.length === b.length && a.every((name, i) => name === b[i]));
+
+/** The Task tools among the hub tools a new session holds for good, or undefined when not known (#1543). */
+const heldTaskTools = (hubTools: ReadonlyArray<string> | undefined) => hubTools?.filter(isTaskToolName);
+
+/** Whether recording `next` over `known` would change nothing the thread keeps of the session. */
+const sameSession = (known: RuntimeSession, next: RuntimeSession) =>
+  known.sessionId === next.sessionId &&
+  known.chapterId === next.chapterId &&
+  (known.chapterMerges ?? 0) === (next.chapterMerges ?? 0) &&
+  known.seenThrough === next.seenThrough &&
+  known.memoryBrief === next.memoryBrief &&
+  sameRoster(known.roster, next.roster) &&
+  sameTools(known.taskTools, next.taskTools);
 
 /** What the turn tells its session ahead of the prompt, once the turn has built it. */
 export interface TurnBriefs {
@@ -74,6 +93,8 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
   // The session the turn ran in, and the policy version its tools ran under, for the Attempt it may start on a Task.
   let sessionId: string | null = null;
   let policy: string | null = null;
+  // The hub tools the runtime says the session it started holds for good, when it keeps them (#1543).
+  let startedWith: ReadonlyArray<string> | undefined;
   let briefs: TurnBriefs = { memory: null, roster: null };
   let briefDelivered = false;
   let compacted = false;
@@ -140,6 +161,7 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
         // Without memory, a session keeps whatever brief it was last told of.
         const memoryBrief = memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, started);
         const rosterMark = rosterAtStart(roster, known, expected, started);
+        const taskTools = heldTaskTools(startedWith);
         const session: RuntimeSession = {
           runtime,
           agentId,
@@ -151,16 +173,9 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
           ...(memoryBrief === undefined ? {} : { memoryBrief }),
           ...carriedMarks(known, started),
           ...(rosterMark === undefined ? {} : { roster: rosterMark }),
+          ...(taskTools === undefined ? {} : { taskTools }),
         };
-        if (
-          known?.sessionId === session.sessionId &&
-          known.chapterId === chapterId &&
-          (known.chapterMerges ?? 0) === thread.liveChapterMerges &&
-          known.seenThrough === seenThrough &&
-          known.memoryBrief === session.memoryBrief &&
-          sameRoster(known.roster, session.roster)
-        )
-          return null;
+        if (known !== undefined && sameSession(known, session)) return null;
         const sessions =
           known === undefined ? [...latest.sessions, session] : latest.sessions.map((s) => (s === known ? session : s));
         return new Thread({ ...latest, sessions, updatedAt });
@@ -173,10 +188,14 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
     id: () => sessionId,
     /** The policy version the turn's tools ran under, once its session started. */
     policy: () => policy,
-    /** The runtime started `started` under `policyVersion`. */
-    begin: (started: string, policyVersion: string | null) => {
+    /**
+     * The runtime started `started` under `policyVersion`. `hubTools` are the tools a new session
+     * holds for good, on a runtime that keeps them (#1543).
+     */
+    begin: (started: string, policyVersion: string | null, hubTools?: ReadonlyArray<string>) => {
       sessionId = started;
       policy = policyVersion;
+      startedWith = hubTools;
     },
     /** What the turn tells its session, once built: confirmed and recorded with the session. */
     briefed: (built: TurnBriefs) => {

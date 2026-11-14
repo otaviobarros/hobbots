@@ -7,6 +7,7 @@ import {
   HobAdmission,
   HobbotsRepository,
   HobTools,
+  MemoryCapture,
   MemoryStore,
   type PromptRequest,
   RuntimeAdapter,
@@ -25,6 +26,7 @@ import {
   OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
+  Thread,
   type ThreadId,
 } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
@@ -34,6 +36,7 @@ import {
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  MemoryCaptureLive,
   TaskRepositoryLive,
   ThreadMemberRepositoryLive,
   UserRepositoryLive,
@@ -49,8 +52,9 @@ import { NodeFolderChecks } from "../src/folders.ts";
 // Issue #1465 (ADR 039, The context pack with several hobs): in a camp two hobs speak in, a hob's
 // new session starts from a pack that says who is here and why it answers, names every speaker and
 // carries its own memory brief, never the other hob's; a resumed session hears only what others
-// said since it last spoke. On Claude Code and on Codex alike. Until the floor runs the mentioned
-// hob's turn (#1461), a test hands the camp from one hob to the other.
+// said since it last spoke. Issue #1466 (ADR 039, Memory in a shared thread): each hob's memory keeps
+// its own turns and the messages it took, and a private camp none. On Claude Code and on Codex alike.
+// Until the floor runs the mentioned hob's turn (#1461), a test hands the camp from one hob to the other.
 
 const NOW = "2026-11-14T00:00:00.000Z";
 const WREN = AgentId.make("wren");
@@ -106,6 +110,7 @@ type Hub = ManagedRuntime.ManagedRuntime<
   Layer.Error<ReturnType<typeof hubLayer>>
 >;
 let hub: Hub | undefined;
+let memory: ReturnType<typeof makeMemoryStoreFake>;
 
 afterEach(async () => {
   await hub?.dispose();
@@ -143,7 +148,7 @@ const lesson = (store: MemoryStore["Service"], scope: MemoryScope, text: string)
 /** A hub with Wren and Quill, both thinking with `runtime`, each remembering its own lesson, and a camp of Wren's that Quill joined. */
 const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
   asked = { "claude-code": [], codex: [] };
-  const memory = makeMemoryStoreFake();
+  memory = makeMemoryStoreFake();
   await lesson(memory.store, { _tag: "Hob", agentId: WREN }, "Wren keeps the market's ledger.");
   await lesson(memory.store, { _tag: "Hob", agentId: QUILL }, "Quill writes in short sentences.");
   hub = ManagedRuntime.make(hubLayer(memory.store));
@@ -234,6 +239,65 @@ describe("the context pack with several hobs", () => {
       expect(wren.briefing).toMatch(/\*\*Quill \(hob\):\*\*\n> /);
       expect(wren.briefing).not.toContain("our stall is number 12");
       expect(wren.briefing).not.toContain("Quill writes in short sentences.");
+    },
+  );
+});
+
+/** One round of the capture worker over the hub's own journal, as the hub runs it while memory is on. */
+const captureRound = () =>
+  run(
+    MemoryCapture.use((capture) => capture.runOnce).pipe(
+      Effect.provide(
+        MemoryCapture.make.pipe(
+          Layer.provide(Layer.merge(MemoryCaptureLive, Layer.succeed(MemoryStore, memory.store))),
+        ),
+      ),
+    ),
+  );
+
+/** What `agentId`'s own memory keeps of the camp's session, as text. */
+const keptBy = (agentId: AgentId, id: ThreadId) =>
+  memory.controls.captured({ _tag: "Hob", agentId }, id).map((item) => `${item.kind}: ${item.text}`);
+
+describe("memory in a shared thread", () => {
+  // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind), RT-001
+  it.each<RuntimeKind>(["claude-code", "codex"])(
+    "[TC-GEN-1466-05] on %s, each hob's memory keeps its own turns and the messages it took, and a private camp none",
+    async (runtime) => {
+      const id = await start(runtime);
+      // Memory is on from the start: the worker holds the journal from its head.
+      expect(await captureRound()).toBe(true);
+      await say(id, "@Wren our stall is number 12.");
+      await handTo(id, QUILL);
+      await say(id, "@Quill write the sign for it.");
+      expect(await captureRound()).toBe(true);
+
+      const wren = keptBy(WREN, id);
+      const quill = keptBy(QUILL, id);
+      expect(wren).toContain(`message: @Wren our stall is number 12.\n\n(from user ${OWNER_ACTOR.id})`);
+      expect(wren.filter((item) => item.startsWith("reply: "))).toHaveLength(1);
+      expect(wren.some((item) => item.includes("write the sign"))).toBe(false);
+      expect(quill).toContain(`message: @Quill write the sign for it.\n\n(from user ${OWNER_ACTOR.id})`);
+      expect(quill.filter((item) => item.startsWith("reply: "))).toHaveLength(1);
+      expect(quill.some((item) => item.includes("stall is number 12"))).toBe(false);
+
+      // Made private, the camp keeps every member hob's memory out.
+      await run(
+        HobbotsRepository.use((repo) =>
+          Effect.flatMap(repo.findThread(id), (thread) =>
+            repo.upsertThread(new Thread({ ...Option.getOrThrow(thread), kind: "camp", private: true })),
+          ),
+        ),
+      );
+      await say(id, "@Quill Ada earns 9000.");
+      await handTo(id, WREN);
+      await say(id, "@Wren Ada earns 9000 too.");
+      expect(await captureRound()).toBe(true);
+      for (const agentId of [WREN, QUILL]) {
+        expect(keptBy(agentId, id).some((item) => item.includes("9000"))).toBe(false);
+      }
+      expect(keptBy(WREN, id)).toEqual(wren);
+      expect(keptBy(QUILL, id)).toEqual(quill);
     },
   );
 });

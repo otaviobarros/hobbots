@@ -257,6 +257,8 @@ const REFUSALS: Readonly<Record<string, (names: Names) => string>> = {
   "task-state": () => refused["task-state"],
   "task-cancelling": () => refused["task-cancelling"],
   "parent-cancelling": () => refused["parent-cancelling"],
+  "parent-paused": () => refused["parent-paused"],
+  "attempt-unresolved": () => refused["attempt-unresolved"],
   "children-open": () => refused["children-open"],
   "quest-exists": () => refused["quest-exists"],
 };

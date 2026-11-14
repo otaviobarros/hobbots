@@ -128,7 +128,8 @@ const withControl = (
   tree: TaskTree,
   event: { readonly task: Task; readonly control?: TaskControl | undefined },
 ): Partial<TaskTree> => {
-  const delegation = event.control?.delegation ?? null;
+  const control = event.control;
+  const delegation = control !== undefined && "delegation" in control ? control.delegation : null;
   const known = tree.tasks.find((each) => each.id === event.task.id);
   if (delegation === null || (known !== undefined && event.task.revision < known.revision)) return {};
   return { delegations: upsert(tree.delegations, delegation) };

@@ -2,6 +2,7 @@ import type { MemoryStoreShape } from "@hobbots/agents";
 import { Effect, Exit, Redacted, Scope } from "effect";
 import { describe, vi } from "vitest";
 import { MEMORY_WORKSPACE } from "../src/engine/engine.ts";
+import { engineSessionOf } from "../src/store/capture.ts";
 import { engineActorOf } from "../src/store/scopes.ts";
 import { captureContract } from "./capture-contract.ts";
 import { engineDataDir, engineEnabled, startEngineStore } from "./engine-store.ts";
@@ -20,6 +21,7 @@ type RunningEngine = Effect.Success<ReturnType<typeof startEngineStore>>;
 interface EngineObservation {
   readonly kind: string;
   readonly title: string;
+  readonly body: string;
   readonly created_at: string;
 }
 
@@ -39,7 +41,12 @@ const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
         method: "tools/call",
         params: {
           name: "memory_read_session_observations",
-          arguments: { workspace: MEMORY_WORKSPACE, project: hob, session_id: threadId, limit: 100 },
+          arguments: {
+            workspace: MEMORY_WORKSPACE,
+            project: hob,
+            session_id: engineSessionOf({ workspace: MEMORY_WORKSPACE, project: hob }, threadId),
+            limit: 100,
+          },
         },
       }),
     });
@@ -69,7 +76,11 @@ describe.runIf(engineEnabled)("memory capture on ai-memory", () => {
           Effect.map(observationsOf(engine, engineActorOf(agentId), sessionId), (observations) => observations.length),
         observed: (agentId, sessionId) =>
           Effect.map(observationsOf(engine, engineActorOf(agentId), sessionId), (observations) =>
-            observations.map((observation) => ({ title: observation.title, at: observation.created_at })),
+            observations.map((observation) => ({
+              title: observation.title,
+              body: observation.body,
+              at: observation.created_at,
+            })),
           ),
         down: Effect.promise(() => Effect.runPromise(Scope.close(engine.scope, Exit.void))),
         up: Effect.promise(async () => {
