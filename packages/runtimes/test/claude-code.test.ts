@@ -653,6 +653,35 @@ describe("reading a Claude Code turn", () => {
     expect(kept).not.toContain(secret.slice(0, 8));
   });
 
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-20] a call waiting for its result is dropped once any result answers it, and only a bounded number wait", () => {
+    const read = turnEvents();
+    const use = (id: string) => ({ type: "tool_use", id, name: "Bash", input: { command: `echo ${id}` } });
+    const result = (id: string, content: string, isError: boolean) => ({
+      type: "tool_result",
+      tool_use_id: id,
+      is_error: isError,
+      content,
+    });
+    const said = (content: ReadonlyArray<unknown>) =>
+      read({ type: "assistant", parent_tool_use_id: null, message: { content } } as unknown as SDKMessage);
+    const answered = (content: ReadonlyArray<unknown>) =>
+      read({ type: "user", parent_tool_use_id: null, message: { role: "user", content } } as unknown as SDKMessage);
+    const noSuch = "<tool_use_error>Error: No such tool available: Bash</tool_use_error>";
+    const labels = (events: ReadonlyArray<RuntimeEvent>) =>
+      events.map((event) => (event._tag === "ToolDenied" ? event.label : event._tag));
+    // A call an ordinary result answered keeps nothing, so a later refusal of its id knows only the result's words.
+    said([use("done")]);
+    answered([result("done", "ok", false)]);
+    expect(labels(answered([result("done", noSuch, true)]))).toEqual(["Running a command"]);
+    // Past the bound, the oldest call waiting is dropped and the newest kept.
+    said(Array.from({ length: 300 }, (_, each) => use(`w-${each}`)));
+    expect(labels(answered([result("w-0", noSuch, true), result("w-299", noSuch, true)]))).toEqual([
+      "Running a command",
+      "Running echo w-299",
+    ]);
+  });
+
   it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
     const read = turnEvents();
     const said = (parent: string | null, content: ReadonlyArray<unknown>) =>

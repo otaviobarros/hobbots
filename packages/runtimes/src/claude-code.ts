@@ -23,6 +23,9 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   approvalNote,
+  clip,
+  NOT_OFFERED_LABEL_MAX,
+  NOT_OFFERED_NAME_MAX,
   notOfferedDenial,
   operationDecision,
   type PromptRequest,
@@ -31,6 +34,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
   RuntimeLimitReached,
+  type RuntimeToolName,
   type ToolAccess,
   type TurnApprovals,
   UNRECORDED_TOOL_CALL,
@@ -667,39 +671,50 @@ const resultText = (content: unknown): string =>
  * model's tool_use, and the "No such tool available" result that answers it. A hub tool is named
  * without the hub server's prefix, as the session's offer names it. A subagent's calls are its own.
  */
-const notOfferedCalls = (redact?: (text: string) => string) => {
-  const calls = new Map<string, { readonly name: string; readonly input: Record<string, unknown> }>();
+/** How many calls still waiting for their result are kept; the oldest is dropped past it. */
+const PENDING_CALLS = 256;
+
+interface NotOfferedCall {
+  readonly tool: string;
+  readonly label: string;
+  readonly runtimeTool: RuntimeToolName | null;
+}
+
+const notOfferedCalls = (redact: (text: string) => string = redactSecrets) => {
+  /** Only what a refusal needs of each call waiting for its result, each bounded, never its input. */
+  const calls = new Map<string, NotOfferedCall>();
+  /** What a refusal of a call keeps: its name, redacted whole and then bounded, and its label. */
+  const projection = (named: string, input: Record<string, unknown>): NotOfferedCall => {
+    // Redacted whole before it is bounded, so a secret the name holds is never cut first.
+    const tool = clip(redact(hubToolOf(named) ?? named), NOT_OFFERED_NAME_MAX);
+    const label = clip(refusedCallLabel(tool, input, redact), NOT_OFFERED_LABEL_MAX);
+    return { tool, label, runtimeTool: claudeCodeRuntimeTool(named) };
+  };
   return (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
     if ((message.type !== "assistant" && message.type !== "user") || message.parent_tool_use_id !== null) return [];
     const content = message.message.content;
     if (!Array.isArray(content)) return [];
     if (message.type === "assistant") {
       for (const block of content) {
-        if (block.type === "tool_use") {
-          const input = block.input !== null && typeof block.input === "object" ? block.input : {};
-          calls.set(block.id, { name: block.name, input: input as Record<string, unknown> });
-        }
+        if (block.type !== "tool_use") continue;
+        const input = block.input !== null && typeof block.input === "object" ? block.input : {};
+        calls.set(block.id, projection(block.name, input as Record<string, unknown>));
+        const oldest = calls.size > PENDING_CALLS ? calls.keys().next() : null;
+        if (oldest !== null && oldest.done !== true) calls.delete(oldest.value);
       }
       return [];
     }
     return content.flatMap((block): ReadonlyArray<RuntimeEvent> => {
-      if (block.type !== "tool_result" || block.is_error !== true) return [];
-      const said = NOT_OFFERED_RESULT.exec(resultText(block.content).trim())?.[1];
-      if (said === undefined) return [];
+      if (block.type !== "tool_result") return [];
+      // Every result ends its call's wait, refused or not.
       const call = calls.get(block.tool_use_id);
       calls.delete(block.tool_use_id);
+      if (block.is_error !== true) return [];
+      const said = NOT_OFFERED_RESULT.exec(resultText(block.content).trim())?.[1];
+      if (said === undefined) return [];
       // The call's own name, exact; the result's words may add a sentence after it.
-      const named = call?.name ?? said;
-      // Redacted whole before notOfferedDenial bounds it, so a secret the name holds is never cut first.
-      const tool = (redact ?? redactSecrets)(hubToolOf(named) ?? named);
-      return [
-        notOfferedDenial({
-          id: block.tool_use_id,
-          tool,
-          label: refusedCallLabel(tool, call?.input ?? {}, redact),
-          runtimeTool: claudeCodeRuntimeTool(named),
-        }),
-      ];
+      const refused = call ?? projection(said, {});
+      return [notOfferedDenial({ id: block.tool_use_id, ...refused })];
     });
   };
 };
