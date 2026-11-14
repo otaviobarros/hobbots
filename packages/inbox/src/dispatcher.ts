@@ -660,12 +660,13 @@ export class Dispatcher extends Context.Service<
                 Effect.as("lost" as const),
               ),
             ),
-            Effect.onInterrupt(() =>
-              Effect.forEach(delivered, ({ item, held: claim }) => Effect.ignore(backpack.requeue(item.id, claim)), {
-                discard: true,
-              }),
-            ),
           );
+
+        /** Sends delivered items back, when their hand-off is interrupted before the runtime took them. */
+        const requeueAll = (delivered: ReadonlyArray<Claimed>) =>
+          Effect.forEach(delivered, ({ item, held: claim }) => Effect.ignore(backpack.requeue(item.id, claim)), {
+            discard: true,
+          });
 
         const handOnce = (
           itemIds: ReadonlyArray<BackpackItemId>,
@@ -673,37 +674,44 @@ export class Dispatcher extends Context.Service<
           give: GiveToLive,
           outcomes: Map<BackpackItemId, Dispatched>,
         ) =>
-          Effect.gen(function* () {
-            if (yield* held) return false;
-            const found = yield* findWaiting(itemIds, outcomes);
-            const waiting = yield* settleLateWaiting(
-              found.filter((item) => item.state === "pending" && item.claim === null),
-              outcomes,
-            );
-            const live = yield* claimAll(waiting, `${hub}:${turn.turnId}`, outcomes, { ending: null });
-            if (live.length === 0) return false;
-            const delivered = yield* Effect.forEach(live, ({ item, held: claim }) =>
-              step(backpack.deliver(item.id, claim, turn)).pipe(
-                Effect.map((next): Claimed => ({ item: next, held: claim })),
-              ),
-            );
-            const sessionId = yield* giving(delivered, give);
-            if (sessionId === "lost") return true;
-            yield* Effect.forEach(
-              delivered,
-              (claimed) =>
-                (sessionId === null
-                  ? step(backpack.requeue(claimed.item.id, claimed.held))
-                  : reachedLive(claimed, turn.turnId, sessionId)
-                ).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logWarning("Could not settle a message handed to a running turn", cause),
-                  ),
+          // Claiming, delivering and settling run whole: an interruption between them would leave a
+          // claim no one gives back. Only the wait for the runtime is interrupted, and the items are
+          // requeued when it is, even when the interruption came before the wait began.
+          Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              if (yield* held) return false;
+              const found = yield* findWaiting(itemIds, outcomes);
+              const waiting = yield* settleLateWaiting(
+                found.filter((item) => item.state === "pending" && item.claim === null),
+                outcomes,
+              );
+              const live = yield* claimAll(waiting, `${hub}:${turn.turnId}`, outcomes, { ending: null });
+              if (live.length === 0) return false;
+              const delivered = yield* Effect.forEach(live, ({ item, held: claim }) =>
+                step(backpack.deliver(item.id, claim, turn)).pipe(
+                  Effect.map((next): Claimed => ({ item: next, held: claim })),
                 ),
-              { discard: true },
-            );
-            return true;
-          }).pipe(
+              );
+              const sessionId = yield* restore(giving(delivered, give)).pipe(
+                Effect.onInterrupt(() => requeueAll(delivered)),
+              );
+              if (sessionId === "lost") return true;
+              yield* Effect.forEach(
+                delivered,
+                (claimed) =>
+                  (sessionId === null
+                    ? step(backpack.requeue(claimed.item.id, claimed.held))
+                    : reachedLive(claimed, turn.turnId, sessionId)
+                  ).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.logWarning("Could not settle a message handed to a running turn", cause),
+                    ),
+                  ),
+                { discard: true },
+              );
+              return true;
+            }),
+          ).pipe(
             Effect.catchCause((cause) =>
               Cause.hasInterruptsOnly(cause)
                 ? Effect.interrupt

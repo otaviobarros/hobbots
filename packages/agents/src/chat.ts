@@ -62,6 +62,17 @@ import { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources, PackReports } from "./turn-pack.ts";
 import { sessionActor } from "./users.ts";
 
+/**
+ * The skill a message asks for: the one you picked with `/`, or one its text names. A skill of a set
+ * picked by its name alone is recorded with its set, when that names one.
+ */
+const pickedSkill = (
+  content: string,
+  askedSkill: SkillMention | null,
+  named: Parameters<typeof mentionedSkill>[1],
+): SkillMention | null =>
+  askedSkill === null ? mentionedSkill(content, named) : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill);
+
 /** How much of a cut-off reply the runtime is shown when asked to continue it. */
 const CONTINUE_CONTEXT = 4_000;
 
@@ -454,11 +465,7 @@ export class ChatService extends Context.Service<
             error: null,
             configVersion: null,
             skills: accepted,
-            // A skill of a set picked by its name alone is recorded with its set, when that names one.
-            askedSkill:
-              askedSkill === null
-                ? mentionedSkill(content, named)
-                : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill),
+            askedSkill: pickedSkill(content, askedSkill, named),
             createdAt: yield* nowIso,
           });
         });
@@ -491,7 +498,13 @@ export class ChatService extends Context.Service<
             // Work you stopped here, and routine progress, ride along: the message starts through the
             // dispatcher, under their claims.
             const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
-            const saved = yield* saveMessage(yield* yourMessage(thread, agent, content, askedSkill, waits || carries));
+            const userMessage = yield* yourMessage(thread, agent, content, askedSkill, waits || carries);
+            // Who answers is decided in the transaction that stores the message (ADR 039, Who
+            // answers). You cannot mention a hob yet (#1455), so nothing is refused, and a thread has
+            // one hob until hobs can be added to a camp (#1467): when it names one, it is the thread's.
+            const sent = yield* repo.sendMessage(userMessage, { mentions: [], repliesTo: null });
+            const saved = yield* announce(sent).pipe(Effect.map((value) => value.message));
+            if (sent.value.answerers.length === 0) return { userMessage: saved, assistantMessage: null };
             // A message that waits behind a busy thread has the thread look at its work again once it
             // is free, so a dispatch that already found nothing does not start it without its progress.
             if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });

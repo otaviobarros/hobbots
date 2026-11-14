@@ -321,6 +321,15 @@ const briefNeeds = (member: Agent, brief: string, offer: SessionToolOffer): stri
   return ` Warning: the brief names ${each.join("; ")}. Do that part yourself, give ${member.name} what it lacks, or bring in a hob that has it.`;
 };
 
+/**
+ * A warning for the lead when the brief names `gh`, which no hob can run: no credential enters its
+ * sandbox, so GitHub goes through the GitHub Charm's tools (#1349). Empty otherwise.
+ */
+const briefNamesGh = (brief: string): string =>
+  /\bgh\b/.test(brief)
+    ? " Warning: the brief names gh, which no hob can run: GitHub goes through the GitHub Charm's tools, so name the work instead."
+    : "";
+
 /** The offer as the call's details carry it, for a lead that reads them. */
 const offerDetails = (offer: SessionToolOffer) => ({
   // Each tool by its name, with its answer, "per-call" for one decided on each call: compact, since a lead reads it in its turn.
@@ -496,7 +505,7 @@ export const makeDelegating = ({
             : (input.prepared ?? NO_OFFER);
         const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders }, offer);
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
-        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}`;
+        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}${briefNamesGh(input.brief)}`;
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
         // Refused here, not only by the records, so a check is refused as the call would be.
         yield* placeable(scope, task, input.depends_on ?? []);

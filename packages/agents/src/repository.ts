@@ -1,9 +1,11 @@
 import type { ThreadKeyReused } from "@hobbots/api";
 import type {
+  Actor,
   Agent,
   AgentConfiguration,
   AgentId,
   AgentStatus,
+  AnswerOwed,
   CarriedOver,
   CarriedOverEntry,
   ChangeActor,
@@ -14,6 +16,7 @@ import type {
   ChatWork,
   Committed,
   IllegalChapterTransition,
+  MentionRefused,
   Message,
   MessageId,
   Retiring,
@@ -29,6 +32,24 @@ import { Context, type Effect, type Option } from "effect";
 export type ChapterMoveTarget =
   | { readonly _tag: "camp"; readonly campId: ThreadId }
   | { readonly _tag: "new"; readonly camp: Thread };
+
+/** Whom a message you send mentions and replies to; see `SaidMessage`. */
+export interface SentTo {
+  readonly mentions: ReadonlyArray<Actor>;
+  readonly repliesTo: Actor | null;
+}
+
+/** A message you sent as stored, and the hobs that owe it an answer, in order. */
+export interface SentMessage {
+  readonly message: Message;
+  readonly answerers: ReadonlyArray<AnswerOwed>;
+}
+
+/** Stores a message you send with who answers it; one with no mentions is never refused. */
+export interface SendMessage {
+  (message: Message, to: SentTo & { readonly mentions: readonly [] }): Effect.Effect<Committed<SentMessage>>;
+  (message: Message, to: SentTo): Effect.Effect<Committed<SentMessage>, MentionRefused>;
+}
 
 /** Where hobs, their configuration versions, threads and messages are stored. Each write journals its events. */
 export class HobbotsRepository extends Context.Service<
@@ -101,6 +122,13 @@ export class HobbotsRepository extends Context.Service<
      * message joins its thread's live chapter; the message returned carries the chapter it is in.
      */
     readonly upsertMessage: (message: Message, uses?: ReadonlyArray<SkillUse>) => Effect.Effect<Committed<Message>>;
+    /**
+     * Stores a message you send and decides who answers it in the same transaction (ADR 039, Who
+     * answers), from the thread's members and its running Quest as they stand at that moment. A
+     * message nobody answers is stored complete, never queued. A mention of a hob that cannot hear
+     * it is refused, and nothing is stored. Without mentions nothing can be refused.
+     */
+    readonly sendMessage: SendMessage;
     /**
      * Saves a reply's text while it is in progress, without journaling or a new revision (ADR 013),
      * so a crash keeps what had streamed by then. Does nothing once the reply has ended.

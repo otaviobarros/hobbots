@@ -96,7 +96,7 @@ export class Task extends Schema.Class<Task>("Task")({
   revision: Revision,
   /**
    * The pause on it while it is `pausing` or `paused` (#1446); null otherwise, and for Tasks
-   * journaled before migration 0115.
+   * journaled before migration 20261114004439_pauses.
    */
   pause: Schema.NullOr(TaskPause).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
