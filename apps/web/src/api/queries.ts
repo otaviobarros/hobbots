@@ -263,7 +263,7 @@ export const storeSavedPermissions = async (
  * event, which reads them again.
  */
 /** The key of a hob's permissions changes, so any view can tell one is still saving (STD-REACT-027). */
-export const updatePermissionsKey = (agentId: AgentId) => ["permissions", "update", agentId] as const;
+const updatePermissionsKey = (agentId: AgentId) => ["permissions", "update", agentId] as const;
 
 /** Whether a change to the hob's permissions is still saving, from any view. */
 export const useSavingPermissions = (agentId: AgentId) =>
