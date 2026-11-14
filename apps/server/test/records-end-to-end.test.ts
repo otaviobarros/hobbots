@@ -19,8 +19,9 @@ import {
   Records,
   RecordToolsLive,
   SecretRedaction,
+  SidebarList,
 } from "@hobbots/agents";
-import type { ForYouRead } from "@hobbots/api";
+import type { ForYouRead, SidebarRead } from "@hobbots/api";
 import {
   type Agent,
   CAMP_SUGGESTION_DECISIONS,
@@ -28,6 +29,7 @@ import {
   type CatchUp,
   type ChapterMove,
   type Decision,
+  hobActor,
   isInProgress,
   type Message,
   type MessagePin,
@@ -54,6 +56,8 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
+  ThreadMemberRepositoryLive,
+  UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_HUB_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -64,6 +68,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { BlockedWorkLive } from "../src/sidebar.ts";
 import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
@@ -90,7 +95,16 @@ beforeEach(() => {
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
     .pipe(Layer.provideMerge(Layer.mergeAll(CampSuggestionService.layer, ChapterService.layer)))
-    .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Notes.layer,
+          CatchUps.layer,
+          ForYouList.layer,
+          SidebarList.layer.pipe(Layer.provide(BlockedWorkLive)),
+        ),
+      ),
+    )
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
@@ -110,6 +124,8 @@ beforeEach(() => {
             PinRepositoryLive,
             CatchUpRepositoryLive,
             ForYouRepositoryLive,
+            ThreadMemberRepositoryLive,
+            UserRepositoryLive,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -393,5 +409,50 @@ describe("the camp sheet over the API", () => {
     await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
     const made = await request<Thread>("PUT", "/api/threads/camp-private/private", { private: true });
     expect(made).toMatchObject({ status: 200, body: { id: "camp-private", private: true } });
+  });
+});
+
+describe("the sidebar over the API", () => {
+  // covers ADR 039 (The sidebar), #1469
+  it("[TC-UX-1469-01] lists a hob's chat in Direct messages and its camps in Camps, with your unread replies, sorted on every read", async () => {
+    const { pip, thread } = await pipWithThread();
+    await exchange(thread, "Hello.");
+    const camp = await request<Thread>("POST", `/api/agents/${pip.id}/camps`, {
+      key: "launch",
+      title: "Launch",
+      goal: null,
+      private: false,
+    });
+    expect(camp.status).toBe(200);
+    const read = (await request<SidebarRead>("GET", "/api/sidebar")).body;
+    expect(read.you).toMatchObject({ id: "owner" });
+    expect(read.people).toEqual([]);
+    expect(read.sidebar.directMessages).toEqual([
+      {
+        threadId: thread.id,
+        agentId: pip.id,
+        section: "direct-message",
+        others: [hobActor(pip.id)],
+        unread: 1,
+        mentions: 0,
+        needsYou: false,
+      },
+    ]);
+    expect(read.sidebar.camps).toEqual([
+      {
+        threadId: "launch",
+        agentId: pip.id,
+        section: "hob-camp",
+        others: [hobActor(pip.id)],
+        unread: 0,
+        mentions: 0,
+        needsYou: false,
+      },
+    ]);
+    // Reading the chat clears its count on the next read: nothing about the sidebar was stored.
+    const last = (await messages(thread)).at(-1);
+    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
+    const again = (await request<SidebarRead>("GET", "/api/sidebar")).body;
+    expect(again.sidebar.directMessages[0]?.unread).toBe(0);
   });
 });

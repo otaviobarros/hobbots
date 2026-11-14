@@ -52,7 +52,7 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("first");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
 
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}$`));
@@ -75,7 +75,7 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   // A chat opens from the list; New chat and Profile sit in the hero.
   await main.getByRole("link", { name: /^Open / }).click();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/threads/`));
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
   await page.goBack();
   await hero.getByRole("link", { name: "Profile" }).click();
   await expect(page.getByRole("main", { name: "Pip's profile" })).toBeVisible();
@@ -83,7 +83,7 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await hero.getByRole("link", { name: "Your chat with Pip" }).click();
   // The hob already has its chat, so the hero opens that one.
   await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/threads/`));
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
 });
 
 // covers CH-001, CH-002, CH-006, CH-009
@@ -98,7 +98,7 @@ test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, 
     const composer = page.getByRole("textbox", { name: /^Message Pip/ });
     await composer.fill(prompt);
     await composer.press("Enter");
-    await expect(page.getByText(`Echo: ${prompt}`)).toBeVisible();
+    await expect(page.getByRole("main").getByText(`Echo: ${prompt}`)).toBeVisible();
   }
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   const main = page.getByRole("main", { name: "Pip's page" });
@@ -153,7 +153,7 @@ test("[TC-UX-147] a link with q opens a hob's Chats already searching for it", a
     const composer = page.getByRole("textbox", { name: /^Message Pip/ });
     await composer.fill(prompt);
     await composer.press("Enter");
-    await expect(page.getByText(`Echo: ${prompt}`)).toBeVisible();
+    await expect(page.getByRole("main").getByText(`Echo: ${prompt}`)).toBeVisible();
   }
 
   await page.goto(`${current.url}/#/hobs/${pip.id}?q=codes`);

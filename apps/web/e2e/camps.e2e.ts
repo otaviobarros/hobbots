@@ -1,15 +1,23 @@
+import type { Locator, Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
-import { campAt, expandSidebar, expect, test } from "./hub.ts";
+import { campAt, expect, test } from "./hub.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1378 (ADR 037): the hob's chat and its camps in the browser, on the fake runtime. The
-// sidebar lists the hob's Chat, then its camps; Make a camp and Start fresh open their sheets from
-// the sidebar and the chat's ⋯ menu.
+// sidebar lists the hob's camps under Camps and its chat under Direct messages (ADR 039); Make a
+// camp and Start fresh open their sheets from the sidebar and the chat's ⋯ menu.
 
 test.afterEach(stopAldricHub);
-test.beforeEach(({ context }) => expandSidebar(context));
 
 const AWAY = /^Send( after this reply)?$/;
+
+/** Aldric's direct message in the sidebar, which opens his chat (ADR 039, The sidebar). */
+const aldricsChat = (page: Page) =>
+  page.getByRole("list", { name: "Direct messages" }).getByRole("link", { name: /^Aldric, / });
+
+/** The camps the sidebar lists, by name, in order. */
+const campNames = (rail: Locator) =>
+  rail.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")));
 
 // covers CH-001, CH-009
 test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archives and restores it", async ({
@@ -18,7 +26,8 @@ test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archive
   const { url, aldric, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   const header = main.locator("header").first();
-  const rail = page.getByRole("list", { name: "Aldric's chat and camps" });
+  const rail = page.getByRole("list", { name: "Camps" });
+  const chat = aldricsChat(page);
 
   // Opening the hob opens its chat, which leads with the hob's name.
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -30,10 +39,10 @@ test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archive
   await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/`));
   await expect(main.getByText("Echo: first")).toBeVisible();
   const chatAddress = page.url();
-  await expect(rail.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(chat).toHaveAttribute("aria-current", "page");
 
   // Make a camp from the sidebar: a name is needed, and the camp opens once it is made.
-  await rail.getByRole("button", { name: "Make a camp for Aldric" }).click();
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Make a camp" }).first().click();
   const sheet = page.getByRole("dialog", { name: "Make a camp" });
   await expectAccessible(page, sheet);
   await sheet.getByRole("button", { name: "Make the camp" }).click();
@@ -47,7 +56,7 @@ test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archive
   await expect(page).not.toHaveURL(chatAddress);
   await expect(header).toContainText("2027 taxes");
   await expect(header).toContainText("Goal: File my taxes on time");
-  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺2027 taxes"]);
+  await expect.poll(() => campNames(rail)).toEqual(["2027 taxes"]);
   await expect(rail.getByRole("link", { name: "2027 taxes" })).toHaveAttribute("aria-current", "page");
   const listed = (await (
     await fetch(`${url}/api/agents/${aldric}/threads`, { headers: hub.headers })
@@ -64,7 +73,7 @@ test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archive
   await expect(page.getByRole("button", { name: AWAY })).toBeEnabled();
   await inCamp.press("Enter");
   await expect(main.getByText("Echo: receipts")).toBeVisible();
-  await rail.getByRole("link", { name: "Chat", exact: true }).click();
+  await chat.click();
   await expect(page).toHaveURL(chatAddress);
   await expect(main.getByText("Echo: receipts")).toBeHidden();
 
@@ -120,8 +129,7 @@ test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question
   // The old messages stay behind; the Quest they started comes along with its question.
   await expect(main.getByText(/fake:hub start_quest/)).toBeHidden();
   await expect(page.getByRole("region", { name: "Aldric asks you" })).toContainText("Should the headings be short?");
-  const rail = page.getByRole("list", { name: "Aldric's chat and camps" });
-  await expect(rail.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(aldricsChat(page)).toHaveAttribute("aria-current", "page");
   const archived = (await (
     await fetch(`${url}/api/agents/${aldric}/threads?archived=true`, { headers: hub.headers })
   ).json()) as ReadonlyArray<{ readonly id: string; readonly state: string }>;
@@ -132,7 +140,7 @@ test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question
 // covers CH-009
 test("[TC-CH-1378-04] a pinned camp stays above a camp with newer messages in the sidebar", async ({ page }) => {
   const { url, aldric, hub } = await aldricHub();
-  const rail = page.getByRole("list", { name: "Aldric's chat and camps" });
+  const rail = page.getByRole("list", { name: "Camps" });
   const kept = await campAt({ url, headers: hub.headers }, aldric, "Kitchen plans");
   const busy = await campAt({ url, headers: hub.headers }, aldric, "Garden");
 
@@ -140,7 +148,7 @@ test("[TC-CH-1378-04] a pinned camp stays above a camp with newer messages in th
   await page.goto(kept.url);
   await page.getByRole("button", { name: "More for this chat" }).click();
   await page.getByRole("menuitem", { name: "Pin to the top" }).click();
-  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺Kitchen plans", "⛺Garden"]);
+  await expect.poll(() => campNames(rail)).toEqual(["Kitchen plans", "Garden"]);
 
   // A message in the other camp makes it the newest, and the pinned one still leads.
   await page.goto(busy.url);
@@ -149,9 +157,9 @@ test("[TC-CH-1378-04] a pinned camp stays above a camp with newer messages in th
   await expect(page.getByRole("button", { name: AWAY })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("main", { name: "Chat" }).getByText("Echo: tomatoes")).toBeVisible();
-  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺Kitchen plans", "⛺Garden"]);
+  await expect.poll(() => campNames(rail)).toEqual(["Kitchen plans", "Garden"]);
   await page.reload();
-  await expect(rail.getByRole("link")).toHaveText(["✦Chat", "⛺Kitchen plans", "⛺Garden"]);
+  await expect.poll(() => campNames(rail)).toEqual(["Kitchen plans", "Garden"]);
 });
 
 // covers CH-009

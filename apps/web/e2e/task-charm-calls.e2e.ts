@@ -56,7 +56,7 @@ test("[TC-OR-1343-04] a Task's write whose answer was lost waits in its quest an
   // It waits in the Inbox, under the Quest, with the way to the quest.
   await expect(room).toBeVisible();
   await page.keyboard.press("Escape");
-  const inbox = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox, / });
+  const inbox = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^For you, / });
   await inbox.click();
   const entry = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Quill lost GitHub's answer/ });
   await entry.click();

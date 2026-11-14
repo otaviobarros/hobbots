@@ -4,6 +4,7 @@ import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
 import { unreadMentionsOf } from "./message-mentions.ts";
+import { memberUnread, memberUnreadCount } from "./thread-columns.ts";
 import {
   insertMember,
   type MemberRow,
@@ -67,6 +68,14 @@ export const ThreadMemberRepositoryLive = Layer.effect(
       find: (threadId, actor) => find(threadId, actor).pipe(Effect.orDie),
       add,
       unreadMentions: (actor) => unreadMentionsOf(sql, actor).pipe(Effect.orDie),
+      unreadReplies: (actor) =>
+        sql<{ readonly threadId: string; readonly count: unknown }>`SELECT thread_id, ${memberUnreadCount(sql)} AS count
+          FROM thread_members
+          WHERE actor_kind = ${actor.kind} AND actor_id = ${actor.id} AND state = 'active' AND ${memberUnread(sql)}
+          ORDER BY ${sql.onDialectOrElse({ pg: () => sql.literal(`thread_id COLLATE "C"`), orElse: () => sql.literal("thread_id") })}`.pipe(
+          Effect.map((rows) => rows.map((row) => ({ threadId: row.threadId as ThreadId, count: Number(row.count) }))),
+          Effect.orDie,
+        ),
     });
   }),
 );

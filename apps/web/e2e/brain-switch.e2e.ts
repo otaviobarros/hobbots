@@ -61,7 +61,7 @@ test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "My cat is called Miso.");
-  await expect(page.getByText("Echo: My cat is called Miso.")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: My cat is called Miso.")).toBeVisible();
 
   // The ⋯ menu names the brain, and its item opens the picker beside ⋯, by keyboard.
   const menu = page.getByRole("main", { name: "Chat" }).getByRole("button", { name: "More for this chat" });

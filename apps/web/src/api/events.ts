@@ -47,6 +47,7 @@ import { questionChanged, workEnded } from "./questions.ts";
 import { applyRecordEvent, isRecordEvent } from "./records.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
 import { setupQueryKey } from "./setup.ts";
+import { applySidebarEvent } from "./sidebar.ts";
 import { skillProposalsChanged } from "./skill-proposals.ts";
 import { refreshSkillUpdates } from "./skill-updates.ts";
 import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.ts";
@@ -213,7 +214,7 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
-  // Nothing on screen shows members yet (ADR 039); a new member has read nothing.
+  // Only the sidebar shows members (ADR 039), and it reads them again; a new member has read nothing.
   "ThreadMemberAdded",
   // What the supervisor did reaches you as the failure, retry or note it made (#1447), not its record.
   "TaskSupervised",
@@ -366,6 +367,7 @@ const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
  */
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
+  applySidebarEvent(queryClient, event);
   applyQuestWork(queryClient, event);
   applyHistory(queryClient, event);
   applyHobChanges(queryClient, event);

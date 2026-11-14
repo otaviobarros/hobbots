@@ -5,9 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
+import { SectionIcon } from "../sidebar/sidebar-item.tsx";
 import { ArchivedTag, ResultDetail, resultLink, type SearchResult, useSearchResults } from "./search-results.tsx";
 
 const copy = messages.jump;
+
+const JUMP_EVENT = "hobbots:jump";
+
+/** Opens the finder, as Find or jump to in the sidebar does. */
+export const openJump = () => window.dispatchEvent(new Event(JUMP_EVENT));
 
 /** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a thread by its title or messages. */
 export function HobJump() {
@@ -21,8 +27,13 @@ export function HobJump() {
       event.preventDefault();
       setOpen((current) => !current);
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(JUMP_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(JUMP_EVENT, onOpen);
+    };
   }, []);
 
   // A modal dialog keeps focus inside, closes on Escape and gives focus back when it closes.
@@ -50,6 +61,29 @@ export function HobJump() {
   );
 }
 
+/** The places the sidebar leaves out (ADR 039, The sidebar), which the finder still jumps to. */
+const PAGES = [
+  { id: "memory", icon: "Memory", to: "/memory" },
+  { id: "skills", icon: "Skills", to: "/skills" },
+] as const;
+
+type JumpPage = (typeof PAGES)[number];
+
+type JumpOption =
+  | SearchResult
+  | {
+      readonly kind: "page";
+      readonly key: string;
+      readonly page: JumpPage;
+      readonly to: string;
+    };
+
+/** The pages whose name holds the query, or every page for an empty one. */
+const pagesFor = (query: string): ReadonlyArray<JumpOption> =>
+  PAGES.filter((page) => copy.pages[page.id].toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(
+    (page) => ({ kind: "page", key: `page-${page.id}`, page, to: page.to }),
+  );
+
 function JumpList({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -57,10 +91,12 @@ function JumpList({ onDone }: { onDone: () => void }) {
   // An empty finder lists every hob; typing also finds threads by their title or messages.
   const agents = useQuery(agentsQuery);
   const found = useSearchResults(query);
-  const options: ReadonlyArray<SearchResult> =
-    query.trim() === ""
-      ? (agents.data ?? []).map((hob) => ({ kind: "hob", key: `hob-${hob.id}`, hob }))
-      : found.results;
+  const options: ReadonlyArray<JumpOption> = [
+    ...(query.trim() === ""
+      ? (agents.data ?? []).map((hob): JumpOption => ({ kind: "hob", key: `hob-${hob.id}`, hob }))
+      : found.results),
+    ...pagesFor(query),
+  ];
   const current = Math.min(active, Math.max(0, options.length - 1));
   const activeKey = options[current]?.key;
 
@@ -69,10 +105,10 @@ function JumpList({ onDone }: { onDone: () => void }) {
     if (activeKey) document.getElementById(`hob-jump-${activeKey}`)?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
-  const go = (option: SearchResult | undefined) => {
+  const go = (option: JumpOption | undefined) => {
     if (!option) return;
     onDone();
-    void navigate(resultLink(option));
+    void navigate(option.kind === "page" ? { to: option.to } : resultLink(option));
   };
 
   return (
@@ -123,23 +159,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
             onMouseMove={() => setActive(index)}
             className={cn("flex cursor-pointer items-center gap-2.5 px-2 py-1.5", index === current && "bg-line")}
           >
-            <HobSprite hob={option.hob} size={24} state={option.hob.status === "paused" ? "paused" : "idle"} badge />
-            {option.kind === "hob" ? (
-              <>
-                <span className="font-heading text-ui font-semibold">{option.hob.name}</span>
-                <span className="min-w-0 flex-1 truncate text-detail text-label">{option.hob.roleTitle}</span>
-              </>
-            ) : (
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex min-w-0 items-center gap-1.5 text-ui font-bold">
-                  <span className="truncate">{option.hit.thread.title}</span>
-                  <ArchivedTag result={option} />
-                </span>
-                <span className="truncate text-detail text-text-secondary">
-                  <ResultDetail result={option} />
-                </span>
-              </span>
-            )}
+            {option.kind === "page" ? <PageOption page={option.page} /> : <ResultOption option={option} />}
             {index === current && <span className="text-meta text-label">{copy.open}</span>}
           </div>
         ))}
@@ -150,5 +170,42 @@ function JumpList({ onDone }: { onDone: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** A page the finder jumps to, with its section icon. */
+function PageOption({ page }: { page: JumpPage }) {
+  return (
+    <>
+      <span aria-hidden className="inline-flex size-6 items-center justify-center text-text-secondary">
+        <SectionIcon name={page.icon} />
+      </span>
+      <span className="min-w-0 flex-1 font-heading text-ui font-semibold">{copy.pages[page.id]}</span>
+    </>
+  );
+}
+
+/** A hob, or a thread the hub found. */
+function ResultOption({ option }: { option: SearchResult }) {
+  return (
+    <>
+      <HobSprite hob={option.hob} size={24} state={option.hob.status === "paused" ? "paused" : "idle"} badge />
+      {option.kind === "hob" ? (
+        <>
+          <span className="font-heading text-ui font-semibold">{option.hob.name}</span>
+          <span className="min-w-0 flex-1 truncate text-detail text-label">{option.hob.roleTitle}</span>
+        </>
+      ) : (
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 items-center gap-1.5 text-ui font-bold">
+            <span className="truncate">{option.hit.thread.title}</span>
+            <ArchivedTag result={option} />
+          </span>
+          <span className="truncate text-detail text-text-secondary">
+            <ResultDetail result={option} />
+          </span>
+        </span>
+      )}
+    </>
   );
 }

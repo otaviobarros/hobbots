@@ -99,7 +99,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
   const thread = page.url();
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
 
   // While Quill's Task waits on your push, Rook's waits on Quill's and has not run.
   await openQuest(page, "Build the app");
@@ -110,7 +110,7 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
 
   // You allow the push: Quill's Task completes, and only then does Rook's run, to Done.
   await page.keyboard.press("Escape");
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click();
   await page
     .getByRole("list", { name: "Requests" })
     .getByRole("link", { name: /Push your work/ })

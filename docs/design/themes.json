@@ -638,8 +638,8 @@
   },
   "size": {
     "title-strip": "30px",
-    "sidebar": "72px",
-    "sidebar-open": "256px",
+    "sidebar": "76px",
+    "sidebar-open": "276px",
     "sheet": "340px",
     "room-chat": "360px",
     "room-chat-narrow": "300px",

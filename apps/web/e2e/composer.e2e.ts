@@ -96,7 +96,7 @@ test("[TC-CH-131] the composer sends plain text exactly as typed or pasted and k
   await expect(composer).toBeFocused();
   // The hub has the message exactly as typed, line breaks, tabs and indentation included.
   await expect.poll(() => sentTexts(page)).toEqual([`${PASTED}\nThanks`]);
-  await expect(page.getByText(/^Echo: Steps:/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: Steps:/)).toBeVisible();
 
   // Focus comes back to the composer when a reply ends, so the next message can follow at once.
   await composer.fill(LONG);
@@ -118,7 +118,7 @@ test("[TC-CH-133] a send the hub refuses puts its text back in the composer", as
   const { composer } = await openMoss(page);
   await composer.fill("Start a thread");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: Start a thread")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: Start a thread")).toBeVisible();
 
   await page.route("**/api/threads/*/messages", (route) =>
     route.request().method() === "POST" ? route.abort() : route.fallback(),
@@ -137,7 +137,7 @@ test("[TC-CH-132] each thread keeps its unsent draft, and a long draft grows, th
   await page.goto(threadUrl);
   await composer.fill("Start a thread");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: Start a thread")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: Start a thread")).toBeVisible();
 
   await composer.fill("Half a thought");
   await page.goto(`${hobUrl}/chat`);
@@ -157,7 +157,7 @@ test("[TC-CH-132] each thread keeps its unsent draft, and a long draft grows, th
   const tall = Array.from({ length: 40 }, (_, i) => `Row ${i + 1}`).join("\n");
   await composer.fill(tall);
   await composer.press("Enter");
-  await expect(page.getByText(/^Echo: Row 1/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: Row 1/)).toBeVisible();
   // Once the reply has finished, nothing but the composer moves the transcript.
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 15_000 });
   const transcript = page.getByRole("main", { name: "Chat" }).locator(".overflow-y-auto").first();

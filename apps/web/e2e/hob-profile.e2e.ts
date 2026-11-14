@@ -73,7 +73,7 @@ const send = async (page: Page, content: string) => {
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(content);
   await composer.press("Enter");
-  await expect(page.getByText(`Echo: ${content}`)).toBeVisible();
+  await expect(page.getByRole("main").getByText(`Echo: ${content}`)).toBeVisible();
 };
 
 // Edit hob sits in the chat header's ⋯ menu.
@@ -107,7 +107,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   // Back in the chat, the same thread's next reply runs on the edited configuration.
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await openOnlyChat(page);
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
   await send(page, "second");
 
   const [saved] = await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents");
@@ -164,7 +164,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
     .getByRole("main", { name: "Bramble's page" })
     .getByRole("link", { name: /^Open / })
     .click();
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
   await expect(page.getByRole("main", { name: "Chat" }).getByText("Bramble", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("main", { name: "Chat" }).getByText("Pip", { exact: true })).toHaveCount(0);
 });

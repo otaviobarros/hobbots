@@ -1,4 +1,4 @@
-import { emptyDataDir, expandSidebar, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -68,12 +68,8 @@ const hubWithArchive = async () => {
 };
 
 // covers CH-009
-test("[TC-CH-160] an archived thread opens read-only from the Archive and comes back on Restore", async ({
-  page,
-  context,
-}) => {
+test("[TC-CH-160] an archived thread opens read-only from the Archive and comes back on Restore", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
-  await expandSidebar(context);
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
 
   const chats = page.getByRole("main", { name: "Pip's page" });

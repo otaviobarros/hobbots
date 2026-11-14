@@ -139,7 +139,7 @@ test("[TC-UX-263] a note held while its hob waits on your approval says so, and 
     ["Quill"],
     "active",
   );
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 30_000 });
 
   await send(page, [
     "Tell Quill the product is renamed",

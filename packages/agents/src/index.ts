@@ -55,6 +55,7 @@ export * from "./repository.ts";
 export * from "./runtime.ts";
 export * from "./secrets.ts";
 export * from "./session-offer.ts";
+export * from "./sidebar.ts";
 export * from "./skill-health.ts";
 export * from "./skill-proposals.ts";
 export * from "./skill-repositories.ts";

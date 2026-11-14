@@ -98,7 +98,7 @@ test("[TC-PE-074] the card shows the exact action and why, and Allow once by key
   await expect(page.getByRole("region", { name: /^Needs you/ })).toBeHidden();
   await expect(card.getByRole("button", { name: "Allow once" })).toBeHidden();
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
-  await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: Ship it/)).toBeVisible();
 });
 
 // covers PE-007
@@ -223,7 +223,7 @@ test("[TC-PE-101] Always shows the rule it saves, saves exactly that rule, and o
   // The rule answers the same delete: it runs with no new card.
   const cards = page.getByRole("region", { name: "Pip asks permission" });
   await sendNext(page, remove("old.txt"));
-  await expect(page.getByText(/^Echo: Tidy up/)).toHaveCount(2);
+  await expect(page.getByRole("main").getByText(/^Echo: Tidy up/)).toHaveCount(2);
   await expect(cards).toHaveCount(1);
   // Another file is not covered, so it asks again.
   await sendNext(page, remove("other.txt"));

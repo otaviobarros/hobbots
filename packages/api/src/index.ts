@@ -29,6 +29,7 @@ export * from "./retire.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./setup-bridge.ts";
+export * from "./sidebar.ts";
 export * from "./skill-health.ts";
 export * from "./skill-proposals.ts";
 export * from "./skill-repositories.ts";

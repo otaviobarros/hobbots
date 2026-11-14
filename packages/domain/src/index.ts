@@ -70,6 +70,7 @@ export * from "./runtime.ts";
 export * from "./search.ts";
 export * from "./setting-change.ts";
 export * from "./setup.ts";
+export * from "./sidebar.ts";
 export * from "./skill-proposals.ts";
 export * from "./skill-repositories.ts";
 export * from "./skill-tools.ts";

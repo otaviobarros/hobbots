@@ -81,7 +81,7 @@ test("[TC-PE-083] under Balanced Pip edits and runs tests without a card, and a 
   );
   await composer.press("Enter");
 
-  await expect(page.getByText(/^Echo: Fix the sum/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: Fix the sum/)).toBeVisible();
   const steps = page.getByRole("list", { name: "Reply steps" });
   await expect(steps.locator('[data-state="done"]', { hasText: "Editing sum.ts" })).toBeVisible();
   await expect(steps.locator('[data-state="done"]', { hasText: "Running pnpm test" })).toBeVisible();
@@ -97,7 +97,7 @@ const askPip = async (page: Page, current: Hub, pipId: string, lines: ReadonlyAr
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(lines.join("\n"));
   await composer.press("Enter");
-  await expect(page.getByText(/^Echo: /)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Echo: /)).toBeVisible();
   return page.getByRole("list", { name: "Reply steps" });
 };
 

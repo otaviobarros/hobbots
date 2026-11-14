@@ -43,6 +43,7 @@ import {
   RecoveryLog,
   RosterReceipts,
   SecretRedaction,
+  SidebarList,
   SkillReviewsLive,
   SkillTrialsLive,
   SummoningHub,
@@ -194,6 +195,7 @@ import { finishReset, HubReset, wipeHubData } from "./resets.ts";
 import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { RetireWhenDone } from "./retire.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { BlockedWorkLive } from "./sidebar.ts";
 import { SkillUpdateChecks } from "./skill-updates.ts";
 import { agentsSkillsFolder, SkillsLive } from "./skills.ts";
 import { SummoningCharm } from "./summoning.ts";
@@ -681,9 +683,11 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
-      // Each person's For you list (ADR 039), above the hub's own questions, which it lists: a layer
+      // Each person's For you list and sidebar (ADR 039), above the hub's own questions, which it lists: a layer
       // sees only what is provided below it.
-      .pipe(Layer.provideMerge(ForYouList.layer))
+      .pipe(
+        Layer.provideMerge(Layer.mergeAll(ForYouList.layer, SidebarList.layer.pipe(Layer.provide(BlockedWorkLive)))),
+      )
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the

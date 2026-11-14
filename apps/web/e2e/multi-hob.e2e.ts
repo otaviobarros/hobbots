@@ -110,12 +110,12 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
 
   // Every reply completes in its own window, on its own thread.
   for (const { hob, page } of all) {
-    await expect(page.getByText(`Echo: ${longPrompt(hob.name)}`)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByText(`Echo: ${longPrompt(hob.name)}`)).toBeVisible({ timeout: 20_000 });
   }
   await send(pipChat.page, "Pip", "second for Pip");
   await send(mossChat.page, "Moss", "second for Moss");
-  await expect(pipChat.page.getByText("Echo: second for Pip")).toBeVisible();
-  await expect(mossChat.page.getByText("Echo: second for Moss")).toBeVisible();
+  await expect(pipChat.page.getByRole("main").getByText("Echo: second for Pip")).toBeVisible();
+  await expect(mossChat.page.getByRole("main").getByText("Echo: second for Moss")).toBeVisible();
 
   // The reply running during the edit kept version 1; only Pip's next reply used version 2.
   const versions = () =>
@@ -158,7 +158,7 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
 
   // Pip and Moss still chat after Ash retired.
   await send(mossChat.page, "Moss", "third for Moss");
-  await expect(mossChat.page.getByText("Echo: third for Moss")).toBeVisible();
+  await expect(mossChat.page.getByRole("main").getByText("Echo: third for Moss")).toBeVisible();
   const active = await api<ReadonlyArray<Hob>>(current, "GET", "/agents");
   expect(active.map((h) => [h.name, h.configVersion]).sort()).toEqual([
     ["Moss", 1],

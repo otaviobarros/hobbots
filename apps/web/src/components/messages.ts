@@ -388,6 +388,8 @@ export const messages = {
     placeholder: "Jump to a hob or thread…",
     list: "Hobs and threads",
     open: "↵ open",
+    /** The pages the sidebar leaves out, which the finder lists by name. */
+    pages: { memory: "Memory", skills: "Skills" },
   },
   chat: {
     landmark: "Chat",
