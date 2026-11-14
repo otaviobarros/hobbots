@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-14
 - **Issue:** [#1353](https://github.com/otaviobarros/hobbots/issues/1353), slice [#1342](https://github.com/otaviobarros/hobbots/issues/1342)
-- **Pull request:** [#PR](https://github.com/otaviobarros/hobbots/pull/PR)
+- **Pull request:** [#1550](https://github.com/otaviobarros/hobbots/pull/1550)
 - **Commit:** the pull request branch `claude/project-thread-r8sj6h`, after `dd867a0` on `main`
 - **Setup:** a Linux x86_64 cloud container, from a source checkout, Node 22.23.4. The fake runtime playing every hob, as Claude Code and as Codex. A fake GitHub on a local port, serving the REST API, Git over HTTP and a GitHub App made by hand and linked to the reviewer. SQLite, and PostgreSQL 16.
 - **Result:** Passed with gaps: the slice's whole scenario ran at hub level on both databases, on the fake Claude Code and the fake Codex, with one approval card and your stop as the only things that reached you. The manual checklist on the packaged Mac app with real Claude Code and real Codex has not been run yet.
