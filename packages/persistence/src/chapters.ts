@@ -4,7 +4,7 @@ import {
   ChapterId,
   type ChapterNotFound,
   type ChapterPlan,
-  type ChapterRefused,
+  ChapterRefused,
   ChapterStates,
   firstChapter,
   type IllegalChapterTransition,
@@ -227,6 +227,12 @@ export const ChapterRepositoryLive = Layer.effect(
                   createdAt: at.createdAt,
                   first: Number(at.first) === 1,
                 };
+          // A split the hub judged lands only on the chapter it judged, as it read it (#1557).
+          const cut = chapters.find((chapter) => chapter.id === point?.chapterId);
+          const { judged } = input;
+          if (judged !== undefined && (cut?.id !== judged.chapterId || cut.revision !== judged.revision)) {
+            return yield* Effect.fail(new ChapterRefused({ threadId, reason: "chapter-changed" }));
+          }
           const plan = yield* planOrFail(planSplit(threadId, chapters, point, input), first);
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;

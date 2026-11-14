@@ -133,7 +133,8 @@ export const ChapterStates = {
  * `same-thread`: a chapter moves only into another thread. `not-a-camp`: a chapter moves only into
  * an open camp of the same hob. `reply-running`: a reply runs or waits in the thread, or an approval
  * waits there, or a Quest in the chapter is led by a hob the camp does not admit, so its chapters
- * stay put until it ends.
+ * stay put until it ends. `chapter-changed`: the chapter the hub judged before splitting it changed
+ * meanwhile, so its judgment no longer fits (#1557).
  */
 export const ChapterRefusal = Schema.Literals([
   "thread-closed",
@@ -146,6 +147,7 @@ export const ChapterRefusal = Schema.Literals([
   "same-thread",
   "not-a-camp",
   "reply-running",
+  "chapter-changed",
 ]);
 export type ChapterRefusal = typeof ChapterRefusal.Type;
 

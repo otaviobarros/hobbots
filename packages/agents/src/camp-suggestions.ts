@@ -15,6 +15,7 @@ import {
   chapterTitle,
   type EventEnvelope,
   hobReads,
+  isInProgress,
   type JournaledEvent,
   lastIdleBreak,
   type Message,
@@ -179,14 +180,20 @@ const restedBy = (event: JournaledEvent): ReadonlyArray<{ threadId: ThreadId; ch
 const raisedPending = (event: JournaledEvent): CampSuggestion | null =>
   event._tag === "CampSuggested" && CampSuggestions.isPending(event.suggestion) ? event.suggestion : null;
 
-/** The thread whose chapters an entry changed, whose pending suggestions are named again, or null. */
-const rechaptered = (event: JournaledEvent): ThreadId | null =>
+/**
+ * The thread whose pending suggestions an entry calls to be named again, or null: one whose chapters
+ * it changed, so a judgment from before no longer fits, or one it settled a message in, so a chapter
+ * that had none to judge may have one now.
+ */
+const renamedBy = (event: JournaledEvent): ThreadId | null =>
   event._tag === "ChapterStarted" ||
   event._tag === "ChapterSplit" ||
   event._tag === "ChapterMerged" ||
   event._tag === "ChapterSummarized"
     ? event.threadId
-    : null;
+    : event._tag === "MessageUpserted" && event.message.status !== "queued" && !isInProgress(event.message.status)
+      ? event.message.threadId
+      : null;
 
 /** The brain's answer: whether the chapter is a topic of its own, worth a camp. */
 const DriftChoice = Schema.Literals(["camp", "stay"]);
@@ -331,8 +338,10 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
         });
 
       // A pending suggestion offered, withdrawn, or withdrawn with its chapter's last topic split off;
-      // nothing while its chapter is gone, since that expires it. The split withdraws it and raises
-      // the part on its own counts in the split's own transaction, so neither lands without the other.
+      // nothing while its chapter is gone, since that expires it, or holds no line yet. The split
+      // withdraws it and raises the part on its own counts in the split's own transaction, so neither
+      // lands without the other, and only on the chapter as it was judged: one that changed meanwhile
+      // is named again when the projector reads the change.
       const named = (id: CampSuggestionId, round: Mutable) =>
         Effect.gen(function* () {
           const suggestion = Option.getOrNull(yield* store.find(id));
@@ -349,9 +358,10 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
             round.withdrawn.push({ id: suggestion.id, chapterRevision: found.chapter.revision });
             return;
           }
+          const judged = { chapterId: found.chapter.id, revision: found.chapter.revision };
           const split = { id: breakChapterId(naming.at.id), messageId: naming.at.id, title: naming.title };
           yield* commands
-            .splitChapter(suggestion.threadId, { ...split, withdraw: suggestion.id })
+            .splitChapter(suggestion.threadId, { ...split, withdraw: suggestion.id, judged })
             .pipe(
               Effect.catch((error) => Effect.logDebug("A suggested chapter's last topic did not split off", error)),
             );
@@ -361,8 +371,8 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
       const project = (entries: ReadonlyArray<EventEnvelope>, sequence: number) =>
         Effect.gen(function* () {
           const round: Mutable = { withdrawn: [], offers: [], raises: [] };
-          // Each pending suggestion is named once a page, whether the page raised it or changed its
-          // thread's chapters, as an offer named before a change no longer fits its chapter.
+          // Each pending suggestion is named once a page, whether the page raised it, changed its
+          // thread's chapters or settled a message there.
           const toName: Array<CampSuggestionId> = [];
           for (const entry of entries) {
             const event = entry.payload as JournaledEvent;
@@ -372,7 +382,7 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
             }
             const raised = raisedPending(event);
             if (raised !== null) toName.push(raised.id);
-            const threadId = rechaptered(event);
+            const threadId = renamedBy(event);
             if (threadId !== null) toName.push(...(yield* store.listPending(threadId)).map((each) => each.id));
           }
           for (const id of Arr.dedupe(toName)) yield* named(id, round);

@@ -929,6 +929,35 @@ describe("camp suggestions", () => {
     expect(part.payload.suggestion).toMatchObject({ chapterId: "topic", state: "pending" });
   });
 
+  // covers ADR 039 (Chapters run on their own), STD-ARCH-014, #1557
+  it("[TC-CH-1557-19] a split the hub judged lands only on the chapter it judged, at the revision it read", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first, billing } = yield* chatWithTwoChapters;
+        const chapters = yield* ChapterRepository;
+        const revision = yield* revisionOf(billing);
+        const split = (judged: { chapterId: ChapterId; revision: number }) =>
+          Effect.exit(
+            chapters.splitChapter(CHAT, {
+              id: ChapterId.make("billing-reply"),
+              messageId: MessageId.make("reply-2"),
+              title: "Reply",
+              judged,
+            }),
+          );
+        const older = yield* split({ chapterId: billing, revision: revision - 1 });
+        const other = yield* split({ chapterId: first, revision });
+        const current = yield* split({ chapterId: billing, revision });
+        return { older, other, current, chapters: (yield* chapters.listChapters(CHAT)).length };
+      }),
+    );
+    const changed = { _tag: "ChapterRefused", reason: "chapter-changed" };
+    expect(result.older).toMatchObject(Exit.fail(changed));
+    expect(result.other).toMatchObject(Exit.fail(changed));
+    expect(Exit.isSuccess(result.current)).toBe(true);
+    expect(result.chapters).toBe(3);
+  });
+
   // covers ADR 037 (Records: CampSuggestion), #1557
   it("[TC-CH-1557-16] a split made for a suggestion withdraws it in the split's own commit, and only a suggestion of the chapter it cuts", async () => {
     const result = await run(

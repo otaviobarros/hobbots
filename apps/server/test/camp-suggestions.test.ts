@@ -441,6 +441,17 @@ describe("a suggested camp's name and goal", () => {
   });
 
   // covers ADR 037 (The hub's brain), #1557
+  it("[TC-CH-1557-20] a suggestion raised before its chapter has a line to judge is named once a message arrives", async () => {
+    const id = await start("claude-code", brain({ naming: [{ topics: "one", title: "Launch plan", goal: "" }] }));
+    await decideMany(id, CAMP_SUGGESTION_DECISIONS);
+    await runDrift();
+    expect(await openIn(id)).toEqual([]);
+    await say(id, "Let us plan the launch.");
+    await runDrift();
+    expect(await openIn(id)).toMatchObject([{ state: "open", title: "Launch plan" }]);
+  });
+
+  // covers ADR 037 (The hub's brain), #1557
   it("[TC-CH-1557-05] under No AI, and on a fallback, the camp takes the chapter's own title and no goal", async () => {
     for (const decider of [Layer.empty, brain({})]) {
       const id = await start("claude-code", decider);
