@@ -21,6 +21,7 @@ import {
   DataExport,
   DeviceService,
   FindIndexer,
+  ForYouList,
   GrantService,
   HobAdmission,
   HobLifecycle,
@@ -104,6 +105,7 @@ import {
   DeviceRepositoryLive,
   EventJournal,
   FindIndexLogLive,
+  ForYouRepositoryLive,
   GitHubAccountRepository,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -363,6 +365,8 @@ const ServerLive = Layer.unwrap(
       // Pins, and what catch-up reads: your read marker and the Quests of each chat and camp (ADR 037).
       PinRepositoryLive,
       CatchUpRepositoryLive,
+      // What each person's For you list reads past their read markers (ADR 039).
+      ForYouRepositoryLive,
       CharmCallsLive,
       HobChangesLive,
       MemorySavesLive,
@@ -665,6 +669,9 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Each person's For you list (ADR 039), above the hub's own questions, which it lists: a layer
+      // sees only what is provided below it.
+      .pipe(Layer.provideMerge(ForYouList.layer))
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the

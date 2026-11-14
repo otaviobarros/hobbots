@@ -1,3 +1,4 @@
+import type { ForYou } from "@hobbots/domain";
 import type { Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
@@ -107,4 +108,17 @@ test("[TC-UX-912] Home's Needs you shows the hub's question with its choices, an
   await tray.getByRole("button", { name: /^Every week/ }).click();
   await expect(tray).toContainText("What should this hub be called on your other devices?");
   await expect(needsYou).not.toContainText("How often should the hub back up your data?");
+});
+
+// covers UX-001, ADR 039 (For you)
+test("[TC-UX-1456] the hub's own questions are on its owner's For you list", async ({ page }) => {
+  await hubThatAsks(page);
+  const current = hub;
+  if (current === undefined) throw new Error("The hub did not start");
+  const forYou = async () => {
+    const response = await fetch(`${current.url}/api/for-you`, { headers: current.headers });
+    const read = (await response.json()) as { readonly forYou: ForYou };
+    return read.forYou.items.filter((item) => item._tag === "HubQuestion").length;
+  };
+  await expect.poll(forYou, { timeout: 15_000 }).toBe(2);
 });

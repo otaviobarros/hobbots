@@ -26,6 +26,7 @@ export * from "./devices.ts";
 export * from "./diagnostics.ts";
 export * from "./export.ts";
 export * from "./find.ts";
+export * from "./for-you.ts";
 export * from "./grants.ts";
 export * from "./hob-changes.ts";
 export * from "./hob-directory.ts";

@@ -33,3 +33,9 @@ export const sessionActor: Effect.Effect<Actor> = Effect.map(
   Effect.serviceOption(UserSession),
   Option.match({ onNone: () => OWNER_ACTOR, onSome: (session) => session.actor }),
 );
+
+/**
+ * The hub's owner (ADR 039, the decider): who decides what no person caused, such as a hob's own
+ * backpack work, and answers the hub's own questions.
+ */
+export const hubOwner: Actor = OWNER_ACTOR;

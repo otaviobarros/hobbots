@@ -172,6 +172,33 @@ test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async (
   await expect(main.getByText("Caught up · 2 updates while you were away")).toBeVisible();
 });
 
+// covers CH-001, ADR 039 (For you: mentions of you)
+test("[TC-CH-1456-02] a reply that mentions you while you are away shows in the catch-up, and its row jumps to it", async ({
+  page,
+}) => {
+  const { url, aldric, api, hub } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, /^Message Aldric/, ["Hello."]);
+  const chat = threadOf(page);
+  const address = page.url();
+
+  // You leave; Aldric's reply, which echoes the message, mentions you by name.
+  await page.goto(`${url}/#/hobs/${aldric}`);
+  await api("POST", `/threads/${chat}/messages`, { content: "@Owner can you check the map?" });
+  const unread = unreadOf(url, hub.headers, chat);
+  await expect.poll(unread, { timeout: 15_000 }).toBe(true);
+
+  await page.goto(address);
+  const card = main.getByRole("region", { name: "While you were away" });
+  const mention = card.getByRole("listitem").filter({ hasText: "Mentions you" });
+  await expect(mention).toBeVisible();
+  await expectAccessible(page, card);
+
+  await mention.getByRole("button", { name: /^Jump to / }).click();
+  await expect.poll(() => new URL(page.url().replace("#/", "")).searchParams.get("message")).toBeTruthy();
+});
+
 // covers CH-001, ADR 037 (Catch-up: each visit reads its own)
 test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on what is new since, not the first visit's news", async ({
   page,
