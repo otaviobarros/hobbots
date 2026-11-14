@@ -7,8 +7,8 @@ runs:
       name: Read the Playwright version
       run: echo "version=$(pnpm --filter @hobbots/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
       shell: bash
-    # The tests run headless, so the headless shell is the only browser they need. The runner
-    # image already has the system libraries it uses.
+    # The tests run headless, so the headless shell is the only browser they need. GitHub's runner
+    # image already has the system libraries it uses; an Instabox machine gets them here (#1524).
     - id: browsers
       uses: actions/cache@v6
       with:
@@ -16,4 +16,7 @@ runs:
         key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
     - if: steps.browsers.outputs.cache-hit != 'true'
       run: pnpm --filter @hobbots/web exec playwright install --only-shell chromium
+      shell: bash
+    - if: runner.environment != 'github-hosted'
+      run: pnpm --filter @hobbots/web exec playwright install-deps chromium
       shell: bash

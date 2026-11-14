@@ -17,13 +17,18 @@ env:
   TURBO_CACHE_DIR: .turbo/cache
   TURBO_TELEMETRY_DISABLED: 1
 
+# The test jobs run on Instabox machines (4 vCPUs, 8 GB, Ubuntu 24.04), which start as many at once
+# as the plan allows, so parallel pull requests don't queue behind each other (#1524). A pull request
+# from a fork runs on GitHub-hosted runners, so its code never runs on the project's Instabox
+# account. Setting the repository variable CI_RUNNER to `ubuntu-latest` moves every job back to
+# GitHub. The jobs that only gather results stay on GitHub-hosted runners.
 jobs:
   # `pnpm check` runs in three jobs side by side: every check but the server suite in one, and the
   # server suite, the longest task, in two shards of its own (#1442). The check the main ruleset
   # requires is the job after them, which passes only when all three pass.
   check-packages:
     name: Lint, typecheck and package tests (SQLite)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -45,7 +50,7 @@ jobs:
 
   check-server:
     name: Server tests (SQLite ${{ matrix.shard }}/2)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -86,7 +91,7 @@ jobs:
   # job after them, which passes only when both shards pass.
   postgres-shards:
     name: Persistence and server tests (PostgreSQL ${{ matrix.shard }}/2)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -150,7 +155,7 @@ jobs:
   # client nor the server and its packages replays the last result.
   browser-tests:
     name: Browser tests (${{ matrix.shard }}/8)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -222,7 +227,7 @@ jobs:
   burn-in:
     name: Burn in changed browser tests
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 35
     env:
       BASE_REF: ${{ github.base_ref }}

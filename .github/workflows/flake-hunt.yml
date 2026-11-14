@@ -19,10 +19,12 @@ concurrency:
 env:
   TURBO_TELEMETRY_DISABLED: 1
 
+# The suites run on Instabox machines, as in ci.yml (#1524); the CI_RUNNER variable moves them back
+# to GitHub-hosted runners.
 jobs:
   browser-tests:
     name: Browser tests, three times (${{ matrix.shard }}/8)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -56,7 +58,7 @@ jobs:
 
   server-tests:
     name: Persistence and server tests, three times (${{ matrix.db }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'instabox-medium' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
