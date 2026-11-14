@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import type { AgentStatus } from "./agent.ts";
 import type { ApprovalRequest } from "./approval.ts";
 import type { BackpackItem } from "./backpack.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { isInProgress, type Message, waitedSteps } from "./message.ts";
 import type { Question } from "./quest.ts";
 import type { FailedTask } from "./task.ts";
@@ -31,14 +31,19 @@ export const replyActivity = (reply: Pick<Message, "status" | "steps" | "content
 };
 
 /**
- * A thread's run as the hub publishes it. `reply` says what the running reply is doing, null while
- * no reply runs. `revision` orders the changes of every thread's run since the hub started: a client
- * keeps, per thread, the one with the highest revision.
+ * A line's run as the hub publishes it: a thread's main line (`rootMessageId` null) or one of its
+ * reply threads (ADR 039). `reply` says what the running reply is doing, null while no reply runs;
+ * `speaking` is the hob holding the floor and `next` the hobs waiting for it, in order. `revision`
+ * orders the changes of every run since the hub started: a client keeps, per line, the one with the
+ * highest revision.
  */
 export const ThreadRunStatus = Schema.Struct({
   threadId: ThreadId,
+  rootMessageId: Schema.NullOr(MessageId),
   run: ThreadRunState,
   reply: Schema.NullOr(ReplyActivity),
+  speaking: Schema.NullOr(AgentId),
+  next: Schema.Array(AgentId),
   revision: Schema.Int,
 });
 export type ThreadRunStatus = typeof ThreadRunStatus.Type;

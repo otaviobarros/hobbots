@@ -16,6 +16,7 @@ import type {
   ChatWork,
   Committed,
   IllegalChapterTransition,
+  Line,
   MentionRefused,
   Message,
   MessageId,
@@ -26,6 +27,8 @@ import type {
   ThreadCheckpoint,
   ThreadId,
   ThreadMember,
+  TurnRequest,
+  TurnRequestId,
   UnreadThreads,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
@@ -42,12 +45,19 @@ export type ChapterMoveTarget =
 export interface SentTo {
   readonly mentions: ReadonlyArray<Actor>;
   readonly repliesTo: Actor | null;
+  /**
+   * The relay depth of the requests it causes (ADR 039, Hobs talking to hobs): 0, the default, for
+   * a person's message; a hob's mention passes its own turn's depth plus one.
+   */
+  readonly relayDepth?: number;
 }
 
-/** A message you sent as stored, and the hobs that owe it an answer, in order. */
+/** A message you sent as stored, the hobs that owe it an answer, in order, and their requests. */
 export interface SentMessage {
   readonly message: Message;
   readonly answerers: ReadonlyArray<AnswerOwed>;
+  /** One waiting `TurnRequest` per answerer, in the same order, written in the same transaction. */
+  readonly requests: ReadonlyArray<TurnRequest>;
 }
 
 /**
@@ -157,7 +167,33 @@ export class HobbotsRepository extends Context.Service<
     readonly startQueuedMessage: (
       message: Message,
       reply: Message,
+      speaking?: ReadonlyArray<TurnRequestId>,
     ) => Effect.Effect<Option.Option<Committed<{ readonly message: Message; readonly reply: Message }>>>;
+    /** The `TurnRequest`s still owed in the line, in floor order (ADR 039, One hob speaks at a time). */
+    readonly openTurnRequests: (line: Line) => Effect.Effect<ReadonlyArray<TurnRequest>>;
+    /**
+     * Saves a turn's new streaming reply and moves the requests it answers to `speaking`, in one
+     * transaction. None, and nothing saved, when any of them no longer waits.
+     */
+    readonly startReply: (
+      reply: Message,
+      speaking: ReadonlyArray<TurnRequestId>,
+    ) => Effect.Effect<Option.Option<Committed<Message>>>;
+    /** The turn writing `replyId` ended: its speaking requests are answered. */
+    readonly answerTurnRequests: (replyId: MessageId) => Effect.Effect<void>;
+    /**
+     * Drops the requests that are still owed, recording who stopped them (Stop and Stop all). A
+     * queued message left with nothing owed leaves the queue said, journaled `MessageDequeued`
+     * `dropped`. Returns the requests it dropped.
+     */
+    readonly dropTurnRequests: (
+      ids: ReadonlyArray<TurnRequestId>,
+      by: Actor | null,
+    ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
+    /** At start: requests whose turn was speaking when the hub stopped are answered by its interrupted reply. */
+    readonly answerUnfinishedTurnRequests: Effect.Effect<void>;
+    /** Threads with a `TurnRequest` waiting. */
+    readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
     readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
     /** The thread's stored summary of older messages, if a handoff made one (ADR 017). */

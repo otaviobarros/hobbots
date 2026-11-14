@@ -41,6 +41,7 @@ import { keepReadersRead } from "./thread-member-rows.ts";
 /** The records that name a message and its thread, which follow the message to the camp. */
 const BY_MESSAGE = [
   "approval_requests",
+  "turn_requests",
   "charm_calls",
   "memory_saves",
   "memory_shares",

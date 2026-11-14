@@ -61,8 +61,11 @@ describe("the status a client holds", () => {
   const hob = AgentId.make("a1");
   const run = (run: ThreadRunStatus["run"], revision: number): ThreadRunStatus => ({
     threadId: thread,
+    rootMessageId: null,
     run,
     reply: run === "running" ? "working" : null,
+    speaking: run === "running" ? hob : null,
+    next: [],
     revision,
   });
   const presence = (state: HobPresence["state"], revision: number): HobPresence => ({ agentId: hob, state, revision });

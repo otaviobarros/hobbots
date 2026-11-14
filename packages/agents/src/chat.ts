@@ -13,7 +13,7 @@ import {
 } from "@hobbots/api";
 import {
   type Agent,
-  type AgentId,
+  AgentId,
   type Brain,
   type ChapterId,
   type ChapterMove,
@@ -29,6 +29,7 @@ import {
   Message,
   MessageId,
   MessageTransitions,
+  mainLine,
   openThreadTask,
   type PackReport,
   type SkillMention,
@@ -39,6 +40,9 @@ import {
   ThreadLifecycle,
   type ThreadMember,
   type ThreadRunStatus,
+  type TurnRequest,
+  type TurnRequestId,
+  TurnRequests,
   takesNewWork,
   type UnreadThreads,
   waitedSteps,
@@ -132,6 +136,12 @@ export class ChatService extends Context.Service<
      * turn in progress, changes nothing.
      */
     readonly stop: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /**
+     * Stop all (ADR 039, One hob speaks at a time): stops the turn speaking in the thread and drops
+     * every request still owed there, each recording who stopped it. Work in the backpack is never
+     * dropped.
+     */
+    readonly stopAll: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
     /**
      * Stop waiting (#1056): once the hob has answered and its reply only waits on commands it started,
      * ends the reply now. The reply shows as stopping, then completes with its text, and each command
@@ -266,8 +276,9 @@ export class ChatService extends Context.Service<
      */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /**
-     * Every thread whose run is not idle, as `ThreadRunChanged` publishes it, and the revision of the
-     * last transition of any run: a thread left out is idle as of that revision (ADR 037).
+     * Every line whose run is not idle or has hobs waiting for its floor, as `ThreadRunChanged`
+     * publishes it, and the revision of the last transition of any run: a line left out is idle with
+     * nobody waiting as of that revision (ADR 037, ADR 039).
      */
     readonly threadRuns: Effect.Effect<{ readonly revision: number; readonly runs: ReadonlyArray<ThreadRunStatus> }>;
     /** The replies still streaming or stopping, with all the text held in memory so far. */
@@ -353,15 +364,17 @@ export class ChatService extends Context.Service<
         );
 
       // A previous process may have died mid-turn; those turns cannot resume. A reply the user had
-      // asked to stop is stopped; any other is interrupted.
+      // asked to stop is stopped; any other is interrupted. Its interrupted reply answers the request
+      // it spoke for, which Continue resumes, so the floor does not start it again.
       for (const message of yield* repo.listUnfinishedMessages) {
         const next = MessageTransitions.interrupt(message);
         if (next instanceof Message) yield* saveMessage(next);
       }
+      yield* repo.answerUnfinishedTurnRequests;
 
       // A queued message's start and removal write, then announce the change once it is committed (CH-008).
-      const saveStarted = (message: Message, reply: Message) =>
-        repo.startQueuedMessage(message, reply).pipe(
+      const saveStarted = (message: Message, reply: Message, speaking: ReadonlyArray<TurnRequestId>) =>
+        repo.startQueuedMessage(message, reply, speaking).pipe(
           Effect.flatMap(
             Option.match({
               onNone: () => Effect.succeed(null),
@@ -369,6 +382,15 @@ export class ChatService extends Context.Service<
             }),
           ),
         );
+      // A turn's reply, saved with the requests it answers taking the floor (ADR 039).
+      const saveSpeaking = (reply: Message, speaking: ReadonlyArray<TurnRequestId>) =>
+        repo
+          .startReply(reply, speaking)
+          .pipe(
+            Effect.flatMap(
+              Option.match({ onNone: () => Effect.succeed(null), onSome: (committed) => announce(committed) }),
+            ),
+          );
       const saveRemoved = (threadId: ThreadId, messageId: MessageId) =>
         repo.removeQueuedMessage(threadId, messageId).pipe(
           Effect.flatMap(
@@ -423,13 +445,23 @@ export class ChatService extends Context.Service<
         beginTurn,
         launch,
         startNext,
+        lineUp,
         drainThreads,
         endTurn,
         workRidesAlong,
         activeThreads,
         threadRuns,
         streamingReplies,
-      } = yield* makeThreadRunner({ redactor, grants, inputs, saveMessage, announce, changeThread, saveStarted });
+      } = yield* makeThreadRunner({
+        redactor,
+        grants,
+        inputs,
+        saveMessage,
+        announce,
+        changeThread,
+        saveStarted,
+        saveSpeaking,
+      });
 
       // Reads the thread and its hob again under the hob's lock, so neither changes before `body` ends.
       const withThreadHob = <A, E, R>(
@@ -448,6 +480,35 @@ export class ChatService extends Context.Service<
           );
         });
 
+      // The hob that takes the floor now for a request of `hobId`: the thread's own hob, read under
+      // its lock, or another member hob that takes work; null while it cannot speak.
+      const speakerFor = (hobId: AgentId, own: Agent) =>
+        Effect.gen(function* () {
+          if (hobId === own.id) return own.status === "active" ? own : null;
+          const hob = yield* repo.findAgent(hobId);
+          return Option.isSome(hob) && hob.value.status === "active" ? hob.value : null;
+        });
+
+      // Drops what `pick` chooses among the line's requests still owed, as the person stopping.
+      const dropOwed = (threadId: ThreadId, pick: (open: ReadonlyArray<TurnRequest>) => ReadonlyArray<TurnRequest>) =>
+        Effect.gen(function* () {
+          const dropping = pick(yield* repo.openTurnRequests(mainLine(threadId)));
+          if (dropping.length === 0) return;
+          const by = yield* sessionActor;
+          yield* repo
+            .dropTurnRequests(
+              dropping.map((request) => request.id),
+              by,
+            )
+            .pipe(Effect.flatMap(announce));
+          yield* lineUp(threadId);
+        });
+
+      // A message nobody takes at once waits for the floor. A line left idle behind a request its
+      // hob cannot take yet gives the floor to the next one that can.
+      const waitForFloor = (threadId: ThreadId, idle: boolean) =>
+        (idle ? startNext(threadId) : Effect.void).pipe(Effect.andThen(lineUp(threadId)));
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
@@ -461,10 +522,12 @@ export class ChatService extends Context.Service<
             if (agent.status === "retired") yield* requireActive(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
-            // A message waits while its hob is paused, while a reply runs, and behind any message
-            // already waiting, so the thread's messages start in the order they were sent (CH-008).
+            // A message waits while its hob is paused, while a reply runs, and behind any request
+            // already waiting for the floor, so the thread's messages start in the order they were
+            // sent (CH-008, ADR 039). It is stored and shown at once either way.
             const busy = isBusy(yield* runOf(threadId));
-            const waits = agent.status === "paused" || busy || Option.isSome(yield* repo.nextQueuedMessage(threadId));
+            const lined = TurnRequests.waiting(yield* repo.openTurnRequests(mainLine(threadId))).length > 0;
+            const waits = agent.status === "paused" || busy || lined;
             // Work you stopped here, and routine progress, ride along: the message starts through the
             // dispatcher, under their claims.
             const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
@@ -486,17 +549,21 @@ export class ChatService extends Context.Service<
             // Who answers is decided in the transaction that stores the message (ADR 039, Who
             // answers), from the mentions the hub parses in its text: a mention of a hob that cannot
             // hear it refuses the message, and nothing is stored.
+            // Each hob that owes it an answer gets a `TurnRequest`, written with it.
             const sent = yield* repo.sendMessage(userMessage, { mentions: [], repliesTo: null });
             const saved = yield* announce(sent).pipe(Effect.map((value) => value.message));
-            if (sent.value.answerers.length === 0) return { userMessage: saved, assistantMessage: null };
-            // A message that waits behind a busy thread has the thread look at its work again once it
-            // is free, so a dispatch that already found nothing does not start it without its progress.
-            if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });
+            const [first] = sent.value.requests;
+            if (first === undefined) return { userMessage: saved, assistantMessage: null };
             // Work you stopped in this thread may start again once this message is answered.
             yield* step(threadId, { _tag: "Release" });
             if (carries) yield* startNext(threadId);
-            if (waits || carries) return { userMessage: saved, assistantMessage: null };
-            const begun = yield* beginTurn(thread, agent, saved);
+            const speaker = waits || carries ? null : yield* speakerFor(first.hobId, agent);
+            if (speaker === null) {
+              yield* waitForFloor(threadId, !busy && !carries);
+              return { userMessage: saved, assistantMessage: null };
+            }
+            // The first hob it is owed by takes the floor at once; the others wait their turn.
+            const begun = yield* beginTurn(thread, speaker, saved, (reply) => saveSpeaking(reply, [first.id]));
             return { userMessage: saved, assistantMessage: begun?.saved ?? null };
           }),
         );
@@ -509,6 +576,7 @@ export class ChatService extends Context.Service<
           Effect.gen(function* () {
             if (!(yield* saveRemoved(threadId, messageId))) return yield* new MessageNotQueued({ messageId });
             yield* step(threadId, { _tag: "Unchoose", messageId });
+            yield* lineUp(threadId);
           }),
         );
       });
@@ -549,8 +617,25 @@ export class ChatService extends Context.Service<
         );
         // Work the turn carried waits for you instead of starting again on its own.
         if (Option.isSome(requested) && reply.carries) yield* step(threadId, { _tag: "Hold" });
+        if (Option.isNone(requested)) return;
+        // The turn's request, and those its mentions caused, are dropped with it; a person's stay.
+        // Only this reply's: a turn that started since keeps its own.
+        yield* dropOwed(threadId, (open) =>
+          TurnRequests.speaking(open)?.replyId === requested.value.id ? TurnRequests.stopping(open) : [],
+        );
         // The turn records the confirmed outcome itself once the runtime has stopped.
-        if (Option.isSome(requested)) yield* Effect.forkIn(endTurn(threadId), scope);
+        yield* Effect.forkIn(
+          runOf(threadId).pipe(Effect.flatMap((run) => (run.reply === reply ? endTurn(threadId) : Effect.void))),
+          scope,
+        );
+      });
+
+      // Stop all (ADR 039): stops the turn that is speaking and drops every request still owed in
+      // the line, each recording who stopped it. A queued message left with nothing owed stays said.
+      // What is owed is dropped first, so the stopped turn's end finds nothing to start next.
+      const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
+        yield* dropOwed(threadId, TurnRequests.stoppingAll);
+        yield* stop(threadId);
       });
 
       // Stop waiting (#1056): only a reply waiting on commands ends this way; it shows as stopping until
@@ -572,15 +657,22 @@ export class ChatService extends Context.Service<
         threadId: ThreadId,
         messageId: MessageId,
       ) {
-        return yield* withThreadHob(threadId, (thread, agent) =>
+        return yield* withThreadHob(threadId, (thread, own) =>
           Effect.gen(function* () {
+            // A note to self written since does not stand in the way: the hob never reads it.
+            const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
+            const message = transcript.at(-1);
+            // The hob that wrote the reply goes on with it, in a camp it joined too.
+            const author =
+              message?.actor?.kind === "hob" && message.actor.id !== own.id
+                ? yield* repo.findAgent(AgentId.make(message.actor.id))
+                : Option.some(own);
+            if (Option.isNone(author)) return yield* new ReplyNotResumable({ messageId });
+            const agent = author.value;
             // Continuing a reply goes on with work the hob has; while it retires, only that of an open Task.
             yield* requireAwake(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
-            // A note to self written since does not stand in the way: the hob never reads it.
-            const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
-            const message = transcript.at(-1);
             if (isBusy(yield* runOf(threadId)) || message?.id !== messageId || !isResumable(message.status)) {
               return yield* new ReplyNotResumable({ messageId });
             }
@@ -601,9 +693,9 @@ export class ChatService extends Context.Service<
       });
 
       const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
+        // The hob's turns are those where it holds the floor, in its own threads or in camps it joined.
         for (const threadId of yield* activeThreads) {
-          const thread = yield* repo.findThread(threadId);
-          if (Option.isSome(thread) && thread.value.agentId === agentId) yield* endTurn(threadId);
+          if ((yield* runOf(threadId)).speaking === agentId) yield* endTurn(threadId);
         }
         if (Option.isSome(taskTurns)) yield* taskTurns.value.interruptAgent(agentId);
       });
@@ -632,10 +724,11 @@ export class ChatService extends Context.Service<
         announce,
       });
 
-      // The threads with your queued messages or backpack work waiting: of one hob, or of every hob.
+      // The threads with requests or your queued messages or backpack work waiting: of one hob, or
+      // of every hob. Requests are the floor's queue, rebuilt from the records at start (ADR 039).
       const threadsWaiting = (agentId?: AgentId) =>
         Effect.gen(function* () {
-          const queued = yield* repo.threadsWithQueuedMessages;
+          const queued = [...(yield* repo.threadsWithQueuedMessages), ...(yield* repo.threadsWithWaitingRequests)];
           const work = Option.isSome(continuations) ? yield* continuations.value.waiting(agentId) : [];
           return [...new Set([...queued, ...work])];
         });
@@ -646,8 +739,14 @@ export class ChatService extends Context.Service<
         const own = yield* Effect.filter(threads, (threadId) =>
           repo.findThread(threadId).pipe(Effect.map((t) => Option.isSome(t) && t.value.agentId === agentId)),
         );
+        // And the requests it owes in camps it joined, which wait for it there.
+        const owed = yield* Effect.filter(threads, (threadId) =>
+          repo
+            .openTurnRequests(mainLine(threadId))
+            .pipe(Effect.map((open) => TurnRequests.waiting(open).some((request) => request.hobId === agentId))),
+        );
         yield* Effect.forEach(own, (threadId) => step(threadId, { _tag: "Release" }));
-        yield* drainThreads(own);
+        yield* drainThreads([...new Set([...own, ...owed])]);
         if (Option.isSome(taskTurns)) yield* taskTurns.value.drainAgent(agentId);
       });
 
@@ -684,6 +783,7 @@ export class ChatService extends Context.Service<
         removeQueued,
         sendNow,
         stop,
+        stopAll,
         stopWaiting,
         continueReply,
         interruptAgent,

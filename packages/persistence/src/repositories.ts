@@ -22,6 +22,7 @@ import {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  type TurnRequestId,
   UnreadThreads,
   YOU,
 } from "@hobbots/domain";
@@ -36,6 +37,8 @@ import { joinedMentions, mentionsToStore, type StoredMentions } from "./message-
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
+import { insertRequest, requestsFor, selectOpenRequestsOf, stepRequests } from "./turn-request-rows.ts";
+import { makeTurnRequestWrites, speakFor } from "./turn-requests.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -609,15 +612,20 @@ export const HobbotsRepositoryLive = Layer.effect(
           // A message nobody answers starts no turn, so it never waits in the queue.
           const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
           const message = yield* writeMessage(new Message({ ...input, status, revision }), parsed);
-          return { value: { message, answerers }, events: messageEvents(message) };
+          // Each answer owed waits for the floor, written with the message (ADR 039).
+          const requests = requestsFor(message, message.actor ?? (yield* sessionActor), answerers, to.relayDepth ?? 0);
+          for (const request of requests) yield* insertRequest(sql, request);
+          return { value: { message, answerers, requests }, events: messageEvents(message) };
         }),
       );
 
     // The new sequence is read in the same statement, as an insert's is. Events: the started
     // message, its dequeue, then the reply's.
-    const startQueuedMessage = (input: Message, inputReply: Message) =>
+    const startQueuedMessage = (input: Message, inputReply: Message, speaking: ReadonlyArray<TurnRequestId> = []) =>
       journaled(2 + messageEvents(inputReply).length, (first) =>
         Effect.gen(function* () {
+          // The requests its turn answers take the floor with it, or neither starts.
+          if (!(yield* speakFor(sql, speaking, inputReply.id))) return null;
           const queued = new Message({ ...input, revision: first });
           // It joins the live chapter as it starts, as its reply does, wherever it waited (ADR 037).
           const [started] = yield* sql<{ readonly chapterId: string }>`UPDATE messages SET
@@ -639,19 +647,30 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
+    // What was owed for the message goes with it, dropped by whoever removed it.
     const removeQueuedMessage = (threadId: ThreadId, messageId: MessageId) =>
       journaled(1, () =>
-        sql`DELETE FROM messages WHERE id = ${messageId} AND thread_id = ${threadId} AND status = 'queued' RETURNING id`.pipe(
-          Effect.map((rows) =>
-            rows.length === 0
-              ? null
-              : {
-                  value: undefined,
-                  events: [{ _tag: "MessageDequeued", threadId, messageId, reason: "removed" } as const],
-                },
-          ),
-        ),
+        Effect.gen(function* () {
+          const removed = yield* sql`DELETE FROM messages
+            WHERE id = ${messageId} AND thread_id = ${threadId} AND status = 'queued' RETURNING id`;
+          if (removed.length === 0) return null;
+          const owed = yield* selectOpenRequestsOf(sql, "message_id", [messageId]);
+          yield* stepRequests(sql, owed, { _tag: "Drop", by: yield* sessionActor });
+          return {
+            value: undefined,
+            events: [{ _tag: "MessageDequeued", threadId, messageId, reason: "removed" } as const],
+          };
+        }),
       );
+
+    const floor = makeTurnRequestWrites(
+      sql,
+      journaled,
+      journaledChange,
+      writeMessage,
+      (id) => findMessage(id).pipe(Effect.orDie),
+      messageEvents,
+    );
 
     const readThread = (id: ThreadId) => findThread(id).pipe(Effect.map(Option.getOrUndefined), Effect.orDie);
     const camps = makeCampWrites(sql, readThread);
@@ -688,6 +707,7 @@ export const HobbotsRepositoryLive = Layer.effect(
         Effect.orDie,
       ),
       startQueuedMessage,
+      ...floor,
       removeQueuedMessage,
       findCheckpoint: (threadId) => findCheckpoint(threadId).pipe(Effect.orDie),
       ...camps.writes,

@@ -75,11 +75,14 @@ const ChatStartedFresh = Schema.TaggedStruct("ChatStartedFresh", {
 const MessageUpserted = Schema.TaggedStruct("MessageUpserted", { message: Message });
 /** A user message joined its thread's queue because a reply was running. */
 const MessageQueued = Schema.TaggedStruct("MessageQueued", { message: Message });
-/** A queued message left the queue: its turn started (after its MessageUpserted), or the user removed it. */
+/**
+ * A queued message left the queue: its turn started, or Stop all dropped what was owed for it, so it
+ * stays said (each after its MessageUpserted), or the user removed it.
+ */
 const MessageDequeued = Schema.TaggedStruct("MessageDequeued", {
   threadId: ThreadId,
   messageId: MessageId,
-  reason: Schema.Literals(["started", "removed"]),
+  reason: Schema.Literals(["started", "dropped", "removed"]),
 });
 /**
  * A thread started a chapter (ADR 037): its first, as the thread was made, or the next one, which
