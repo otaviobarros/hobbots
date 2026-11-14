@@ -58,11 +58,35 @@ reviews:
     - label: "area: docs"
       instructions: Changes only under docs/ or to Markdown files.
 
+  # CodeRabbit requests changes on actionable findings and approves once they are resolved, the
+  # pre-merge checks pass and the Merge Risk is Low or Minimal. Approving is not merging.
+  auto_approvals:
+    enabled: true
+    max_merge_risk: low
+    # Pull requests are opened from the maintainer's account, so the author must not be able to
+    # skip the review with `@coderabbitai approve`.
+    allow_author_approval: false
+    overrides:
+      # Changes to the review gate, CI, the repository rules or the engineering standards always
+      # need a person's approval.
+      - paths:
+          - ".coderabbit.yaml"
+          - ".github/**"
+          - "AGENTS.md"
+          - "docs/standards/**"
+          - "scripts/check-*.mjs"
+          - "scripts/*-baseline.json"
+        enabled: false
+
   merge_risk_instructions: >-
-    Rate risk high when a change touches durable state (migrations, journal events, repository
-    writes), the runtime adapters, permissions or sandboxing, device pairing and authentication, the
-    Electron main process or preload, or CI workflows. A change that touches only docs or tests is low
-    risk unless it weakens a check.
+    Rate the risk that remains after the review, not how sensitive the area is. A sensitive area raises
+    the bar for evidence. Durable state (migrations, journal events, repository writes), the runtime
+    adapters, permissions and sandboxing, device pairing and authentication, and the Electron main
+    process or preload are sensitive. A change there is at least Moderate when its behavior is not
+    covered by tests on the fake runtime and on both SQLite and PostgreSQL where they apply, when it
+    changes one runtime adapter without the others, or when a migration could fail or lose data on
+    existing rows. A change that weakens or skips a test or check is at least Moderate. A change
+    that touches only docs, or only adds tests, is Minimal unless it changes a documented contract.
   security_risk_instructions: >-
     Hobs run untrusted model output with real tools on the user's machine. Rate security risk high when
     a change widens what a hob may do, moves enforcement from a real boundary into prompt text
