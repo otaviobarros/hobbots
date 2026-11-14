@@ -665,6 +665,9 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Each person's For you list (ADR 039), above the hub's own questions, which it lists: a layer
+      // sees only what is provided below it.
+      .pipe(Layer.provideMerge(ForYouList.layer))
       // Before the parts of the hub that put questions to you themselves and apply your answers (#976).
       .pipe(Layer.provideMerge(HubQuestions.layer))
       // The other hobs every turn sees, and `read_hob` (ADR 032), before the chat service and the
@@ -680,9 +683,8 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
       // Keep in chat and the chat's camp suggestions (ADR 037).
       .pipe(Layer.provideMerge(CampSuggestionService.layer))
-      // Notes to self, pins and catch-up (ADR 037), and each person's For you list (ADR 039), after the
-      // hub's own questions, which it lists.
-      .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
+      // Notes to self, pins and catch-up (ADR 037).
+      .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer)))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(
