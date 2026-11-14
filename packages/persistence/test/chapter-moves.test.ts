@@ -875,4 +875,28 @@ describe("camp suggestions", () => {
     );
     expect(result).toEqual({ owed: "reply-running", after: "moved" });
   });
+
+  // covers CH-009, ADR 039 (Members)
+  it("[TC-CH-1461-28] refuses while a Quest in the chapter is led by a hob the camp would not admit, and moves once it ends", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* chatWithTwoChapters;
+        const repo = yield* HobbotsRepository;
+        const sql = yield* SqlClient.SqlClient;
+        // Pip, a member of the chat, leads the chapter's Quest and waits on its step: no request is owed.
+        yield* repo.insertAgent(hob(AgentId.make("pip"), "Pip"));
+        yield* sql`UPDATE tasks SET owner_id = 'pip' WHERE id = 'launch'`;
+        const refused = move(first, intoNew()).pipe(
+          Effect.match({
+            onFailure: (error) => ("reason" in error ? error.reason : error._tag),
+            onSuccess: () => "moved",
+          }),
+        );
+        const open = yield* refused;
+        yield* sql`UPDATE tasks SET state = 'completed' WHERE id = 'launch'`;
+        return { open, after: yield* refused };
+      }),
+    );
+    expect(result).toEqual({ open: "reply-running", after: "moved" });
+  });
 });

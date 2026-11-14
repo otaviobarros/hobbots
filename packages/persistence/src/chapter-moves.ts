@@ -93,6 +93,16 @@ export const makeChapterMoves = (
       return replies.length > 0 || approvals.length > 0 || owed.length > 0;
     });
 
+  // A Quest that moves goes on in the camp as its lead's work, so the camp must admit that lead. A
+  // member's Quest still open in the chapter, once its request is answered, holds the chapter where
+  // it is unless that member is in the camp too (ADR 039).
+  const strandsLead = (from: ThreadId, chapterId: ChapterId, camp: Thread) =>
+    sql`SELECT 1 FROM tasks t WHERE t.chapter_id = ${chapterId} AND t.thread_id = ${from}
+      AND t.parent_id IS NULL AND t.state NOT IN ('completed', 'failed', 'cancelled')
+      AND t.owner_id <> ${camp.agentId} AND NOT EXISTS (SELECT 1 FROM thread_members m
+        WHERE m.thread_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = t.owner_id
+        AND m.state = 'active') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
+
   // The thread as this transaction wrote it.
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
 
@@ -273,6 +283,9 @@ export const makeChapterMoves = (
           at: input.at,
         });
         if (!isPlan(planned)) return yield* Effect.fail(planned);
+        if (yield* strandsLead(from.id, input.chapterId, made.camp)) {
+          return yield* new ChapterRefused({ threadId: from.id, reason: "reply-running" });
+        }
         const plan = stamped(planned, revision);
         yield* writeChapters(sql, plan.from);
         yield* writeChapters(sql, plan.camp);

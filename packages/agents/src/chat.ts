@@ -597,8 +597,12 @@ export class ChatService extends Context.Service<
                 yield* yourMessage(thread, agent, content, askedSkill, false),
                 mentioned,
               );
-              // Another hob it mentions answers here, when the floor is its.
-              if (sent.requests.length > 0) yield* waitForFloor(threadId, !isBusy(yield* runOf(threadId)));
+              // Another hob it mentions answers here, when the floor is its, and work you stopped
+              // here may start again with that answer, as with any message you send.
+              if (sent.requests.length > 0) {
+                yield* step(threadId, { _tag: "Release" });
+                yield* waitForFloor(threadId, !isBusy(yield* runOf(threadId)));
+              }
               return { userMessage: sent.message, assistantMessage: null };
             }
             const { busy, carries, slot, limited } = yield* howItStarts(thread, agent);

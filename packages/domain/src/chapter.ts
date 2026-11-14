@@ -132,7 +132,8 @@ export const ChapterStates = {
  * `thread-closed`: the thread is archived or superseded, so its chapters stay as they are.
  * `same-thread`: a chapter moves only into another thread. `not-a-camp`: a chapter moves only into
  * an open camp of the same hob. `reply-running`: a reply runs or waits in the thread, or an approval
- * waits there, so its chapters stay put until it ends.
+ * waits there, or a Quest in the chapter is led by a hob the camp does not admit, so its chapters
+ * stay put until it ends.
  */
 export const ChapterRefusal = Schema.Literals([
   "thread-closed",
