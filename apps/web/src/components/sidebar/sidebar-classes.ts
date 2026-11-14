@@ -30,4 +30,4 @@ export const sidebarMore =
 
 /** A count on a row: replies you have not read, or `@` in lantern for a mention of you. */
 export const sidebarCount =
-  "min-w-[18px] rounded-[9px] bg-[color-mix(in_srgb,var(--color-text-strong)_14%,transparent)] px-[5px] text-center text-meta font-bold text-text-strong";
+  "min-w-[18px] rounded-full bg-[color-mix(in_srgb,var(--color-text-strong)_14%,transparent)] px-[5px] text-center text-meta font-bold text-text-strong";

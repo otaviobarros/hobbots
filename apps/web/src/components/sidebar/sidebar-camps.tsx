@@ -1,7 +1,6 @@
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useThreadReplies } from "../../api/hub-status.ts";
 import { useKnownUnreadThreads } from "../../api/thread-reads.ts";
 import { formatCount } from "../../lib/format.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
@@ -10,6 +9,7 @@ import { messages as copy } from "./messages.ts";
 import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
 import type { SidebarData } from "./sidebar-data.ts";
 import { FaceStack } from "./sidebar-faces.tsx";
+import { SidebarFailed } from "./sidebar-failed.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
 import { SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type CampRow, campRows, rowTime } from "./sidebar-rows.ts";
@@ -20,7 +20,7 @@ const openCampOf = (pathname: string) => /^\/hobs\/[^/]+\/threads\/([^/]+)/.exec
 /**
  * Camps (ADR 039, The sidebar): the camps you share first, as rows with stacked faces, the last line
  * and its time, then the camps a hob runs alone with you, as compact rows. The first five show, and
- * the open one, with Show N more for the rest. The + makes a camp.
+ * the open one, with Show N more for the rest; the rail lists them all. The + makes a camp.
  */
 export function SidebarCamps({
   data,
@@ -34,13 +34,11 @@ export function SidebarCamps({
   onMake: (() => void) | undefined;
 }) {
   const [all, setAll] = useState(false);
-  const replies = useThreadReplies();
   const rows = campRows({
     places: data.read?.sidebar.camps ?? [],
     threads: data.threads,
     hobs: data.hobs,
     people: data.read?.people ?? [],
-    replies,
     unread: useKnownUnreadThreads(),
   });
   const open = openCampOf(pathname);
@@ -50,7 +48,8 @@ export function SidebarCamps({
     open,
     unread,
   );
-  const shown = all ? rows : folded.shown;
+  // The rail has no room for Show more, so it lists every camp and scrolls.
+  const shown = all || !wide ? rows : folded.shown;
   return (
     <>
       <div className={sidebarSection}>
@@ -58,6 +57,7 @@ export function SidebarCamps({
         {onMake !== undefined && <MakeButton onMake={onMake} />}
       </div>
       <span aria-hidden className={sidebarRule} />
+      {data.campsFailed && <SidebarFailed message={copy.campsLoadFailed} onRetry={data.retry} />}
       <ul aria-label={copy.camps} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
         {shown.map((row) => (
           <li key={row.thread.id} className="flex w-full justify-center">
@@ -65,7 +65,7 @@ export function SidebarCamps({
           </li>
         ))}
       </ul>
-      {folded.hidden > 0 && (
+      {wide && folded.hidden > 0 && (
         <button
           type="button"
           aria-expanded={all}
@@ -166,7 +166,7 @@ function CampAside({ row }: { row: CampRow }) {
       {aside !== "" && <span className="text-meta text-label">{aside}</span>}
       <span className="flex items-center gap-1">
         {row.needs && (
-          <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-lantern)_22%,transparent)] px-[7px] py-px text-meta font-semibold whitespace-nowrap text-lantern">
+          <span className="rounded-tag bg-lantern px-[7px] py-px text-meta font-semibold whitespace-nowrap text-on-lantern">
             {copy.needsYou}
           </span>
         )}

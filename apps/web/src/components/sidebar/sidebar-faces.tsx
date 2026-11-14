@@ -11,9 +11,9 @@ export function PersonBadge({ person, size }: { person: User; size: "sm" | "md" 
     <span
       aria-hidden
       className={cn(
-        "inline-flex flex-none items-center justify-center rounded-full bg-(--person) font-bold text-white",
-        size === "sm" && "size-6 text-[9px]",
-        size === "md" && "size-7.5 text-[11px]",
+        "inline-flex flex-none items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--person)_35%,var(--color-panel))] font-bold text-text-strong",
+        size === "sm" && "size-6 text-meta",
+        size === "md" && "size-7.5 text-meta",
         size === "lg" && "size-hob-tile text-meta",
       )}
       style={{ "--person": HOB_COLORS[person.color].hat } as CSSProperties}

@@ -176,7 +176,7 @@ test("[TC-DP-170] a hub that stops shows the app's reason in the banner, and the
   await expect(banner(page)).toBeHidden();
   await expect(composer).toHaveValue("sent once the hub is back");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: sent once the hub is back", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: sent once the hub is back", { exact: true })).toBeVisible();
 });
 
 // covers DP-001

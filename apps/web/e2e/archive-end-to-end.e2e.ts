@@ -56,7 +56,7 @@ const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => 
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(prompt);
   await composer.press("Enter");
-  await expect(page.getByText(`Echo: ${prompt}`, { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText(`Echo: ${prompt}`, { exact: true })).toBeVisible();
   await expect(threadLink(page, prompt)).toBeVisible();
 };
 

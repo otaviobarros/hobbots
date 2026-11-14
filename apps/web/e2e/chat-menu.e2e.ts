@@ -22,7 +22,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
     await composer.fill(prompt);
     await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");
-    await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }
   const chat = page.url();
   const header = page.getByRole("main", { name: "Chat" }).locator("header").first();

@@ -1,4 +1,4 @@
-import type { Agent, ReplyActivity, SidebarPlace, Thread, ThreadId, User } from "@hobbots/domain";
+import type { Agent, SidebarPlace, Thread, ThreadId, User } from "@hobbots/domain";
 import { formatMonthDay, formatTime } from "../../lib/format.ts";
 
 /** A face in a camp's stack: a hob's tile or a person's initials. */
@@ -53,14 +53,12 @@ export const campRows = ({
   threads,
   hobs,
   people,
-  replies,
   unread,
 }: {
   readonly places: ReadonlyArray<SidebarPlace>;
   readonly threads: ReadonlyMap<ThreadId, Thread>;
   readonly hobs: ReadonlyArray<Agent>;
   readonly people: ReadonlyArray<User>;
-  readonly replies: Readonly<Record<ThreadId, ReplyActivity>>;
   readonly unread: ReadonlySet<ThreadId> | undefined;
 }): ReadonlyArray<CampRow> =>
   places.flatMap((place) => {
@@ -73,7 +71,7 @@ export const campRows = ({
         thread,
         hob,
         faces: place.others.flatMap(faceOf(hobs, people)).slice(0, 2),
-        needs: replies[place.threadId] === "waiting",
+        needs: place.needsYou,
         unread: unreadCount(place, unread),
       },
     ];

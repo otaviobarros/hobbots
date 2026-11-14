@@ -34,6 +34,7 @@ const place = (
   section: SidebarPlace["section"],
   others: SidebarPlace["others"],
   unread = 0,
+  needsYou = false,
 ) =>
   new SidebarPlace({
     threadId: ThreadId.make(threadId),
@@ -42,28 +43,35 @@ const place = (
     others,
     unread,
     mentions: 0,
+    needsYou,
   });
 const marina = new User({ id: UserId.make("marina"), name: "Marina", initials: "MR", color: "rose", state: "active" });
 
 describe("sidebar rows", () => {
-  it("[TC-UX-1469-04] joins each camp with its thread, hob and faces, and waits for a thread not loaded yet", () => {
+  it("[TC-UX-1469-04] joins each camp with its thread, hob, faces and needs-you mark, and waits for a thread not loaded yet", () => {
     const aldric = hob("aldric");
     const quill = hob("quill");
     const team = thread("team", "aldric", "camp");
     const threads = new Map([[team.id, team]]);
     const rows = campRows({
       places: [
-        place("team", "aldric", "shared-camp", [
-          { kind: "hob", id: "aldric" },
-          { kind: "user", id: "marina" },
-          { kind: "hob", id: "quill" },
-        ]),
+        place(
+          "team",
+          "aldric",
+          "shared-camp",
+          [
+            { kind: "hob", id: "aldric" },
+            { kind: "user", id: "marina" },
+            { kind: "hob", id: "quill" },
+          ],
+          0,
+          true,
+        ),
         place("later", "aldric", "hob-camp", [{ kind: "hob", id: "aldric" }]),
       ],
       threads,
       hobs: [aldric, quill],
       people: [marina],
-      replies: { [ThreadId.make("team")]: "waiting" },
       unread: undefined,
     });
     expect(rows.map((row) => row.thread.id)).toEqual(["team"]);

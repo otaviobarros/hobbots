@@ -9,12 +9,18 @@ export interface SidebarData {
   readonly read: SidebarRead | undefined;
   readonly hobs: ReadonlyArray<Agent>;
   readonly threads: ReadonlyMap<ThreadId, Thread>;
-  readonly failed: boolean;
+  /** The hobs could not be read, so Direct messages may be missing some. */
+  readonly hobsFailed: boolean;
+  /** The sections or a hob's threads could not be read, so Camps may be missing some. */
+  readonly campsFailed: boolean;
+  /** Reads again what could not be read. */
+  readonly retry: () => void;
 }
 
 /**
  * The hub's sections joined with the threads the event stream keeps live per hob, so a row's title
- * and last line follow a reply as it lands while the hub decides which section it is in.
+ * and last line follow a reply as it lands while the hub decides which section it is in. A read that
+ * failed is never taken for an empty list: the section says so and offers Try again.
  */
 export const useSidebarData = (): SidebarData => {
   const read = useQuery(sidebarQuery);
@@ -24,5 +30,15 @@ export const useSidebarData = (): SidebarData => {
   const threads = new Map<ThreadId, Thread>(
     lists.flatMap((list) => list.data ?? []).map((thread) => [thread.id, thread] as const),
   );
-  return { read: read.data, hobs, threads, failed: agents.isError || read.isError };
+  const failedLists = lists.filter((list) => list.isError);
+  return {
+    read: read.data,
+    hobs,
+    threads,
+    hobsFailed: agents.isError,
+    campsFailed: read.isError || failedLists.length > 0,
+    retry: () => {
+      for (const query of [read, agents, ...failedLists]) if (query.isError) void query.refetch();
+    },
+  };
 };

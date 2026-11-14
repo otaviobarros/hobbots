@@ -5,6 +5,8 @@ export const messages = {
   label: "Sections",
   wordmark: "Hobbots",
   find: "Find or jump to",
+  /** Read after For you's label when something waits there, so it reads "For you, 2 waiting on you". */
+  waiting: ({ count }: { count: number }) => `, ${formatCount(count)} waiting on you`,
   /** The keys that open Find, as a Mac and other systems name them. */
   findKeys: ({ mac }: { mac: boolean }) => (mac ? "⌘K" : "Ctrl+K"),
   makeCamp: "Make a camp",
@@ -12,6 +14,9 @@ export const messages = {
   directMessages: "Direct messages",
   hobsLoadFailed: "Could not load your hobs.",
   campsLoadFailed: "Could not load your camps.",
+  tryAgain: "Try again",
+  /** Try again on the rail, where there is no room for its words. */
+  retryMark: "↻",
   summonLabel: "Summon a hob",
   allHobs: "All your hobs",
   state: {

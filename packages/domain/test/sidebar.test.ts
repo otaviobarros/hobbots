@@ -11,6 +11,7 @@ import {
   Thread,
   ThreadId,
   ThreadMember,
+  threadsNeedingYou,
 } from "../src/index.ts";
 
 // Issue #1469 (ADR 039, The sidebar): the hub sorts threads into Camps and Direct messages with one
@@ -39,7 +40,7 @@ const entry = (
   t: SidebarThread["thread"],
   members: ReadonlyArray<{ actor: Actor; state: MemberState }>,
   unread = 0,
-): SidebarThread => ({ thread: t, members, unread, mentions: 0 });
+): SidebarThread => ({ thread: t, members, unread, mentions: 0, needsYou: false });
 
 describe("sidebarSectionOf", () => {
   it("[TC-DM-1469-01] puts a chat in Direct messages, a camp with one hob in its hob's camps, and a camp with more in shared camps", () => {
@@ -145,5 +146,36 @@ describe("sidebarOf", () => {
         expect(order).toEqual([...order].sort((a, b) => (a === b ? 0 : a === "shared-camp" ? -1 : 1)));
       }),
     );
+  });
+});
+
+describe("threadsNeedingYou", () => {
+  it("[TC-DM-1469-05] marks the threads where an approval, a question, a blocker or failed work waits on you", () => {
+    const asked = ThreadId.make("asked");
+    const questioned = ThreadId.make("questioned");
+    const blocked = ThreadId.make("blocked");
+    const failed = ThreadId.make("failed");
+    const decided = ThreadId.make("decided");
+    const needing = threadsNeedingYou({
+      approvals: [
+        { threadId: asked, state: "pending" },
+        { threadId: decided, state: "approved" },
+      ],
+      blockers: [{ threadId: blocked }, { threadId: null }],
+      questions: [{ task: { threadId: questioned } }],
+      failed: [{ task: { threadId: failed } }, { task: { threadId: null } }],
+    });
+    expect([...needing].sort()).toEqual([asked, blocked, failed, questioned].sort());
+  });
+
+  it("[TC-DM-1469-06] carries the mark onto the thread's place, and a reply waiting on commands does not set it", () => {
+    const camp = thread("camp", "camp");
+    const sidebar = sidebarOf({
+      you,
+      threads: [{ ...entry(camp, [member(you), member(hob("aldric"))]), needsYou: true }],
+    });
+    expect(sidebar.camps.map((place) => place.needsYou)).toEqual([true]);
+    const quiet = sidebarOf({ you, threads: [entry(camp, [member(you), member(hob("aldric"))])] });
+    expect(quiet.camps.map((place) => place.needsYou)).toEqual([false]);
   });
 });

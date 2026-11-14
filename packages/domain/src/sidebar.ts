@@ -24,6 +24,8 @@ export class SidebarPlace extends Schema.Class<SidebarPlace>("SidebarPlace")({
   unread: Schema.Number,
   /** Mentions of you that you have not read. */
   mentions: Schema.Number,
+  /** Something there waits on you: an approval, a question, a blocker or failed work. */
+  needsYou: Schema.Boolean,
 }) {}
 
 /** Your camps, shared ones first, and your direct messages, as the hub sorted them. */
@@ -54,6 +56,7 @@ export interface SidebarThread {
   readonly members: ReadonlyArray<Pick<ThreadMember, "actor" | "state">>;
   readonly unread: number;
   readonly mentions: number;
+  readonly needsYou: boolean;
 }
 
 const CAMP_ORDER: Record<SidebarSection, number> = { "shared-camp": 0, "hob-camp": 1, "direct-message": 2 };
@@ -97,6 +100,7 @@ export const sidebarOf = ({
           .map((member) => member.actor),
         unread: each.unread,
         mentions: each.mentions,
+        needsYou: each.needsYou,
       }),
     }));
   const camps = places

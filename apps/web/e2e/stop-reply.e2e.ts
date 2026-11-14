@@ -51,7 +51,7 @@ test("[TC-CH-005] Stop shows Stopping, then Stopped with the partial reply kept,
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(LONG_PROMPT);
   await composer.press("Enter");
-  await expect(page.getByText(/Echo: word0 word1 word2/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Echo: word0 word1 word2/)).toBeVisible();
 
   const thread = page.url().match(/threads\/([^/?#]+)/)?.[1];
   await page.getByRole("button", { name: "■ Stop" }).click();
@@ -73,10 +73,10 @@ test("[TC-CH-005] Stop shows Stopping, then Stopped with the partial reply kept,
   expect(reply?.status).toBe("stopped");
   expect(reply?.content).toMatch(/^Echo: word0 word1 word2/);
   expect(reply?.content.length).toBeLessThan(`Echo: ${LONG_PROMPT}`.length);
-  await expect(page.getByText(reply?.content.trimEnd() ?? "")).toBeVisible();
+  await expect(page.getByRole("main").getByText(reply?.content.trimEnd() ?? "")).toBeVisible();
 
   // The thread and Pip take the next message as usual.
   await composer.fill("next");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: next", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: next", { exact: true })).toBeVisible();
 });

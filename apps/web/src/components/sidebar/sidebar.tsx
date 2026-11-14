@@ -8,7 +8,6 @@ import { isMac } from "../archive/archive-rules.ts";
 import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { ChiefMark, type ChiefMood } from "../chief/chief-mark.tsx";
 import { chiefLabel, chiefMood } from "../chief/chief-mood.ts";
-import { messages as inboxCopy } from "../inbox/messages.ts";
 import { useWaitingCount } from "../inbox/use-waiting-count.ts";
 import { openJump } from "../shell/hob-jump.tsx";
 import { messages as copy } from "./messages.ts";
@@ -95,7 +94,6 @@ export function Sidebar() {
                 <SidebarNavLink
                   key={item.label}
                   label={item.label}
-                  name={count > 0 ? inboxCopy.forYou({ count }) : item.label}
                   icon={item.icon}
                   to={item.to}
                   active={isActive(item.to)}
@@ -142,7 +140,7 @@ function FindButton({ wide }: { wide: boolean }) {
         <span className="flex-1 max-wide:sr-only">{copy.find}</span>
         <kbd
           aria-hidden
-          className="rounded-[4px] px-[5px] text-meta font-semibold text-label shadow-[inset_0_0_0_1px_var(--color-line-2)] max-wide:hidden"
+          className="rounded-tag px-[5px] text-meta font-semibold text-label shadow-[inset_0_0_0_1px_var(--color-line-2)] max-wide:hidden"
         >
           {copy.findKeys({ mac: isMac() })}
         </kbd>

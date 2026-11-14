@@ -110,7 +110,7 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
 
   // Every reply completes in its own window, on its own thread.
   for (const { hob, page } of all) {
-    await expect(page.getByText(`Echo: ${longPrompt(hob.name)}`)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByText(`Echo: ${longPrompt(hob.name)}`)).toBeVisible({ timeout: 20_000 });
   }
   await send(pipChat.page, "Pip", "second for Pip");
   await send(mossChat.page, "Moss", "second for Moss");

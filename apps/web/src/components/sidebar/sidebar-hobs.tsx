@@ -10,6 +10,7 @@ import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
 import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
 import type { SidebarData } from "./sidebar-data.ts";
+import { SidebarFailed } from "./sidebar-failed.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
 import { SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type DirectRow, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
@@ -56,7 +57,7 @@ export function SidebarHobs({ data, pathname, wide }: { data: SidebarData; pathn
         </Link>
       </div>
       <span aria-hidden className={sidebarRule} />
-      {data.failed && <p className="px-3 text-detail text-rose max-wide:hidden">{copy.hobsLoadFailed}</p>}
+      {data.hobsFailed && <SidebarFailed message={copy.hobsLoadFailed} onRetry={data.retry} />}
       <ul aria-label={copy.directMessages} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
         {rows.map((row) => (
           <li key={row.hob.id} className="flex w-full justify-center">
@@ -127,7 +128,9 @@ function DirectFace({ hob, state }: { hob: Agent; state: SidebarState }) {
         <HobTile hob={hob} tile="md" />
       </span>
       {dot !== undefined && (
-        <span className={cn("absolute -end-px -bottom-px size-[11px] rounded-dot border-2 border-panel", dot)} />
+        <span
+          className={cn("absolute -end-px -bottom-px size-[11px] rounded-dot border-(length:--edge) border-panel", dot)}
+        />
       )}
     </>
   );

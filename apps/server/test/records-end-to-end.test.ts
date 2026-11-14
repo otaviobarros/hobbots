@@ -404,10 +404,19 @@ describe("the sidebar over the API", () => {
         others: [hobActor(pip.id)],
         unread: 1,
         mentions: 0,
+        needsYou: false,
       },
     ]);
     expect(read.sidebar.camps).toEqual([
-      { threadId: "launch", agentId: pip.id, section: "hob-camp", others: [hobActor(pip.id)], unread: 0, mentions: 0 },
+      {
+        threadId: "launch",
+        agentId: pip.id,
+        section: "hob-camp",
+        others: [hobActor(pip.id)],
+        unread: 0,
+        mentions: 0,
+        needsYou: false,
+      },
     ]);
     // Reading the chat clears its count on the next read: nothing about the sidebar was stored.
     const last = (await messages(thread)).at(-1);

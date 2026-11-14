@@ -150,7 +150,7 @@ test("[TC-CH-152] a thread cannot be archived while its reply runs, by menu or b
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill(LONG_PROMPT);
   await composer.press("Enter");
-  await expect(page.getByText(/Echo: word0 word1/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Echo: word0 word1/)).toBeVisible();
 
   await page.getByRole("button", { name: "More for this chat" }).click();
   const item = page.getByRole("menuitem", { name: /Archive chat/ });

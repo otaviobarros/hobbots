@@ -5,7 +5,7 @@ import type { BackpackItem } from "./backpack.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { isInProgress, type Message, waitedSteps } from "./message.ts";
 import type { Question } from "./quest.ts";
-import type { FailedTask } from "./task.ts";
+import type { FailedTask, Task } from "./task.ts";
 
 /**
  * What the hub publishes about a thread's run and a hob's presence (ADR 037, the hub decides
@@ -105,6 +105,31 @@ export const leadsNeedingYou = ({
     ...failed.map(({ task, leadId }) => leadId ?? lead(task.threadId, task.ownerId)),
   ]);
 };
+
+/**
+ * The threads where something waits on you: a pending approval asked there, a blocker sent there, a
+ * question from a Task started there, or a member's failed Task under one (ADR 039, The sidebar).
+ * The sidebar marks each of them Needs you.
+ */
+export const threadsNeedingYou = ({
+  approvals,
+  blockers,
+  questions,
+  failed,
+}: {
+  readonly approvals: ReadonlyArray<Pick<ApprovalRequest, "threadId" | "state">>;
+  readonly blockers: ReadonlyArray<Pick<BackpackItem, "threadId">>;
+  readonly questions: ReadonlyArray<{ readonly task: Pick<Task, "threadId"> }>;
+  readonly failed: ReadonlyArray<{ readonly task: Pick<Task, "threadId"> }>;
+}): ReadonlySet<ThreadId> =>
+  new Set(
+    [
+      ...approvals.flatMap((request) => (request.state === "pending" ? [request.threadId] : [])),
+      ...blockers.map((item) => item.threadId),
+      ...questions.map(({ task }) => task.threadId),
+      ...failed.map(({ task }) => task.threadId),
+    ].flatMap((threadId) => (threadId === null ? [] : [threadId])),
+  );
 
 /**
  * The status a client holds, as the hub published it: each busy thread's run and each live hob's

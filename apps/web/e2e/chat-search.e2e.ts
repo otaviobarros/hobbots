@@ -18,7 +18,7 @@ test("[TC-CH-261] Find lists the messages of this chat that match, opens the one
     await composer.fill(prompt);
     await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");
-    await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }
 
   // The magnifier opens the box, focused; each match says who and when, with the words marked.

@@ -2,17 +2,27 @@ import type { HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
+import { syncState } from "./sync.ts";
 
 const sidebarKey = ["sidebar"] as const;
 
 /**
  * Your camps and direct messages as the hub sorts them by members (ADR 039, The sidebar). The hub
- * works out which section each thread is in on every read; the client only shows it (STD-REACT-028).
+ * works out which section each thread is in, and what waits on you there, on every read; the client
+ * only shows it (STD-REACT-028). A read that lands after a new sync generation began is taken again,
+ * since the events between its snapshot and the fresh stream are not replayed (ADR 013).
  */
 export const sidebarQuery = queryOptions({
   queryKey: sidebarKey,
   ...followsEvents,
-  queryFn: () => call((c) => c.sidebar.current()),
+  queryFn: async ({ client }) => {
+    const state = syncState(client);
+    for (;;) {
+      const generation = state.generation;
+      const read = await call((c) => c.sidebar.current());
+      if (state.generation === generation) return read;
+    }
+  },
 });
 
 /**
@@ -25,7 +35,10 @@ export const sidebarChanged = async (queryClient: QueryClient) => {
   await queryClient.invalidateQueries({ queryKey: sidebarKey, exact: true });
 };
 
-/** The events that move a thread between the sidebar's sections, or into or out of it. */
+/**
+ * The events that move a thread between the sidebar's sections, or into or out of it, and those that
+ * change what waits on you in it: a request, a blocker, a question or a Task's state.
+ */
 const SIDEBAR_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "AgentUpserted",
   "ThreadUpserted",
@@ -34,6 +47,16 @@ const SIDEBAR_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ChapterMoved",
   "ThreadMemberAdded",
   "ThreadMemberChanged",
+  "ApprovalRequested",
+  "ApprovalResolved",
+  "ApprovalMoved",
+  "BackpackItemRecorded",
+  "BackpackItemChanged",
+  "QuestionAsked",
+  "QuestionAnswered",
+  "QuestionEscalated",
+  "QuestionWithdrawn",
+  "TaskStateChanged",
 ]);
 
 /** Reads the sidebar again after an event that changes what it lists; the event's own handling goes on. */
