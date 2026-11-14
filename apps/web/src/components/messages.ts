@@ -1,4 +1,4 @@
-import { formatCount, plural as pluralForm } from "../lib/format.ts";
+import { formatCount, formatList, plural as pluralForm } from "../lib/format.ts";
 
 /**
  * User-facing copy for the components in this folder, grouped by feature (STD-I18N-001). Copy moves
@@ -435,6 +435,23 @@ export const messages = {
     placeholder: ({ name, title }: { name: string; title: string }) => `Message ${name} in “${title}”…`,
   },
   composer: {
+    /**
+     * A message refused for mentioning hobs that are not in the thread (ADR 039, Who answers). A
+     * direct message takes no one else, so it only says so.
+     */
+    mentionRefused: ({ names, kind }: { names: ReadonlyArray<string>; kind: "chat" | "camp" }) => {
+      const who = formatList(names);
+      if (kind === "chat") {
+        return pluralForm(names.length, {
+          one: `${who} isn't in this direct message.`,
+          other: `${who} aren't in this direct message.`,
+        });
+      }
+      return pluralForm(names.length, {
+        one: `${who} isn't in this camp. Add ${who}?`,
+        other: `${who} aren't in this camp. Add them?`,
+      });
+    },
     pausedPlaceholder: ({ name }: { name: string }) => `${name} is paused. Wake ${name} to start a thread.`,
     stop: "■ Stop",
     stopping: "Stopping…",

@@ -21,7 +21,7 @@ import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import chaptersMigration from "../src/migrations/0099_chapters.ts";
-import hobSessionsMigration from "../src/migrations/0115_hob_sessions.ts";
+import hobSessionsMigration from "../src/migrations/20261114004440_hob_sessions.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1379 (ADR 037): a thread's transcript is split into chapters. The migration gives each
@@ -179,7 +179,7 @@ describe("0099_chapters", () => {
       yield* stored("empty", [], []);
 
       yield* chaptersMigration;
-      // Sessions now also name their hob (0115), which the hub reads them with.
+      // Sessions now also name their hob (20261114004440_hob_sessions), which the hub reads them with.
       yield* hobSessionsMigration;
 
       const repo = yield* HobbotsRepository;

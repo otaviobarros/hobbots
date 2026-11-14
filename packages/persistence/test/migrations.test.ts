@@ -39,23 +39,18 @@ describe("migrations", () => {
   it("[TC-DP-003] applies every migration in order on an empty database and records each one", async () => {
     const applied = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      return yield* sql<{ migrationId: number; name: string }>`
+      const rows = yield* sql<{ migrationId: unknown; name: string }>`
         SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id
       `;
+      // PostgreSQL returns a bigint id as a string.
+      return rows.map((row) => ({ migrationId: Number(row.migrationId), name: row.name }));
     }).pipe(Effect.provide(TestDatabase), Effect.runPromise);
 
-    const expected = Object.keys(migrations)
-      .sort()
-      .map((key) => {
-        const [id, ...name] = key.split("_");
-        return { migrationId: Number(id), name: name.join("_") };
-      });
+    const expected = Object.keys(migrations).map((key) => {
+      const [id, ...name] = key.split("_");
+      return { migrationId: Number(id), name: name.join("_") };
+    });
     expect(applied).toEqual(expected);
-  });
-
-  it("use unique, sequential ids", () => {
-    const ids = Object.keys(migrations).map((key) => Number(key.split("_")[0]));
-    expect(ids).toEqual(ids.map((_, index) => index + 1));
   });
 });
 

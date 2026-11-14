@@ -4,7 +4,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
-import hobSessionsMigration from "../src/migrations/0115_hob_sessions.ts";
+import hobSessionsMigration from "../src/migrations/20261114004440_hob_sessions.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1464 (ADR 039): a runtime session belongs to one hob. The migration gives each session a
@@ -15,13 +15,13 @@ const NOW = "2026-11-13T00:00:00.000Z";
 const ADA = AgentId.make("ada");
 const QUILL = AgentId.make("quill");
 
-describe("0115_hob_sessions", () => {
-  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0115")) as typeof migrations;
+describe("20261114004440_hob_sessions", () => {
+  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "20261114004440")) as typeof migrations;
   const layer = Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer).pipe(
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
 
-  /** A thread of `agentId` with one session per runtime in its one live chapter, as stored before 0115. */
+  /** A thread of `agentId` with one session per runtime in its one live chapter, as stored before 20261114004440_hob_sessions. */
   const stored = (threadId: string, agentId: string, runtimes: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();

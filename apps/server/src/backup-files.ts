@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MEMORY_ARCHIVE, memoryFolder, replaceMemoryKeys, restoreMemoryArchive } from "@hobbots/memory";
+import { knownMigrationIds } from "@hobbots/persistence";
 import { Effect, Schema } from "effect";
 
 /** The format of a backup's manifest (ADR 026). A later format, such as an encrypted one, gets a new version. */
@@ -28,6 +29,11 @@ export const BackupManifest = Schema.Struct({
   storage: Schema.Literal("sqlite"),
   database: Schema.Literals(["included", "external"]),
   schemaVersion: Schema.Int,
+  /**
+   * Every migration id the backup's database applied (ADR 040). A backup made before it has none, and
+   * its ids were sequential, so its `schemaVersion` alone says whether this Hobbots knows them.
+   */
+  migrations: Schema.optionalKey(Schema.Array(Schema.Int)),
   installationId: Schema.String,
   counts: Schema.Struct({
     hobs: Schema.Int,
@@ -292,15 +298,27 @@ const restoreSkillObjects = async (dataDir: string, backup: string, manifest: Ba
 export const writeManifest = (folder: string, manifest: BackupManifest) =>
   writeFile(join(folder, "manifest.json"), `${encodeManifest(manifest)}\n`, { flag: "wx", mode: 0o600 });
 
+/**
+ * Whether a backup's database is newer than this Hobbots: a higher schema version, or since ADR 040
+ * a migration id it does not know, which a newer Hobbots can add below the highest this one knows.
+ */
+const isNewerSchema = (manifest: BackupManifest, knownSchema: number, knownIds: ReadonlySet<number>) =>
+  manifest.schemaVersion > knownSchema || (manifest.migrations ?? []).some((id) => !knownIds.has(id));
+
 /** Why a backup folder cannot be restored, in words for the restore screen. */
 export class NotRestorable extends Error {}
 
 /**
  * Reads and checks a backup before anything changes: its manifest, every file it names by size and
  * SHA-256, and that nothing in it is a link that could lead outside it. A newer schema than
- * `knownSchema` is refused.
+ * `knownSchema` is refused, and so is a migration id outside `knownIds`: since ADR 040 a newer
+ * Hobbots can add one below the highest this one knows.
  */
-export const readBackup = async (folder: string, knownSchema: number): Promise<BackupManifest> => {
+export const readBackup = async (
+  folder: string,
+  knownSchema: number,
+  knownIds: ReadonlySet<number> = knownMigrationIds(),
+): Promise<BackupManifest> => {
   const stat = await lstat(folder).catch(() => undefined);
   if (stat === undefined || !stat.isDirectory()) throw new NotRestorable("There is no backup folder at that path.");
   let manifest: BackupManifest;
@@ -311,7 +329,7 @@ export const readBackup = async (folder: string, knownSchema: number): Promise<B
       "This folder is not a complete Hobbots backup: its manifest is missing or unreadable. A backup that stopped before it finished has none.",
     );
   }
-  if (manifest.schemaVersion > knownSchema) {
+  if (isNewerSchema(manifest, knownSchema, knownIds)) {
     throw new NotRestorable("This backup is from a newer Hobbots. Update Hobbots first.");
   }
   if (manifest.database !== "included") {

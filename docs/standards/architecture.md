@@ -166,8 +166,16 @@ A runtime session starts from the context pack: briefs, active decisions, the ar
 A record that changes place, such as a chapter and its decisions moving into a camp, is re-parented in one transaction and leaves a stub where it was. It is never copied. Every authored record carries an explicit `actor`, `{ kind: "user" | "hob" | "hub", id }`, never an implied "you".
 
 - **Why:** two copies drift apart, and a named author keeps shared camps possible without a migration of meaning.
-- **Enforced by:** review.
+- **Enforced by:** review, and for who did something, STD-ARCH-020's check.
 - **Applies to:** `packages/*`, `apps/server`.
+
+### STD-ARCH-020 A record names who did something with an Actor
+
+A field that says who did something, such as `requestedBy`, `addedBy` or `author`, holds an `Actor` (`{ kind, id }`), never a bare `UserId` or hob id (`AgentId`). A bare id cannot say whether a person, a hob or the hub did it, and a null that stands for "you" stops meaning one person once a hub has several (ADR 039, Users as actors). A field that says what a record belongs to, such as a device's `userId` or a Task's `agentId`, is not about who did something and keeps its id.
+
+- **Why:** shared camps put several people and hobs on one record, and only an actor tells them apart.
+- **Enforced by:** `checkRecords` in `scripts/owner-actor.mjs`, run by `scripts/check-standards.mjs` and `pnpm lint:actor`, which fails on a schema field whose name ends in `By` (or is `author`, `actor`, `creator`, `requester`) and whose schema is a bare `UserId`, `AgentId` or `HobId`. The two fields that predate the rule are listed in `KNOWN_BARE_AUTHORS`, and that list only shrinks. Review covers the rest.
+- **Applies to:** `packages/*`, `apps/*`.
 
 ## Guidance
 
