@@ -106,6 +106,8 @@ describe("record events", () => {
         threadId,
         chapterId: ChapterId.make("c1"),
         reasons: [{ code: "decisions", count: 5 }],
+        title: null,
+        goal: null,
         state: "expired",
         raisedAt: at,
         settledAt: at,

@@ -7,7 +7,7 @@ import { followsEvents } from "./queries.ts";
 import { readListAgain } from "./records.ts";
 
 // Camp suggestions (ADR 037, #1385), as the suggestion card in the chat shows them: the open ones the
-// hub raised. You keep the chapter in the chat, or move it into a camp, which accepts its suggestion.
+// hub offered, once it checked their chapter holds one topic and named the camp (#1557). You keep the chapter in the chat, or move it into a camp, which accepts its suggestion.
 
 const suggestionsKey = (threadId: ThreadId) => ["threads", threadId, "campSuggestions"] as const;
 
@@ -22,11 +22,17 @@ export const campSuggestionsQuery = (threadId: ThreadId) =>
 type SuggestionEvent = Extract<
   HobbotsEvent,
   {
-    readonly _tag: "CampSuggested" | "CampSuggestionKept" | "CampSuggestionAccepted" | "CampSuggestionExpired";
+    readonly _tag:
+      | "CampSuggested"
+      | "CampSuggestionOffered"
+      | "CampSuggestionKept"
+      | "CampSuggestionAccepted"
+      | "CampSuggestionExpired";
   }
 >;
 const SUGGESTION_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "CampSuggested",
+  "CampSuggestionOffered",
   "CampSuggestionKept",
   "CampSuggestionAccepted",
   "CampSuggestionExpired",

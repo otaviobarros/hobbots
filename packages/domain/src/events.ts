@@ -138,8 +138,16 @@ const ChapterMoved = Schema.TaggedStruct("ChapterMoved", {
   chapters: Schema.Array(Chapter),
   campChapters: Schema.Array(Chapter),
 });
-/** The hub suggested making a chat's chapter a camp (ADR 037, #1385): a threshold rule or the hub's brain raised it. */
+/**
+ * The hub raised a suggestion to make a chat's chapter a camp (ADR 037, #1385): a threshold rule or
+ * the hub's brain raised it, pending until the hub offers it (#1557).
+ */
 const CampSuggested = Schema.TaggedStruct("CampSuggested", { threadId: ThreadId, suggestion: CampSuggestion });
+/** The hub offered a pending suggestion, with the camp's name and goal it suggests (#1557). */
+const CampSuggestionOffered = Schema.TaggedStruct("CampSuggestionOffered", {
+  threadId: ThreadId,
+  suggestion: CampSuggestion,
+});
 /** You kept a suggested chapter in the chat; it is never suggested again. */
 const CampSuggestionKept = Schema.TaggedStruct("CampSuggestionKept", {
   threadId: ThreadId,
@@ -150,7 +158,10 @@ const CampSuggestionAccepted = Schema.TaggedStruct("CampSuggestionAccepted", {
   threadId: ThreadId,
   suggestion: CampSuggestion,
 });
-/** A suggestion no longer applies: its chapter was merged away, or its chat closed. */
+/**
+ * A suggestion no longer applies: its chapter holds several topics (#1557), was merged away, or its
+ * chat closed.
+ */
 const CampSuggestionExpired = Schema.TaggedStruct("CampSuggestionExpired", {
   threadId: ThreadId,
   suggestion: CampSuggestion,
@@ -518,6 +529,7 @@ export const JournaledEvent = Schema.Union([
   ChapterSummarized,
   ChapterMoved,
   CampSuggested,
+  CampSuggestionOffered,
   CampSuggestionKept,
   CampSuggestionAccepted,
   CampSuggestionExpired,
@@ -647,7 +659,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChapterSummarized: 1,
   // 2: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 20261114004500).
   ChapterMoved: 2,
+  // A suggestion's `title`, `goal` and `pending` state (#1557) were added with defaults, compatibly:
+  // every entry from before holds an open suggestion or a settled one.
   CampSuggested: 1,
+  CampSuggestionOffered: 1,
   CampSuggestionKept: 1,
   CampSuggestionAccepted: 1,
   CampSuggestionExpired: 1,

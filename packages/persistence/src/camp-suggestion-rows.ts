@@ -12,7 +12,7 @@ import {
 } from "@hobbots/domain";
 import { Array as Arr, DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
-import { chapterRows } from "./chapters.ts";
+import { chapterRows } from "./chapter-rows.ts";
 
 // Camp suggestions (ADR 037, migration 0104). The rule that raises one is the pure
 // `planCampSuggestion` in @hobbots/domain, run here in the transaction whose events grew a chat's
@@ -25,6 +25,8 @@ export interface CampSuggestionRow {
   readonly threadId: string;
   readonly chapterId: string;
   readonly reasons: string;
+  readonly title: string | null;
+  readonly goal: string | null;
   readonly state: string;
   readonly raisedAt: string;
   readonly settledAt: string | null;
@@ -41,6 +43,8 @@ export const suggestionFromRow = (row: CampSuggestionRow) =>
     threadId: row.threadId,
     chapterId: row.chapterId,
     reasons: JSON.parse(row.reasons),
+    title: row.title,
+    goal: row.goal,
     state: row.state,
     raisedAt: row.raisedAt,
     settledAt: row.settledAt,
@@ -54,6 +58,8 @@ const suggestionColumns = (suggestion: CampSuggestion) => ({
   thread_id: suggestion.threadId,
   chapter_id: suggestion.chapterId,
   reasons: JSON.stringify(suggestion.reasons),
+  title: suggestion.title,
+  goal: suggestion.goal,
   state: suggestion.state,
   raised_at: suggestion.raisedAt,
   settled_at: suggestion.settledAt,
@@ -61,10 +67,17 @@ const suggestionColumns = (suggestion: CampSuggestion) => ({
   revision: suggestion.revision,
 });
 
-/** Writes a suggestion's new state, as a transition left it. */
+/** Writes a suggestion's new state, as a transition left it, with the camp's name and goal it offers. */
 export const settleSuggestion = (sql: SqlClient.SqlClient, suggestion: CampSuggestion) =>
   sql`UPDATE camp_suggestions SET state = ${suggestion.state}, settled_at = ${suggestion.settledAt},
-    camp_id = ${suggestion.campId}, revision = ${suggestion.revision} WHERE id = ${suggestion.id}`;
+    camp_id = ${suggestion.campId}, title = ${suggestion.title}, goal = ${suggestion.goal},
+    revision = ${suggestion.revision} WHERE id = ${suggestion.id}`;
+
+/** The suggestion `id`, in any state, or null. */
+export const suggestionById = (sql: SqlClient.SqlClient, id: CampSuggestionId) =>
+  sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE id = ${id}`.pipe(
+    Effect.map(([row]) => (row === undefined ? null : suggestionFromRow(row))),
+  );
 
 /** The chapter's suggestion, in any state, or null. */
 export const suggestionOfChapter = (sql: SqlClient.SqlClient, chapterId: ChapterId) =>
@@ -129,6 +142,44 @@ export const raiseSuggestion = (
     return suggestion;
   });
 
+/**
+ * In any split of chapter `from` (#1557), at journal sequences from `first` on: its pending suggestion
+ * is withdrawn when the split was made for it (`withdraw`, as `from` holds several topics), or when
+ * the thresholds it was raised for no longer hold, since the part split off took what counted; and
+ * the part, `part`, is suggested if it reaches a threshold on its own. Answers their events. Only for
+ * use within the split's transaction.
+ */
+export const reconcileSplit = (
+  sql: SqlClient.SqlClient,
+  from: ChapterId,
+  part: ChapterId,
+  first: number,
+  withdraw: CampSuggestionId | undefined,
+): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+  Effect.gen(function* () {
+    const at = DateTime.formatIso(yield* DateTime.now);
+    const events: Array<JournaledEvent> = [];
+    const suggestion = yield* suggestionOfChapter(sql, from);
+    const outgrown =
+      suggestion !== null &&
+      suggestion.id !== withdraw &&
+      CampSuggestions.isPending(suggestion) &&
+      !suggestion.reasons.some((reason) => reason.code === "drift") &&
+      campSuggestionReasons(yield* countsOf(sql, from)).length === 0;
+    const withdrawn =
+      suggestion !== null && (suggestion.id === withdraw || outgrown)
+        ? CampSuggestions.transition(suggestion, { _tag: "Withdraw", at })
+        : null;
+    if (withdrawn instanceof CampSuggestion) {
+      const written = new CampSuggestion({ ...withdrawn, revision: first });
+      yield* settleSuggestion(sql, written);
+      events.push({ _tag: "CampSuggestionExpired", threadId: written.threadId, suggestion: written });
+    }
+    const raised = yield* raiseSuggestion(sql, part, null, first + events.length, at);
+    if (raised !== null) events.push({ _tag: "CampSuggested", threadId: raised.threadId, suggestion: raised });
+    return events;
+  });
+
 /** The chapter a settled message, a decision, an artifact or a quest's start grew, if any. */
 const grownChapter = (sql: SqlClient.SqlClient, event: JournaledEvent) =>
   Effect.gen(function* () {
@@ -180,12 +231,11 @@ export const raiseCampSuggestions = (
     return raised;
   });
 
-/** The open suggestions a change's events end: a merged-away chapter's, and every one of a chat that closed. */
+/** The unsettled suggestions a change's events end: a merged-away chapter's, and every one of a chat that closed. */
 const endedSuggestions = (sql: SqlClient.SqlClient, event: JournaledEvent) => {
   const open = (where: Statement.Fragment) =>
-    sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE state = 'open' AND ${where} ORDER BY raised_at, id`.pipe(
-      Effect.map((rows) => rows.map(suggestionFromRow)),
-    );
+    sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE state IN ('pending', 'open') AND ${where}
+      ORDER BY raised_at, id`.pipe(Effect.map((rows) => rows.map(suggestionFromRow)));
   switch (event._tag) {
     case "ChapterMerged":
       return open(sql`chapter_id = ${event.absorbed}`);
@@ -199,7 +249,7 @@ const endedSuggestions = (sql: SqlClient.SqlClient, event: JournaledEvent) => {
 };
 
 /**
- * Expires the open suggestions a change's events end, at journal sequences from `first` on, and
+ * Expires the pending and open suggestions a change's events end, at journal sequences from `first` on, and
  * returns their `CampSuggestionExpired` events. Only for use within `sql.withTransaction`.
  */
 export const expireCampSuggestions = (

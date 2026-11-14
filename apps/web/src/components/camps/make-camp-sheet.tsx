@@ -21,11 +21,16 @@ import { messages } from "./messages.ts";
 
 const copy = messages.make;
 
-/** A chat's chapter a camp is made from, which moves into it, and what it holds, in words. */
+/**
+ * A chat's chapter a camp is made from, which moves into it, and what it holds, in words: `title` names
+ * the chapter. `name` and `goal` prefill the camp's, as a camp suggestion offers them (#1557).
+ */
 export interface CampFrom {
   readonly chapter: Chapter;
   readonly title: string;
   readonly detail: string;
+  readonly name?: string;
+  readonly goal?: string;
 }
 
 /**
@@ -47,7 +52,7 @@ export function MakeCampSheet({
   onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(makeCampStep, undefined, () =>
-    startMakeCamp(from?.title ?? "", from !== undefined),
+    startMakeCamp(from?.name ?? "", from !== undefined, from?.goal ?? ""),
   );
   const make = useMakeCamp(hob.id);
   const move = useMoveChapter(from?.chapter.threadId ?? ("" as ThreadId));

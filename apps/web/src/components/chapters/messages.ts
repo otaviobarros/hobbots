@@ -59,6 +59,7 @@ export const messages = {
     "same-thread": () => "That chapter is already here.",
     "not-a-camp": () => "Pick one of this hob's open camps.",
     "reply-running": () => "Wait for the reply to finish, then try again.",
+    "chapter-changed": () => "The chapters changed meanwhile. Try again.",
     unreachable: () => "Couldn't change the chapters. Hobbots may be reconnecting; try again in a moment.",
   } satisfies Record<ChapterChangeError, () => string>,
   dismiss: "Dismiss",

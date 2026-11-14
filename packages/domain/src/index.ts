@@ -14,6 +14,7 @@ export * from "./carried-over.ts";
 export * from "./catch-up.ts";
 export * from "./change-actor.ts";
 export * from "./chapter.ts";
+export * from "./chapter-break.ts";
 export * from "./chapter-move.ts";
 export * from "./chapter-tools.ts";
 export * from "./charm-call.ts";

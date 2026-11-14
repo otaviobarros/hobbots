@@ -1,5 +1,5 @@
 import type { EventEnvelope } from "@hobbots/domain";
-import { Effect, Layer, Option, Schedule } from "effect";
+import { type Duration, Effect, Layer, Option, Schedule } from "effect";
 import { byRule, HubDecider, type Judgment } from "./hub-decider.ts";
 
 // What the hub's cursor projectors share (ADR 037, STD-ARCH-016): the brain they ask, or its rules
@@ -54,8 +54,12 @@ export const projectorRound = <R>(
   }).pipe(Effect.catchCause((cause) => Effect.logWarning(`${name} stopped a round`, cause).pipe(Effect.as(false))));
 };
 
-/** A projector's rounds, run every few seconds for as long as the layer's scope is open. */
-export const runEvery = <I, E, R>(round: Effect.Effect<boolean, never, I>, make: Layer.Layer<I, E, R>) =>
-  Layer.effectDiscard(round.pipe(Effect.repeat(Schedule.spaced("5 seconds")), Effect.forkScoped, Effect.asVoid)).pipe(
+/** A projector's rounds, run every `spaced` (a few seconds by default) for as long as the layer's scope is open. */
+export const runEvery = <I, E, R>(
+  round: Effect.Effect<boolean, never, I>,
+  make: Layer.Layer<I, E, R>,
+  spaced: Duration.Input = "5 seconds",
+) =>
+  Layer.effectDiscard(round.pipe(Effect.repeat(Schedule.spaced(spaced)), Effect.forkScoped, Effect.asVoid)).pipe(
     Layer.provideMerge(make),
   );
