@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
 import { Effect, Layer } from "effect";
 import git from "isomorphic-git";
@@ -196,6 +196,40 @@ const namesOnMain = async (top: string, directory: string): Promise<ReadonlyArra
   return null;
 };
 
+/** The nearest folder above `path`, or `path` itself, that exists, by its real path, with the names left below it. */
+const nearestReal = async (path: string): Promise<{ readonly real: string; readonly below: ReadonlyArray<string> }> => {
+  const below: Array<string> = [];
+  for (let at = path; ; at = dirname(at)) {
+    const real = await realpath(at).catch(() => null);
+    if (real !== null) return { real, below };
+    if (dirname(at) === at) return { real: at, below };
+    below.unshift(basename(at));
+  }
+};
+
+/**
+ * The repository an absolute path is in and the path inside it, for the claims register (#1449),
+ * or null when it is in none. The path is normalized first, so `..` cannot step out of it.
+ */
+const placeOf = async (path: string): Promise<{ readonly top: string; readonly path: string } | null> => {
+  if (!isAbsolute(path)) return null;
+  const { real, below } = await nearestReal(resolve(path));
+  const found = await repositoryOf(real, new Map());
+  if (found === null) return null;
+  const top = await realpath(found.dir);
+  const inside = insideOf(top, join(real, ...below));
+  return inside === null || inside === "" ? null : { top, path: inside };
+};
+
+/** The branch checked out in the repository whose top is `top`, by its short name, or null. */
+const currentBranch = async (top: string): Promise<string | null> => {
+  const repository = await repositoryOf(top, new Map());
+  if (repository === null) return null;
+  const files = repository.common === null ? fs : worktreeFs(repository.gitdir, repository.common);
+  const branch = await git.currentBranch({ fs: files, gitdir: repository.gitdir, fullname: false });
+  return branch ?? null;
+};
+
 /** The hub's reader of Git state. */
 export const GitWorkspaceLive = Layer.succeed(
   GitWorkspace,
@@ -205,5 +239,7 @@ export const GitWorkspaceLive = Layer.succeed(
     realFolder: (folder) =>
       Effect.promise(() => (isAbsolute(folder) ? realpath(folder).catch(() => null) : Promise.resolve(null))),
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
+    placeOf: (path) => Effect.promise(() => placeOf(path).catch(() => null)),
+    currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
   }),
 );

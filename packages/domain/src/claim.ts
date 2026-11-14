@@ -27,7 +27,7 @@ export type ClaimScope = typeof ClaimScope.Type;
 export const isSequenceScope = (scope: ClaimScope): boolean => scope === "sequence";
 
 /** Where a claim stands, held by `ClaimMachine`. */
-export const ClaimState = Schema.Literals(["held", "contested", "released"]);
+export const ClaimState = Schema.Literals(["held", "contested", "taken", "released"]);
 export type ClaimState = typeof ClaimState.Type;
 
 export class Claim extends Schema.Class<Claim>("Claim")({
@@ -54,7 +54,9 @@ export class Claim extends Schema.Class<Claim>("Claim")({
 export type ClaimEvent =
   | { readonly _tag: "Contest"; readonly at: string }
   | { readonly _tag: "Clear"; readonly at: string }
-  | { readonly _tag: "Release"; readonly at: string };
+  | { readonly _tag: "Release"; readonly at: string }
+  /** You took over the claim's Task (#1449): the claim is yours, and its hob may not write to it. */
+  | { readonly _tag: "TakeOver"; readonly at: string; readonly by: Actor };
 
 /** A change to a claim its state does not allow. */
 export class IllegalClaimTransition extends Schema.TaggedError<IllegalClaimTransition>()("IllegalClaimTransition", {
@@ -72,6 +74,8 @@ export const ClaimMachine = defineMachine<ClaimState, ClaimEvent, Claim, Illegal
   states: {
     held: "The Task holds it, and no other open claim clashes with it",
     contested: "Another Task's open claim on the same path or branch clashes with it; neither Task is stopped",
+    taken:
+      "You took it over from its Task: it is yours, and the hub refuses its hob's writes to it until the Task ends",
     released: "Its Task ended; a released number is never handed out again",
   },
   field: "state",
@@ -89,8 +93,15 @@ export const ClaimMachine = defineMachine<ClaimState, ClaimEvent, Claim, Illegal
       to: "held",
       apply: (claim, e) => new Claim({ ...claim, state: "held", updatedAt: e.at }),
     },
-    Release: {
+    // Only you take a claim over, and it moves to you as it stands, contested or not.
+    TakeOver: {
       from: ["held", "contested"],
+      to: "taken",
+      guard: (_claim, e) => e.by.kind === "user",
+      apply: (claim, e) => new Claim({ ...claim, state: "taken", actor: e.by, updatedAt: e.at }),
+    },
+    Release: {
+      from: ["held", "contested", "taken"],
       to: "released",
       apply: (claim, e) => new Claim({ ...claim, state: "released", updatedAt: e.at, releasedAt: e.at }),
     },
@@ -123,6 +134,13 @@ export const Claims = {
   ...ClaimMachine,
   isOpen,
   isContested: (claim: Claim): boolean => claim.state === "contested",
+  /** Whether you took the claim over (#1449), so its hob may not write to it. */
+  isTaken: (claim: Claim): boolean => claim.state === "taken",
+  /**
+   * Whether a new clash makes the claim contested: only a held one is. A contested claim already
+   * is, and a claim you took over stays yours, while the new claim that clashes with it is contested.
+   */
+  contestable: (claim: Claim): boolean => claim.state === "held",
   /** The open claims in `others` that clash with `claim`. */
   clashesOf: (claim: Claim, others: ReadonlyArray<Claim>): ReadonlyArray<Claim> =>
     others.filter((other) => claimsClash(claim, other)),
@@ -213,6 +231,30 @@ export const claimSubject = (claim: Claim): string => {
       return `number ${claim.key} in ${claim.directory ?? ""} of ${claim.repository}`;
   }
 };
+
+/**
+ * Whether a write to `path`, inside the claim's repository with `/` between names, touches the path
+ * the claim is on: the file itself, a file inside its folder, or a folder that holds it.
+ */
+export const touchesPath = (claim: Claim, path: string): boolean =>
+  claim.scope === "path" && pathsOverlap(claim.key, path);
+
+/** The claims a list names, as a hob reads them: "path docs/a.md and branch feat/x in github.com/me/app". */
+const subjects = (claims: ReadonlyArray<Claim>): string => {
+  const names = claims.map(claimSubject);
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
+};
+
+/**
+ * What a hob hears when you take over a Task it works on (#1449): which of its claims are yours now,
+ * that the hub refuses its writes to them, and what it may still do.
+ */
+export const claimsTakenText = (taskId: TaskId, claims: ReadonlyArray<Claim>): string =>
+  `The user took over Task ${taskId}'s claims on ${subjects(claims)}. They are the user's now: Hobbots refuses your writes to them until the Task ends. Carry on with the rest of the Task, and ask the user before you need to change them.`;
+
+/** Why the hub refuses a hob's write to a claim you took over (#1449). */
+export const takenWriteText = (claim: Claim): string =>
+  `The user took over ${claimSubject(claim)} from Task ${claim.taskId}, so Hobbots refuses your writes to it. Leave it to them, and ask the user if your work needs it changed.`;
 
 /** What a lead hears of a clash (ADR 037): whose claims clash, on what, and that neither Task was stopped. */
 export const claimClashText = (claim: Claim, clashes: ReadonlyArray<Claim>): string =>

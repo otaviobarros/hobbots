@@ -2,7 +2,16 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { ClaimRegister, HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
+import {
+  type CallWrites,
+  ClaimRegister,
+  HobbotsRepository,
+  HobTools,
+  makeRedactor,
+  TaskRepository,
+  takeOverTask,
+} from "@hobbots/agents";
+import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -49,6 +58,15 @@ const SAM = AgentId.make("sam");
 // Merry works only in the repository's docs folder.
 const MERRY = AgentId.make("merry");
 const MIGRATIONS = "packages/persistence/src/migrations";
+/** You, on a device of yours: only a user session takes a Task over (#1449). */
+const YOU = UserSession.of({
+  deviceId: "device-1" as UserSession["Service"]["deviceId"],
+  name: "Ada's Mac",
+  kind: "desktop" as UserSession["Service"]["kind"],
+  userId: "owner" as UserSession["Service"]["userId"],
+  actor: { kind: "user", id: "owner" },
+  whileApproved: (write) => write,
+});
 
 let root: string;
 let checkout: string;
@@ -246,6 +264,41 @@ const hub = () => {
         yield* Effect.orDie(tasks.retryTask(taskId, (yield* latest).revision, now));
       }),
     );
+  /** You take over a Task's claims (#1449), from a device session of yours. */
+  const takeOver = (taskId: TaskId) => run(takeOverTask(taskId).pipe(Effect.provideService(UserSession, YOU)));
+  /** Why the hub refuses `writes` of any hob's session, as every runtime asks it (#1449). */
+  const takenWrite = (writes: Partial<CallWrites>) =>
+    run(
+      Effect.gen(function* () {
+        const tools = yield* TaskTools;
+        const session = yield* tools.forSession(
+          { agentId: SAM, taskId: B },
+          {
+            attemptId: AttemptId.make(`${B}-1`),
+            threadId: null,
+            currentAccess: Effect.succeed(null),
+            redactor: makeRedactor(),
+            approvals: null,
+          },
+        );
+        const ask = session.steering?.takenByYou;
+        if (ask === undefined) throw new Error("expected the session to check writes to what you took over");
+        return yield* ask({ paths: [], pushes: [], commits: [], ...writes });
+      }),
+    );
+  /** The claims-taken items in the backpack, by recipient and Task. */
+  const takenItems = () =>
+    run(
+      Effect.flatMap(
+        SqlClient.SqlClient,
+        (sql) => sql<{
+          readonly recipientId: string;
+          readonly taskId: string;
+          readonly actionable: number | boolean;
+        }>`SELECT recipient_id, task_id, actionable FROM backpack_items WHERE kind = 'claims-taken'
+          ORDER BY recipient_id, task_id`,
+      ),
+    );
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
       (tree) => Option.getOrThrow(tree).tasks[0],
@@ -262,6 +315,9 @@ const hub = () => {
     end,
     failAndRetry,
     taskOf,
+    takeOver,
+    takenWrite,
+    takenItems,
     dispose: () => runtime.dispose(),
   };
 };
@@ -413,6 +469,65 @@ describe("the claims register", () => {
     }
   });
 
+  // covers OR-006, PE-006, #1449
+  it("[TC-OR-1449-03] moves a Task's claims to you when you take it over, tells its hob, and refuses every hob's writes to them", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      // Frodo's request never started a turn, so it can be cancelled below.
+      await h.request(FRODO, A, false);
+      await h.request(SAM, B);
+      await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
+      // The worktree's branch, checked out there.
+      await h.call(FRODO, A, { key: "b", scope: "branch", branch: "camp" });
+      // Nothing is yours yet, so nothing is refused.
+      expect(await h.takenWrite({ paths: [join(worktree, "docs", "plan.md")] })).toBeNull();
+
+      const before = (await h.taskOf(A))?.state;
+      const taken = await h.takeOver(A);
+      expect(taken.map((claim) => [claim.key, claim.state, claim.actor])).toEqual([
+        ["docs", "taken", { kind: "user", id: "owner" }],
+        ["camp", "taken", { kind: "user", id: "owner" }],
+      ]);
+      // Frodo hears of it once, in his backpack, and his Task goes on.
+      expect(
+        (await h.takenItems()).map((item) => [item.recipientId, item.taskId, Boolean(Number(item.actionable))]),
+      ).toEqual([[FRODO, A, true]]);
+      expect((await h.taskOf(A))?.state).toBe(before);
+      // Taking over again changes nothing.
+      expect(await h.takeOver(A)).toEqual([]);
+      expect(await h.takenItems()).toHaveLength(1);
+
+      // Any hob's write there is refused, from either clone of the repository, a new file included.
+      const refusal = await h.takenWrite({ paths: [join(worktree, "docs", "new", "plan.md")] });
+      expect(refusal).toContain("The user took over path docs in");
+      expect(refusal).toContain(`from Task ${A}`);
+      expect(await h.takenWrite({ paths: [join(checkout, "docs", "decisions", "001-first.md")] })).toContain(
+        "took over",
+      );
+      // Climbing back in with ".." is the same file; a file beside the folder is not yours.
+      expect(await h.takenWrite({ paths: [`${checkout}${sep}web${sep}..${sep}docs${sep}a.md`] })).toContain(
+        "took over",
+      );
+      expect(await h.takenWrite({ paths: [join(checkout, "docs-old", "a.md")] })).toBeNull();
+      // A push of the branch, and a commit where it is checked out, are refused; a commit on main is not.
+      expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "refs/heads/camp" }] })).toContain("branch camp");
+      expect(await h.takenWrite({ commits: [worktree] })).toContain("branch camp");
+      expect(await h.takenWrite({ commits: [checkout] })).toBeNull();
+
+      // Sam's claim on a file inside it is contested; what you took over stays yours.
+      expect((await h.call(SAM, B, { key: "p", scope: "path", path: "docs/a.md" })).details.state).toBe("contested");
+      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["taken", "taken"]);
+      // Once the Task ends, its claims are released, and the writes run again.
+      await h.end(A);
+      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["released", "released"]);
+      expect((await h.claimsOf(B)).map((claim) => claim.state)).toEqual(["held"]);
+      expect(await h.takenWrite({ paths: [join(checkout, "docs", "a.md")] })).toBeNull();
+    } finally {
+      await h.dispose();
+    }
+  });
+
   // covers PE-002, PE-004
   it("[TC-OR-1388-06] claims nothing outside the hob's folders, whatever the folder's spelling", async () => {
     const h = hub();
@@ -451,7 +566,8 @@ type Step =
       readonly scope: ClaimScope;
       readonly key: string;
     }
-  | { readonly _tag: "End"; readonly task: number };
+  | { readonly _tag: "End"; readonly task: number }
+  | { readonly _tag: "TakeOver"; readonly task: number };
 
 const TASKS = 3;
 const keys = fc.constantFrom("a", "a/b", "b", "c");
@@ -465,6 +581,7 @@ const steps: fc.Arbitrary<Step> = fc.oneof(
     key: keys,
   }),
   fc.record({ _tag: fc.constant("End" as const), task: fc.nat({ max: TASKS - 1 }) }),
+  fc.record({ _tag: fc.constant("TakeOver" as const), task: fc.nat({ max: TASKS - 1 }) }),
 );
 
 /** The model: each claim by Task and key with its state, how many numbers were handed out, and which Tasks ended. */
@@ -482,10 +599,13 @@ interface Model {
 const overlaps = (scope: ClaimScope, a: string, b: string) =>
   scope === "path" ? a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`) : a === b;
 
-/** Contested exactly while another Task's open claim on the same scope overlaps it. */
+/**
+ * Contested exactly while another Task's open claim on the same scope overlaps it. A claim you took
+ * over (#1449) stays yours, and still clashes with the others.
+ */
 const settle = (model: Model) => {
   for (const claim of model.claims) {
-    if (claim.state === "released" || claim.scope === "sequence") continue;
+    if (claim.state === "released" || claim.state === "taken" || claim.scope === "sequence") continue;
     const clashing = model.claims.some(
       (other) =>
         other !== claim &&
@@ -517,7 +637,7 @@ const claimInModel = (model: Model, task: number, scope: ClaimScope, key: string
 
 describe("ClaimRegister", () => {
   // covers OR-004
-  it("[TC-OR-1388-04] agrees with a model of claims, clashes and releases over random runs, claims at once included", async () => {
+  it("[TC-OR-1388-04] agrees with a model of claims, clashes, takeovers and releases over random runs, claims at once included", async () => {
     const taskIds = Array.from({ length: TASKS }, (_, index) => TaskIds.make(`model-${index}`));
     await fc.assert(
       fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 10 }), async (run) => {
@@ -557,6 +677,11 @@ describe("ClaimRegister", () => {
               // Either order leaves the same claims and states.
               claimInModel(model, x, step.scope, step.key);
               claimInModel(model, y, step.scope, step.key);
+            } else if (step._tag === "TakeOver") {
+              await h.takeOver(taskIds[step.task] as TaskId);
+              for (const claim of model.claims) {
+                if (claim.task === step.task && claim.state !== "released") claim.state = "taken";
+              }
             } else if (open(step.task)) {
               await h.end(taskIds[step.task] as TaskId);
               model.ended.add(step.task);

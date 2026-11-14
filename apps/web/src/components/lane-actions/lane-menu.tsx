@@ -18,6 +18,7 @@ import { taskTitle } from "../quest/work-model.ts";
 import { laneMenu } from "./lane-actions-model.ts";
 import { messages } from "./messages.ts";
 import { type StuckRetry, StuckRetryItems, useStuckRetries } from "./stuck-retry-item.tsx";
+import { TakeOverItems } from "./taken-claims.tsx";
 import type { LaneActions } from "./use-lane-actions.ts";
 
 type LaneMenuItems = ReturnType<typeof laneMenu>;
@@ -32,7 +33,8 @@ const stayOpen = (go: () => void) => (event: Event) => {
 
 /**
  * The ⋯ menu on a hob's lane (ADR 027): Show in the Workbench, then Retry while the Task failed or
- * its work is stuck, Reassign… on the hobs the hub would accept, and Cancel task…. The lead's lane has Pin quest and
+ * its work is stuck, Reassign… on the hobs the hub would accept, Take over its files and branches
+ * while it holds some (#1449), and Cancel task…. The lead's lane has Pin quest and
  * Cancel quest… with what cancelling keeps. Radix moves focus into the menu, moves it with the
  * arrow keys, and gives it back to the ⋯ button when the menu closes.
  */
@@ -150,6 +152,7 @@ function MenuItems({
           {messages.reassign}
         </DropdownMenuItem>
       )}
+      <TakeOverItems task={task} owner={owner} actions={actions} />
       {(menu.cancel.length > 0 || menu.cancelTop !== null) && <DropdownMenuSeparator />}
       {menu.cancelTop !== null && (
         <DropdownMenuItem variant="deny" onSelect={() => ask(task)}>

@@ -181,6 +181,8 @@ export const Criteria = {
     criterion.required && criterion.state !== "accepted" && criterion.state !== "waived",
   /** Whether a person's waiver could still waive it: it is not waived already. */
   waivable: (criterion: Pick<Criterion, "state">): boolean => criterion.state !== "waived",
+  /** Whether it was accepted on evidence: an outcome a Quest's cost is counted against (#1449). */
+  accepted: (criterion: Pick<Criterion, "state">): boolean => criterion.state === "accepted",
   /** Whether it is settled for now: accepted or waived. */
   settled: (criterion: Pick<Criterion, "state">): boolean =>
     criterion.state === "accepted" || criterion.state === "waived",

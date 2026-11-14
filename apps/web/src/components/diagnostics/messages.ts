@@ -142,6 +142,7 @@ export const messages = {
     "skill-proposal": "a skill proposal's outcome",
     "hob-proposal": "a hob proposal's outcome",
     "claim-clash": "a claim clash",
+    "claims-taken": "a takeover of its claims",
     progress: "progress",
   },
   questStates: {

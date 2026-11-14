@@ -2,6 +2,7 @@ import type { HobbotsEvent, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
+import { refreshTaskClaims } from "./task-claims.ts";
 
 // The open clashes on paths and branches a chat or camp shows as Heads-ups (ADR 037, #1390), from
 // the hub's claims register.
@@ -18,21 +19,24 @@ export const clashesQuery = (threadId: ThreadId) =>
 
 export type ClaimEvent = Extract<
   HobbotsEvent,
-  { readonly _tag: "ClaimMade" | "ClaimContested" | "ClaimCleared" | "ClaimReleased" }
+  { readonly _tag: "ClaimMade" | "ClaimContested" | "ClaimCleared" | "ClaimTakenOver" | "ClaimReleased" }
 >;
 const CLAIM_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ClaimMade",
   "ClaimContested",
   "ClaimCleared",
+  "ClaimTakenOver",
   "ClaimReleased",
 ]);
 export const isClaimEvent = (event: HobbotsEvent): event is ClaimEvent => CLAIM_EVENTS.has(event._tag);
 
 /**
- * A claim was made, contested, cleared or released. A claim names its Task, not the thread, and a
- * clash can touch two camps, so every thread's clashes are read again (STD-REACT-012).
+ * A claim was made, contested, cleared, taken over or released. A claim names its Task, not the thread, and a
+ * clash can touch two camps, so every thread's clashes are read again (STD-REACT-012), with every
+ * Task's claims (#1449).
  */
 export const applyClaimEvent = async (queryClient: QueryClient): Promise<void> => {
+  void refreshTaskClaims(queryClient);
   // A first read still on its way may have been taken before the change, so it is dropped.
   await queryClient.cancelQueries({ queryKey: ["clashes"] });
   await queryClient.invalidateQueries({ queryKey: ["clashes"] });

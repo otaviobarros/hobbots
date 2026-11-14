@@ -1,4 +1,4 @@
-import { formatCount } from "../../lib/format.ts";
+import { formatCount, formatList } from "../../lib/format.ts";
 
 /** Copy for acting in each hob's work in a quest (STD-I18N-001). */
 export const messages = {
@@ -21,6 +21,15 @@ export const messages = {
   reassignTo: ({ title }: { title: string }) => `Reassign “${title}” to`,
   noOneElse: "No other hob can take this task.",
   back: "Back",
+  /** Take over (#1449): the Task's files and branches move to you. */
+  takeOver: "Take over its files and branches",
+  takeOverKeeps: ({ name }: { name: string }) =>
+    `${name} keeps working, but Hobbots refuses its writes to them until the task ends.`,
+  takingOver: "Taking over its files and branches…",
+  /** What you took over of a Task, as the claims register holds it. */
+  taken: ({ claims }: { claims: ReadonlyArray<{ readonly scope: string; readonly key: string }> }) =>
+    `Yours now: ${formatList(claims.map((claim) => (claim.scope === "path" ? claim.key : claim.scope === "branch" ? `branch ${claim.key}` : `number ${claim.key}`)))}. Hobbots refuses the hob's writes to them.`,
+  takeOverFailed: "Taking over didn't go through. Hobbots may be reconnecting.",
   /** The attempt picker in a lane's header: "Try 1 ✗ · 2". */
   tries: ({ name }: { name: string }) => `${name}'s attempts`,
   try: "Try",

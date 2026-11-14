@@ -498,9 +498,11 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
                 const offer = yield* charmsFor(charmTurn);
                 const holdsCommit = taskTurn?.holdsCommit;
+                const takenByYou = taskTurn?.takenByYou;
                 const steering: CallSteering = {
                   takeovers: offer.steering?.takeovers ?? [],
                   ...(holdsCommit === undefined ? {} : { holdsCommit }),
+                  ...(takenByYou === undefined ? {} : { takenByYou }),
                 };
                 return {
                   hubTools: joinHubTools([

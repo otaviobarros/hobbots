@@ -1,4 +1,4 @@
-import { type ClaimOutcome, ClaimRegister, type ClaimRequest } from "@hobbots/agents";
+import { type ClaimOutcome, ClaimRegister, type ClaimRequest, type TakeOverRequest } from "@hobbots/agents";
 import {
   AgentId,
   Claim,
@@ -31,7 +31,8 @@ interface TaskHolder {
  * The SQL claims register (ADR 037, migration 0098). A claim takes the journal's head first, so two
  * claims for one number, from any hub process sharing the database, take turns: the second reads
  * the first and gets the next number. Unique indexes hold each number once per folder of a
- * repository, ever, and a path or branch once per Task.
+ * repository, ever, and a path or branch once per Task. A claim you take over (#1449) keeps its row,
+ * with you as its actor.
  */
 export const ClaimRegisterLive = Layer.effect(
   ClaimRegister,
@@ -89,7 +90,8 @@ export const ClaimRegisterLive = Layer.effect(
             revision: first,
           });
           const found = Claims.clashesOf(made, open);
-          const fresh = found.filter((each) => !Claims.isContested(each));
+          // A contested claim already is, and one you took over stays yours (#1449).
+          const fresh = found.filter(Claims.contestable);
           // Each held claim it clashes with is contested now, at the sequences after the new claim's.
           const contested = fresh.map((each, index) =>
             movedClaim(each, { _tag: "Contest", at: request.at }, first + 1 + index),
@@ -156,7 +158,40 @@ export const ClaimRegisterLive = Layer.effect(
         );
       });
 
+    /**
+     * Moves the Task's open claims to you (#1449), each at its own sequence with its own event, in
+     * one transaction: its hob hears of it through its backpack, from the same change. Claims you
+     * already took over stay as they are, so taking over again changes nothing.
+     */
+    const takeOver = (request: TakeOverRequest) =>
+      change<ReadonlyArray<Claim>, never>((first) =>
+        Effect.gen(function* () {
+          const open = yield* claimsFromRows(
+            yield* sql<ClaimRow>`SELECT * FROM claims WHERE task_id = ${request.taskId} AND state <> 'released'
+              ORDER BY created_at, id`,
+          );
+          const event = { _tag: "TakeOver" as const, at: request.at, by: request.by };
+          const taken = open
+            .filter((claim) => Claims.can(claim, event))
+            .map((claim, index) => movedClaim(claim, event, first + index));
+          for (const claim of taken) yield* saveClaim(sql, claim);
+          return {
+            value: taken,
+            events: taken.map((claim) => ({ _tag: "ClaimTakenOver" as const, claim })),
+          };
+        }),
+      );
+
     return ClaimRegister.of({
+      takeOver,
+      takenIn: (repository) =>
+        sqlOrDie(
+          Effect.flatMap(
+            sql<ClaimRow>`SELECT * FROM claims WHERE repository = ${repository} AND state = 'taken'
+              ORDER BY created_at, id`,
+            claimsFromRows,
+          ),
+        ),
       clashesIn: (threadId) => sqlOrDie(clashesIn(threadId)),
       claim,
       ofTask: (taskId) =>

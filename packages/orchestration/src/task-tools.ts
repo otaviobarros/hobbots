@@ -73,6 +73,7 @@ import { makePlanning } from "./planning.ts";
 import { routineReply, waitingForYou } from "./quiet-replies.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
+import { makeTakenWrites } from "./taken-writes.ts";
 import { endTurn, type TurnEndDeps } from "./turn-end.ts";
 import { attemptMarkKeeper } from "./web-marks.ts";
 import { makeSettle, makeWrapUp } from "./wrap-up.ts";
@@ -195,6 +196,8 @@ export class TaskTools extends Context.Service<
         const web = yield* makeWebProvenance;
         // A lead's commit of a member's open work is held, whichever runtime makes it (#742).
         const heldCommit = yield* makeHeldCommits;
+        // A write to a path or branch you took over from a Task is refused, whichever runtime makes it (#1449).
+        const takenByYou = yield* makeTakenWrites(separator);
         // Which runtimes take a message while a turn runs (#1345); without adapters, as in tests of the
         // tools alone, every one is taken to.
         const steersTurns = yield* turnSteering;
@@ -583,6 +586,7 @@ export class TaskTools extends Context.Service<
             return {
               hubTools,
               holdsCommit: (cwd) => heldCommit(known, cwd),
+              takenByYou,
               briefing: briefed?.text ?? null,
               told: briefed?.told ?? null,
               end,
@@ -639,6 +643,7 @@ export class TaskTools extends Context.Service<
               steering: {
                 takeovers: offer.steering?.takeovers ?? [],
                 holdsCommit: (cwd: string) => heldCommit(caller.taskId, cwd),
+                takenByYou,
               },
             };
           });

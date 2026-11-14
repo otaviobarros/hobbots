@@ -1,7 +1,8 @@
-import { sep } from "node:path";
+import { resolve, sep } from "node:path";
 import {
   type AskedDecision,
   askUntilDecided,
+  type CallWrites,
   type PromptRequest,
   type Redactor,
   type RuntimeEvent,
@@ -113,7 +114,40 @@ export interface CallSteers {
   readonly initTool?: string | undefined;
   /** Why a `git commit` in a folder is held, when the hub holds it (#742). */
   readonly holdsCommit?: ((cwd: string) => Effect.Effect<string | null>) | undefined;
+  /** Why a call's writes are refused: a path or branch you took over from a Task (#1449). */
+  readonly takenByYou?: ((writes: CallWrites) => Effect.Effect<string | null>) | undefined;
 }
+
+/**
+ * What a call writes, read from the call alone (#1449): the files a file tool or a patch changes or
+ * deletes, the absolute paths a command line writes by redirection or names to a program that
+ * writes them, the branches it pushes and the folders it commits in. Relative paths resolve against
+ * the folder each request is made from.
+ */
+export const callWrites = (call: ToolCall): CallWrites => {
+  const requests = toolRequests(call.tool, call.input, call.cwd) ?? [];
+  const files = requests.flatMap((request) =>
+    request._tag === "Files" && request.operation !== "read-files"
+      ? request.paths.map((path) => resolve(request.cwd ?? call.cwd, path))
+      : [],
+  );
+  return {
+    paths: [...new Set([...files, ...commandWritesTo(call.tool, call.input, call.cwd, () => true)])],
+    pushes: requests.flatMap((request) =>
+      request._tag === "Push" ? [{ cwd: request.cwd ?? call.cwd, branch: request.branch }] : [],
+    ),
+    commits: commitFolders(call.tool, call.input, call.cwd),
+  };
+};
+
+/** Why `steers` refuses what the call writes, or null; a call that writes nothing is not asked about. */
+const takenWrites = (call: ToolCall, steers: CallSteers): Effect.Effect<string | null> => {
+  if (steers.takenByYou === undefined) return Effect.succeed(null);
+  const writes = callWrites(call);
+  return writes.paths.length + writes.pushes.length + writes.commits.length === 0
+    ? Effect.succeed(null)
+    : steers.takenByYou(writes);
+};
 
 /**
  * Why a `git push` command is refused when a Charm the hob holds takes Push over for its folder, as
@@ -206,7 +240,7 @@ export const decideCall = (
  * sandbox, or null: a `git push` a Charm takes over, as the GitHub Charm does (ADR 020, ADR 031),
  * any `gh`, which cannot sign in there, to the GitHub Charm's tool for what it tried (#1349),
  * a commit identity of the command's own, since the hub sets it (#700), a commit the hub holds, as
- * a lead's of a member's open work (#742), a `git init`, which the hub makes (ADR 014), and a write
+ * a lead's of a member's open work (#742), a write to a path or branch you took over (#1449), a `git init`, which the hub makes (ADR 014), and a write
  * in a shared temporary folder, for which the turn has its own (#578).
  */
 const steeredAway = (context: PolicyContext, call: ToolCall, steers: CallSteers): Effect.Effect<string | null> =>
@@ -218,6 +252,8 @@ const steeredAway = (context: PolicyContext, call: ToolCall, steers: CallSteers)
     if (overridesCommitIdentity(call.tool, call.input, call.cwd)) return steerCommitIdentity(steers.commitsAs);
     const held = yield* firstAnswer(commitFolders(call.tool, call.input, call.cwd), steers.holdsCommit);
     if (held !== null) return held;
+    const yours = yield* takenWrites(call, steers);
+    if (yours !== null) return yours;
     const { initTool } = steers;
     if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
     const temp = sharedTempWrites(context, call);
