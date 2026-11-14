@@ -1,12 +1,12 @@
 import { type Actor, isInProgress, type Message, mentionsIn, sameActor, type ThreadId } from "@hobbots/domain";
 import { Effect } from "effect";
-import type { SqlClient } from "effect/sql";
+import type { SqlClient, SqlError } from "effect/sql";
 
-// The hobs and people each message @mentions (ADR 039, Who answers; migration 0115), stored as JSON
+// The hobs and people each message @mentions (ADR 039, Who answers; migration 20261114003022), stored as JSON
 // on the message, and the mentions of one person that they have not read yet.
 
 /** Each actor of `later` not already in `earlier`, after them: earlier mentions keep their place. */
-const joined = (earlier: ReadonlyArray<Actor>, later: ReadonlyArray<Actor>) => [
+export const joinedMentions = (earlier: ReadonlyArray<Actor>, later: ReadonlyArray<Actor>) => [
   ...earlier,
   ...later.filter((actor) => !earlier.some((seen) => sameActor(seen, actor))),
 ];
@@ -25,6 +25,12 @@ const parse = (sql: SqlClient.SqlClient, text: string, after: number) =>
     );
   });
 
+/** A message's mentions as stored, and how much of its text, in UTF-16 code units, they were parsed from. */
+export interface StoredMentions {
+  readonly mentions: ReadonlyArray<Actor>;
+  readonly through: number;
+}
+
 /**
  * The mentions to store with the message, and how much of its text they were parsed from. Text is
  * parsed when it is stored final: as a message is sent, or when a reply ends. A reply still streaming
@@ -34,7 +40,10 @@ const parse = (sql: SqlClient.SqlClient, text: string, after: number) =>
  * renamed later never changes what a stored message mentions. The roster is every hob and person of
  * the hub, so a mention of a hob outside the thread is kept, for who answers to refuse.
  */
-export const mentionsToStore = (sql: SqlClient.SqlClient, message: Message) =>
+export const mentionsToStore = (
+  sql: SqlClient.SqlClient,
+  message: Message,
+): Effect.Effect<StoredMentions, SqlError.SqlError> =>
   Effect.gen(function* () {
     const [stored] = yield* sql<{ readonly mentions: string; readonly mentionsThrough: unknown }>`SELECT mentions,
       mentions_through FROM messages WHERE id = ${message.id}`;
@@ -42,7 +51,7 @@ export const mentionsToStore = (sql: SqlClient.SqlClient, message: Message) =>
     const through = stored === undefined ? 0 : Number(stored.mentionsThrough);
     if (isInProgress(message.status) || through >= message.content.length) return { mentions: had, through };
     const found = message.content.includes("@") ? yield* parse(sql, message.content, through) : [];
-    return { mentions: joined(had, found), through: message.content.length };
+    return { mentions: joinedMentions(had, found), through: message.content.length };
   });
 
 /**

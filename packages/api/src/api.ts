@@ -43,6 +43,7 @@ import {
   AgentNotFound,
   HobUnavailable,
   InvalidHob,
+  MentionRefused,
   MessageNotQueued,
   ReplyNotResumable,
   StartFreshRefused,
@@ -344,7 +345,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       payload: SendPromptPayload,
       success: SendPromptResult,
-      error: [ThreadNotFound, HobUnavailable, ThreadArchived],
+      error: [ThreadNotFound, HobUnavailable, ThreadArchived, MentionRefused],
     }),
     HttpApiEndpoint.delete("removeQueued", "/threads/:threadId/messages/:messageId", {
       params: { threadId: ThreadId, messageId: MessageId },
