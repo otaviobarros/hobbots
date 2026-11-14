@@ -182,6 +182,8 @@ describe("read markers per member", () => {
   // covers ADR 039 (Members), ADR 013
   it("[TC-PE-1454-02] takes `unread` out of every journaled thread, at its new version, and the entries decode", async () => {
     const carriers = { ThreadUpserted: 5, CampMade: 2, ChatStartedFresh: 2, ChapterMoved: 1 } as const;
+    // The versions 20261114004500_member_reads writes, without `unread`.
+    const written = { ThreadUpserted: 6, CampMade: 3, ChatStartedFresh: 3, ChapterMoved: 2 } as const;
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -221,20 +223,17 @@ describe("read markers per member", () => {
       }),
       TestDatabaseAt(earlier),
     );
+    // At the version this migration writes; a later migration may move them on.
     expect(result.rows.map((row) => [row.type, Number(row.schemaVersion)])).toEqual([
-      ["ThreadUpserted", EVENT_SCHEMA_VERSIONS.ThreadUpserted],
-      ["CampMade", EVENT_SCHEMA_VERSIONS.CampMade],
-      ["ChatStartedFresh", EVENT_SCHEMA_VERSIONS.ChatStartedFresh],
+      ["ThreadUpserted", written.ThreadUpserted],
+      ["CampMade", written.CampMade],
+      ["ChatStartedFresh", written.ChatStartedFresh],
     ]);
     expect(result.rows.every((row) => !row.payload.includes('"unread"'))).toBe(true);
     expect(result.decoded).toEqual(["ThreadUpserted", "CampMade", "ChatStartedFresh"]);
-    // The migration lists every event type that carries a thread, at the version it writes.
-    expect(EVENT_SCHEMA_VERSIONS).toMatchObject({
-      ThreadUpserted: 6,
-      CampMade: 3,
-      ChatStartedFresh: 3,
-      ChapterMoved: 2,
-    });
+    // The migration lists every event type that carries a thread; each is at its version or a later one.
+    for (const [type, version] of Object.entries(written))
+      expect(EVENT_SCHEMA_VERSIONS[type as keyof typeof written]).toBeGreaterThanOrEqual(version);
   });
 
   // covers ADR 039 (Members: unread counts, the unread line and catch-up are per person)
