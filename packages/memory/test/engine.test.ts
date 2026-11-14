@@ -8,7 +8,7 @@ import { create } from "tar";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENGINE_BINARY, ENGINE_CHECKSUM, parseChecksum, parseVersion, verifyEngine } from "../src/engine/binary.ts";
 import { configHoldsCredential, renderEngineConfig } from "../src/engine/config.ts";
-import { MemoryEngine, type MemoryEngineOptions } from "../src/engine/engine.ts";
+import { holdsPort, MemoryEngine, type MemoryEngineOptions } from "../src/engine/engine.ts";
 import { loadOrCreateMemoryKeys, memoryKeysFile } from "../src/engine/keys.ts";
 import { MemoryModelEndpoint } from "../src/engine/model-endpoint.ts";
 import { AI_MEMORY_VERSION } from "../src/engine/release.ts";
@@ -272,22 +272,31 @@ describe("the supervised engine", () => {
   }, 20_000);
 
   // covers ADR 028
-  it("[TC-GEN-1530-01] counts as started only an engine that takes the hub's own bearer, not another that answers its port", async () => {
+  it("[TC-GEN-1530-01] counts as started only an engine whose own process says it holds the port, not whatever answers there", async () => {
     const dataDir = tempFolder("hobbots-data-");
     mkdirSync(join(dataDir, "memory"), { recursive: true });
-    // Every start answers `/healthz` but refuses this hub's bearer, as another hub's engine on the port would.
-    writeFileSync(join(dataDir, "memory", "foreign"), "");
+    // Each start answers `/healthz` but never says it bound the port, as when another engine holds it.
+    writeFileSync(join(dataDir, "memory", "quiet"), "");
     await withEngine({ dataDir, startTimeout: "500 millis" }, (engine) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.restarts >= 1);
         expect((yield* engine.health).state).not.toBe("running");
         expect(Option.isNone(yield* engine.endpoint)).toBe(true);
 
-        rmSync(join(dataDir, "memory", "foreign"));
+        rmSync(join(dataDir, "memory", "quiet"));
         yield* until(engine, (each) => each.state === "running");
         expect(Option.isSome(yield* engine.endpoint)).toBe(true);
       }),
     );
+  });
+
+  it("reads ai-memory's ready line for the port it holds", () => {
+    const ready =
+      "INFO ai_memory_cli::commands::serve: MCP HTTP server ready (POST /mcp, POST /hook, Ctrl-C to stop) local_addr=127.0.0.1:47123 auth=true body_limit_mb=10";
+    expect(holdsPort(ready, 47123)).toBe(true);
+    expect(holdsPort(`\x1b[2m${ready.replace("local_addr", "\x1b[3mlocal_addr\x1b[0m")}`, 47123)).toBe(true);
+    expect(holdsPort(ready, 4712)).toBe(false);
+    expect(holdsPort("ai-memory starting bind=127.0.0.1:47123", 47123)).toBe(false);
   });
 
   // covers ADR 028
