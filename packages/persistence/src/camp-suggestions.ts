@@ -1,4 +1,4 @@
-import { CampSuggestionRepository, type SuggestionRound } from "@hobbots/agents";
+import { CampSuggestionRepository, type JudgedRevisions, type SuggestionRound } from "@hobbots/agents";
 import {
   CampSuggestion,
   type CampSuggestionEvent,
@@ -18,7 +18,7 @@ import {
   suggestionById,
   suggestionFromRow,
 } from "./camp-suggestion-rows.ts";
-import { chapterRows } from "./chapter-rows.ts";
+import { chapterRows, messagesRevisionOf } from "./chapter-rows.ts";
 import { EventJournal, makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
@@ -64,20 +64,21 @@ export const CampSuggestionRepositoryLive = Layer.effect(
           const at = DateTime.formatIso(yield* DateTime.now);
           const events: Array<JournaledEvent> = [];
           // A pending suggestion settled meanwhile, as when its chapter moved, is left as it is.
-          // An offer or withdrawal judged from a chapter whose boundaries changed since is stale, so it
-          // is left pending: the projector names it again when it reads the change.
+          // An offer or withdrawal judged from a chapter whose boundaries or messages changed since is
+          // stale, so it is left pending: the projector names it again when it reads the change.
           const settle = (
             id: CampSuggestionId,
             event: CampSuggestionEvent,
             tag: "CampSuggestionOffered" | "CampSuggestionExpired",
-            chapterRevision?: number,
+            judged?: JudgedRevisions,
           ) =>
             Effect.gen(function* () {
               const suggestion = yield* suggestionById(sql, id);
               if (suggestion === null) return;
-              if (chapterRevision !== undefined) {
+              if (judged !== undefined) {
                 const [chapter] = chapterRows(yield* sql`SELECT * FROM chapters WHERE id = ${suggestion.chapterId}`);
-                if (chapter?.revision !== chapterRevision) return;
+                if (chapter?.revision !== judged.chapterRevision) return;
+                if ((yield* messagesRevisionOf(sql, suggestion.chapterId)) !== judged.messagesRevision) return;
               }
               const next = CampSuggestions.transition(suggestion, event);
               if (!(next instanceof CampSuggestion)) return;
@@ -85,12 +86,12 @@ export const CampSuggestionRepositoryLive = Layer.effect(
               yield* settleSuggestion(sql, written);
               events.push({ _tag: tag, threadId: written.threadId, suggestion: written });
             });
-          for (const { id, chapterRevision } of round.withdrawn) {
-            yield* settle(id, { _tag: "Withdraw", at }, "CampSuggestionExpired", chapterRevision);
+          for (const withdrawal of round.withdrawn) {
+            yield* settle(withdrawal.id, { _tag: "Withdraw", at }, "CampSuggestionExpired", withdrawal);
           }
           for (const offer of round.offers) {
             const event: CampSuggestionEvent = { _tag: "Offer", title: offer.title, goal: offer.goal };
-            yield* settle(offer.id, event, "CampSuggestionOffered", offer.chapterRevision);
+            yield* settle(offer.id, event, "CampSuggestionOffered", offer);
           }
           for (const raise of round.raises) {
             const suggestion = yield* raiseSuggestion(sql, raise.chapterId, raise.reasons, first + events.length, at);

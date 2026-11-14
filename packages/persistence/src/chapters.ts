@@ -19,7 +19,7 @@ import {
 import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { reconcileSplit } from "./camp-suggestion-rows.ts";
-import { chapterRows } from "./chapter-rows.ts";
+import { chapterRows, messagesRevisionOf } from "./chapter-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { keepReadersRead } from "./thread-member-rows.ts";
 
@@ -230,7 +230,13 @@ export const ChapterRepositoryLive = Layer.effect(
           // A split the hub judged lands only on the chapter it judged, as it read it (#1557).
           const cut = chapters.find((chapter) => chapter.id === point?.chapterId);
           const { judged } = input;
-          if (judged !== undefined && (cut?.id !== judged.chapterId || cut.revision !== judged.revision)) {
+          const messagesMoved =
+            judged?.messagesRevision !== undefined &&
+            (yield* messagesRevisionOf(sql, judged.chapterId)) !== judged.messagesRevision;
+          if (
+            judged !== undefined &&
+            (cut?.id !== judged.chapterId || cut.revision !== judged.revision || messagesMoved)
+          ) {
             return yield* Effect.fail(new ChapterRefused({ threadId, reason: "chapter-changed" }));
           }
           const plan = yield* planOrFail(planSplit(threadId, chapters, point, input), first);

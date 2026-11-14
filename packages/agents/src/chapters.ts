@@ -23,8 +23,11 @@ export interface SplitInput {
   readonly messageId: MessageId;
   readonly title: string;
   readonly withdraw?: CampSuggestionId;
-  /** For a split the hub judged: the chapter it judged, at the revision it read. */
-  readonly judged?: { readonly chapterId: ChapterId; readonly revision: number };
+  /**
+   * For a split the hub judged: the chapter it judged, at the revision it read, and the highest
+   * revision of its messages when the judgment read them all.
+   */
+  readonly judged?: { readonly chapterId: ChapterId; readonly revision: number; readonly messagesRevision?: number };
 }
 
 /** Where a thread's chapters are kept (ADR 037). Each command runs its rules and journals its event in one transaction. */
@@ -47,7 +50,7 @@ export class ChapterRepository extends Context.Service<
      * transaction (#1557), the cut chapter's pending camp suggestion is withdrawn when it is `withdraw`,
      * the one the hub split it for, or when its thresholds no longer hold; and chapter `id` is
      * suggested if it reaches a threshold on its own. A split with `judged` is refused as
-     * `chapter-changed` when the message is no longer in that chapter at that revision.
+     * `chapter-changed` when the message is no longer in that chapter as it was judged.
      */
     readonly splitChapter: (
       threadId: ThreadId,

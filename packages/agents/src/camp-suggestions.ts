@@ -55,20 +55,25 @@ export interface SuggestionRaise {
 }
 
 /**
- * A pending suggestion the projector offers, with the camp's name and goal it suggests, named from
- * its chapter at `chapterRevision`.
+ * The chapter as a judgment read it: the chapter at `chapterRevision`, its messages with
+ * `messagesRevision` the highest of their revisions. A judgment lands only on the chapter as it read
+ * it (STD-ARCH-014).
  */
-export interface SuggestionOffer {
+export interface JudgedRevisions {
+  readonly chapterRevision: number;
+  readonly messagesRevision: number;
+}
+
+/** A pending suggestion the projector offers, with the camp's name and goal it suggests. */
+export interface SuggestionOffer extends JudgedRevisions {
   readonly id: CampSuggestionId;
   readonly title: string | null;
   readonly goal: string | null;
-  readonly chapterRevision: number;
 }
 
-/** A pending suggestion the projector withdraws, judged from its chapter at `chapterRevision`. */
-export interface SuggestionWithdrawal {
+/** A pending suggestion the projector withdraws. */
+export interface SuggestionWithdrawal extends JudgedRevisions {
   readonly id: CampSuggestionId;
-  readonly chapterRevision: number;
 }
 
 /** What one page of the projector writes, with its cursor, in one transaction. */
@@ -107,7 +112,7 @@ export class CampSuggestionRepository extends Context.Service<
      * `CampSuggestionExpired`; offers each of `round.offers`, journaled as `CampSuggestionOffered`;
      * raises each suggestion the rule still allows, journaled as `CampSuggested`; and moves the
      * projector's cursor to `sequence`. A suggestion settled meanwhile is left as it is, and an offer
-     * or withdrawal whose chapter's revision moved since it was judged is left pending. Answers the entries it
+     * or withdrawal whose chapter or messages moved since it was judged is left pending. Answers the entries it
      * journaled.
      */
     readonly recordRound: (sequence: number, round: SuggestionRound) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
@@ -321,10 +326,13 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
           if (Option.isNone(thread) || !ThreadLifecycle.isOpenChat(thread.value)) return null;
           const chapter = (yield* chapters.listChapters(threadId)).find((each) => each.id === chapterId);
           if (chapter === undefined || !ChapterStates.isInThread(chapter)) return null;
-          const own = (yield* repo.listMessages(threadId)).filter(
-            (message) => message.chapterId === chapterId && message.status !== "queued" && hobReads(message),
-          );
-          return own.length === 0 ? null : { chapter, own };
+          const all = (yield* repo.listMessages(threadId)).filter((message) => message.chapterId === chapterId);
+          const own = all.filter((message) => message.status !== "queued" && hobReads(message));
+          const judged: JudgedRevisions = {
+            chapterRevision: chapter.revision,
+            messagesRevision: Math.max(0, ...all.map((message) => message.revision)),
+          };
+          return own.length === 0 ? null : { chapter, own, judged };
         });
 
       // A chapter's drift suggestion, when the brain is sure enough it is a topic of its own.
@@ -351,14 +359,18 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
           const naming = namingOf(found.chapter, found.own, yield* decide(namingJudgment(found.chapter, found.own)));
           if (naming._tag === "Offer") {
             const { title, goal } = naming;
-            round.offers.push({ id: suggestion.id, title, goal, chapterRevision: found.chapter.revision });
+            round.offers.push({ id: suggestion.id, title, goal, ...found.judged });
             return;
           }
           if (naming._tag === "Withdraw") {
-            round.withdrawn.push({ id: suggestion.id, chapterRevision: found.chapter.revision });
+            round.withdrawn.push({ id: suggestion.id, ...found.judged });
             return;
           }
-          const judged = { chapterId: found.chapter.id, revision: found.chapter.revision };
+          const judged = {
+            chapterId: found.chapter.id,
+            revision: found.chapter.revision,
+            messagesRevision: found.judged.messagesRevision,
+          };
           const split = { id: breakChapterId(naming.at.id), messageId: naming.at.id, title: naming.title };
           yield* commands
             .splitChapter(suggestion.threadId, { ...split, withdraw: suggestion.id, judged })

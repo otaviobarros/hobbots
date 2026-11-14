@@ -98,8 +98,8 @@ const sentIn = (entries: ReadonlyArray<EventEnvelope>): ReadonlyArray<Message> =
     (a, b) => a.id === b.id,
   );
 
-/** How many times a message is judged when its chapter keeps changing under the judgment. */
-const BREAK_ATTEMPTS = 3;
+/** How many times a message is judged again when its chapter keeps changing under the judgment. */
+const BREAK_RETRIES = 2;
 
 export interface ChapterBreaksShape {
   /** One round: reads the journal after the cursor until it is caught up. Answers whether it caught up. */
@@ -123,40 +123,40 @@ export class ChapterBreaks extends Context.Service<ChapterBreaks, ChapterBreaksS
 
       // Starts a chapter at the message when it opens a new topic: only in an open chat, only in its
       // live chapter, and never at a chapter's first message, which starts one already. The split
-      // lands only on the chapter as it was judged; one that changed meanwhile is judged again, a few
-      // times at most. Answers whether it is to be judged again.
-      const judgedOnce = (sent: Message): Effect.Effect<boolean> =>
+      // lands only on the chapter as it was judged, and fails as `chapter-changed` otherwise.
+      const judgedOnce = (sent: Message) =>
         Effect.gen(function* () {
           const thread = yield* repo.findThread(sent.threadId);
-          if (Option.isNone(thread) || !ThreadLifecycle.isOpenChat(thread.value)) return false;
+          if (Option.isNone(thread) || !ThreadLifecycle.isOpenChat(thread.value)) return;
           const messages = yield* repo.listMessages(sent.threadId);
           const message = messages.find((each) => each.id === sent.id);
-          if (message === undefined) return false;
+          if (message === undefined) return;
           const chapter = (yield* chapters.listChapters(sent.threadId)).find((each) => each.id === message.chapterId);
-          if (chapter === undefined || !ChapterStates.isLive(chapter)) return false;
+          if (chapter === undefined || !ChapterStates.isLive(chapter)) return;
           const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued" && hobReads(m));
           const earlier = own.slice(0, own.indexOf(message));
-          if (earlier.length === 0) return false;
+          if (earlier.length === 0) return;
           const decided = yield* decide(breakJudgment(earlier, message));
-          if (decided.choice.topic !== "new" || decided.confidence < CHAPTER_BREAK_CONFIDENCE) return false;
+          if (decided.choice.topic !== "new" || decided.confidence < CHAPTER_BREAK_CONFIDENCE) return;
           const title = chapterTitle(decided.choice.title) ?? breakTitle(message.content);
           const judged = { chapterId: chapter.id, revision: chapter.revision };
-          return yield* commands
-            .splitChapter(sent.threadId, { id: breakChapterId(message.id), messageId: message.id, title, judged })
-            .pipe(
-              Effect.as(false),
-              Effect.catch((error) =>
-                error._tag === "ChapterRefused" && error.reason === "chapter-changed"
-                  ? Effect.succeed(true)
-                  : Effect.logDebug("A chapter did not start at a new topic", error).pipe(Effect.as(false)),
-              ),
-            );
+          yield* commands.splitChapter(sent.threadId, {
+            id: breakChapterId(message.id),
+            messageId: message.id,
+            title,
+            judged,
+          });
         });
 
+      // A message whose chapter changed under its judgment is judged again, a few times at most.
       const judged = (sent: Message) =>
-        Effect.gen(function* () {
-          for (let attempt = 0; attempt < BREAK_ATTEMPTS; attempt++) if (!(yield* judgedOnce(sent))) return;
-        });
+        judgedOnce(sent).pipe(
+          Effect.retry({
+            times: BREAK_RETRIES,
+            while: (error) => error._tag === "ChapterRefused" && error.reason === "chapter-changed",
+          }),
+          Effect.catch((error) => Effect.logDebug("A chapter did not start at a new topic", error)),
+        );
 
       const project = (entries: ReadonlyArray<EventEnvelope>, sequence: number) =>
         Effect.gen(function* () {

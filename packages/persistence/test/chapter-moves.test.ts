@@ -215,6 +215,18 @@ const revisionOf = (chapterId: ChapterId) =>
     Effect.map((all) => (all.find((chapter) => chapter.id === chapterId) as { revision: number }).revision),
   );
 
+/** The chapter's revisions as a judgment of it now reads them: its own and its messages' highest. */
+const judgedNow = (chapterId: ChapterId) =>
+  Effect.gen(function* () {
+    const messages = (yield* HobbotsRepository.use((repo) => repo.listMessages(CHAT))).filter(
+      (message) => message.chapterId === chapterId,
+    );
+    return {
+      chapterRevision: yield* revisionOf(chapterId),
+      messagesRevision: Math.max(0, ...messages.map((message) => message.revision)),
+    };
+  });
+
 /** Where each record is now, by table: its id and thread, in id order. */
 const placesOf = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -665,7 +677,7 @@ describe("camp suggestions", () => {
               id: suggestion.id,
               title: "Launch",
               goal: null,
-              chapterRevision: yield* revisionOf(suggestion.chapterId),
+              ...(yield* judgedNow(suggestion.chapterId)),
             },
           ],
           raises: [],
@@ -778,16 +790,16 @@ describe("camp suggestions", () => {
         for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++)
           raised.push(...suggested((yield* quest(`billing-${n}`)).entries));
         const first = raised[0] as CampSuggestion;
-        const chapterRevision = yield* revisionOf(first.chapterId);
+        const judged = yield* judgedNow(first.chapterId);
         const offered = yield* suggestions.recordRound(0, {
           withdrawn: [],
-          offers: [{ id: first.id, title: "Billing", goal: "Fix the invoices.", chapterRevision }],
+          offers: [{ id: first.id, title: "Billing", goal: "Fix the invoices.", ...judged }],
           raises: [],
         });
         // Offered already, it is neither offered again nor withdrawn.
         const again = yield* suggestions.recordRound(0, {
-          withdrawn: [{ id: first.id, chapterRevision }],
-          offers: [{ id: first.id, title: "Other", goal: null, chapterRevision }],
+          withdrawn: [{ id: first.id, ...judged }],
+          offers: [{ id: first.id, title: "Other", goal: null, ...judged }],
           raises: [],
         });
         const found = yield* suggestions.find(first.id);
@@ -802,7 +814,7 @@ describe("camp suggestions", () => {
         const driftSuggestion = ((drift[0] as { payload: unknown }).payload as { suggestion: CampSuggestion })
           .suggestion;
         const withdrawn = yield* suggestions.recordRound(0, {
-          withdrawn: [{ id: driftSuggestion.id, chapterRevision: yield* revisionOf(driftSuggestion.chapterId) }],
+          withdrawn: [{ id: driftSuggestion.id, ...(yield* judgedNow(driftSuggestion.chapterId)) }],
           offers: [],
           raises: [],
         });
@@ -852,7 +864,7 @@ describe("camp suggestions", () => {
     const { billing } = yield* chatWithTwoChapters;
     const raised: Array<CampSuggestion> = [];
     for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++) raised.push(...suggested((yield* quest(`billing-${n}`)).entries));
-    return { billing, suggestion: raised[0] as CampSuggestion, named: yield* revisionOf(billing) };
+    return { billing, suggestion: raised[0] as CampSuggestion, named: yield* judgedNow(billing) };
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557
@@ -871,24 +883,24 @@ describe("camp suggestions", () => {
         const offer = { id: suggestion.id, title: "Billing", goal: null };
         const stale = yield* suggestions.recordRound(0, {
           withdrawn: [],
-          offers: [{ ...offer, chapterRevision: named }],
+          offers: [{ ...offer, ...named }],
           raises: [],
         });
         const staleWithdrawal = yield* suggestions.recordRound(0, {
-          withdrawn: [{ id: suggestion.id, chapterRevision: named }],
+          withdrawn: [{ id: suggestion.id, ...named }],
           offers: [],
           raises: [],
         });
         const pending = Option.getOrThrow(yield* suggestions.find(suggestion.id));
         const fresh = yield* suggestions.recordRound(0, {
           withdrawn: [],
-          offers: [{ ...offer, chapterRevision: yield* revisionOf(billing) }],
+          offers: [{ ...offer, ...(yield* judgedNow(billing)) }],
           raises: [],
         });
-        return { named, stale, staleWithdrawal, pending, fresh, now: yield* revisionOf(billing) };
+        return { named, stale, staleWithdrawal, pending, fresh, now: yield* judgedNow(billing) };
       }),
     );
-    expect(result.now).not.toBe(result.named);
+    expect(result.now.chapterRevision).not.toBe(result.named.chapterRevision);
     expect(result.stale).toEqual([]);
     expect(result.staleWithdrawal).toEqual([]);
     expect(result.pending.state).toBe("pending");
@@ -927,6 +939,30 @@ describe("camp suggestions", () => {
     ]);
     const part = result.split.entries.at(-1) as { payload: { suggestion: CampSuggestion } };
     expect(part.payload.suggestion).toMatchObject({ chapterId: "topic", state: "pending" });
+  });
+
+  // covers ADR 037 (Records: CampSuggestion), STD-ARCH-014, #1557
+  it("[TC-CH-1557-21] leaves an offer pending when a message of its chapter changed after it was named", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { billing, suggestion, named } = yield* pendingBilling;
+        const suggestions = yield* CampSuggestionRepository;
+        // A message arrives in billing while the hub's brain names it.
+        yield* (yield* HobbotsRepository).upsertMessage(message(CHAT, "ask-meanwhile", "user"));
+        const offer = { id: suggestion.id, title: "Billing", goal: null };
+        const stale = yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [{ ...offer, ...named }],
+          raises: [],
+        });
+        const now = yield* judgedNow(billing);
+        const fresh = yield* suggestions.recordRound(0, { withdrawn: [], offers: [{ ...offer, ...now }], raises: [] });
+        return { named, now, stale, fresh };
+      }),
+    );
+    expect(result.now.chapterRevision).toBe(result.named.chapterRevision);
+    expect(result.stale).toEqual([]);
+    expect(result.fresh.map((entry) => entry.type)).toEqual(["CampSuggestionOffered"]);
   });
 
   // covers ADR 039 (Chapters run on their own), STD-ARCH-014, #1557
