@@ -39,7 +39,7 @@ The [project workflow guide](docs/agent-engineering.md) says where each authorit
 This is a public open-source project, so be strict about what reaches main. Check the change against [the standards](docs/standards/README.md) and cite the rule ID in each finding. Mark a breach of a rule as P1. A preference that no rule backs is not a finding.
 
 - Bugs come first: reachable failures, wrong state transitions, races, lost work on restart, duplicate delivery on retry, and missing error handling. Trace callers and callees beyond the diff when the bug depends on them.
-- Security: untrusted input from hobs, models, files, Git or HTTP crossing a trust boundary, leaked secrets, missing permission checks and data exposure ([security](docs/standards/security.md)).
+- Security: untrusted input from hobs, models, files, Git or HTTP crossing a trust boundary, leaked secrets, missing permission checks and data exposure. The [threat model](docs/threat-model.md) names the boundaries, and the [security standards](docs/standards/security.md) the rules.
 - Proper tooling: a hand-rolled parser, validator, retry loop, timer, cache or queue where an established library or Effect module already does the job (STD-DUP-007). A new helper that duplicates an existing one (STD-DUP-001).
 - Unnecessary complexity: speculative abstractions, options nobody uses, functions over cyclomatic complexity 15 (STD-ARCH-012), dead code (STD-DUP-005) and copied blocks (STD-DUP-006). Name the simpler form that keeps the behavior.
 - Runtime parity: a change to how hobs run, resume, stop, use tools or ask for permission covers Claude Code, Codex and the fake runtime, with a test for each, or says why one does not apply.
