@@ -74,3 +74,13 @@ Read its docs or source for the version you use (STD-DOCS-005). When a layer may
 - **Why:** a library used by many people is already tested, fixed and kept up to date, and a copy of it is code this project must test and fix alone.
 - **Enforced by:** review.
 - **Applies to:** all code.
+
+### STD-DUP-008 Markdown is read only by the CommonMark parser
+
+Code that reads Markdown reads it with the CommonMark parser: `mdast-util-from-markdown`, or `micromark` under it when the exact offsets of what was written are needed, and `remark-parse` in `apps/web`, which runs the same parser. That covers headings, code blocks and code spans, links, images and reference definitions, and YAML front matter through `micromark-extension-frontmatter`. Never match Markdown with a regular expression or a string method. The domain reads no Markdown (STD-ARCH-002): its caller parses and passes the result in, as `memoryTitleOf` takes a page's heading. Writing Markdown, such as `# ${title}` in an export, is not reading it.
+
+- ✅ `fromMarkdown(page).children.find((node) => node.type === "heading" && node.depth === 1)` for a page's title.
+- ❌ `line.startsWith("# ")` or `/\]\(([^)]+)\)/g`: a heading in a code block, or a link in a code span, is read as real.
+- **Why:** the spec has many edge cases (fences in quotes and lists, indented code, escapes, setext headings), and a parser used by many people already handles each one.
+- **Enforced by:** `scripts/check-markdown.mjs` in `pnpm check` (`pnpm lint:markdown`) flags regular expressions and string methods that match a fence, an ATX heading, a link destination, a reference definition or a front matter fence, and imports of other Markdown parsers. `scripts/markdown.test.mjs` proves the check. Review covers what the check cannot see.
+- **Applies to:** `packages/*/src` and `apps/*/src`, except tests.
