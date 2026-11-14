@@ -1,7 +1,7 @@
 import type { Agent, BackpackItem, TaskId } from "@hobbots/domain";
 import { useState } from "react";
 import { useDecideBlocker } from "../../api/blockers.ts";
-import { useTakeOver } from "../../api/task-claims.ts";
+import { useGiveBack, useTakeOver } from "../../api/task-claims.ts";
 import { type TaskControl, useTaskControl } from "../../api/task-controls.ts";
 
 /**
@@ -22,12 +22,14 @@ export const useLaneActions = () => {
   const control = useTaskControl();
   const decide = useDecideBlocker();
   const takeOver = useTakeOver();
+  const giveBack = useGiveBack();
   // The Task whose stuck work Retry was last sent for.
   const [retried, setRetried] = useState<TaskId | null>(null);
   const reset = () => {
     control.reset();
     decide.reset();
     takeOver.reset();
+    giveBack.reset();
   };
   // The lane whose menu is open, named by its header's Task, and the Task the view acts on.
   const [menu, setMenu] = useState<{ readonly lane: TaskId; readonly taskId: TaskId; readonly view: MenuView } | null>(
@@ -86,8 +88,18 @@ export const useLaneActions = () => {
     /** Why the hub refused to take the Task over, while it did; else null. */
     takeOverRefusal: (taskId: TaskId): unknown =>
       takeOver.isError && takeOver.variables === taskId ? takeOver.error : null,
+    /** Gives back what you took over of the Task (#1538); once the hub gave it back, the menu closes. */
+    giveBack: (taskId: TaskId) => {
+      reset();
+      giveBack.mutate(taskId, { onSuccess: () => setMenu(null) });
+    },
+    /** Whether Give back is on its way for the Task. */
+    givingBack: (taskId: TaskId): boolean => giveBack.isPending && giveBack.variables === taskId,
+    /** Why the hub refused to give the Task's claims back, while it did; else null. */
+    giveBackRefusal: (taskId: TaskId): unknown =>
+      giveBack.isError && giveBack.variables === taskId ? giveBack.error : null,
     /** Any control is on its way, so none can be sent twice. */
-    busy: control.isPending || decide.isPending || takeOver.isPending,
+    busy: control.isPending || decide.isPending || takeOver.isPending || giveBack.isPending,
     /** The kind of control on its way for the Task, else null. */
     sending: (taskId: TaskId): TaskControl["kind"] | null =>
       control.isPending && on(taskId) ? (control.variables?.kind ?? null) : null,

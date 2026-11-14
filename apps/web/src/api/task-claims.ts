@@ -4,7 +4,8 @@ import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
 
 // A Task's files and branches as the claims register holds them (ADR 037), and Take over, which
-// moves them to you so the hub refuses its hob's writes to them (#1449).
+// moves them to you so the hub refuses its hob's writes to them (#1449), and Give back, which returns
+// them to its hob (#1538).
 
 const taskClaimsKey = (taskId: TaskId) => ["task-claims", taskId] as const;
 
@@ -38,7 +39,7 @@ export const useTaskClaims = (task: Task): TaskClaimsRead => {
   return { claims: read.data, failed: read.isError && read.data === undefined, retry: () => void read.refetch() };
 };
 
-/** A claim was made, contested, cleared, taken over or released: every Task's claims are read again. */
+/** A claim was made, contested, cleared, taken over, given back or released: every Task's claims are read again. */
 export const refreshTaskClaims = async (queryClient: QueryClient, taskId?: TaskId): Promise<void> => {
   const queryKey = taskId === undefined ? ["task-claims"] : taskClaimsKey(taskId);
   await queryClient.cancelQueries({ queryKey });
@@ -55,5 +56,18 @@ export const useTakeOver = () => {
     mutationFn: (taskId: TaskId): Promise<ReadonlyArray<Claim>> =>
       call((c) => c.claims.takeOver({ params: { taskId } })),
     onSuccess: (_taken, taskId) => queryClient.invalidateQueries({ queryKey: taskClaimsKey(taskId) }),
+  });
+};
+
+/**
+ * Gives back a Task's files and branches you took over (#1538). The hub answers with the claims it
+ * gave back, which the Task's read shows at once, before their events arrive.
+ */
+export const useGiveBack = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: TaskId): Promise<ReadonlyArray<Claim>> =>
+      call((c) => c.claims.giveBack({ params: { taskId } })),
+    onSuccess: (_given, taskId) => queryClient.invalidateQueries({ queryKey: taskClaimsKey(taskId) }),
   });
 };

@@ -45,6 +45,7 @@ export const BackpackItemKind = Schema.Literals([
   "hob-proposal",
   "claim-clash",
   "claims-taken",
+  "claims-given-back",
 ]);
 export type BackpackItemKind = typeof BackpackItemKind.Type;
 
@@ -110,6 +111,12 @@ export const BackpackPayload = Schema.Union([
    * refuses the recipient's writes to them. Actionable: the hob carries on without them.
    */
   Schema.TaggedStruct("claims-taken", { taskId: TaskId, claims: Schema.Array(Claim) }),
+  /**
+   * You gave back what you took over of a Task the recipient works on (#1538): it holds those
+   * claims again, and the hub no longer refuses its writes to them. Actionable: the hob may go on
+   * with them.
+   */
+  Schema.TaggedStruct("claims-given-back", { taskId: TaskId, claims: Schema.Array(Claim) }),
 ]);
 export type BackpackPayload = typeof BackpackPayload.Type;
 

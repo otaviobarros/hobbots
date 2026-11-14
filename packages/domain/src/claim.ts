@@ -56,7 +56,18 @@ export type ClaimEvent =
   | { readonly _tag: "Clear"; readonly at: string }
   | { readonly _tag: "Release"; readonly at: string }
   /** You took over the claim's Task (#1449): the claim is yours, and its hob may not write to it. */
-  | { readonly _tag: "TakeOver"; readonly at: string; readonly by: Actor };
+  | { readonly _tag: "TakeOver"; readonly at: string; readonly by: Actor }
+  /**
+   * You gave the claim back to its Task's hob (#1538), `to`, which may write to it again. `clashes`
+   * says whether another Task's open claim clashes with it now, as the register read it.
+   */
+  | {
+      readonly _tag: "GiveBack";
+      readonly at: string;
+      readonly by: Actor;
+      readonly to: Actor;
+      readonly clashes: boolean;
+    };
 
 /** A change to a claim its state does not allow. */
 export class IllegalClaimTransition extends Schema.TaggedError<IllegalClaimTransition>()("IllegalClaimTransition", {
@@ -75,7 +86,7 @@ export const ClaimMachine = defineMachine<ClaimState, ClaimEvent, Claim, Illegal
     held: "The Task holds it, and no other open claim clashes with it",
     contested: "Another Task's open claim on the same path or branch clashes with it; neither Task is stopped",
     taken:
-      "You took it over from its Task: it is yours, and the hub refuses its hob's writes to it until the Task ends",
+      "You took it over from its Task: it is yours, and the hub refuses its hob's writes to it until you give it back or the Task ends",
     released: "Its Task ended; a released number is never handed out again",
   },
   field: "state",
@@ -100,6 +111,22 @@ export const ClaimMachine = defineMachine<ClaimState, ClaimEvent, Claim, Illegal
       guard: (_claim, e) => e.by.kind === "user",
       apply: (claim, e) => new Claim({ ...claim, state: "taken", actor: e.by, updatedAt: e.at }),
     },
+    // Only you give a claim back, to its Task's hob: contested when another Task's open claim
+    // clashes with it now, as a path or a branch can, and held otherwise.
+    GiveBack: [
+      {
+        from: ["taken"],
+        to: "contested",
+        guard: (claim, e) => e.by.kind === "user" && e.clashes && !isSequenceScope(claim.scope),
+        apply: (claim, e) => new Claim({ ...claim, state: "contested", actor: e.to, updatedAt: e.at }),
+      },
+      {
+        from: ["taken"],
+        to: "held",
+        guard: (_claim, e) => e.by.kind === "user",
+        apply: (claim, e) => new Claim({ ...claim, state: "held", actor: e.to, updatedAt: e.at }),
+      },
+    ],
     Release: {
       from: ["held", "contested", "taken"],
       to: "released",
@@ -134,7 +161,7 @@ export const Claims = {
   ...ClaimMachine,
   isOpen,
   isContested: (claim: Claim): boolean => claim.state === "contested",
-  /** Whether you took the claim over (#1449), so its hob may not write to it. */
+  /** Whether you took the claim over (#1449) and have not given it back (#1538), so its hob may not write to it. */
   isTaken: (claim: Claim): boolean => claim.state === "taken",
   /**
    * Whether a new clash makes the claim contested: only a held one is. A contested claim already
@@ -251,7 +278,14 @@ const subjects = (claims: ReadonlyArray<Claim>): string => {
  * that the hub refuses its writes to them, and what it may still do.
  */
 export const claimsTakenText = (taskId: TaskId, claims: ReadonlyArray<Claim>): string =>
-  `The user took over Task ${taskId}'s claims on ${subjects(claims)}. They are the user's now: Hobbots refuses your writes to them until the Task ends. Carry on with the rest of the Task, and ask the user before you need to change them.`;
+  `The user took over Task ${taskId}'s claims on ${subjects(claims)}. They are the user's now: Hobbots refuses your writes to them until the user gives them back or the Task ends. Carry on with the rest of the Task, and ask the user before you need to change them.`;
+
+/**
+ * What a hob hears when you give back what you took over of a Task it works on (#1538): which of
+ * its claims it holds again, and that it may write to them again.
+ */
+export const claimsGivenBackText = (taskId: TaskId, claims: ReadonlyArray<Claim>): string =>
+  `The user gave back Task ${taskId}'s claims on ${subjects(claims)}. Hobbots no longer refuses your writes to them: carry on with them as the Task needs.`;
 
 /** Why the hub refuses a hob's write to a claim you took over (#1449). */
 export const takenWriteText = (claim: Claim): string =>
