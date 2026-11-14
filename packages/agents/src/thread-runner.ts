@@ -7,6 +7,7 @@ import {
   DEFAULT_THREAD_TITLE,
   hobActor,
   hobReads,
+  holdsEveryTaskTool,
   isInProgress,
   type Line,
   lineKey,
@@ -35,7 +36,9 @@ import { type CarriedEnd, type CarriedWork, Continuations } from "./continuation
 import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
+import { runtimeAdapters } from "./runtime.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
+import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
 import { ThreadMemberRepository } from "./thread-members.ts";
 import {
@@ -156,6 +159,23 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const slots = yield* turnSlots;
     // Without Task records, a chat's turns are in no Quest.
     const taskRecords = yield* Effect.serviceOption(TaskRepository);
+    const adapters = yield* runtimeAdapters;
+    // Without Task tools, as in tests of one part, a chat's turns offer none.
+    const offersTaskTools = Option.isSome(yield* Effect.serviceOption(TaskTurns));
+    /**
+     * `thread` as a turn of `agent` on `runtime` sees it (#1543). A runtime that keeps the hub tools a
+     * session started with, as Codex does (ADR 024), never gets a Task tool its session lacks, so a
+     * Quest lead in a thread that started before `check_criterion` existed could never accept a
+     * criterion. Such a session, or one whose tools are not known, is left out: the turn starts a new
+     * session from the context pack in its place, as in a new chapter, and the new one is recorded
+     * over it.
+     */
+    const withoutStaleSession = (thread: Thread, runtime: Brain["runtime"], agentId: AgentId): Thread => {
+      if (!offersTaskTools || adapters(runtime)?.resumeKeepsHubTools !== true) return thread;
+      const live = liveSession(thread, runtime, agentId);
+      if (live === undefined || holdsEveryTaskTool(live.taskTools)) return thread;
+      return new Thread({ ...thread, sessions: thread.sessions.filter((session) => session !== live) });
+    };
     const scope = yield* Effect.scope;
     const turns = yield* FiberMap.make<ThreadId>();
     // When each hob's running work was last stopped, in epoch milliseconds, so a member turn that
@@ -343,7 +363,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const launch = (
       agent: Agent,
       config: AgentConfiguration,
-      thread: Thread,
+      found: Thread,
       prompt: string,
       saved: Message,
       promptId: MessageId | null,
@@ -352,6 +372,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     ) =>
       Effect.gen(function* () {
         const launchedAt = yield* nowMillis;
+        const thread = withoutStaleSession(found, brainFor(found, config).runtime, agent.id);
         const brain = brainFor(thread, config);
         // A note to self never reaches a turn (ADR 037).
         const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));

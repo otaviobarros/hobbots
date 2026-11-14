@@ -258,6 +258,11 @@ export const partyHub = (
     readonly chapters?: boolean;
     /** The installed runtime every turn runs on instead of the fake, with its stand-in model (STD-TEST-002). */
     readonly turnsOn?: HubCallRuntime;
+    /**
+     * The hub tools a turn is not offered, as on a hub from before they existed (#1543): its runtime
+     * neither lists them nor reaches the hub with them.
+     */
+    readonly withholds?: (request: PromptRequest) => ReadonlyArray<string>;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -290,13 +295,30 @@ export const partyHub = (
     }),
   );
 
+  /** `request` without the hub tools the test withholds from it, as an older hub offered them. */
+  const withheld = (request: PromptRequest): PromptRequest => {
+    const hubTools = request.hubTools;
+    const gone = new Set(options.withholds?.(request) ?? []);
+    if (hubTools == null || gone.size === 0) return request;
+    return {
+      ...request,
+      hubTools: {
+        tools: hubTools.tools.filter((tool) => !gone.has(tool.name)),
+        call: (name, input, step) =>
+          gone.has(name)
+            ? Effect.succeed({ text: `${name} is not offered in this session.`, refused: true })
+            : hubTools.call(name, input, step),
+      },
+    };
+  };
+
   /** The fake, with each prompt it is sent recorded and played as the test scripts it. */
   const recorded = (fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
     ...fake,
     sendPrompt: (sent) => {
       const prompt = reacted(sent.prompt, reactions);
       const finished = options.repliesWhenSentBack === true ? prompt : finishedWhenSentBack(prompt);
-      const request = answering({ ...sent, prompt: finished }, answers, gates);
+      const request = answering(withheld({ ...sent, prompt: finished }), answers, gates);
       requests.push(request);
       const events = play === null ? fake.sendPrompt(request) : play(request);
       return options.announcesTwice?.(request.prompt)
