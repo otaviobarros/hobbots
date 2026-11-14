@@ -8,11 +8,10 @@ import { afterAll, describe, expect, it } from "vitest";
 import { type PreparedSandbox, ProcessSandbox } from "../src/sandbox.ts";
 
 // #1537: what you took over from a Task stays closed in every hob turn's sandbox, whatever the hob
-// runs. A script writes a taken file through a variable, and Git moves a taken branch through any
-// of its commands or its config: each fails in the sandbox, which closes the taken folder and the
-// files that move the branch (its loose ref, or the folder it would go in, and the packed refs),
-// while the rest of the folder and the other branches stay writable. A branch not made yet has no file to close: the call-level
-// check (#1449) refuses making it.
+// runs. A script writes a taken file through a variable, and Git moves a branch through any of its
+// commands or its config: each fails in the sandbox, which closes the taken folder and, while a
+// branch of the repository is taken, the repository's whole ref store (see GitWorkspace.refStores),
+// so no branch there moves. The rest of the folder stays writable.
 
 // The real OS sandbox runs on macOS, and on Linux with HOBBOTS_SANDBOX_TESTS=1 where bubblewrap,
 // socat and sandbox-runtime's seccomp helper are installed (as in sandbox-hub.test.ts).
@@ -69,7 +68,7 @@ const AS_NETTLE = "-c user.name=Nettle -c user.email=nettle@example.com -c commi
 describe("what you took over, in a hob turn's sandbox", () => {
   // covers PE-005, OR-006, #1537
   it.runIf(sandboxed)(
-    "[TC-PE-1537-02] fails every write to a taken folder and every move of a taken branch, and leaves the rest open",
+    "[TC-PE-1537-02] fails every write to a taken folder and every branch move in a repository with a taken branch, and leaves the rest open",
     async () => {
       hubGit("init", "--quiet", "-b", "main");
       mkdirSync(join(project, "docs"));
@@ -82,22 +81,16 @@ describe("what you took over, in a hob turn's sandbox", () => {
       hubGit("branch", "feat/shop", "HEAD~1");
       // A remote that fetches into the taken branch, as a hob could set in the repository's config.
       hubGit("remote", "add", "self", project);
-      // Both taken branches are in the packed refs; feat/shop moved since, so it has a loose ref
-      // too, and feat/packed has none: the hub closes the folder its loose ref would go in (see
-      // GitWorkspace.branchFiles).
+      // feat/packed is held only in the packed refs, feat/shop also as a loose ref.
       hubGit("branch", "feat/packed", "HEAD~1");
       hubGit("pack-refs", "--all");
       const git = join(project, ".git");
       mkdirSync(join(git, "refs", "heads", "feat"), { recursive: true });
       writeFileSync(join(git, "refs", "heads", "feat", "shop"), `${hubGit("rev-parse", "feat/shop")}\n`);
       const shop = hubGit("rev-parse", "feat/shop");
-      // What the hub closes for `docs` and the two branches.
-      const taken = [
-        join(project, "docs"),
-        join(git, "refs", "heads", "feat", "shop"),
-        join(git, "refs", "heads", "feat"),
-        join(git, "packed-refs"),
-      ];
+      const main = hubGit("rev-parse", "main");
+      // What the hub closes for `docs` and a taken branch: the repository's ref store.
+      const taken = [join(project, "docs"), join(git, "packed-refs"), join(git, "refs"), join(git, "HEAD")];
 
       await turnWith(taken, async (prepared) => {
         // A script that names the file only through a variable, and an interpreter.
@@ -110,8 +103,8 @@ describe("what you took over, in a hob turn's sandbox", () => {
           const result = await runIn(prepared, write);
           expect(result.ok, `${write} should fail`).toBe(false);
         }
-        // Every way Git moves or deletes a taken branch, its config included, leaves it where it was.
-        for (const branch of ["feat/shop", "feat/packed"]) {
+        // Every way Git moves, makes or deletes a branch, its config included, leaves them all where they were.
+        for (const branch of ["feat/shop", "feat/packed", "main", "review"]) {
           for (const move of [
             `git update-ref refs/heads/${branch} HEAD`,
             `git branch -f ${branch} HEAD`,
@@ -122,16 +115,13 @@ describe("what you took over, in a hob turn's sandbox", () => {
             `git checkout --quiet ${branch} && git ${AS_NETTLE} commit --quiet --allow-empty -m Third`,
           ]) {
             await runIn(prepared, `${move}; git checkout --quiet main`);
-            expect(hubGit("rev-parse", branch), `${move} should leave ${branch} alone`).toBe(shop);
+            expect(hubGit("rev-parse", "feat/shop"), `${move} should leave feat/shop alone`).toBe(shop);
+            expect(hubGit("rev-parse", "feat/packed"), `${move} should leave feat/packed alone`).toBe(shop);
+            expect(hubGit("rev-parse", "main"), `${move} should leave main alone`).toBe(main);
           }
         }
-        // The rest of the folder and the other branches stay open.
-        for (const write of [
-          "git checkout --quiet main",
-          "echo notes > notes.md",
-          "git branch review",
-          `git ${AS_NETTLE} commit --quiet --allow-empty -m Third`,
-        ]) {
+        // The rest of the folder stays open, and Git still reads the repository.
+        for (const write of ["echo notes > notes.md", "git status --short", "git log -1 --format=%s feat/shop"]) {
           const result = await runIn(prepared, write);
           expect(result.ok, `${write} should run: ${result.stderr}`).toBe(true);
         }
@@ -139,10 +129,8 @@ describe("what you took over, in a hob turn's sandbox", () => {
 
       expect(readFileSync(join(project, "docs", "plan.md"), "utf8")).toBe("plan\n");
       expect(existsSync(join(project, "docs", "new.md"))).toBe(false);
-      expect(hubGit("rev-parse", "feat/shop")).toBe(shop);
       expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("notes\n");
-      expect(hubGit("log", "-1", "--format=%s", "main")).toBe("Third");
-      expect(hubGit("branch", "--list", "review")).toContain("review");
+      expect(hubGit("branch", "--list", "review")).toBe("");
 
       // Given back, the next turn's sandbox lets Git move the branch again.
       await turnWith([], async (prepared) => {

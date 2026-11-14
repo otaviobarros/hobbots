@@ -59,14 +59,12 @@ export interface GitWorkspaceShape {
     folder: string,
   ) => Effect.Effect<{ readonly tops: ReadonlyArray<string>; readonly complete: boolean }>;
   /**
-   * The paths whose change moves the branch `branch` of the repository whose top is `top`, by
-   * absolute path (#1537): its loose ref and the packed refs, in the Git folder every worktree of it
-   * shares, or the ref table too in a repository that has one. Only paths that are there: a branch
-   * only the packed refs hold closes the folder its loose ref would go in, one held any other way
-   * (a symbolic ref, a link) closes the Git folders whole, and a branch not made yet has none. Empty
-   * when the repository cannot be read. Reads only, and runs no Git.
+   * Where the repository whose top is `top` keeps its refs, by absolute path (#1537): its refs,
+   * HEADs, packed refs and ref table, in the shared Git folder and each worktree's own, each that is
+   * there and where a link among them leads. A fixed list, read without running Git or reading how
+   * Git holds any branch. Empty when the repository cannot be read.
    */
-  readonly branchFiles: (top: string, branch: string) => Effect.Effect<ReadonlyArray<string>>;
+  readonly refStores: (top: string) => Effect.Effect<ReadonlyArray<string>>;
 }
 
 /** Reads the Git state of a hob's folders for the hub, without running Git. */

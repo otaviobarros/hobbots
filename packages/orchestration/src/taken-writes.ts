@@ -201,9 +201,9 @@ export const makeTakenWrites = (separator: PathSeparator) =>
 /**
  * What a hob's turn may not write at all, because you took it over from a Task (#1537): for every
  * repository its folders reach, and every repository around those, each taken path by absolute
- * path, as claimed and where its links land, and the Git files that move each taken branch. The
- * turn's sandbox closes them, so a write the call-level check cannot see, from a script, a variable,
- * an interpreter or Git's own config, fails too. Every hob's turn gets them, whatever Task it works
+ * path, as claimed and where its links land, and the whole ref store of a repository with a taken
+ * branch, so no branch there moves. The turn's sandbox closes them, so a write the call-level check
+ * cannot see, from a script, a variable, an interpreter or Git's own config, fails too. Every hob's turn gets them, whatever Task it works
  * on. Empty when nothing is taken there, or when the hub keeps no claims register.
  */
 export const makeTakenPlaces = (separator: PathSeparator) =>
@@ -235,7 +235,8 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
             keys.map((key) => (key === "" ? top : `${top}${separator}${key.split("/").join(separator)}`)),
           )
         : claim.scope === "branch"
-          ? git.branchFiles(top, claim.key)
+          ? // No branch of the repository moves while one is taken: its whole ref store is closed.
+            git.refStores(top)
           : Effect.succeed([]);
 
     return (folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>

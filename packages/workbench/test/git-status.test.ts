@@ -4,7 +4,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -163,151 +162,103 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual({ tops: [], complete: true });
   });
 
-  // covers PE-005, #1537
-  it("[TC-PE-1537-06] names the files that move a branch, the folder a packed-only branch's loose ref goes in, and none for a branch not made", async () => {
-    const repo = join(work, "repo");
+  const committed = (repo: string) => {
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
     gitIn(repo, "add", ".");
     gitIn(repo, "commit", "-q", "-m", "one");
+  };
+  const listing = (folder: string): ReadonlyArray<string> =>
+    readdirSync(folder, { recursive: true, encoding: "utf8" }).sort();
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-06] closes a repository's refs and HEAD, its packed refs, or its whole Git folder while it has none, and writes nothing", async () => {
+    const repo = join(work, "repo");
+    committed(repo);
     gitIn(repo, "branch", "feat/shop");
-    const loose = join(repo, ".git", "refs", "heads", "feat", "shop");
-    const packed = join(repo, ".git", "packed-refs");
-    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([loose]);
-    const commit = gitIn(repo, "rev-parse", "feat/shop").toString().trim();
+    const dotGit = join(repo, ".git");
+    const before = listing(dotGit);
+    // No packed refs yet, which a hob could write a branch into: the Git folder is closed whole.
+    expect(await read((git) => git.refStores(repo))).toEqual([dotGit, join(dotGit, "refs"), join(dotGit, "HEAD")]);
+    expect(listing(dotGit)).toEqual(before);
+    // With packed refs, the same fixed list: what the branches are named or how they are held is not read.
     gitIn(repo, "pack-refs", "--all");
-    // Only the packed refs hold it now, and Git pruned its empty folder: the deepest folder Git would
-    // write its loose ref in is closed, and the hub writes nothing in the repository.
-    const heads = join(repo, ".git", "refs", "heads");
-    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([heads, packed]);
-    expect(existsSync(loose)).toBe(false);
-    expect(gitIn(repo, "rev-parse", "feat/shop").toString().trim()).toBe(commit);
-    expect(await read((git) => git.branchFiles(repo, "feat/new"))).toEqual([packed]);
-    expect(await read((git) => git.branchFiles(repo, "../../config"))).toEqual([packed]);
-    // A name Git refuses, with a backslash or a part starting with a dot, names no ref file.
-    for (const name of ["feat\\..\\..\\config", "feat/.hidden", "feat:shop", "feat/shop."]) {
-      expect(await read((git) => git.branchFiles(repo, name))).toEqual([packed]);
-    }
-    // A linked worktree's branches are in the main repository's Git folder.
+    const stores = [join(dotGit, "packed-refs"), join(dotGit, "refs"), join(dotGit, "HEAD")];
+    expect(await read((git) => git.refStores(repo))).toEqual(stores);
+    gitIn(repo, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
+    expect(await read((git) => git.refStores(join(repo, "a.md")))).toEqual(stores);
+    expect(await read((git) => git.refStores(join(work, "outside")))).toEqual([]);
+  });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-07] closes the shared refs and every worktree's own, and the .git file a worktree names its Git folder in", async () => {
+    const repo = join(work, "main-repo");
+    committed(repo);
+    gitIn(repo, "pack-refs", "--all");
     const camp = join(work, "camp");
     gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
-    expect(await read((git) => git.branchFiles(camp, "camp"))).toEqual([
-      join(repo, ".git", "refs", "heads", "camp"),
-      packed,
-    ]);
-  });
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-07] closes the folder around a packed-only branch's loose ref while Git holds its lock, and the whole Git folder for a link in its path", async () => {
-    const repo = join(work, "locked");
-    write(join(repo, "a.md"), "a\n");
-    gitIn(repo, "init", "-q", "-b", "main");
-    gitIn(repo, "add", ".");
-    gitIn(repo, "commit", "-q", "-m", "one");
-    gitIn(repo, "branch", "feat/shop");
-    gitIn(repo, "branch", "side/shop");
-    gitIn(repo, "pack-refs", "--all");
-    const heads = join(repo, ".git", "refs", "heads");
-    const packed = join(repo, ".git", "packed-refs");
-    // Git is moving the branch: its lock is held, and the folder Git would publish the ref in is closed.
-    mkdirSync(join(heads, "feat"), { recursive: true });
-    write(join(heads, "feat", "shop.lock"), "moving\n");
-    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([join(heads, "feat"), packed]);
-    expect(existsSync(join(heads, "feat", "shop"))).toBe(false);
-    expect(readFileSync(join(heads, "feat", "shop.lock"), "utf8")).toBe("moving\n");
-    // A link where a folder of the ref should be: the Git folder and the folder it leads to are closed.
-    const outside = join(work, "outside");
-    mkdirSync(outside);
-    symlinkSync(outside, join(heads, "side"));
-    expect(await read((git) => git.branchFiles(repo, "side/shop"))).toEqual([join(repo, ".git"), outside, packed]);
-    expect(readdirSync(outside)).toEqual([]);
-  });
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-09] closes the whole Git folder for a branch that is a symbolic ref or a link, since it moves with what it names", async () => {
-    const repo = join(work, "symbolic");
-    write(join(repo, "a.md"), "a\n");
-    gitIn(repo, "init", "-q", "-b", "main");
-    gitIn(repo, "add", ".");
-    gitIn(repo, "commit", "-q", "-m", "one");
     const dotGit = join(repo, ".git");
-    for (const target of ["refs/heads/main", "HEAD", "refs/heads/later"]) {
-      gitIn(repo, "symbolic-ref", "refs/heads/alias", target);
-      expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([dotGit]);
-    }
-    // A link as the ref, here to a file holding a symbolic ref, closes the Git folder and where it leads.
-    write(join(work, "pointer"), "ref: refs/heads/main\n");
-    rmSync(join(dotGit, "refs", "heads", "alias"));
-    symlinkSync(join(work, "pointer"), join(dotGit, "refs", "heads", "alias"));
-    expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([dotGit, join(work, "pointer")]);
+    const own = join(dotGit, "worktrees", "camp");
+    const shared = [join(dotGit, "packed-refs"), join(dotGit, "refs"), join(dotGit, "HEAD")];
+    const ownStores = ["refs", "HEAD", "commondir"].map((name) => join(own, name)).filter((path) => existsSync(path));
+    expect(ownStores).toContain(join(own, "HEAD"));
+    // From the worktree and from the main checkout alike, since a branch of either moves in both.
+    expect(await read((git) => git.refStores(camp))).toEqual([...shared, ...ownStores, join(camp, ".git")]);
+    expect(await read((git) => git.refStores(repo))).toEqual([...shared, ...ownStores]);
+  });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-09] closes where a link among the ref stores leads, as well as the link", async () => {
+    const repo = join(work, "linked");
+    committed(repo);
+    gitIn(repo, "pack-refs", "--all");
+    const dotGit = join(repo, ".git");
+    renameSync(join(dotGit, "packed-refs"), join(work, "packed-elsewhere"));
+    symlinkSync(join(work, "packed-elsewhere"), join(dotGit, "packed-refs"));
+    renameSync(join(dotGit, "refs"), join(work, "refs-elsewhere"));
+    symlinkSync(join(work, "refs-elsewhere"), join(dotGit, "refs"));
+    expect(gitIn(repo, "rev-parse", "--abbrev-ref", "HEAD").toString().trim()).toBe("main");
+    expect(await read((git) => git.refStores(repo))).toEqual([
+      join(dotGit, "packed-refs"),
+      join(work, "packed-elsewhere"),
+      join(dotGit, "refs"),
+      join(work, "refs-elsewhere"),
+      join(dotGit, "HEAD"),
+    ]);
   });
 
   // covers PE-005, STD-SEC-002, #1537
-  it("[TC-PE-1537-10] writes nothing in a Git folder a hob's .git file points to outside, and closes around the ref there", async () => {
+  it("[TC-PE-1537-10] reads a Git folder a hob's .git file points to outside, writes nothing there, and closes its ref stores", async () => {
     const outside = join(work, "elsewhere");
-    write(join(outside, "a.md"), "a\n");
-    gitIn(outside, "init", "-q", "-b", "main");
-    gitIn(outside, "add", ".");
-    gitIn(outside, "commit", "-q", "-m", "one");
-    gitIn(outside, "branch", "taken");
+    committed(outside);
     gitIn(outside, "pack-refs", "--all");
     const folder = join(work, "allowed");
     write(join(folder, ".git"), `gitdir: ${join(outside, ".git")}\n`);
-    const heads = join(outside, ".git", "refs", "heads");
-    expect(await read((git) => git.branchFiles(folder, "taken"))).toEqual([
-      heads,
+    const before = listing(join(outside, ".git"));
+    expect(await read((git) => git.refStores(folder))).toEqual([
       join(outside, ".git", "packed-refs"),
+      join(outside, ".git", "refs"),
+      join(outside, ".git", "HEAD"),
+      join(folder, ".git"),
     ]);
-    expect(existsSync(join(heads, "taken"))).toBe(false);
+    expect(listing(join(outside, ".git"))).toEqual(before);
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-11] closes the shared Git folder and the worktree's own for a symbolic branch in a linked worktree", async () => {
-    const repo = join(work, "main-repo");
-    write(join(repo, "a.md"), "a\n");
-    gitIn(repo, "init", "-q", "-b", "main");
-    gitIn(repo, "add", ".");
-    gitIn(repo, "commit", "-q", "-m", "one");
-    const camp = join(work, "camp-tree");
-    gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
-    gitIn(camp, "update-ref", "refs/worktree/target", "HEAD");
-    gitIn(camp, "symbolic-ref", "refs/heads/alias", "refs/worktree/target");
-    expect(await read((git) => git.branchFiles(camp, "alias"))).toEqual([
-      join(repo, ".git"),
-      join(repo, ".git", "worktrees", "camp-tree"),
-    ]);
-  });
-
-  // covers PE-005, #1537
-  it("[TC-PE-1537-12] closes a repository's ref table whole, and where a link to it leads", async () => {
+  it("[TC-PE-1537-12] closes a repository's ref table, and where a link to it leads", async () => {
     const repo = join(work, "tabled");
-    mkdirSync(join(repo, ".git"), { recursive: true });
+    committed(repo);
+    gitIn(repo, "pack-refs", "--all");
+    const dotGit = join(repo, ".git");
     const store = join(work, "store");
     mkdirSync(store);
-    symlinkSync(store, join(repo, ".git", "reftable"));
-    write(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
-    expect(await read((git) => git.branchFiles(repo, "main"))).toEqual([join(repo, ".git", "reftable"), store]);
-    // A ref table Git may not read, in a repository whose refs are files: both stores are closed.
-    const both = join(work, "both");
-    write(join(both, "a.md"), "a\n");
-    gitIn(both, "init", "-q", "-b", "main");
-    gitIn(both, "add", ".");
-    gitIn(both, "commit", "-q", "-m", "one");
-    mkdirSync(join(both, ".git", "reftable"));
-    expect(await read((git) => git.branchFiles(both, "main"))).toEqual([
-      join(both, ".git", "reftable"),
-      join(both, ".git", "refs", "heads", "main"),
-    ]);
-    // Packed refs read through a link close the Git folder and where it leads.
-    gitIn(both, "branch", "packed");
-    gitIn(both, "pack-refs", "--all");
-    renameSync(join(both, ".git", "packed-refs"), join(work, "packed-elsewhere"));
-    symlinkSync(join(work, "packed-elsewhere"), join(both, ".git", "packed-refs"));
-    expect(await read((git) => git.branchFiles(both, "packed"))).toEqual([
-      join(both, ".git", "reftable"),
-      join(both, ".git"),
-      join(work, "packed-elsewhere"),
-      join(both, ".git", "packed-refs"),
+    symlinkSync(store, join(dotGit, "reftable"));
+    expect(await read((git) => git.refStores(repo))).toEqual([
+      join(dotGit, "packed-refs"),
+      join(dotGit, "reftable"),
+      store,
+      join(dotGit, "refs"),
+      join(dotGit, "HEAD"),
     ]);
   });
 });

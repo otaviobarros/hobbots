@@ -666,32 +666,35 @@ describe("the claims register", () => {
       expect(await h.takenPlacesPartly([outside])).toEqual([]);
 
       await h.takeOver(A);
-      // Both clones share the branch's refs, in the checkout's Git folder; each closes its own `docs`.
-      const refs = join(checkout, ".git", "refs", "heads", "camp");
+      // Both clones share the repository's ref stores, in the checkout's Git folder, which has no
+      // packed refs yet and so is closed whole; each closes its own `docs`.
+      const dotGit = join(checkout, ".git");
       expect(await h.takenPlaces([checkout])).toEqual(
-        [join(checkout, "docs"), join(checkout, "web"), join(checkout, "web-link"), refs].sort(),
+        expect.arrayContaining([join(checkout, "docs"), join(checkout, "web"), join(checkout, "web-link"), dotGit]),
       );
       expect(await h.takenPlaces([worktree])).toEqual(
-        expect.arrayContaining([join(worktree, "docs"), join(worktree, "web-link"), refs]),
+        expect.arrayContaining([join(worktree, "docs"), join(worktree, "web-link"), dotGit]),
       );
       // A hob given only a folder inside the repository, or a folder holding it, gets the same.
       expect(await h.takenPlaces([join(checkout, "docs", "decisions")])).toContain(join(checkout, "docs"));
       expect(await h.takenPlaces([root])).toEqual(
-        expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs"), refs]),
+        expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs"), dotGit]),
       );
       // A repository with nothing taken closes nothing, but a folder the scan could not see whole
       // may hold one with something taken, so it is closed whole.
       expect(await h.takenPlaces([outside])).toEqual([]);
       expect(await h.takenPlacesPartly([outside])).toEqual([outside]);
 
-      // A branch only the packed refs hold has no loose ref: the folder Git would write one in is
-      // closed, with the packed refs, and the hub writes nothing in the repository.
+      // With packed refs, the fixed ref stores are closed rather than the Git folder, and the hub
+      // writes nothing in the repository.
       const camp = git(checkout, "rev-parse", "camp").toString().trim();
       git(checkout, "pack-refs", "--all");
-      expect(await h.takenPlaces([checkout])).toEqual(
-        expect.arrayContaining([join(checkout, ".git", "refs", "heads"), join(checkout, ".git", "packed-refs")]),
+      const places = await h.takenPlaces([checkout]);
+      expect(places).toEqual(
+        expect.arrayContaining([join(dotGit, "packed-refs"), join(dotGit, "refs"), join(dotGit, "HEAD")]),
       );
-      expect(existsSync(refs)).toBe(false);
+      expect(places).not.toContain(dotGit);
+      expect(existsSync(join(dotGit, "refs", "heads", "camp"))).toBe(false);
       expect(git(checkout, "rev-parse", "camp").toString().trim()).toBe(camp);
 
       // Given back, nothing is closed; taken again, then the Task ends: nothing is closed either.

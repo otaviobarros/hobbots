@@ -291,115 +291,46 @@ const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<str
   return { tops: [...found], complete: true };
 };
 
-/** Whether `path` is there, as a file or folder, without following a link at it. */
-const present = async (path: string) => (await lstat(path).catch(() => null)) !== null;
-
-/** Whether `path` is a folder itself, never a link to one. */
-const plainFolder = async (path: string) => (await lstat(path).catch(() => null))?.isDirectory() === true;
-
-/** Whether the packed refs at `packed` hold `ref`, read from the file itself, never through a link. */
-const packedHolds = async (packed: string, ref: string): Promise<boolean> => {
-  if ((await lstat(packed).catch(() => null))?.isFile() !== true) return false;
-  const text = await readFile(packed, { encoding: "utf8", flag: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW });
-  return text.split("\n").some((line) => line.trim().split(" ")[1] === ref);
-};
-
-/** Where a repository's refs are: its shared Git folder and its worktree's own, as real paths. */
-interface RefPlaces {
-  readonly common: string;
-  readonly gitdir: string;
-}
-
-const refPlacesOf = async (repository: Repository): Promise<RefPlaces> => {
-  const gitdir = await realpath(repository.gitdir).catch(() => repository.gitdir);
-  const common = repository.common === null ? gitdir : await realpath(repository.common).catch(() => repository.common);
-  return { common: common ?? gitdir, gitdir };
-};
+/** What each Git folder keeps that moves a branch: its refs, its HEAD and where its shared folder is. */
+const OWN_REF_STORE = ["refs", "HEAD", "commondir"];
 
 /**
- * Whether `branch` is a branch name Git accepts (`git check-ref-format`): no part empty, starting with
- * a dot or ending with `.lock`, no `..`, `@{`, backslash, control character, space or any of `~^:?*[`,
- * and not ending with a dot. So its ref file is always inside `refs/heads`, whatever separator the
- * platform's paths take.
+ * Where the repository whose top is `top` keeps its refs, by absolute path (#1537): in the Git
+ * folder its worktrees share, its `refs`, `HEAD`, packed refs and ref table, in every worktree's own
+ * Git folder its `refs`, `HEAD` and the file naming the shared folder, and the `.git` file a
+ * worktree's top names its Git folder in, each that is there, and where a link among them leads.
+ * Closing them all stops any branch of the repository moving, however Git holds it, without reading
+ * how it does: the list is fixed, so nothing a hob lays out in the repository changes what is closed.
+ * A sandbox cannot close a missing file without hiding it from Git's reads, so when there are no
+ * packed refs, which a hob could otherwise write a branch into, the shared Git folder is closed
+ * whole. The hub only reads here, never writes.
  */
-const branchNamed = (branch: string): boolean => {
-  if (branch.endsWith(".") || branch.includes("..") || branch.includes("@{")) return false;
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Git refuses control characters in ref names.
-  if (/[\x00-\x20\x7f~^:?*[\\]/.test(branch)) return false;
-  return branch.split("/").every((name) => name !== "" && !name.startsWith(".") && !name.endsWith(".lock"));
-};
-
-/** A loose ref that holds a commit itself, the only kind `branchFiles` closes as a file. */
-const LOOSE_COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?\s*$/;
-
-/**
- * What closes the branch whose ref is `names` (from `common`): its loose ref, when it is a plain file
- * that holds a commit; the folder its loose ref would be written in, when only the packed refs hold
- * it; nothing for a branch not made yet, which the call-level check covers (#1449); and anything else
- * (a symbolic ref, a link on the way or at the ref) closes the repository's whole Git folders, since
- * where Git then writes is not read here.
- */
-const refFiles = async (places: RefPlaces, names: ReadonlyArray<string>): Promise<Array<string>> => {
-  // The Git folders, and where a link on the way leads, since Git follows it.
-  const whole = async (at: string) => {
-    const link = (await lstat(at).catch(() => null))?.isSymbolicLink() === true;
-    const target = link ? await realpath(at).catch(() => null) : null;
-    return [...new Set([places.common, places.gitdir, ...(target === null ? [] : [target])])];
-  };
-  let folder = places.common;
-  for (const name of names.slice(0, -1)) {
-    folder = join(folder, name);
-    const stats = await lstat(folder).catch(() => null);
-    if (stats === null) break;
-    if (!stats.isDirectory()) return await whole(folder);
-  }
-  const loose = join(places.common, ...names);
-  const stats = await lstat(loose).catch(() => null);
-  if (stats !== null) {
-    if (!stats.isFile()) return await whole(loose);
-    const text = await readFile(loose, { encoding: "utf8", flag: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW });
-    return LOOSE_COMMIT.test(text) ? [loose] : await whole(loose);
-  }
-  const packedFile = join(places.common, "packed-refs");
-  const packedStats = await lstat(packedFile).catch(() => null);
-  // Packed refs Git reads through a link may hold the branch where it is not read here.
-  if (packedStats !== null && !packedStats.isFile()) return await whole(packedFile);
-  const packed = await packedHolds(packedFile, names.join("/")).catch(() => false);
-  return packed ? await closedAround(places.common, names) : [];
-};
-
-/** The deepest folder that is there on the way to ref `names` (from `base`), where Git would write it. */
-const closedAround = async (base: string, names: ReadonlyArray<string>): Promise<Array<string>> => {
-  let folder = base;
-  for (const name of names.slice(0, -1)) {
-    if (!(await plainFolder(join(folder, name)))) break;
-    folder = join(folder, name);
-  }
-  return [folder];
-};
-
-/**
- * The files whose change moves branch `branch` of the repository whose top is `top` (#1537), in the
- * Git folder the repository's worktrees share: its loose ref and the packed refs, which Git rewrites
- * to delete or repack a branch; or the whole ref table, and where a link to it leads, in a repository
- * that keeps its refs in one. Only what is there is named, since a sandbox cannot close a missing file
- * without hiding it from Git's reads (see `refFiles`). The hub only reads here, never writes.
- */
-const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<string>> => {
+const refStores = async (top: string): Promise<ReadonlyArray<string>> => {
   const repository = await repositoryOf(top, new Map());
   if (repository === null) return [];
-  const places = await refPlacesOf(repository);
-  const table = join(places.common, "reftable");
-  // Git reads the ref table only when the repository's config says so: with one there, both stores
-  // are closed, the table whole and where a link to it leads.
-  const tables = (await present(table)) ? [table, await realpath(table).catch(() => table)] : [];
-  const packed = join(places.common, "packed-refs");
-  // A ref store that changes under the read, as Git packs or prunes it, is closed whole.
-  const files = branchNamed(branch)
-    ? await refFiles(places, ["refs", "heads", ...branch.split("/")]).catch(() => [places.common, places.gitdir])
-    : [];
-  const packedFiles = (await present(packed)) ? [packed, await realpath(packed).catch(() => packed)] : [];
-  return [...new Set([...tables, ...files, ...packedFiles])];
+  const real = (path: string) => realpath(path).catch(() => path);
+  const gitdir = await real(repository.gitdir);
+  const common = repository.common === null ? gitdir : await real(repository.common);
+  const worktrees = join(common, "worktrees");
+  const linked = (await readdir(worktrees, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(worktrees, entry.name));
+  const stores = new Set<string>();
+  const close = async (path: string) => {
+    const stats = await lstat(path).catch(() => null);
+    if (stats === null) return false;
+    stores.add(path);
+    if (stats.isSymbolicLink()) stores.add(await real(path));
+    return true;
+  };
+  if (!(await close(join(common, "packed-refs")))) stores.add(common);
+  await close(join(common, "reftable"));
+  for (const folder of new Set([common, gitdir, ...linked])) {
+    for (const name of OWN_REF_STORE) await close(join(folder, name));
+  }
+  const dotGit = join(repository.dir, ".git");
+  if ((await lstat(dotGit).catch(() => null))?.isDirectory() === false) await close(dotGit);
+  return [...stores];
 };
 
 /** The hub's reader of Git state. */
@@ -415,6 +346,6 @@ export const GitWorkspaceLive = Layer.succeed(
     currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
     repositoriesIn: (folder) =>
       Effect.promise(() => repositoriesIn(folder).catch(() => ({ tops: [], complete: false }))),
-    branchFiles: (top, branch) => Effect.promise(() => branchFiles(top, branch).catch(() => [])),
+    refStores: (top) => Effect.promise(() => refStores(top).catch(() => [])),
   }),
 );
