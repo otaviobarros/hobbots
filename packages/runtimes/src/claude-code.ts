@@ -38,6 +38,8 @@ import {
 import {
   type CommitIdentity,
   GIT_INIT_TOOL,
+  GITHUB_CHARM_NOTE,
+  GITHUB_CHARM_TOOLS,
   type PlanUsage,
   policySandbox,
   type ReplyUsage,
@@ -185,9 +187,16 @@ export const botCommitNote = (commitAs: CommitIdentity) =>
     "When your commits are pushed, GitHub recreates them as your bot and signs them, so they show as Verified on GitHub. A local commit shows no signature until then; that is expected.",
   ].join(" ");
 
-/** The sandbox note a turn gets: none unsandboxed, the read-only one when its commands cannot write. */
-export const sandboxNote = (sandboxed: boolean, readOnly: boolean): string =>
-  sandboxed ? (readOnly ? READ_ONLY_SANDBOX_NOTE : SANDBOX_NOTE) : "";
+/**
+ * The sandbox note a turn gets: none unsandboxed, the read-only one when its commands cannot write,
+ * and for a hob offered GitHub Charm tools, that GitHub goes through them and never `gh` (#1349).
+ */
+export const sandboxNote = (sandboxed: boolean, readOnly: boolean, github = false): string =>
+  sandboxed ? [readOnly ? READ_ONLY_SANDBOX_NOTE : SANDBOX_NOTE, ...(github ? [GITHUB_CHARM_NOTE] : [])].join(" ") : "";
+
+/** Whether a turn offers any GitHub Charm tool, so its sandbox note says GitHub goes through them. */
+export const holdsGitHub = (tools: Pick<ToolTurn, "githubTools"> | null): boolean =>
+  (tools?.githubTools?.length ?? 0) > 0;
 
 /**
  * The text appended to Claude Code's system prompt: the hob's instructions, the approval note when
@@ -201,11 +210,12 @@ export const turnInstructions = (
   commitAs?: CommitIdentity,
   identityNote = "",
   readOnly = false,
+  github = false,
 ) =>
   [
     instructions,
     asks ? APPROVAL_NOTE : "",
-    sandboxNote(sandboxed, readOnly),
+    sandboxNote(sandboxed, readOnly, github),
     commitAs ? botCommitNote(commitAs) : "",
     identityNote,
   ]
@@ -835,9 +845,10 @@ export const claudeTurnStart = (request: PromptRequest, policySandboxState: Sand
     tools?.commitAs,
     commits.note,
     readOnly,
+    holdsGitHub(tools),
   );
   const asked = askedMount(request.askedSkill, request.skills);
-  const sandbox = sandboxNote(tools !== null && sandboxOn, readOnly);
+  const sandbox = sandboxNote(tools !== null && sandboxOn, readOnly, holdsGitHub(tools));
   const prompt = askedSkillPrompt(turnPrompt(request, instructions, commits.now, sandbox), asked);
   return { tools, commits, instructions, prompt, asked: asked?.name ?? null, askedSet: asked?.set?.name ?? null };
 };
@@ -880,12 +891,16 @@ export const sessionPolicy = (tools: ToolTurn | null): { readonly policyVersion?
 
 /**
  * What the hub points the turn's calls to, or holds them for (ADR 031): the requests the Charms the hob
- * holds take over and the commits it holds, from the turn's steering, and `git init` when it offers it.
+ * holds take over and the commits it holds, from the turn's steering, `git init` when it offers it, and
+ * the GitHub Charm tools it offers, which a `gh` command is pointed to (#1349).
  */
 const hubSteers = (hub: Pick<PromptRequest, "hubTools" | "steering"> | null | undefined) => ({
   ...(hub?.steering?.takeovers.length ? { takeovers: hub.steering.takeovers } : {}),
   ...(hub?.steering?.holdsCommit ? { holdsCommit: hub.steering.holdsCommit } : {}),
   ...(hub?.hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
+  githubTools: (hub?.hubTools?.tools ?? []).flatMap((tool) =>
+    GITHUB_CHARM_TOOLS.includes(tool.name) ? [tool.name] : [],
+  ),
 });
 
 /**

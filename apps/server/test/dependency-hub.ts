@@ -13,6 +13,7 @@ import {
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
+  type RuntimeEvent,
   TaskControls,
   TaskRepository,
 } from "@hobbots/agents";
@@ -144,6 +145,8 @@ interface Script {
   stopped: boolean;
   /** Runs the members' Task sessions instead of the fake runtime, such as an installed Claude Code or Codex. */
   readonly members: HubCallRuntime | null;
+  /** The tool calls the fake runtime's turns had refused, with why, in order. */
+  readonly denied: Array<Extract<RuntimeEvent, { readonly _tag: "ToolDenied" }>>;
 }
 
 const gateOf = (script: Script, name: string) => {
@@ -203,7 +206,11 @@ const scripted = (script: Script, sandbox: "on" | "unavailable" = "on") =>
           if (script.members !== null && toTask(request.prompt)) {
             return script.members.events(request, hubCalls(request.prompt));
           }
-          const stream = fake.sendPrompt(request);
+          const stream = Stream.tap(fake.sendPrompt(request), (event) =>
+            Effect.sync(() => {
+              if (event._tag === "ToolDenied") script.denied.push(event);
+            }),
+          );
           const lines = request.prompt.split("\n").map((line) => line.trim());
           const started = named(lines, "fake:hold-started");
           if (started !== undefined) {
@@ -350,6 +357,7 @@ export const startHub = async (
     reactions: [...reactions],
     stopped: false,
     members,
+    denied: [],
   };
   const runtime = ManagedRuntime.make(makeHub(database, script, charms, policy));
   open.push(runtime);
@@ -360,6 +368,7 @@ export const startHub = async (
     run,
     requests: script.requests,
     answers: script.answers,
+    denied: script.denied,
     release: (name: string) => run(Deferred.succeed(gateOf(script, name), undefined)),
     stop: () => {
       script.stopped = true;

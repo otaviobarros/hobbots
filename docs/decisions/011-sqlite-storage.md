@@ -5,7 +5,7 @@ Status: **Accepted.** Supersedes the storage choice of [ADR 007](007-durability-
 ## Decision
 
 - Each installation has one SQLite database (`node:sqlite` through `@effect/sql-sqlite-node`), written by the single server process in the hub's data folder.
-- All data access goes through Effect's generic `SqlClient` and the Effect migrator. SQL stays PostgreSQL-compatible; where the dialects differ, the query chooses explicitly.
+- All data access goes through Effect's generic `SqlClient` and the Effect migrator. Since [ADR 040](040-parallel-pull-requests.md), migrations run through Hobbots' own migrator, which also applies ids below the highest applied one. SQL stays PostgreSQL-compatible; where the dialects differ, the query chooses explicitly.
 - Tests can run the persistence and server suites against SQLite or PostgreSQL (`HOBBOTS_TEST_DB`), and CI runs both.
 - PostgreSQL remains an optional backend for a later server edition with several workers or high availability. Desktop installations never need it.
 - Long-running reads such as search run off the event loop, in a worker thread.

@@ -34,9 +34,15 @@ const delegated = send([
   hub("wait_for", { key: "wait", tasks: ["$page.task_id"] }),
 ]);
 
-/** Whether the Quest and its Task ended, and nothing in its tree runs any more. */
+/**
+ * Whether the Quest and its Task ended, and nothing in its tree runs any more. The Task is read as
+ * well as the Quest: on PostgreSQL a tree is read one table at a time, so a read can see the Quest
+ * stopped before the Task the same change cancelled.
+ */
 const settled = (tree: TaskTree) =>
-  tree.quests[0]?.state === "stopped" && !tree.attempts.some((each) => isLive(each.state));
+  tree.quests[0]?.state === "stopped" &&
+  tree.tasks[0]?.state === "cancelled" &&
+  !tree.attempts.some((each) => isLive(each.state));
 
 describe.each(RUNTIMES)("a lead that stops its Quest, on %s", (runtime) => {
   // covers OR-004, OR-006, EX-002
