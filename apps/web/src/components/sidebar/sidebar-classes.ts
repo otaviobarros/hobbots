@@ -21,10 +21,6 @@ export const sidebarIcon =
 /** The hairline between the rail's groups. */
 export const sidebarRule = "my-1.5 h-px w-9 flex-none bg-line wide:hidden";
 
-/** A camp or direct message row: its face, its name and last line, then its counts; the face alone on the rail. */
-export const sidebarRow =
-  "relative grid w-full flex-none grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-control px-2 py-1.5 text-start text-text-strong no-underline hover:bg-hover aria-[current=page]:bg-selected max-wide:flex max-wide:h-11 max-wide:w-12 max-wide:justify-center max-wide:p-0";
-
 /** A section's heading: its label and its + button. Only the wide sidebar shows it. */
 export const sidebarSection = "flex w-full flex-none items-center gap-1.5 pt-3 pe-2 pb-1 ps-2.5 max-wide:hidden";
 

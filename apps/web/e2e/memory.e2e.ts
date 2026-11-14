@@ -54,7 +54,9 @@ test("[TC-UX-951] Memory opens from the sidebar, shows what hobs learned, and re
   const { url, summon } = await hubWithMemory("seeded");
   const pip = await summon("Pip", 1201);
   await page.goto(`${url}/#/`);
-  await page.getByRole("link", { name: "Memory", exact: true }).first().click();
+  // Memory is a page the sidebar leaves out (ADR 039, The sidebar); Find or jump to opens it.
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Find or jump to" }).click();
+  await page.getByRole("option", { name: "Memory" }).click();
   const main = page.getByRole("main", { name: "Memory" });
   await expect(main.getByRole("heading", { name: "Recently learned" })).toBeVisible();
   await expect(main.getByRole("link", { name: /Publishing a preview link/ })).toBeVisible();

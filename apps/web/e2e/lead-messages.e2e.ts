@@ -159,7 +159,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
 
   // Frodo messages Pip meanwhile; his result says it is held and why.
@@ -195,7 +195,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
 
   // You allow the push; Pip's turn ends, and his next one carries the message.
   await page.keyboard.press("Escape");
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click();
   await page
     .getByRole("list", { name: "Requests" })
     .getByRole("link", { name: /Push your work/ })

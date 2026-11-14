@@ -7,10 +7,11 @@ import { formatCount } from "../../lib/format.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { campList } from "./camp-list.ts";
 import { messages as copy } from "./messages.ts";
-import { sidebarCount, sidebarMore, sidebarRow, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
+import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
 import type { SidebarData } from "./sidebar-data.ts";
 import { FaceStack } from "./sidebar-faces.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
+import { SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type CampRow, campRows, rowTime } from "./sidebar-rows.ts";
 
 /** The camp the address names, if any. */
@@ -108,72 +109,72 @@ function MakeButton({ onMake }: { onMake: () => void }) {
 /** A camp's row: shared ones with their faces and last line, a hob's own compact with its tile. */
 function CampLink({ row, current, wide }: { row: CampRow; current: boolean; wide: boolean }) {
   const { place, thread, hob, needs } = row;
+  const shared = place.section === "shared-camp";
   const news = copy.campNews({ unread: row.unread, mentions: place.mentions, needs });
   return (
-    <SidebarTip label={thread.title} wide={wide}>
-      <Link
-        to="/hobs/$hobId/threads/$threadId"
-        params={{ hobId: hob.id, threadId: thread.id }}
-        aria-current={current ? "page" : undefined}
-        // The link keeps the camp's name as its name; what is new is told as its description.
-        aria-label={thread.title}
-        aria-description={news === "" ? undefined : news}
-        className={cn(sidebarRow, place.section === "shared-camp" ? "min-h-12" : "min-h-[34px] py-[3px]")}
-      >
-        <CampFace row={row} wide={wide} />
-        <CampText row={row} />
-        <CampMarks row={row} />
-      </Link>
-    </SidebarTip>
+    <SidebarRowFrame
+      tall={shared}
+      face={<CampFace row={row} wide={wide} />}
+      link={
+        <SidebarTip label={thread.title} wide={wide}>
+          <Link
+            to="/hobs/$hobId/threads/$threadId"
+            params={{ hobId: hob.id, threadId: thread.id }}
+            aria-current={current ? "page" : undefined}
+            // The link keeps the camp's name as its name; what is new is told as its description.
+            aria-label={thread.title}
+            aria-description={news === "" ? undefined : news}
+            className={cn(sidebarRowLink, shared || row.unread > 0 ? "font-semibold" : "font-normal")}
+          >
+            <span className="max-wide:sr-only">{thread.title}</span>
+          </Link>
+        </SidebarTip>
+      }
+      line={shared && thread.lastLine !== null ? <CampLine row={row} /> : undefined}
+      aside={<CampAside row={row} />}
+    />
   );
 }
 
 /** A shared camp's stack of faces, or the hob's tile; on the rail, a lantern dot when it needs you. */
 function CampFace({ row, wide }: { row: CampRow; wide: boolean }) {
   return (
-    <span aria-hidden className="relative inline-flex size-hob-tile items-center justify-center max-wide:size-7.5">
+    <>
       {row.place.section === "shared-camp" ? <FaceStack faces={row.faces} /> : <HobTile hob={row.hob} tile="sm" />}
       {!wide && row.needs && (
         <span className="absolute -end-0.5 -bottom-0.5 size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern" />
       )}
+    </>
+  );
+}
+
+/** A shared camp's last line, in bold while it holds what you have not read. */
+function CampLine({ row }: { row: CampRow }) {
+  return (
+    <span className={cn(row.unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary")}>
+      {row.thread.lastLine}
     </span>
   );
 }
 
-/** The camp's name and, for a shared camp, its time and last line; for a hob's own, the hob's name. */
-function CampText({ row }: { row: CampRow }) {
-  const { thread, hob, needs } = row;
+/** A shared camp's time, or the hob whose camp it is; then Needs you, `@` for a mention of you, and the unread count. */
+function CampAside({ row }: { row: CampRow }) {
   const shared = row.place.section === "shared-camp";
-  const unread = row.unread > 0;
-  const aside = shared ? rowTime(thread.updatedAt) : needs ? "" : hob.name;
+  const aside = shared ? rowTime(row.thread.updatedAt) : row.needs ? "" : row.hob.name;
   return (
-    <span aria-hidden className="flex min-w-0 flex-col max-wide:hidden">
-      <span className="flex min-w-0 items-baseline gap-1.5">
-        <span className={cn("truncate text-ui", shared || unread ? "font-semibold" : "font-normal")}>
-          {thread.title}
-        </span>
-        <span className="ms-auto flex-none text-meta text-label">{aside}</span>
+    <>
+      {aside !== "" && <span className="text-meta text-label">{aside}</span>}
+      <span className="flex items-center gap-1">
+        {row.needs && (
+          <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-lantern)_22%,transparent)] px-[7px] py-px text-meta font-semibold whitespace-nowrap text-lantern">
+            {copy.needsYou}
+          </span>
+        )}
+        {row.place.mentions > 0 && (
+          <span className={cn(sidebarCount, "bg-lantern text-on-lantern")}>{copy.mention}</span>
+        )}
+        {row.unread > 0 && <span className={sidebarCount}>{formatCount(row.unread)}</span>}
       </span>
-      {shared && thread.lastLine !== null && (
-        <span className={cn("truncate text-detail", unread ? "font-semibold text-text-strong" : "text-text-secondary")}>
-          {thread.lastLine}
-        </span>
-      )}
-    </span>
-  );
-}
-
-/** Needs you, `@` for a mention of you, and the unread count. */
-function CampMarks({ row }: { row: CampRow }) {
-  return (
-    <span aria-hidden className="flex items-center gap-1 max-wide:hidden">
-      {row.needs && (
-        <span className="rounded-tag bg-[color-mix(in_srgb,var(--color-lantern)_22%,transparent)] px-[7px] py-px text-meta font-semibold whitespace-nowrap text-lantern">
-          {copy.needsYou}
-        </span>
-      )}
-      {row.place.mentions > 0 && <span className={cn(sidebarCount, "bg-lantern text-on-lantern")}>{copy.mention}</span>}
-      {row.unread > 0 && <span className={sidebarCount}>{formatCount(row.unread)}</span>}
-    </span>
+    </>
   );
 }

@@ -87,11 +87,11 @@ test("[TC-IN-150] Aldric's page and his Task's backpack show Quill's result as a
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
   const thread = page.url();
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
 
   // Aldric rests, so Quill's result waits in his backpack instead of starting his continuation.
   await api(current, "POST", `/api/agents/${aldric.id}/pause`);
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click();
   await page
     .getByRole("list", { name: "Requests" })
     .getByRole("link", { name: /Push your work/ })

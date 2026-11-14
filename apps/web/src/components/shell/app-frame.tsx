@@ -1,6 +1,6 @@
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
-import { sidebarColumn, sidebarIcon, sidebarNav, sidebarRow, sidebarTop } from "../sidebar/sidebar-classes.ts";
+import { sidebarColumn, sidebarIcon, sidebarNav, sidebarTop } from "../sidebar/sidebar-classes.ts";
 import { titleStrip, windowBody, windowFrame } from "./window-classes.ts";
 
 /**
@@ -47,7 +47,10 @@ function FrameSidebar() {
           ))}
         </div>
         {[0, 1].map((index) => (
-          <div key={index} className={cn(sidebarRow, "min-h-12 px-2")}>
+          <div
+            key={index}
+            className="flex min-h-12 w-full items-center gap-2.5 px-4 max-wide:h-11 max-wide:min-h-0 max-wide:w-12 max-wide:justify-center max-wide:px-0"
+          >
             <Skeleton shape="tile" className="size-hob-tile max-wide:size-7.5" />
             <span className="max-wide:hidden">
               <Skeleton width="12ch" />

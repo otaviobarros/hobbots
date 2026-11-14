@@ -123,7 +123,7 @@ function FindButton({ wide }: { wide: boolean }) {
     <SidebarTip label={copy.find} wide={wide}>
       <button
         type="button"
-        aria-label={copy.find}
+        aria-keyshortcuts={isMac() ? "Meta+K" : "Control+K"}
         onClick={openJump}
         className="mx-3 mb-2 flex h-[34px] flex-none cursor-pointer items-center gap-2 self-stretch rounded-control border-(length:--edge) border-line-2 bg-deep px-2.5 text-start text-ui text-label hover:border-control max-wide:mx-auto max-wide:mb-0 max-wide:h-11 max-wide:w-12 max-wide:justify-center max-wide:self-center max-wide:border-0 max-wide:bg-transparent max-wide:px-0 max-wide:hover:bg-hover"
       >
@@ -139,9 +139,7 @@ function FindButton({ wide }: { wide: boolean }) {
           <circle cx="7" cy="7" r="4.5" />
           <path d="M10.5 10.5 14 14" />
         </svg>
-        <span aria-hidden className="flex-1 max-wide:hidden">
-          {copy.find}
-        </span>
+        <span className="flex-1 max-wide:sr-only">{copy.find}</span>
         <kbd
           aria-hidden
           className="rounded-[4px] px-[5px] text-meta font-semibold text-label shadow-[inset_0_0_0_1px_var(--color-line-2)] max-wide:hidden"

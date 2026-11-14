@@ -1,3 +1,4 @@
+import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useHobPresence } from "../../api/hub-status.ts";
@@ -7,9 +8,10 @@ import { presenceState } from "../../lib/hob-state.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
-import { sidebarCount, sidebarMore, sidebarRow, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
+import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
 import type { SidebarData } from "./sidebar-data.ts";
 import { SidebarTip } from "./sidebar-item.tsx";
+import { SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type DirectRow, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
 
 /** The state dot on a hob's face: lantern when it needs you, mint while it works, a ring while paused. */
@@ -78,47 +80,55 @@ function DirectLink({ row, current, wide }: { row: DirectRow; current: boolean; 
   const unread = place === undefined ? 0 : unreadCount(place, known);
   const needs = state === "needs-you";
   const line = needs || state === "working" || chat?.lastLine == null ? word : chat.lastLine;
+  const name = copy.hob({ name: hob.name, state: word, unread: unread > 0 });
+  return (
+    <SidebarRowFrame
+      tall
+      face={<DirectFace hob={hob} state={state} />}
+      link={
+        <SidebarTip label={name} wide={wide}>
+          <Link
+            to="/hobs/$hobId/chat"
+            params={{ hobId: hob.id }}
+            aria-label={name}
+            aria-current={current ? "page" : undefined}
+            className={cn(sidebarRowLink, "font-semibold")}
+          >
+            <span className="max-wide:sr-only">{hob.name}</span>
+          </Link>
+        </SidebarTip>
+      }
+      line={
+        <span
+          className={cn(needs ? "text-lantern" : unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary")}
+        >
+          {line}
+        </span>
+      }
+      aside={
+        <>
+          {chat !== undefined && <span className="text-meta text-label">{rowTime(chat.updatedAt)}</span>}
+          {unread > 0 && <span className={sidebarCount}>{formatCount(unread)}</span>}
+        </>
+      }
+    />
+  );
+}
+
+/** The hob's tile with its state dot: larger on the wide sidebar than on the rail. */
+function DirectFace({ hob, state }: { hob: Agent; state: SidebarState }) {
   const dot = DOT[state];
   return (
-    <SidebarTip label={copy.hob({ name: hob.name, state: word, unread: unread > 0 })} wide={wide}>
-      <Link
-        to="/hobs/$hobId/chat"
-        params={{ hobId: hob.id }}
-        aria-label={copy.hob({ name: hob.name, state: word, unread: unread > 0 })}
-        aria-current={current ? "page" : undefined}
-        className={cn(sidebarRow, "min-h-12")}
-      >
-        <span aria-hidden className="relative inline-flex size-hob-tile items-center justify-center max-wide:size-7.5">
-          <span className="hidden wide:inline-flex">
-            <HobTile hob={hob} tile="lg" />
-          </span>
-          <span className="inline-flex wide:hidden">
-            <HobTile hob={hob} tile="md" />
-          </span>
-          {dot !== undefined && (
-            <span className={cn("absolute -end-px -bottom-px size-[11px] rounded-dot border-2 border-panel", dot)} />
-          )}
-        </span>
-        <span aria-hidden className="flex min-w-0 flex-col max-wide:hidden">
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="truncate text-ui font-semibold">{hob.name}</span>
-            {chat !== undefined && (
-              <span className="ms-auto flex-none text-meta text-label">{rowTime(chat.updatedAt)}</span>
-            )}
-          </span>
-          <span
-            className={cn(
-              "truncate text-detail",
-              needs ? "text-lantern" : unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary",
-            )}
-          >
-            {line}
-          </span>
-        </span>
-        <span aria-hidden className="flex items-center max-wide:hidden">
-          {unread > 0 && <span className={sidebarCount}>{formatCount(unread)}</span>}
-        </span>
-      </Link>
-    </SidebarTip>
+    <>
+      <span className="hidden wide:inline-flex">
+        <HobTile hob={hob} tile="lg" />
+      </span>
+      <span className="inline-flex wide:hidden">
+        <HobTile hob={hob} tile="md" />
+      </span>
+      {dot !== undefined && (
+        <span className={cn("absolute -end-px -bottom-px size-[11px] rounded-dot border-2 border-panel", dot)} />
+      )}
+    </>
   );
 }

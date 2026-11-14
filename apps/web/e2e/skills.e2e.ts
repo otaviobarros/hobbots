@@ -64,7 +64,9 @@ test("[TC-UX-1062] Skills: write one, give it out, edit and roll out with one ho
 }) => {
   const { url, folder } = await hubWithHobs();
   await page.goto(`${url}/#/`);
-  await page.getByRole("link", { name: "Skills", exact: true }).first().click();
+  // Skills is a page the sidebar leaves out (ADR 039, The sidebar); Find or jump to opens it.
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Find or jump to" }).click();
+  await page.getByRole("option", { name: "Skills" }).click();
   const main = page.getByRole("main", { name: "Skills" });
   await expect(main.getByRole("heading", { name: "No skills yet" })).toBeVisible();
   await expectAccessible(page, main);
@@ -487,7 +489,9 @@ test("[TC-UX-1099] the Overview shows every finding and what each hob carries, a
   }
 
   await page.goto(`${url}/#/`);
-  await page.getByRole("link", { name: "Skills", exact: true }).first().click();
+  // Skills is a page the sidebar leaves out (ADR 039, The sidebar); Find or jump to opens it.
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Find or jump to" }).click();
+  await page.getByRole("option", { name: "Skills" }).click();
   const main = page.getByRole("main", { name: "Skills" });
   const worth = main.getByRole("region", { name: "Worth a look" });
   const findings = worth.getByRole("link", { name: /description may not trigger/ });

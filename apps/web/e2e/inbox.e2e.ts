@@ -72,7 +72,7 @@ const pipAsksToPush = async (page: Page) => {
 };
 
 const inboxLink = (page: Page) =>
-  page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox/ });
+  page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^For you/ });
 
 /** The chief of the hobs on the rail, which raises its lantern while a request needs you. */
 const chief = (page: Page) =>
@@ -83,7 +83,7 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   page,
 }) => {
   const { current } = await pipAsksToPush(page);
-  await expect(inboxLink(page)).toHaveAccessibleName("Inbox, 1 waiting on you");
+  await expect(inboxLink(page)).toHaveAccessibleName("For you, 1 waiting on you");
 
   // The chief raises its lantern as soon as the request arrives, and leads to the Inbox.
   await expect(chief(page)).toHaveAccessibleName("Hobbots inbox, something needs you");

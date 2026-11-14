@@ -1,16 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Page, Route } from "@playwright/test";
-import {
-  admit,
-  emptyDataDir,
-  expandSidebar,
-  expect,
-  type Hub,
-  removeDataDir,
-  sidebarThread,
-  startHub,
-  test,
-} from "./hub.ts";
+import { admit, emptyDataDir, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -75,7 +65,6 @@ const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>, setup
 };
 
 // The open hob's threads show under it in the expanded sidebar.
-test.beforeEach(({ context }) => expandSidebar(context));
 const threadLink = sidebarThread;
 
 // covers CH-009, UX-003
@@ -88,7 +77,6 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
   // A second window follows along live.
   const other = await browser.newPage();
   await admit(other.context(), hub);
-  await expandSidebar(other.context());
   await other.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[0]}`);
   await expect(threadLink(other, "Support triage")).toBeVisible();
 

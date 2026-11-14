@@ -1,15 +1,5 @@
 import type { Page } from "@playwright/test";
-import {
-  campAt,
-  emptyDataDir,
-  expandSidebar,
-  expect,
-  type Hub,
-  removeDataDir,
-  sidebarThread,
-  startHub,
-  test,
-} from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
 // thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
@@ -58,7 +48,6 @@ const summonPip = async (current: Hub) => {
 };
 
 // The open hob's threads show under it in the expanded sidebar.
-test.beforeEach(({ context }) => expandSidebar(context));
 const threadLink = sidebarThread;
 
 /** Makes a camp with Pip named by the prompt, sends the prompt there and waits for its echo. */
