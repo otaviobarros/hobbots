@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { openWorkbench, ticket } from "./quest-sheet.ts";
 import { colored, hobTerminal, rows } from "./terminal.ts";
+import { FRAME_LEAST_HEIGHT } from "./window-still.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issues #389 and #908: the Workbench's Terminal replays what each hob ran in a real terminal,
@@ -405,8 +406,9 @@ test("[TC-UX-998] the Terminal fits the Workbench at any window height, and read
   await expect.poll(() => scrolledAround(panel)).toEqual({ panel: 0, boxes: 0, window: 0 });
   await expect(page.getByRole("button", { name: "Close the quest" })).toBeInViewport();
 
-  // A shorter window still holds the terminal's tabs, Find and a couple of rows, with nothing scrolled.
-  await page.setViewportSize({ width: page.viewportSize()?.width ?? 1280, height: 560 });
+  // The shortest window the frame fits still holds the terminal's tabs, Find and a couple of rows,
+  // with nothing scrolled. A shorter one scrolls by design to show the rest of the frame (STD-TEST-010).
+  await page.setViewportSize({ width: page.viewportSize()?.width ?? 1280, height: FRAME_LEAST_HEIGHT });
   await expect.poll(shownRows).toBeLessThan(docked);
   await expect.poll(shownRows).toBeGreaterThanOrEqual(2);
   await fits();

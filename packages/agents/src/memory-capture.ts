@@ -191,6 +191,7 @@ const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" |
     case "hand-off":
       return `Handed over, "${payload.artifact.label}": ${payload.artifact.value} (to Task ${payload.handOff.toTaskId})`;
     case "message":
+      if (payload.byHub === true) return `Note from Hobbots: ${payload.text}`;
       return `${payload.senderId === null ? "Note from the user" : "Message"}: ${payload.text}${payload.senderId === null ? "" : ` (from hob ${payload.senderId})`}`;
     case "approval-outcome":
       return `Approval ${payload.approval.state}: "${payload.approval.label}"`;

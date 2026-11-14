@@ -85,6 +85,8 @@ export const BackpackPayload = Schema.Union([
     noteId: Schema.optionalKey(NoteId),
     /** How the note asked to reach a running turn (#1345); absent on older items, which wait for the next turn. */
     delivery: Schema.optionalKey(NoteDelivery),
+    /** A note Hobbots wrote itself, as the supervisor's (#1447) or Resume's; absent on yours and a hob's. */
+    byHub: Schema.optionalKey(Schema.Literal(true)),
   }),
   Schema.TaggedStruct("approval-outcome", { approval: ApprovalRequest }),
   Schema.TaggedStruct("deadline", { taskId: TaskId, dueAt: Schema.String }),

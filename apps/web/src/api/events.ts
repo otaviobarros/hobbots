@@ -215,6 +215,8 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "HobPresenceRemoved",
   // Nothing on screen shows members yet (ADR 039); a new member has read nothing.
   "ThreadMemberAdded",
+  // What the supervisor did reaches you as the failure, retry or note it made (#1447), not its record.
+  "TaskSupervised",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -227,7 +229,8 @@ type UnappliedEvent = Extract<
       | "ThreadRunChanged"
       | "HobPresenceChanged"
       | "HobPresenceRemoved"
-      | "ThreadMemberAdded";
+      | "ThreadMemberAdded"
+      | "TaskSupervised";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

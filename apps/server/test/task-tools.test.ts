@@ -8,6 +8,7 @@ import {
   AttemptId,
   type CarriedItem,
   carriedFrom,
+  DelegationId,
   EMPTY_HOB_POLICY,
   type EventEnvelope,
   type TaskId,
@@ -534,6 +535,47 @@ describe("hob tools for Tasks and Quests", () => {
     });
     expect(retried.reason).toBe("concurrency-limit");
     expect((await tree()).tasks.find((each) => each.id === failing)?.state).toBe("failed");
+  });
+
+  // covers OR-005, OR-006
+  it("[TC-OR-1447-13] a lead's retry or reassign of a member's Task past its deadline is refused", async () => {
+    await run(seed);
+    // Pip's Task was given a minute on the first of the month, long past by now, and failed.
+    await delegate(ALDRIC, TOP, "Quill", "quest");
+    const late = TaskIdSchema.make("late");
+    const failed = await run(
+      TaskRepository.use((tasks) =>
+        Effect.gen(function* () {
+          const created = yield* tasks.createTask({
+            task: {
+              id: late,
+              ownerId: PIP,
+              parentId: TOP,
+              threadId,
+              brief: "Late work",
+              dependsOn: [],
+              createdAt: now,
+            },
+            delegation: {
+              id: DelegationId.make("d-late"),
+              brief: "Late work",
+              expectedOutput: null,
+              authority: { overrides: {}, folders: null },
+              timeoutMs: 60_000,
+            },
+            milestones: [],
+          });
+          return yield* tasks.moveTask(late, created.value.revision, "failed", now);
+        }).pipe(Effect.orDie),
+      ),
+    );
+    const input = { task_id: late, reason: "Try again", expected_revision: failed.value.revision };
+    const retried = await refused(ALDRIC, TOP, "retry_task", { key: "again", ...input });
+    expect(retried.reason).toBe("deadline-passed");
+    expect(retried.message).toContain("delegate_task");
+    const moved = await refused(ALDRIC, TOP, "reassign_task", { key: "move", hob: "Rook", ...input });
+    expect(moved.reason).toBe("deadline-passed");
+    expect((await tree()).tasks.find((each) => each.id === late)?.state).toBe("failed");
   });
 
   // covers OR-001, OR-003, OR-006

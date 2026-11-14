@@ -37,6 +37,7 @@ export * from "./skill-repositories.ts";
 export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export * from "./sqlite.ts";
+export * from "./supervision.ts";
 export * from "./task-tool-calls.ts";
 export * from "./tasks.ts";
 export * from "./thread-members.ts";

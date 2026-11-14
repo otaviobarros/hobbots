@@ -11,6 +11,7 @@ import {
   type AgentId,
   type Committed,
   cancelMoves,
+  deadlineOf,
   HUB_ACTOR,
   type IllegalTaskTransition,
   isLiveAttempt,
@@ -133,6 +134,22 @@ export class TaskControls extends Context.Service<
           return task === undefined || Option.isNone(found)
             ? Effect.fail(new TaskNotFound({ taskId }))
             : Effect.succeed({ task, tree: found.value });
+        });
+
+      /**
+       * Refused once the Task's deadline has passed (#1447): no turn starts on it, and the supervisor
+       * would stop it again, so what is left is given to a hob afresh instead.
+       */
+      const beforeDeadline = (task: Task) =>
+        Effect.gen(function* () {
+          const whole = yield* tasks.readTree(task.rootId);
+          const due = Option.isSome(whole) ? deadlineOf(task, whole.value) : null;
+          if (due === null || Date.parse(due) > Date.parse(yield* nowIso)) return;
+          return yield* new TaskNotControllable({
+            taskId: task.id,
+            reason: "deadline-passed",
+            message: `Task ${task.id} passed its deadline (${due}), so it cannot start again. Ask its lead to give what is left to a hob again.`,
+          });
         });
 
       /** The Task's hob, refused when it is retired: nobody can take its work. */
@@ -331,6 +348,7 @@ export class TaskControls extends Context.Service<
             yield* UserSession;
             const { task } = yield* subtree(taskId);
             yield* activeHob(task.ownerId).pipe(Effect.catchTag("AgentNotFound", () => Effect.void));
+            yield* beforeDeadline(task);
             yield* tasks
               .retryTask(task.id, task.revision, yield* nowIso)
               .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
@@ -347,6 +365,7 @@ export class TaskControls extends Context.Service<
             }
             const { task } = yield* subtree(taskId);
             if (task.ownerId === agentId && task.state !== "failed") return;
+            yield* beforeDeadline(task);
             yield* tasks
               .reassignTask(task.id, task.revision, agentId, yield* nowIso)
               .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));

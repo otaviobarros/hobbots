@@ -572,6 +572,13 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
   ),
 }) {}
 
+/**
+ * Whether you left the note: no lead sent it, and Hobbots did not write it either, as the
+ * supervisor's reports (#1447), which say what went wrong and ask nothing of the work.
+ */
+export const isNoteFromYou = (note: TaskNote): boolean =>
+  (note.senderId === undefined || note.senderId === null) && note.author?.kind !== "hub";
+
 export const ArtifactKind = Schema.Literals(["file", "link", "text"]);
 export type ArtifactKind = typeof ArtifactKind.Type;
 

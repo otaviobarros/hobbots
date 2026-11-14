@@ -49,6 +49,12 @@ export const isCancellingTask = (state: TaskState): boolean => state === "cancel
 /** Whether a Task ended with its result. */
 export const isCompletedTask = (state: TaskState): boolean => state === "completed";
 
+/** Whether a Task ended without its result: it failed, and only a retry or a reassign opens it again. */
+export const isFailedTask = (state: TaskState): boolean => state === "failed";
+
+/** Whether a Task waits in the queue for its next Attempt, as a retry or a reassign leaves it. */
+export const isQueuedTask = (state: TaskState): boolean => state === "queued";
+
 /** The result a Task returned: a short summary and the Attempt that produced it. */
 export const TaskResult = Schema.Struct({
   summary: Schema.String,
@@ -129,6 +135,9 @@ export const AttemptState = Schema.Literals([
 export type AttemptState = typeof AttemptState.Type;
 
 export const isLiveAttempt = (state: AttemptState): boolean => state === "starting" || state === "running";
+
+/** Whether an Attempt's turn failed: its runtime or the hub ended it with an error. */
+export const isFailedAttempt = (state: AttemptState): boolean => state === "failed";
 
 /** One attempt to do a Task's work, called Execution in the agent model. */
 export class Attempt extends Schema.Class<Attempt>("Attempt")({

@@ -2,6 +2,7 @@ import type { HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   type Agent,
   type DelegationAuthority,
+  deadlineOf,
   hobActor,
   isTerminalTask,
   liveAttemptOn,
@@ -50,8 +51,22 @@ const nothingRunning = (scope: CallScope, task: Task) =>
     : Effect.void;
 
 /**
+ * Refused once the Task's deadline has passed (#1447): no turn would start on it, and the supervisor
+ * would stop it again, so the lead delegates what is left afresh instead.
+ */
+const beforeDeadline = (scope: CallScope, task: Task) => {
+  const due = deadlineOf(task, scope.tree);
+  return due === null || Date.parse(due) > Date.parse(scope.at)
+    ? Effect.void
+    : refuse(
+        "deadline-passed",
+        `Task ${task.id} passed its deadline (${due}), so it cannot start again. Delegate what is left with delegate_task, with a time limit it can meet.`,
+      );
+};
+
+/**
  * The member's Task a lead's retry or reassign acts on: directly under one of the lead's, with no
- * turn running on it, at the revision the lead read.
+ * turn running on it, at the revision the lead read, and not past its deadline.
  */
 const controllable = (scope: CallScope, input: { readonly task_id: string; readonly expected_revision: number }) =>
   Effect.gen(function* () {
@@ -59,6 +74,7 @@ const controllable = (scope: CallScope, input: { readonly task_id: string; reado
     // A running turn moves the Task's revision on, so it is named first.
     yield* nothingRunning(scope, task);
     yield* sameRevision(task, input.expected_revision);
+    yield* beforeDeadline(scope, task);
     return task;
   });
 

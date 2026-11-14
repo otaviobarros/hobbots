@@ -48,6 +48,7 @@ import {
   SkillSource,
   SkillUse,
 } from "./skills.ts";
+import { Supervision } from "./supervision.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 import { ThreadMember } from "./thread-member.ts";
@@ -416,6 +417,8 @@ const WebFetched = Schema.TaggedStruct("WebFetched", { fetch: WebFetchRecord });
 const WebSettingsChanged = Schema.TaggedStruct("WebSettingsChanged", { settings: WebSettings });
 /** A hub setting that changes what hobs may do changed (#1357): who changed it, and before and after. */
 const SettingChanged = Schema.TaggedStruct("SettingChanged", { change: SettingChange });
+/** The supervisor acted on a Task (#1447): its record of the Task as the act left it. */
+const TaskSupervised = Schema.TaggedStruct("TaskSupervised", { supervision: Supervision });
 /** A hob's own web limits changed. */
 const HobWebLimitsChanged = Schema.TaggedStruct("HobWebLimitsChanged", { agentId: AgentId, limits: HobWebLimits });
 /** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
@@ -590,6 +593,7 @@ export const JournaledEvent = Schema.Union([
   WebSettingsChanged,
   HobWebLimitsChanged,
   SettingChanged,
+  TaskSupervised,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -732,6 +736,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   WebSettingsChanged: 1,
   HobWebLimitsChanged: 1,
   SettingChanged: 1,
+  TaskSupervised: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */
