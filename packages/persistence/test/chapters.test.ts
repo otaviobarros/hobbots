@@ -21,6 +21,7 @@ import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import chaptersMigration from "../src/migrations/0099_chapters.ts";
+import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1379 (ADR 037): a thread's transcript is split into chapters. The migration gives each
@@ -178,6 +179,8 @@ describe("0099_chapters", () => {
       yield* stored("empty", [], []);
 
       yield* chaptersMigration;
+      // Sessions now also name their hob (20261114005209_hob_sessions), which the hub reads them with.
+      yield* hobSessionsMigration;
 
       const repo = yield* HobbotsRepository;
       const chapters = yield* ChapterRepository;
@@ -218,15 +221,15 @@ describe("0099_chapters", () => {
     ]);
     // The session the thread kept goes on being resumed, in its one chapter.
     expect(result.threads[0]?.sessions).toEqual([
-      { runtime: "claude-code", sessionId: "s1", chapterId: lampsChapter, seenThrough: null },
+      { runtime: "claude-code", agentId: "ada", sessionId: "s1", chapterId: lampsChapter, seenThrough: null },
     ]);
     // Every old entry decodes, with the chapter its thread now has, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ThreadUpserted", 5],
+      ["ThreadUpserted", 7],
       ["MessageUpserted", 5],
       ["MessageUpserted", 5],
       ["MessageQueued", 2],
-      ["ThreadUpserted", 5],
+      ["ThreadUpserted", 7],
     ]);
     const payloads = result.entries.map((e) => e.payload);
     expect(payloads.flatMap((p) => ("message" in p ? [p.message.chapterId] : []))).toEqual([
@@ -562,7 +565,13 @@ describe("chapters in the database", () => {
           new Thread({
             ...stored,
             sessions: [
-              { runtime: "claude-code", sessionId: "s1", chapterId: first, seenThrough: MessageId.make("v4") },
+              {
+                runtime: "claude-code",
+                agentId: AgentId.make("ada"),
+                sessionId: "s1",
+                chapterId: first,
+                seenThrough: MessageId.make("v4"),
+              },
             ],
           }),
         );
@@ -652,6 +661,7 @@ describe("chapters in the database", () => {
         const live = read.liveChapterId as ChapterId;
         const session = {
           runtime: "claude-code" as const,
+          agentId: AgentId.make("ada"),
           sessionId: "s-before",
           chapterId: live,
           chapterMerges: read.liveChapterMerges,
@@ -677,7 +687,7 @@ describe("chapters in the database", () => {
     expect(result.read.liveChapterMerges).toBe(1);
     expect(result.after).toMatchObject({ liveChapterId: result.read.liveChapterId, liveChapterMerges: 2 });
     expect(result.after.sessions.map((s) => s.sessionId)).toEqual(["s-before"]);
-    expect(liveSession(result.after, "claude-code")).toBeUndefined();
-    expect(liveSession(result.fresh, "claude-code")?.sessionId).toBe("s-after");
+    expect(liveSession(result.after, "claude-code", AgentId.make("ada"))).toBeUndefined();
+    expect(liveSession(result.fresh, "claude-code", AgentId.make("ada"))?.sessionId).toBe("s-after");
   });
 });
