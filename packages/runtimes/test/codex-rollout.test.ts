@@ -8,6 +8,7 @@ import {
   ROLLOUT_CHUNK_BYTES,
   ROLLOUT_DRAIN_READS,
   ROLLOUT_READ_BYTES,
+  ROLLOUT_READ_LINES,
   ROLLOUT_REFUSALS_MAX,
   rolloutRefusals,
 } from "../src/codex/rollout.ts";
@@ -302,6 +303,29 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
       const kept = event._tag === "ToolDenied" ? [event.tool, event.label, event.reason].join(" ") : "";
       expect(kept).not.toContain(secret.slice(0, 8));
     }
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-19] a read parses only lines that may be a call, a bounded number of them, so a flooded rollout costs little", async () => {
+    const path = join(folder, "flood.jsonl");
+    writeFileSync(path, "");
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    // A full read of one-byte lines, then more lines that look like calls than one read parses.
+    const lookalike = `${line({ type: "function_call" })}`;
+    appendFileSync(
+      path,
+      `${"x\n".repeat(ROLLOUT_READ_BYTES / 2)}${lookalike.repeat(ROLLOUT_READ_LINES + 1)}${call("late", "github_comment", {})}${output("late", "unsupported call: github_comment")}`,
+    );
+    const started = Date.now();
+    await Effect.runPromise(refusals.read);
+    await Effect.runPromise(refusals.read);
+    // Two reads: the one-byte lines, then as many look-alikes as one read parses, and no further.
+    expect(reported).toEqual([]);
+    await Effect.runPromise(refusals.drain);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["late"]);
   });
 
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {

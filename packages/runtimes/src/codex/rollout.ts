@@ -25,6 +25,8 @@ import { refusedCallLabel } from "../tool-calls.ts";
 export const ROLLOUT_CHUNK_BYTES = 1024 * 1024;
 /** How much of the rollout one read takes at most; the rest waits for the next read. */
 export const ROLLOUT_READ_BYTES = 16 * ROLLOUT_CHUNK_BYTES;
+/** How many lines that may be a call or its output one read parses at most; the rest waits for the next read. */
+export const ROLLOUT_READ_LINES = 1024;
 /** How many reads the end of a turn takes at most to catch up, so a rollout gained a lot is read to its end. */
 export const ROLLOUT_DRAIN_READS = 16;
 /** How many refused calls one turn's rollout reports at most; past it a rollout the hob wrote adds none. */
@@ -46,6 +48,32 @@ const RUNTIME_TOOLS: ReadonlyMap<string, RuntimeToolName> = new Map([
   ["apply_patch", "file_edits"],
   ["view_image", "file_reads"],
 ]);
+
+/** What every line holding a call or its output has, as Codex writes it: its type, quoted, starting so. */
+const MARKERS = [Buffer.from('"function_call'), Buffer.from('"custom_tool_call')];
+
+/**
+ * Passes each line of `lines`, whole lines only, that holds a marker to `each`, while `budget` lasts,
+ * and returns how many bytes it read past: all of them, or up to the end of the last line it passed
+ * when the budget ran out. A line without a marker is never decoded, so a run of them costs a search.
+ */
+const scanLines = (lines: Buffer, budget: { lines: number }, each: (line: string) => void) => {
+  let at = 0;
+  // Where each marker is next found; one is searched for again only once the read has passed it.
+  const next = MARKERS.map((marker) => lines.indexOf(marker));
+  while (budget.lines > 0) {
+    for (const [index, marker] of MARKERS.entries())
+      if (next[index] !== -1 && (next[index] ?? -1) < at) next[index] = lines.indexOf(marker, at);
+    const hits = next.filter((hit) => hit !== -1);
+    if (hits.length === 0) return lines.length;
+    const hit = Math.min(...hits);
+    const stop = lines.indexOf(0x0a, hit);
+    each(lines.toString("utf8", lines.lastIndexOf(0x0a, hit) + 1, stop));
+    budget.lines -= 1;
+    at = stop + 1;
+  }
+  return at;
+};
 
 interface ResponseItem {
   readonly type?: unknown;
@@ -106,8 +134,9 @@ const labelOf = (
  *
  * The rollout lives in the session's Codex home, which the hob's commands can write, so it is read
  * as untrusted input (STD-SEC-002): never through a symlink or from anything but a regular file, a
- * bounded chunk at a time, at most a bounded amount per read, a line longer than a chunk skipped,
- * and a rollout that shrank read on from its new end.
+ * bounded chunk at a time, at most a bounded amount and a bounded number of parsed lines per read,
+ * only a line that may be a call or its output decoded, a line longer than a chunk skipped, and a
+ * rollout that shrank read on from its new end.
  */
 export const rolloutRefusals = (
   path: string | null | undefined,
@@ -148,44 +177,45 @@ export const rolloutRefusals = (
     const label = call?.label ?? labelOf(tool, runtimeTool, undefined, redact);
     return notOfferedDenial({ id, tool, label, runtimeTool });
   };
-  const refusedIn = (lines: ReadonlyArray<string>) => {
-    for (const line of lines) {
-      const item = itemOf(line);
-      if (item === null || typeof item.call_id !== "string") continue;
-      const id = clip(item.call_id, NOT_OFFERED_NAME_MAX);
-      if (item.type === "function_call" || item.type === "custom_tool_call") keep(id, item);
-      if (item.type !== "function_call_output" && item.type !== "custom_tool_call_output") continue;
-      const refusal = refusalOf(id, item.output);
-      if (refusal !== null) report(refusal);
-    }
+  /** Reports the refusal one line holds, if it is Codex's answer to a call it has no tool for. */
+  const readLine = (line: string) => {
+    const item = itemOf(line);
+    if (item === null || typeof item.call_id !== "string") return;
+    const id = clip(item.call_id, NOT_OFFERED_NAME_MAX);
+    if (item.type === "function_call" || item.type === "custom_tool_call") keep(id, item);
+    if (item.type !== "function_call_output" && item.type !== "custom_tool_call_output") return;
+    const refusal = refusalOf(id, item.output);
+    if (refusal !== null) report(refusal);
   };
   /**
-   * The whole lines appended past `from`, a chunk at a time and at most ROLLOUT_READ_BYTES of them,
-   * where the last of them ends, and whether the read stopped at that bound with more to read. A
-   * rollout that shrank is read on from its new end.
+   * Reads on from `offset`, a chunk at a time and at most ROLLOUT_READ_BYTES and ROLLOUT_READ_LINES of
+   * it, moving `offset` past each whole line it has read, and says whether it stopped at a bound with
+   * more to read. Only a line that may be a call or its output is decoded and parsed, as it is found,
+   * so what the hob writes costs at most a bounded amount of work per read. A rollout that shrank is
+   * read on from its new end.
    */
-  const appended = async (file: string, from: number) => {
+  const readFrom = async (file: string, from: number) => {
     const handle = await open(file, OPEN_FLAGS);
     try {
       const info = await handle.stat();
-      if (!info.isFile()) return { lines: [], end: from, more: false };
-      if (info.size < from) return { lines: [], end: info.size, more: false };
-      const lines: Array<string> = [];
+      if (!info.isFile()) return false;
+      if (info.size < from) {
+        offset = info.size;
+        return false;
+      }
       const buffer = Buffer.alloc(Math.min(ROLLOUT_CHUNK_BYTES, info.size - from));
+      const budget = { lines: ROLLOUT_READ_LINES };
       let end = from;
-      while (end < info.size && end - from < ROLLOUT_READ_BYTES) {
+      while (end < info.size && end - from < ROLLOUT_READ_BYTES && budget.lines > 0) {
         const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, info.size - end), end);
         if (bytesRead === 0) break;
         const whole = buffer.subarray(0, bytesRead).lastIndexOf(0x0a) + 1;
         // A line Codex is still writing waits for the next read; one longer than a chunk is skipped.
         if (whole === 0 && bytesRead < ROLLOUT_CHUNK_BYTES) break;
-        // A line at a time: a chunk the hob filled with empty lines must not become one call's arguments.
-        for (const line of buffer.subarray(0, whole).toString("utf8").split("\n"))
-          if (line.trim() !== "") lines.push(line);
-        end += whole === 0 ? bytesRead : whole;
+        end += whole === 0 ? bytesRead : scanLines(buffer.subarray(0, whole), budget, readLine);
+        offset = end;
       }
-      const more = end < info.size && end - from >= ROLLOUT_READ_BYTES;
-      return { lines, end, more };
+      return end < info.size && (end - from >= ROLLOUT_READ_BYTES || budget.lines === 0);
     } finally {
       await handle.close();
     }
@@ -194,16 +224,7 @@ export const rolloutRefusals = (
   const readOnce = Effect.suspend(() => {
     if (path == null || offset === null) return Effect.succeed(false);
     const from = offset;
-    return Effect.tryPromise(() => appended(path, from)).pipe(
-      Effect.flatMap(({ lines, end, more }) =>
-        Effect.sync(() => {
-          offset = end;
-          refusedIn(lines);
-          return more;
-        }),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
+    return Effect.tryPromise(() => readFrom(path, from)).pipe(Effect.orElseSucceed(() => false));
   });
   return {
     /** Starts reading where the rollout ends now, so only what this turn's run appends is read. */
