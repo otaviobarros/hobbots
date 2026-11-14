@@ -348,3 +348,45 @@ test("[TC-UX-1431-02] the camp sheet's tabs fit it without a sideways scroll, ho
   expect(close.x + close.width).toBeLessThanOrEqual(field.x + field.width - 4);
   expect(close.y).toBeGreaterThanOrEqual(field.y + 2);
 });
+
+// covers CH-001, ADR 037 (Records: CampSuggestion). Issue #1557: a suggestion takes one topic's
+// chapter, and Make a camp prefills the name the hub suggests, never "Chapter N".
+test("[TC-CH-1557-12] makes a camp from the suggested chapter alone, named as the hub suggests", async ({ page }) => {
+  const { url, aldric, api, hub } = await aldricHub();
+  const main = page.getByRole("main", { name: "Chat" });
+  await page.goto(`${url}/#/hobs/${aldric}/chat`);
+  await say(page, /^Message Aldric/, ["My cat is called Miso."]);
+  await say(page, /^Message Aldric/, ["Now the garden plans."]);
+  const chat = threadOf(page);
+  const garden = (
+    (await (
+      await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+    ).json()) as ReadonlyArray<Message>
+  ).find((message) => message.content === "Now the garden plans.");
+  const split = await fetch(`${url}/api/threads/${chat}/chapters/split`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...hub.headers },
+    body: JSON.stringify({ key: "garden", messageId: garden?.id, title: "Garden plans" }),
+  });
+  expect(split.status).toBe(200);
+  for (let n = 1; n <= 5; n++) {
+    await api("POST", `/threads/${chat}/decisions`, { key: `g${n}`, text: `Plant bed ${n}`, replaces: null });
+  }
+
+  // Under No AI the hub names the camp after the chapter's own title, with no goal.
+  const card = main.getByRole("region", { name: "Make Garden plans a camp?" });
+  await card.getByRole("button", { name: "Make it a camp" }).click();
+  const sheet = page.getByRole("dialog", { name: "Make a camp" });
+  await expect(sheet.getByRole("textbox", { name: "Name" })).toHaveValue("Garden plans");
+  await expect(sheet.getByRole("textbox", { name: /^Goal/ })).toHaveValue("");
+  await sheet.getByRole("button", { name: "Make the camp" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(main.locator("header").first()).toContainText("Garden plans");
+  await expect(main.getByText("Echo: Now the garden plans.")).toBeVisible();
+
+  // The chat keeps the talk from before the garden.
+  const left = (await (
+    await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+  ).json()) as ReadonlyArray<Message>;
+  expect(left.map((message) => message.content)).toEqual(["My cat is called Miso.", "Echo: My cat is called Miso."]);
+});

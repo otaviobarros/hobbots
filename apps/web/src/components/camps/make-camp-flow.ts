@@ -38,10 +38,13 @@ export type MakeCampEvent =
   | { readonly _tag: "Send"; readonly key: ThreadId }
   | { readonly _tag: "Failed"; readonly error: MakeCampError };
 
-/** A new camp's sheet, named `title`, with the chapter it is made from moving into it when `chapter`. */
-export const startMakeCamp = (title = "", chapter = false): MakeCamp => ({
+/**
+ * A new camp's sheet, named `title`, with `goal`, and the chapter it is made from moving into it when
+ * `chapter`.
+ */
+export const startMakeCamp = (title = "", chapter = false, goal = ""): MakeCamp => ({
   step: "editing",
-  draft: { title, goal: "", private: false, chapter },
+  draft: { title, goal, private: false, chapter },
   shown: new Set(),
 });
 

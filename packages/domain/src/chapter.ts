@@ -160,7 +160,7 @@ export class ChapterNotFound extends Schema.TaggedError<ChapterNotFound>()("Chap
 }) {}
 
 /** `text` as one line cut at `max` characters, marked with an ellipsis when cut; null when it has no text. */
-const oneLineUpTo = (text: string, max: number): string | null => {
+export const oneLineUpTo = (text: string, max: number): string | null => {
   const line = text.replace(/\s+/g, " ").trim();
   if (line.length === 0) return null;
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;

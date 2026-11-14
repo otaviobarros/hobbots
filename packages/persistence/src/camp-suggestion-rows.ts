@@ -25,6 +25,8 @@ export interface CampSuggestionRow {
   readonly threadId: string;
   readonly chapterId: string;
   readonly reasons: string;
+  readonly title: string | null;
+  readonly goal: string | null;
   readonly state: string;
   readonly raisedAt: string;
   readonly settledAt: string | null;
@@ -41,6 +43,8 @@ export const suggestionFromRow = (row: CampSuggestionRow) =>
     threadId: row.threadId,
     chapterId: row.chapterId,
     reasons: JSON.parse(row.reasons),
+    title: row.title,
+    goal: row.goal,
     state: row.state,
     raisedAt: row.raisedAt,
     settledAt: row.settledAt,
@@ -54,6 +58,8 @@ const suggestionColumns = (suggestion: CampSuggestion) => ({
   thread_id: suggestion.threadId,
   chapter_id: suggestion.chapterId,
   reasons: JSON.stringify(suggestion.reasons),
+  title: suggestion.title,
+  goal: suggestion.goal,
   state: suggestion.state,
   raised_at: suggestion.raisedAt,
   settled_at: suggestion.settledAt,
@@ -61,10 +67,17 @@ const suggestionColumns = (suggestion: CampSuggestion) => ({
   revision: suggestion.revision,
 });
 
-/** Writes a suggestion's new state, as a transition left it. */
+/** Writes a suggestion's new state, as a transition left it, with the camp's name and goal it offers. */
 export const settleSuggestion = (sql: SqlClient.SqlClient, suggestion: CampSuggestion) =>
   sql`UPDATE camp_suggestions SET state = ${suggestion.state}, settled_at = ${suggestion.settledAt},
-    camp_id = ${suggestion.campId}, revision = ${suggestion.revision} WHERE id = ${suggestion.id}`;
+    camp_id = ${suggestion.campId}, title = ${suggestion.title}, goal = ${suggestion.goal},
+    revision = ${suggestion.revision} WHERE id = ${suggestion.id}`;
+
+/** The suggestion `id`, in any state, or null. */
+export const suggestionById = (sql: SqlClient.SqlClient, id: CampSuggestionId) =>
+  sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE id = ${id}`.pipe(
+    Effect.map(([row]) => (row === undefined ? null : suggestionFromRow(row))),
+  );
 
 /** The chapter's suggestion, in any state, or null. */
 export const suggestionOfChapter = (sql: SqlClient.SqlClient, chapterId: ChapterId) =>
@@ -180,12 +193,11 @@ export const raiseCampSuggestions = (
     return raised;
   });
 
-/** The open suggestions a change's events end: a merged-away chapter's, and every one of a chat that closed. */
+/** The unsettled suggestions a change's events end: a merged-away chapter's, and every one of a chat that closed. */
 const endedSuggestions = (sql: SqlClient.SqlClient, event: JournaledEvent) => {
   const open = (where: Statement.Fragment) =>
-    sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE state = 'open' AND ${where} ORDER BY raised_at, id`.pipe(
-      Effect.map((rows) => rows.map(suggestionFromRow)),
-    );
+    sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE state IN ('pending', 'open') AND ${where}
+      ORDER BY raised_at, id`.pipe(Effect.map((rows) => rows.map(suggestionFromRow)));
   switch (event._tag) {
     case "ChapterMerged":
       return open(sql`chapter_id = ${event.absorbed}`);
@@ -199,7 +211,7 @@ const endedSuggestions = (sql: SqlClient.SqlClient, event: JournaledEvent) => {
 };
 
 /**
- * Expires the open suggestions a change's events end, at journal sequences from `first` on, and
+ * Expires the pending and open suggestions a change's events end, at journal sequences from `first` on, and
  * returns their `CampSuggestionExpired` events. Only for use within `sql.withTransaction`.
  */
 export const expireCampSuggestions = (

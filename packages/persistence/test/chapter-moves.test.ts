@@ -648,8 +648,16 @@ describe("camp suggestions", () => {
         for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS + 1; n++) {
           raised.push(suggested((yield* decide(CHAT, `d${n}`)).entries));
         }
+        // Raised pending (#1557): not offered, so not there to keep, until the hub offers it.
+        const pending = yield* suggestions.listOpen(CHAT);
+        const suggestion = raised[CAMP_SUGGESTION_DECISIONS - 1]?.[0] as CampSuggestion;
+        const keptPending = yield* Effect.exit(suggestions.keep(CHAT, suggestion.id, LATER));
+        yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [{ id: suggestion.id, title: "Launch", goal: null }],
+          raises: [],
+        });
         const open = yield* suggestions.listOpen(CHAT);
-        const suggestion = open[0] as CampSuggestion;
         const kept = yield* suggestions.keep(CHAT, suggestion.id, LATER);
         const keptAgain = yield* suggestions.keep(CHAT, suggestion.id, LATER);
         const afterKeep = suggested((yield* decide(CHAT, "d-more")).entries);
@@ -661,6 +669,8 @@ describe("camp suggestions", () => {
         const missing = yield* Effect.exit(suggestions.keep(CHAT, "nope" as CampSuggestion["id"], LATER));
         return {
           raised,
+          pending,
+          keptPending,
           open,
           kept,
           keptAgain,
@@ -675,10 +685,14 @@ describe("camp suggestions", () => {
     expect(result.raised.map((each) => each.length)).toEqual([0, 0, 0, 0, 1, 0]);
     expect(result.raised[CAMP_SUGGESTION_DECISIONS - 1]?.[0]).toMatchObject({
       threadId: CHAT,
-      state: "open",
+      state: "pending",
       reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
+      title: null,
+      goal: null,
     });
-    expect(result.open).toHaveLength(1);
+    expect(result.pending).toEqual([]);
+    expect(result.keptPending).toMatchObject(Exit.fail({ _tag: "CampSuggestionRefused", reason: "not-found" }));
+    expect(result.open).toMatchObject([{ state: "open", title: "Launch", goal: null }]);
     expect(result.kept.entries.map((entry) => entry.type)).toEqual(["CampSuggestionKept"]);
     expect(result.kept.value).toMatchObject({ state: "kept", settledAt: LATER });
     expect(result.keptAgain.entries).toEqual([]);
@@ -698,11 +712,14 @@ describe("camp suggestions", () => {
         const suggestions = yield* CampSuggestionRepository;
         // A second Quest in the live chapter reaches the quests threshold.
         const raisedBy: Array<string> = [];
+        const raised: Array<CampSuggestion> = [];
         for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++) {
           const started = yield* quest(`billing-${n}`);
+          raised.push(...suggested(started.entries));
           raisedBy.push(...suggested(started.entries).map((each) => each.reasons.map((r) => r.code).join()));
         }
-        const [open] = yield* suggestions.listOpen(CHAT);
+        // Still pending when its chapter moves: the move accepts it all the same.
+        const [open] = raised;
         const moved = yield* move(billing, intoNew());
         const keepAccepted = yield* Effect.exit(suggestions.keep(CHAT, (open as CampSuggestion).id, LATER));
 
@@ -714,16 +731,18 @@ describe("camp suggestions", () => {
         for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) yield* decide(CHAT, `late-${n}`);
         const merged = yield* chapters.mergeChapters(CHAT, ChapterId.make("late"));
 
-        // Closed: a suggestion in the merged chapter, then the chat is archived.
-        for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) yield* decide(CHAT, `more-${n}`);
-        const beforeArchive = yield* suggestions.listOpen(CHAT);
+        // Closed: a suggestion in the merged chapter, offered, then the chat is archived.
+        const beforeArchive: Array<CampSuggestion> = [];
+        for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) {
+          beforeArchive.push(...suggested((yield* decide(CHAT, `more-${n}`)).entries));
+        }
         const chat = Option.getOrThrow(yield* repo.findThread(CHAT));
         const archived = yield* repo.upsertThread(new Thread({ ...chat, state: "archived", archivedAt: LATER }));
         return { raisedBy, open, moved, keepAccepted, live, merged, beforeArchive, archived };
       }),
     );
     expect(result.raisedBy).toEqual(["quests"]);
-    expect(result.open).toMatchObject({ chapterId: "billing", state: "open" });
+    expect(result.open).toMatchObject({ chapterId: "billing", state: "pending" });
     const accepted = result.moved.entries.find((entry) => entry.type === "CampSuggestionAccepted");
     expect((accepted as { payload: { suggestion: CampSuggestion } }).payload.suggestion).toMatchObject({
       state: "accepted",
@@ -733,6 +752,85 @@ describe("camp suggestions", () => {
     expect(result.merged.entries.map((entry) => entry.type)).toEqual(["ChapterMerged", "CampSuggestionExpired"]);
     expect(result.beforeArchive).toHaveLength(1);
     expect(result.archived.entries.map((entry) => entry.type)).toEqual(["ThreadUpserted", "CampSuggestionExpired"]);
+  });
+
+  // covers ADR 037 (Records: CampSuggestion), #1557
+  it("[TC-CH-1557-11] offers a pending suggestion with its name and goal, withdraws one, and leaves one settled meanwhile", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { billing } = yield* chatWithTwoChapters;
+        const repo = yield* HobbotsRepository;
+        const suggestions = yield* CampSuggestionRepository;
+        const raised: Array<CampSuggestion> = [];
+        for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++)
+          raised.push(...suggested((yield* quest(`billing-${n}`)).entries));
+        const first = raised[0] as CampSuggestion;
+        const offered = yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [{ id: first.id, title: "Billing", goal: "Fix the invoices." }],
+          raises: [],
+        });
+        // Offered already, it is neither offered again nor withdrawn.
+        const again = yield* suggestions.recordRound(0, {
+          withdrawn: [first.id],
+          offers: [{ id: first.id, title: "Other", goal: null }],
+          raises: [],
+        });
+        const found = yield* suggestions.find(first.id);
+        // The first chapter: raised with the reasons given, then withdrawn.
+        const live = Option.getOrThrow(yield* repo.findThread(CHAT)).liveChapterId as ChapterId;
+        const resting = (yield* (yield* ChapterRepository).listChapters(CHAT)).find((c) => c.id !== live);
+        const drift = yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [],
+          raises: [{ chapterId: (resting as { id: ChapterId }).id, reasons: [{ code: "drift", count: 3 }] }],
+        });
+        const driftSuggestion = ((drift[0] as { payload: unknown }).payload as { suggestion: CampSuggestion })
+          .suggestion;
+        const withdrawn = yield* suggestions.recordRound(0, {
+          withdrawn: [driftSuggestion.id],
+          offers: [],
+          raises: [],
+        });
+        // A chapter withdrawn once is never raised again: it holds several topics.
+        const counted = yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [],
+          raises: [{ chapterId: (resting as { id: ChapterId }).id, reasons: null }],
+        });
+        return {
+          billing,
+          offered,
+          again,
+          found,
+          driftSuggestion,
+          withdrawn,
+          counted,
+          open: yield* suggestions.listOpen(CHAT),
+        };
+      }),
+    );
+    expect(result.offered.map((entry) => entry.type)).toEqual(["CampSuggestionOffered"]);
+    expect(
+      ((result.offered[0] as { payload: unknown }).payload as { suggestion: CampSuggestion }).suggestion,
+    ).toMatchObject({
+      state: "open",
+      title: "Billing",
+      goal: "Fix the invoices.",
+    });
+    expect(result.again).toEqual([]);
+    expect(Option.getOrThrow(result.found)).toMatchObject({
+      state: "open",
+      title: "Billing",
+      goal: "Fix the invoices.",
+    });
+    expect(result.driftSuggestion).toMatchObject({ state: "pending", reasons: [{ code: "drift", count: 3 }] });
+    expect(result.withdrawn.map((entry) => entry.type)).toEqual(["CampSuggestionExpired"]);
+    expect(
+      ((result.withdrawn[0] as { payload: unknown }).payload as { suggestion: CampSuggestion }).suggestion.state,
+    ).toBe("expired");
+    expect(result.counted).toEqual([]);
+    expect(result.open).toMatchObject([{ chapterId: result.billing, title: "Billing" }]);
   });
 
   /**

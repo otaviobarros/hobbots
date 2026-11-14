@@ -18,11 +18,17 @@ export const chapterName = (chapter: Chapter): string =>
 const reasonsOf = (suggestion: CampSuggestion): ReadonlyArray<string> =>
   suggestion.reasons.map((reason) => copy.reason[reason.code](reason));
 
-/** What Make a camp moves for a suggestion: its chapter and why it was suggested. */
-const suggestedFrom = (suggestion: CampSuggestion, chapter: Chapter): CampFrom => ({
+/**
+ * What Make a camp moves for a suggestion: its chapter and why it was suggested, with the camp's name
+ * and goal the hub suggests, which it prefills (#1557). One raised before them takes the chapter's own
+ * title, never its number.
+ */
+export const suggestedFrom = (suggestion: CampSuggestion, chapter: Chapter): CampFrom => ({
   chapter,
   title: chapterName(chapter),
   detail: formatList(reasonsOf(suggestion)),
+  name: suggestion.title ?? chapter.title ?? "",
+  goal: suggestion.goal ?? "",
 });
 
 /**
@@ -89,7 +95,7 @@ function SuggestionCard({
   onMake: () => void;
   onKeep: () => void;
 }) {
-  const heading = copy.heading({ title: chapterName(chapter) });
+  const heading = copy.heading({ title: suggestion.title ?? chapterName(chapter) });
   return (
     <section
       aria-label={heading}

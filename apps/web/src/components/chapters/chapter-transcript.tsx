@@ -126,6 +126,8 @@ export function ChapterTranscript({
                     chapter: section.chapter,
                     title: chapterName(section.chapter),
                     detail: campCopy.suggestion.messages({ count: section.messages.length }),
+                    // A chapter nobody named leaves the camp's name for you, never "Chapter N" (#1557).
+                    name: section.chapter.title ?? "",
                   })
               : undefined
           }

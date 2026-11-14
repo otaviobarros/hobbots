@@ -11,6 +11,7 @@ import {
   CampDrift,
   CampSuggestionService,
   CatchUps,
+  ChapterBreaks,
   ChapterService,
   ChapterSummaries,
   ChapterToolsLive,
@@ -97,6 +98,7 @@ import {
   BriefLogLive,
   CampSuggestionRepositoryLive,
   CatchUpRepositoryLive,
+  ChapterBreakRepositoryLive,
   ChapterRepositoryLive,
   ChapterSummaryLogLive,
   CharmCallsLive,
@@ -385,6 +387,7 @@ const ServerLive = Layer.unwrap(
       ChapterSummaryLogLive.pipe(Layer.provide(EventJournal.layer)),
       // Camp suggestions: Keep in chat, and the camp drift projector's cursor (ADR 037).
       CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
+      ChapterBreakRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
       // Each chat's and camp's brief, and the brief projector's cursor (ADR 037).
       BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
       // The find index's rows, and the find projector's cursor (ADR 037).
@@ -587,8 +590,11 @@ const ServerLive = Layer.unwrap(
             memoryPageLayer(config, PageStore),
             // Each chapter that comes to rest gets its one-line summary, which the pack reads (ADR 037).
             ChapterSummaries.layer,
-            // A chat chapter that comes to rest may be suggested as a camp by the hub's brain (ADR 037).
+            // A chat chapter that comes to rest may be suggested as a camp by the hub's brain (ADR 037),
+            // and every suggestion is checked for one topic and named before it is offered (#1557).
             CampDrift.layer,
+            // A person's message that opens a new topic starts the chat's next chapter (ADR 039, #1557).
+            ChapterBreaks.layer,
             // Each chat and camp gets its brief at chapter ends and Quest steps, which the pack reads (ADR 037).
             CampBriefs.layer,
             // Every chat's and camp's decisions, artifacts and chapters go in the find index (ADR 037).

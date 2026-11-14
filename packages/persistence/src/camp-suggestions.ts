@@ -1,26 +1,30 @@
-import { CampSuggestionRepository, type DriftRaise } from "@hobbots/agents";
+import { CampSuggestionRepository, type SuggestionRound } from "@hobbots/agents";
 import {
   CampSuggestion,
+  type CampSuggestionEvent,
   type CampSuggestionId,
   type CampSuggestionRefused,
+  CampSuggestions,
   type JournaledEvent,
   planKeep,
   type ThreadId,
 } from "@hobbots/domain";
-import { DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import {
   type CampSuggestionRow,
   raiseSuggestion,
   settleSuggestion,
+  suggestionById,
   suggestionFromRow,
 } from "./camp-suggestion-rows.ts";
 import { EventJournal, makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
 // Camp suggestions' store (ADR 037, migration 0104): Keep in chat, the chat's open suggestions, and
-// the camp drift projector's cursor and the suggestions it raises. The threshold rule raises its own
-// in the journal's transaction (`raiseCampSuggestions`).
+// the camp suggestion projector's cursor and what it writes: the drift suggestions it raises, and the
+// pending ones it offers or withdraws (#1557). The threshold rule raises its own, pending, in the
+// journal's transaction (`raiseCampSuggestions`).
 
 const PROJECTOR = "camp-drift";
 
@@ -53,12 +57,31 @@ export const CampSuggestionRepositoryLive = Layer.effect(
     const driftCursor = sql<{ readonly sequence: unknown }>`SELECT sequence FROM projector_cursors
       WHERE name = ${PROJECTOR}`.pipe(Effect.map(([row]) => Number(row?.sequence ?? 0)));
 
-    const recordDrift = (sequence: number, raises: ReadonlyArray<DriftRaise>) =>
+    const recordRound = (sequence: number, round: SuggestionRound) =>
       change<void, never>((first) =>
         Effect.gen(function* () {
           const at = DateTime.formatIso(yield* DateTime.now);
           const events: Array<JournaledEvent> = [];
-          for (const raise of raises) {
+          // A pending suggestion settled meanwhile, as when its chapter moved, is left as it is.
+          const settle = (
+            id: CampSuggestionId,
+            event: CampSuggestionEvent,
+            tag: "CampSuggestionOffered" | "CampSuggestionExpired",
+          ) =>
+            Effect.gen(function* () {
+              const suggestion = yield* suggestionById(sql, id);
+              if (suggestion === null) return;
+              const next = CampSuggestions.transition(suggestion, event);
+              if (!(next instanceof CampSuggestion)) return;
+              const written = new CampSuggestion({ ...next, revision: first + events.length });
+              yield* settleSuggestion(sql, written);
+              events.push({ _tag: tag, threadId: written.threadId, suggestion: written });
+            });
+          for (const id of round.withdrawn) yield* settle(id, { _tag: "Withdraw", at }, "CampSuggestionExpired");
+          for (const offer of round.offers) {
+            yield* settle(offer.id, { _tag: "Offer", title: offer.title, goal: offer.goal }, "CampSuggestionOffered");
+          }
+          for (const raise of round.raises) {
             const suggestion = yield* raiseSuggestion(sql, raise.chapterId, raise.reasons, first + events.length, at);
             if (suggestion !== null) events.push({ _tag: "CampSuggested", threadId: suggestion.threadId, suggestion });
           }
@@ -72,9 +95,10 @@ export const CampSuggestionRepositoryLive = Layer.effect(
     return CampSuggestionRepository.of({
       listOpen: (threadId) => sqlOrDie(listOpen(threadId)),
       keep,
+      find: (id) => sqlOrDie(suggestionById(sql, id).pipe(Effect.map(Option.fromNullishOr))),
       driftCursor: sqlOrDie(driftCursor),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),
-      recordDrift,
+      recordRound,
     });
   }),
 );

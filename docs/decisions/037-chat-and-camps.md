@@ -37,7 +37,7 @@ Message, hob, Task and Attempt states are already explicit: pure transitions tha
 
 - A `Chapter` has `threadId`, `number`, `title`, a one-line `summary`, `startedAt`, `endedAt` and `movedTo`. `ChapterState` is live, resting or moved. Exactly one chapter per thread is live.
 - Every message belongs to one chapter (`Message.chapterId`). The migration gives each thread one chapter holding its history.
-- **The hob ends a chapter.** It calls `start_chapter` with a title when the topic changes. The tool is a hub tool on every runtime: Claude Code, Codex and the fake runtime. You can split or merge chapters in the UI. A hub rule may suggest a split; it never splits on its own.
+- **The hob ends a chapter.** It calls `start_chapter` with a title when the topic changes. The tool is a hub tool on every runtime: Claude Code, Codex and the fake runtime. You can split or merge chapters in the UI. The hub starts chapters on its own too, when a message opens a new topic (see the amendment for [#1557](https://github.com/otaviobarros/hobbots/issues/1557)).
 - **A runtime session belongs to one chapter.** `RuntimeSession` is keyed by thread, runtime and chapter. A new chapter starts a new session, seeded from records. Resuming stays inside a chapter. Replaying the transcript stays only for a brain switch inside a live chapter (ADR 017).
 - **Moving a chapter into a camp moves it.** One command changes the chapter's `threadId`, with its decisions, artifacts, open questions and the quests started in it, in one transaction. The chat keeps a stub that links to the camp. Nothing is copied, so nothing is ever in two places. A running quest moves whole.
 
@@ -224,6 +224,14 @@ Building the claims register settled these details.
 - **Expiry and hand-off.** A claim can lapse after a time, and a waiting Task can take it once it is released.
 
 `ClaimMachine`, the register, clash items in the backpack and release when a Task ends stay as they are; the space and the shape replace the fixed scope list.
+
+## Amendment: chapters that start on their own, and suggestions of one topic ([#1557](https://github.com/otaviobarros/hobbots/issues/1557))
+
+A camp made from a suggestion took a whole chat: the chapters migration put each thread's history in one chapter, and only the hob started chapters, so later topics stayed in it too. ADR 039 says chapters run on their own; this builds that, and settles these details.
+
+- **The hub starts chapters.** "A hub rule may suggest a split; it never splits on its own" no longer holds. When a person's message in an open chat opens a new topic, the hub starts the chat's next chapter at that message, as Split here does, under the thread's hob lock. The hub's brain judges each message; under No AI, or when its answer does not decode, a named rule does: a message after the chat sat idle for `CHAPTER_BREAK_IDLE_MINUTES` (180) starts one. The hob's `start_chapter`, Split here and Merge with previous stay as they are.
+- **A suggestion is pending first.** The threshold rule and the drift judgment raise a suggestion `pending`. Before it is offered, the hub checks that its chapter holds one topic and names the camp. A chapter that holds several, such as a migrated history chapter, is never offered whole: the hub splits off its last topic, at the line the brain names or, under No AI, at its last idle gap, withdraws the suggestion, and suggests that part only if it reaches a threshold on its own.
+- **The hub suggests the name and goal.** An offered suggestion carries the camp's `title` and one-line `goal`, which Make a camp prefills and you can change. The brain draws them from the topic; under No AI, or on a fallback, the name is the chapter's own title and there is no goal. Neither is ever "Chapter N".
 
 ## Validation
 
