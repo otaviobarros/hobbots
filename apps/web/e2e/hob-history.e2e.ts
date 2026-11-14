@@ -145,3 +145,76 @@ test("[TC-AG-411-04] History and the Changes log show who changed a hob and what
   await expect(log.getByRole("listitem")).toHaveCount(5);
   await expect(log.getByRole("listitem").first().getByText("Paused", { exact: true })).toBeVisible();
 });
+
+// covers #1352 (answers an earlier Summoning change dropped are shown to restore, never restored silently)
+test("[TC-UX-1352-03] History offers to restore the answers a Summoning change dropped, shows it working and failing, and restores them as yours", async ({
+  page,
+  scan,
+}) => {
+  const current = await startHub(dataDir);
+  hub = current;
+  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ada = await api<Hob>(current, "POST", "/api/agents", hobPayload("Ada"));
+  const pip = await api<Hob>(current, "POST", "/api/agents", hobPayload("Pip"));
+  await api(current, "PATCH", `/api/agents/${pip.id}/permissions`, {
+    overrides: { push: "deny", "delete-files": "deny", "use-web": "ask" },
+  });
+  // Version 3 keeps only Use the web: the page is told Ada made it through Summoning, as a change
+  // that set one answer did before #1352, dropping Push and Delete files.
+  await api(current, "PATCH", `/api/agents/${pip.id}/permissions`, { overrides: { "use-web": "ask" } });
+  const byAda = { _tag: "Hob", hobId: ada.id, call: { scope: "task:hire", key: "k1" } };
+  const asAda = (change: Change): Change =>
+    change.hobId === pip.id && change._tag === "Version" && change.config?.version === 3
+      ? {
+          ...change,
+          actor: byAda,
+          origin: { charm: "Summoning", taskId: "hire", threadId: null, messageId: null },
+          config: { ...change.config, actor: byAda },
+        }
+      : change;
+  await page.route(/\/api\/agents\/[^/]+\/changes$/, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: ((await response.json()) as ReadonlyArray<Change>).map(asAda) });
+  });
+
+  // The first Restore fails; the second waits until the test lets it through.
+  let attempts = 0;
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/api\/agents\/[^/]+\/permissions$/, async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    attempts += 1;
+    if (attempts === 1) return route.fulfill({ status: 500, json: { _tag: "Unavailable", message: "down" } });
+    await held;
+    return route.fallback();
+  });
+
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile?tab=history`);
+  const history = page.getByRole("list", { name: "History" });
+  const dropped = history.getByRole("listitem").first();
+  await expect(dropped.getByText("Version 3", { exact: true })).toBeVisible();
+  await expect(
+    dropped.getByText(
+      "This change also dropped answers it did not name: Delete files: Never, Push your work: Never. Those operations fell back to your preset.",
+    ),
+  ).toBeVisible();
+  await scan();
+
+  const restore = dropped.getByRole("button", { name: "Restore them" });
+  await restore.click();
+  await expect(dropped.getByRole("alert")).toHaveText("Hobbots could not restore these answers.");
+  await restore.click();
+  await expect(dropped.getByRole("button", { name: "Restoring…" })).toBeDisabled();
+  release();
+
+  const restored = history.getByRole("listitem").first();
+  await expect(restored.getByText("Version 4", { exact: true })).toBeVisible();
+  await expect(restored.getByText("By you", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore them" })).toHaveCount(0);
+  const [saved] = (
+    await api<ReadonlyArray<Hob & { policy: { overrides: object } }>>(current, "GET", "/api/agents")
+  ).filter((h) => h.id === pip.id);
+  expect(saved?.policy.overrides).toEqual({ push: "deny", "delete-files": "deny", "use-web": "ask" });
+});
