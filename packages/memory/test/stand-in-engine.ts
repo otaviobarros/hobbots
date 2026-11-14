@@ -8,8 +8,10 @@ import { AI_MEMORY_VERSION } from "../src/engine/release.ts";
  * A stand-in for the ai-memory binary, so the supervisor's tests need no download: it prints the
  * pinned version, and `serve` answers `/healthz` on the address it is given. Each start appends
  * its pid, environment and arguments to `starts.jsonl` in its data folder. A `crash` file there
- * makes the next start exit at once with code 3; a `hang` file makes it stop answering. Its backup
- * route answers the root bearer with `stand-in-backup.tar.gz` from its data folder.
+ * makes the next start exit at once with code 3; a `hang` file makes it stop answering. Its status
+ * route answers the root bearer, unless a `foreign` file there makes it refuse every bearer, as
+ * another hub's engine would. Its backup route answers the root bearer with
+ * `stand-in-backup.tar.gz` from its data folder.
  */
 const SCRIPT = `#!${process.execPath}
 const { appendFileSync, createReadStream, existsSync } = require("node:fs");
@@ -32,6 +34,11 @@ createServer((request, response) => {
     }
     response.writeHead(200, { "content-type": "application/gzip" });
     return createReadStream(archive).pipe(response);
+  }
+  if (request.url === "/admin/status") {
+    const root = request.headers.authorization === "Bearer " + process.env.AI_MEMORY_AUTH_TOKEN;
+    response.writeHead(root && !existsSync(join(data, "foreign")) ? 200 : 401, { "content-type": "application/json" });
+    return response.end("{}");
   }
   response.writeHead(request.url === "/healthz" ? 200 : 404, { "content-type": "application/json" });
   response.end('{"status":"ok"}');

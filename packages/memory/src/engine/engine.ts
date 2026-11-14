@@ -233,6 +233,21 @@ const run = (options: MemoryEngineOptions) =>
         Effect.orElseSucceed(() => false),
       );
 
+    /**
+     * Whether the engine on `url` is the one this start launched: it takes this hub's root bearer.
+     * The port is free when it is picked but not held until the engine binds it, so another engine
+     * started meanwhile can hold it and answer `/healthz` while this one fails to bind. Counting
+     * that one as started would send every request to an engine that refuses this hub's bearers.
+     */
+    const ours = (url: string) =>
+      http
+        .get(`${url}/admin/status`, { headers: { authorization: `Bearer ${Redacted.value(options.keys.root)}` } })
+        .pipe(
+          Effect.map((response) => response.status === 200),
+          Effect.timeout("2 seconds"),
+          Effect.orElseSucceed(() => false),
+        );
+
     const writeConfig = Effect.gen(function* () {
       const text = renderEngineConfig(yield* Ref.get(settings), modelUrl);
       // The rendered config never holds one; this guards against a future setting that would.
@@ -305,9 +320,9 @@ const run = (options: MemoryEngineOptions) =>
           Effect.orElseSucceed(() => null),
         );
 
-        // Starting: answers, exits, or runs out of time.
+        // Starting: answers as this start's engine, exits, or runs out of time.
         const started = yield* Effect.raceFirst(
-          answers(url).pipe(
+          ours(url).pipe(
             Effect.repeat({ schedule: Schedule.spaced("200 millis"), until: (ok) => ok }),
             Effect.as("answered" as const),
           ),

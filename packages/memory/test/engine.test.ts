@@ -272,6 +272,25 @@ describe("the supervised engine", () => {
   }, 20_000);
 
   // covers ADR 028
+  it("[TC-GEN-1530-01] counts as started only an engine that takes the hub's own bearer, not another that answers its port", async () => {
+    const dataDir = tempFolder("hobbots-data-");
+    mkdirSync(join(dataDir, "memory"), { recursive: true });
+    // Every start answers `/healthz` but refuses this hub's bearer, as another hub's engine on the port would.
+    writeFileSync(join(dataDir, "memory", "foreign"), "");
+    await withEngine({ dataDir, startTimeout: "500 millis" }, (engine) =>
+      Effect.gen(function* () {
+        yield* until(engine, (each) => each.restarts >= 1);
+        expect((yield* engine.health).state).not.toBe("running");
+        expect(Option.isNone(yield* engine.endpoint)).toBe(true);
+
+        rmSync(join(dataDir, "memory", "foreign"));
+        yield* until(engine, (each) => each.state === "running");
+        expect(Option.isSome(yield* engine.endpoint)).toBe(true);
+      }),
+    );
+  });
+
+  // covers ADR 028
   it("[TC-GEN-181] restarts only the engine's process when its settings change", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
