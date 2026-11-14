@@ -62,6 +62,7 @@ const BALANCED_WITH_GITHUB = {
   "github.read": "allow",
   "github.open-pull-request": "ask",
   "github.comment": "ask",
+  "github.open-issue": "ask",
 };
 
 const hob = {

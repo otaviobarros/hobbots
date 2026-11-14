@@ -80,6 +80,11 @@ const FakeGitHub = Layer.succeed(
     gitObject: () => Effect.die("not written in these tests"),
     rateLimit: () => Effect.die("not written in these tests"),
     comment: () => Effect.die("not written in these tests"),
+    label: () => Effect.die("not written in these tests"),
+    openIssue: () => Effect.die("not written in these tests"),
+    issuesSince: () => Effect.die("not written in these tests"),
+    addSubIssue: () => Effect.die("not written in these tests"),
+    subIssues: () => Effect.die("not written in these tests"),
   }),
 );
 
