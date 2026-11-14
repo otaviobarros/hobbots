@@ -54,7 +54,7 @@ interface Start {
 interface Runtime {
   readonly starts: Array<Start>;
   readonly gates: Array<Deferred.Deferred<void>>;
-  /** How many turns the runtime is running now: asked for, not yet finished, stopped or cut off. */
+  /** How many turns the runtime is running now: started, not yet finished, stopped or cut off. */
   live: number;
   /** How many deliveries of backpack work the dispatcher has under way, each until its turn ended. */
   delivering: number;
@@ -93,9 +93,13 @@ const gated = (runtime: Runtime) =>
           });
           const gate = Deferred.makeUnsafe<void>();
           runtime.gates.push(gate);
-          runtime.live += 1;
-          return Stream.unwrap(Effect.as(Deferred.await(gate), fake.sendPrompt(request))).pipe(
-            Stream.ensuring(Effect.sync(() => (runtime.live -= 1))),
+          // Counted while its stream runs: a hub disposed between asking and running never runs it.
+          const counting = Effect.acquireRelease(
+            Effect.sync(() => (runtime.live += 1)),
+            () => Effect.sync(() => (runtime.live -= 1)),
+          );
+          return Stream.unwrap(
+            counting.pipe(Effect.andThen(Deferred.await(gate)), Effect.as(fake.sendPrompt(request))),
           );
         },
       });
