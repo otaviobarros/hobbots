@@ -75,6 +75,7 @@ function SheetBody({ camp, report, hobs }: { camp: Thread; report: MembersReport
   const shown = shownMembers(report.members, camp.agentId);
   const hobMembers = shown.filter((member) => member.actor.kind === "hob");
   const people = shown.filter((member) => member.actor.kind === "user");
+  const answering = hobMembers.filter(ThreadMembers.isActive).length;
   return (
     <>
       <SheetHeader>
@@ -87,7 +88,8 @@ function SheetBody({ camp, report, hobs }: { camp: Thread; report: MembersReport
         <SheetTitle>{camp.title}</SheetTitle>
         {camp.goal !== null && <span className="text-ui text-text-secondary">{copy.goal({ goal: camp.goal })}</span>}
       </div>
-      <p className="m-0 text-meta text-label">{hobMembers.length > 1 ? copy.several : copy.one}</p>
+      {/* Who answers is decided over the active hobs only, as the hub decides it (ADR 039, Who answers). */}
+      <p className="m-0 text-meta text-label">{answering > 1 ? copy.several : copy.one}</p>
       <HobsSection camp={camp} report={report} hobs={hobs} members={hobMembers} />
       <PeopleSection report={report} members={people} />
       <CostSection report={report} hobs={hobs} members={hobMembers} />

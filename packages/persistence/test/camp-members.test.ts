@@ -282,7 +282,7 @@ describe("a camp's hobs", () => {
   });
 
   // covers ADR 039 (Cards every thread shares: Status and cost)
-  it("[TC-PE-1467-05] counts each hob's own settled replies and tokens in the camp for the period, and when it last answered there", async () => {
+  it("[TC-PE-1467-05] counts each hob's own settled replies, passed turns and tokens in the camp for the period, and when it last answered there", async () => {
     const usage = (input: number, output: number): ReplyUsage => ({
       timeToRequestMs: 5,
       timeToFirstStreamMs: 15,
@@ -321,12 +321,24 @@ describe("a camp's hobs", () => {
         ]) {
           yield* repo.upsertMessage(message);
         }
+        // A turn Quill passed left no reply, but what it used counts; it answered nothing, so it sets no time.
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO passed_turns ${sql.insert({
+          reply_id: "r-6",
+          thread_id: CAMP,
+          agent_id: QUILL,
+          created_at: "2026-11-14T10:00:00.000Z",
+          input_tokens: 4,
+          output_tokens: 6,
+          cache_read_tokens: 0,
+          cache_write_tokens: 0,
+        })}`;
         return yield* ledger.threadUsage(CAMP, "2026-11-14T00:00:00.000Z", "2026-11-14T12:00:00.000Z");
       }),
     );
     expect(result).toEqual([
       { hobId: PIP, turns: 2, tokens: 30, unreported: 1, lastAnsweredAt: "2026-11-14T09:20:00.000Z" },
-      { hobId: QUILL, turns: 1, tokens: 300, unreported: 0, lastAnsweredAt: "2026-11-14T09:00:00.000Z" },
+      { hobId: QUILL, turns: 2, tokens: 310, unreported: 0, lastAnsweredAt: "2026-11-14T09:00:00.000Z" },
     ]);
   });
 });

@@ -160,6 +160,10 @@ export class UsageLedger extends Context.Service<
                   FROM messages m JOIN threads t ON t.id = m.thread_id
                   WHERE m.thread_id = ${threadId} AND ${sql.literal(SETTLED)}
                     AND m.created_at >= ${since} AND m.created_at < ${until}
+                  UNION ALL
+                  SELECT p.agent_id, p.input_tokens, p.output_tokens, p.cache_read_tokens, p.cache_write_tokens
+                  FROM passed_turns p
+                  WHERE p.thread_id = ${threadId} AND p.created_at >= ${since} AND p.created_at < ${until}
                 ) s
                 GROUP BY s.hob_id`,
               sql<Record<string, unknown>>`

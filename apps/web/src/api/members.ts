@@ -34,8 +34,8 @@ const membersChanged = async (queryClient: QueryClient, threadId: ThreadId) => {
 };
 
 /**
- * The threads whose members sheets an event changes: a member's, that of a hob's reply that settled,
- * or both threads of a chapter that moved, whose replies count where they now are.
+ * The threads whose members sheets an event changes: a member's, that of a hob's reply that settled
+ * or turn it passed, or both threads of a chapter that moved, whose replies count where they now are.
  */
 const changedThreads = (event: HobbotsEvent): ReadonlyArray<ThreadId> => {
   if (event._tag === "ChapterMoved") return [event.thread.id, event.camp.id];
@@ -45,6 +45,8 @@ const changedThreads = (event: HobbotsEvent): ReadonlyArray<ThreadId> => {
 
 const changedThread = (event: HobbotsEvent): ThreadId | null => {
   if (event._tag === "ThreadMemberAdded" || event._tag === "ThreadMemberChanged") return event.member.threadId;
+  // A passed turn leaves no reply, but what it used still counts here.
+  if (event._tag === "TurnPassed") return event.threadId;
   // A reply counts once it settles: streaming updates change no total.
   if (event._tag === "MessageUpserted" && event.message.role === "assistant") {
     const status = event.message.status;

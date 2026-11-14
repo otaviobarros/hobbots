@@ -31,10 +31,13 @@ const reread = async (event: HobbotsEvent) => {
 
 describe("applyMembersEvent", () => {
   // covers ADR 039 (Cards every thread shares: Status and cost), #1467
-  it("[TC-CH-1467-07] reads both threads' members again when a chapter moves between them, cancelling first", async () => {
+  it("[TC-CH-1467-07] reads both threads' members again when a chapter moves between them, and a camp's after a turn passed there, cancelling first", async () => {
     const chat = thread("chat", "chat");
     const camp = thread("camp", "camp");
     const moved = { _tag: "ChapterMoved", threadId: chat.id, thread: chat, camp } as unknown as HobbotsEvent;
     expect(await reread(moved)).toEqual(["cancel:chat", "cancel:camp", "invalidate:chat", "invalidate:camp"]);
+    // A turn passed in the camp counts there, though it leaves no reply.
+    const passed = { _tag: "TurnPassed", threadId: camp.id } as unknown as HobbotsEvent;
+    expect(await reread(passed)).toEqual(["cancel:camp", "invalidate:camp"]);
   });
 });
