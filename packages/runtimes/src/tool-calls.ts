@@ -693,7 +693,7 @@ const gitFoldersWhere = (
   input: Record<string, unknown>,
   cwd: string,
   home: string,
-  matches: (sub: string, rest: ReadonlyArray<string>) => boolean,
+  matches: (sub: string, rest: ReadonlyArray<string>, settings: ReadonlyArray<string>) => boolean,
   every = false,
 ): ReadonlyArray<string> => {
   const found = new Set<string>();
@@ -713,7 +713,7 @@ const gitFoldersWhere = (
       if (program === "git") {
         const git = gitFolders(args, folder, home);
         const sub = args[git.sub];
-        if (sub !== undefined && matches(sub, args.slice(git.sub + 1)))
+        if (sub !== undefined && matches(sub, args.slice(git.sub + 1), git.settings))
           for (const reached of every ? git.folders : git.folders.slice(0, 1)) found.add(reached);
       } else {
         const nested = nestedLine(program, args);
@@ -773,7 +773,10 @@ const BRANCH_MOVES = new Set(["-f", "--force", "-d", "-D", "--delete", "-m", "-M
 /** `git stash` forms that only read. */
 const STASH_READS = new Set(["list", "show", "create"]);
 
-const rewritesTree = (sub: string, rest: ReadonlyArray<string>) => {
+const rewritesTree = (sub: string, rest: ReadonlyArray<string>, settings: ReadonlyArray<string>) => {
+  // A setting given on the line, such as `-c remote.origin.fetch=...:refs/heads/taken`, can make
+  // any subcommand write where its words don't say, so the line is read as a rewrite.
+  if (settings.length > 0) return true;
   if (sub === "branch") return rest.some((word) => BRANCH_MOVES.has(word));
   // A fetch whose refspec names where it lands, such as `HEAD:refs/heads/taken`, may move a local branch.
   if (sub === "fetch")

@@ -285,6 +285,7 @@ describe("what a call writes", () => {
     expect(bash("git switch taken && git commit -am x")).toEqual([project]);
     expect(bash("git branch -f taken HEAD")).toEqual([project]);
     expect(bash("git fetch --force origin HEAD:refs/heads/taken")).toEqual([project]);
+    expect(bash("git -c remote.origin.fetch=+refs/heads/main:refs/heads/taken fetch origin")).toEqual([project]);
     // A subcommand not known to leave the working tree alone is read as one that may rewrite it.
     expect(bash("git frobnicate")).toEqual([project]);
     // Every reset may move the checked-out branch, `--soft` and the default mode included.
