@@ -164,6 +164,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       pin: ({ params, payload }) => chat.setPinned(params.threadId, payload.pinned),
       setPrivate: ({ params, payload }) => chat.setPrivate(params.threadId, payload.private),
       markRead: ({ params, payload }) => chat.markRead(params.threadId, payload.messageId, payload.revision),
+      unreadThreads: () => chat.unreadThreads,
       archive: ({ params }) => chat.archive(params.threadId),
       restore: ({ params }) => chat.restore(params.threadId),
       startFresh: ({ params, payload }) => chat.startFresh(params.threadId, payload.key),

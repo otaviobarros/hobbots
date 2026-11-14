@@ -25,6 +25,8 @@ import type {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  ThreadMember,
+  UnreadThreads,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
@@ -106,16 +108,19 @@ export class HobbotsRepository extends Context.Service<
      */
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
     /**
-     * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027):
-     * the marker takes the newest revision of the messages up to it, but never past `revision`, so a
-     * reply continued after you saw it stays unread. It only moves forward: none, and nothing
-     * journaled, when the message is not in the thread or you had read past it.
+     * Records that the person asking read the thread through `messageId`, as they saw it at
+     * `revision` (ADR 027): their member row's marker takes the newest revision of the messages up to
+     * it, but never past `revision`, so a reply continued after they saw it stays unread, and is
+     * journaled as `ThreadMemberChanged` (ADR 039). It only moves forward: none, and nothing journaled,
+     * when the message is not in the thread, they had read past it or they are not a member.
      */
     readonly markThreadRead: (
       threadId: ThreadId,
       messageId: MessageId,
       revision: number,
-    ) => Effect.Effect<Option.Option<Committed<Thread>>>;
+    ) => Effect.Effect<Option.Option<Committed<ThreadMember>>>;
+    /** The threads where a hob wrote since the person asking last read them (ADR 039, read markers per member). */
+    readonly listUnreadThreads: Effect.Effect<UnreadThreads>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
     /** The message with `id`, in whichever thread it is. */
     readonly findMessage: (id: MessageId) => Effect.Effect<Option.Option<Message>>;

@@ -108,15 +108,6 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   /**
-   * Whether the hob wrote in the thread since the last message you read on any device (ADR 027): a
-   * reply that ended after it. Worked out when the thread is read from the read marker the hub
-   * keeps, never sent by a client; false for threads from before it was kept.
-   */
-  unread: Schema.Boolean.pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(false)),
-    Schema.withConstructorDefault(Effect.succeed(false)),
-  ),
-  /**
    * The draft this chat tries (ADR 029, Try in a chat), or null for an ordinary chat. Set when the chat
    * is made and never changed: its turns load that draft and no other skill.
    */

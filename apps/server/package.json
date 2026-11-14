@@ -10,7 +10,8 @@
     "test": "vitest run --passWithNoTests",
     "allow": "tsx src/allow.ts",
     "restore": "tsx src/restore-command.ts",
-    "reset": "tsx src/reset-command.ts"
+    "reset": "tsx src/reset-command.ts",
+    "member-reads": "tsx src/member-reads-command.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

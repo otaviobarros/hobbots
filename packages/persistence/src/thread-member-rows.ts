@@ -8,8 +8,9 @@ import {
   ThreadMember,
   ThreadMembers,
 } from "@hobbots/domain";
-import { Effect, Schema } from "effect";
-import type { SqlClient, SqlError } from "effect/sql";
+import { Effect, Option, Schema } from "effect";
+import type { SqlClient, SqlError, Statement } from "effect/sql";
+import { memberUnread } from "./thread-columns.ts";
 
 // The members of each thread (ADR 039, Members; migration 0114). An actor is two columns, as a
 // message's author is (0101); PostgreSQL reads BIGINT as a bigint and SQLite as a number.
@@ -146,20 +147,32 @@ export const copyMembersIn =
     });
 
 /**
- * Moves each person's read marker with their thread's, where the thread's marker moves without them
- * reading, as a chapter that moves keeps a read thread read. Only the owner reads a thread today; the
- * marker becomes each member's own when unread counts move onto it (ADR 039).
+ * Keeps every person who had read the thread read where its messages take revision `revision`
+ * without them reading, as when a chapter moves (ADR 037): their marker moves to it. Someone with a
+ * reply unread keeps it unread, and a hob reads nothing (ADR 039, read markers per member).
  */
-export const followThreadReads = (sql: SqlClient.SqlClient, threadIds: ReadonlyArray<ThreadId>) =>
-  sql`UPDATE thread_members SET read_revision = (SELECT t.read_revision FROM threads t
-      WHERE t.id = thread_members.thread_id)
-    WHERE ${sql.in("thread_id", threadIds)} AND role = 'owner'`;
-
-/** Moves `reader`'s marker in the thread forward to `revision`, never back. */
-export const markMemberRead = (sql: SqlClient.SqlClient, threadId: ThreadId, reader: Actor, revision: number) =>
+export const keepReadersRead = (sql: SqlClient.SqlClient, threadIds: ReadonlyArray<ThreadId>, revision: number) =>
   sql`UPDATE thread_members SET read_revision = ${revision}
+    WHERE ${sql.in("thread_id", threadIds)} AND actor_kind = 'user' AND NOT ${memberUnread(sql)}`;
+
+/**
+ * Moves `reader`'s marker in the thread forward to `seen` at `revision`, never back, and returns
+ * their row as it is now; none when it did not move, or they are not a member.
+ */
+export const markMemberRead = (
+  sql: SqlClient.SqlClient,
+  threadId: ThreadId,
+  reader: Actor,
+  seen: Statement.Fragment,
+  revision: number,
+) =>
+  sql<MemberRow>`UPDATE thread_members SET read_revision = ${seen}, revision = ${revision}
     WHERE thread_id = ${threadId} AND actor_kind = ${reader.kind} AND actor_id = ${reader.id}
-      AND COALESCE(read_revision, 0) < ${revision}`;
+      AND ${seen} > COALESCE(read_revision, 0)
+    RETURNING *`.pipe(
+    Effect.flatMap(membersFromRows),
+    Effect.map((rows) => Option.fromNullishOr(rows[0])),
+  );
 
 /**
  * A hob leaves every thread it is active in when it retires, and comes back to every thread it left

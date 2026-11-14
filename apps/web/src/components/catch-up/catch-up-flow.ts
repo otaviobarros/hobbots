@@ -27,6 +27,22 @@ export type CatchUpEvent =
 
 export const CATCH_UP_START: CatchUpFlow = { step: "idle", threadId: undefined, shown: false, visits: 0 };
 
+/**
+ * What a render sees: the chat in front, whether you look at it, and whether it is unread for you.
+ * Until your unread threads are known (`unread` undefined) the chat counts as not there yet, so the
+ * visit waits for them instead of passing as read (ADR 039).
+ */
+export const seeing = (
+  threadId: ThreadId | undefined,
+  shown: boolean,
+  unread: ReadonlySet<ThreadId> | undefined,
+): Extract<CatchUpEvent, { readonly _tag: "See" }> => ({
+  _tag: "See",
+  threadId: unread === undefined ? undefined : threadId,
+  shown,
+  unread: threadId !== undefined && unread?.has(threadId) === true,
+});
+
 /** Whether `event` changes where you are or whether you look at it. */
 export const moves = (flow: CatchUpFlow, event: Extract<CatchUpEvent, { readonly _tag: "See" }>): boolean =>
   flow.threadId !== event.threadId || flow.shown !== event.shown;
