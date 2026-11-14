@@ -24,6 +24,21 @@ export const makeRepositoryIdentity = (separator: PathSeparator) =>
           : Effect.succeed(memoryProjectIdentity(null, lastName(top, separator))),
   );
 
+/**
+ * Where `path` inside the repository at `inner` lies inside the repository at `top`, when `inner`
+ * is a folder of it, as a repository nested in another is; null otherwise.
+ */
+const below = (top: string, inner: string, path: string, separator: PathSeparator) => {
+  if (!inner.startsWith(`${top}${separator}`)) return null;
+  return joinedInside(
+    inner
+      .slice(top.length + 1)
+      .split(separator)
+      .join("/"),
+    path,
+  );
+};
+
 /** Two paths inside a repository joined, where "" is its top folder. */
 const joinedInside = (folder: string, path: string) =>
   folder === "" ? path : path === "" ? folder : `${folder}/${path}`;
@@ -90,7 +105,10 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             const known = followedKeys.get(`${top}\0${key}`);
             if (known !== undefined) return known;
             const place = key === "" ? null : yield* git.placeOf(`${top}${separator}${key.split("/").join(separator)}`);
-            const keys = place === null || place.top !== top || place.path === key ? [key] : [key, place.path];
+            // A link may land in a repository inside this one: its target is then read from this top.
+            const landed =
+              place === null ? null : place.top === top ? place.path : below(top, place.top, place.path, separator);
+            const keys = landed === null || landed === key ? [key] : [key, landed];
             followedKeys.set(`${top}\0${key}`, keys);
             return keys;
           });

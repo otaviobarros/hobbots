@@ -549,6 +549,11 @@ describe("the claims register", () => {
       );
       expect(await h.takenWrite({ pushes: [{ cwd: worktree, branch: "(current branch)" }] })).toContain("branch camp");
       expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "(current branch)" }] })).toBeNull();
+      // A taken link into a repository nested in this one holds writes to its target there too.
+      git(checkout, "init", "-q", "-b", "main", join(checkout, "packages", "persistence"));
+      expect(await h.takenWrite({ paths: [join(checkout, "packages", "persistence", "x.ts")] })).toContain(
+        "took over path persistence-link",
+      );
 
       // Sam's claim on a file inside it is contested; what you took over stays yours.
       expect((await h.call(SAM, B, { key: "p", scope: "path", path: "docs/a.md" })).details.state).toBe("contested");
