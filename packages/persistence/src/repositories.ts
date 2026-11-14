@@ -14,6 +14,7 @@ import {
   type MentionRefused,
   Message,
   type MessageId,
+  mainLine,
   messageEvents,
   previewLine,
   type ReplyUsage,
@@ -23,6 +24,7 @@ import {
   ThreadCheckpoint,
   ThreadId,
   type TurnRequestId,
+  TurnRequests,
   UnreadThreads,
   YOU,
 } from "@hobbots/domain";
@@ -37,7 +39,13 @@ import { joinedMentions, mentionsToStore, parseMentions, type StoredMentions } f
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
-import { insertRequest, requestsFor, selectOpenRequestsOf, stepRequests } from "./turn-request-rows.ts";
+import {
+  insertRequest,
+  requestsFor,
+  selectOpenRequests,
+  selectOpenRequestsOf,
+  stepRequests,
+} from "./turn-request-rows.ts";
 import { makeTurnRequestWrites, speakFor } from "./turn-requests.ts";
 
 const decodeActor = Schema.decodeUnknownSync(Actor);
@@ -633,14 +641,17 @@ export const HobbotsRepositoryLive = Layer.effect(
           // A message nobody answers starts no turn, so it never waits in the queue.
           const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
           const message = yield* writeMessage(new Message({ ...input, status, revision }), parsed);
+          const author = message.actor ?? (yield* sessionActor);
+          // A person who writes takes over from the hobs the relay budget paused there (ADR 039).
+          if (author.kind === "user" && message.role !== "note") {
+            const open = yield* selectOpenRequests(sql, mainLine(message.threadId));
+            yield* stepRequests(sql, TurnRequests.paused(open), { _tag: "Drop", by: author });
+          }
           // Each answer owed waits for the floor, written with the message (ADR 039).
           const elsewhere = new Set<string>(to.takenElsewhere ?? []);
-          const requests = requestsFor(
-            message,
-            message.actor ?? (yield* sessionActor),
-            answerers,
-            to.relayDepth ?? 0,
-          ).filter((request) => !elsewhere.has(request.hobId));
+          const requests = requestsFor(message, author, answerers, to.relayDepth ?? 0).filter(
+            (request) => !elsewhere.has(request.hobId),
+          );
           for (const request of requests) yield* insertRequest(sql, request);
           return { value: { message, answerers, requests }, events: messageEvents(message) };
         }),

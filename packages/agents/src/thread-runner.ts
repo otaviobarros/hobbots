@@ -513,11 +513,13 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         );
       });
 
-    // Publishes who waits for the line's floor, from its requests as stored now.
+    // Publishes who waits for the line's floor, and whose relay waits for a person, from its
+    // requests as stored now.
     const lineUp = (threadId: ThreadId) =>
       Effect.gen(function* () {
-        const waiting = TurnRequests.waiting(yield* repo.openTurnRequests(mainLine(threadId)));
-        yield* step(threadId, { _tag: "Lined", next: [...new Set(waiting.map((request) => request.hobId))] });
+        const open = yield* repo.openTurnRequests(mainLine(threadId));
+        const next = [...new Set(TurnRequests.waiting(open).map((request) => request.hobId))];
+        yield* step(threadId, { _tag: "Lined", next, paused: TurnRequests.pausedHobs(open) });
       });
 
     // The hobs among `hobIds` that take work now in `thread`, by id. A member hob that is retiring
@@ -902,8 +904,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.map(({ all, revision }) => ({
         revision,
         runs: Array.from(HashMap.values(all)).flatMap(({ line, run }) =>
-          // An idle line still says who waits for the floor, so a client that reconnects sees it.
-          isBusy(run) || run.next.length > 0 ? [runStatus(line, run, revision)] : [],
+          // An idle line still says who waits for the floor, or for a person, so a client that
+          // reconnects sees it.
+          isBusy(run) || run.next.length > 0 || run.paused.length > 0 ? [runStatus(line, run, revision)] : [],
         ),
       })),
     );

@@ -33,7 +33,8 @@ export const replyActivity = (reply: Pick<Message, "status" | "steps" | "content
 /**
  * A line's run as the hub publishes it: a thread's main line (`rootMessageId` null) or one of its
  * reply threads (ADR 039). `reply` says what the running reply is doing, null while no reply runs;
- * `speaking` is the hob holding the floor and `next` the hobs waiting for it, in order. `revision`
+ * `speaking` is the hob holding the floor and `next` the hobs waiting for it, in order; `paused` the
+ * hobs whose relay went past the budget and waits for a person, empty while none did. `revision`
  * orders the changes of every run since the hub started: a client keeps, per line, the one with the
  * highest revision.
  */
@@ -44,6 +45,7 @@ export const ThreadRunStatus = Schema.Struct({
   reply: Schema.NullOr(ReplyActivity),
   speaking: Schema.NullOr(AgentId),
   next: Schema.Array(AgentId),
+  paused: Schema.Array(AgentId),
   revision: Schema.Int,
 });
 export type ThreadRunStatus = typeof ThreadRunStatus.Type;
@@ -231,10 +233,13 @@ export const withStatusEvent = (view: StatusView, event: StatusEvent): StatusVie
   }
 };
 
-/** What the status shows: each busy thread's run and each live hob's presence. */
+/**
+ * What the status shows: each busy thread's run, or idle one whose hobs wait for a person after the
+ * relay budget (ADR 039), and each live hob's presence.
+ */
 export const shownStatus = (
   view: StatusView,
 ): { readonly runs: ReadonlyArray<ThreadRunStatus>; readonly hobs: ReadonlyArray<HobPresence> } => ({
-  runs: Object.values(view.runs).filter((run) => run.run !== "idle"),
+  runs: Object.values(view.runs).filter((run) => run.run !== "idle" || run.paused.length > 0),
   hobs: Object.values(view.hobs),
 });

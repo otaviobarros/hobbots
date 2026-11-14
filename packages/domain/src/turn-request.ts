@@ -73,7 +73,12 @@ export type TurnRequestEvent =
   /** The hob ended its turn with no message (the `pass` tool). */
   | { readonly _tag: "Pass" }
   /** Stop or Stop all dropped it, recording who stopped it; null when the hub dropped it. */
-  | { readonly _tag: "Drop"; readonly by: Actor | null };
+  | { readonly _tag: "Drop"; readonly by: Actor | null }
+  /**
+   * A person let the hobs go on past the relay budget: the paused request waits again, at depth
+   * `RESUMED_RELAY_DEPTH`, so its turn counts as the first of the budget's next turns.
+   */
+  | { readonly _tag: "GoOn" };
 
 /** A change to a request its state does not allow. */
 export class IllegalTurnRequestTransition extends Schema.TaggedError<IllegalTurnRequestTransition>()(
@@ -82,8 +87,27 @@ export class IllegalTurnRequestTransition extends Schema.TaggedError<IllegalTurn
 ) {}
 
 /**
+ * How many turns hobs may wake each other for after a person's message (ADR 039, Hobs talking to
+ * hobs): a request a person caused has depth 0, and each hob's mention adds one to the depth of the
+ * turn that mentioned. A request deeper than the budget is written `paused`, so two hobs that
+ * mention each other stop after this many turns and wait for a person.
+ */
+export const HOB_RELAY_BUDGET = 3;
+
+/** The depth Let them go on gives a paused request: its turn is the first of the budget's next turns. */
+export const RESUMED_RELAY_DEPTH = 1;
+
+/** The depth of the requests a reply's mentions cause: one more than the deepest its turn answered, 1 for a turn nobody asked for. */
+export const relayDepthAfter = (answered: ReadonlyArray<TurnRequest>): number =>
+  Math.max(0, ...answered.map((request) => request.relayDepth)) + 1;
+
+/** Where a new request at `relayDepth` starts: waiting within the relay budget, paused past it. */
+export const relayStateFor = (relayDepth: number): "waiting" | "paused" =>
+  relayDepth > HOB_RELAY_BUDGET ? "paused" : "waiting";
+
+/**
  * A request's lifecycle (ADR 039, One hob speaks at a time), declared once. A request past the
- * relay budget is written `paused`; what wakes it again comes with the relay budget (#1463).
+ * relay budget is written `paused`, and waits again only when a person lets the hobs go on.
  */
 export const TurnRequestMachine = defineMachine<
   TurnRequestState,
@@ -118,6 +142,11 @@ export const TurnRequestMachine = defineMachine<
       to: "dropped",
       apply: (request, event) => new TurnRequest({ ...request, state: "dropped", droppedBy: event.by }),
     },
+    GoOn: {
+      from: ["paused"],
+      to: "waiting",
+      apply: (request) => new TurnRequest({ ...request, state: "waiting", relayDepth: RESUMED_RELAY_DEPTH }),
+    },
   },
   illegal: (request, _event, to) => new IllegalTurnRequestTransition({ id: request.id, from: request.state, to }),
 });
@@ -137,6 +166,24 @@ export const TurnRequests = {
   isOpen: (request: TurnRequest): boolean => OPEN.includes(request.state),
   isWaiting: (request: TurnRequest): boolean => request.state === "waiting",
   isSpeaking: (request: TurnRequest): boolean => request.state === "speaking",
+  isPaused: (request: TurnRequest): boolean => request.state === "paused",
+  /** Whether Stop, Stop all or the hub dropped it. */
+  isDropped: (request: TurnRequest): boolean => request.state === "dropped",
+  /** The requests past the relay budget, oldest first: what Let them go on wakes and your message drops. */
+  paused: (requests: ReadonlyArray<TurnRequest>): ReadonlyArray<TurnRequest> =>
+    requests.filter((request) => request.state === "paused").toSorted(byFloorOrder),
+  /**
+   * The hobs a line's relay paused between, each once, in the order they relayed: for each paused
+   * request, the hob whose mention caused it, then the hob it is owed by. Empty while none is paused.
+   */
+  pausedHobs: (requests: ReadonlyArray<TurnRequest>): ReadonlyArray<AgentId> => [
+    ...new Set(
+      TurnRequests.paused(requests).flatMap((request) => [
+        ...(request.causedBy.kind === "hob" ? [AgentId.make(request.causedBy.id)] : []),
+        request.hobId,
+      ]),
+    ),
+  ],
   /** The request whose hob holds the floor, if any. */
   speaking: (requests: ReadonlyArray<TurnRequest>): TurnRequest | null =>
     requests.find((request) => request.state === "speaking") ?? null,

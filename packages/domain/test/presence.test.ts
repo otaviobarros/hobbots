@@ -66,6 +66,7 @@ describe("the status a client holds", () => {
     reply: run === "running" ? "working" : null,
     speaking: run === "running" ? hob : null,
     next: [],
+    paused: [],
     revision,
   });
   const presence = (state: HobPresence["state"], revision: number): HobPresence => ({ agentId: hob, state, revision });
@@ -105,6 +106,14 @@ describe("the status a client holds", () => {
     // Once the snapshot is in, an event from before it changes nothing.
     const held = withSnapshot(noStatus, snapshot({ runsRevision: 7, runs: [run("running", 7)] }));
     expect(withStatusEvent(held, { _tag: "ThreadRunChanged", run: run("idle", 6) })).toBe(held);
+  });
+
+  // covers ADR 039 (Hobs talking to hobs)
+  it("[TC-DM-1463-04] shows an idle run whose hobs wait for a person, from the snapshot as from an event", () => {
+    const waiting: ThreadRunStatus = { ...run("idle", 4), paused: [hob] };
+    expect(shownStatus(withSnapshot(noStatus, snapshot({ runsRevision: 4, runs: [waiting] }))).runs).toEqual([waiting]);
+    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: waiting })).runs).toEqual([waiting]);
+    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: run("idle", 5) })).runs).toEqual([]);
   });
 
   it("shows a hob brought back after its removal, even when a snapshot from before both arrives last", () => {

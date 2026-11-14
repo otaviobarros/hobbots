@@ -148,6 +148,12 @@ export class ChatService extends Context.Service<
      */
     readonly stopAll: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
     /**
+     * Let them go on (ADR 039, Hobs talking to hobs): the hobs the relay budget paused in the
+     * thread go on, for the budget's turns again, the resumed turn first. A person's message there
+     * drops what was paused instead. With nothing paused, it changes nothing.
+     */
+    readonly letHobsGoOn: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /**
      * Stop waiting (#1056): once the hob has answered and its reply only waits on commands it started,
      * ends the reply now. The reply shows as stopping, then completes with its text, and each command
      * it waited on is stopped. With no reply waiting, it changes nothing.
@@ -563,7 +569,8 @@ export class ChatService extends Context.Service<
               if (sent.requests.length > 0) {
                 yield* step(threadId, { _tag: "Release" });
                 yield* advance(threadId, null, sent.message.id);
-              }
+                // Your message dropped what the relay budget paused there, so the line says so.
+              } else yield* lineUp(threadId);
               return { userMessage: sent.message, assistantMessage: null };
             }
             // A message waits while its hob is paused, while a reply runs, behind any request ahead
@@ -588,6 +595,8 @@ export class ChatService extends Context.Service<
             );
             if (sent.value.requests.length === 0) {
               yield* free;
+              // Your message dropped what the relay budget paused there, so the line says so.
+              yield* lineUp(threadId);
               return { userMessage: saved, assistantMessage: null };
             }
             // Work you stopped in this thread may start again once this message is answered.
@@ -683,6 +692,21 @@ export class ChatService extends Context.Service<
             Effect.andThen(stop(threadId)),
             Effect.andThen(holdDispatch(threadId)),
           ),
+        );
+      });
+
+      // Let them go on (ADR 039): the paused requests wait again, journaled as one reset of the relay
+      // budget, and the floor moves on to the first of them, under the thread's lock as any start is.
+      const letHobsGoOn = Effect.fn("ChatService.letHobsGoOn")(function* (threadId: ThreadId) {
+        yield* withThreadLock(
+          admission,
+          yield* findThread(threadId),
+          Effect.gen(function* () {
+            const woken = yield* repo
+              .letHobsGoOn(mainLine(threadId), yield* sessionActor)
+              .pipe(Effect.flatMap(announce));
+            if (woken.length > 0) yield* advance(threadId);
+          }),
         );
       });
 
@@ -845,6 +869,7 @@ export class ChatService extends Context.Service<
         sendNow,
         stop,
         stopAll,
+        letHobsGoOn,
         stopWaiting,
         continueReply,
         interruptAgent,

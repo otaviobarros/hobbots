@@ -43,6 +43,8 @@ export interface ThreadRun {
   readonly carrier: AgentId | null;
   /** The hobs whose requests wait for the floor, in the order they will speak, each once. */
   readonly next: ReadonlyArray<AgentId>;
+  /** The hobs whose relay went past the budget there and waits for a person, each once (#1463). */
+  readonly paused: ReadonlyArray<AgentId>;
   /** The reply of the turn running there, while `running` or `carrying`. */
   readonly reply: Reply | null;
   /** What that reply is doing, while it runs; null with no reply. */
@@ -70,8 +72,8 @@ export type ThreadRunEvent =
   | { readonly _tag: "Drained" }
   /** The dispatcher has delivered the work and frees the thread. */
   | { readonly _tag: "Delivered" }
-  /** The requests waiting for the floor changed; `next` is who they are for now. */
-  | { readonly _tag: "Lined"; readonly next: ReadonlyArray<AgentId> }
+  /** The requests owed there changed; `next` is who waits for the floor now, `paused` whose relay waits for a person. */
+  | { readonly _tag: "Lined"; readonly next: ReadonlyArray<AgentId>; readonly paused: ReadonlyArray<AgentId> }
   /** Send now picked a queued message. */
   | { readonly _tag: "Choose"; readonly messageId: MessageId }
   /** The chosen message was taken from the queue, or removed from it. */
@@ -91,6 +93,7 @@ export const idleRun: ThreadRun = {
   speaking: null,
   carrier: null,
   next: [],
+  paused: [],
   reply: null,
   activity: null,
   chosen: null,
@@ -173,11 +176,15 @@ export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRu
       { from: ["idle"], to: "idle", apply: (r) => r },
     ],
     Delivered: { from: ["dispatching"], to: "idle", apply: (r) => ({ ...r, run: "idle", carrier: null }) },
-    // Only a change is a transition, so the run publishes who is next only when it changes.
+    // Only a change is a transition, so the run publishes who is next, or paused, only when it changes.
     Lined: staying(
       RUN_STATES,
-      (r, e: { readonly next: ReadonlyArray<AgentId> }) => ({ ...r, next: e.next }),
-      (r, e) => !sameHobs(r.next, e.next),
+      (r, e: { readonly next: ReadonlyArray<AgentId>; readonly paused: ReadonlyArray<AgentId> }) => ({
+        ...r,
+        next: e.next,
+        paused: e.paused,
+      }),
+      (r, e) => !sameHobs(r.next, e.next) || !sameHobs(r.paused, e.paused),
     ),
     Choose: staying(RUN_STATES, (r, e: { readonly messageId: MessageId }) => ({ ...r, chosen: e.messageId })),
     Unchoose: staying(RUN_STATES, (r, e: { readonly messageId: MessageId | null }) =>
@@ -207,7 +214,11 @@ export const isBusy = (run: ThreadRun) => run.run !== "idle";
 
 /** Whether the run is idle and remembers nothing, so it need not be kept. */
 export const isAtRest = (run: ThreadRun) =>
-  run.run === "idle" && run.chosen === null && run.held.length === 0 && run.next.length === 0;
+  run.run === "idle" &&
+  run.chosen === null &&
+  run.held.length === 0 &&
+  run.next.length === 0 &&
+  run.paused.length === 0;
 
 /** The run of `line` as the hub publishes it, at `revision`. */
 export const runStatus = (line: Line, run: ThreadRun, revision: number): ThreadRunStatus => ({
@@ -217,5 +228,6 @@ export const runStatus = (line: Line, run: ThreadRun, revision: number): ThreadR
   reply: run.activity,
   speaking: run.speaking,
   next: run.next,
+  paused: run.paused,
   revision,
 });

@@ -190,8 +190,20 @@ export class HobbotsRepository extends Context.Service<
       reply: Message,
       speaking: ReadonlyArray<TurnRequestId>,
     ) => Effect.Effect<Option.Option<Committed<Message>>>;
-    /** The turn writing `replyId` ended: its speaking requests are answered. */
+    /**
+     * The turn writing `replyId` ended: its speaking requests are answered and, in the same
+     * transaction, a hob's complete reply that @mentions other hobs of the camp owes each one a
+     * relay request (ADR 039, Hobs talking to hobs), at one more than its turn's relay depth, written
+     * `paused` past `HOB_RELAY_BUDGET`. A reply whose turn was stopped relays nothing, and a reply
+     * relays once, however often its turn ends.
+     */
     readonly answerTurnRequests: (replyId: MessageId) => Effect.Effect<void>;
+    /**
+     * Let them go on (ADR 039, Hobs talking to hobs): the line's paused requests wait again, each at
+     * `RESUMED_RELAY_DEPTH`, journaled as one `RelayBudgetReset` by `by`. Returns the requests it
+     * woke; none, and nothing journaled, when none was paused.
+     */
+    readonly letHobsGoOn: (line: Line, by: Actor) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
      * Drops the requests that are still owed, recording who stopped them (Stop and Stop all). A
      * queued message left with nothing owed leaves the queue said, journaled `MessageDequeued`
@@ -203,7 +215,7 @@ export class HobbotsRepository extends Context.Service<
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /** At start: requests whose turn was speaking when the hub stopped are answered by its interrupted reply. */
     readonly answerUnfinishedTurnRequests: Effect.Effect<void>;
-    /** Threads with a `TurnRequest` waiting. */
+    /** Threads with a `TurnRequest` waiting, or paused past the relay budget, so a start shows each line as it was. */
     readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
     readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;

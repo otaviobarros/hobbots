@@ -23,6 +23,7 @@ const runFrame = JSON.stringify({
     reply: "working",
     speaking: "wren",
     next: [],
+    paused: [],
     revision: 1,
   },
 });

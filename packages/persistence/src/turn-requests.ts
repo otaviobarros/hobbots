@@ -2,6 +2,7 @@ import type { HobbotsRepository } from "@hobbots/agents";
 import {
   type Actor,
   type JournaledEvent,
+  type Line,
   Message,
   type MessageId,
   QueuedMessageTransitions,
@@ -12,24 +13,30 @@ import {
 import { Effect, Option } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import type { makeJournaled, makeJournaledChange } from "./journal.ts";
+import { relaysFor } from "./relays.ts";
 import {
+  insertRequest,
   selectOpenRequests,
   selectOpenRequestsOf,
   selectRequestsById,
   selectRequestsIn,
+  selectRequestsOfReply,
   selectThreadsWaiting,
   stepRequests,
 } from "./turn-request-rows.ts";
 
 // The floor's writes (ADR 039, One hob speaks at a time): a request speaks in the transaction that
-// saves its turn's reply, is answered when the turn ends, and is dropped by Stop and Stop all. A
-// queued message left with nothing owed leaves the queue as it is, said but answered by no one.
+// saves its turn's reply, is answered when the turn ends, with the relays its reply's mentions
+// cause, and is dropped by Stop and Stop all. A queued message left with nothing owed leaves the
+// queue as it is, said but answered by no one. Let them go on wakes the requests the relay budget
+// paused.
 
 type Writes = Pick<
   HobbotsRepository["Service"],
   | "openTurnRequests"
   | "startReply"
   | "answerTurnRequests"
+  | "letHobsGoOn"
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
   | "threadsWithWaitingRequests"
@@ -89,11 +96,34 @@ export const makeTurnRequestWrites = (
         }),
       ),
     answerTurnRequests: (replyId) =>
-      selectOpenRequestsOf(sql, "reply_id", [replyId]).pipe(
-        Effect.flatMap((speaking) => stepRequests(sql, speaking.filter(TurnRequests.isSpeaking), { _tag: "Answer" })),
-        sql.withTransaction,
-        Effect.asVoid,
-        Effect.orDie,
+      Effect.gen(function* () {
+        const own = yield* selectRequestsOfReply(sql, replyId);
+        yield* stepRequests(sql, own.filter(TurnRequests.isSpeaking), { _tag: "Answer" });
+        // The reply as its turn left it: a hob's mentions in it relay to the hobs they name.
+        const reply = yield* readMessage(replyId);
+        if (Option.isNone(reply)) return;
+        for (const relay of yield* relaysFor(sql, reply.value, own)) yield* insertRequest(sql, relay);
+      }).pipe(sql.withTransaction, Effect.orDie),
+    letHobsGoOn: (line: Line, by: Actor) =>
+      journaledChange<ReadonlyArray<TurnRequest>, never>(() =>
+        Effect.gen(function* () {
+          const woken = yield* stepRequests(sql, TurnRequests.paused(yield* selectOpenRequests(sql, line)), {
+            _tag: "GoOn",
+          });
+          const events: ReadonlyArray<JournaledEvent> =
+            woken.length === 0
+              ? []
+              : [
+                  {
+                    _tag: "RelayBudgetReset",
+                    threadId: line.threadId,
+                    rootMessageId: line.rootMessageId,
+                    by,
+                    requests: woken.map((request) => request.id),
+                  },
+                ];
+          return { value: woken, events };
+        }),
       ),
     dropTurnRequests: (ids: ReadonlyArray<TurnRequestId>, by: Actor | null) =>
       journaledChange<ReadonlyArray<TurnRequest>, never>((revision) =>

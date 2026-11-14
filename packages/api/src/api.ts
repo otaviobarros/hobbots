@@ -370,6 +370,11 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       error: ThreadNotFound,
     }),
+    // Let them go on (ADR 039): the hobs the relay budget paused in the thread go on for its turns again.
+    HttpApiEndpoint.post("letHobsGoOn", "/threads/:threadId/go-on", {
+      params: { threadId: ThreadId },
+      error: ThreadNotFound,
+    }),
     // Stop waiting: ends a reply that only waits on commands its hob started, keeping its text (#1056).
     HttpApiEndpoint.post("stopWaiting", "/threads/:threadId/stop-waiting", {
       params: { threadId: ThreadId },
