@@ -238,6 +238,21 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(labels[1]).toBe("Using apply_patch");
   });
 
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-15] a rollout the hob filled with empty lines is read past them, and the refusal after them is reported", async () => {
+    const path = join(folder, "blank.jsonl");
+    writeFileSync(path, "");
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    appendFileSync(
+      path,
+      `${"\n".repeat(2 * ROLLOUT_CHUNK_BYTES)}${call("after", "github_comment", {})}${output("after", "unsupported call: github_comment")}`,
+    );
+    await Effect.runPromise(refusals.drain);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["after"]);
+  });
+
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {

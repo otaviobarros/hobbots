@@ -160,11 +160,13 @@ export const rolloutRefusals = (
         const whole = buffer.subarray(0, bytesRead).lastIndexOf(0x0a) + 1;
         // A line Codex is still writing waits for the next read; one longer than a chunk is skipped.
         if (whole === 0 && bytesRead < ROLLOUT_CHUNK_BYTES) break;
-        if (whole > 0) lines.push(...buffer.subarray(0, whole).toString("utf8").split("\n"));
+        // A line at a time: a chunk the hob filled with empty lines must not become one call's arguments.
+        for (const line of buffer.subarray(0, whole).toString("utf8").split("\n"))
+          if (line.trim() !== "") lines.push(line);
         end += whole === 0 ? bytesRead : whole;
       }
       const more = end < info.size && end - from >= ROLLOUT_READ_BYTES;
-      return { lines: lines.filter((line) => line.trim() !== ""), end, more };
+      return { lines, end, more };
     } finally {
       await handle.close();
     }
