@@ -22,8 +22,8 @@ import {
   Thread,
   ThreadCheckpoint,
   ThreadId,
-  UnreadThreads,
   type TurnRequestId,
+  UnreadThreads,
   YOU,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
