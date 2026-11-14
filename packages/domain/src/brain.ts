@@ -85,6 +85,12 @@ export const RuntimeSession = Schema.Struct({
    * it has read nothing; a new session in its place starts without it.
    */
   readWeb: Schema.optionalKey(Schema.NullOr(WebReadMark)),
+  /**
+   * The Task tools the session holds for good, on a runtime that keeps the hub tools a session
+   * started with, as Codex does (ADR 024, #1543). Absent when not known, as for a session from
+   * before #1543: a turn that offers Task tools then starts a new session in its place.
+   */
+  taskTools: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type RuntimeSession = typeof RuntimeSession.Type;
 

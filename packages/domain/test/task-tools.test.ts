@@ -11,6 +11,7 @@ import {
   collidingLabel,
   DEFAULT_QUEST_LIMITS,
   FINISH_RULE,
+  holdsEveryTaskTool,
   isTaskToolName,
   LEAN_CHAT_RULE,
   optionNamed,
@@ -233,5 +234,20 @@ describe("hob tools for Tasks and Quests", () => {
     expect(questPlacement(step, tree, [aldrics, rooks])).toEqual({ outer: rooks, depth: 2 });
     expect(questPlacement(pip, tree, [aldrics, rooks])).toEqual({ outer: rooks, depth: 3 });
     expect(questChain(rooks, [aldrics, rooks]).map((each) => each.id)).toEqual(["q2", "q1"]);
+  });
+});
+
+describe("holdsEveryTaskTool", () => {
+  const all = TASK_TOOLS.map((tool) => tool.name);
+  // covers ADR 024, RT-001 (#1543)
+  it("[TC-RT-1543-03] holds only a session whose recorded tools include every Task tool, in any order", () => {
+    // Not known, as for every session recorded before #1543: not held, so the session is replaced.
+    expect(holdsEveryTaskTool(undefined)).toBe(false);
+    expect(holdsEveryTaskTool([])).toBe(false);
+    expect(holdsEveryTaskTool(all.filter((name) => name !== "check_criterion"))).toBe(false);
+    expect(holdsEveryTaskTool(all)).toBe(true);
+    expect(holdsEveryTaskTool([...all].reverse())).toBe(true);
+    // Other hub tools beside them, such as a Charm's, change nothing.
+    expect(holdsEveryTaskTool([...all, "github_push", "read_hob"])).toBe(true);
   });
 });

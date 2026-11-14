@@ -462,7 +462,8 @@ describe("a Codex turn", () => {
       success: true,
     });
     expect(events(exit).filter((event) => event._tag !== "TextDelta")).toEqual([
-      { _tag: "SessionStarted", sessionId: THREAD, billing: null },
+      // The new thread holds its hub tools for good, so the hub records them (#1543).
+      { _tag: "SessionStarted", sessionId: THREAD, billing: null, hubTools: ["delegate_task"] },
       { _tag: "StepStarted", id: "call_1", kind: "tool", label: "Delegating a Task" },
       expect.objectContaining({ _tag: "ToolAwaitingApproval", id: "call_1", approvalId: "a1" }),
       { _tag: "ToolFinished", id: "call_1", failed: false },
@@ -499,6 +500,8 @@ describe("a Codex turn", () => {
     expect(resumed.requests.find((request) => request.method === "thread/resume")?.params).not.toHaveProperty(
       "dynamicTools",
     );
+    // A resumed thread keeps what it started with, so its start names no hub tools (#1543).
+    expect(events(exit)).toContainEqual({ _tag: "SessionStarted", sessionId: THREAD, billing: null });
     expect(resumed.answers[0]).toEqual({
       contentItems: [{ type: "inputText", text: notOffered("delegate_task") }],
       success: false,
@@ -557,7 +560,7 @@ describe("a Codex turn", () => {
     // The hub ran the call, but the hob never heard its answer: it must be checked before it runs again.
     expect(hubCalls).toHaveLength(1);
     expect(seen.filter((event) => event._tag !== "ToolAwaitingApproval")).toEqual([
-      { _tag: "SessionStarted", sessionId: THREAD, billing: null },
+      { _tag: "SessionStarted", sessionId: THREAD, billing: null, hubTools: ["delegate_task"] },
       { _tag: "StepStarted", id: "call_1", kind: "tool", label: "Delegating a Task" },
       { _tag: "ToolUncertain", id: "call_1", reason: LOST_CALL },
     ]);
