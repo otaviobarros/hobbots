@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorkspace } from "@hobbots/agents";
@@ -172,5 +182,31 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
       join(repo, ".git", "refs", "heads", "camp"),
       packed,
     ]);
+  });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-07] leaves a packed-only branch's loose ref unwritten while Git holds its lock or a link stands in its path", async () => {
+    const repo = join(work, "locked");
+    write(join(repo, "a.md"), "a\n");
+    gitIn(repo, "init", "-q", "-b", "main");
+    gitIn(repo, "add", ".");
+    gitIn(repo, "commit", "-q", "-m", "one");
+    gitIn(repo, "branch", "feat/shop");
+    gitIn(repo, "branch", "side/shop");
+    gitIn(repo, "pack-refs", "--all");
+    const heads = join(repo, ".git", "refs", "heads");
+    const packed = join(repo, ".git", "packed-refs");
+    // Git is moving the branch: its lock is held, so nothing is written over it.
+    mkdirSync(join(heads, "feat"), { recursive: true });
+    write(join(heads, "feat", "shop.lock"), "moving\n");
+    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([packed]);
+    expect(existsSync(join(heads, "feat", "shop"))).toBe(false);
+    expect(readFileSync(join(heads, "feat", "shop.lock"), "utf8")).toBe("moving\n");
+    // A link where a folder of the ref should be is never followed out of the repository.
+    const outside = join(work, "outside");
+    mkdirSync(outside);
+    symlinkSync(outside, join(heads, "side"));
+    expect(await read((git) => git.branchFiles(repo, "side/shop"))).toEqual([packed]);
+    expect(readdirSync(outside)).toEqual([]);
   });
 });

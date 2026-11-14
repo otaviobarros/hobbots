@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Charms, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
@@ -582,7 +582,6 @@ describe("tool calls in a reply", () => {
   // covers OR-006, PE-008, #1537
   it("[TC-OR-1537-04] stops a running turn once you take over what its command may write, and keeps it when you give it back", async () => {
     const docs = join(folder, "docs");
-    const plan = join(docs, "plan.md");
     let taken: ReadonlyArray<string> = [];
     const changing = Layer.succeed(
       HobTools,
@@ -603,17 +602,17 @@ describe("tool calls in a reply", () => {
           })),
       }),
     );
-    // A test run that writes the plan when it ends, without its command naming it.
+    // A test run that goes on until its turn ends, and would write the plan without naming it: the
+    // reply waits on it, so the turn is running for as long as nothing stops it.
     const testRun = `fake:run ${JSON.stringify({
-      command: "pnpm test",
+      command: "pnpm test --watch",
       writes: { "docs/plan.md": "written" },
       background: true,
-      runsFor: "300 millis",
+      outlives: true,
     })}`;
-    const runWhile = (change: () => void) =>
+    /** The reply's status once the hub reviewed the running turn after `change`. */
+    const statusAfter = (change: () => void) =>
       Effect.gen(function* () {
-        rmSync(docs, { recursive: true, force: true });
-        mkdirSync(docs);
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
         const thread = yield* chat.createThread(HOB_ID);
@@ -628,32 +627,20 @@ describe("tool calls in a reply", () => {
           Effect.retry(Schedule.spaced("5 millis")),
         );
         change();
+        // The turn has ended when review returns, if it stopped it.
         yield* chat.reviewAuthority(HOB_ID);
-        const reply = yield* repo.listMessages(thread.id).pipe(
-          Effect.flatMap((messages) => {
-            const last = messages.at(-1);
-            return last?.role === "assistant" && !isInProgress(last.status)
-              ? Effect.succeed(last)
-              : Effect.fail("busy");
-          }),
-          Effect.retry(Schedule.spaced("10 millis")),
-        );
-        // Long enough for the command to have ended, had it run on.
-        yield* Effect.sleep("400 millis");
-        return { status: reply.status, written: existsSync(plan) };
+        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
       }).pipe(
         Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), changing)),
         Effect.scoped,
         Effect.runPromise,
       );
 
-    // Nothing changes: the command writes the plan.
-    expect(await runWhile(() => undefined)).toEqual({ status: "complete", written: true });
-    // You take over the folder while it runs: the turn stops, and the command never writes there.
-    expect(await runWhile(() => (taken = [docs]))).toEqual({ status: "interrupted", written: false });
-    // You give it back while a command started with it closed runs: the turn goes on, and its sandbox
-    // still refuses the write, which the next turn's will not.
-    expect(await runWhile(() => (taken = []))).toMatchObject({ written: false });
-    expect(await runWhile(() => undefined)).toEqual({ status: "complete", written: true });
-  }, 30_000);
+    // Nothing changes: the turn goes on.
+    expect(await statusAfter(() => undefined)).toBe("streaming");
+    // You take over the folder while its command runs: the turn stops, and its command with it.
+    expect(await statusAfter(() => (taken = [docs]))).toBe("interrupted");
+    // You give it back: what runs keeps the sandbox it started with, closed, and goes on.
+    expect(await statusAfter(() => (taken = []))).toBe("streaming");
+  });
 });

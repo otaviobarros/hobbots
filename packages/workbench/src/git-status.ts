@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, realpath, rename, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
 import { Effect, Layer } from "effect";
@@ -298,15 +298,69 @@ const repositoriesIn = async (folder: string): Promise<ReadonlyArray<string>> =>
 /** Whether `path` is there, as a file or folder, without following a link at it. */
 const present = async (path: string) => (await lstat(path).catch(() => null)) !== null;
 
+/** Whether `path` is a folder itself, never a link to one. */
+const plainFolder = async (path: string) => (await lstat(path).catch(() => null))?.isDirectory() === true;
+
+/** The commit the packed refs at `packed` give `ref`, read from the file itself, never through a link. */
+const packedCommit = async (packed: string, ref: string): Promise<string | null> => {
+  if ((await lstat(packed).catch(() => null))?.isFile() !== true) return null;
+  const text = await readFile(packed, { encoding: "utf8", flag: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW });
+  for (const line of text.split("\n")) {
+    const [oid, name] = line.trim().split(" ");
+    if (name === ref && oid !== undefined && /^[0-9a-f]{40,64}$/.test(oid)) return oid;
+  }
+  return null;
+};
+
+/**
+ * Writes back the loose ref of a branch only the packed refs hold, with the commit they give it, as
+ * Git does to move it (#1537), and under Git's own lock on the ref (`<ref>.lock`, made only if no
+ * one holds it): while it is held no Git command moves, deletes or repacks the branch, so the commit
+ * is read again under the lock and the ref never comes back stale or deleted. Every folder on the way
+ * from the Git folder's `refs/heads` is a folder itself, never a link, made where missing, so the
+ * write stays in the repository's refs. Anything unexpected, a lock someone holds included, leaves
+ * the ref as it is.
+ */
+const restoreLooseRef = async (common: string, names: ReadonlyArray<string>) => {
+  let folder = join(common, "refs", "heads");
+  if (!(await plainFolder(join(common, "refs"))) || !(await plainFolder(folder))) return;
+  for (const name of names.slice(0, -1)) {
+    folder = join(folder, name);
+    if ((await lstat(folder).catch(() => null)) === null) await mkdir(folder).catch(() => undefined);
+    if (!(await plainFolder(folder))) return;
+  }
+  const loose = join(folder, names.at(-1) as string);
+  const lock = `${loose}.lock`;
+  const { O_WRONLY, O_CREAT, O_EXCL, O_NOFOLLOW } = fs.constants;
+  const held = await open(lock, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o644).catch(() => null);
+  if (held === null) return;
+  let written = false;
+  try {
+    const commit =
+      (await present(loose)) || (await realpath(folder)) !== folder
+        ? null
+        : await packedCommit(join(common, "packed-refs"), `refs/heads/${names.join("/")}`);
+    if (commit !== null) {
+      await held.writeFile(`${commit}\n`);
+      await held.sync();
+      written = true;
+    }
+  } finally {
+    await held.close();
+  }
+  // The lock becomes the ref, as Git commits a ref; once renamed it is no longer ours to remove.
+  if (written) await rename(lock, loose).catch(() => unlink(lock).catch(() => undefined));
+  else await unlink(lock).catch(() => undefined);
+};
+
 /**
  * The files whose change moves branch `branch` of the repository whose top is `top` (#1537), in the
  * Git folder the repository's worktrees share: its loose ref, and the packed refs, which Git rewrites
  * to delete or repack a branch; or the whole ref table, in a repository that keeps its refs in one,
  * since each of its files may hold any branch. A branch that only the packed refs hold gets its loose
- * ref written first, with the same commit, as Git itself writes one to move it: a ref file the sandbox
- * closes then stands where Git would write. Only files that are there are named, since a sandbox
- * cannot close a missing file without hiding it from Git's reads; a branch not made yet is left to
- * the call-level check (#1449).
+ * ref written back first (`restoreLooseRef`): a ref file the sandbox closes then stands where Git
+ * would write. Only files that are there are named, since a sandbox cannot close a missing file
+ * without hiding it from Git's reads; a branch not made yet is left to the call-level check (#1449).
  */
 const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<string>> => {
   const repository = await repositoryOf(top, new Map());
@@ -318,21 +372,11 @@ const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<s
   const packed = join(common, "packed-refs");
   const names = branch.split("/");
   // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
-  if (names.some((name) => name === "" || name === "." || name === "..")) {
+  if (names.some((name) => name === "" || name === "." || name === ".." || name.endsWith(".lock"))) {
     return (await present(packed)) ? [packed] : [];
   }
   const loose = join(common, "refs", "heads", ...names);
-  if (!(await present(loose)) && (await present(packed))) {
-    const files = repository.common === null ? fs : worktreeFs(repository.gitdir, repository.common);
-    const oid = await git
-      .resolveRef({ fs: files, gitdir: repository.gitdir, ref: `refs/heads/${branch}` })
-      .catch(() => null);
-    if (oid !== null && /^[0-9a-f]{40,64}$/.test(oid)) {
-      await mkdir(dirname(loose), { recursive: true });
-      // Never over a ref Git wrote meanwhile: `wx` fails if one is there now.
-      await writeFile(loose, `${oid}\n`, { flag: "wx" }).catch(() => undefined);
-    }
-  }
+  if (!(await present(loose)) && (await present(packed))) await restoreLooseRef(common, names);
   return [...((await present(loose)) ? [loose] : []), ...((await present(packed)) ? [packed] : [])];
 };
 
