@@ -18,20 +18,55 @@ const blank = (chars: Array<string>, from: number, to: number): void => {
   for (let at = from; at < to; at++) if (chars[at] !== "\n") chars[at] = " ";
 };
 
-/** How many times `char` repeats from `at` on. */
-const runLength = (text: string, at: number, char: string): number => {
+/** How many characters from `at` on pass `test`. */
+const runLengthOf = (text: string, at: number, test: (char: string) => boolean): number => {
   let end = at;
-  while (text[end] === char) end++;
+  while (end < text.length && test(text[end] ?? "")) end++;
   return end - at;
 };
 
-/** A fence line's marker (CommonMark 4.5): up to three spaces, then three or more ` or ~. */
+/** How many times `char` repeats from `at` on. */
+const runLength = (text: string, at: number, char: string): number => runLengthOf(text, at, (c) => c === char);
+
+/** Whether a list item's marker starts at `at`: `-`, `*` or `+`, or up to nine digits and `.` or `)`. */
+const listMarkerEnd = (line: string, at: number): number | null => {
+  const char = line[at];
+  if (char === "-" || char === "*" || char === "+") return at + 1;
+  const digits = runLengthOf(line, at, (c) => c >= "0" && c <= "9");
+  const after = line[at + digits];
+  return digits > 0 && digits <= 9 && (after === "." || after === ")") ? at + digits + 1 : null;
+};
+
+/**
+ * Where a line's text starts once its containers are passed (CommonMark 5): any indentation, each
+ * block quote's `>`, and each list item's marker followed by a space or a tab. A fence inside a quote
+ * or a list item is then read as a fence, at any depth.
+ */
+const contentStart = (line: string): number => {
+  let at = runLengthOf(line, 0, (c) => c === " " || c === "\t");
+  for (;;) {
+    if (line[at] === ">") {
+      at += 1;
+    } else {
+      const end = listMarkerEnd(line, at);
+      if (end === null || (line[end] !== " " && line[end] !== "\t")) return at;
+      at = end;
+    }
+    at += runLengthOf(line, at, (c) => c === " " || c === "\t");
+  }
+};
+
+/**
+ * A fence line's marker (CommonMark 4.5): three or more ` or ~ where the line's text starts. Read at
+ * any indentation, so an indented code block's line of backticks also hides what follows it: a
+ * missed mention, never a false one.
+ */
 const fenceOf = (line: string): { readonly char: string; readonly length: number; readonly rest: string } | null => {
-  const indent = runLength(line, 0, " ");
-  const char = line[indent];
-  if (indent > 3 || (char !== "`" && char !== "~")) return null;
-  const length = runLength(line, indent, char);
-  return length < 3 ? null : { char, length, rest: line.slice(indent + length) };
+  const start = contentStart(line);
+  const char = line[start];
+  if (char !== "`" && char !== "~") return null;
+  const length = runLength(line, start, char);
+  return length < 3 ? null : { char, length, rest: line.slice(start + length) };
 };
 
 /** Whether `line` closes a fence opened with `open`: the same character, at least as many, nothing after. */
@@ -130,7 +165,7 @@ const namedAt = (text: string, at: number, names: ReturnType<typeof byLongestNam
     (entry) =>
       text.slice(at + 1, at + 1 + entry.length).toLowerCase() === entry.folded &&
       !isWordChar(text[at + 1 + entry.length]),
-  )?.actor;
+  );
 
 /**
  * The hobs and people a message's text @mentions (ADR 039, Who answers), in the order they are first
@@ -140,17 +175,23 @@ const namedAt = (text: string, at: number, names: ReturnType<typeof byLongestNam
  * A mention is `@` and a roster name, matched without regard to case, where the `@` starts the text
  * or follows something other than a letter or a digit (so `ana@pip.dev` mentions nobody) and the name
  * ends at something other than a letter or a digit. Of two names that both fit, the longer wins.
- * Markdown code mentions nobody: fenced blocks and code spans as CommonMark reads them.
+ * Markdown code mentions nobody: fenced blocks, in quotes and list items too, and code spans, as
+ * CommonMark reads them.
+ *
+ * `after` reads only the mentions whose name ends past that offset, for text that grew after its
+ * start was parsed, such as a reply continued with Continue: what that start mentioned was decided
+ * then, against the roster of then, and is never read again. The whole text still decides what is code.
  */
-export const mentionsIn = (text: string, roster: ReadonlyArray<Mentionable>): ReadonlyArray<Actor> => {
+export const mentionsIn = (text: string, roster: ReadonlyArray<Mentionable>, after = 0): ReadonlyArray<Actor> => {
   if (!text.includes("@")) return [];
   const names = byLongestName(roster);
   const plain = withoutCode(text);
   const found: Array<Actor> = [];
   for (let at = plain.indexOf("@"); at !== -1; at = plain.indexOf("@", at + 1)) {
     if (isWordChar(plain[at - 1])) continue;
-    const actor = namedAt(plain, at, names);
-    if (actor !== undefined && !found.some((seen) => sameActor(seen, actor))) found.push(actor);
+    const entry = namedAt(plain, at, names);
+    if (entry === undefined || at + 1 + entry.length <= after) continue;
+    if (!found.some((seen) => sameActor(seen, entry.actor))) found.push(entry.actor);
   }
   return found;
 };

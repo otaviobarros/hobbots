@@ -150,7 +150,7 @@ describe("message mentions", () => {
   });
 
   // covers ADR 039 (Who answers)
-  it("[TC-PE-1455-04] keeps a continued reply's mentions while it streams and adds those of its new text", async () => {
+  it("[TC-PE-1455-04] keeps a continued reply's mentions while it streams and adds only those of its new text", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -161,6 +161,10 @@ describe("message mentions", () => {
         const cut = yield* repo.upsertMessage(
           new Message({ ...streaming.value, content: "Asking @Rook", status: "interrupted", error: "lost" }),
         );
+        // Rook is renamed and Aldric takes its old name: what the kept text mentions was decided already.
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`UPDATE agents SET name = 'Quill' WHERE id = ${ROOK}`;
+        yield* sql`UPDATE agents SET name = 'Rook' WHERE id = ${ALDRIC}`;
         const resumed = MessageTransitions.resume(cut.value);
         if (!(resumed instanceof Message)) return yield* Effect.die(resumed);
         const continued = yield* repo.upsertMessage(resumed);

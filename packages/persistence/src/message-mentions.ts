@@ -11,37 +11,38 @@ const joined = (earlier: ReadonlyArray<Actor>, later: ReadonlyArray<Actor>) => [
   ...later.filter((actor) => !earlier.some((seen) => sameActor(seen, actor))),
 ];
 
-const parse = (sql: SqlClient.SqlClient, text: string) =>
+const parse = (sql: SqlClient.SqlClient, text: string, after: number) =>
   Effect.gen(function* () {
     const hobs = yield* sql<{ readonly id: string; readonly name: string }>`SELECT id, name FROM agents`;
     const people = yield* sql<{ readonly id: string; readonly name: string }>`SELECT id, name FROM users`;
-    return mentionsIn(text, [
-      ...hobs.map((row) => ({ actor: { kind: "hob" as const, id: row.id }, name: row.name })),
-      ...people.map((row) => ({ actor: { kind: "user" as const, id: row.id }, name: row.name })),
-    ]);
+    return mentionsIn(
+      text,
+      [
+        ...hobs.map((row) => ({ actor: { kind: "hob" as const, id: row.id }, name: row.name })),
+        ...people.map((row) => ({ actor: { kind: "user" as const, id: row.id }, name: row.name })),
+      ],
+      after,
+    );
   });
 
 /**
- * The mentions to store with the message. Text is parsed when it is stored final: as a message is
- * sent, or when a reply ends. A reply still streaming keeps what it had: none on its first turn, and
- * after Continue, those of the text it kept. The same final text is never parsed twice, so renaming a
- * hob later changes nothing a stored message mentions; a reply that ends again with more text keeps
- * its mentions and adds those of the new text after them. The roster is every hob and person of the
- * hub, so a mention of a hob outside the thread is kept, for who answers to refuse.
+ * The mentions to store with the message, and how much of its text they were parsed from. Text is
+ * parsed when it is stored final: as a message is sent, or when a reply ends. A reply still streaming
+ * keeps what it had: none on its first turn, and after Continue, those of the text it kept. Text is
+ * parsed once: a reply that ends again with more text keeps its mentions, as they were decided
+ * against the roster of then, and adds after them those of the text past what was parsed. So a hob
+ * renamed later never changes what a stored message mentions. The roster is every hob and person of
+ * the hub, so a mention of a hob outside the thread is kept, for who answers to refuse.
  */
 export const mentionsToStore = (sql: SqlClient.SqlClient, message: Message) =>
   Effect.gen(function* () {
-    if (isInProgress(message.status)) return message.mentions;
-    const [stored] = yield* sql<{
-      readonly content: string;
-      readonly status: Message["status"];
-      readonly mentions: string;
-    }>`SELECT content, status, mentions FROM messages WHERE id = ${message.id}`;
+    const [stored] = yield* sql<{ readonly mentions: string; readonly mentionsThrough: unknown }>`SELECT mentions,
+      mentions_through FROM messages WHERE id = ${message.id}`;
     const had: ReadonlyArray<Actor> = stored === undefined ? message.mentions : JSON.parse(stored.mentions);
-    // A reply's text is saved as it streams, so only text already stored final was parsed.
-    const parsed = stored !== undefined && !isInProgress(stored.status) && stored.content === message.content;
-    if (parsed || !message.content.includes("@")) return had;
-    return joined(had, yield* parse(sql, message.content));
+    const through = stored === undefined ? 0 : Number(stored.mentionsThrough);
+    if (isInProgress(message.status) || through >= message.content.length) return { mentions: had, through };
+    const found = message.content.includes("@") ? yield* parse(sql, message.content, through) : [];
+    return { mentions: joined(had, found), through: message.content.length };
   });
 
 /**

@@ -52,8 +52,28 @@ describe("mentionsIn", () => {
     expect(mentionsIn("~~~\n@Rook\n~~~\n@Ana", roster)).toEqual([ANA]);
     expect(mentionsIn("````md\n```\n@Rook\n```\n````\n@Pip", roster)).toEqual([PIP]);
     expect(mentionsIn("   ```\n@Rook\n~~~\n@Ana", roster)).toEqual([]);
-    // Four spaces of indent is not a fence.
-    expect(mentionsIn("    ```\n@Rook", roster)).toEqual([ROOK]);
+    // A line of backticks is read as a fence at any indentation: at worst a mention is missed, never invented.
+    expect(mentionsIn("    ```\n@Rook", roster)).toEqual([]);
+  });
+
+  it("reads fences inside block quotes and list items, at any depth", () => {
+    expect(mentionsIn("> ~~~\n> @Ana\n> ~~~\n@Rook", roster)).toEqual([ROOK]);
+    expect(mentionsIn(">> ```\n>> @Ana\n>> ```\n> @Pip", roster)).toEqual([PIP]);
+    expect(mentionsIn("- ```\n  @Ana\n  ```\n1. @Rook", roster)).toEqual([ROOK]);
+    expect(mentionsIn("- item\n  - ```\n    @Ana\n    ```\n- @Pip", roster)).toEqual([PIP]);
+    // A quote marker alone is no fence: what it quotes still mentions.
+    expect(mentionsIn("> @Ana said hi", roster)).toEqual([ANA]);
+  });
+
+  it("reads only the mentions that end past `after`, for text that grew after its start was parsed", () => {
+    const kept = "Asking @Rook";
+    // Rook was renamed since: the start is not read again, so a new hob called Rook is not added.
+    const renamed: ReadonlyArray<Mentionable> = [{ actor: PIP, name: "Rook" }, ...roster.slice(3)];
+    expect(mentionsIn(`${kept}, then @Ana`, renamed, kept.length)).toEqual([ANA]);
+    // A mention cut in two by the end of what was parsed counts as new.
+    expect(mentionsIn("Asking @Ro" + "ok", roster, "Asking @Ro".length)).toEqual([ROOK]);
+    // What decides code reads the whole text: a fence opened before `after` still hides what follows.
+    expect(mentionsIn("```\nhi" + "\n@Rook", roster, "```\nhi".length)).toEqual([]);
   });
 
   it("finds no one with no @, an unknown name or a blank roster name", () => {
