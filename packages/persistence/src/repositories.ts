@@ -1,4 +1,4 @@
-import { HobbotsRepository, type SendMessage, type SentMessage, type SentTo, sessionActor } from "@hobbots/agents";
+import { HobbotsRepository, type SentMessage, type SentTo, sessionActor } from "@hobbots/agents";
 import {
   type Actor,
   Agent,
