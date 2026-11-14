@@ -699,6 +699,29 @@ export const initsRepository = (
   );
 
 /**
+ * Each simple command of a command line run from `at`, with the folder the shell is in when it runs
+ * it, after any `cd` before it, and its words with wrappers taken off and the folder they move it to.
+ */
+const eachCommand = (
+  line: string,
+  at: string,
+  home: string,
+  each: (token: { readonly writes: ReadonlyArray<string> }, shell: string, command: Unwrapped) => void,
+) => {
+  const tokens = commandLine(line);
+  const folders = folderFlow(at, home);
+  tokens.forEach((token, index) => {
+    if ("separator" in token) {
+      folders.separator(token.separator);
+      return;
+    }
+    // A wrapper such as `env -C` moves the command it runs, so the folder is the unwrapped one.
+    const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+    each(token, shell, unwrap(token.words, shell, home));
+  });
+};
+
+/**
  * The folders a tool call's command line runs a `git` subcommand from that `matches` picks (with
  * `every`, also its `--git-dir` repository and `--work-tree`), as the line spells them, after any `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or
  * `sh -c` (#742). Which repository each is in is the hub's to find. Only what the line says is read:
@@ -713,17 +736,8 @@ const gitFoldersWhere = (
   every = false,
 ): ReadonlyArray<string> => {
   const found = new Set<string>();
-  const visit = (line: string, at: string) => {
-    const tokens = commandLine(line);
-    const folders = folderFlow(at, home);
-    tokens.forEach((token, index) => {
-      if ("separator" in token) {
-        folders.separator(token.separator);
-        return;
-      }
-      // A wrapper such as `env -C` moves the command it runs, so the folder is the unwrapped one.
-      const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
-      const { words, folder } = unwrap(token.words, shell, home);
+  const visit = (line: string, at: string) =>
+    eachCommand(line, at, home, (_token, _shell, { words, folder }) => {
       const [name, ...args] = words;
       const program = basename(name ?? "");
       if (program === "git") {
@@ -736,7 +750,6 @@ const gitFoldersWhere = (
         if (nested !== undefined) visit(nested, folder);
       }
     });
-  };
   const command = tool === "Bash" ? text(input, "command") : undefined;
   if (command !== undefined) visit(command, cwd);
   return [...found];
@@ -1158,25 +1171,16 @@ export const commandWritesTo = (
     if (path !== null && matches(path)) found.add(path);
   };
   // A line run by `eval` or `sh -c` is read the same way, from the folder it runs in.
-  const visit = (line: string, at: string) => {
-    const tokens = commandLine(line);
-    const folders = folderFlow(at, home);
-    tokens.forEach((token, index) => {
-      if ("separator" in token) {
-        folders.separator(token.separator);
-        return;
-      }
-      const shell = folders.command(unwrap(token.words, at, home).words, separatorOf(tokens[index + 1]));
+  const visit = (line: string, at: string) =>
+    eachCommand(line, at, home, (token, shell, { words, folder }) => {
       // The shell opens a redirection's file in its own folder, after any `cd` before it on the line.
       for (const write of token.writes) add(write, shell);
-      const { words, folder } = unwrap(token.words, shell, home);
       const [name, ...args] = words;
       const program = basename(name ?? "");
       if (PATH_WRITERS.has(program)) for (const arg of args) if (!arg.startsWith("-")) add(arg, folder);
       const nested = nestedLine(program, args);
       if (nested !== undefined) visit(nested, folder);
     });
-  };
   visit(command, cwd);
   return [...found];
 };
