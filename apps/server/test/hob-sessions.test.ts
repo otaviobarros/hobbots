@@ -10,13 +10,16 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type RuntimeAdapterShape,
+  ThreadMemberRepository,
 } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  hobActor,
   isInProgress,
   liveSession,
   type Message,
+  OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
   type Thread,
@@ -29,19 +32,19 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   TaskRepositoryLive,
+  ThreadMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
-import { SqlClient } from "effect/sql";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 
 // Issue #1464 (ADR 039): a runtime session belongs to one hob. In a thread two hobs speak in, each
 // resumes only its own session, on Claude Code and on Codex alike, and a hob that has not spoken in
-// the live chapter starts a new session from the context pack. Until who answers is decided by
-// mention (#1460), a test hands the thread from one hob to the other.
+// the live chapter starts a new session from the context pack. The test passes the floor from one hob
+// to the other by @mention (#1461).
 
 const NOW = "2026-11-11T00:00:00.000Z";
 const WREN = AgentId.make("wren");
@@ -78,6 +81,7 @@ const hubLayer = () =>
           ApprovalRepositoryLive,
           GrantRepositoryLive,
           TaskRepositoryLive,
+          ThreadMemberRepositoryLive,
           EventJournal.layer,
         ).pipe(Layer.provideMerge(TestDatabase)),
         EventBus.layer,
@@ -122,7 +126,7 @@ const hob = (id: AgentId, name: string, runtime: RuntimeKind) =>
     createdAt: NOW,
   });
 
-/** A hub with Wren and Quill, both thinking with `runtime`, and Wren's chat. */
+/** A hub with Wren and Quill, both thinking with `runtime`, and a camp of Wren's, Wren alone in it. */
 const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
   asked = { "claude-code": [], codex: [] };
   hub = ManagedRuntime.make(hubLayer());
@@ -131,7 +135,10 @@ const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(hob(WREN, "Wren", runtime));
       yield* repo.insertAgent(hob(QUILL, "Quill", runtime));
-      return (yield* (yield* ChatService).createThread(WREN)).id;
+      const chat = yield* ChatService;
+      // Wren's first thread is the direct chat; a second one is a camp, which other hobs can join.
+      yield* chat.createThread(WREN);
+      return (yield* chat.createThread(WREN)).id;
     }),
   );
 };
@@ -149,17 +156,9 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
   });
 };
 
-/**
- * Lets `agentId` answer the thread's next turns, as a mention will (#1460). Nothing in the hub moves a
- * thread to another hob, so the test writes it in place.
- */
-const handTo = (id: ThreadId, agentId: AgentId) =>
-  run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`UPDATE threads SET agent_id = ${agentId} WHERE id = ${id}`;
-    }),
-  );
+/** Brings Quill into the camp, so a mention of Quill gives Quill the floor. */
+const join = (id: ThreadId) =>
+  run(ThreadMemberRepository.use((members) => members.add(id, hobActor(QUILL), OWNER_ACTOR)));
 
 describe("runtime sessions keyed by hob", () => {
   // covers ADR 039 (The context pack with several hobs), RT-001
@@ -172,8 +171,8 @@ describe("runtime sessions keyed by hob", () => {
       expect(wren?.sessionId).toMatch(/^fake-/);
       expect(liveSession(await thread(id), runtime, QUILL)).toBeUndefined();
 
-      await handTo(id, QUILL);
-      await say(id, "Quill, what should I plant?");
+      await join(id);
+      await say(id, "@quill what should I plant?");
       const fresh = asked[runtime][1] as PromptRequest;
       // Quill has not spoken in the chapter: a new session, briefed from the pack, never Wren's.
       expect(fresh.sessionId).toBeNull();
@@ -184,11 +183,10 @@ describe("runtime sessions keyed by hob", () => {
       // Wren's session is kept as it was.
       expect(liveSession(await thread(id), runtime, WREN)).toEqual(wren);
 
-      await say(id, "And when?");
+      await say(id, "@quill and when?");
       expect(asked[runtime][2]?.sessionId).toBe(quill?.sessionId);
 
-      await handTo(id, WREN);
-      await say(id, "Wren, how old is she?");
+      await say(id, "@wren how old is she?");
       expect(asked[runtime][3]?.sessionId).toBe(wren?.sessionId);
       expect(asked[runtime].map((request) => request.sessionId)).toEqual([
         null,
