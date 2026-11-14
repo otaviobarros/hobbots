@@ -353,27 +353,41 @@ describe("skill import", () => {
   // covers STD-SEC-005, ADR 029 (Import), #1060
   it("[TC-AG-136] reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes", async () => {
     const { layer } = await importerLayer();
+    const crafted = (run: number) =>
+      [
+        `See https://example.com/${".".repeat(run)}x for more.`,
+        "\n".repeat(run),
+        "```\n".repeat(3),
+        `[ref]:${" ".repeat(run)}x`,
+      ].join("\n");
     const RUN = 200_000;
-    const crafted = [
-      `See https://example.com/${".".repeat(RUN)}x for more.`,
-      "\n".repeat(RUN),
-      "```\n".repeat(3),
-      `[ref]:${" ".repeat(RUN)}x`,
-    ].join("\n");
-    const folder = await folderOf({ "SKILL.md": skillMd("release", "Releases.", "") + crafted });
+    const half = await folderOf({ "SKILL.md": skillMd("release-half", "Releases.", "") + crafted(RUN / 2) });
+    const folder = await folderOf({ "SKILL.md": skillMd("release", "Releases.", "") + crafted(RUN) });
     const archive = await archiveOf({ "SKILL.md": skillMd("release"), [`notes${"/".repeat(30_000)}x`]: "x" });
     await runWith(layer)(
       Effect.gen(function* () {
         const importer = yield* SkillImporter;
-        const started = performance.now();
-        const [added] = yield* importer.add({ _tag: "Folder", path: folder }, you);
-        expect(added?.revision.flags).toEqual([
+        const timed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          Effect.gen(function* () {
+            const started = performance.now();
+            const value = yield* effect;
+            return { value, ms: performance.now() - started };
+          });
+        const halfRun = yield* timed(importer.add({ _tag: "Folder", path: half }, you));
+        const fullRun = yield* timed(importer.add({ _tag: "Folder", path: folder }, you));
+        expect(fullRun.value[0]?.revision.flags).toEqual([
           { _tag: "Url", path: "SKILL.md", url: `https://example.com/${".".repeat(RUN)}x` },
         ]);
+        // Twice the text takes about twice the time: linear, where backtracking would take four times
+        // as long or more. A ratio, not a bound in seconds, since the CommonMark parser that reads the
+        // file is linear but its speed depends on the machine.
+        expect(fullRun.ms).toBeLessThan(3 * halfRun.ms);
         // The archive's name with a long run of slashes is read, and refused, without backtracking.
-        const refused = yield* Effect.flip(importer.add({ _tag: "Archive", fileName: "x.zip", bytes: archive }, you));
-        expect(refused._tag).toBe("SkillRefused");
-        expect(performance.now() - started).toBeLessThan(2_000);
+        const refused = yield* timed(
+          Effect.flip(importer.add({ _tag: "Archive", fileName: "x.zip", bytes: archive }, you)),
+        );
+        expect(refused.value._tag).toBe("SkillRefused");
+        expect(refused.ms).toBeLessThan(2_000);
       }),
     );
   });
