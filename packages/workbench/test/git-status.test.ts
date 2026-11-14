@@ -283,4 +283,15 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
       join(own, "refs", "worktree"),
     ]);
   });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-12] closes a repository's ref table whole, and where a link to it leads", async () => {
+    const repo = join(work, "tabled");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    const store = join(work, "store");
+    mkdirSync(store);
+    symlinkSync(store, join(repo, ".git", "reftable"));
+    write(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
+    expect(await read((git) => git.branchFiles(repo, "main"))).toEqual([join(repo, ".git", "reftable"), store]);
+  });
 });

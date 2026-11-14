@@ -171,7 +171,9 @@ const userClaudeCode = (home: string) => {
  * What stays closed to writes even inside the turn's folders: Hobbots' data, the turn's skills, the
  * user's own Claude Code state, Git's hooks and config, and what you took over from a Task.
  */
-const closedToWrites = (scope: SandboxScope, home: string): Array<string> => [
+type FilesystemEntry = SandboxRuntimeConfig["filesystem"]["denyWrite"][number];
+
+const closedToWrites = (scope: SandboxScope, home: string): Array<FilesystemEntry> => [
   scope.dataFolder,
   join(scope.runtimeFolder, SKILL_MOUNTS),
   // Loaded later by the user's own Claude Code, outside any policy.
@@ -190,7 +192,8 @@ const closedToWrites = (scope: SandboxScope, home: string): Array<string> => [
   ]),
   // What you took over from a Task: a script, an interpreter or Git's own config cannot write it
   // either, nor move a taken branch, whatever the call-level check read of the command (#1537).
-  ...(scope.taken ?? []),
+  // Each is a path, never a pattern, whatever characters its name holds.
+  ...(scope.taken ?? []).map((path) => ({ path, literal: true as const })),
 ];
 
 /**

@@ -412,7 +412,11 @@ const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<s
   if (repository === null) return [];
   const places = await refPlacesOf(repository);
   const table = join(places.common, "reftable");
-  if ((await lstat(table).catch(() => null))?.isDirectory() === true) return [table];
+  // A ref table is closed whole, and through a link to it, where it leads too.
+  if (await present(table)) {
+    const target = await realpath(table).catch(() => table);
+    return [...new Set([table, target])];
+  }
   const packed = join(places.common, "packed-refs");
   const files = await refFiles(places, `refs/heads/${branch}`, 0);
   return [...new Set([...files, ...((await present(packed)) ? [packed] : [])])];

@@ -141,7 +141,9 @@ const recordingSandbox = (scopes: Array<Omit<SandboxScope, "tempFolder">>): Proc
  */
 const scriptIn = async (scope: Omit<SandboxScope, "tempFolder">, files: ReadonlyArray<string>): Promise<HiddenRun> => {
   if (!osSandbox) {
-    const closed = sandboxFilesystem({ ...scope, tempFolder: join(temp, "tmp") }).denyWrite;
+    const closed = sandboxFilesystem({ ...scope, tempFolder: join(temp, "tmp") }).denyWrite.map((entry) =>
+      typeof entry === "string" ? entry : entry.path,
+    );
     const shut = (file: string) =>
       closed.some((path) => join(project, file) === path || join(project, file).startsWith(`${path}/`));
     return {
