@@ -354,12 +354,13 @@ const restoreLooseRef = async (common: string, names: ReadonlyArray<string>) => 
 };
 
 /**
- * What to close when ref `names` exists but has no loose file to close, because Git held its lock or
- * a link stands on its way: the deepest folder on its way that is a folder itself, so no ref can be
- * written under it, and the folder a link there leads to.
+ * What to close when ref `names` has no loose file to close, because Git held its lock, a link stands
+ * on its way, the hub may not write there, or it is not there: the deepest folder on its way from
+ * `base` that is a folder itself, so no ref can be written under it, and the folder a link there
+ * leads to.
  */
-const closedAround = async (common: string, names: ReadonlyArray<string>): Promise<Array<string>> => {
-  let folder = common;
+const closedAround = async (base: string, names: ReadonlyArray<string>): Promise<Array<string>> => {
+  let folder = base;
   for (const name of names.slice(0, -1)) {
     const next = join(folder, name);
     if (!(await plainFolder(next))) {
@@ -384,26 +385,64 @@ const symbolicTarget = async (loose: string): Promise<string | null> => {
 /** How many symbolic refs `refFiles` follows from one branch, as Git stops after a few. */
 const MAX_SYMBOLIC_DEPTH = 5;
 
-/** The files whose change moves ref `ref` (`refs/...`) in the Git folder `common` (see `branchFiles`). */
-const refFiles = async (common: string, ref: string, depth: number): Promise<Array<string>> => {
+/** Where a repository's refs are: its shared Git folder, its worktree's own, and whether the hub may write there. */
+interface RefPlaces {
+  readonly common: string;
+  readonly gitdir: string;
+  readonly writable: boolean;
+}
+
+/** Whether `path` is `folder` or inside it. */
+const within = (path: string, folder: string) => {
+  const inside = relative(folder, path);
+  return inside === "" || !(inside.startsWith("..") || isAbsolute(inside));
+};
+
+/**
+ * The Git folders of `repository`, real paths, and whether the hub may write a ref back in them: only
+ * in a Git folder inside the repository's own folder, or in a linked worktree's, kept in the shared
+ * Git folder's `worktrees`, that names this worktree back. A `.git` file or a `commondir` a hob wrote
+ * cannot then lead the hub to write in a repository outside its folders.
+ */
+const refPlacesOf = async (repository: Repository): Promise<RefPlaces> => {
+  const real = (path: string) => realpath(path).catch(() => path);
+  const dir = await real(repository.dir);
+  const gitdir = await real(repository.gitdir);
+  const common = repository.common === null ? gitdir : await real(repository.common);
+  if (within(common, dir)) return { common, gitdir, writable: true };
+  const back = (await readFile(join(gitdir, "gitdir"), "utf8").catch(() => "")).trim();
+  const named = back === "" ? null : await real(back);
+  const linked = within(gitdir, join(common, "worktrees")) && named === (await real(join(repository.dir, ".git")));
+  return { common, gitdir, writable: linked };
+};
+
+/** The files whose change moves ref `ref` (`refs/...`), from `depth` symbolic refs away (see `branchFiles`). */
+const refFiles = async (places: RefPlaces, ref: string, depth: number): Promise<Array<string>> => {
   const names = ref.split("/");
   // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
   if (names.some((name) => name === "" || name === "." || name === ".." || name.endsWith(".lock"))) return [];
-  const loose = join(common, ...names);
-  const packed = join(common, "packed-refs");
-  if (!(await present(loose)) && (await present(packed))) await restoreLooseRef(common, names);
+  // A worktree's own refs are in its own Git folder, and never packed.
+  const own = PER_WORKTREE.some((pattern) => pattern.test(ref));
+  const base = own ? places.gitdir : places.common;
+  const loose = join(base, ...names);
+  const packed = join(places.common, "packed-refs");
+  if (!own && places.writable && !(await present(loose)) && (await present(packed))) {
+    await restoreLooseRef(places.common, names);
+  }
   if (await present(loose)) {
     const target = depth < MAX_SYMBOLIC_DEPTH ? await symbolicTarget(loose).catch(() => null) : null;
     // A link as the ref itself is closed with its folder, since a write may go through it.
     const link = (await lstat(loose).catch(() => null))?.isSymbolicLink() === true;
     return [
-      ...(link ? await closedAround(common, [...names, ""]) : [loose]),
-      ...(target === null ? [] : await refFiles(common, target, depth + 1)),
+      ...(link ? await closedAround(base, [...names, ""]) : [loose]),
+      ...(target === null ? [] : await refFiles(places, target, depth + 1)),
     ];
   }
-  // The branch is in the packed refs, but its loose ref could not be written back: close around it.
-  const packedOnly = (await packedCommit(packed, ref).catch(() => null)) !== null;
-  return packedOnly ? await closedAround(common, names) : [];
+  // A ref a symbolic branch names moves the branch once made, and a packed branch whose loose ref
+  // could not be written back moves through a file not closed yet: close around either. A branch
+  // not made yet is left to the call-level check (#1449).
+  const packedOnly = !own && (await packedCommit(packed, ref).catch(() => null)) !== null;
+  return depth > 0 || packedOnly ? await closedAround(base, names) : [];
 };
 
 /**
@@ -411,21 +450,20 @@ const refFiles = async (common: string, ref: string, depth: number): Promise<Arr
  * Git folder the repository's worktrees share: its loose ref, and the packed refs, which Git rewrites
  * to delete or repack a branch; or the whole ref table, in a repository that keeps its refs in one,
  * since each of its files may hold any branch. A branch that only the packed refs hold gets its loose
- * ref written back first (`restoreLooseRef`): a ref file the sandbox closes then stands where Git
- * would write. When that cannot be done, the folder around it is closed instead, and a branch that is
- * a symbolic ref has the ref it names closed too. Only files that are there are named, since a sandbox
- * cannot close a missing file without hiding it from Git's reads; a branch not made yet is left to the
- * call-level check (#1449).
+ * ref written back first (`restoreLooseRef`), in a Git folder the hub may write in (`refPlacesOf`): a
+ * ref file the sandbox closes then stands where Git would write. When that cannot be done, the folder
+ * around it is closed instead, and a branch that is a symbolic ref has the ref it names closed too, in
+ * the worktree's own Git folder for a ref only it keeps. Only files that are there are named, since a
+ * sandbox cannot close a missing file without hiding it from Git's reads.
  */
 const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<string>> => {
   const repository = await repositoryOf(top, new Map());
   if (repository === null) return [];
-  const shared = repository.common ?? repository.gitdir;
-  const common = await realpath(shared).catch(() => shared);
-  const table = join(common, "reftable");
+  const places = await refPlacesOf(repository);
+  const table = join(places.common, "reftable");
   if ((await lstat(table).catch(() => null))?.isDirectory() === true) return [table];
-  const packed = join(common, "packed-refs");
-  const files = await refFiles(common, `refs/heads/${branch}`, 0);
+  const packed = join(places.common, "packed-refs");
+  const files = await refFiles(places, `refs/heads/${branch}`, 0);
   return [...new Set([...files, ...((await present(packed)) ? [packed] : [])])];
 };
 

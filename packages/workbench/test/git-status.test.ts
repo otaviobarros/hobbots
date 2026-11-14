@@ -226,4 +226,48 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     // A ref that names itself is followed only a few times.
     expect(await read((git) => git.branchFiles(repo, "loop"))).toEqual([join(heads, "loop")]);
   });
+
+  // covers PE-005, STD-SEC-002, #1537
+  it("[TC-PE-1537-10] writes no ref in a Git folder a hob's .git file points to outside, and closes around it instead", async () => {
+    const outside = join(work, "elsewhere");
+    write(join(outside, "a.md"), "a\n");
+    gitIn(outside, "init", "-q", "-b", "main");
+    gitIn(outside, "add", ".");
+    gitIn(outside, "commit", "-q", "-m", "one");
+    gitIn(outside, "branch", "taken");
+    gitIn(outside, "pack-refs", "--all");
+    const folder = join(work, "allowed");
+    write(join(folder, ".git"), `gitdir: ${join(outside, ".git")}\n`);
+    const heads = join(outside, ".git", "refs", "heads");
+    expect(await read((git) => git.branchFiles(folder, "taken"))).toEqual([
+      heads,
+      join(outside, ".git", "packed-refs"),
+    ]);
+    expect(existsSync(join(heads, "taken"))).toBe(false);
+  });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-11] closes a worktree's own ref that a symbolic branch names, in that worktree's Git folder", async () => {
+    const repo = join(work, "main-repo");
+    write(join(repo, "a.md"), "a\n");
+    gitIn(repo, "init", "-q", "-b", "main");
+    gitIn(repo, "add", ".");
+    gitIn(repo, "commit", "-q", "-m", "one");
+    const camp = join(work, "camp-tree");
+    gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
+    gitIn(camp, "update-ref", "refs/worktree/target", "HEAD");
+    gitIn(camp, "symbolic-ref", "refs/heads/alias", "refs/worktree/target");
+    gitIn(camp, "symbolic-ref", "refs/heads/later", "refs/worktree/later");
+    const own = join(repo, ".git", "worktrees", "camp-tree");
+    const heads = join(repo, ".git", "refs", "heads");
+    expect(await read((git) => git.branchFiles(camp, "alias"))).toEqual([
+      join(heads, "alias"),
+      join(own, "refs", "worktree", "target"),
+    ]);
+    // A ref it names that is not made yet would move it once made: the folder it goes in is closed.
+    expect(await read((git) => git.branchFiles(camp, "later"))).toEqual([
+      join(heads, "later"),
+      join(own, "refs", "worktree"),
+    ]);
+  });
 });
