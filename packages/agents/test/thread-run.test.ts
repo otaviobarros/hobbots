@@ -31,7 +31,7 @@ interface RunView {
   readonly reply: number | null;
   readonly activity: ReplyActivity | null;
   readonly chosen: MessageId | null;
-  readonly held: AgentId | null;
+  readonly held: ReadonlyArray<AgentId>;
 }
 
 const view = (run: ThreadRun): RunView => ({
@@ -78,9 +78,11 @@ const rules: { readonly [T in ThreadRunEvent["_tag"]]: Rule<T> } = {
   Lined: (m, e) => (JSON.stringify(m.next) === JSON.stringify(e.next) ? "refused" : { ...m, next: e.next }),
   Choose: (m, e) => ({ ...m, chosen: e.messageId }),
   Unchoose: (m, e) => (e.messageId === null || m.chosen === e.messageId ? { ...m, chosen: null } : m),
-  Hold: (m, e) => ({ ...m, held: e.hobId }),
-  // A hob that wakes releases only its own stopped work.
-  Release: (m, e) => (e.hobId === undefined || m.held === e.hobId ? { ...m, held: null } : m),
+  // Each hob's stop is kept apart: holding one hob leaves another's hold as it is.
+  Hold: (m, e) => (m.held.includes(e.hobId) ? m : { ...m, held: [...m.held, e.hobId] }),
+  // A hob that wakes releases only its own stopped work; your message or resume releases all.
+  Release: (m, e) =>
+    e.hobId === undefined ? { ...m, held: [] } : { ...m, held: m.held.filter((hobId) => hobId !== e.hobId) },
 };
 
 const step = (m: RunView, event: ThreadRunEvent) =>
@@ -119,7 +121,7 @@ const records: fc.Arbitrary<ThreadRun> = fc.oneof(
       reply,
       activity,
       chosen: fc.option(messageId, { nil: null }),
-      held: fc.option(hob, { nil: null }),
+      held: next,
     })
     .map((r) => {
       const turning = r.run === "running" || r.run === "carrying";
@@ -223,12 +225,17 @@ describe("ThreadRunMachine", () => {
   it("keeps a hold set when the stopped turn ended before the stop was saved", () => {
     const [pip, rook] = hobs as [AgentId, AgentId];
     const held = apply(idleRun, { _tag: "Hold", hobId: pip });
-    expect(held.held).toBe(pip);
+    expect(held.held).toEqual([pip]);
     expect(isAtRest(held)).toBe(false);
     expect(isAtRest(apply(held, { _tag: "Release" }))).toBe(true);
     // Another hob that wakes leaves Pip's stopped work held; Pip waking releases it.
-    expect(apply(held, { _tag: "Release", hobId: rook }).held).toBe(pip);
+    expect(apply(held, { _tag: "Release", hobId: rook }).held).toEqual([pip]);
     expect(isAtRest(apply(held, { _tag: "Release", hobId: pip }))).toBe(true);
+    // Stopping Rook's turn too keeps Pip's work held; each hob's waking releases only its own.
+    const both = apply(held, { _tag: "Hold", hobId: rook });
+    expect(both.held).toEqual([pip, rook]);
+    expect(apply(both, { _tag: "Release", hobId: rook }).held).toEqual([pip]);
+    expect(apply(both, { _tag: "Release" }).held).toEqual([]);
   });
 
   it("forgets the chosen message only when that message, or any, is taken", () => {

@@ -592,6 +592,48 @@ describe("continuing a hob when work arrives", () => {
     expect(await run(messages())).toHaveLength(2);
   });
 
+  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-19] stopping a second hob's continuation keeps the first hob's stopped work held", async () => {
+    const { run, release } = setUp(SamsCamp);
+    // Stops the continuation that is the camp's latest message once its turn runs.
+    const stopLatest = async (count: number) => {
+      await run(
+        retry(
+          Effect.flatMap(messages(), (all) =>
+            all.length === count && all.at(-1)?.status === "streaming" ? Effect.void : Effect.fail("not yet" as const),
+          ),
+        ),
+      );
+      await run(
+        retry(
+          Effect.flatMap(
+            ChatService.use((chat) => chat.activeThreads),
+            (active) => (active.includes(threadId) ? Effect.void : Effect.fail("not yet" as const)),
+          ),
+        ),
+      );
+      await run(ChatService.use((chat) => chat.stop(threadId)));
+      await run(messagesWhen((all) => all.length === count && all.at(-1)?.status === "stopped"));
+    };
+    holdContinuations = true;
+    await run(failedStep);
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await stopLatest(1);
+    // Sam's work starts while Frodo's stays held, and you stop Sam's too.
+    await run(failedStepOf(SAM, "sam-"));
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await stopLatest(2);
+    holdContinuations = false;
+    await release();
+
+    // Neither starts again on its own once Sam's turn has ended.
+    await run(Effect.sleep("300 millis"));
+    expect((await run(messages())).map((m) => [m.status, m.actor?.kind === "hob" ? m.actor.id : null])).toEqual([
+      ["stopped", FRODO],
+      ["stopped", SAM],
+    ]);
+  });
+
   // covers AG-006, ADR 039 (One hob speaks at a time)
   it("[TC-CH-1461-13] a member hob retiring once its Tasks end still carries the work of its open Task in a camp", async () => {
     const { run } = setUp(SamsCamp);

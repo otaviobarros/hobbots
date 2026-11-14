@@ -582,7 +582,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.gen(function* () {
         if (yield* held) return;
         // A message of yours waiting there takes the work you stopped along with it.
-        if ((yield* runOf(threadId)).held && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
+        if ((yield* runOf(threadId)).held.length > 0 && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
           yield* step(threadId, { _tag: "Release" });
         }
         if (Option.isNone(continuations)) {
@@ -630,7 +630,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
 
     // Whether the hob's work in the thread is held, because you stopped its turn there.
     const holds = (threadId: ThreadId, agentId: AgentId) =>
-      runOf(threadId).pipe(Effect.map((run) => run.held === agentId));
+      runOf(threadId).pipe(Effect.map((run) => run.held.includes(agentId)));
 
     // The first of the thread's hobs, its own first, that takes work now and has work waiting
     // there that you did not stop.
