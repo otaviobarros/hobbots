@@ -151,10 +151,13 @@ export const makeTakenWrites = (separator: PathSeparator) =>
         // A command that may rewrite the working tree or move a branch, such as `git reset --hard` or
         // `git switch` before a commit in the same call, may reach any file or branch in it, so
         // anything you took over in the repository refuses it.
+        // In a repository inside another, its whole tree is a folder of the outer one, so the outer
+        // repositories' taken paths are checked against it too.
         const treeHit = (cwd: string) =>
-          atRepository(cwd, (_top, claims) =>
-            Effect.succeed(claims.find((claim) => claim.scope === "path" || claim.scope === "branch")),
-          );
+          atRepository(cwd, (top, claims) => {
+            const own = claims.find((claim) => claim.scope === "path" || claim.scope === "branch");
+            return own === undefined ? placeHit(top) : Effect.succeed(own);
+          });
 
         const checks = [
           ...writes.paths.map(pathHit),

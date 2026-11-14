@@ -533,6 +533,7 @@ describe("the claims register", () => {
       // A repository inside the taken folder, such as a submodule, is still inside it.
       git(checkout, "init", "-q", "-b", "main", join(checkout, "docs", "vendor"));
       expect(await h.takenWrite({ paths: [join(checkout, "docs", "vendor", "plan.md")] })).toContain("took over");
+      expect(await h.takenWrite({ trees: [join(checkout, "docs", "vendor")] })).toContain("took over");
       // Deleting the repository's top folder deletes what you took over inside it.
       expect(await h.takenWrite({ paths: [checkout] })).toContain("took over");
       // A Git command that rewrites the working tree, as `git reset --hard`, may reach the folder.
