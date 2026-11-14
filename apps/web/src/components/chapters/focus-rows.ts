@@ -12,6 +12,7 @@ export type FocusGroup = "always" | "here" | "carried" | "archived";
 
 const GROUP_OF: Readonly<Record<PackPartName, FocusGroup>> = {
   "memory-brief": "always",
+  members: "here",
   "camp-brief": "here",
   decisions: "here",
   "open-work": "here",

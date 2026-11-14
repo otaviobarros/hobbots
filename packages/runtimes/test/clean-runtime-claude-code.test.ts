@@ -18,6 +18,7 @@ import {
   type CleanRuntimeFixture,
   CONTRACT_ANSWER,
   CONTRACT_HUB_TOOL,
+  CONTRACT_PACK,
   CONTRACT_ROSTER,
   CONTRACT_SEARCH,
   cleanRuntimeFixture,
@@ -27,6 +28,8 @@ import {
   HOB_SESSION_MARKERS,
   HOB_SESSION_PROMPTS,
   LIBRARY_SKILL,
+  PACK_INJECTION,
+  PACK_PROMPT,
   ROSTER_INJECTION,
   SET_RULES,
   SET_SIBLING,
@@ -419,6 +422,22 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
         expect.stringMatching(new RegExp(`^recorded ${WEB_FETCH_CONTRACT_TOOL.name} as `)),
         records ? "ran" : "not run",
       ]);
+    }
+  });
+
+  // covers ADR 039 (The context pack with several hobs), RT-001
+  it("[TC-RT-1465-01] the pack with several hobs reaches the model with the turn's prompt, never in its system prompt", {
+    timeout: 120_000,
+  }, async () => {
+    const { exit, requests } = await turn({ briefing: CONTRACT_PACK, prompt: PACK_PROMPT });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      expect(JSON.stringify(request.system ?? "")).not.toContain(PACK_INJECTION);
+      // Who is here, why it answers and every named speaker, ahead of the prompt in one user message.
+      expect(JSON.stringify(request.messages)).toContain(
+        JSON.stringify(`${CONTRACT_PACK}\n\n${PACK_PROMPT}`).slice(1, -1),
+      );
     }
   });
 

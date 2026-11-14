@@ -29,6 +29,7 @@ import {
   type CleanRuntimeFixture,
   CONTRACT_ANSWER,
   CONTRACT_HUB_TOOL,
+  CONTRACT_PACK,
   CONTRACT_ROSTER,
   CONTRACT_SEARCH,
   cleanRuntimeFixture,
@@ -37,6 +38,8 @@ import {
   HOB_SESSION_MARKERS,
   HOB_SESSION_PROMPTS,
   LIBRARY_SKILL,
+  PACK_INJECTION,
+  PACK_PROMPT,
   ROSTER_INJECTION,
   SET_RULES,
   SET_SIBLING,
@@ -553,6 +556,23 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     );
     // No thread opened and no model was asked.
     expect(model.requests.length).toBe(asked);
+  });
+
+  // covers ADR 039 (The context pack with several hobs), RT-001
+  it("[TC-RT-1465-02] the pack with several hobs reaches the model with the turn's prompt, never in its instructions", {
+    timeout: 60_000,
+  }, async () => {
+    const asked = model.requests.length;
+    const { exit } = await turn({ briefing: CONTRACT_PACK, prompt: PACK_PROMPT });
+    expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+    const requests = model.requests.slice(asked);
+    expect(requests.length).toBeGreaterThan(0);
+    for (const request of requests) {
+      expect(request.instructions ?? "").not.toContain(PACK_INJECTION);
+      expect(JSON.stringify(request.input)).toContain(
+        JSON.stringify(`${CONTRACT_PACK}\n\n${PACK_PROMPT}`).slice(1, -1),
+      );
+    }
   });
 
   // covers ADR 032 (The roster, Every runtime)

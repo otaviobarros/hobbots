@@ -230,6 +230,7 @@ describe("chapters over the API", () => {
     expect(before.body.of).toBe("next-session");
     expect(before.body.report.parts.map((part) => part.part)).toEqual([
       "memory-brief",
+      "members",
       "camp-brief",
       "decisions",
       "open-work",

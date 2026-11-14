@@ -25,6 +25,8 @@ import {
   type PackRecords,
   packChapters,
   plainChapterSummary,
+  type SpeakerOf,
+  sinceYouSpoke,
 } from "../src/context-pack.ts";
 
 // The context pack (ADR 037, #1380): built from records within a budget, never over it, and never
@@ -70,8 +72,19 @@ const NO_WORK: ChatWork = { tasks: [], trees: [], questions: [], items: [] };
 
 const decision = (n: number, text: string): PackDecision => ({ id: `d${n}`, text, recordedAt: at(n) });
 
+/** Names authors as a two-person, two-hob camp does: the turn is Wren's. */
+const named: SpeakerOf = (m) =>
+  m.actor?.kind === "hob" && m.actor.id !== WREN
+    ? `${m.actor.id === "quill" ? "Quill" : m.actor.id} (hob)`
+    : m.role === "assistant"
+      ? "You"
+      : `${m.actor?.id === "leo" ? "Leo" : "Marina"} (person)`;
+
 const empty: PackRecords = {
   memoryBrief: null,
+  members: null,
+  quests: [],
+  speaker: named,
   campBrief: null,
   decisions: [],
   work: NO_WORK,
@@ -123,6 +136,17 @@ const fixed = (): PackRecords => {
     artifacts: [{ kind: "doc", title: "Planting plan", latestVersion: 2, updatedAt: at(6) }],
     chapters: [{ number: 1, title: "The cat", summary: "Named the cat Miso; she is three." }],
     live: [message(10, "user", "What should I plant first?"), message(11, "assistant", "Tomatoes, in pots.")],
+    members: {
+      members: [
+        { name: "Marina", kind: "person", you: false, owner: true },
+        { name: "Wren", kind: "hob", you: true, owner: false },
+      ],
+      reason: "You are the only hob here.",
+    },
+    quests: [
+      { title: "Plant the spring garden", lead: "Wren", state: "active", open: 1, needsYou: 1, readyForReview: 0 },
+    ],
+    speaker: named,
   };
 };
 
@@ -195,6 +219,7 @@ describe("buildPack", () => {
       total: 1_500,
       shares: {
         "memory-brief": 100,
+        members: 0,
         "camp-brief": 100,
         decisions: 100,
         "open-work": 100,
@@ -239,7 +264,9 @@ describe("buildPack", () => {
     expect(full.text).toMatch(/\(\d+ older artifacts left out\.\)/);
     // Then the live chapter's oldest turns; its last turn stays whole.
     expect(full.text).toContain(`turn 29 ${"t".repeat(300)}`);
-    expect(full.text).toMatch(/\(\d+ earlier messages of this chapter left out\.\)/);
+    expect(full.text).toMatch(
+      /\(\d+ earlier messages of this chapter left out\. Read any with read_message by its message_id, newest first: m\d+, m\d+, m\d+, m\d+, m\d+, then older ones\.\)/,
+    );
     expect(full.report.tokens).toBeLessThanOrEqual(budget.total);
   });
 
@@ -344,6 +371,96 @@ describe("buildPack", () => {
         expect(pack.report.tokens).toBeLessThanOrEqual(budget.total);
       }),
       { numRuns: 60 },
+    );
+  });
+});
+
+describe("the pack with several hobs", () => {
+  const by = (m: Message, kind: "user" | "hob", id: string) => new Message({ ...m, actor: { kind, id } });
+  const camp = [
+    by(message(1, "user", "Quill, draft the invitation."), "user", "marina"),
+    by(message(2, "assistant", "Here is a draft."), "hob", "quill"),
+    by(message(3, "user", "@Wren can you check the dates?"), "user", "leo"),
+    by(message(4, "assistant", "The dates hold."), "hob", "wren"),
+  ];
+
+  // covers ADR 039 (The context pack with several hobs)
+  it("[TC-CH-1465-01] names every speaker in the live chapter: people, other hobs and the hob itself", () => {
+    const pack = buildPack({ ...empty, live: camp });
+    expect(pack.text).toContain("**Marina (person):**\n> Quill, draft the invitation.");
+    expect(pack.text).toContain("**Quill (hob):**\n> Here is a draft.");
+    expect(pack.text).toContain("**Leo (person):**\n> @Wren can you check the dates?");
+    expect(pack.text).toContain("**You:**\n> The dates hold.");
+    expect(pack.text).not.toContain("**User:**");
+  });
+
+  // covers ADR 039 (The context pack with several hobs)
+  it("[TC-CH-1465-02] says who is here and why the turn runs, keeping the reason when the members do not fit", () => {
+    const members = {
+      members: [
+        { name: "Marina", kind: "person", you: false, owner: true },
+        { name: "Leo", kind: "person", you: false, owner: false },
+        { name: "Quill", kind: "hob", you: false, owner: false },
+        { name: "Wren", kind: "hob", you: true, owner: false },
+      ],
+      reason: "Leo mentioned you.",
+    } as const;
+    const pack = buildPack({ ...empty, members });
+    expect(pack.text).toBe(
+      [
+        "## Who is here",
+        "You are Wren.",
+        "Why you are answering now: Leo mentioned you.",
+        "Its members:",
+        "- Marina (person, owner)",
+        "- Leo (person)",
+        "- Quill (hob)",
+        "- Wren (hob, you)",
+      ].join("\n"),
+    );
+    const tight = buildPack({ ...empty, members }, { ...PACK_BUDGET, shares: { ...PACK_BUDGET.shares, members: 40 } });
+    expect(tight.text).toContain("Why you are answering now: Leo mentioned you.");
+    expect(tight.text).toMatch(/\(\d more members are not listed here\.\)/);
+    const part = tight.report.parts.find((each) => each.part === "members");
+    expect((part?.trimmed?.full ?? 0) + (part?.trimmed?.leftOut ?? 0)).toBe(4);
+  });
+
+  // covers ADR 039 (The context pack with several hobs), ADR 037 (The context pack)
+  it("[TC-CH-1465-03] lists the Quests under way here with the open work, before the Tasks", () => {
+    const pack = buildPack({
+      ...empty,
+      work: { ...NO_WORK, tasks: [task("t1", "Book the hall")], trees: [task("t1", "Book the hall")] },
+      quests: [
+        { title: "Run the winter market", lead: "Quill", state: "active", open: 3, needsYou: 1, readyForReview: 2 },
+      ],
+    });
+    const lines = pack.text?.split("\n") ?? [];
+    const quest = lines.findIndex((line) =>
+      line.startsWith(
+        "- Quest: Run the winter market (led by Quill, active; 3 open Tasks, 1 waiting on a person, 2 ready for review)",
+      ),
+    );
+    const open = lines.findIndex((line) => line.startsWith("- Open Task: Book the hall"));
+    expect(quest).toBeGreaterThan(-1);
+    expect(open).toBeGreaterThan(quest);
+  });
+
+  // covers ADR 039 (The context pack with several hobs)
+  it("[TC-CH-1465-04] tells a resumed hob only what others said since it spoke, within the live chapter's share", () => {
+    expect(sinceYouSpoke([], named)).toBeNull();
+    const since = sinceYouSpoke(camp.slice(2, 3), named);
+    expect(since).toContain("## Since you last spoke");
+    expect(since).toContain("**Leo (person):**\n> @Wren can you check the dates?");
+    // A long run keeps its newest lines, counts the oldest and says where to read them.
+    const long = Array.from({ length: 200 }, (_, n) =>
+      by(message(100 + n, "user", `line ${n} ${"w".repeat(400)}`), "user", n % 2 === 0 ? "leo" : "marina"),
+    );
+    const capped = sinceYouSpoke(long, named) ?? "";
+    expect(capped.length).toBeLessThanOrEqual(PACK_BUDGET.shares["live-chapter"] * CHARS_PER_TOKEN);
+    expect(capped).toContain(`line 199 ${"w".repeat(400)}`);
+    expect(capped).not.toContain("line 0 ");
+    expect(capped).toMatch(
+      /\(\d+ earlier messages since you last spoke left out\. Read any with read_message by its message_id, newest first: m\d+, m\d+, m\d+, m\d+, m\d+, then older ones\.\)/,
     );
   });
 });

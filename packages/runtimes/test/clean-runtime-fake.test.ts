@@ -14,9 +14,11 @@ import {
   AGENTS_SKILL,
   ASKED_SKILL,
   CONTRACT_HUB_TOOL,
+  CONTRACT_PACK,
   CONTRACT_ROSTER,
   cleanRuntimeFixture,
   LIBRARY_SKILL,
+  PACK_PROMPT,
   SET_SIBLING,
   SET_SKILL,
   stepRecordingContract,
@@ -116,6 +118,23 @@ describe("a clean fake runtime (ADR 029)", () => {
       .pipe(Stream.runCollect, Effect.runPromise)
       .then((events) => Array.from(events).flatMap((event) => (event._tag === "Completed" ? [event.text] : [])));
     expect(told).toEqual([CONTRACT_ROSTER]);
+  });
+
+  // covers ADR 039 (The context pack with several hobs), RT-001
+  it("[TC-RT-1465-03] the pack with several hobs reaches the turn as its briefing, ahead of the prompt", async () => {
+    const told = await makeFakeRuntime()
+      .sendPrompt({
+        prompt: PACK_PROMPT,
+        briefing: CONTRACT_PACK,
+        sessionId: null,
+        instructions: "",
+        instructionsChanged: false,
+        model: null,
+        effort: null,
+      })
+      .pipe(Stream.runCollect, Effect.runPromise)
+      .then((events) => Array.from(events).flatMap((event) => (event._tag === "Completed" ? [event.text] : [])));
+    expect(told).toEqual([`Echo: ${CONTRACT_PACK}\n\n${PACK_PROMPT}`]);
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001

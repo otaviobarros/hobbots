@@ -23,6 +23,7 @@ import {
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
+import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
@@ -62,6 +63,11 @@ interface TurnStart {
   readonly carry?: Carry | null;
   /** False when whoever started the turn starts what waits next, once it has settled the turn's work. */
   readonly drain?: boolean;
+  /**
+   * Why the turn runs, as the floor's `TurnRequest` records it (#1461). Without one, it is worked
+   * out from the turn's prompt with `turnReasonOf`.
+   */
+  readonly reason?: TurnReason | null;
 }
 
 /** How a turn that carried work ended early, as a code: a reply still running was interrupted. */
@@ -86,6 +92,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const { brief, instructionsChanged } = inputs;
     const repo = yield* HobbotsRepository;
     const packSources = yield* makePackSources;
+    const packPeople = yield* makePackPeople;
     const bus = yield* EventPublisher;
     const admission = yield* HobAdmission;
     // Without a backpack, a thread starts only your queued messages.
@@ -266,9 +273,22 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // the live chapter since. Only the live chapter is ever replayed (ADR 037).
         const inChapter = before.filter((m) => m.chapterId === thread.liveChapterId);
         const told = switched ? [...inChapter, continued] : inChapter;
-        const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched);
+        const people = yield* packPeople(thread, agent.id);
+        const reason =
+          start.reason === undefined
+            ? turnReasonOf(
+                transcript.find((m) => m.id === promptId) ?? null,
+                thread,
+                people.rows,
+                agent.id,
+                people.quest,
+              )
+            : start.reason;
+        const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched, people, reason);
         const pack =
-          liveSession(thread, brain.runtime, agent.id) === undefined ? yield* packSources(thread, told, before) : null;
+          liveSession(thread, brain.runtime, agent.id) === undefined
+            ? yield* packSources(thread, told, before, people, reason)
+            : null;
         // Every turn hears of every call the thread left uncertain, whichever brain runs it, since a
         // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
         // Continue names the continued reply's own.
