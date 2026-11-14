@@ -15,6 +15,7 @@ import {
   RUNTIME_NAMES,
   readHobJsonSchema,
   type SafetyPreset,
+  SUMMONING_CHARM_ID,
   SUMMONING_CHARM_NAME,
   type SummoningForEveryHob,
   starterRole,
@@ -62,6 +63,8 @@ export interface HobCard {
    * its override set it. Never its grants or folders.
    */
   readonly answers: CardAnswers;
+  /** Set when it holds the Summoning Charm only from "Summoning for every hob" (ADR 034, #1352). */
+  readonly summoningFromEveryHob?: true;
 }
 
 /** A card's answers: the preset they start from, and each operation's answer. */
@@ -146,6 +149,12 @@ export const rosterLine = (card: HobCard, shared: ReadonlySet<string>): string =
     ...(card.goodAt === null ? [] : [`good at ${quoted(card.goodAt, 200)}`]),
   ].join("; ");
 
+/** Where a card's Summoning Charm comes from, when it is "Summoning for every hob" rather than its own grant. */
+const fromEveryHobWords = (card: HobCard) =>
+  card.summoningFromEveryHob === true && card.charms.includes(SUMMONING_CHARM_NAME)
+    ? ` (${SUMMONING_CHARM_NAME} comes from the "Summoning for every hob" setting, not from its own grant)`
+    : "";
+
 const PRESET_WORDS: Readonly<Record<SafetyPreset, string>> = {
   careful: "Careful",
   balanced: "Balanced",
@@ -182,7 +191,7 @@ export const cardText = (card: HobCard, shared: ReadonlySet<string>): string =>
       `- Good at: ${card.goodAt === null ? "(not set)" : quoted(card.goodAt, 200)}`,
       `- Status: ${card.status === "retiring" ? "retiring, takes no new work" : card.status}`,
       `- Brain: ${brainWords(card)}`,
-      `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}`,
+      `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}${fromEveryHobWords(card)}`,
     ].join("\n"),
     answersTable(card.answers),
   ].join("\n\n");
@@ -330,11 +339,14 @@ export class HobDirectory extends Context.Service<
             },
           );
           const declared = held.flatMap((charm) => charm.declaration.operations);
-          return hobCard(
+          const card = hobCard(
             agent,
             held.map((charm) => charm.name),
             cardAnswers(preset, policy, declared),
           );
+          // Marked when its Summoning Charm comes from `setting` alone (#1352).
+          const fromSetting = !holdsCharm(agent.policy, SUMMONING_CHARM_ID) && holdsCharm(policy, SUMMONING_CHARM_ID);
+          return fromSetting ? { ...card, summoningFromEveryHob: true as const } : card;
         });
 
       const cardsOf = (agents: ReadonlyArray<Agent>) =>
