@@ -26,6 +26,7 @@ import { contextBlock } from "./briefing.ts";
 import { type CharmTurn, hubToolOffer, joinHubTools, type WebRecordPlace } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import type { CarriedWork } from "./continuations.ts";
+import { PASS_OWNER, passTools } from "./pass-tool.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import {
@@ -518,6 +519,8 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 return {
                   hubTools: joinHubTools([
                     { owner: "the Task tools", tools: taskTurn?.hubTools ?? null },
+                    // Every chat turn may pass (ADR 039), whatever its tool access.
+                    { owner: PASS_OWNER, tools: passTools(reply, repo, redactor) },
                     { owner: "the hub's other tools", tools: recorded(offer.hubTools) },
                   ]),
                   steering,

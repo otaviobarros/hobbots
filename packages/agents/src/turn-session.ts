@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark } from "@hobbots/domain";
-import { isSessionOf, isTaskToolName, liveSession, Thread } from "@hobbots/domain";
+import { isSessionOf, isTaskToolName, liveSession, PASS_TOOL, Thread } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";
@@ -45,8 +45,12 @@ const carriedMarks = (
 const sameTools = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string> | undefined) =>
   a === b || (a !== undefined && b !== undefined && a.length === b.length && a.every((name, i) => name === b[i]));
 
-/** The Task tools among the hub tools a new session holds for good, or undefined when not known (#1543). */
-const heldTaskTools = (hubTools: ReadonlyArray<string> | undefined) => hubTools?.filter(isTaskToolName);
+/**
+ * The Task tools and `pass` among the hub tools a new session holds for good, or undefined when not
+ * known (#1543, ADR 039).
+ */
+const heldTaskTools = (hubTools: ReadonlyArray<string> | undefined) =>
+  hubTools?.filter((name) => isTaskToolName(name) || name === PASS_TOOL);
 
 /** Whether recording `next` over `known` would change nothing the thread keeps of the session. */
 const sameSession = (known: RuntimeSession, next: RuntimeSession) =>

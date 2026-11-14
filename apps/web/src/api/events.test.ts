@@ -6,6 +6,7 @@ import {
   ApprovalRequest,
   Message,
   MessageId,
+  OWNER_ACTOR,
   type RemoteAccessStatus,
   Revision,
   Skill,
@@ -15,6 +16,8 @@ import {
   SkillRevisionHash,
   Thread,
   ThreadId,
+  TurnRequest,
+  TurnRequestId,
   YOU,
 } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
@@ -303,6 +306,41 @@ describe("applyEvent", () => {
       "m1",
       "q2",
     ]);
+  });
+
+  // covers ADR 039 (One hob speaks at a time)
+  it("[TC-UX-1462-01] drops the reply of a hob that passed, which leaves no message, and reads what is unread again", async () => {
+    const client = new QueryClient();
+    // The passed reply had ended, so the camp showed as unread.
+    client.setQueryData(queryKeys.unreadThreads, [threadId]);
+    const said = new Message({
+      ...reply("complete", "What should we plant?"),
+      id: MessageId.make("plan"),
+      role: "user",
+    });
+    client.setQueryData(queryKeys.messages(threadId), [said, reply("streaming", "")]);
+    const request = new TurnRequest({
+      id: TurnRequestId.make("r-1"),
+      threadId,
+      rootMessageId: null,
+      hobId: AgentId.make("pip"),
+      messageId: said.id,
+      causedBy: OWNER_ACTOR,
+      cause: "mention",
+      relayDepth: 0,
+      state: "passed",
+      replyId: MessageId.make("m1"),
+      droppedBy: null,
+      passReason: "Quill covered it",
+      queuedAt: 1,
+      position: 0,
+      createdAt: now,
+    });
+    applyEvent(client, { _tag: "TurnPassed", threadId, messageId: MessageId.make("m1"), request });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.map((m) => m.id)).toEqual([
+      "plan",
+    ]);
+    await vi.waitFor(() => expect(client.getQueryState(queryKeys.unreadThreads)?.isInvalidated).toBe(true));
   });
 
   it("takes a reply's steps from its upsert, so a replayed entry restores them", () => {

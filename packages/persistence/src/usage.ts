@@ -105,8 +105,9 @@ export class UsageLedger extends Context.Service<
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       /**
-       * Every settled reply and every turn outside a chat that started in the window, or ever: who
-       * spent it, on what, when, in which chat (none for a turn) and for which Quest.
+       * Every settled reply, every passed turn whose reply was removed (#1462) and every turn outside
+       * a chat that started in the window, or ever: who spent it, on what, when, in which chat (none
+       * for a turn) and for which Quest.
        */
       const spentIn = (window: { readonly since: string; readonly until: string } | null) => {
         const replies =
@@ -123,6 +124,11 @@ export class UsageLedger extends Context.Service<
               m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
             FROM messages m JOIN threads t ON t.id = m.thread_id
             WHERE ${sql.literal(SETTLED)} ${replies}
+            UNION ALL
+            SELECT m.agent_id, m.runtime, m.model, m.created_at, m.thread_id, ${sql.literal(QUEST_OF_REPLY)},
+              m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
+            FROM passed_turns m
+            WHERE 1 = 1 ${replies}
             UNION ALL
             SELECT u.agent_id, u.runtime, u.model, u.started_at, NULL, ${sql.literal(QUEST_OF_TURN)},
               u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens

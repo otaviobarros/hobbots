@@ -8,6 +8,7 @@ import {
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
   type MessageId,
+  PASS_TOOL,
   type PolicyDecision,
   READ_HOB_TOOL,
   READ_MESSAGE_TOOL,
@@ -100,8 +101,8 @@ export interface HubToolOwner {
 
 /**
  * The hub's built-in tool sets beside the Charms (ADR 031), whose names no Charm may take: Local Git,
- * Memory, Skills, the Directory (ADR 032), the Web tools (ADR 036), the Chapter tools (ADR 037) and
- * the Task tools.
+ * Memory, Skills, the Directory (ADR 032), the Web tools (ADR 036), the Chapter tools (ADR 037), the
+ * Task tools and the Turn tools' `pass` (ADR 039).
  */
 export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "Local Git", names: [GIT_INIT_TOOL] },
@@ -112,6 +113,7 @@ export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "the Records", names: [RECORD_DECISION_TOOL] },
   { owner: "the Chapter tools", names: [START_CHAPTER_TOOL, READ_MESSAGE_TOOL] },
   { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
+  { owner: "the Turn tools", names: [PASS_TOOL] },
 ];
 
 /**

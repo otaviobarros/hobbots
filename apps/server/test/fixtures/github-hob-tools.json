@@ -1,5 +1,22 @@
 [
   {
+    "name": "pass",
+    "description": "End your turn with no message, when you were asked to answer but have nothing to add, such as when another hob already covered it. Give a short reason, such as \"Quill covered it\": the conversation shows that you passed and why, and nothing else of this turn. Call it before you write anything or use any other tool, then end your turn without writing more. Never pass a question only you can answer.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Why you pass, in a few words, at most 200 characters, such as \"Quill covered it\"."
+        }
+      },
+      "required": ["reason"],
+      "additionalProperties": true
+    }
+  },
+  {
     "name": "git_init",
     "description": "Create an empty Git repository in one of your folders, or in a folder inside one. Use this instead of `git init`, which cannot write a repository's config or hooks from your sandbox. Hobbots creates the repository with Git's defaults and no hooks; then add, commit and branch with git as usual. Its .git/config and .git/hooks stay read-only for you. A .git that holds only a config and hooks, which is what your sandbox leaves when you delete a repository, is replaced.",
     "inputSchema": {
