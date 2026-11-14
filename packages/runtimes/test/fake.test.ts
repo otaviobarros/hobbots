@@ -9,6 +9,7 @@ import {
   FAKE_ONCE_DIRECTIVE,
   fakeCutOffError,
   fakeInstructionsPrompt,
+  fakeNotHeld,
   makeFakeRuntime,
 } from "../src/fake.ts";
 
@@ -155,5 +156,67 @@ describe("fake runtime's scripted hub calls", () => {
       { key: "build", depends_on: ["t1"] },
       { key: "hand", artifact_id: "a1", to_task_id: "t2", x: "$none.id" },
     ]);
+  });
+});
+
+describe("fake runtime's hub tools on a resumed session", () => {
+  // Codex keeps the hub tools a thread started with (ADR 024): fake Codex does too, so a test of a
+  // resumed lead sees what Codex would (#1543). Fake Claude Code is offered each turn's tools.
+  const offering = (names: ReadonlyArray<string>, calls: Array<string>) => ({
+    tools: names.map((name) => ({ name, description: name, label: name, inputSchema: {} })),
+    call: (name: string) =>
+      Effect.sync(() => {
+        calls.push(name);
+        return { text: `${name} ran.`, refused: false };
+      }),
+  });
+  const turn = async (
+    fake: ReturnType<typeof makeFakeRuntime>,
+    sessionId: string | null,
+    names: ReadonlyArray<string>,
+    calls: Array<string>,
+  ) => {
+    const events = await fake
+      .sendPrompt({
+        ...request(`fake:hub check_criterion {"key":"accept"}`),
+        sessionId,
+        hubTools: offering(names, calls),
+      })
+      .pipe(Stream.runCollect, Effect.runPromise);
+    const started = events.find((event) => event._tag === "SessionStarted");
+    const completed = events.find((event) => event._tag === "Completed");
+    return { started, text: completed?._tag === "Completed" ? completed.text : "" };
+  };
+
+  it("[TC-RT-1543-01] fake Codex holds the hub tools its session started with, and refuses a newer one", async () => {
+    const fake = makeFakeRuntime({ runtime: "codex" });
+    expect(fake.resumeKeepsHubTools).toBe(true);
+    const calls: Array<string> = [];
+    const first = await turn(fake, null, ["start_quest"], calls);
+    // A new session says which hub tools it holds, so the hub can record them.
+    expect(first.started).toMatchObject({ _tag: "SessionStarted", hubTools: ["start_quest"] });
+    const sessionId = first.started?._tag === "SessionStarted" ? first.started.sessionId : null;
+    const resumed = await turn(fake, sessionId, ["start_quest", "check_criterion"], calls);
+    expect(resumed.started).not.toHaveProperty("hubTools");
+    expect(resumed.text).toContain(`check_criterion: ${fakeNotHeld("check_criterion")}`);
+    expect(calls).toEqual([]);
+    // A new session holds what its turn offers.
+    const fresh = await turn(fake, null, ["start_quest", "check_criterion"], calls);
+    expect(fresh.text).toContain("check_criterion: check_criterion ran.");
+    expect(calls).toEqual(["check_criterion"]);
+  });
+
+  it("[TC-RT-1543-02] fake Claude Code is offered each turn's hub tools, resumed or not", async () => {
+    const fake = makeFakeRuntime();
+    expect(fake.resumeKeepsHubTools).toBeUndefined();
+    const calls: Array<string> = [];
+    const first = await turn(fake, null, ["start_quest"], calls);
+    expect(first.started).not.toHaveProperty("hubTools");
+    const sessionId = first.started?._tag === "SessionStarted" ? first.started.sessionId : null;
+    // Every call reaches the hub, which refuses one the turn does not offer.
+    expect(calls).toEqual(["check_criterion"]);
+    const resumed = await turn(fake, sessionId, ["start_quest", "check_criterion"], calls);
+    expect(resumed.text).toContain("check_criterion: check_criterion ran.");
+    expect(calls).toEqual(["check_criterion", "check_criterion"]);
   });
 });
