@@ -566,6 +566,32 @@ describe("continuing a hob when work arrives", () => {
     ]);
   });
 
+  // covers AG-006, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-13] a member hob retiring once its Tasks end still carries the work of its open Task in a camp", async () => {
+    const { run } = setUp(SamsCamp);
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    // Frodo's Task is open, so he retires only once it ends.
+    expect((await run(HobLifecycle.use((hobs) => hobs.retireWhenDone(FRODO)))).retiring).not.toBeNull();
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+
+    const all = await run(messagesWhen((each) => each.length === 1));
+    expect(all[0]?.actor).toMatchObject({ kind: "hob", id: FRODO });
+    expect(all[0]?.content).toContain("ended as failed.");
+  });
+
+  // covers IN-004, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-14] work only a paused member hob can carry waits without dispatching again and again", async () => {
+    const { run } = setUp(SamsCamp);
+    await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
+    await run(failedStep);
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(Effect.sleep("300 millis"));
+    // At most the one dispatch the wake started, which found nothing of Sam's.
+    expect(dispatches).toBeLessThanOrEqual(1);
+    expect(await run(messages())).toEqual([]);
+  });
+
   // covers OR-004, IN-004, EX-004
   it("[TC-OR-646] a Quest whose turn ended just before Hobbots stopped, before its wake was recorded, wakes its lead as the hub starts (#1081)", async () => {
     // The records as that stop left them: Frodo's Task leads an active Quest, his turn's Attempt

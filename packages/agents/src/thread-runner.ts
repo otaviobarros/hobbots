@@ -445,12 +445,19 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       });
 
     // The hobs among `hobIds` that take work now in `thread`, by id. A member hob that is retiring
-    // takes no new turn in a camp it joined; the thread's own hob keeps its rules for open Tasks.
+    // takes work in a camp it joined only for a Task of its own open there; the thread's own hob
+    // keeps its rules for open Tasks.
     const activeHobs = (thread: Thread, hobIds: ReadonlyArray<AgentId>) =>
       Effect.gen(function* () {
         const found = yield* Effect.forEach([...new Set(hobIds)], (hobId) => repo.findAgent(hobId));
-        const takesWork = (agent: Agent) =>
-          agent.status === "active" && (agent.retiring === null || agent.id === thread.agentId);
+        const retiringMember = found.some(
+          (agent) => Option.isSome(agent) && agent.value.retiring !== null && agent.value.id !== thread.agentId,
+        );
+        const trees =
+          retiringMember && Option.isSome(taskRecords) ? yield* taskRecords.value.readThreadTrees(thread.id) : [];
+        const mayWork = (agent: Agent) =>
+          agent.retiring === null || agent.id === thread.agentId || openThreadTask(trees, agent.id) !== undefined;
+        const takesWork = (agent: Agent) => agent.status === "active" && mayWork(agent);
         return new Map(
           found.flatMap((agent) =>
             Option.isSome(agent) && takesWork(agent.value) ? [[agent.value.id, agent.value] as const] : [],
@@ -613,12 +620,18 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // there; its own hob when none has, so the dispatch still reads the records again.
     const carrierOf = (service: Continuations["Service"], thread: Thread) =>
       Effect.gen(function* () {
+        return (yield* withWork(service, thread)) ?? (yield* workable(thread.id));
+      });
+
+    // The first of the thread's hobs, its own first, that takes work now and has work waiting there.
+    const withWork = (service: Continuations["Service"], thread: Thread) =>
+      Effect.gen(function* () {
         for (const hobId of yield* hobsOf(thread)) {
           if (!(yield* workWaits(service, thread.id, hobId))) continue;
           const found = yield* workable(thread.id, hobId);
           if (found !== null) return found;
         }
-        return yield* workable(thread.id);
+        return null;
       });
 
     // Delivers the work waiting in the thread, then frees the thread and starts what waits next.
@@ -660,17 +673,25 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
               yield* startNext(threadId);
               return;
             }
-            handed = (yield* startQueued(threadId, { slot })) !== null;
-            // With no request to start, another hob's work there takes the floor.
-            if (!handed && (yield* workWaitsIn(service, threadId))) {
-              handed = true;
-              yield* slot.release;
-              yield* startNext(threadId);
-            }
+            // The slot counts against this hob: it goes only to a request of this hob's.
+            handed = (yield* startQueued(threadId, { slot }, agentId)) !== null;
+            if (!handed) yield* afterEmpty(service, threadId, slot);
+            handed = true;
           }),
         );
       }).pipe(Effect.ensuring(Effect.suspend(() => (handed ? Effect.void : slot.release))));
     };
+
+    // After an empty dispatch whose slot no request of its hob took: the next request takes a slot
+    // of its own hob's, and with none to start, work of another hob that can run takes the floor.
+    // Work only hobs that cannot run now hold waits until one can.
+    const afterEmpty = (service: Continuations["Service"], threadId: ThreadId, slot: TurnSlot) =>
+      Effect.gen(function* () {
+        yield* slot.release;
+        if ((yield* startQueued(threadId)) !== null) return;
+        const thread = yield* repo.findThread(threadId);
+        if (Option.isSome(thread) && (yield* withWork(service, thread.value)) !== null) yield* startNext(threadId);
+      });
 
     // One turn that carries the work: your queued message with the work riding along, else a
     // continuation whose prompt is the work. Returns once the turn has ended, and how.

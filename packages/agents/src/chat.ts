@@ -486,14 +486,19 @@ export class ChatService extends Context.Service<
 
       // The hob that takes the floor now for a request of `hobId`, with its slot: the thread's own
       // hob in the slot taken for it, or a member hob that takes work, in a slot of its own; null
-      // while it cannot speak now. A member hob that is retiring takes no new turn in a camp it joined.
+      // while it cannot speak now. A member hob that is retiring takes a turn in a camp it joined
+      // only for a Task of its own open there.
       const speakerFor = (thread: Thread, own: Agent, hobId: AgentId, slot: TurnSlot | null) =>
         Effect.gen(function* () {
           if (slot === null) return null;
           if (hobId === own.id) return { agent: own, slot };
           yield* slot.release;
           const hob = yield* repo.findAgent(hobId);
-          if (Option.isNone(hob) || hob.value.status !== "active" || hob.value.retiring !== null) return null;
+          if (Option.isNone(hob) || hob.value.status !== "active") return null;
+          const mayWork = yield* requireOpenTaskWhileRetiring(hob.value, thread.id).pipe(
+            Effect.match({ onFailure: () => false, onSuccess: () => true }),
+          );
+          if (!mayWork) return null;
           const its = yield* slotFor(thread, hob.value);
           return its === null ? null : { agent: hob.value, slot: its };
         });
