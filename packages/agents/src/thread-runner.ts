@@ -395,6 +395,12 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         return { thread: thread.value, agent: agent.value };
       });
 
+    // Whether a request of `agentId` waits in the thread's line, for routine progress to ride along.
+    const requestWaitsFor = (threadId: ThreadId, agentId: AgentId) =>
+      repo
+        .openTurnRequests(mainLine(threadId))
+        .pipe(Effect.map((open) => TurnRequests.waiting(open).some((request) => request.hobId === agentId)));
+
     // Gives the line's floor to the next request (ADR 039): the oldest waiting one whose hob takes
     // work, the message Send now picked first; with `only`, a request of that hob alone. Runs under
     // the thread's lock while the line is not busy. The request takes the floor together with its
@@ -464,7 +470,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
                 Effect.gen(function* () {
                   const found = yield* workable(threadId);
                   if (found === null || (yield* runOf(threadId)).held) return null;
-                  if (routineOnly && Option.isNone(yield* repo.nextQueuedMessage(threadId))) return null;
+                  if (routineOnly && !(yield* requestWaitsFor(threadId, agentId))) return null;
                   return MessageId.make(crypto.randomUUID());
                 }),
               ),
@@ -558,13 +564,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       );
 
     // Whether work waits in the thread that a dispatch would deliver now: work that needs the hob,
-    // or routine progress when a queued message is there for it to ride along.
+    // or routine progress when a request of that hob is there for it to ride along.
     const workWaits = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId) =>
       Effect.gen(function* () {
         if ((yield* service.waiting(agentId)).includes(threadId)) return true;
-        return (
-          Option.isSome(yield* repo.nextQueuedMessage(threadId)) && (yield* service.progressWaits(threadId, agentId))
-        );
+        return (yield* requestWaitsFor(threadId, agentId)) && (yield* service.progressWaits(threadId, agentId));
       });
 
     // Whether your next message carries work: work you stopped in the thread, or routine
@@ -582,7 +586,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.map(({ all, revision }) => ({
         revision,
         runs: Array.from(HashMap.values(all)).flatMap(({ line, run }) =>
-          isBusy(run) ? [runStatus(line, run, revision)] : [],
+          // An idle line still says who waits for the floor, so a client that reconnects sees it.
+          isBusy(run) || run.next.length > 0 ? [runStatus(line, run, revision)] : [],
         ),
       })),
     );

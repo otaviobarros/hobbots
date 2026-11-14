@@ -15,8 +15,8 @@ import type { SqlClient, SqlError } from "effect/sql";
 
 // The answers hobs owe each conversation (ADR 039, One hob speaks at a time; migration
 // 20261114003401). An actor is two columns, as a message's author is; PostgreSQL reads BIGINT as a
-// bigint and SQLite as a number. Requests are not journaled: clients see the floor through the
-// thread's run.
+// bigint and SQLite as a number. Requests are not journaled, an exception to STD-ARCH-015 that
+// ADR 039's amendment records: clients see the floor through the thread's run.
 
 interface TurnRequestRow {
   readonly id: unknown;

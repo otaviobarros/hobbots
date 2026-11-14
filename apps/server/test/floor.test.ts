@@ -231,4 +231,35 @@ describe("one hob speaks at a time", () => {
     expect(replies(result.messages).map(([hobId, , status]) => [hobId, status])).toEqual([[ROOK, "complete"]]);
     expect(result.requests.map((r) => [r.hobId, r.state])).toEqual([[ROOK, "answered"]]);
   }, 30_000);
+
+  // covers ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-05] gives an idle floor to the next hob that can take it, past a paused hob's request", async () => {
+    const left = Effect.gen(function* () {
+      yield* campOfThree;
+      const repo = yield* HobbotsRepository;
+      yield* repo.setAgentStatus(new Agent({ ...hob(PIP), status: "paused" }), "active");
+      yield* mention("first", [PIP]);
+    });
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      yield* chat.sendPrompt(CAMP, "@rook and you?");
+      const messages = yield* repo.listMessages(CAMP).pipe(
+        Effect.flatMap((all) =>
+          all.some((m) => m.role === "assistant" && m.status === "complete")
+            ? Effect.succeed(all)
+            : Effect.fail("not yet" as const),
+        ),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      return { messages, requests: yield* allRequests };
+    }).pipe(Effect.provide(hubOver(left, "2 millis")), Effect.scoped, Effect.runPromise);
+
+    expect(replies(result.messages).map(([hobId, , status]) => [hobId, status])).toEqual([[ROOK, "complete"]]);
+    // Pip's request keeps its place until Pip wakes.
+    expect(result.requests.map((r) => [r.hobId, r.state])).toEqual([
+      [PIP, "waiting"],
+      [ROOK, "answered"],
+    ]);
+  }, 30_000);
 });
