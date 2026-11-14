@@ -3,6 +3,8 @@ import { formatCount } from "../../lib/format.ts";
 /** User-facing copy for the sidebar (STD-I18N-001). */
 export const messages = {
   label: "Sections",
+  /** The four places above the camps. */
+  places: { home: "Home", forYou: "For you", usage: "Usage", settings: "Settings" },
   wordmark: "Hobbots",
   find: "Find or jump to",
   /** Read after For you's label when something waits there, so it reads "For you, 2 waiting on you". */

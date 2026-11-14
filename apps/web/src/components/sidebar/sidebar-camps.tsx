@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useKnownUnreadThreads } from "../../api/thread-reads.ts";
 import { formatCount } from "../../lib/format.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
-import { campList } from "./camp-list.ts";
+import { campList, foldedNews } from "./camp-list.ts";
 import { messages as copy } from "./messages.ts";
 import { sidebarCount, sidebarMore, sidebarRule, sidebarSection } from "./sidebar-classes.ts";
 import type { SidebarData } from "./sidebar-data.ts";
@@ -43,11 +43,9 @@ export function SidebarCamps({
     unread: useKnownUnreadThreads(),
   });
   const open = openCampOf(pathname);
-  const unread = new Set(rows.filter((row) => row.unread > 0).map((row) => row.thread.id));
   const folded = campList(
     rows.map((row) => ({ ...row, id: row.thread.id })),
     open,
-    unread,
   );
   // The rail has no room for Show more, so it lists every camp and scrolls.
   const shown = all || !wide ? rows : folded.shown;
@@ -60,9 +58,7 @@ export function SidebarCamps({
       <span aria-hidden className={sidebarRule} />
       {data.campsFailed && <SidebarFailed message={copy.campsLoadFailed} onRetry={data.retry} />}
       <CampsList data={data} rows={rows} shown={shown} open={open} wide={wide} />
-      {wide && folded.hidden > 0 && (
-        <ShowMore all={all} hidden={folded.hidden} hiddenUnread={folded.hiddenUnread} onToggle={() => setAll(!all)} />
-      )}
+      {wide && folded.hidden.length > 0 && <ShowMore all={all} hidden={folded.hidden} onToggle={() => setAll(!all)} />}
     </>
   );
 }
@@ -96,30 +92,27 @@ function CampsList({
 
 /**
  * Show N more, or Show fewer, under the first camps. While folded, a dot shows that a hidden camp
- * holds what you have not read, as the rail's dot does, and its description says so.
+ * holds what you have not read, as the rail's dot does: lantern for a mention of you. Its description
+ * says so.
  */
-function ShowMore({
-  all,
-  hidden,
-  hiddenUnread,
-  onToggle,
-}: {
-  all: boolean;
-  hidden: number;
-  hiddenUnread: boolean;
-  onToggle: () => void;
-}) {
-  const news = !all && hiddenUnread;
+function ShowMore({ all, hidden, onToggle }: { all: boolean; hidden: ReadonlyArray<CampRow>; onToggle: () => void }) {
+  const { unread, mentions } = foldedNews(all ? [] : hidden);
+  const news = copy.campNews({ unread, mentions, needs: false });
   return (
     <button
       type="button"
       aria-expanded={all}
-      aria-description={news ? copy.campNews({ unread: 1, mentions: 0, needs: false }) : undefined}
+      aria-description={news === "" ? undefined : news}
       className={sidebarMore}
       onClick={onToggle}
     >
-      {all ? copy.fewerCamps : copy.moreCamps({ count: hidden })}
-      {news && <span aria-hidden className="size-2 flex-none rounded-dot bg-text-strong" />}
+      {all ? copy.fewerCamps : copy.moreCamps({ count: hidden.length })}
+      {news !== "" && (
+        <span
+          aria-hidden
+          className={cn("size-2 flex-none rounded-dot", mentions > 0 ? "bg-lantern" : "bg-text-strong")}
+        />
+      )}
     </button>
   );
 }

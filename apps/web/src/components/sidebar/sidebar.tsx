@@ -21,10 +21,10 @@ import { useWide } from "./use-wide.ts";
 
 /** The four places above the camps. For you opens the Inbox until its own screen replaces it (#1470). */
 const NAV = [
-  { label: "Home", icon: "Home", to: "/" },
-  { label: "For you", icon: "Inbox", to: "/inbox" },
-  { label: "Usage", icon: "Usage", to: "/usage" },
-  { label: "Settings", icon: "Settings", to: "/settings" },
+  { id: "home", icon: "Home", to: "/" },
+  { id: "forYou", icon: "Inbox", to: "/inbox" },
+  { id: "usage", icon: "Usage", to: "/usage" },
+  { id: "settings", icon: "Settings", to: "/settings" },
 ] as const;
 
 /** In development, `?chief=needs-you`, `?chief=working` or `?chief=idle` previews a mood. */
@@ -89,11 +89,11 @@ export function Sidebar() {
           <FindButton wide={wide} />
           <div className="flex w-full flex-none gap-0.5 px-2.5 pb-1.5 max-wide:flex-col max-wide:items-center max-wide:px-0">
             {NAV.map((item) => {
-              const count = item.label === "For you" && !isActive(item.to) ? waiting : 0;
+              const count = item.id === "forYou" && !isActive(item.to) ? waiting : 0;
               return (
                 <SidebarNavLink
-                  key={item.label}
-                  label={item.label}
+                  key={item.id}
+                  label={copy.places[item.id]}
                   icon={item.icon}
                   to={item.to}
                   active={isActive(item.to)}
