@@ -208,6 +208,36 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     }
   });
 
+  // covers SEC-001, SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-13] a refused call's label is redacted with the turn's redactor before it is shortened, and input it cannot read gives a plain label", async () => {
+    const path = join(folder, "labels.jsonl");
+    writeFileSync(path, "");
+    const secret = "plain-known-value-7f3a9c";
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(
+      path,
+      (event) => reported.push(event),
+      (text) => text.replaceAll(secret, "[secret]"),
+    );
+    await Effect.runPromise(refusals.start);
+    // The secret straddles where a command's label is cut.
+    const command = `echo ${"a".repeat(80)} ${secret} done`;
+    appendFileSync(
+      path,
+      [
+        call("c-1", "exec_command", { cmd: command }),
+        output("c-1", "unsupported call: exec_command"),
+        call("c-2", "apply_patch", { changes: [null] }),
+        output("c-2", "unsupported call: apply_patch"),
+      ].join(""),
+    );
+    await Effect.runPromise(refusals.read);
+    const labels = reported.map((event) => (event._tag === "ToolDenied" ? event.label : event._tag));
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).not.toContain(secret.slice(0, 8));
+    expect(labels[1]).toBe("Using apply_patch");
+  });
+
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {

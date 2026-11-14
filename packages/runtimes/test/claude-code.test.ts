@@ -593,6 +593,35 @@ describe("reading a Claude Code turn", () => {
   });
 
   // covers PE-001, ADR 014 (#1356)
+  // covers SEC-001, ADR 014 (#1356)
+  it("[TC-PE-1356-14] a refused call's label is redacted with the turn's redactor before it is shortened", () => {
+    const secret = "plain-known-value-7f3a9c";
+    const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
+    const command = `echo ${"a".repeat(80)} ${secret} done`;
+    read({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { content: [{ type: "tool_use", id: "t-1", name: "Bash", input: { command } }] },
+    } as unknown as SDKMessage);
+    const [denied] = read({
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t-1",
+            is_error: true,
+            content: "<tool_use_error>Error: No such tool available: Bash</tool_use_error>",
+          },
+        ],
+      },
+    } as unknown as SDKMessage);
+    expect(denied).toMatchObject({ _tag: "ToolDenied", tool: "Bash" });
+    expect(denied?._tag === "ToolDenied" ? denied.label : "").not.toContain(secret.slice(0, 8));
+  });
+
   it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
     const read = turnEvents();
     const said = (parent: string | null, content: ReadonlyArray<unknown>) =>

@@ -100,6 +100,7 @@ import {
   commandOf,
   offeredTools,
   readOnlyCommands,
+  refusedCallLabel,
   toolLabel,
   WEB_SEARCH_TOOL,
 } from "./tool-calls.ts";
@@ -665,7 +666,7 @@ const resultText = (content: unknown): string =>
  * model's tool_use, and the "No such tool available" result that answers it. A hub tool is named
  * without the hub server's prefix, as the session's offer names it. A subagent's calls are its own.
  */
-const notOfferedCalls = () => {
+const notOfferedCalls = (redact?: (text: string) => string) => {
   const calls = new Map<string, { readonly name: string; readonly input: Record<string, unknown> }>();
   return (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
     if ((message.type !== "assistant" && message.type !== "user") || message.parent_tool_use_id !== null) return [];
@@ -693,7 +694,7 @@ const notOfferedCalls = () => {
         notOfferedDenial({
           id: block.tool_use_id,
           tool,
-          label: toolLabel(tool, call?.input ?? {}),
+          label: refusedCallLabel(tool, call?.input ?? {}, redact),
           runtimeTool: claudeCodeRuntimeTool(named),
         }),
       ];
@@ -706,10 +707,10 @@ const notOfferedCalls = () => {
  * becomes a step that starts with the block and ends when it stops. `tools` are the turn's, whose
  * policy version its session start reports.
  */
-export const turnEvents = (tools: ToolTurn | null = null) => {
+export const turnEvents = (tools: ToolTurn | null = null, redact?: (text: string) => string) => {
   // The step of each open thinking block, by content block index.
   const open = new Map<number, string>();
-  const refused = notOfferedCalls();
+  const refused = notOfferedCalls(redact);
   let steps = 0;
   const endAll = (): ReadonlyArray<RuntimeEvent> => {
     const ended = Array.from(open.values(), (id): RuntimeEvent => ({ _tag: "StepEnded", id }));
@@ -1516,7 +1517,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 Effect.andThen(Effect.sync(() => prepared && child?.pid && killGroup(child.pid))),
               ),
           );
-          const toEvents = turnEvents(tools);
+          const toEvents = turnEvents(tools, request.redaction?.text);
           const whole = wholeTurn(start.asked, start.askedSet);
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
           yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(

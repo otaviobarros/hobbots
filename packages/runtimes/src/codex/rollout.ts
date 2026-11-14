@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { notOfferedDenial, type RuntimeEvent, type RuntimeToolName } from "@hobbots/agents";
 import { Effect, Semaphore } from "effect";
-import { toolLabel } from "../tool-calls.ts";
+import { refusedCallLabel } from "../tool-calls.ts";
 
 /**
  * Calls to tools a Codex turn was not offered (#1356). Codex answers a call to a name it has no tool
@@ -75,13 +75,18 @@ const inputOf = (item: ResponseItem): Record<string, unknown> => {
 };
 
 /** A refused call's step label: a command by its command line, as Codex's own commands show. */
-const labelOf = (tool: string, runtimeTool: RuntimeToolName | null, call: ResponseItem | undefined) => {
+const labelOf = (
+  tool: string,
+  runtimeTool: RuntimeToolName | null,
+  call: ResponseItem | undefined,
+  redact: ((text: string) => string) | undefined,
+) => {
   const input = call === undefined ? {} : inputOf(call);
   const command = input.cmd ?? input.command;
   const line = Array.isArray(command) ? command.filter((word) => typeof word === "string").join(" ") : command;
   return runtimeTool === "commands" && typeof line === "string"
-    ? toolLabel("Bash", { command: line })
-    : toolLabel(tool, input);
+    ? refusedCallLabel("Bash", { command: line }, redact)
+    : refusedCallLabel(tool, input, redact);
 };
 
 /**
@@ -96,7 +101,11 @@ const labelOf = (tool: string, runtimeTool: RuntimeToolName | null, call: Respon
  * bounded chunk at a time, at most a bounded amount per read, a line longer than a chunk skipped,
  * and a rollout that shrank read on from its new end.
  */
-export const rolloutRefusals = (path: string | null | undefined, report: (event: RuntimeEvent) => void) => {
+export const rolloutRefusals = (
+  path: string | null | undefined,
+  report: (event: RuntimeEvent) => void,
+  redact?: (text: string) => string,
+) => {
   const calls = new Map<string, ResponseItem>();
   let offset: number | null = null;
   let reported = 0;
@@ -126,7 +135,9 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
       const runtimeTool = RUNTIME_TOOLS.get(tool) ?? null;
       if (reported >= ROLLOUT_REFUSALS_MAX) continue;
       reported += 1;
-      report(notOfferedDenial({ id: item.call_id, tool, label: labelOf(tool, runtimeTool, call), runtimeTool }));
+      report(
+        notOfferedDenial({ id: item.call_id, tool, label: labelOf(tool, runtimeTool, call, redact), runtimeTool }),
+      );
     }
   };
   /**

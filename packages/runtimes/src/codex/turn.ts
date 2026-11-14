@@ -859,7 +859,7 @@ const turnEvents = (
       const threadId = opened.thread.id;
       thread = threadId;
       // The calls to tools the thread was not offered, which only its rollout shows (#1356).
-      const refusals = rolloutRefusals(opened.thread.path, report);
+      const refusals = rolloutRefusals(opened.thread.path, report, request.redaction?.text);
       const mapper = codexTurnEvents(
         threadId,
         skillRootsOf(launch.skills),

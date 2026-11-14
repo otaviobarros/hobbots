@@ -1381,6 +1381,24 @@ export const toolLabel = (
 };
 
 /**
+ * The label of a call a runtime refused before any hook saw it (#1356). Its input is the model's own,
+ * and a Codex call's comes from a rollout the hob can write, so input a label cannot read, such as a
+ * patch with a null change, gives the tool's plain label instead of failing the turn. It is redacted
+ * with the turn's redactor before it is shortened, as every label is.
+ */
+export const refusedCallLabel = (
+  tool: string,
+  input: Record<string, unknown>,
+  redact: (text: string) => string = redactSecrets,
+): string => {
+  try {
+    return toolLabel(tool, input, redact);
+  } catch {
+    return `Using ${tool}`;
+  }
+};
+
+/**
  * The narrowest of several verdicts, keeping the first on a tie, for one call's requests. An Ask is
  * high risk when any part that asks is, and grantable only when every part that asks is, with the
  * rules of each (ADR 015). An Allow names every grant that answered a part.
