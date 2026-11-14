@@ -1,8 +1,10 @@
 import {
   Agent,
   AgentId,
+  type CharmOperation,
   EMPTY_HOB_POLICY,
   type HobPolicy,
+  POLICY_OPERATIONS,
   type PolicyOverrides,
   READ_HOB_DESCRIPTION,
   roleFields,
@@ -11,6 +13,7 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { DirectoryTools } from "../src/charms.ts";
 import {
+  cardAnswers,
   DIRECTORY_LABEL,
   deliveredRoster,
   type HobCard,
@@ -27,6 +30,7 @@ import {
 } from "../src/hob-directory.ts";
 import type { ToolAccess } from "../src/runtime.ts";
 import { makeRedactor } from "../src/secrets.ts";
+import { fakeCharmDeclaration } from "../src/testing.ts";
 
 const agent = (id: string, name: string, fields: Partial<Agent> = {}) =>
   new Agent({
@@ -44,8 +48,16 @@ const agent = (id: string, name: string, fields: Partial<Agent> = {}) =>
     ...fields,
   });
 
-const card = (id: string, name: string, fields: Partial<Agent> = {}, charms: ReadonlyArray<string> = []) =>
-  hobCard(agent(id, name, fields), charms);
+const card = (
+  id: string,
+  name: string,
+  fields: Partial<Agent> = {},
+  charms: ReadonlyArray<string> = [],
+  declared: ReadonlyArray<CharmOperation> = [],
+) => {
+  const hob = agent(id, name, fields);
+  return hobCard(hob, charms, cardAnswers("balanced", hob.policy, declared));
+};
 
 const access = (overrides: PolicyOverrides = {}): ToolAccess => {
   const hob: HobPolicy = { ...EMPTY_HOB_POLICY, overrides };
@@ -88,8 +100,8 @@ describe("the public card", () => {
   it("[TC-AG-1234-01] has only the fields ADR 032 lists, and never the hob's instructions", () => {
     const pip = card("pip", "Pip", { goodAt: "Launch emails.", model: "sonnet", effort: "high" }, ["GitHub"]);
     // A field added to the card must be added to ADR 032's table first.
-    expect(Object.keys(pip).sort()).toEqual(["brain", "charms", "goodAt", "id", "name", "role", "status"]);
-    expect(pip).toEqual({
+    expect(Object.keys(pip).sort()).toEqual(["answers", "brain", "charms", "goodAt", "id", "name", "role", "status"]);
+    expect(pip).toMatchObject({
       id: "pip",
       name: "Pip",
       role: { title: "Writer", sigil: "Writer" },
@@ -97,6 +109,7 @@ describe("the public card", () => {
       status: "active",
       brain: { runtime: "Claude Code", model: "sonnet", effort: "high" },
       charms: ["GitHub"],
+      answers: { preset: "balanced" },
     });
     expect(card("q", "Quill", { runtime: "codex" }).brain).toEqual({
       runtime: "Codex",
@@ -141,11 +154,15 @@ describe("the roster", () => {
   });
 
   // covers ADR 032 (The roster)
-  it("[TC-AG-1307-01] tells the hob a card holds no more than its line, so it answers from the list and reads a card only when asked or left out", () => {
+  it("[TC-AG-1307-01] tells the hob a card holds its line and its answers, so it answers from the list and reads a card only when asked, left out or checking what a hob may do", () => {
     const text = renderRoster([card("pip", "Pip", {}, ["GitHub"])], new Set(), true) ?? "";
-    expect(text).toContain("a card holds no more than the hob's line below");
+    expect(text).toContain("the hob's line below, and its Allow, Ask or Never answer for each operation");
     expect(text).toContain("Answer questions about these hobs from this list.");
-    expect(text).toContain("Read a card only when you are asked to, or for a hob this list leaves out.");
+    expect(text).toContain(
+      "Read a card only when you are asked to, for a hob this list leaves out, or to check what a hob may do.",
+    );
+    // The answers are on the card only, so the roster's budget holds as the hub grows.
+    expect(text).not.toContain("| Operation |");
     expect(text).not.toContain("full card");
     expect(READ_HOB_DESCRIPTION).toContain(
       "only when you are asked to read a card, or for a hob the roster leaves out",
@@ -297,11 +314,87 @@ describe("read_hob's answer", () => {
           "- Brain: Claude Code, model default, effort default",
           "- Charms: GitHub",
         ].join("\n"),
+        [
+          "Answers, from the Balanced preset:",
+          "| Operation | Answer |",
+          "| --- | --- |",
+          "| read-files | Allow |",
+          "| edit-files | Allow |",
+          "| delete-files | Ask |",
+          "| run-commands | Allow |",
+          "| local-git | Allow |",
+          "| push | Ask |",
+          "| use-web | Allow |",
+          "| outside-folders | Never |",
+          "| search-memory | Allow |",
+          "| save-memory | Allow |",
+          "| search-skills | Allow |",
+          "| request-skill | Ask |",
+          "| propose-skill | Allow |",
+          "| skill-feedback | Allow |",
+          "| read-hobs | Allow |",
+          "| search-web | Allow |",
+        ].join("\n"),
       ].join("\n\n"),
     );
     const twins = readHobAnswer("pip", { cards: [pip, card("pip-2", "pip")], shared: new Set() });
     expect(twins).toContain('### "Pip" (id pip)');
     expect(twins).toContain('### "pip" (id pip-2)');
     expect(readHobAnswer(" Wren ", { cards: [], shared: new Set() })).toBe("There is no hob named Wren.");
+  });
+});
+
+describe("the card's answers", () => {
+  const github = fakeCharmDeclaration("github").operations;
+
+  // covers ADR 032 (The public card, Answers), #1351
+  it("[TC-AG-1351-01] a hob with overrides and a Charm shows every built-in and Charm answer after its overrides, marking those an override set", () => {
+    const pip = card(
+      "pip",
+      "Pip",
+      {
+        policy: {
+          ...EMPTY_HOB_POLICY,
+          overrides: { "edit-files": "ask", push: "allow", "read-files": "allow" },
+          charms: { granted: ["github"], overrides: { "github.write": "deny" } },
+        },
+      },
+      ["GitHub"],
+      github,
+    );
+    const answers = new Map(pip.answers.operations.map((each) => [each.operation, each]));
+    expect(pip.answers.operations.map((each) => each.operation)).toEqual([
+      ...POLICY_OPERATIONS,
+      "github.read",
+      "github.write",
+    ]);
+    // An override narrower than the preset sets the answer, and is marked.
+    expect(answers.get("edit-files")).toEqual({ operation: "edit-files", decision: "ask", override: true });
+    expect(answers.get("github.write")).toEqual({ operation: "github.write", decision: "deny", override: true });
+    // One wider than the preset decides nothing: the preset stands, unmarked.
+    expect(answers.get("push")).toEqual({ operation: "push", decision: "ask", override: false });
+    // One the same as the preset still is the hob's own answer.
+    expect(answers.get("read-files")).toEqual({ operation: "read-files", decision: "allow", override: true });
+    expect(answers.get("github.read")).toEqual({ operation: "github.read", decision: "allow", override: false });
+
+    const text = readHobAnswer("Pip", { cards: [pip], shared: new Set() });
+    expect(text).toContain("Answers, from the Balanced preset:");
+    expect(text).toContain("| edit-files | Ask (override) |");
+    expect(text).toContain("| push | Ask |");
+    expect(text).toContain("| github.write | Never (override) |");
+    expect(text).toContain("| github.read | Allow |");
+    // The answers, never the grants, folders or instructions behind them.
+    expect(text).not.toContain("launch date");
+  });
+
+  it("[TC-AG-1351-02] follow the installation's preset, and list no operation of a Charm the card does not show", () => {
+    const hob = agent("quill", "Quill");
+    const careful = hobCard(hob, [], cardAnswers("careful", hob.policy, []));
+    expect(careful.answers.preset).toBe("careful");
+    expect(careful.answers.operations.find((each) => each.operation === "edit-files")?.decision).toBe("ask");
+    expect(careful.answers.operations.some((each) => each.operation.includes("."))).toBe(false);
+    expect(readHobAnswer("Quill", { cards: [careful], shared: new Set() })).toContain(
+      "Answers, from the Careful preset:",
+    );
   });
 });

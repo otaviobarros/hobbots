@@ -360,6 +360,7 @@ describe("hobs see each other, end to end", () => {
       expect(heard, run.name).toContain('### "Quill"\n- Role: "Writer"');
       expect(heard, run.name).toContain("- Brain: Codex, model default, effort default");
       expect(heard, run.name).toContain("- Charms: GitHub");
+      expect(heard, run.name).toContain("| github.read | Allow |\n| github.write | Allow |");
       // On Claude Code and Codex the card reached the model as the call's result, not only the hub.
       if (run.runtime !== null) expect(told, run.name).toContain('### "Quill"');
       const steps = reply.steps.filter((step) => step.label === READ_HOB_LABEL);

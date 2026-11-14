@@ -1,7 +1,15 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type CharmTurn, DirectoryTools, HobDirectory, hobCard, makeRedactor, type ToolAccess } from "@hobbots/agents";
+import {
+  type CharmTurn,
+  cardAnswers,
+  DirectoryTools,
+  HobDirectory,
+  hobCard,
+  makeRedactor,
+  type ToolAccess,
+} from "@hobbots/agents";
 import { Agent, AgentId, EMPTY_HOB_POLICY, READ_HOB_TOOL, roleFields } from "@hobbots/domain";
 import { type HubCallRuntime, hubCallRuntimes } from "@hobbots/runtimes/testing";
 import { Effect, Exit, Layer } from "effect";
@@ -45,6 +53,7 @@ const pip = hobCard(
     createdAt: "2026-11-08T00:00:00.000Z",
   }),
   ["GitHub"],
+  cardAnswers("balanced", EMPTY_HOB_POLICY, []),
 );
 
 /** One hub's directory tools over a directory holding Pip, with every record and read in `order`. */
