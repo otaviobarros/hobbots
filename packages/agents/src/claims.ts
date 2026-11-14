@@ -77,9 +77,7 @@ export class ClaimRegister extends Context.Service<
  * another (PE-006). The Task keeps running: the hub refuses only its writes to what you took over.
  * Taking over a hob's live browser is not part of it; it waits for its own decision (#382).
  */
-export const takeOverTask = (
-  taskId: TaskId,
-): Effect.Effect<ReadonlyArray<Claim>, TaskNotFound, UserSession | ClaimRegister | TaskRepository | EventPublisher> =>
+export const takeOverTask = (taskId: TaskId) =>
   Effect.gen(function* () {
     const session = yield* UserSession;
     const tasks = yield* TaskRepository;

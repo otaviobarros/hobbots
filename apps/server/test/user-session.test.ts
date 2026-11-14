@@ -844,6 +844,7 @@ describe("only the user decides approvals and manages grants", () => {
         join("apps", "server", "src", "user-session.ts"),
         join("packages", "agents", "src", "approvals.ts"),
         join("packages", "agents", "src", "charm-calls.ts"),
+        join("packages", "agents", "src", "claims.ts"),
         join("packages", "agents", "src", "devices.ts"),
         join("packages", "agents", "src", "controls.ts"),
         join("packages", "agents", "src", "grants.ts"),
@@ -866,6 +867,7 @@ describe("only the user decides approvals and manages grants", () => {
     for (const service of [
       "approvals.ts",
       "charm-calls.ts",
+      "claims.ts",
       "controls.ts",
       "devices.ts",
       "grants.ts",
