@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { type CommandStart, operationDecision } from "@hobbots/agents";
+import { type CommandStart, operationDecision, type RuntimeToolName } from "@hobbots/agents";
 import { narrowest, openTools, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
@@ -63,6 +63,21 @@ export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "re
         return open.edit;
     }
   });
+};
+
+/** The runtime tool a Claude Code tool belongs to, as a session's offer names them (#1348); null for any other name. */
+export const claudeCodeRuntimeTool = (tool: string): RuntimeToolName | null => {
+  if (!(CLAUDE_CODE_TOOLS as ReadonlyArray<string>).includes(tool)) return null;
+  switch (tool) {
+    case "Read":
+    case "Glob":
+    case "Grep":
+      return "file_reads";
+    case "Bash":
+      return "commands";
+    default:
+      return "file_edits";
+  }
 };
 
 /**
@@ -1483,6 +1498,24 @@ export const toolLabel = (
     }
     default:
       return `Using ${tool}`;
+  }
+};
+
+/**
+ * The label of a call a runtime refused before any hook saw it (#1356). Its input is the model's own,
+ * and a Codex call's comes from a rollout the hob can write, so input a label cannot read, such as a
+ * patch with a null change, gives the tool's plain label instead of failing the turn. It is redacted
+ * with the turn's redactor before it is shortened, as every label is.
+ */
+export const refusedCallLabel = (
+  tool: string,
+  input: Record<string, unknown>,
+  redact: (text: string) => string = redactSecrets,
+): string => {
+  try {
+    return toolLabel(tool, input, redact);
+  } catch {
+    return `Using ${tool}`;
   }
 };
 

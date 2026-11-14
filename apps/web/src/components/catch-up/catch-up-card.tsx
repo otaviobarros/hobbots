@@ -21,6 +21,14 @@ interface Row {
 
 const rowOf = (item: CatchUpItem): Row => {
   switch (item._tag) {
+    case "Mentioned":
+      return {
+        key: `mentioned-${item.messageId}`,
+        tag: messages.tag.mentioned,
+        needs: true,
+        text: messages.mentioned({ excerpt: item.excerpt }),
+        messageId: item.messageId,
+      };
     case "NeedsYou":
       return {
         key: `needs-${item.questId}`,

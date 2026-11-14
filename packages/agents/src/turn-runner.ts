@@ -264,7 +264,17 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         // Secrets are redacted before a tool call's step is saved, journaled or announced, so a client
         // that reads the reply later never receives them either.
         const handle = (raw: RuntimeEvent) =>
-          raw._tag === "SessionStarted" ? handleEvent(raw) : Effect.andThen(session.confirmBrief, handleEvent(raw));
+          raw._tag === "SessionStarted"
+            ? handleEvent(raw)
+            : Effect.andThen(session.confirmBrief, Effect.flatMap(explained(raw), handleEvent));
+        // A call to a tool the turn was not offered is recorded on the Task the turn works on, with why (#1356).
+        const explained = (raw: RuntimeEvent): Effect.Effect<RuntimeEvent> => {
+          const notOffered = onTask?.notOffered;
+          if (raw._tag !== "ToolDenied" || raw.notOffered === undefined || notOffered === undefined) {
+            return Effect.succeed(raw);
+          }
+          return Effect.map(notOffered({ tool: raw.tool, ...raw.notOffered }), (reason) => ({ ...raw, reason }));
+        };
         // What the turn searched is recorded, against the hob's web limits (ADR 036, Usage and limits).
         let webTurn: WebSearchTurn | null = null;
         const handleEvent = (raw: RuntimeEvent) => {

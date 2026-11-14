@@ -7,6 +7,7 @@ import {
   CampSuggestionService,
   CatchUps,
   ChatService,
+  ForYouList,
   GrantService,
   HobAdmission,
   HobLifecycle,
@@ -17,6 +18,7 @@ import {
   RecordToolsLive,
   SecretRedaction,
 } from "@hobbots/agents";
+import type { ForYouRead } from "@hobbots/api";
 import {
   type Agent,
   CAMP_SUGGESTION_DECISIONS,
@@ -27,6 +29,7 @@ import {
   isInProgress,
   type Message,
   type MessagePin,
+  OWNER_ACTOR,
   RECORD_DECISION_TOOL,
   roleFields,
   type Thread,
@@ -40,6 +43,7 @@ import {
   CampSuggestionRepositoryLive,
   CatchUpRepositoryLive,
   EventJournal,
+  ForYouRepositoryLive,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   PinRepositoryLive,
@@ -81,7 +85,7 @@ beforeEach(() => {
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
     .pipe(Layer.provideMerge(CampSuggestionService.layer))
-    .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer)))
+    .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
@@ -99,6 +103,7 @@ beforeEach(() => {
             BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
             PinRepositoryLive,
             CatchUpRepositoryLive,
+            ForYouRepositoryLive,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -332,6 +337,28 @@ describe("the camp sheet over the API", () => {
     await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
     expect(await catchUp()).toMatchObject({ firstUnread: null, replies: 0, items: [] });
     expect((await request("GET", "/api/threads/nope/catch-up")).status).toBe(404);
+  });
+
+  // covers ADR 039 (Cards every thread shares › For you)
+  it("[TC-CH-1456-01] lists in For you, for the person asking, the changes catch-up lists, and nothing once read", async () => {
+    const { thread } = await pipWithThread();
+    const first = await exchange(thread, "Hello.");
+    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: first.id, revision: first.revision });
+    const call = { key: "mondays", text: "Ship on Mondays." };
+    await exchange(thread, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
+    const forYou = async () => (await request<ForYouRead>("GET", "/api/for-you")).body;
+    const caught = (await request<CatchUp>("GET", `/api/threads/${thread.id}/catch-up`)).body;
+    const read = await forYou();
+    expect(read.cursor).toMatch(/\S/);
+    expect(read.forYou.for).toEqual(OWNER_ACTOR);
+    expect(read.forYou.away.find((part) => part.threadId === thread.id)).toMatchObject({
+      readRevision: first.revision,
+      items: caught.items,
+      more: caught.more,
+    });
+    const last = (await messages(thread)).at(-1);
+    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
+    expect((await forYou()).forYou.away.find((part) => part.threadId === thread.id)).toBeUndefined();
   });
 
   // covers CH-001, ADR 037 (Private camps), #1377
