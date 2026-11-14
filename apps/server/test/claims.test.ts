@@ -480,6 +480,8 @@ describe("the claims register", () => {
       await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
       // The worktree's branch, checked out there.
       await h.call(FRODO, A, { key: "b", scope: "branch", branch: "camp" });
+      symlinkSync(join(checkout, "packages", "persistence"), join(checkout, "persistence-link"));
+      await h.call(FRODO, A, { key: "l", scope: "path", path: "persistence-link" });
       // Nothing is yours yet, so nothing is refused.
       expect(await h.takenWrite({ paths: [join(worktree, "docs", "plan.md")] })).toBeNull();
 
@@ -488,6 +490,7 @@ describe("the claims register", () => {
       expect(taken.map((claim) => [claim.key, claim.state, claim.actor])).toEqual([
         ["docs", "taken", { kind: "user", id: "owner" }],
         ["camp", "taken", { kind: "user", id: "owner" }],
+        ["persistence-link", "taken", { kind: "user", id: "owner" }],
       ]);
       // Frodo hears of it once, in his backpack, and his Task goes on.
       expect(
@@ -515,6 +518,10 @@ describe("the claims register", () => {
       expect(await h.takenWrite({ paths: [`${checkout}${sep}decisions-link${sep}..${sep}a.md`] })).toContain(
         "took over",
       );
+      // A claim whose own path is a link holds writes to where the link points, too.
+      expect(await h.takenWrite({ paths: [join(checkout, "packages", "persistence", "x.ts")] })).toContain(
+        "took over path persistence-link",
+      );
       // A different spelling of the folder's case is the same folder on a case-insensitive volume.
       expect(await h.takenWrite({ paths: [join(checkout, "DOCS", "plan.md")] })).toContain("took over");
       // Deleting a link inside the taken folder removes the link, whatever it points to.
@@ -538,10 +545,10 @@ describe("the claims register", () => {
 
       // Sam's claim on a file inside it is contested; what you took over stays yours.
       expect((await h.call(SAM, B, { key: "p", scope: "path", path: "docs/a.md" })).details.state).toBe("contested");
-      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["taken", "taken"]);
+      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["taken", "taken", "taken"]);
       // Once the Task ends, its claims are released, and the writes run again.
       await h.end(A);
-      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["released", "released"]);
+      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["released", "released", "released"]);
       expect((await h.claimsOf(B)).map((claim) => claim.state)).toEqual(["held"]);
       expect(await h.takenWrite({ paths: [join(checkout, "docs", "a.md")] })).toBeNull();
     } finally {

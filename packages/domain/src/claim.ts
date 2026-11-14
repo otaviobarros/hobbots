@@ -237,7 +237,7 @@ export const claimSubject = (claim: Claim): string => {
  * the claim is on: the file itself, a file inside its folder, or a folder that holds it. An empty
  * path is the repository's top folder, which holds every path in it.
  */
-export const touchesPath = (claim: Claim, path: string): boolean =>
+export const touchesPath = (claim: Pick<Claim, "scope" | "key">, path: string): boolean =>
   claim.scope === "path" && (path === "" || pathsOverlap(claim.key, path));
 
 /** The claims a list names, as a hob reads them: "path docs/a.md and branch feat/x in github.com/me/app". */

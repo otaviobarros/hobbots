@@ -213,9 +213,14 @@ const nearestReal = async (path: string): Promise<{ readonly real: string; reado
  * write there lands. Names below the first one that does not exist are read as written.
  */
 const followed = async (path: string): Promise<string> => {
-  let at = parse(path).root;
+  const root = parse(path).root;
+  let at = root;
   let exists = true;
-  for (const name of path.split(/[\\/]/).filter((each) => each !== "" && each !== ".")) {
+  // The root, such as `C:\` or a UNC share, is kept as it is and not read as a name.
+  for (const name of path
+    .slice(root.length)
+    .split(/[\\/]/)
+    .filter((each) => each !== "" && each !== ".")) {
     if (name === "..") {
       at = dirname(at);
       continue;

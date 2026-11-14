@@ -49,6 +49,14 @@ const pushTarget = (branch: string): PushTarget => {
  * identity, so another clone or worktree of it is refused too. Null when nothing it writes is yours,
  * or when the hub keeps no claims register.
  */
+/**
+ * Whether a write at `inside` touches the taken path `key`, without regard to case, as a
+ * case-insensitive volume reads `DOCS` and `docs` as one folder; on a case-sensitive one this
+ * refuses at most a few writes too many.
+ */
+const touchesKey = (key: string, inside: string) =>
+  touchesPath({ scope: "path", key: key.toLowerCase() }, inside.toLowerCase());
+
 export const makeTakenWrites = (separator: PathSeparator) =>
   Effect.gen(function* () {
     const register = yield* Effect.serviceOption(ClaimRegister);
@@ -70,6 +78,18 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             read.set(repository, claims);
             return claims;
           });
+        // A taken path is matched as it was claimed and where it lands with its links followed, so
+        // a claim on `docs`, a link to `content`, holds writes to either spelling.
+        const followedKeys = new Map<string, ReadonlyArray<string>>();
+        const keysOf = (top: string, key: string) =>
+          Effect.gen(function* () {
+            const known = followedKeys.get(`${top}\0${key}`);
+            if (known !== undefined) return known;
+            const place = key === "" ? null : yield* git.placeOf(`${top}${separator}${key.split("/").join(separator)}`);
+            const keys = place === null || place.top !== top || place.path === key ? [key] : [key, place.path];
+            followedKeys.set(`${top}\0${key}`, keys);
+            return keys;
+          });
         const branchClaim = (claims: ReadonlyArray<Claim>, branch: string | null) =>
           branch === null ? undefined : claims.find((claim) => claim.scope === "branch" && claim.key === branch);
 
@@ -86,11 +106,11 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             const place = yield* git.placeOf(path);
             if (place === null) return undefined;
             const inside = name === "" ? place.path : place.path === "" ? name : `${place.path}/${name}`;
-            // Matched without regard to case, as a case-insensitive volume reads `DOCS` and `docs` as
-            // one folder; on a case-sensitive one this refuses at most a few writes too many.
-            return (yield* takenAt(place.top)).find((claim) =>
-              touchesPath({ ...claim, key: claim.key.toLowerCase() }, inside.toLowerCase()),
-            );
+            for (const claim of yield* takenAt(place.top)) {
+              const keys = claim.scope === "path" ? yield* keysOf(place.top, claim.key) : [];
+              if (keys.some((key) => touchesKey(key, inside))) return claim;
+            }
+            return undefined;
           });
         // A path is checked where it lands with its links followed, and as the entry it names in its
         // folder, so deleting a link inside a taken folder is refused though its target is not.
