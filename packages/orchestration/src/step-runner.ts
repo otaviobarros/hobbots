@@ -31,8 +31,12 @@ import {
   type Committed,
   carriedFrom,
   isTerminalTask,
+  liveAttemptOn,
+  pausedHolder,
+  resumedAs,
   type Task,
   type TaskId,
+  TaskPauses,
   TaskReadiness,
   type TaskToolName,
   type TaskTree,
@@ -79,6 +83,15 @@ const STEP_TOOLS: ReadonlyArray<TaskToolName> = ["report_checkpoint", "complete_
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
 /** How a step that ends without a result ends: cancelled when its cancel was asked for, failed otherwise. */
+/**
+ * Why a running turn stops now, read from its Task: a cancel asked for, or a pause with Pause now
+ * (#1446). Null while it runs on.
+ */
+const stopFor = (task: Task): StopReason | null => {
+  if (task.state === "cancelling") return "cancel";
+  return TaskPauses.isPausing(task) && task.pause?.now === true ? "pause" : null;
+};
+
 const endOf = (step: Task) => (step.state === "cancelling" ? "cancelled" : "failed");
 
 /**
@@ -279,6 +292,22 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       ).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not confirm the cancels asked for", cause)));
 
       /**
+       * Pauses each Task you paused whose turn has ended with nothing to settle it (#1446): a turn
+       * that ended as the hub stopped, before a restart, or one a runner never saw end.
+       */
+      const settlePauses = Effect.gen(function* () {
+        for (const task of yield* tasks.listPausingTasks) {
+          if (running.has(task.id)) continue;
+          const tree = Option.getOrUndefined(yield* tasks.readTree(task.rootId));
+          if (tree === undefined || liveAttemptOn(task, tree)) continue;
+          yield* attempt(
+            tasks.settlePause(task.id, task.revision, resumedAs(task, tree.tasks), yield* nowIso),
+            "pause a Task whose turn ended",
+          );
+        }
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not settle the pauses asked for", cause)));
+
+      /**
        * Ends the steps left open with no live Attempt (EX-004): one Hobbots stopped while it ran,
        * or just after its session ended, fails, since what it did is not known, and one being
        * cancelled is cancelled. A step ends only once the steps under it have, so each pass ends
@@ -414,12 +443,14 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       const round = Effect.gen(function* () {
         for (const [id, run] of running) {
           const task = yield* currentTask(id);
-          if (Option.isSome(task) && task.value.state === "cancelling" && run.stop === null) {
-            run.stop = "cancel";
+          const reason = Option.isSome(task) ? stopFor(task.value) : null;
+          if (reason !== null && run.stop === null) {
+            run.stop = reason;
             yield* Effect.forkIn(FiberMap.remove(fibers, id), scope);
           }
         }
         yield* settleCancels;
+        yield* settlePauses;
         // After a restore no queued step or member's turn starts until you resume work (ADR 026).
         if (yield* held) return;
         const trees = new Map<TaskId, TaskTree>();
@@ -430,6 +461,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
+          // Nothing starts under a Task you paused, until you resume it (#1446).
+          if (pausedHolder(step, tree.tasks) !== undefined) continue;
           // A step starts once every step it comes after has completed (ADR 018).
           if (TaskReadiness.of(step, tree.tasks)._tag === "Ready") yield* start(step, tree);
         }

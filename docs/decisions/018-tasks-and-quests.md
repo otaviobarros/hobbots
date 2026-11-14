@@ -149,6 +149,8 @@ Hobs act through Hobbots tools on the runtime's control channel, as Charms are e
 | `wait_for` | A Task's owner | Waits for any or all of its child Tasks, steps or members' Tasks, without blocking its chat. The hob then ends its turn, and the Task shows as waiting once the turn has ended | Wait record |
 | `read_tasks` | A Task's owner | Reads the state of every Task under its own, at any depth: owner, state, whether a turn runs, what it waits on, open questions, latest checkpoints and result. The results and failures it shows count as read for the turn's completion | Nothing |
 | `message_task` | A lead | Sends a short message to a member's Task directly under its own, which wakes the member; a hob further down is reached through its own lead | A note from the lead on that Task |
+| `retry_task` | A lead | Queues a failed member's Task directly under its own again, with its reason and the revision it read (see the #1446 amendment below) | The Task queued again, and the lead's note |
+| `reassign_task` | A lead | Gives a member's Task directly under its own to another hob, with its reason and the revision it read, under authority worked out again for that hob | The Task queued for its new hob, and the lead's note |
 | `complete_task` | A Task's owner | Returns the result; the server checks the completion gate | Result, Task state |
 | `cancel_task` | A Task's owner | Cancels one of its child Tasks and that Task's subtree | Cancel request, then confirmed outcomes |
 | `stop_quest` | The lead of the Quest you asked for, only when you asked it to stop | Stops the Quest without delivering it, with a reason and a summary, and cancels everything under it (see the amendment below) | The Quest's stop, then confirmed outcomes |
@@ -219,6 +221,14 @@ A Quest's acceptance was strings folded into its brief and never read again, and
 - **The gate reads them.** A Quest's Task completes only once each required criterion is accepted or waived (`criteria-unmet`), whatever its lead says. The gate reads them after the completion's own artifacts are registered, in its transaction, so a version that completion makes voids the evidence it replaces and the completion is refused, with nothing written.
 - **Only you waive a required one.** A lead's waiver of a required criterion does not waive it: the hub asks you, in a question to you about the Quest with the choices Waive it and Keep it, and keeps that question on the criterion. Your Waive it waives it, in the transaction that records your answer, and the waiver names you, from your session (STD-SEC-006); Keep it, or an answer in words, leaves it as it was. Nothing in the lead's turn stands for your answer, not even your message asking to skip it. A lead waives an optional criterion itself.
 - **What you see.** The quest's sheet lists the criteria under Done when, each with its state, the versions it was accepted on, who decided last, and whether a waiver waits on your answer. You answer that on the question's card; a control to waive one from the sheet itself waits for the quest's reply thread ([ADR 039](039-shared-camps.md)).
+
+## Amendment: pause, a lead's retry and reassign, and your note to a member ([#1446](https://github.com/otaviobarros/hobbots/issues/1446))
+
+You could cancel a Quest but not hold it, a lead could not retry or reassign the work it leads, and anything you said in a Quest reached only its lead.
+
+- **Pause, Pause now and Resume.** Pausing a Quest or a Task holds it and everything under it still under way. The Task machine gains `pausing`, while a turn that ran as you paused ends, and `paused`; the Quest machine gains `paused`, kept in step with its Task. Pause lets a running turn end; Pause now stops it. A Task's pause records where it stood, who paused it, when, and whether it was Pause now, so Resume puts it back there and a restart loses nothing. Resume tells each hob that goes back to work what changed while it was paused, from the records.
+- **A lead retries and reassigns.** `retry_task` and `reassign_task` reach a member's Task directly under the lead's own, as `message_task` does. Each takes a reason, the Task's revision as the lead read it and an idempotency key, and is refused when the Task changed since, while its last Attempt may still run, or by the rules your own Retry and Reassign follow. A reassign works the new hob's authority out again rather than keeping the old member's. The journal names the lead and its reason on the change.
+- **Your note to a member.** An @mention of a member in a Quest's chat reaches that member's Task as your note, and does not wake the lead, which reads it on its next turn. Its receipt shows only what the hub recorded.
 
 ## Validation
 

@@ -12,7 +12,8 @@ export const joinedMentions = (earlier: ReadonlyArray<Actor>, later: ReadonlyArr
   ...later.filter((actor) => !earlier.some((seen) => sameActor(seen, actor))),
 ];
 
-const parse = (sql: SqlClient.SqlClient, text: string, after: number) =>
+/** Whom `text` mentions past offset `after`, against every hob and person of the hub, skipping Markdown code. */
+export const parseMentions = (sql: SqlClient.SqlClient, text: string, after: number) =>
   Effect.gen(function* () {
     const hobs = yield* sql<{ readonly id: string; readonly name: string }>`SELECT id, name FROM agents`;
     const people = yield* sql<{ readonly id: string; readonly name: string }>`SELECT id, name FROM users`;
@@ -51,7 +52,7 @@ export const mentionsToStore = (
     const had: ReadonlyArray<Actor> = stored === undefined ? message.mentions : JSON.parse(stored.mentions);
     const through = stored === undefined ? 0 : Number(stored.mentionsThrough);
     if (isInProgress(message.status) || through >= message.content.length) return { mentions: had, through };
-    const found = message.content.includes("@") ? yield* parse(sql, message.content, through) : [];
+    const found = message.content.includes("@") ? yield* parseMentions(sql, message.content, through) : [];
     return { mentions: joinedMentions(had, found), through: message.content.length };
   });
 

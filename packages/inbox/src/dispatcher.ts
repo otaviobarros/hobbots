@@ -11,6 +11,7 @@ import {
   type EventEnvelope,
   IllegalBackpackTransition,
   isTerminalTask,
+  pausedHolder,
   type StaleBackpackClaim,
   type Task,
   type TaskId,
@@ -140,6 +141,15 @@ export const heldUnder = (item: BackpackItem, tree: ReadonlyArray<Task>): Task |
   const above = ancestorsOf(task, tree);
   const from = REPORTS_UP.includes(item.kind) && task.parentId !== null ? above : [task, ...above];
   return from.find((each) => each.ownerId === item.recipientId);
+};
+
+/**
+ * Whether the item waits on a pause you put on the work (#1446): the Task its recipient holds it
+ * under, or one above that, is paused, so no turn starts to carry it until you resume.
+ */
+export const heldByPause = (item: BackpackItem, tree: ReadonlyArray<Task>): boolean => {
+  const held = heldUnder(item, tree);
+  return held !== undefined && pausedHolder(held, tree) !== undefined;
 };
 
 /** The kinds a member reports about its own Task to the Task above it. */

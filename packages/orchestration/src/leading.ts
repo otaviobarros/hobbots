@@ -25,6 +25,7 @@ import {
   fromRecords,
   journalOf,
   ledTask,
+  memberTask,
   nameFor,
   newId,
   outcomesShown,
@@ -94,6 +95,8 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
     .slice(0, RECENT_CHECKPOINTS);
   return {
     task_id: task.id as string,
+    // What retry_task and reassign_task take as expected_revision (#1446).
+    revision: task.revision,
     parent_id: task.parentId as string | null,
     owner: task.ownerId as string,
     brief: firstLine(task.brief),
@@ -211,14 +214,7 @@ export const makeLeading = ({ tasks, steersTurns }: Deps) => ({
 
   message_task: (scope: CallScope, input: Omit<TaskToolInput<"message_task">, "key">) =>
     Effect.gen(function* () {
-      const task = yield* ledTask(scope, input.task_id);
-      const parent = scope.tree.tasks.find((each) => each.id === task.parentId);
-      if (parent?.ownerId !== scope.caller.agentId || task.ownerId === scope.caller.agentId) {
-        return yield* refuse(
-          "not-lead",
-          `Task ${task.id} is not a member's Task directly under one of yours. Message the hob that leads it instead.`,
-        );
-      }
+      const task = yield* memberTask(scope, input.task_id, "Message the hob that leads it instead.");
       if (isTerminalTask(task.state)) {
         return yield* refuse("task-state", `Task ${task.id} has ended as ${task.state}, so nobody would read it.`);
       }

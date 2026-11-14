@@ -5,7 +5,9 @@ import {
   type AttemptState,
   AttemptTransitions,
   isTerminalTask,
+  type PausedFrom,
   type Task,
+  TaskPauses,
   type TaskState,
   type TaskTarget,
 } from "./task.ts";
@@ -50,7 +52,12 @@ export type TaskMove =
    * With a `reason` when it moves to blocked or failed, which its lead reads with the move (#571):
    * the move records it as a blocker in the same change, so the lead hears of it once (#683).
    */
-  | { readonly _tag: "Move"; readonly to: TaskTarget; readonly reason?: string };
+  | { readonly _tag: "Move"; readonly to: TaskTarget; readonly reason?: string }
+  /**
+   * The Task was paused while its turn ran (#1446): it is paused now, and goes back to `otherwise`
+   * on Resume unless the turn moved it on itself.
+   */
+  | { readonly _tag: "SettlePause"; readonly otherwise: PausedFrom };
 
 export interface TurnEnd {
   /** What the runner reports to the record, which ends the Attempt by `AttemptTransitions.end`. */
@@ -162,10 +169,26 @@ const rootAfter = (task: Task, open: ReadonlyArray<LedgerEntry>, was: TaskState 
   return was === "waiting" || was === "blocked" ? move(was) : STAY;
 };
 
+/** Where each runner's Task goes back to on Resume once its turn was cut short by a pause (#1446). */
+const RESUMED_AS: Record<TurnRunner, PausedFrom> = { step: "queued", member: "waiting", root: "active" };
+
+/**
+ * A Task you paused while its turn ran (#1446): a step that finished still completes with its reply;
+ * any other is paused now, for Resume to take on from where it stood.
+ */
+const pausedAfter = (input: TurnEndInput): TaskMove => {
+  const settle: TaskMove = { _tag: "SettlePause", otherwise: RESUMED_AS[input.runner] };
+  const { ending } = input;
+  if (input.runner !== "step" || ending._tag !== "Replied") return settle;
+  if (input.lastReport === "finding" || input.lastReport === "blocker") return settle;
+  return { _tag: "Complete", summary: ending.text.trim() || NO_STEP_REPLY, otherwise: settle, explainRefusal: false };
+};
+
 /** What the Task does after the turn, by its runner. */
 const taskAfter = (input: TurnEndInput): TaskMove => {
   const { runner, task, ending } = input;
-  if (isTerminalTask(task.state)) return STAY;
+  if (TaskPauses.isPausing(task)) return pausedAfter(input);
+  if (isTerminalTask(task.state) || TaskPauses.isPaused(task)) return STAY;
   // A cancel asked for is confirmed once the turn has ended; the records refuse it while work under it is open.
   if (task.state === "cancelling") return move("cancelled");
   const open = input.ledger.filter((entry) => entry._tag !== "Item" || !input.carried.has(entry.item.id));

@@ -113,9 +113,11 @@ const taskCompleted: Rule<"TaskCompleted"> = ({ task, artifacts }, trees) => {
 
 /**
  * A Task that failed, was blocked or was cancelled goes to its parent's owner as a Failure. One you
- * retried or reassigned goes to its owner again, as the work it now has to do.
+ * or its lead retried or reassigned goes to its owner again, as the work it now has to do.
  */
 const taskStateChanged: Rule<"TaskStateChanged"> = ({ task, attempt, control }, trees) => {
+  // A pause or resume is no work of its own: Resume's note tells each hob what to take up (#1446).
+  if (control?._tag === "Paused" || control?._tag === "Resumed") return [];
   if (control !== undefined) return workFor(task, control.delegation);
   const parent = parentOf(task, trees);
   // An Attempt moving on repeats the Task's state; only a move of the Task itself is news.

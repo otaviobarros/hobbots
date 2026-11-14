@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { type Authority, delegatedAuthority, holds, NO_AUTHORITY, narrowBy, sharedFolders } from "../src/authority.ts";
+import {
+  type Authority,
+  delegatedAuthority,
+  holds,
+  NO_AUTHORITY,
+  narrowBy,
+  reassignedAuthority,
+  sharedFolders,
+} from "../src/authority.ts";
 
 const lead: Authority = {
   decisions: {
@@ -99,5 +107,35 @@ describe("authority only narrows", () => {
     expect(member.decisions["read-files"]).toBe("allow");
     expect(member.folders).toEqual(["/work/site"]);
     expect(narrowBy(member, { overrides: { "run-commands": "allow" }, folders: null }, "/")).toEqual(member);
+  });
+});
+
+describe("the authority of a hob taking a Task over", () => {
+  // covers OR-006, STD-SEC-003
+  it("[TC-OR-1446-15] keeps a restriction the lead gained after the delegation, and never holds more than the lead or the new hob", () => {
+    // The delegation answered only push; since then the lead was refused edit-files on purpose.
+    const leadNow: Authority = {
+      ...lead,
+      decisions: { ...lead.decisions, "edit-files": "deny" },
+      fixed: [...lead.fixed, "edit-files"],
+    };
+    const given = { overrides: { push: "deny" as const }, folders: ["/work/site"] };
+    // The new hob's own policy allows editing and asks before running commands.
+    const own: Authority = {
+      ...lead,
+      decisions: { ...lead.decisions, "run-commands": "ask" },
+      fixed: ["run-commands"],
+      folders: ["/work"],
+    };
+    const result = reassignedAuthority(leadNow, given, own, "/");
+    expect(result).toEqual({
+      _tag: "Reassigned",
+      authority: { overrides: { "edit-files": "deny", push: "deny" }, folders: ["/work/site"] },
+    });
+    // A hob that may use none of the Task's folders could not do it.
+    expect(reassignedAuthority(leadNow, given, { ...own, folders: ["/elsewhere"] }, "/")).toEqual({
+      _tag: "Unusable",
+      folders: ["/work/site"],
+    });
   });
 });

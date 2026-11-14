@@ -14,6 +14,9 @@ const TONE: Record<ReceiptHop["state"] | "reading" | "read", string> = {
   held: "text-lantern",
   picked: "font-semibold text-mint",
   unread: "text-label",
+  sent: "text-text-secondary",
+  waiting: "text-text-secondary",
+  interrupting: "text-lantern",
 };
 
 const actionOf = (hop: ReceiptHop) => (hop.approval === null ? "" : operationLabel(hop.approval.operation));
@@ -37,9 +40,10 @@ const hopSentence = (hop: ReceiptHop, name: string, from: string): string => {
 /** Each step as a whole sentence, keyed by where it sits, so a screen reader hears each step once. */
 const sentences = (receipt: SteerReceipt, hobs: HobLookup): ReadonlyArray<{ key: string; text: string }> => {
   const lead = hobs(receipt.lead).name;
-  const out = [
-    { key: "lead", text: receipt.read ? messages.say.gotIt({ name: lead }) : messages.say.reading({ name: lead }) },
-  ];
+  // A message sent straight to the members it mentions never went through the lead (#1446).
+  const out = receipt.direct
+    ? []
+    : [{ key: "lead", text: receipt.read ? messages.say.gotIt({ name: lead }) : messages.say.reading({ name: lead }) }];
   const walk = (hops: ReadonlyArray<ReceiptHop>, from: string, path: string) => {
     for (const [index, hop] of hops.entries()) {
       const name = hobs(hop.hob).name;
@@ -101,9 +105,11 @@ function SteerReceiptLine({ receipt, hobs }: { receipt: SteerReceipt; hobs: HobL
       className="flex max-w-bubble-max flex-wrap items-center justify-end gap-x-2 gap-y-1 self-end text-detail text-label"
     >
       <span aria-hidden className="contents">
-        <Step hob={receipt.lead} hobs={hobs} tone={receipt.read ? "read" : "reading"}>
-          {leadText}
-        </Step>
+        {!receipt.direct && (
+          <Step hob={receipt.lead} hobs={hobs} tone={receipt.read ? "read" : "reading"}>
+            {leadText}
+          </Step>
+        )}
         <Hops hops={receipt.hops} hobs={hobs} />
       </span>
       {/* A status is atomic by default and would read every step again; each sentence is its own node, so only the step that changed is read. */}

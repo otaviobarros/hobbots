@@ -28,6 +28,7 @@ import type {
   MilestoneId,
   NoteDelivery,
   NoteId,
+  PausedFrom,
   Quest,
   QuestId,
   Question,
@@ -66,6 +67,17 @@ export interface NewTask {
   readonly brief: string;
   readonly dependsOn: ReadonlyArray<TaskId>;
   readonly createdAt: string;
+}
+
+/**
+ * Who retried or reassigned a Task, when it was not you through your controls (#1446): its lead,
+ * with the reason it gave, which the change journals with it.
+ */
+export interface ControlledBy {
+  readonly actor: Actor;
+  readonly reason: string;
+  /** On a reassign, the member's authority worked out again for the hob that takes the Task over. */
+  readonly authority?: DelegationAuthority;
 }
 
 /** The brief a lead gives a member, for a child Task with another owner. Its Quest, lead and member follow from the Tasks. */
@@ -236,6 +248,16 @@ export interface NewNote {
   readonly carried?: ReadonlyArray<BackpackItemId>;
   /** How it reaches a turn of its recipient's that runs as it arrives (#1345); the next turn when absent. */
   readonly delivery?: NoteDelivery;
+  /**
+   * Who wrote it (STD-ARCH-019): a person through their session, the sending lead, or the hub. Absent,
+   * the sending lead, or the session's person for a note with no sender.
+   */
+  readonly author?: Actor;
+  /**
+   * Yours, straight to the Task's own owner rather than its nearest lead (#1446): an @mention of a
+   * member in a quest. Its lead is not woken for it.
+   */
+  readonly direct?: true;
 }
 
 /** A question that climbed every lead and waits for you, with the Task it asks about. */
@@ -392,7 +414,7 @@ export class TaskRepository extends Context.Service<
      * Task under another one is retried, under ancestors still open and not being cancelled; its
      * Quest reopens with it.
      */
-    readonly retryTask: (taskId: TaskId, revision: number, at: string) => Changed<Task, TaskChange>;
+    readonly retryTask: (taskId: TaskId, revision: number, at: string, by?: ControlledBy) => Changed<Task, TaskChange>;
     /**
      * Gives a party member's Task to another hob, queued for its first Attempt there, keeping its
      * id, Attempts, checkpoints and results (ADR 018). Refused while its Attempt is live or work is
@@ -404,7 +426,39 @@ export class TaskRepository extends Context.Service<
       revision: number,
       ownerId: AgentId,
       at: string,
+      by?: ControlledBy,
     ) => Changed<Task, TaskChange>;
+    /**
+     * Pauses a Task you asked to pause (#1446), from its version `revision`: `pausing` while its
+     * Attempt runs, which ends paused once that turn ends, and `paused` otherwise. The Quest on it,
+     * if any, is paused with it. Refused for a Task that cannot be paused now, or that changed.
+     */
+    readonly pauseTask: (
+      taskId: TaskId,
+      revision: number,
+      pause: { readonly at: string; readonly by: Actor; readonly now: boolean },
+    ) => Changed<Task, TaskChange>;
+    /**
+     * The turn a pause waited for ended (#1446): the Task is paused now, and goes back to
+     * `otherwise` on Resume unless that turn moved it on itself.
+     */
+    readonly settlePause: (
+      taskId: TaskId,
+      revision: number,
+      otherwise: PausedFrom,
+      at: string,
+    ) => Changed<Task, TaskChange>;
+    /**
+     * Resumes a Task you paused (#1446), back where its pause says it stood, with the Quest on it.
+     * Refused while a Task above it is still paused.
+     */
+    readonly resumeTask: (
+      taskId: TaskId,
+      revision: number,
+      resume: { readonly at: string; readonly by: Actor },
+    ) => Changed<Task, TaskChange>;
+    /** Tasks still pausing: each waits for its turn to end, or, after a restart, for nothing (#1446). */
+    readonly listPausingTasks: Effect.Effect<ReadonlyArray<Task>>;
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
     /** Asks the nearest lead above the Task, or the user when there is none. */
     readonly askQuestion: (input: NewQuestion) => Changed<Question>;
@@ -430,6 +484,13 @@ export class TaskRepository extends Context.Service<
      * returns the first and changes nothing; the same id with another Task or text is refused.
      */
     readonly leaveNote: (input: NewNote) => Changed<TaskNote>;
+    /**
+     * Runs `effect` in one transaction: every change in it commits together or none does, so a
+     * command whose change needs another written with it (a resume and its note, your message and the
+     * notes it sends) never leaves one without the other (STD-ARCH-014). Announce the changes once it
+     * returns, never inside it.
+     */
+    readonly atomically: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
     /** The questions no lead could answer that wait for you, oldest first. */
     readonly listWaitingQuestions: Effect.Effect<ReadonlyArray<WaitingQuestion>>;
     /** Members' failed Tasks that wait on you while their top Task goes on, oldest first (ADR 027). */

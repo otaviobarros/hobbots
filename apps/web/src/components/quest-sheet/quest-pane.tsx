@@ -1,4 +1,4 @@
-import type { AgentId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import { type AgentId, type Task, type TaskId, TaskPauses, type TaskTree, type ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import {
@@ -13,6 +13,7 @@ import { focusElement } from "@hobbots/ui/lib/restore-focus";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useTaskControl } from "../../api/task-controls.ts";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import { topCancel } from "../quest/control-room.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
@@ -24,6 +25,7 @@ import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../qu
 import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
 import { QuestCriteria } from "./criteria.tsx";
 import { messages } from "./messages.ts";
+import { PauseControls, pauseControl } from "./pause-controls.tsx";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
 import { QuestThreadView } from "./quest-thread-view.tsx";
@@ -114,6 +116,7 @@ function QuestBody({
   back: QuestBack | null;
 }) {
   const [asking, setAsking] = useState(false);
+  const pause = useTaskControl();
   const heading = useRef<HTMLHeadingElement>(null);
   // The title takes focus once the quest shows, after the sheet's own focus on opening. Another
   // quest mounts another body, keyed by its top Task.
@@ -143,6 +146,14 @@ function QuestBody({
             <DropdownMenuItem onSelect={() => pins.toggle(top.id)}>
               {pins.pinned.includes(top.id) ? copy.unpin : copy.pin}
             </DropdownMenuItem>
+            {TaskPauses.canPause(top) && (
+              <DropdownMenuItem
+                title={messages.paused.pauseNowHint}
+                onSelect={() => pause.mutate(pauseControl(top, card.quest, true))}
+              >
+                {messages.paused.pauseNow}
+              </DropdownMenuItem>
+            )}
             {cancel === "open" && (
               <>
                 <DropdownMenuSeparator />
@@ -182,10 +193,11 @@ function QuestBody({
       )}
       <RoomFinished tree={tree} onChanges={() => moves.everyone("changes")} onFiles={() => moves.everyone("files")} />
       <RoomStopped tree={tree} />
-      <span className="flex">
+      <span className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" title={copy.showWorkHint} onClick={() => moves.everyone("changes")}>
           {copy.showWork}
         </Button>
+        <PauseControls top={top} quest={card.quest} owner={lead.name} control={pause} />
       </span>
       <QuestCriteria tree={tree} hobs={hobs} />
       <Team tree={tree} hobs={hobs} pins={pins} moves={moves} />

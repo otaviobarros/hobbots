@@ -1,8 +1,10 @@
 import {
   type AttemptChange,
   type AttemptResume,
+  type ControlledBy,
   type NewNote,
   type NewTask,
+  sessionActor,
   type TaskCompletion,
   TaskRepository,
 } from "@hobbots/agents";
@@ -21,6 +23,7 @@ import {
   Delegation,
   descendantsOf,
   HandOff,
+  hobActor,
   IllegalQuestTransition,
   IllegalTaskTransition,
   isLiveAttempt,
@@ -31,6 +34,7 @@ import {
   Milestone,
   noteRecipientOf,
   optionNamed,
+  pausedHolder,
   Quest,
   type QuestEvent,
   Question,
@@ -38,8 +42,10 @@ import {
   questPlacement,
   StaleTask,
   Task,
+  type TaskControl,
   type TaskId,
   TaskNote,
+  TaskPauses,
   TaskReadiness,
   type TaskRefusal,
   TaskRefused,
@@ -52,7 +58,7 @@ import {
   unmetCriteriaText,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
-import { SqlClient, type SqlError } from "effect/sql";
+import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { criteriaOf, makeCriteriaChanges, settleWaiverAsks, voidReplacedEvidence } from "./criteria-rows.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
@@ -99,6 +105,9 @@ const questMoved = (quest: Quest, event: QuestEvent) => {
   const next = QuestMachine.transition(quest, event);
   return next instanceof IllegalQuestTransition ? Effect.die(next) : Effect.succeed(next);
 };
+
+/** What a control journals of who made it, when its lead did rather than you (#1446). */
+const controlledBy = (by: ControlledBy | undefined) => (by === undefined ? {} : { by: by.actor, reason: by.reason });
 
 /** The SQL store of Tasks, Quests and their records, for SQLite and PostgreSQL (ADR 011, ADR 018). */
 
@@ -245,6 +254,14 @@ export const TaskRepositoryLive = Layer.effect(
         if (isTerminalTask(parent.state)) return yield* refuse("parent-ended", `Task ${parent.id} is ${parent.state}`);
         // Work never starts under a Task whose cancel was asked for (OR-006).
         if (parent.state === "cancelling") return yield* refuse("parent-cancelling", `Task ${parent.id} is cancelling`);
+        // Nor under one you paused, until you resume it (#1446).
+        const holder = pausedHolder(parent, yield* read.treeOf(parent.rootId));
+        if (holder !== undefined) {
+          return yield* refuse(
+            "parent-paused",
+            `Task ${holder.id} is paused; nothing new starts under it until it is resumed`,
+          );
+        }
         const step = parent.ownerId === input.ownerId;
         if (step && hasDelegation) return yield* refuse("delegation-mismatch", "A step is not delegated");
         if (!step && !hasDelegation) return yield* refuse("step-owner", "A step has its parent's owner");
@@ -394,6 +411,75 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    /** The Quest on `task`, paused or resumed with it (#1446), or null when it has none or is already so. */
+    const followPause = (task: Task, revision: number) =>
+      Effect.gen(function* () {
+        const [quest] = yield* read.questsOn([task.id]);
+        if (quest === undefined) return null;
+        const event = TaskPauses.isPaused(task) ? "Pause" : "Unpause";
+        if (!QuestMachine.can(quest, { _tag: event, at: task.updatedAt })) return null;
+        return yield* saveQuest(yield* questMoved(quest, { _tag: event, at: task.updatedAt }), revision);
+      });
+
+    /** Saves a pause's move of `task` and journals it, with its Quest and what you did. */
+    const pauseMoved = (task: Task, revision: number, control?: TaskControl) =>
+      Effect.gen(function* () {
+        yield* saveTask(task);
+        const quest = yield* followPause(task, revision);
+        return {
+          value: task,
+          events: [
+            {
+              _tag: "TaskStateChanged",
+              task,
+              attempt: null,
+              quest,
+              wait: null,
+              ...(control === undefined ? {} : { control }),
+            } as const,
+          ],
+        };
+      });
+
+    const pauseTask: TaskRepository["Service"]["pauseTask"] = (taskId, expected, pause) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          if (!TaskPauses.canPause(before)) {
+            return yield* refuse("task-paused", `Task ${taskId} is ${before.state}, so it cannot be paused`);
+          }
+          const running = yield* liveAttempt(before);
+          const task = new Task({ ...(yield* orFail(TaskTransitions.pause(before, { ...pause, running }))), revision });
+          return yield* pauseMoved(task, revision, { _tag: "Paused", by: pause.by, now: pause.now });
+        }),
+      );
+
+    const settlePause: TaskRepository["Service"]["settlePause"] = (taskId, expected, otherwise, at) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          if (yield* liveAttempt(before)) return yield* refuse("attempt-live", `Task ${taskId}'s turn still runs`);
+          const task = new Task({ ...(yield* orFail(TaskTransitions.settlePause(before, otherwise, at))), revision });
+          return yield* pauseMoved(task, revision);
+        }),
+      );
+
+    const resumeTask: TaskRepository["Service"]["resumeTask"] = (taskId, expected, resume) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          if (!TaskPauses.isPaused(before)) {
+            return yield* refuse("task-not-paused", `Task ${taskId} is ${before.state}, so there is no pause to lift`);
+          }
+          const above = ancestorsOf(before, yield* read.treeOf(before.rootId)).find(TaskPauses.isPaused);
+          if (above !== undefined) {
+            return yield* refuse("parent-paused", `Task ${above.id} above it is still paused; resume that one`);
+          }
+          const task = new Task({ ...(yield* orFail(TaskTransitions.unpause(before, resume.at))), revision });
+          return yield* pauseMoved(task, revision, { _tag: "Resumed", by: resume.by });
+        }),
+      );
+
     const liveAttempt = (task: Task) =>
       Effect.gen(function* () {
         if (task.currentAttemptId === null) return false;
@@ -418,6 +504,21 @@ export const TaskRepositoryLive = Layer.effect(
         const cancelling = ancestorsOf(task, yield* read.treeOf(task.rootId)).find((at) => at.state === "cancelling");
         if (cancelling !== undefined) {
           return yield* refuse("parent-cancelling", `Task ${cancelling.id} is cancelling`);
+        }
+      });
+
+    /** No turn starts and nothing is queued again under a Task you paused, until you resume it (#1446). */
+    const notUnderPause = (task: Task) =>
+      Effect.gen(function* () {
+        if (task.parentId === null) return;
+        const tree = yield* read.treeOf(task.rootId);
+        const parent = tree.find((each) => each.id === task.parentId);
+        const holder = parent === undefined ? undefined : pausedHolder(parent, tree);
+        if (holder !== undefined) {
+          return yield* refuse(
+            "parent-paused",
+            `Task ${holder.id} above it is paused; nothing starts under it until it is resumed`,
+          );
         }
       });
 
@@ -455,6 +556,7 @@ export const TaskRepositoryLive = Layer.effect(
           const before = yield* current(taskId, expected);
           if (yield* liveAttempt(before)) return yield* refuse("attempt-live", `Task ${taskId} has a live Attempt`);
           yield* notUnderCancel(before);
+          yield* notUnderPause(before);
           const quest = yield* reopen(before, revision);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt, yield* readiness(before)))),
@@ -579,6 +681,7 @@ export const TaskRepositoryLive = Layer.effect(
           const before = yield* current(taskId, expected);
           const last = yield* resumable(before, resume);
           yield* notUnderCancel(before);
+          yield* notUnderPause(before);
           const ready = yield* readiness(before);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at, ready))),
@@ -661,7 +764,7 @@ export const TaskRepositoryLive = Layer.effect(
         return [...events, ...(yield* ledger.retire(yield* ledger.questionItems(task), first + events.length))];
       });
 
-    const retryTask: TaskRepository["Service"]["retryTask"] = (taskId, expected, at) =>
+    const retryTask: TaskRepository["Service"]["retryTask"] = (taskId, expected, at, by) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
@@ -669,10 +772,12 @@ export const TaskRepositoryLive = Layer.effect(
             return yield* refuse("top-task", `Task ${taskId} is the one you asked for; ask its hob again instead`);
           }
           const task = new Task({ ...(yield* orFail(TaskTransitions.retry(before, at))), revision });
+          yield* noUnresolvedAttempt(before);
+          yield* notUnderPause(before);
           const quest = yield* reopen(before, revision);
           yield* saveTask(task);
           const [delegation] = yield* read.delegationsOf(task.id);
-          const control = { _tag: "Retried", delegation: delegation ?? null } as const;
+          const control = { _tag: "Retried", delegation: delegation ?? null, ...controlledBy(by) } as const;
           const late = yield* ledger.retire(yield* ledger.staleItems(before, null), revision + 1);
           return {
             value: task,
@@ -712,12 +817,28 @@ export const TaskRepositoryLive = Layer.effect(
         return tree;
       });
 
+    /**
+     * No replacement starts while the Task's last Attempt may still run (#1446): one whose stop was
+     * never confirmed is not known to have stopped.
+     */
+    const noUnresolvedAttempt = (task: Task) =>
+      Effect.gen(function* () {
+        const [last] = task.currentAttemptId === null ? [] : yield* read.attempt(task.currentAttemptId);
+        if (last?.state === "unresolved") {
+          return yield* refuse(
+            "attempt-unresolved",
+            `Task ${task.id}'s last Attempt was asked to stop and never confirmed it did, so it may still run`,
+          );
+        }
+      });
+
     /** A member's Task can change hands only with nothing running in it and nothing open under it. */
     const handable = (task: Task, tree: ReadonlyArray<Task>) =>
       Effect.gen(function* () {
         if (yield* liveAttempt(task)) {
           return yield* refuse("attempt-live", `Task ${task.id} is running; wait for its turn to end`);
         }
+        yield* noUnresolvedAttempt(task);
         if (descendantsOf(task, tree).some((each) => !isTerminalTask(each.state))) {
           return yield* refuse("children-open", `Task ${task.id} has work still open under it; cancel it first`);
         }
@@ -752,7 +873,7 @@ export const TaskRepositoryLive = Layer.effect(
         Effect.orDie,
       );
 
-    const reassignTask: TaskRepository["Service"]["reassignTask"] = (taskId, expected, ownerId, at) =>
+    const reassignTask: TaskRepository["Service"]["reassignTask"] = (taskId, expected, ownerId, at, by) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
@@ -762,13 +883,18 @@ export const TaskRepositoryLive = Layer.effect(
           }
           const task = new Task({ ...(yield* orFail(TaskTransitions.reassign(before, ownerId, at))), revision });
           yield* handable(before, yield* newOwner(before, ownerId));
+          yield* notUnderPause(before);
           const quest = yield* reopen(before, revision);
           yield* saveTask(task);
-          yield* sql`UPDATE delegations SET member_id = ${ownerId} WHERE id = ${delegation.id}`;
+          // A lead's reassign gives the new hob the authority worked out again for it (#1446).
+          const authority = by?.authority ?? delegation.authority;
+          yield* sql`UPDATE delegations SET member_id = ${ownerId}, authority = ${JSON.stringify(authority)}
+            WHERE id = ${delegation.id}`;
           const control = {
             _tag: "Reassigned",
             from: before.ownerId,
-            delegation: new Delegation({ ...delegation, memberId: ownerId }),
+            delegation: new Delegation({ ...delegation, memberId: ownerId, authority }),
+            ...controlledBy(by),
           } as const;
           const late = yield* ledger.retire(yield* ledger.staleItems(before, before.ownerId), revision + 1);
           // What the earlier owner was stuck on about the Task is no longer its to retry (#1087).
@@ -1062,7 +1188,14 @@ export const TaskRepositoryLive = Layer.effect(
      * or to the owner of a Task nobody leads. A lead's message goes to the owner of the open Task
      * directly under its own (#574).
      */
-    const noteRecipient = (task: Task, senderId: AgentId | undefined, tree: ReadonlyArray<Task>) => {
+    const noteRecipient = (task: Task, input: NewNote, tree: ReadonlyArray<Task>) => {
+      const { senderId } = input;
+      // Yours straight to the member, as an @mention in its quest sends it (#1446).
+      if (input.direct === true) {
+        return isTerminalTask(task.state)
+          ? refuse("task-ended", `Task ${task.id} has ended`)
+          : Effect.succeed(task.ownerId);
+      }
       if (senderId === undefined) return Effect.succeed(noteRecipientOf(task, tree));
       const parent = tree.find((each) => each.id === task.parentId);
       if (parent?.ownerId !== senderId || task.ownerId === senderId) {
@@ -1080,6 +1213,7 @@ export const TaskRepositoryLive = Layer.effect(
      */
     const noteOrigin = (input: NewNote) =>
       Effect.gen(function* () {
+        if (input.direct === true) return { messageId: input.messageId ?? null, fromNoteId: null };
         if (input.senderId === undefined) return { messageId: null, fromNoteId: null };
         if (input.messageId !== undefined) return { messageId: input.messageId, fromNoteId: null };
         const picked = yield* read.carriedNote(input.carried ?? [], input.senderId);
@@ -1103,8 +1237,10 @@ export const TaskRepositoryLive = Layer.effect(
           const top = task.rootId === task.id ? task : yield* loadTask(task.rootId);
           if (isTerminalTask(top.state))
             return yield* refuse("task-ended", `The work Task ${task.id} is part of has ended`);
-          const recipientId = yield* noteRecipient(task, input.senderId, yield* read.treeOf(task.rootId));
+          const recipientId = yield* noteRecipient(task, input, yield* read.treeOf(task.rootId));
           const { messageId, fromNoteId } = yield* noteOrigin(input);
+          const author =
+            input.author ?? (input.senderId === undefined ? yield* sessionActor : hobActor(input.senderId));
           const note = new TaskNote({
             id: input.id,
             taskId: input.taskId,
@@ -1115,6 +1251,7 @@ export const TaskRepositoryLive = Layer.effect(
             messageId,
             fromNoteId,
             delivery: input.delivery ?? "next-turn",
+            author,
             revision,
           });
           yield* sql`INSERT INTO task_notes ${sql.insert({
@@ -1127,6 +1264,7 @@ export const TaskRepositoryLive = Layer.effect(
             message_id: note.messageId,
             from_note_id: note.fromNoteId,
             delivery: note.delivery,
+            author: JSON.stringify(author),
             revision,
             left_revision: revision,
           })}`;
@@ -1183,9 +1321,19 @@ export const TaskRepositoryLive = Layer.effect(
       );
 
     return TaskRepository.of({
+      atomically: (effect) =>
+        sql.withTransaction(effect).pipe(
+          Effect.catchIf(
+            (error): error is SqlError.SqlError => SqlError.isSqlError(error),
+            (error) => Effect.die(error),
+          ),
+        ) as typeof effect,
       createTask,
       startQuest,
       stopQuest,
+      pauseTask,
+      settlePause,
+      resumeTask,
       ...makeCriteriaChanges(sql, change),
       startAttempt,
       updateAttempt,
@@ -1271,6 +1419,7 @@ export const TaskRepositoryLive = Layer.effect(
       listQueuedSteps: read.queuedSteps.pipe(Effect.orDie),
       listStrandedSteps: read.strandedSteps.pipe(Effect.orDie),
       listCancellingTasks: read.cancelling.pipe(Effect.orDie),
+      listPausingTasks: read.pausing.pipe(Effect.orDie),
       listLiveAttempts: read.liveAttempts.pipe(Effect.orDie),
       listRootsAtWork: read.rootsAtWork.pipe(Effect.orDie),
     });

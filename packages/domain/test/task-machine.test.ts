@@ -4,6 +4,7 @@ import {
   type AgentId,
   type AttemptId,
   IllegalTaskTransition,
+  PausedFrom,
   Task,
   type TaskEvent,
   TaskMachine,
@@ -15,6 +16,14 @@ import {
 import { agreesWithModel } from "../testing/machine-model.ts";
 
 const at = "2026-01-01T00:00:00.000Z";
+
+/** A paused or pausing Task carries its pause; any other carries none. */
+const pauseOf = (state: TaskState) =>
+  state === "paused" || state === "pausing"
+    ? { from: state === "pausing" ? ("active" as const) : ("waiting" as const), at, by: you, now: false }
+    : null;
+
+const you = { kind: "user" as const, id: "owner" };
 
 const task = (state: TaskState) =>
   new Task({
@@ -31,6 +40,7 @@ const task = (state: TaskState) =>
     createdAt: at,
     updatedAt: at,
     revision: 1 as Task["revision"],
+    pause: pauseOf(state),
   });
 
 /** What the model tracks of a Task. */
@@ -39,6 +49,7 @@ interface TaskView {
   readonly ownerId: string;
   readonly currentAttemptId: string | null;
   readonly result: TaskResult | null;
+  readonly pause: Task["pause"];
   readonly updatedAt: string;
 }
 
@@ -47,42 +58,66 @@ const view = (t: Task): TaskView => ({
   ownerId: t.ownerId,
   currentAttemptId: t.currentAttemptId,
   result: t.result,
+  pause: t.pause,
   updatedAt: t.updatedAt,
 });
 
 // The rules as they were written by hand before Task moved onto defineMachine, kept apart from the
 // machine so the two can disagree.
-const ended = (state: TaskState) => state === "completed" || state === "cancelled" || state === "cancelling";
+// A paused Task (#1446) starts nothing and changes no hands until you resume it.
+const open = (state: TaskState) => ["queued", "active", "waiting", "blocked", "failed"].includes(state);
+// complexity-ignore: the model is one case per event, kept apart from the machine on purpose.
 const stepModel = (before: TaskView, e: TaskEvent): TaskView | "refused" => {
   // Every change names the time it happened.
   const m = { ...before, updatedAt: e.at };
   const to = (state: TaskState, from: ReadonlyArray<TaskState>) =>
     from.includes(m.state) ? { ...m, state } : "refused";
+  // What ends a Task, or asks it to end, drops its pause.
+  const ends = (state: TaskState, from: ReadonlyArray<TaskState>) =>
+    from.includes(m.state) ? { ...m, state, pause: null } : "refused";
+  // A turn still running as you paused moves where Resume takes it back to.
+  const repause = (from: PausedFrom) => (m.pause === null ? m : { ...m, pause: { ...m.pause, from } });
   switch (e._tag) {
     case "Wait":
-      return to("waiting", ["active"]);
+      return m.state === "pausing" ? repause("waiting") : to("waiting", ["active"]);
     case "Block":
-      return to("blocked", ["active", "waiting"]);
+      return m.state === "pausing" ? repause("blocked") : to("blocked", ["active", "waiting"]);
     case "Resume":
       return to("active", ["waiting", "blocked"]);
     case "Fail":
-      return to("failed", ["queued", "active", "waiting", "blocked"]);
+      return ends("failed", ["queued", "active", "waiting", "blocked", "pausing", "paused"]);
     case "RequestCancel":
-      return to("cancelling", ["queued", "active", "waiting", "blocked"]);
+      return ends("cancelling", ["queued", "active", "waiting", "blocked", "pausing", "paused"]);
     case "Cancel":
-      return to("cancelled", ["queued", "cancelling"]);
+      return ends("cancelled", ["queued", "paused", "cancelling"]);
     case "Start":
-      return ended(m.state) || e.readiness._tag !== "Ready"
+      return !open(m.state) || e.readiness._tag !== "Ready"
         ? "refused"
         : { ...m, state: "active", currentAttemptId: e.attemptId };
     case "Retry":
       return to("queued", ["failed"]);
     case "Reassign":
-      return ended(m.state) ? "refused" : { ...m, state: "queued", ownerId: e.ownerId, currentAttemptId: null };
+      return !open(m.state) ? "refused" : { ...m, state: "queued", ownerId: e.ownerId, currentAttemptId: null };
     case "Complete":
-      return ["active", "waiting", "blocked"].includes(m.state)
-        ? { ...m, state: "completed", result: e.result }
+      return ["active", "waiting", "blocked", "pausing"].includes(m.state)
+        ? { ...m, state: "completed", result: e.result, pause: null }
         : "refused";
+    case "Pause": {
+      const pause = { at: e.at, by: e.by, now: e.now };
+      if (m.state === "active" && e.running) return { ...m, state: "pausing", pause: { ...pause, from: "active" } };
+      return m.state === "queued" || m.state === "active" || m.state === "waiting" || m.state === "blocked"
+        ? { ...m, state: "paused", pause: { ...pause, from: m.state } }
+        : "refused";
+    }
+    case "PauseSettled": {
+      if (m.state !== "pausing") return "refused";
+      if (m.pause === null) return { ...m, state: "paused" };
+      const from = m.pause.from === "active" ? e.otherwise : m.pause.from;
+      return { ...m, state: "paused", pause: { ...m.pause, from } };
+    }
+    case "Unpause":
+      if (m.state === "pausing") return { ...m, state: "active", pause: null };
+      return m.state === "paused" ? { ...m, state: e.to, pause: null } : "refused";
   }
 };
 
@@ -107,6 +142,19 @@ const events: fc.Arbitrary<TaskEvent> = fc.oneof(
     ownerId: fc.constantFrom("hob-1", "hob-2").map((id) => id as AgentId),
   }),
   fc.record({
+    _tag: fc.constant("Pause" as const),
+    at: times,
+    by: fc.constant(you),
+    now: fc.boolean(),
+    running: fc.boolean(),
+  }),
+  fc.record({
+    _tag: fc.constant("PauseSettled" as const),
+    at: times,
+    otherwise: fc.constantFrom(...PausedFrom.literals),
+  }),
+  fc.record({ _tag: fc.constant("Unpause" as const), at: times, to: fc.constantFrom(...PausedFrom.literals) }),
+  fc.record({
     _tag: fc.constant("Complete" as const),
     at: times,
     result: attemptIds.map((attemptId) => ({ summary: "Done", attemptId })),
@@ -114,7 +162,7 @@ const events: fc.Arbitrary<TaskEvent> = fc.oneof(
 );
 
 describe("TaskMachine", () => {
-  it("agrees with a model of the rules over random runs of events", () => {
+  it("[TC-OR-1446-01] agrees with a model of the rules, pauses included, over random runs of events", () => {
     agreesWithModel({
       machine: TaskMachine,
       records: fc.constantFrom(...TaskStates.literals).map(task),
@@ -131,19 +179,29 @@ describe("TaskMachine", () => {
     );
   });
 
-  it("exports one row per event, with Start guarded", () => {
-    expect(TaskMachine.table.map((row) => row.event).sort()).toEqual([
+  it("exports a row for every event, with Start, Pause while a turn runs and each Resume guarded", () => {
+    expect([...new Set(TaskMachine.table.map((row) => row.event))].sort()).toEqual([
       "Block",
       "Cancel",
       "Complete",
       "Fail",
+      "Pause",
+      "PauseSettled",
       "Reassign",
       "RequestCancel",
       "Resume",
       "Retry",
       "Start",
+      "Unpause",
       "Wait",
     ]);
-    expect(TaskMachine.table.filter((row) => row.guarded).map((row) => row.event)).toEqual(["Start"]);
+    expect(TaskMachine.table.filter((row) => row.guarded).map((row) => row.event)).toEqual([
+      "Start",
+      "Pause",
+      "Unpause",
+      "Unpause",
+      "Unpause",
+      "Unpause",
+    ]);
   });
 });

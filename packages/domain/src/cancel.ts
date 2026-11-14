@@ -1,5 +1,5 @@
 import type { TaskTree } from "./quest.ts";
-import { ancestorsOf, descendantsOf, isLiveAttempt, isTerminalTask, type Task } from "./task.ts";
+import { ancestorsOf, descendantsOf, isLiveAttempt, isTerminalTask, type Task, TaskPauses } from "./task.ts";
 
 /** What a cancel moves a Task to: confirmed at once when nothing runs in it, requested otherwise. */
 export interface CancelMove {
@@ -10,7 +10,7 @@ export interface CancelMove {
 /**
  * The moves that cancel `target` and everything under it (OR-006), deepest first, so a Task ends
  * only after what is under it. A Task that has ended, or whose cancel was asked for already, is
- * left as it is. A queued Task with no live Attempt and nothing open under it is confirmed at once;
+ * left as it is. A queued or paused Task with no live Attempt and nothing open under it is confirmed at once;
  * every other is asked to stop, and the runner confirms it once it has.
  */
 export const cancelMoves = (target: Task, tree: TaskTree): ReadonlyArray<CancelMove> => {
@@ -24,8 +24,9 @@ export const cancelMoves = (target: Task, tree: TaskTree): ReadonlyArray<CancelM
   for (const task of deepestFirst) {
     const state = states.get(task.id);
     if (state === undefined || isTerminalTask(state) || state === "cancelling") continue;
+    // A paused Task has nothing running, as a queued one has not (#1446).
     const quiet =
-      state === "queued" &&
+      (state === "queued" || TaskPauses.isPaused({ state })) &&
       (task.currentAttemptId === null || !live.has(task.currentAttemptId)) &&
       descendantsOf(task, tree.tasks).every((each) => {
         const under = states.get(each.id);

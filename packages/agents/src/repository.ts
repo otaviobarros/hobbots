@@ -138,6 +138,11 @@ export class HobbotsRepository extends Context.Service<
      */
     readonly sendMessage: SendMessage;
     /**
+     * Whom `text` @mentions, parsed as the hub parses a message it stores (`mentionsIn` against every
+     * hob and person, skipping Markdown code), for a decision taken before the message is stored.
+     */
+    readonly mentionsIn: (text: string) => Effect.Effect<ReadonlyArray<Actor>>;
+    /**
      * Saves a reply's text while it is in progress, without journaling or a new revision (ADR 013),
      * so a crash keeps what had streamed by then. Does nothing once the reply has ended.
      */

@@ -229,8 +229,12 @@ export class QuestionsGroup extends HttpApiGroup.make("questions")
 export const ReassignTaskPayload = Schema.Struct({ agentId: AgentId });
 export type ReassignTaskPayload = typeof ReassignTaskPayload.Type;
 
+/** Pause now (#1446): stop a turn running there at once, rather than let it end on its own. */
+export const PausePayload = Schema.Struct({ now: Schema.optionalKey(Schema.Boolean) });
+export type PausePayload = typeof PausePayload.Type;
+
 /**
- * The Quest tab's controls (ADR 018, OR-006): Cancel, Retry and Reassign act on a Task directly,
+ * The Quest tab's controls (ADR 018, OR-006): Cancel, Pause, Resume, Retry and Reassign act on a Task directly,
  * never through its lead. Each returns the Task's tree once the hub recorded what it did, with the
  * cursor as above; a cancel that needs a running session to stop shows as cancelling, and each
  * Task's confirmed or unresolved outcome arrives on the event stream. User sessions only: a hob
@@ -246,6 +250,30 @@ export class TaskControlsGroup extends HttpApiGroup.make("taskControls")
     }),
     // The Task the Quest sits on, with its whole party.
     HttpApiEndpoint.post("cancelQuest", "/quests/:questId/cancel", {
+      params: { questId: QuestId },
+      success: TaskTreeRead,
+      error: [QuestNotFound, TaskNotControllable],
+    }),
+    // The Task and everything under it, held until you resume it (#1446). Pausing again changes nothing.
+    HttpApiEndpoint.post("pause", "/tasks/:taskId/pause", {
+      params: { taskId: TaskId },
+      payload: PausePayload,
+      success: TaskTreeRead,
+      error: [TaskNotFound, TaskNotControllable],
+    }),
+    HttpApiEndpoint.post("pauseQuest", "/quests/:questId/pause", {
+      params: { questId: QuestId },
+      payload: PausePayload,
+      success: TaskTreeRead,
+      error: [QuestNotFound, TaskNotControllable],
+    }),
+    // Each paused Task back where it stood; each hob that goes back to work hears what changed.
+    HttpApiEndpoint.post("resume", "/tasks/:taskId/resume", {
+      params: { taskId: TaskId },
+      success: TaskTreeRead,
+      error: [TaskNotFound, TaskNotControllable],
+    }),
+    HttpApiEndpoint.post("resumeQuest", "/quests/:questId/resume", {
       params: { questId: QuestId },
       success: TaskTreeRead,
       error: [QuestNotFound, TaskNotControllable],
