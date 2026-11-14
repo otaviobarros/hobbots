@@ -14,6 +14,8 @@ export const messages = {
   directMessages: "Direct messages",
   hobsLoadFailed: "Could not load your hobs.",
   campsLoadFailed: "Could not load your camps.",
+  noCamps: "No camps yet.",
+  noHobs: "No hobs yet.",
   tryAgain: "Try again",
   /** Try again on the rail, where there is no room for its words. */
   retryMark: "↻",

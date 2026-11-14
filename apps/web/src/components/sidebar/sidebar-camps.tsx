@@ -13,6 +13,7 @@ import { SidebarFailed } from "./sidebar-failed.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
 import { RailUnread, SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type CampRow, campRows, rowTime } from "./sidebar-rows.ts";
+import { SidebarEmpty, SidebarLoading } from "./sidebar-states.tsx";
 
 /** The camp the address names, if any. */
 const openCampOf = (pathname: string) => /^\/hobs\/[^/]+\/threads\/([^/]+)/.exec(pathname)?.[1];
@@ -58,27 +59,68 @@ export function SidebarCamps({
       </div>
       <span aria-hidden className={sidebarRule} />
       {data.campsFailed && <SidebarFailed message={copy.campsLoadFailed} onRetry={data.retry} />}
-      <ul aria-label={copy.camps} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
-        {shown.map((row) => (
-          <li key={row.thread.id} className="flex w-full justify-center">
-            <CampLink row={row} current={row.thread.id === open} wide={wide} />
-          </li>
-        ))}
-      </ul>
+      <CampsList data={data} rows={rows} shown={shown} open={open} wide={wide} />
       {wide && folded.hidden > 0 && (
-        <button
-          type="button"
-          aria-expanded={all}
-          aria-description={
-            !all && folded.hiddenUnread ? copy.campNews({ unread: 1, mentions: 0, needs: false }) : undefined
-          }
-          className={sidebarMore}
-          onClick={() => setAll(!all)}
-        >
-          {all ? copy.fewerCamps : copy.moreCamps({ count: folded.hidden })}
-        </button>
+        <ShowMore all={all} hidden={folded.hidden} hiddenUnread={folded.hiddenUnread} onToggle={() => setAll(!all)} />
       )}
     </>
+  );
+}
+
+/** The camps, or still rows while none are read yet, or a line saying there are none. */
+function CampsList({
+  data,
+  rows,
+  shown,
+  open,
+  wide,
+}: {
+  data: SidebarData;
+  rows: ReadonlyArray<CampRow>;
+  shown: ReadonlyArray<CampRow>;
+  open: string | undefined;
+  wide: boolean;
+}) {
+  if (rows.length === 0 && data.campsLoading) return <SidebarLoading label={copy.camps} />;
+  if (rows.length === 0 && !data.campsFailed) return <SidebarEmpty message={copy.noCamps} />;
+  return (
+    <ul aria-label={copy.camps} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
+      {shown.map((row) => (
+        <li key={row.thread.id} className="flex w-full justify-center">
+          <CampLink row={row} current={row.thread.id === open} wide={wide} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Show N more, or Show fewer, under the first camps. While folded, a dot shows that a hidden camp
+ * holds what you have not read, as the rail's dot does, and its description says so.
+ */
+function ShowMore({
+  all,
+  hidden,
+  hiddenUnread,
+  onToggle,
+}: {
+  all: boolean;
+  hidden: number;
+  hiddenUnread: boolean;
+  onToggle: () => void;
+}) {
+  const news = !all && hiddenUnread;
+  return (
+    <button
+      type="button"
+      aria-expanded={all}
+      aria-description={news ? copy.campNews({ unread: 1, mentions: 0, needs: false }) : undefined}
+      className={sidebarMore}
+      onClick={onToggle}
+    >
+      {all ? copy.fewerCamps : copy.moreCamps({ count: hidden })}
+      {news && <span aria-hidden className="size-2 flex-none rounded-dot bg-text-strong" />}
+    </button>
   );
 }
 

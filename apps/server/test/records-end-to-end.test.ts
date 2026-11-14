@@ -17,6 +17,7 @@ import {
   Records,
   RecordToolsLive,
   SecretRedaction,
+  SidebarList,
 } from "@hobbots/agents";
 import type { ForYouRead, SidebarRead } from "@hobbots/api";
 import {
@@ -64,6 +65,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { BlockedWorkLive } from "../src/sidebar.ts";
 import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
@@ -88,7 +90,16 @@ beforeEach(() => {
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
     .pipe(Layer.provideMerge(CampSuggestionService.layer))
-    .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Notes.layer,
+          CatchUps.layer,
+          ForYouList.layer,
+          SidebarList.layer.pipe(Layer.provide(BlockedWorkLive)),
+        ),
+      ),
+    )
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))

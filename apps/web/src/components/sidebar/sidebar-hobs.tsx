@@ -14,6 +14,7 @@ import { SidebarFailed } from "./sidebar-failed.tsx";
 import { SidebarTip } from "./sidebar-item.tsx";
 import { RailUnread, SidebarRowFrame, sidebarRowLink } from "./sidebar-row.tsx";
 import { type DirectRow, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
+import { SidebarEmpty, SidebarLoading } from "./sidebar-states.tsx";
 
 /** The state dot on a hob's face: lantern when it needs you, mint while it works, a ring while paused. */
 const DOT: Partial<Record<SidebarState, string>> = {
@@ -58,13 +59,18 @@ export function SidebarHobs({ data, pathname, wide }: { data: SidebarData; pathn
       </div>
       <span aria-hidden className={sidebarRule} />
       {data.hobsFailed && <SidebarFailed message={copy.hobsLoadFailed} onRetry={data.retry} />}
-      <ul aria-label={copy.directMessages} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
-        {rows.map((row) => (
-          <li key={row.hob.id} className="flex w-full justify-center">
-            <DirectLink row={row} current={isOpen(pathname, row)} wide={wide} />
-          </li>
-        ))}
-      </ul>
+      {data.hobsLoading ? (
+        <SidebarLoading label={copy.directMessages} />
+      ) : (
+        <ul aria-label={copy.directMessages} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
+          {rows.map((row) => (
+            <li key={row.hob.id} className="flex w-full justify-center">
+              <DirectLink row={row} current={isOpen(pathname, row)} wide={wide} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {!data.hobsLoading && !data.hobsFailed && rows.length === 0 && <SidebarEmpty message={copy.noHobs} />}
       <Link to="/hobs" aria-current={pathname === "/hobs" ? "page" : undefined} className={sidebarMore}>
         {copy.allHobs}
       </Link>

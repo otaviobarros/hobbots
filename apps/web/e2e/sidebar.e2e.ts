@@ -165,6 +165,41 @@ test("[TC-UX-1469-12] a hob's direct message opens its chat, a camp opens itself
   await expect(page).toHaveURL(/#\/summon/);
 });
 
+// covers UX-001, ADR 039 (The sidebar), STD-REACT-015
+test("[TC-UX-1469-15] Camps and Direct messages hold their place while they load, then say when they are empty", async ({
+  page,
+}) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir);
+  const current = hub;
+  const done = await fetch(`${current.url}/api/setup`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", ...current.headers },
+    body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
+  });
+  expect(done.ok).toBe(true);
+  // The sidebar's and the hobs' reads wait until the test lets them through.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/api\/(sidebar|agents)(\?|$)/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${current.url}/#/`);
+  const nav = sidebar(page);
+  await expect(nav.getByRole("list", { name: "Camps" })).toHaveAttribute("aria-busy", "true");
+  await expect(nav.getByRole("list", { name: "Direct messages" })).toHaveAttribute("aria-busy", "true");
+
+  release();
+  await expect(nav.getByText("No camps yet.")).toBeVisible();
+  await expect(nav.getByText("No hobs yet.")).toBeVisible();
+  await expect(nav.locator("[aria-busy=true]")).toHaveCount(0);
+  await expectAccessible(page, nav);
+});
+
 // covers UX-001
 test("[TC-UX-1431-01] Camps lists five camps, then Show more, and always shows the open camp", async ({ page }) => {
   const { url, ids } = await hubWithHobs();

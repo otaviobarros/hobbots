@@ -13,6 +13,10 @@ export interface SidebarData {
   readonly hobsFailed: boolean;
   /** The sections or a hob's threads could not be read, so Camps may be missing some. */
   readonly campsFailed: boolean;
+  /** The hobs are still being read, so Direct messages has no rows yet. */
+  readonly hobsLoading: boolean;
+  /** The sections or a hob's threads are still being read, so Camps has no rows yet. */
+  readonly campsLoading: boolean;
   /** Reads again what could not be read. */
   readonly retry: () => void;
 }
@@ -35,6 +39,8 @@ export const useSidebarData = (): SidebarData => {
     read: read.data,
     hobs,
     threads,
+    hobsLoading: agents.isPending,
+    campsLoading: read.isPending || agents.isPending || lists.some((list) => list.isPending),
     hobsFailed: agents.isError,
     campsFailed: read.isError || failedLists.length > 0,
     retry: () => {
