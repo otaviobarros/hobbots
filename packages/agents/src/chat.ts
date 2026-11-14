@@ -646,7 +646,10 @@ export class ChatService extends Context.Service<
           saveMessage,
         );
         // Work the turn carried waits for you instead of starting again on its own.
-        if (Option.isSome(requested) && reply.carries) yield* step(threadId, { _tag: "Hold" });
+        if (Option.isSome(requested) && reply.carries) {
+          const { speaking } = yield* runOf(threadId);
+          yield* step(threadId, { _tag: "Hold", hobId: speaking ?? (yield* findThread(threadId)).agentId });
+        }
         if (Option.isNone(requested)) return;
         // The turn's request, and those its mentions caused, are dropped with it; a person's stay.
         // Only this reply's: a turn that started since keeps its own.
@@ -662,10 +665,15 @@ export class ChatService extends Context.Service<
 
       // Stop all (ADR 039): stops the turn that is speaking and drops every request still owed in
       // the line, each recording who stopped it. A queued message left with nothing owed stays said.
-      // What is owed is dropped first, so the stopped turn's end finds nothing to start next.
+      // What is owed is dropped first, so the stopped turn's end finds nothing to start next. Both run
+      // under the thread's lock, which every turn is admitted under, so a turn admitted meanwhile is
+      // either running for the stop to reach, or never takes its dropped request.
       const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
-        yield* dropOwed(threadId, TurnRequests.stoppingAll);
-        yield* stop(threadId);
+        const { agentId } = yield* findThread(threadId);
+        yield* admission.withHob(
+          agentId,
+          dropOwed(threadId, TurnRequests.stoppingAll).pipe(Effect.andThen(stop(threadId))),
+        );
       });
 
       // Stop waiting (#1056): only a reply waiting on commands ends this way; it shows as stopping until
@@ -767,7 +775,7 @@ export class ChatService extends Context.Service<
         });
 
       const drainAgent = Effect.fn("ChatService.drainAgent")(function* (agentId: AgentId) {
-        // A hob that wakes takes up the work you stopped in its threads too.
+        // A hob that wakes takes up its work in its threads.
         const threads = yield* threadsWaiting(agentId);
         const own = yield* Effect.filter(threads, (threadId) =>
           repo.findThread(threadId).pipe(Effect.map((t) => Option.isSome(t) && t.value.agentId === agentId)),
@@ -780,8 +788,10 @@ export class ChatService extends Context.Service<
         );
         // And the work its backpack holds for camps it joined, which it carries there.
         const work = Option.isSome(continuations) ? yield* continuations.value.waiting(agentId) : [];
-        yield* Effect.forEach(own, (threadId) => step(threadId, { _tag: "Release" }));
-        yield* drainThreads([...new Set([...own, ...owed, ...work])]);
+        // It takes up the work you stopped of its own, and leaves another hob's held.
+        const mine = [...new Set([...own, ...work])];
+        yield* Effect.forEach(mine, (threadId) => step(threadId, { _tag: "Release", hobId: agentId }));
+        yield* drainThreads([...new Set([...mine, ...owed])]);
         if (Option.isSome(taskTurns)) yield* taskTurns.value.drainAgent(agentId);
       });
 

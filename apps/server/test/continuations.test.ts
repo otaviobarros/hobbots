@@ -524,6 +524,39 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
   });
 
+  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-12] a member hob's continuation you stop in a camp starts again once that hob wakes", async () => {
+    holdContinuations = true;
+    const { run, release } = setUp(SamsCamp);
+    await run(failedStep);
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    // Frodo's continuation starts in Sam's camp, and you stop it before it writes.
+    await run(
+      retry(
+        Effect.flatMap(messages(), (all) =>
+          all.at(-1)?.status === "streaming" ? Effect.void : Effect.fail("not yet" as const),
+        ),
+      ),
+    );
+    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
+    holdContinuations = false;
+    await release();
+    await run(Effect.sleep("300 millis"));
+    expect((await run(messages())).map((m) => m.status)).toEqual(["stopped"]);
+
+    // Sam waking leaves Frodo's stopped work held; Frodo waking takes it up.
+    await run(HobLifecycle.use((hobs) => hobs.pause(SAM).pipe(Effect.andThen(hobs.wake(SAM)))));
+    await run(Effect.sleep("300 millis"));
+    expect(await run(messages())).toHaveLength(1);
+    await run(HobLifecycle.use((hobs) => hobs.pause(FRODO).pipe(Effect.andThen(hobs.wake(FRODO)))));
+    const all = await run(messagesWhen((each) => each.length === 2));
+    expect(all.map((m) => [m.status, m.actor?.kind === "hob" ? m.actor.id : null])).toEqual([
+      ["stopped", FRODO],
+      ["complete", FRODO],
+    ]);
+  });
+
   // covers OR-004, IN-004, EX-004
   it("[TC-OR-646] a Quest whose turn ended just before Hobbots stopped, before its wake was recorded, wakes its lead as the hub starts (#1081)", async () => {
     // The records as that stop left them: Frodo's Task leads an active Quest, his turn's Attempt

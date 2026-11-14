@@ -45,10 +45,11 @@ export interface ThreadRun {
   /** The queued message Send now picked to start next. After a restart the queue keeps its order. */
   readonly chosen: MessageId | null;
   /**
-   * Whether you stopped a turn carrying backpack work here: the work waits for your next message, or
-   * for the hob to wake, instead of starting again on its own. A restart delivers it again.
+   * The hob whose turn carrying backpack work you stopped here, or null: the work waits for your
+   * next message, or for that hob to wake, instead of starting again on its own. A restart
+   * delivers it again.
    */
-  readonly held: boolean;
+  readonly held: AgentId | null;
 }
 
 export type ThreadRunEvent =
@@ -71,9 +72,12 @@ export type ThreadRunEvent =
   /** The chosen message was taken from the queue, or removed from it. */
   | { readonly _tag: "Unchoose"; readonly messageId: MessageId | null }
   /** You stopped a turn that carried backpack work. */
-  | { readonly _tag: "Hold" }
-  /** Work you stopped may start again: you wrote, resumed it, or its hob woke. */
-  | { readonly _tag: "Release" };
+  | { readonly _tag: "Hold"; readonly hobId: AgentId }
+  /**
+   * Work you stopped may start again: you wrote or resumed it, or, with `hobId`, that hob woke, which
+   * leaves another hob's stopped work held.
+   */
+  | { readonly _tag: "Release"; readonly hobId?: AgentId };
 
 export const RUN_STATES: ReadonlyArray<RunState> = ThreadRunState.literals;
 /** A thread with nothing running and nothing remembered. */
@@ -84,7 +88,7 @@ export const idleRun: ThreadRun = {
   reply: null,
   activity: null,
   chosen: null,
-  held: false,
+  held: null,
 };
 
 const sameHobs = (a: ReadonlyArray<AgentId>, b: ReadonlyArray<AgentId>) =>
@@ -170,8 +174,10 @@ export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRu
       e.messageId === null || r.chosen === e.messageId ? { ...r, chosen: null } : r,
     ),
     // A stop reaches a running reply, but the turn may have ended by the time the stop is saved.
-    Hold: staying(RUN_STATES, (r) => ({ ...r, held: true })),
-    Release: staying(RUN_STATES, (r) => ({ ...r, held: false })),
+    Hold: staying(RUN_STATES, (r, e: { readonly hobId: AgentId }) => ({ ...r, held: e.hobId })),
+    Release: staying(RUN_STATES, (r, e: { readonly hobId?: AgentId }) =>
+      e.hobId === undefined || r.held === e.hobId ? { ...r, held: null } : r,
+    ),
   },
   illegal: (r, e, to) => `ThreadRun: ${e._tag} cannot move a run from ${r.run} to ${to}`,
 });
@@ -181,7 +187,7 @@ export const isBusy = (run: ThreadRun) => run.run !== "idle";
 
 /** Whether the run is idle and remembers nothing, so it need not be kept. */
 export const isAtRest = (run: ThreadRun) =>
-  run.run === "idle" && run.chosen === null && !run.held && run.next.length === 0;
+  run.run === "idle" && run.chosen === null && run.held === null && run.next.length === 0;
 
 /** The run of `line` as the hub publishes it, at `revision`. */
 export const runStatus = (line: Line, run: ThreadRun, revision: number): ThreadRunStatus => ({
