@@ -47,6 +47,8 @@ export function HobsSection({
   // Every hob that takes new work and is not here yet, a hob taken out included.
   const joinable = hobs.filter((hob) => takesNewWork(hob) && !inCamp.has(hob.id));
   const failed = (name: string) => (error: unknown) => setFailure({ error: memberError(error), name });
+  // An archived camp is read-only: it lists who was here and changes no one until it is brought back.
+  const archived = camp.archivedAt !== null;
   const busy = add.isPending || remove.isPending;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1.5">
@@ -54,18 +56,21 @@ export function HobsSection({
         <span id={headingId} className="flex-1">
           {copy.hobs({ total: members.length })}
         </span>
-        <button
-          type="button"
-          className={linkButton}
-          aria-expanded={adding}
-          onClick={() => {
-            setFailure(null);
-            setAdding((open) => !open);
-          }}
-        >
-          {adding ? copy.doneAdding : copy.addHob}
-        </button>
+        {!archived && (
+          <button
+            type="button"
+            className={linkButton}
+            aria-expanded={adding}
+            onClick={() => {
+              setFailure(null);
+              setAdding((open) => !open);
+            }}
+          >
+            {adding ? copy.doneAdding : copy.addHob}
+          </button>
+        )}
       </h3>
+      {archived && <p className="m-0 text-meta text-label">{copy.archived}</p>}
       <ul aria-labelledby={headingId} className="m-0 flex list-none flex-col p-0">
         {members.map((member) => {
           const hob = hobs.find((each) => each.id === member.actor.id);
@@ -81,6 +86,7 @@ export function HobsSection({
               speaking={runs?.speaking ?? null}
               next={runs?.next ?? []}
               busy={busy}
+              removable={!archived}
               onRemove={() => {
                 setFailure(null);
                 remove.mutate(member.actor, { onError: failed(name) });
@@ -89,7 +95,7 @@ export function HobsSection({
           );
         })}
       </ul>
-      {adding && (
+      {adding && !archived && (
         <AddList
           hobs={joinable}
           busy={busy}
@@ -117,6 +123,7 @@ function HobRow({
   speaking,
   next,
   busy,
+  removable,
   onRemove,
 }: {
   member: ThreadMember;
@@ -126,6 +133,8 @@ function HobRow({
   speaking: AgentId | null;
   next: ReadonlyArray<AgentId>;
   busy: boolean;
+  /** Whether the camp takes member changes at all: an archived one does not. */
+  removable: boolean;
   onRemove: () => void;
 }) {
   const name = hob?.name ?? member.actor.id;
@@ -146,7 +155,7 @@ function HobRow({
           {copy.tokens({ tokens: formatCompact(today?.tokens ?? 0) })}
         </span>
         {/* A hob that retired left the camp, and comes back with it when it returns: nothing to take out. */}
-        {!lead && ThreadMembers.isActive(member) && (
+        {removable && !lead && ThreadMembers.isActive(member) && (
           <button
             type="button"
             aria-label={copy.remove({ name })}

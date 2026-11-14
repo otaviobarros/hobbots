@@ -74,7 +74,9 @@ export const messages = {
     loading: "Reading who is here…",
     failed: "Couldn't read who is here. Hobbots may be reconnecting.",
     retry: "Try again",
+    archived: "This camp is archived. Bring it back from the Archive to change who is here.",
     errors: {
+      archived: () => "This camp was archived. Bring it back from the Archive to change who is here.",
       "hob-unavailable": ({ name }: Named) => `${name} is paused or retired, so it can't join now.`,
       "leads-quest": ({ name }: Named) => `${name} leads a quest still open here, so it stays until that quest ends.`,
       refused: () => "That change isn't possible in this camp.",
