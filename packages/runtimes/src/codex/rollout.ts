@@ -1,6 +1,13 @@
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
-import { notOfferedDenial, type RuntimeEvent, type RuntimeToolName } from "@hobbots/agents";
+import {
+  clip,
+  NOT_OFFERED_LABEL_MAX,
+  NOT_OFFERED_NAME_MAX,
+  notOfferedDenial,
+  type RuntimeEvent,
+  type RuntimeToolName,
+} from "@hobbots/agents";
 import { Effect, Semaphore } from "effect";
 import { refusedCallLabel } from "../tool-calls.ts";
 
@@ -106,38 +113,46 @@ export const rolloutRefusals = (
   report: (event: RuntimeEvent) => void,
   redact?: (text: string) => string,
 ) => {
-  const calls = new Map<string, ResponseItem>();
+  /** Only what a refusal needs of each call waiting for its output, each bounded, never the call itself. */
+  const calls = new Map<
+    string,
+    { readonly tool: string; readonly runtimeTool: RuntimeToolName | null; readonly label: string }
+  >();
   let offset: number | null = null;
   let reported = 0;
   const turns = Semaphore.makeUnsafe(1);
   /** Keeps a call until its output is read, dropping the oldest past PENDING_CALLS. */
   const keep = (id: string, item: ResponseItem) => {
-    calls.set(id, item);
+    if (typeof item.name !== "string") return;
+    const tool = clip(item.name, NOT_OFFERED_NAME_MAX);
+    // A name is the model's or the rollout's own text, so only a name in the map is a runtime tool.
+    const runtimeTool = RUNTIME_TOOLS.get(tool) ?? null;
+    const label = clip(labelOf(tool, runtimeTool, item, redact), NOT_OFFERED_LABEL_MAX);
+    calls.set(id, { tool, runtimeTool, label });
     const oldest = calls.size > PENDING_CALLS ? calls.keys().next() : null;
     if (oldest !== null && oldest.done !== true) calls.delete(oldest.value);
+  };
+  /** The refusal an output reports, if it is Codex's answer to a call it has no tool for. */
+  const refusalOf = (id: string, output: unknown) => {
+    const call = calls.get(id);
+    calls.delete(id);
+    const prefix = typeof output === "string" ? UNSUPPORTED.find((each) => output.startsWith(each)) : undefined;
+    if (prefix === undefined || typeof output !== "string" || reported >= ROLLOUT_REFUSALS_MAX) return null;
+    reported += 1;
+    const tool = call?.tool ?? clip(output.slice(prefix.length).trim(), NOT_OFFERED_NAME_MAX);
+    const runtimeTool = call?.runtimeTool ?? RUNTIME_TOOLS.get(tool) ?? null;
+    const label = call?.label ?? labelOf(tool, runtimeTool, undefined, redact);
+    return notOfferedDenial({ id, tool, label, runtimeTool });
   };
   const refusedIn = (lines: ReadonlyArray<string>) => {
     for (const line of lines) {
       const item = itemOf(line);
       if (item === null || typeof item.call_id !== "string") continue;
-      if (item.type === "function_call" || item.type === "custom_tool_call") {
-        keep(item.call_id, item);
-        continue;
-      }
+      const id = clip(item.call_id, NOT_OFFERED_NAME_MAX);
+      if (item.type === "function_call" || item.type === "custom_tool_call") keep(id, item);
       if (item.type !== "function_call_output" && item.type !== "custom_tool_call_output") continue;
-      const call = calls.get(item.call_id);
-      calls.delete(item.call_id);
-      const output = item.output;
-      const prefix = typeof output === "string" ? UNSUPPORTED.find((each) => output.startsWith(each)) : undefined;
-      if (prefix === undefined || typeof output !== "string") continue;
-      const tool = typeof call?.name === "string" ? call.name : output.slice(prefix.length).trim();
-      // A name is the model's or the rollout's own text, so only a name in the map is a runtime tool.
-      const runtimeTool = RUNTIME_TOOLS.get(tool) ?? null;
-      if (reported >= ROLLOUT_REFUSALS_MAX) continue;
-      reported += 1;
-      report(
-        notOfferedDenial({ id: item.call_id, tool, label: labelOf(tool, runtimeTool, call, redact), runtimeTool }),
-      );
+      const refusal = refusalOf(id, item.output);
+      if (refusal !== null) report(refusal);
     }
   };
   /**

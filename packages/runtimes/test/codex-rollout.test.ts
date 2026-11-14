@@ -253,6 +253,27 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["after"]);
   });
 
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-16] a call waiting for its output keeps only its bounded name and label, whatever its arguments hold", async () => {
+    const path = join(folder, "pending.jsonl");
+    writeFileSync(path, "");
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    // Calls whose arguments nest far more than any label needs, waiting for an output.
+    const nested = { cmd: `git ${"x".repeat(50_000)}`, more: Array.from({ length: 2_000 }, (_, each) => ({ each })) };
+    appendFileSync(path, Array.from({ length: 300 }, (_, each) => call(`p-${each}`, "exec_command", nested)).join(""));
+    await Effect.runPromise(refusals.drain);
+    appendFileSync(path, output("p-299", "unsupported call: exec_command"));
+    await Effect.runPromise(refusals.read);
+    expect(reported).toEqual([
+      expect.objectContaining({ id: "p-299", tool: "exec_command", notOffered: { runtimeTool: "commands" } }),
+    ]);
+    const [denied] = reported;
+    expect(denied?._tag === "ToolDenied" ? denied.label.length : 0).toBeLessThanOrEqual(NOT_OFFERED_LABEL_MAX);
+    expect(denied?._tag === "ToolDenied" ? denied.label : "").toMatch(/^Running git x+/);
+  });
+
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {
