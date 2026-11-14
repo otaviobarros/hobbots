@@ -1,5 +1,5 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { Agent, AgentId } from "@hobbots/domain";
+import { Agent, AgentId, OWNER_ACTOR } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -73,8 +73,9 @@ describe("SetupRepository", () => {
   it("[TC-OP-003] keeps fields a change leaves out and stores the folders in order", async () => {
     const result = await Effect.gen(function* () {
       const setup = yield* SetupRepository;
-      const first = yield* setup.update({ safetyPreset: "careful", approvedFolders: ["/b", "/a"] });
-      const second = yield* setup.update({ completed: true });
+      const first = (yield* setup.update({ safetyPreset: "careful", approvedFolders: ["/b", "/a"] }, OWNER_ACTOR))
+        .value;
+      const second = (yield* setup.update({ completed: true }, OWNER_ACTOR)).value;
       return { first, second, stored: yield* setup.get };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -101,11 +102,11 @@ describe("SetupRepository", () => {
       const setup = yield* SetupRepository;
       yield* Effect.all(
         [
-          setup.update({ safetyPreset: "careful" }),
-          setup.update({ completed: true }),
-          setup.update({ approvedFolders: ["/a"] }),
-          setup.update({ safetyPreset: "careful" }),
-          setup.update({ approvedFolders: ["/a"] }),
+          setup.update({ safetyPreset: "careful" }, OWNER_ACTOR),
+          setup.update({ completed: true }, OWNER_ACTOR),
+          setup.update({ approvedFolders: ["/a"] }, OWNER_ACTOR),
+          setup.update({ safetyPreset: "careful" }, OWNER_ACTOR),
+          setup.update({ approvedFolders: ["/a"] }, OWNER_ACTOR),
         ],
         { concurrency: "unbounded" },
       );
@@ -131,7 +132,7 @@ describe("SetupRepository", () => {
       yield* connectedProviders;
       const setup = yield* SetupRepository;
       const migrated = yield* setup.get;
-      yield* setup.update({ connectedProviders: ["claude-code"] });
+      yield* setup.update({ connectedProviders: ["claude-code"] }, OWNER_ACTOR);
       return { migrated, stored: yield* setup.get };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 

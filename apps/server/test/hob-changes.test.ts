@@ -121,7 +121,9 @@ const summary = (changes: ReadonlyArray<HobChange>) =>
     .map((change) =>
       change._tag === "Version"
         ? [`v${change.config.version}`, change.previous?.version ?? null, change.actor._tag]
-        : [`${change.from}→${change.status}`, null, change.actor._tag],
+        : change._tag === "Status"
+          ? [`${change.from}→${change.status}`, null, change.actor._tag]
+          : [`setting ${change.setting.diff.setting}`, null, change.actor._tag],
     );
 
 const chief = AgentId.make("6f1d2c4e-8a5b-4c3d-9e7f-1a2b3c4d5e6f");

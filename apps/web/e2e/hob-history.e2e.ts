@@ -145,3 +145,42 @@ test("[TC-AG-411-04] History and the Changes log show who changed a hob and what
   await expect(log.getByRole("listitem")).toHaveCount(5);
   await expect(log.getByRole("listitem").first().getByText("Paused", { exact: true })).toBeVisible();
 });
+
+// covers AG-002, PE-001, #1357
+test("[TC-AG-1357-01] a hob's History and Settings › Changes show who turned Summoning for every hob on, live", async ({
+  page,
+  scan,
+}) => {
+  const current = await startHub(dataDir);
+  hub = current;
+  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const pip = await api<Hob>(current, "POST", "/api/agents", hobPayload("Pip"));
+
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile?tab=history`);
+  const profile = page.getByRole("main", { name: "Pip's profile" });
+  const history = profile.getByRole("list", { name: "History" });
+  await expect(history.getByText("Summoned", { exact: true })).toBeVisible();
+
+  // Turned on from another device: Pip's History follows the hub.
+  await api(current, "PATCH", "/api/setup", {
+    summoningForEveryHob: { scope: { summoned: true, self: false, hobs: [] }, overrides: {} },
+  });
+  const newest = history.getByRole("listitem").first();
+  await expect(newest.getByText("From Summoning for every hob", { exact: true })).toBeVisible();
+  await expect(newest.getByText("By you", { exact: true })).toBeVisible();
+  await expect(newest.getByText("Gave Pip the Summoning Charm.")).toBeVisible();
+  await scan();
+
+  await page.goto(`${current.url}/#/settings/changes`);
+  const settings = page.getByRole("list", { name: "Hub settings" });
+  const row = settings.getByRole("listitem").first();
+  await expect(row.getByText("Summoning for every hob turned on", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "Show what changed" }).click();
+  await expect(row.getByText("Turned", { exact: true })).toBeVisible();
+  await expect(row.getByText("Summoning manages", { exact: true })).toBeVisible();
+  await scan();
+
+  await api(current, "PATCH", "/api/setup", { summoningForEveryHob: null });
+  await expect(settings.getByRole("listitem").first().getByText("Summoning for every hob turned off")).toBeVisible();
+  await expect(settings.getByText(/^Summoning for every hob turned (on|off)$/)).toHaveCount(2);
+});

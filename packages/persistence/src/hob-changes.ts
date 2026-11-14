@@ -9,10 +9,12 @@ import {
   MessageId,
   scopeWork,
   ThreadId,
+  YOU,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { agentRows } from "./repositories.ts";
+import { settingChangesReaching } from "./setup.ts";
 
 interface StatusRow {
   readonly agentId: string;
@@ -32,8 +34,12 @@ const decodeConfigs = Schema.decodeUnknownEffect(Schema.Array(AgentConfiguration
 const decodeActor = Schema.decodeUnknownEffect(Schema.fromJsonString(ChangeActor));
 const decodeStatus = Schema.decodeUnknownEffect(AgentStatus);
 
-/** Newest first; a version and a status change made in the same instant keep the version second. */
-const newestFirst = (a: HobChange, b: HobChange) => b.at.localeCompare(a.at) || (a._tag === "Version" ? 1 : -1);
+// In the same instant a status change comes before a version, and a version before a setting change.
+const SAME_INSTANT: Record<HobChange["_tag"], number> = { Status: 0, Version: 1, Setting: 2 };
+
+/** Newest first; changes made in the same instant keep the order of `SAME_INSTANT`. */
+const newestFirst = (a: HobChange, b: HobChange) =>
+  b.at.localeCompare(a.at) || SAME_INSTANT[a._tag] - SAME_INSTANT[b._tag];
 
 /**
  * The SQL change records: configuration versions with their actor (migrations 0007 and 0082) and
@@ -124,6 +130,17 @@ export const HobChangesLive = Layer.effect(
         Effect.map(([a, b]) => [...a, ...b].sort(newestFirst)),
       );
 
+    /**
+     * The hub setting changes that reached the hob (#1357), as each recorded the hobs it reached
+     * when it was made.
+     */
+    const settingChanges = (hobId: AgentId) =>
+      Effect.map(settingChangesReaching(sql, hobId), (found) =>
+        found.map(
+          (setting): HobChange => ({ _tag: "Setting", hobId, at: setting.at, actor: YOU, origin: null, setting }),
+        ),
+      );
+
     return HobChanges.of({
       forHob: (hobId) =>
         Effect.gen(function* () {
@@ -131,7 +148,8 @@ export const HobChangesLive = Layer.effect(
             ORDER BY version DESC`.pipe(Effect.flatMap(configs));
           const statuses = yield* sql<StatusRow>`SELECT * FROM agent_status_changes WHERE agent_id = ${hobId}
             ORDER BY revision DESC`;
-          return yield* assemble(versions, statuses);
+          const settings = yield* settingChanges(hobId);
+          return [...(yield* assemble(versions, statuses)), ...settings].sort(newestFirst);
         }).pipe(Effect.orDie),
       latest: (limit) =>
         Effect.gen(function* () {

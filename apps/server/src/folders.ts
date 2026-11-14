@@ -3,6 +3,7 @@ import { homedir, platform } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { FolderChecks } from "@hobbots/agents";
 import { InvalidFolder } from "@hobbots/api";
+import { HUB_ACTOR } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 
@@ -99,7 +100,9 @@ export const CanonicalSharedFolders = Layer.effectDiscard(
     const { approvedFolders } = yield* setup.get;
     const canonical = [...new Set(yield* Effect.forEach(approvedFolders, folderIdentity))];
     if (canonical.join("\0") !== approvedFolders.join("\0")) {
-      yield* setup.update({ approvedFolders: canonical });
+      // The hub itself respells them, and the change is kept as any other (#1357). Its event is in
+      // the journal, which clients read when they connect.
+      yield* setup.update({ approvedFolders: canonical }, HUB_ACTOR);
     }
   }),
 );

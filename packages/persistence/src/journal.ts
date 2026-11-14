@@ -143,9 +143,10 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     case "MessageUpserted":
     case "MessageQueued":
       return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };
-    // Pairing belongs to no hob or thread (ADR 021).
+    // Pairing belongs to no hob or thread (ADR 021), nor does a hub setting (#1357).
     case "PairingRequested":
     case "PairingChanged":
+    case "SettingChanged":
       return NONE;
     default:
       return restCorrelationOf(event);
@@ -303,6 +304,7 @@ const restCorrelationOf = (
         | "MessageQueued"
         | "PairingRequested"
         | "PairingChanged"
+        | "SettingChanged"
         | "WebSearched"
         | "WebFetched"
         | "WebSettingsChanged"

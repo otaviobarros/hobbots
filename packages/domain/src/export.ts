@@ -6,6 +6,7 @@ import { MemoryAuthor, MemoryPath, MemoryScope } from "./memory.ts";
 import { MessageRole, MessageStatus, ReplyStepState, ReplyUsage } from "./message.ts";
 import { ArtifactId, ArtifactKind, QuestId, QuestionId, QuestionState, QuestState } from "./quest.ts";
 import { RoleId } from "./roles.ts";
+import { SettingChange } from "./setting-change.ts";
 import { AttemptId, AttemptState, TaskId, TaskState } from "./task.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
@@ -262,6 +263,11 @@ export const HobbotsExport = Schema.Struct({
   quests: Schema.Array(ExportedTree),
   memory: ExportedMemory,
   web: Schema.optionalKey(ExportedWeb),
+  /**
+   * For everything, each change to the settings that change what hobs may do (#1357), newest first.
+   * Absent from other scopes and from an export made before they were recorded.
+   */
+  settingChanges: Schema.optionalKey(Schema.Array(SettingChange)),
 });
 export type HobbotsExport = typeof HobbotsExport.Type;
 

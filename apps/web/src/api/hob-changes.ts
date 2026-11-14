@@ -10,6 +10,7 @@ const changeKeys = {
   all: ["hobChanges"] as const,
   hob: (hobId: AgentId) => ["hobChanges", "hob", hobId] as const,
   log: ["hobChanges", "log"] as const,
+  settings: ["hobChanges", "settings"] as const,
 };
 
 /** Every change to a hob, newest first (ADR 034). */
@@ -27,6 +28,13 @@ export const changesLogQuery = queryOptions({
   queryFn: () => call((c) => c.hobChanges.log()),
 });
 
+/** The newest changes to the settings that change what hobs may do (#1357), for Settings › Changes. */
+export const settingChangesQuery = queryOptions({
+  queryKey: changeKeys.settings,
+  ...followsEvents,
+  queryFn: () => call((c) => c.setup.changes()),
+});
+
 /**
  * Reads every History and the Changes log again after a change to a hob. A read still in flight is
  * cancelled first, since it may have been taken before the change (STD-REACT-012).
@@ -36,9 +44,12 @@ export const hobChangesChanged = async (queryClient: QueryClient) => {
   await queryClient.invalidateQueries({ queryKey: changeKeys.all });
 };
 
-/** Keeps every History and the Changes log live: each hob event records a change to it. */
+/**
+ * Keeps every History and the Changes log live: each hob event records a change to it, and a setting
+ * change shows in Settings and in the History of each hob it reached (#1357).
+ */
 export const applyHobChanges = (queryClient: QueryClient, event: HobbotsEvent) => {
-  if (event._tag === "AgentUpserted") void hobChangesChanged(queryClient);
+  if (event._tag === "AgentUpserted" || event._tag === "SettingChanged") void hobChangesChanged(queryClient);
 };
 
 /** Reverts the hob's latest change, `version`, as its next version made by you. */
