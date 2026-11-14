@@ -12,6 +12,7 @@ import {
   type IllegalThreadTransition,
   isInProgress,
   type MessageId,
+  mainLine,
   sameBrain,
   Thread,
   type ThreadId,
@@ -60,10 +61,12 @@ export const archiveBlockersOf = Effect.gen(function* () {
       const requests = Option.isSome(approvals) ? yield* approvals.value.listForThread(thread.id) : [];
       // A turn whose reply has ended no longer stops it, even before its thread is freed.
       const messages = yield* repo.listMessages(thread.id);
+      // An answer a hob still owes there, as one a paused member will give, counts as a reply to come.
+      const owed = yield* repo.openTurnRequests(mainLine(thread.id));
       return {
         hobRetired: agent.status === "retired",
         approvalPending: requests.some((request) => request.state === "pending"),
-        replyRunning: messages.some((m) => m.status === "queued" || isInProgress(m.status)),
+        replyRunning: owed.length > 0 || messages.some((m) => m.status === "queued" || isInProgress(m.status)),
       } satisfies ArchiveBlockers;
     });
 });

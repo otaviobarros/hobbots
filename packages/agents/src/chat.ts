@@ -485,8 +485,9 @@ export class ChatService extends Context.Service<
       const speakerFor = (hobId: AgentId, own: Agent) =>
         Effect.gen(function* () {
           if (hobId === own.id) return own.status === "active" ? own : null;
+          // A member hob that is retiring takes no new turn in a camp it joined.
           const hob = yield* repo.findAgent(hobId);
-          return Option.isSome(hob) && hob.value.status === "active" ? hob.value : null;
+          return Option.isSome(hob) && hob.value.status === "active" && hob.value.retiring === null ? hob.value : null;
         });
 
       // Drops what `pick` chooses among the line's requests still owed, as the person stopping.

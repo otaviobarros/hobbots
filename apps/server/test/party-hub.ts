@@ -54,6 +54,7 @@ import {
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  ThreadMemberRepositoryLive,
   UsageLedger,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -364,6 +365,7 @@ export const partyHub = (
       Layer.mergeAll(
         HobbotsRepositoryLive,
         TaskRepositoryLive,
+        ThreadMemberRepositoryLive,
         UsageLedger.layer,
         TaskToolCallsLive,
         ApprovalRepositoryLive,

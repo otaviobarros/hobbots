@@ -374,15 +374,33 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         yield* step(threadId, { _tag: "Lined", next: [...new Set(waiting.map((request) => request.hobId))] });
       });
 
-    // The hobs among `hobIds` that take work now, by id.
-    const activeHobs = (hobIds: ReadonlyArray<AgentId>) =>
+    // The hobs among `hobIds` that take work now in `thread`, by id. A member hob that is retiring
+    // takes no new turn in a camp it joined; the thread's own hob keeps its rules for open Tasks.
+    const activeHobs = (thread: Thread, hobIds: ReadonlyArray<AgentId>) =>
       Effect.gen(function* () {
         const found = yield* Effect.forEach([...new Set(hobIds)], (hobId) => repo.findAgent(hobId));
+        const takesWork = (agent: Agent) =>
+          agent.status === "active" && (agent.retiring === null || agent.id === thread.agentId);
         return new Map(
           found.flatMap((agent) =>
-            Option.isSome(agent) && agent.value.status === "active" ? [[agent.value.id, agent.value] as const] : [],
+            Option.isSome(agent) && takesWork(agent.value) ? [[agent.value.id, agent.value] as const] : [],
           ),
         );
+      });
+
+    // The request the line's floor goes to next, among those whose hob takes work now, the
+    // message Send now picked first; null when nobody waiting can speak.
+    const floorNext = (thread: Thread) =>
+      Effect.gen(function* () {
+        const open = yield* repo.openTurnRequests(mainLine(thread.id));
+        const hobs = yield* activeHobs(
+          thread,
+          TurnRequests.waiting(open).map((request) => request.hobId),
+        );
+        const { chosen } = yield* runOf(thread.id);
+        const next = TurnRequests.next(open, (request) => hobs.has(request.hobId), chosen);
+        const agent = next === null ? undefined : hobs.get(next.hobId);
+        return next === null || agent === undefined ? null : { request: next, agent };
       });
 
     // The thread and its hob, when the hob takes work and the thread takes new turns.
@@ -409,20 +427,16 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const startQueued = (threadId: ThreadId, start: TurnStart = {}, only: AgentId | null = null) =>
       Effect.gen(function* () {
         if (yield* held) return null;
+        // An archived thread is read-only: what it still owes waits until it is restored.
         const found = yield* repo.findThread(threadId);
-        if (Option.isNone(found)) return null;
-        const open = yield* repo.openTurnRequests(mainLine(threadId));
-        const hobs = yield* activeHobs(TurnRequests.waiting(open).map((request) => request.hobId));
-        const { chosen } = yield* runOf(threadId);
-        const next = TurnRequests.next(
-          open,
-          (request) => hobs.has(request.hobId) && (only === null || request.hobId === only),
-          chosen,
-        );
+        if (Option.isNone(found) || !ThreadLifecycle.isOpen(found.value)) return null;
+        const chosen = yield* floorNext(found.value);
+        // Work rides along only the request that is next anyway: it never moves another ahead.
+        if (only !== null && chosen?.agent.id !== only) return null;
         yield* step(threadId, { _tag: "Unchoose", messageId: null });
-        const agent = next === null ? undefined : hobs.get(next.hobId);
         // Nobody waiting can speak now: the line still says who waits, as after a restart.
-        if (next === null || agent === undefined) return yield* lineUp(threadId).pipe(Effect.as(null));
+        if (chosen === null) return yield* lineUp(threadId).pipe(Effect.as(null));
+        const { request: next, agent } = chosen;
         const message = yield* repo.findMessage(next.messageId);
         if (Option.isNone(message)) return null;
         // A queued message starts with its first request's turn; a message already said, as one
@@ -448,7 +462,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           return;
         }
         const found = yield* workable(threadId);
-        if (found === null) {
+        // Another hob's request that is next takes the floor first; the work waits its hob's turn.
+        const next = found === null ? null : yield* floorNext(found.thread);
+        if (found === null || (next !== null && next.agent.id !== found.agent.id)) {
           yield* startQueued(threadId);
           return;
         }

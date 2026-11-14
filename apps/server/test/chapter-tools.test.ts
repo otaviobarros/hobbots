@@ -4,12 +4,15 @@ import {
   HobbotsRepository,
   type PromptRequest,
   START_CHAPTER_OUTSIDE_CHAT,
+  ThreadMemberRepository,
   unknownMessageText,
 } from "@hobbots/agents";
 import {
+  hobActor,
   liveSession,
   MESSAGE_PART_CHARS,
   type Message,
+  OWNER_ACTOR,
   READ_MESSAGE_TOOL,
   type RuntimeKind,
   START_CHAPTER_TOOL,
@@ -211,5 +214,20 @@ describe("read_message", () => {
     expect(answers.get("theirs")).toBe(unknownMessageText(id));
     expect(answers.get("theirs")).not.toContain("Pip's own plan");
     expect(answers.get("unknown")).toBe(unknownMessageText("no-such-message"));
+  });
+
+  // covers ADR 039 (One hob speaks at a time, The context pack with several hobs)
+  it("[TC-CH-1461-06] reads a message of a camp the hob joined", async () => {
+    const { run, say, answers } = chapterHub();
+    // Pip's first thread is the direct chat; a second one is a camp, which Frodo joins.
+    await run(ChatService.use((chat) => chat.createThread(PIP)));
+    const camp = await run(ChatService.use((chat) => chat.createThread(PIP)));
+    await run(ChatService.use((chat) => chat.sendPrompt(camp.id, "The camp's plan")));
+    await run(ThreadMemberRepository.use((members) => members.add(camp.id, hobActor(FRODO), OWNER_ACTOR)));
+    const [said] = await run(HobbotsRepository.use((repo) => repo.listMessages(camp.id)));
+    const id = (said as Message).id;
+
+    await say([hub("read_message", { key: "camp", message_id: id })], 2);
+    expect(answers.get("camp")).toContain("The camp's plan");
   });
 });

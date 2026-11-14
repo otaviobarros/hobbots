@@ -1,6 +1,7 @@
 import {
   ChapterId,
   type ChapterRefusal,
+  hobActor,
   hobReads,
   MESSAGE_PART_CHARS,
   type Message,
@@ -15,12 +16,15 @@ import {
   START_CHAPTER_TOOL,
   StartChapterInput,
   startChapterJsonSchema,
+  type Thread,
+  ThreadMembers,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChapterService } from "./chapters.ts";
 import { ChapterTools, type CharmTurn, hubAnswer } from "./charms.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
+import { ThreadMemberRepository } from "./thread-members.ts";
 import { pageParts } from "./web-fetch.ts";
 
 /** Why a Chapter tool call did not run, in words for the hob. */
@@ -89,6 +93,16 @@ export const ChapterToolsLive = Layer.effect(
   Effect.gen(function* () {
     const chapters = yield* ChapterService;
     const repo = yield* HobbotsRepository;
+    const members = yield* Effect.serviceOption(ThreadMemberRepository);
+    // A hob reads the messages of its own threads and of the camps it is an active member of (ADR 039).
+    const readsIn = (thread: Thread, turn: CharmTurn) =>
+      thread.agentId === turn.agentId
+        ? Effect.succeed(true)
+        : Option.isNone(members)
+          ? Effect.succeed(false)
+          : members.value
+              .find(thread.id, hobActor(turn.agentId))
+              .pipe(Effect.map((member) => Option.isSome(member) && ThreadMembers.isActive(member.value)));
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
@@ -134,13 +148,13 @@ export const ChapterToolsLive = Layer.effect(
         );
         const found = yield* repo.findMessage(MessageId.make(input.message_id));
         const thread = Option.isNone(found) ? Option.none() : yield* repo.findThread(found.value.threadId);
-        // Another hob's message, and a note to self, which only you read (ADR 037), read as one that
-        // does not exist, so its id says nothing.
+        // A message of a thread the hob is not in, and a note to self, which only you read (ADR 037),
+        // read as one that does not exist, so its id says nothing.
         if (
           Option.isNone(found) ||
           !hobReads(found.value) ||
           Option.isNone(thread) ||
-          thread.value.agentId !== turn.agentId
+          !(yield* readsIn(thread.value, turn))
         ) {
           return yield* new Refused({ message: unknownMessageText(input.message_id) });
         }

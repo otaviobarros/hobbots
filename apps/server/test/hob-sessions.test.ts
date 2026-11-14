@@ -188,6 +188,8 @@ describe("runtime sessions keyed by hob", () => {
 
       await say(id, "@wren how old is she?");
       expect(asked[runtime][3]?.sessionId).toBe(wren?.sessionId);
+      // Wren's own session is told what was said while Quill spoke, on the same brain too.
+      expect(asked[runtime][3]?.briefing).toContain("@quill and when?");
       expect(asked[runtime].map((request) => request.sessionId)).toEqual([
         null,
         null,

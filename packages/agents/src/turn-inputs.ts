@@ -144,8 +144,11 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         const session = liveSession(thread, runtime, agentId);
         if (session === undefined) return null;
         const missed = missedBy(runtime, session.seenThrough, before);
-        // Only a switch needs one: a session is told what other brains wrote that it did not see.
-        const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
+        // Only a switch needs one: a session is told what other brains, or other hobs on the same
+        // brain, wrote that it did not see (ADR 039).
+        const others = missed.some(
+          (m) => m.role === "assistant" && ((m.runtime !== null && m.runtime !== runtime) || !isHobsOwn(m, agentId)),
+        );
         if (!switched && !others) return null;
         return buildBriefing({ kind: "resumed", messages: missed, checkpoint: null })?.text ?? null;
       });
