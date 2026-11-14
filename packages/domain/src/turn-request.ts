@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
@@ -57,6 +57,11 @@ export class TurnRequest extends Schema.Class<TurnRequest>("TurnRequest")({
   replyId: Schema.NullOr(MessageId),
   /** Who stopped it, once dropped by Stop or Stop all; null otherwise, or when the hub dropped it. */
   droppedBy: Schema.NullOr(Actor),
+  /** Why its hob passed, in the hob's words, once `passed` (the `pass` tool); null otherwise. */
+  passReason: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** The revision of the message that caused it, which orders the floor. */
   queuedAt: Schema.Int,
   /** Its place among the requests that message caused, in the order `answerersFor` gave them. */
@@ -70,8 +75,8 @@ export type TurnRequestEvent =
   | { readonly _tag: "Speak"; readonly replyId: MessageId }
   /** The turn that took it ended, however it ended, as a turn the hub stopped does at a restart. */
   | { readonly _tag: "Answer" }
-  /** The hob ended its turn with no message (the `pass` tool). */
-  | { readonly _tag: "Pass" }
+  /** The hob ended its turn with no message (the `pass` tool), saying why. */
+  | { readonly _tag: "Pass"; readonly reason: string }
   /** Stop or Stop all dropped it, recording who stopped it; null when the hub dropped it. */
   | { readonly _tag: "Drop"; readonly by: Actor | null };
 
@@ -112,7 +117,11 @@ export const TurnRequestMachine = defineMachine<
       to: "answered",
       apply: (request) => new TurnRequest({ ...request, state: "answered" }),
     },
-    Pass: { from: ["speaking"], to: "passed", apply: (request) => new TurnRequest({ ...request, state: "passed" }) },
+    Pass: {
+      from: ["speaking"],
+      to: "passed",
+      apply: (request, event) => new TurnRequest({ ...request, state: "passed", passReason: event.reason }),
+    },
     Drop: {
       from: ["waiting", "paused", "speaking"],
       to: "dropped",

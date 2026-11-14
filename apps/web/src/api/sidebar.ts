@@ -68,13 +68,16 @@ const SIDEBAR_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
 
 /**
  * Whether an event changes what the sidebar lists: one of `SIDEBAR_EVENTS`, a person's message, which
- * may mention you with no turn after it, or a queued message taken back, whose mention goes with it.
+ * may mention you with no turn after it, a queued message taken back, whose mention goes with it, or
+ * a pass, whose reply goes.
  * A hob's reply streams many updates, so its unread mark follows `unreadChanged` instead.
  */
 const changesSidebar = (event: HobbotsEvent) =>
   SIDEBAR_EVENTS.has(event._tag) ||
   (event._tag === "MessageUpserted" && event.message.role === "user") ||
-  (event._tag === "MessageDequeued" && event.reason === "removed");
+  (event._tag === "MessageDequeued" && event.reason === "removed") ||
+  // A hob that passed leaves no reply, so the camp's last line is what came before it.
+  event._tag === "TurnPassed";
 
 /** Reads the sidebar again after an event that changes what it lists; the event's own handling goes on. */
 export const applySidebarEvent = (queryClient: QueryClient, event: HobbotsEvent) => {

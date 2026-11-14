@@ -12,7 +12,7 @@ import {
   type FloorSnapshot,
   hobActor,
   hobReads,
-  holdsEveryTaskTool,
+  holdsEveryChatTool,
   isInProgress,
   type Line,
   lineKey,
@@ -41,6 +41,7 @@ import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Sema
 import { HobAdmission, withThreadLock } from "./admission.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
+import { passStands } from "./pass-tool.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { runtimeAdapters } from "./runtime.ts";
@@ -170,14 +171,14 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
      * `thread` as a turn of `agent` on `runtime` sees it (#1543). A runtime that keeps the hub tools a
      * session started with, as Codex does (ADR 024), never gets a Task tool its session lacks, so a
      * Quest lead in a thread that started before `check_criterion` existed could never accept a
-     * criterion. Such a session, or one whose tools are not known, is left out: the turn starts a new
-     * session from the context pack in its place, as in a new chapter, and the new one is recorded
-     * over it.
+     * criterion. Such a session, or one without `pass` (ADR 039), or one whose tools are not known, is
+     * left out: the turn starts a new session from the context pack in its place, as in a new chapter,
+     * and the new one is recorded over it.
      */
     const withoutStaleSession = (thread: Thread, runtime: Brain["runtime"], agentId: AgentId): Thread => {
-      if (!offersTaskTools || adapters(runtime)?.resumeKeepsHubTools !== true) return thread;
+      if (adapters(runtime)?.resumeKeepsHubTools !== true) return thread;
       const live = liveSession(thread, runtime, agentId);
-      if (live === undefined || holdsEveryTaskTool(live.taskTools)) return thread;
+      if (live === undefined || holdsEveryChatTool(live.taskTools, offersTaskTools)) return thread;
       return new Thread({ ...thread, sessions: thread.sessions.filter((session) => session !== live) });
     };
     const scope = yield* Effect.scope;
@@ -431,6 +432,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           carries: start.carry != null && !start.carry.routineOnly,
           endWait: yield* Deferred.make<void>(),
           waitsStopped: yield* Ref.make<number | null>(null),
+          passed: yield* Ref.make<string | null>(null),
         };
         // Who waits behind it is published first, so the turn's start says who is next.
         yield* lineUp(thread.id);
@@ -452,8 +454,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             // The message of yours the reply answers, as you wrote it, which Continue keeps (#1005).
             saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId),
           ).pipe(
-            // However the turn ended, the requests it spoke for are answered before the floor frees.
-            Effect.ensuring(repo.answerTurnRequests(saved.id)),
+            // However the turn ended, the requests it spoke for are answered, or passed with no
+            // message when its hob passed (ADR 039), before the floor frees.
+            Effect.ensuring(endRequests(saved.id, reply)),
             // The slot frees before the drain, so what waits here can take it.
             Effect.ensuring(start.slot?.release ?? Effect.void),
             Effect.ensuring(start.drain === false ? Effect.void : Effect.forkIn(drain(thread.id), scope)),
@@ -511,6 +514,17 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           Effect.andThen(bus.publishTransient({ _tag: "TurnEnded", threadId, agentId })),
           Effect.forkIn(scope),
         );
+      });
+
+    // Ends the requests the turn writing `replyId` spoke for: passed, with no message, when its hob
+    // called `pass` (ADR 039) and did nothing after it that the reply must keep; answered otherwise.
+    const endRequests = (replyId: MessageId, reply: Reply) =>
+      Effect.gen(function* () {
+        const reason = yield* Ref.get(reply.passed);
+        if (reason === null || !passStands(yield* Ref.get(reply.current), reply.stepsFrom)) {
+          return yield* repo.answerTurnRequests(replyId);
+        }
+        yield* bus.publish((yield* repo.passTurnRequests(replyId, reason)).entries);
       });
 
     // Publishes who waits for the line's floor, from its requests as stored now.

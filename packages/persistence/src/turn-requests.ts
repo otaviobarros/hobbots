@@ -30,6 +30,8 @@ type Writes = Pick<
   | "openTurnRequests"
   | "startReply"
   | "answerTurnRequests"
+  | "turnRequestsOf"
+  | "passTurnRequests"
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
   | "threadsWithWaitingRequests"
@@ -94,6 +96,37 @@ export const makeTurnRequestWrites = (
         sql.withTransaction,
         Effect.asVoid,
         Effect.orDie,
+      ),
+    turnRequestsOf: (replyId) => selectOpenRequestsOf(sql, "reply_id", [replyId]).pipe(Effect.orDie),
+    // A pass leaves no message (ADR 039): the reply goes in the transaction that passes its requests.
+    // A reply an approval names stays, since that record needs it, and its requests are answered.
+    passTurnRequests: (replyId, reason) =>
+      journaledChange<ReadonlyArray<TurnRequest>, never>(() =>
+        Effect.gen(function* () {
+          const speaking = (yield* selectOpenRequestsOf(sql, "reply_id", [replyId])).filter(TurnRequests.isSpeaking);
+          if (speaking.length === 0) return { value: [], events: [] };
+          const removed = yield* sql`DELETE FROM messages WHERE id = ${replyId}
+            AND NOT EXISTS (SELECT 1 FROM approval_requests WHERE message_id = ${replyId}) RETURNING thread_id`;
+          if (removed.length === 0) {
+            yield* stepRequests(sql, speaking, { _tag: "Answer" });
+            return { value: [], events: [] };
+          }
+          const passed = yield* stepRequests(sql, speaking, { _tag: "Pass", reason });
+          // What the reply's text asked of other hobs goes with it: no turn answers a message that is gone.
+          yield* stepRequests(sql, yield* selectOpenRequestsOf(sql, "message_id", [replyId]), {
+            _tag: "Drop",
+            by: null,
+          });
+          const events = passed.map(
+            (request): JournaledEvent => ({
+              _tag: "TurnPassed",
+              threadId: request.threadId,
+              messageId: replyId,
+              request,
+            }),
+          );
+          return { value: passed, events };
+        }),
       ),
     dropTurnRequests: (ids: ReadonlyArray<TurnRequestId>, by: Actor | null) =>
       journaledChange<ReadonlyArray<TurnRequest>, never>((revision) =>

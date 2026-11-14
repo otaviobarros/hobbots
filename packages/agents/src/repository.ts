@@ -192,6 +192,17 @@ export class HobbotsRepository extends Context.Service<
     ) => Effect.Effect<Option.Option<Committed<Message>>>;
     /** The turn writing `replyId` ended: its speaking requests are answered. */
     readonly answerTurnRequests: (replyId: MessageId) => Effect.Effect<void>;
+    /** The requests still owed that the turn writing `replyId` speaks for. */
+    readonly turnRequestsOf: (replyId: MessageId) => Effect.Effect<ReadonlyArray<TurnRequest>>;
+    /**
+     * The turn writing `replyId` ended with its hob's `pass` (ADR 039): its speaking requests end
+     * `passed` with `reason`, and the reply is removed, journaled `TurnPassed`, so it leaves no
+     * message. A reply an approval names stays, and its requests are answered. Returns the passed.
+     */
+    readonly passTurnRequests: (
+      replyId: MessageId,
+      reason: string,
+    ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
      * Drops the requests that are still owed, recording who stopped them (Stop and Stop all). A
      * queued message left with nothing owed leaves the queue said, journaled `MessageDequeued`

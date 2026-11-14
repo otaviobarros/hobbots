@@ -52,8 +52,14 @@ interface RequestView {
   readonly state: TurnRequestState;
   readonly replyId: string | null;
   readonly droppedBy: Actor | null;
+  readonly passReason: string | null;
 }
-const view = (r: TurnRequest): RequestView => ({ state: r.state, replyId: r.replyId, droppedBy: r.droppedBy });
+const view = (r: TurnRequest): RequestView => ({
+  state: r.state,
+  replyId: r.replyId,
+  droppedBy: r.droppedBy,
+  passReason: r.passReason,
+});
 const stepModel = (m: RequestView, e: TurnRequestEvent): RequestView | "refused" => {
   switch (e._tag) {
     case "Speak":
@@ -61,7 +67,7 @@ const stepModel = (m: RequestView, e: TurnRequestEvent): RequestView | "refused"
     case "Answer":
       return m.state === "speaking" ? { ...m, state: "answered" } : "refused";
     case "Pass":
-      return m.state === "speaking" ? { ...m, state: "passed" } : "refused";
+      return m.state === "speaking" ? { ...m, state: "passed", passReason: e.reason } : "refused";
     case "Drop":
       return m.state === "waiting" || m.state === "paused" || m.state === "speaking"
         ? { ...m, state: "dropped", droppedBy: e.by }
@@ -73,7 +79,7 @@ const by = fc.option(fc.constantFrom(...PEOPLE), { nil: null });
 const events: fc.Arbitrary<TurnRequestEvent> = fc.oneof(
   fc.constantFrom("reply-1", "reply-2").map((id) => ({ _tag: "Speak", replyId: MessageId.make(id) }) as const),
   fc.constant({ _tag: "Answer" } as const),
-  fc.constant({ _tag: "Pass" } as const),
+  fc.constantFrom("Quill covered it", "Nothing to add").map((reason) => ({ _tag: "Pass", reason }) as const),
   by.map((actor) => ({ _tag: "Drop", by: actor }) as const),
 );
 
@@ -105,6 +111,7 @@ type Op =
   | { readonly _tag: "Relay"; readonly hobs: ReadonlyArray<AgentId> }
   | { readonly _tag: "Start"; readonly away: ReadonlyArray<AgentId> }
   | { readonly _tag: "End" }
+  | { readonly _tag: "Pass"; readonly reason: string }
   | { readonly _tag: "Stop"; readonly by: Actor }
   | { readonly _tag: "StopAll"; readonly by: Actor }
   | { readonly _tag: "Restart" };
@@ -116,6 +123,12 @@ const ops: fc.Arbitrary<Op> = fc.oneof(
   { weight: 2, arbitrary: someHobs.map((hobs) => ({ _tag: "Relay", hobs }) as const) },
   { weight: 3, arbitrary: fc.subarray(HOBS, { maxLength: 2 }).map((away) => ({ _tag: "Start", away }) as const) },
   { weight: 2, arbitrary: fc.constant({ _tag: "End" } as const) },
+  {
+    weight: 1,
+    arbitrary: fc
+      .constantFrom("Quill covered it", "Nothing to add")
+      .map((reason) => ({ _tag: "Pass", reason }) as const),
+  },
   { weight: 1, arbitrary: person.map((actor) => ({ _tag: "Stop", by: actor }) as const) },
   { weight: 1, arbitrary: person.map((actor) => ({ _tag: "StopAll", by: actor }) as const) },
   { weight: 1, arbitrary: fc.constant({ _tag: "Restart" } as const) },
@@ -129,9 +142,10 @@ interface Owed {
   readonly cause: string;
   readonly byHob: boolean;
   readonly depth: number;
-  readonly state: "waiting" | "speaking" | "answered" | "dropped";
+  readonly state: "waiting" | "speaking" | "answered" | "passed" | "dropped";
   readonly reply: string | null;
   readonly droppedBy: Actor | null;
+  readonly passReason: string | null;
 }
 
 /** The model: a list in the order requests were made, each moved by the rules of ADR 039 alone. */
@@ -148,6 +162,7 @@ const modelStep = (owed: ReadonlyArray<Owed>, op: Op, n: number): ReadonlyArray<
         state: "waiting",
         reply: null,
         droppedBy: null,
+        passReason: null,
       }),
     );
   switch (op._tag) {
@@ -172,6 +187,9 @@ const modelStep = (owed: ReadonlyArray<Owed>, op: Op, n: number): ReadonlyArray<
     case "End":
     case "Restart":
       return owed.map((o) => (o.state === "speaking" ? { ...o, state: "answered" } : o));
+    // The hob speaking ended its turn with no message: the floor moves on as after a reply.
+    case "Pass":
+      return owed.map((o) => (o.state === "speaking" ? { ...o, state: "passed", passReason: op.reason } : o));
     case "Stop":
       if (speaking === undefined) return owed;
       return owed.map((o) =>
@@ -238,6 +256,8 @@ const floorStep = (records: ReadonlyArray<TurnRequest>, op: Op, n: number): Read
     case "End":
     case "Restart":
       return speaking === null ? records : moved([speaking], { _tag: "Answer" });
+    case "Pass":
+      return speaking === null ? records : moved([speaking], { _tag: "Pass", reason: op.reason });
     case "Stop":
       return moved(TurnRequests.stopping(records), { _tag: "Drop", by: op.by });
     case "StopAll":
@@ -246,15 +266,29 @@ const floorStep = (records: ReadonlyArray<TurnRequest>, op: Op, n: number): Read
 };
 
 const shownModel = (owed: ReadonlyArray<Owed>) =>
-  owed.map((o) => ({ id: o.id, hob: o.hob, state: o.state, depth: o.depth, droppedBy: o.droppedBy }));
+  owed.map((o) => ({
+    id: o.id,
+    hob: o.hob,
+    state: o.state,
+    depth: o.depth,
+    droppedBy: o.droppedBy,
+    passReason: o.passReason,
+  }));
 const shownFloor = (records: ReadonlyArray<TurnRequest>) =>
   records
     .toSorted((a, b) => a.queuedAt - b.queuedAt || a.position - b.position)
-    .map((r) => ({ id: r.id, hob: r.hobId, state: r.state, depth: r.relayDepth, droppedBy: r.droppedBy }));
+    .map((r) => ({
+      id: r.id,
+      hob: r.hobId,
+      state: r.state,
+      depth: r.relayDepth,
+      droppedBy: r.droppedBy,
+      passReason: r.passReason,
+    }));
 
 describe("the floor", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-DM-1461-03] agrees with a model of the floor across three hobs, whatever sends, mentions, stops and restarts do", () => {
+  it("[TC-DM-1461-03] agrees with a model of the floor across three hobs, whatever sends, mentions, passes, stops and restarts do", () => {
     fc.assert(
       fc.property(fc.array(ops, { maxLength: 40 }), (script) => {
         let owed: ReadonlyArray<Owed> = [];
