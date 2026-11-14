@@ -212,6 +212,18 @@ Slices in this order. Each leaves the app working and is proven end to end on Cl
 - `ThreadRun` becomes one run per conversation. The dispatcher picks the next turn from `TurnRequest` records and backpack items, and `wakePending` keeps its meaning. The model-based tests of ADR 037 extend to several hobs, several conversations and backpack work.
 - Every memory and For you query that assumes one person gains an actor. Today that actor is always the owner.
 
+## Amendment: the floor as built ([#1461](https://github.com/otaviobarros/hobbots/issues/1461))
+
+Building `TurnRequest` and one floor per conversation settled what the decision left open.
+
+- **The records replace `wakePending`.** A conversation's queue is its waiting `TurnRequest`s and its backpack items, so `ThreadRun` keeps no flag for work that arrived while the floor was taken. When a dispatch delivered nothing, the dispatcher reads the records again: work that needs the hob, or routine progress with a queued message to ride along, starts another dispatch; otherwise only a request can be waiting. A busy conversation that is woken does nothing, because its own end reads the records.
+- **A turn answers the request it took.** Each person's queued message keeps its own turn, as before (CH-008), so a hob's other requests in the conversation wait their own turns instead of folding into one.
+- **Restart answers a speaking request.** A turn that was speaking when the hub stopped ends as an interrupted reply, as before, and that reply answers its request, which Continue resumes. The request does not go back to `waiting`, so no second turn starts over an unfinished reply. Waiting requests start again in their order.
+- **Stop all leaves what was said.** Stop all stops the speaking turn and drops every request still owed, each recording who stopped it. A queued message left with nothing owed leaves the queue as said, journaled `MessageDequeued` with reason `dropped`. Removing a queued message drops what was owed for it.
+- **The run says who speaks.** `ThreadRunStatus` names its conversation (`rootMessageId`, null for the main line), the hob speaking and the hobs next in line. Every turn runs in a main line until reply threads come.
+- **Paused and passed are declared, not reached.** The relay budget ([#1463](https://github.com/otaviobarros/hobbots/issues/1463)) writes `paused` requests and the `pass` tool ([#1462](https://github.com/otaviobarros/hobbots/issues/1462)) ends one `passed`.
+- **Proven.** `[TC-DM-1461-03]` plays random sends, mentions, hob relays, starts, stops, Stop all and restarts across three hobs against a model of the floor; `[TC-PE-1461-03]` plays them on the records, on SQLite and PostgreSQL, with removals; `[TC-CH-1461-01]` to `[TC-CH-1461-03]` run the turns through the chat, a restart and Stop all included.
+
 ## Validation
 
 The scenarios that would show this decision holds. None is proven yet. Each slice will file its proof issues from these ([#1425](https://github.com/otaviobarros/hobbots/issues/1425)).

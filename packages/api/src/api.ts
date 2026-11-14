@@ -362,6 +362,11 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       error: ThreadNotFound,
     }),
+    // Stop all (ADR 039): stops the turn speaking and drops every answer still owed in the thread.
+    HttpApiEndpoint.post("stopAll", "/threads/:threadId/stop-all", {
+      params: { threadId: ThreadId },
+      error: ThreadNotFound,
+    }),
     // Stop waiting: ends a reply that only waits on commands its hob started, keeping its text (#1056).
     HttpApiEndpoint.post("stopWaiting", "/threads/:threadId/stop-waiting", {
       params: { threadId: ThreadId },

@@ -156,6 +156,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       removeQueued: ({ params }) => chat.removeQueued(params.threadId, params.messageId),
       sendNow: ({ params }) => chat.sendNow(params.threadId, params.messageId),
       interrupt: ({ params }) => chat.stop(params.threadId),
+      stopAll: ({ params }) => chat.stopAll(params.threadId),
       stopWaiting: ({ params }) => chat.stopWaiting(params.threadId),
       continueReply: ({ params }) => chat.continueReply(params.threadId, params.messageId),
       toolLog: ({ params }) => readToolLog(params, repo, logs),
