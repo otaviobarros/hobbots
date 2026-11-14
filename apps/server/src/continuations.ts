@@ -21,6 +21,7 @@ import {
   type Delivery,
   Dispatcher,
   DispatcherHost,
+  heldByPause,
   lateWorkOf,
   type ResultsIn,
   runningTurnAsk,
@@ -51,13 +52,26 @@ const makeCarrier = Effect.gen(function* () {
           (routine || item.actionable) &&
           (item.notBefore === null || item.notBefore <= now),
       );
-      return yield* Effect.forEach(waiting, (item) =>
+      const all = yield* Effect.forEach(waiting, (item) =>
         Effect.map(
           item.taskId === null ? Effect.succeed<ReadonlyArray<Task>>([]) : host.treeOf(item.taskId),
           (tree) => ({ item, tree }),
         ),
       );
+      // Work on a Task you paused waits for you to resume it: no turn starts for it (#1446).
+      return all.filter(({ item, tree }) => !heldByPause(item, tree));
     });
+
+  /** Whether a pause now holds any of the items, read afresh from their Task trees. */
+  const pausedSince = (items: ReadonlyArray<BackpackItem>) =>
+    Effect.map(
+      Effect.forEach(items, (item) =>
+        item.taskId === null
+          ? Effect.succeed(false)
+          : Effect.map(host.treeOf(item.taskId), (tree) => heldByPause(item, tree)),
+      ),
+      (held) => held.some(Boolean),
+    );
 
   /** What the turn is handed; a claim found lost as its runtime accepts it fails `lost`, which stops the turn. */
   const workOf = (
@@ -105,29 +119,34 @@ const makeCarrier = Effect.gen(function* () {
       let ran = false;
       yield* dispatcher.dispatchAll(
         items.map((item) => item.id),
-        // Planned again after an early end, the turn sees only the items still waiting.
+        // Planned again after an early end, the turn sees only the items still waiting. A pause put on
+        // their work meanwhile holds them as they are, before any delivery is claimed (#1446).
         (found) =>
-          Effect.map(turn.plan(!found.some((item) => item.actionable)), (turnId) =>
-            turnId === null
-              ? null
-              : {
-                  target,
-                  turnId,
-                  run: (deliveries: ReadonlyArray<Delivery>) =>
-                    Effect.gen(function* () {
-                      ran = true;
-                      // A turn whose claim is lost spends no more of the model's budget: it stops,
-                      // and the dispatcher drops its outcome (ADR 019).
-                      const lost = yield* Deferred.make<never, StaleBackpackClaim>();
-                      const ended = yield* Effect.raceFirst(
-                        turn.run(turnId, workOf(deliveries, lost, results)),
-                        Deferred.await(lost),
-                      );
-                      if (ended._tag === "EndedEarly") {
-                        return yield* new BackpackTurnFailed({ end: ended.end, diagnostic: ended.diagnostic });
-                      }
-                    }),
-                },
+          Effect.flatMap(pausedSince(found), (paused) =>
+            paused ? Effect.succeed(null) : turn.plan(!found.some((item) => item.actionable)),
+          ).pipe(
+            Effect.map((turnId) =>
+              turnId === null
+                ? null
+                : {
+                    target,
+                    turnId,
+                    run: (deliveries: ReadonlyArray<Delivery>) =>
+                      Effect.gen(function* () {
+                        ran = true;
+                        // A turn whose claim is lost spends no more of the model's budget: it stops,
+                        // and the dispatcher drops its outcome (ADR 019).
+                        const lost = yield* Deferred.make<never, StaleBackpackClaim>();
+                        const ended = yield* Effect.raceFirst(
+                          turn.run(turnId, workOf(deliveries, lost, results)),
+                          Deferred.await(lost),
+                        );
+                        if (ended._tag === "EndedEarly") {
+                          return yield* new BackpackTurnFailed({ end: ended.end, diagnostic: ended.diagnostic });
+                        }
+                      }),
+                  },
+            ),
           ),
       );
       return ran;

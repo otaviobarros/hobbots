@@ -34,7 +34,7 @@ const quest = (state: QuestState) =>
     stop:
       state === "stopping" || state === "stopped" ? { reason: "You asked", summary: "Copy drafted", at: at(0) } : null,
     createdAt: at(0),
-    endedAt: state === "active" || state === "stopping" ? null : at(1),
+    endedAt: state === "active" || state === "paused" || state === "stopping" ? null : at(1),
     revision: 1 as Quest["revision"],
   });
 
@@ -49,21 +49,28 @@ const view = (q: Quest): QuestView => ({ state: q.state, stop: q.stop, endedAt: 
 
 // ADR 018's rules with #1346's stop, kept apart from the machine: a Quest ends with its Task, a stop
 // only comes while it is under way, and a Quest its lead was stopping ends stopped, never completed.
+// A paused Quest (#1446) is still under way: it ends, or is stopped, as an active one would.
+// complexity-ignore: the model is one case per event, kept apart from the machine on purpose.
 const stepModel = (m: QuestView, e: QuestEvent): QuestView | "refused" => {
+  const underWay = m.state === "active" || m.state === "paused";
   switch (e._tag) {
     case "Stop":
-      return m.state === "active"
+      return underWay
         ? { ...m, state: "stopping", stop: { reason: e.reason, summary: e.summary, at: e.at } }
         : "refused";
     case "Complete":
-      return m.state === "active" ? { ...m, state: "completed", endedAt: e.at } : "refused";
+      return underWay ? { ...m, state: "completed", endedAt: e.at } : "refused";
     case "Fail":
-      return m.state === "active" ? { ...m, state: "failed", endedAt: e.at } : "refused";
+      return underWay ? { ...m, state: "failed", endedAt: e.at } : "refused";
     case "Cancel":
       if (m.state === "stopping") return { ...m, state: "stopped", endedAt: e.at };
-      return m.state === "active" ? { ...m, state: "cancelled", endedAt: e.at } : "refused";
+      return underWay ? { ...m, state: "cancelled", endedAt: e.at } : "refused";
     case "Reopen":
       return m.state === "failed" ? { ...m, state: "active", endedAt: null } : "refused";
+    case "Pause":
+      return m.state === "active" ? { ...m, state: "paused" } : "refused";
+    case "Unpause":
+      return m.state === "paused" ? { ...m, state: "active" } : "refused";
   }
 };
 
@@ -75,10 +82,12 @@ const events: fc.Arbitrary<QuestEvent> = fc.oneof(
   fc.record({ _tag: fc.constant("Fail" as const), at: time }),
   fc.record({ _tag: fc.constant("Cancel" as const), at: time }),
   fc.record({ _tag: fc.constant("Reopen" as const), at: time }),
+  fc.record({ _tag: fc.constant("Pause" as const), at: time }),
+  fc.record({ _tag: fc.constant("Unpause" as const), at: time }),
 );
 
 describe("QuestMachine", () => {
-  it("[TC-OR-1346-01] agrees with a model of a Quest's end and its lead's stop over random runs of events", () => {
+  it("[TC-OR-1346-01] [TC-OR-1446-02] agrees with a model of a Quest's end and its lead's stop over random runs of events", () => {
     agreesWithModel({
       machine: QuestMachine,
       records: fc.constantFrom(...QuestStateSchema.literals).map(quest),
@@ -108,11 +117,13 @@ describe("QuestMachine", () => {
 
   it("exports one row per rule", () => {
     expect(QuestMachine.table.map((row) => [row.event, row.from, row.to])).toEqual([
-      ["Stop", ["active"], "stopping"],
-      ["Complete", ["active"], "completed"],
-      ["Fail", ["active"], "failed"],
+      ["Stop", ["active", "paused"], "stopping"],
+      ["Complete", ["active", "paused"], "completed"],
+      ["Fail", ["active", "paused"], "failed"],
       ["Cancel", ["stopping"], "stopped"],
-      ["Cancel", ["active"], "cancelled"],
+      ["Cancel", ["active", "paused"], "cancelled"],
+      ["Pause", ["active"], "paused"],
+      ["Unpause", ["paused"], "active"],
       ["Reopen", ["failed"], "active"],
     ]);
   });

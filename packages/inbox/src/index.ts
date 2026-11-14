@@ -28,6 +28,7 @@ export {
   DispatcherHost,
   type DispatchLimits,
   type GiveToLive,
+  heldByPause,
   heldUnder,
   lateness,
   lateWorkOf,

@@ -50,6 +50,11 @@ export interface SentTo {
    * a person's message; a hob's mention passes its own turn's depth plus one.
    */
   readonly relayDepth?: number;
+  /**
+   * False when the hobs it mentions take it elsewhere, as a Quest member takes your note from its
+   * Task (#1446): no answer is owed here, so no request waits for the floor.
+   */
+  readonly owes?: boolean;
 }
 
 /** A message you sent as stored, the hobs that owe it an answer, in order, and their requests. */
@@ -147,6 +152,11 @@ export class HobbotsRepository extends Context.Service<
      * it is refused, and nothing is stored. Without mentions nothing can be refused.
      */
     readonly sendMessage: SendMessage;
+    /**
+     * Whom `text` @mentions, parsed as the hub parses a message it stores (`mentionsIn` against every
+     * hob and person, skipping Markdown code), for a decision taken before the message is stored.
+     */
+    readonly mentionsIn: (text: string) => Effect.Effect<ReadonlyArray<Actor>>;
     /**
      * Saves a reply's text while it is in progress, without journaling or a new revision (ADR 013),
      * so a crash keeps what had streamed by then. Does nothing once the reply has ended.

@@ -1153,6 +1153,24 @@ describe("blockers", () => {
     expect((await run(choose(failure.id, "retry"))).state).toBe("resolved");
   });
 
+  // covers IN-007, OR-006
+  it("[TC-OR-1446-26] work whose turn was cut off waits through a pause put on it during the backoff, spending no delivery", async () => {
+    cutContinuations = true;
+    const { run } = setUp(Frodo, { ...LIMITS, firstRetry: "500 millis", maxRetry: "500 millis" });
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(messagesWhen((all) => all.some((m) => m.status === "interrupted")));
+    // You pause the Quest before the dispatcher tries again: it holds the work and claims nothing.
+    const before = dispatches;
+    await run(TaskControls.use((controls) => controls.pause(TaskId.make("quest"), false)));
+    await run(retry(Effect.suspend(() => (dispatches > before ? Effect.void : Effect.fail("not yet" as const)))));
+    const [item] = await run(itemsOf([failure.id]));
+    expect(item).toMatchObject({ state: "pending", blockers: [] });
+    expect(item?.deliveries).toHaveLength(1);
+    expect((await run(messages())).filter((m) => m.role === "assistant")).toHaveLength(1);
+  });
+
   // covers IN-007
   it("[TC-OR-121] work you stopped until it ran out of deliveries becomes a blocker, and Retry starts it without a message", async () => {
     holdContinuations = true;

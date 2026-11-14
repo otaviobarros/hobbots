@@ -622,7 +622,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       run(({ store }) =>
         Effect.gen(function* () {
           const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f2");
-          const path = MemoryPath.make(`sessions/${thread}.md`);
+          const path = store.sessionPage(pipsOwn, thread);
           yield* store.capture(asPip, pipsOwn, thread, [
             { key: "message:m1", kind: "message", text: "How do the tests run?" },
           ]);
@@ -652,7 +652,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       run(({ store }) =>
         Effect.gen(function* () {
           const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f3");
-          const path = MemoryPath.make(`sessions/${thread}.md`);
+          const path = store.sessionPage(pipsOwn, thread);
           const read = Effect.map(store.page(you, pipsOwn, path), (page) => page as MemoryPage);
           const listedTitle = Effect.map(store.list(you, pipsOwn, 50), (pages) =>
             pages.filter((each) => each.path === path).map((each) => each.title),
@@ -692,7 +692,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
           // Sent again, it is acknowledged and skipped.
           expect(yield* store.capture(asPip, pipsOwn, thread, items)).toBe(1);
           yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
-          const page = yield* store.page(you, pipsOwn, MemoryPath.make(`sessions/${thread}.md`));
+          const page = yield* store.page(you, pipsOwn, store.sessionPage(pipsOwn, thread));
           expect(page?.markdown).toContain("How do the tests run?");
           expect(page?.author).toEqual(byPip);
           for (const scope of [quillsOwn, theApp, everyone]) {

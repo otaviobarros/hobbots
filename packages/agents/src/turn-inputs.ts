@@ -176,10 +176,12 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         if (missedOthers(thread, agentId, missed)) {
           return [why, sinceYouSpoke(missed, people.speaker)].filter((part) => part !== null).join("\n\n") || null;
         }
-        // Only a switch needs one: a session is told what other brains wrote that it did not see.
+        // Only a switch needs one: a session is told what other brains wrote that it did not see,
+        // and what you sent here that no turn of its took, as an @mention of a member does (#1446).
         const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
+        const yours = missed.some((m) => m.role === "user");
         const switchedText =
-          switched || others
+          switched || others || yours
             ? (buildBriefing({
                 kind: "resumed",
                 messages: missed,

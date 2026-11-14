@@ -11,6 +11,8 @@ export const messages = {
     active: "Working",
     waiting: "Waiting",
     blocked: "Blocked",
+    pausing: "Pausing…",
+    paused: "Paused",
     cancelling: "Cancelling…",
     completed: "Done",
     failed: "Had a problem",

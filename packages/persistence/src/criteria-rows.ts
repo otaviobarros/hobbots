@@ -167,7 +167,7 @@ export const makeCriteriaChanges = (
   const openCriterion = (questId: string, criterionId: string) =>
     Effect.gen(function* () {
       const quest = yield* questOf(questId);
-      if (!QuestStates.takesWork(quest)) {
+      if (!QuestStates.checksCriteria(quest)) {
         return yield* refuse("quest-ended", `Quest ${questId} is ${quest.state}, so its criteria no longer change`);
       }
       const unknown = missing(quest, [criterionId]);

@@ -33,7 +33,7 @@ import { makeCampWrites, threadColumns } from "./camps.ts";
 import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
-import { joinedMentions, mentionsToStore, type StoredMentions } from "./message-mentions.ts";
+import { joinedMentions, mentionsToStore, parseMentions, type StoredMentions } from "./message-mentions.ts";
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
@@ -209,7 +209,7 @@ const usageColumns = (usage: ReplyUsage | null) => ({
 });
 
 // A message's steps are one JSON text column (migration 0017).
-const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
+export const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
   rows.map((row) => ({
     ...row,
     revision: Number(row.revision),
@@ -613,7 +613,10 @@ export const HobbotsRepositoryLive = Layer.effect(
           const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
           const message = yield* writeMessage(new Message({ ...input, status, revision }), parsed);
           // Each answer owed waits for the floor, written with the message (ADR 039).
-          const requests = requestsFor(message, message.actor ?? (yield* sessionActor), answerers, to.relayDepth ?? 0);
+          const requests =
+            to.owes === false
+              ? []
+              : requestsFor(message, message.actor ?? (yield* sessionActor), answerers, to.relayDepth ?? 0);
           for (const request of requests) yield* insertRequest(sql, request);
           return { value: { message, answerers, requests }, events: messageEvents(message) };
         }),
@@ -697,6 +700,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       findMessage: (id) => findMessage(id).pipe(Effect.orDie),
       upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),
       sendMessage,
+      mentionsIn: (text) => (text.includes("@") ? parseMentions(sql, text, 0) : Effect.succeed([])).pipe(Effect.orDie),
       checkpointMessage: (message) =>
         sql`UPDATE messages SET content = ${message.content}
           WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),

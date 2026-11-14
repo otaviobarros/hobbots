@@ -53,6 +53,7 @@ import { HobAdmission } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
+import { makeMentionNotes } from "./mention-notes.ts";
 import { makePackPeople } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -441,6 +442,7 @@ export class ChatService extends Context.Service<
       });
 
       const grants = yield* makeTurnGrants(repo, hobTools);
+      const mentions = yield* makeMentionNotes;
       const {
         runOf,
         step,
@@ -494,6 +496,9 @@ export class ChatService extends Context.Service<
           if (slot === null) return null;
           if (hobId === own.id) return { agent: own, slot };
           yield* slot.release;
+          // Only a hob of the camp speaks here, with its own policy (ADR 039): a Quest member that
+          // is not one takes your mention from its Task instead (#1446).
+          if (!(yield* hobsOf(thread)).includes(hobId)) return null;
           const hob = yield* repo.findAgent(hobId);
           if (Option.isNone(hob) || hob.value.status !== "active") return null;
           const mayWork = yield* requireOpenTaskWhileRetiring(hob.value, thread.id).pipe(
@@ -523,6 +528,32 @@ export class ChatService extends Context.Service<
       // hob cannot take yet gives the floor to the next one that can.
       const waitForFloor = (threadId: ThreadId, idle: boolean) =>
         (idle ? startNext(threadId) : Effect.void).pipe(Effect.andThen(lineUp(threadId)));
+
+      /** Your message as stored in the thread, `queued` while it waits for its turn. */
+      const yourMessage = (
+        thread: Thread,
+        agent: Agent,
+        content: string,
+        askedSkill: SkillMention | null,
+        queued: boolean,
+      ) =>
+        Effect.gen(function* () {
+          const accepted = yield* acceptedIn(thread, agent);
+          const named = namedSkills(accepted, thread.skillTrial);
+          return new Message({
+            id: MessageId.make(crypto.randomUUID()),
+            threadId: thread.id,
+            actor: yield* sessionActor,
+            role: "user",
+            content,
+            status: queued ? "queued" : "complete",
+            error: null,
+            configVersion: null,
+            skills: accepted,
+            askedSkill: pickedSkill(content, askedSkill, named),
+            createdAt: yield* nowIso,
+          });
+        });
 
       // How a message you send starts: now, in a slot of its own hob's; through the dispatcher,
       // carrying work (`carries`); or waiting for the floor (no slot either way).
@@ -555,23 +586,19 @@ export class ChatService extends Context.Service<
             if (agent.status === "retired") yield* requireActive(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
+            // A message that @mentions a member of a quest here goes to that member, and the lead
+            // reads it in the chat on its next turn without being woken for it (#1446).
+            const mentioned = yield* mentions.targets(threadId, agent, content);
+            if (mentioned.length > 0) {
+              const saved = yield* mentions.send(
+                yield* yourMessage(thread, agent, content, askedSkill, false),
+                mentioned,
+              );
+              return { userMessage: saved, assistantMessage: null };
+            }
             const { busy, carries, slot, limited } = yield* howItStarts(thread, agent);
             const free = slot?.release ?? Effect.void;
-            const accepted = yield* acceptedIn(thread, agent);
-            const named = namedSkills(accepted, thread.skillTrial);
-            const userMessage = new Message({
-              id: MessageId.make(crypto.randomUUID()),
-              threadId,
-              actor: yield* sessionActor,
-              role: "user",
-              content,
-              status: slot === null ? "queued" : "complete",
-              error: null,
-              configVersion: null,
-              skills: accepted,
-              askedSkill: pickedSkill(content, askedSkill, named),
-              createdAt: yield* nowIso,
-            });
+            const userMessage = yield* yourMessage(thread, agent, content, askedSkill, slot === null);
             // Who answers is decided in the transaction that stores the message (ADR 039, Who
             // answers), from the mentions the hub parses in its text: a mention of a hob that cannot
             // hear it refuses the message, and nothing is stored.

@@ -82,9 +82,19 @@ const work = (fields: Parameters<typeof tree>[0] = {}) => tree({ ...blackFriday(
 describe("the steer receipt under a message of yours", () => {
   it("reads while the lead's turn on it runs, and got it once that turn ends with nothing passed on", () => {
     const trees = [work()];
-    expect(steerReceiptOf(STEER, [STEER], trees, ALDRIC)).toEqual({ lead: ALDRIC, read: false, hops: [] });
+    expect(steerReceiptOf(STEER, [STEER], trees, ALDRIC)).toEqual({
+      lead: ALDRIC,
+      direct: false,
+      read: false,
+      hops: [],
+    });
     expect(steerReceiptOf(STEER, [STEER, reply("streaming")], trees, ALDRIC)?.read).toBe(false);
-    expect(steerReceiptOf(STEER, [STEER, reply()], trees, ALDRIC)).toEqual({ lead: ALDRIC, read: true, hops: [] });
+    expect(steerReceiptOf(STEER, [STEER, reply()], trees, ALDRIC)).toEqual({
+      lead: ALDRIC,
+      direct: false,
+      read: true,
+      hops: [],
+    });
   });
 
   it("names each hob the lead passed it to, and whether it picked it up", () => {
@@ -115,6 +125,30 @@ describe("the steer receipt under a message of yours", () => {
     const [hop] = steerReceiptOf(STEER, [STEER, reply()], trees, ALDRIC)?.hops ?? [];
     expect(hop?.state).toBe("held");
     expect(hop?.approval?.id).toBe(approval.id);
+  });
+
+  it("[TC-OR-1446-08] starts at the member a message of yours mentioned, sent, waiting for its turn or interrupting it", () => {
+    const yours = { senderId: null, delivery: "steer" as const };
+    const base = work();
+    const busy = base.tasks.map((each) =>
+      each.id === BUILD
+        ? new Task({ ...task(BUILD, { ownerId: ADA, second: 3 }), currentAttemptId: AttemptId.make(`a-${BUILD}`) })
+        : each,
+    );
+    const idle = steerReceiptOf(STEER, [STEER], [work({ notes: [note("n1", COPY, QUILL, yours)] })], ALDRIC);
+    expect(idle).toMatchObject({ direct: true, hops: [{ hob: QUILL, state: "sent" }] });
+    const waiting = [work({ tasks: busy, attempts: [running(BUILD, ADA)], notes: [note("n1", BUILD, ADA, yours)] })];
+    expect(steerReceiptOf(STEER, [STEER], waiting, ALDRIC)?.hops[0]?.state).toBe("waiting");
+    const interrupting = [
+      work({
+        tasks: busy,
+        attempts: [running(BUILD, ADA)],
+        notes: [note("n1", BUILD, ADA, { ...yours, delivery: "interrupt" })],
+      }),
+    ];
+    expect(steerReceiptOf(STEER, [STEER], interrupting, ALDRIC)?.hops[0]?.state).toBe("interrupting");
+    const read = [work({ notes: [note("n1", COPY, QUILL, { ...yours, ...picked })] })];
+    expect(steerReceiptOf(STEER, [STEER], read, ALDRIC)?.hops[0]?.state).toBe("picked");
   });
 
   it("follows a note down through a nested lead", () => {

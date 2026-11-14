@@ -788,7 +788,7 @@ describe("only the user decides approvals and manages grants", () => {
   });
 
   // covers PE-006, OR-006
-  it("[TC-PE-230] refuses and records a Cancel, Retry or Reassign that is not from an approved device", async () => {
+  it("[TC-PE-230] [TC-OR-1446-24] refuses and records a Cancel, Pause, Resume, Retry or Reassign that is not from an approved device", async () => {
     await setupDone();
     const thread = await hobThread("Pip");
     const task = "00000000-0000-4000-8000-000000000000";
@@ -798,6 +798,10 @@ describe("only the user decides approvals and manages grants", () => {
       await request({ origin: "https://attacker.example" }, "POST", `/api/quests/${task}/cancel`),
       await request(SCRIPT, "POST", `/api/tasks/${task}/retry`),
       await request(SCRIPT, "POST", `/api/tasks/${task}/reassign`, { agentId: thread.agentId }),
+      await request(SCRIPT, "POST", `/api/tasks/${task}/pause`, { now: true }),
+      await request(SCRIPT, "POST", `/api/quests/${task}/pause`, {}),
+      await request(SCRIPT, "POST", `/api/tasks/${task}/resume`),
+      await request(SCRIPT, "POST", `/api/quests/${task}/resume`),
     ];
     for (const attempt of attempts) expect(attempt).toMatchObject({ status: 401, body: REQUIRED });
     expect(refusals).toHaveLength(attempts.length);

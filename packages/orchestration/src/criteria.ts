@@ -117,7 +117,7 @@ const checkable = (scope: CallScope, input: Omit<TaskToolInput<"check_criterion"
     if (quest === undefined || criterion === undefined) {
       return yield* refuse("criterion-missing", unknownCriterion(scope, input.criterion_id));
     }
-    if (!QuestStates.takesWork(quest)) {
+    if (!QuestStates.checksCriteria(quest)) {
       return yield* refuse("quest-ended", `Quest ${quest.id} is ${quest.state}, so its criteria no longer change.`);
     }
     if (input.verdict === "accepted" && (input.evidence ?? []).length === 0) {
