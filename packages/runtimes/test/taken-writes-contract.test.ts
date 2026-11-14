@@ -2,12 +2,20 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { CallSteering, CallWrites, PromptRequest, ToolAccess } from "@hobbots/agents";
-import { EMPTY_HOB_POLICY } from "@hobbots/domain";
+import {
+  type ApprovalOutcome,
+  actionDigest,
+  type CallSteering,
+  type CallWrites,
+  type PromptRequest,
+  type ToolAccess,
+  type TurnApprovals,
+} from "@hobbots/agents";
+import { ApprovalId, EMPTY_HOB_POLICY } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { callWrites } from "../src/approval.ts";
+import { callWrites, decideCall } from "../src/approval.ts";
 import { policyHooks, toolTurn } from "../src/claude-code.ts";
 import type { AppServerNotification } from "../src/codex/app-server.ts";
 import { codexTurnEvents } from "../src/codex/events.ts";
@@ -194,6 +202,48 @@ describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
     const before = asked.length;
     expect(await runtime.run(`cat ${PLAN}`, steering(asked))).not.toContain(TAKEN);
     expect(asked).toHaveLength(before);
+  });
+});
+
+describe("a write the user approved", () => {
+  // covers OR-006, PE-008, #1449
+  it("[TC-OR-1449-07] is refused if you took over what it writes while its card waited", async () => {
+    const careful = { ...access, policy: { ...access.policy, preset: "careful" as const } };
+    const turn = toolTurn(careful, "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const approvals: TurnApprovals = {
+      request: (action) =>
+        Effect.succeed({
+          approvalId: ApprovalId.make("approval-1"),
+          decision: Effect.map(
+            actionDigest(action),
+            (digest): ApprovalOutcome => ({
+              _tag: "Approved",
+              actionDigest: digest,
+              policyVersion: action.policyVersion,
+              lifetime: "once",
+            }),
+          ),
+        }),
+      currentAccess: Effect.succeed(careful),
+      grants: Effect.succeed([]),
+      used: () => Effect.void,
+    };
+    const decide = (answers: Array<string | null>) =>
+      Effect.runPromise(
+        decideCall(
+          engine,
+          turn.context,
+          approvals,
+          { id: "t1", tool: "Write", input: { file_path: PLAN, content: "# Plan\n" }, cwd: project },
+          () => undefined,
+          { commitsAs: access.commitsAs, takenByYou: () => Effect.succeed(answers.shift() ?? null) },
+        ),
+      );
+    // Nothing was yours when it asked, and nothing is when you approve: it runs.
+    expect((await decide([null, null]))._tag).toBe("Run");
+    // You took it over while it waited: your approval does not let it overwrite your file.
+    expect(await decide([null, TAKEN])).toMatchObject({ _tag: "Refuse", reason: TAKEN });
   });
 });
 

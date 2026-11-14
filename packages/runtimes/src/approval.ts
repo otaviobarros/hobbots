@@ -204,8 +204,8 @@ const decideIn = (
 /**
  * Decides a tool call: the policy's answer, and for Ask the user's (PE-003). While the user decides,
  * `report` gets ToolAwaitingApproval. An approved call is decided again under the hob's policy as
- * it is now, just before it runs (PE-008). A call `steers` points elsewhere or holds is refused
- * with why, before the policy decides it.
+ * it is now, just before it runs (PE-008), and against what you took over (#1449). A call `steers`
+ * points elsewhere or holds is refused with why, before the policy decides it.
  */
 export const decideCall = (
   engine: PolicyEngine["Service"],
@@ -232,8 +232,22 @@ export const decideCall = (
             decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
           report,
           unknown: UNKNOWN_TOOL(call.tool),
-        }).pipe(Effect.map((decision) => withGitHint(withTempHint(call, decision), initTool)));
+        }).pipe(
+          Effect.flatMap((decision) => takenSinceAsked(call, steers, decision)),
+          Effect.map((decision) => withGitHint(withTempHint(call, decision), initTool)),
+        );
   });
+
+/**
+ * A call the user approved is checked again against what they took over just before it runs, since
+ * they may have taken its Task's files or branches over while its card waited (#1449).
+ */
+const takenSinceAsked = (call: ToolCall, steers: CallSteers, decision: CallDecision): Effect.Effect<CallDecision> =>
+  decision._tag !== "Run" || decision.approval === undefined
+    ? Effect.succeed(decision)
+    : Effect.map(takenWrites(call, steers), (reason) =>
+        reason === null ? decision : { _tag: "Refuse", verdict: decision.verdict, reason },
+      );
 
 /**
  * Why a call is refused before the policy decides it, pointing the hob to what works from its

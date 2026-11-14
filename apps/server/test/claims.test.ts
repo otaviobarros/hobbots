@@ -510,6 +510,11 @@ describe("the claims register", () => {
         "took over",
       );
       expect(await h.takenWrite({ paths: [join(checkout, "docs-old", "a.md")] })).toBeNull();
+      // A link is followed before the ".." after it, as the write lands: beside the link's target.
+      symlinkSync(join(checkout, "docs", "decisions"), join(checkout, "decisions-link"));
+      expect(await h.takenWrite({ paths: [`${checkout}${sep}decisions-link${sep}..${sep}a.md`] })).toContain(
+        "took over",
+      );
       // A push of the branch, and a commit where it is checked out, are refused; a commit on main is not.
       expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "refs/heads/camp" }] })).toContain("branch camp");
       expect(await h.takenWrite({ commits: [worktree] })).toContain("branch camp");

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
 import { Effect, Layer } from "effect";
 import git from "isomorphic-git";
@@ -208,12 +208,33 @@ const nearestReal = async (path: string): Promise<{ readonly real: string; reado
 };
 
 /**
+ * An absolute path as the file system reads it: each existing name is followed through its links
+ * before the `..` after it steps up, so `link/../plan.md` is the file beside the link's target, as a
+ * write there lands. Names below the first one that does not exist are read as written.
+ */
+const followed = async (path: string): Promise<string> => {
+  let at = parse(path).root;
+  let exists = true;
+  for (const name of path.split(/[\\/]/).filter((each) => each !== "" && each !== ".")) {
+    if (name === "..") {
+      at = dirname(at);
+      continue;
+    }
+    const next = join(at, name);
+    const real: string | null = exists ? await realpath(next).catch(() => null) : null;
+    exists = real !== null;
+    at = real ?? next;
+  }
+  return at;
+};
+
+/**
  * The repository an absolute path is in and the path inside it, for the claims register (#1449),
- * or null when it is in none. The path is normalized first, so `..` cannot step out of it.
+ * or null when it is in none. Links are followed before each `..`, so `..` cannot step out of it.
  */
 const placeOf = async (path: string): Promise<{ readonly top: string; readonly path: string } | null> => {
   if (!isAbsolute(path)) return null;
-  const { real, below } = await nearestReal(resolve(path));
+  const { real, below } = await nearestReal(await followed(path));
   const found = await repositoryOf(real, new Map());
   if (found === null) return null;
   const top = await realpath(found.dir);
