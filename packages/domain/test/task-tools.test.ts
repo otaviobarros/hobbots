@@ -251,3 +251,50 @@ describe("holdsEveryTaskTool", () => {
     expect(holdsEveryTaskTool([...all, "github_push", "read_hob"])).toBe(true);
   });
 });
+
+describe("the ids a Task tool takes", () => {
+  /**
+   * Where a lead reads each id it passes to a Task tool again, from the records, in any session
+   * (#1555). A session never sees an earlier session's tool results, so an id known only from a
+   * call's result is lost to a new session, as the Quest's criterion ids were.
+   */
+  const REREAD: Record<string, string> = {
+    "plan_steps.task_id": "the briefing names the Task it works on; read_tasks",
+    "start_quest.task_id": "the briefing names the Task it works on",
+    "delegate_task.task_id": "the briefing names the Task it works on",
+    "delegate_task.depends_on": "the briefing lists the work under it; read_tasks",
+    "delegate_task.criteria": "the briefing lists the Quest's criteria; read_tasks",
+    "report_checkpoint.task_id": "the brief names the Task it works on",
+    "report_checkpoint.milestone_id": "the brief lists the milestones to report",
+    "ask.task_id": "the briefing names the Task it works on",
+    "answer.question_id": "the item that brings the question; read_tasks",
+    "escalate.question_id": "the item that brings the question; read_tasks",
+    "hand_off.artifact_id": "the briefing lists each artifact; read_tasks",
+    "hand_off.to_task_id": "the briefing lists the work under it; read_tasks",
+    "wait_for.task_id": "the briefing names the Task it works on",
+    "wait_for.tasks": "the briefing lists the work under it; read_tasks",
+    "read_tasks.task_id": "the briefing lists the work under it",
+    "message_task.task_id": "the briefing lists the work under it; read_tasks",
+    "retry_task.task_id": "the briefing lists the work under it; read_tasks",
+    "retry_task.expected_revision": "read_tasks",
+    "reassign_task.task_id": "the briefing lists the work under it; read_tasks",
+    "reassign_task.expected_revision": "read_tasks",
+    "complete_task.task_id": "the briefing names the Task it works on",
+    "check_criterion.criterion_id": "the briefing lists the Quest's criteria; read_tasks",
+    "check_criterion.evidence": "the briefing lists each artifact; read_tasks",
+    "cancel_task.task_id": "the briefing lists the work under it; read_tasks",
+    "claim.task_id": "the briefing names the Task it works on",
+  };
+  const ID_LISTS = new Set(["tasks", "depends_on", "criteria", "evidence", "expected_revision"]);
+
+  // covers OR-006 (#1555)
+  it("[TC-OR-1555-02] each have a place a lead reads them again from the records", () => {
+    const taken = Object.entries(TaskToolInputs).flatMap(([tool, schema]) =>
+      Object.keys(schema.fields)
+        .filter((field) => field.endsWith("_id") || ID_LISTS.has(field))
+        .map((field) => `${tool}.${field}`),
+    );
+    // A new id argument needs a source in the records first: a briefing line or read_tasks.
+    expect(taken.sort()).toEqual(Object.keys(REREAD).sort());
+  });
+});

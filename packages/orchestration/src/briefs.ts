@@ -6,6 +6,7 @@ import {
   type BackpackItem,
   CHECKPOINT_WORDS,
   CONTINUATION_HEADER,
+  type Criterion,
   checkpointText,
   FINISH_RULE,
   handedFrom,
@@ -202,6 +203,39 @@ const leadGuidance = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
   return [`You lead the Quest on this Task. ${RESULTS_RULE} ${LEAD_DUTY}${place}`];
 };
 
+/** What heads a Quest's criteria in its lead's briefing. */
+const CRITERIA_HEADING = "The Quest's acceptance criteria, each checked with check_criterion by its criterion_id:";
+
+/** A criterion as its lead's briefing lists it, by the id check_criterion takes. */
+const criterionLine = (criterion: Criterion) =>
+  `- criterion_id ${criterion.id}: "${cut(criterion.text, SUMMARY_LIMIT)}" (${criterion.required ? "required" : "optional"}, ${criterion.state})`;
+
+/**
+ * The acceptance criteria of the Quest on `task`, with the ids check_criterion and delegate_task
+ * take (#1555). They come from the records, so a lead in a new session, which never sees what
+ * start_quest returned in an earlier one, still holds them. A resumed session is told one again
+ * only once it changed.
+ */
+const criteriaPart = (task: Task, tree: TaskTree): BriefPart => ({
+  _tag: "Listed",
+  group: "criterion",
+  heading: [CRITERIA_HEADING],
+  entries: questCriteria(task, tree).map((criterion) => ({ key: criterion.id, lines: [criterionLine(criterion)] })),
+});
+
+/** The acceptance criteria of the Quest on `task`, if it leads one. */
+const questCriteria = (task: Task, tree: TaskTree): ReadonlyArray<Criterion> =>
+  tree.quests.find((each) => each.taskId === task.id)?.criteria ?? [];
+
+/**
+ * The criteria of the Quest a member leads on its own Task (#1555), as every member turn lists them:
+ * a member's session can be new, as after a retry, and never holds an earlier session's results.
+ */
+const memberCriteria = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
+  const criteria = questCriteria(task, tree);
+  return criteria.length === 0 ? [] : [CRITERIA_HEADING, ...criteria.map(criterionLine)];
+};
+
 /**
  * The prompt a party member's session starts from (ADR 018): the lead's brief first, then what the
  * lead expects back, what each Task it comes after returned and anything handed to it, then how to
@@ -226,6 +260,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),
+    ...memberCriteria(task, tree),
     `Report findings or blockers with report_checkpoint, and ask ${lead} with ask. ${CHECKPOINT_RULE} When the Task is done, call complete_task with its result. Task id: ${task.id}.`,
   ].join("\n");
 };
@@ -255,6 +290,7 @@ export const memberReminder = (task: Task, tree: TaskTree, lead: string): string
   return [
     `You work on Task ${task.id} for ${lead}.`,
     ...leadGuidance(task, tree),
+    ...memberCriteria(task, tree),
     // Every later turn carries it, so all of it together stays within the step input limit; the
     // lines around it are never cut.
     ...(standing.length === 0
@@ -410,6 +446,7 @@ export const ownerBriefingParts = (
       `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
     ),
     rule("lead", ...leadGuidance(task, tree)),
+    criteriaPart(task, tree),
     { _tag: "Listed", group: "answer", heading: ["Answers to the questions you asked about it:"], entries: answers },
     ...(under.length === 0
       ? []
