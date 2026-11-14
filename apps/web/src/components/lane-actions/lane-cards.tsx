@@ -16,6 +16,7 @@ import { taskTitle } from "../quest/work-model.ts";
 import { type LaneFailure, laneCharmCalls, laneFailures, laneQuestions } from "./lane-actions-model.ts";
 import { LaneAsk } from "./lane-ask.tsx";
 import { messages } from "./messages.ts";
+import { TakenClaims } from "./taken-claims.tsx";
 import type { LaneActions } from "./use-lane-actions.ts";
 
 const room = questCopy.room;
@@ -200,6 +201,7 @@ function TaskOutcome({
         {refusal === null ? null : controlError(refusal.error, { owner, target: refusal.target?.name ?? owner })}
       </Refusal>
       <Refusal>{stuck === null ? null : blockerError(stuck, owner)}</Refusal>
+      <TakenClaims task={task} actions={actions} />
     </>
   );
 }

@@ -1,7 +1,8 @@
-import { type ClaimOutcome, ClaimRegister, GitWorkspace, MemoryProjects, type TaskRepository } from "@hobbots/agents";
+import { type ClaimOutcome, ClaimRegister, GitWorkspace, type TaskRepository } from "@hobbots/agents";
 import {
   type Claim,
   ClaimId,
+  Claims,
   carriedFrom,
   claimBranch,
   claimClashText,
@@ -9,14 +10,15 @@ import {
   claimSubject,
   isSequenceScope,
   isTerminalTask,
-  memoryProjectIdentity,
   numberLike,
   numbersIn,
   type TaskToolInput,
+  takenWriteText,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { holds, type PathSeparator } from "./authority.ts";
 import { type CallScope, newId, ownTask, refuse } from "./call-scope.ts";
+import { makeRepositoryIdentity } from "./taken-writes.ts";
 
 /** What `claim` reads beside the Tasks: the register, the hob's folders and their Git state. */
 interface Deps {
@@ -26,13 +28,6 @@ interface Deps {
 }
 
 type ClaimInput = Omit<TaskToolInput<"claim">, "key">;
-
-/** The last name of a folder, which a repository with no `origin` remote is known by. */
-const lastName = (folder: string, separator: PathSeparator) =>
-  folder
-    .split(separator)
-    .filter((name) => name !== "")
-    .at(-1) ?? folder;
 
 /**
  * The folder a claim is in: the one the call names, or the hob's first folder. A named folder is
@@ -113,10 +108,13 @@ const madeText = (claim: Claim, onMain: OnMain, taken: number | null) => {
 const doneOf = (outcome: ClaimOutcome, onMain: OnMain) => {
   const names = onMain ?? [];
   const clashes = outcome.clashes.length === 0 ? "" : ` ${claimClashText(outcome.claim, outcome.clashes)}`;
+  // A claim you took over is the Task's in name only: the hob is told it is yours, not that it holds it.
   const text =
-    outcome._tag === "Held"
-      ? `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`
-      : madeText(outcome.claim, onMain, outcome.taken);
+    outcome._tag !== "Held"
+      ? madeText(outcome.claim, onMain, outcome.taken)
+      : Claims.isTaken(outcome.claim)
+        ? takenWriteText(outcome.claim)
+        : `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`;
   return {
     message: `${text}${clashes}`,
     details: {
@@ -143,14 +141,9 @@ export const makeClaiming = (deps: Deps) =>
   Effect.gen(function* () {
     const register = yield* Effect.serviceOption(ClaimRegister);
     const workspace = yield* Effect.serviceOption(GitWorkspace);
-    const projects = yield* Effect.serviceOption(MemoryProjects);
     const { tasks, separator } = deps;
-
     /** Who the repository is across clones, from its top folder. */
-    const identityOf = (top: string) =>
-      Option.isSome(projects)
-        ? projects.value.of(top)
-        : Effect.succeed(memoryProjectIdentity(null, lastName(top, separator)));
+    const identityOf = yield* makeRepositoryIdentity(separator);
 
     /** The claim's own clash item in the turn's backpack, which its result shows it, so the turn carries it (#662). */
     const shownIn = (scope: CallScope, claim: Claim) =>

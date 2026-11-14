@@ -26,6 +26,7 @@ import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
 import { QuestCriteria } from "./criteria.tsx";
 import { messages } from "./messages.ts";
 import { PauseControls, pauseControl } from "./pause-controls.tsx";
+import { QuestCost } from "./quest-cost.tsx";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
 import { QuestThreadView } from "./quest-thread-view.tsx";
@@ -200,6 +201,7 @@ function QuestBody({
         <PauseControls top={top} quest={card.quest} owner={lead.name} control={pause} />
       </span>
       <QuestCriteria tree={tree} hobs={hobs} />
+      <QuestCost tree={tree} />
       <Team tree={tree} hobs={hobs} pins={pins} moves={moves} />
       <QuestThreadView tree={tree} threadId={threadId} lead={card.leadId} hobs={hobs} />
     </>

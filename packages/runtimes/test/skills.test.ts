@@ -122,6 +122,9 @@ describe("a turn's skill folder (ADR 029)", () => {
     expect(onlyWhenAskedSkillFile("---\ndisable-model-invocation: false\n---\nx")).toBe(
       "---\ndisable-model-invocation: true\n---\nx",
     );
+    expect(onlyWhenAskedSkillFile("\uFEFF---\nname: a\n---\nSteps.\n")).toBe(
+      "---\nname: a\ndisable-model-invocation: true\n---\nSteps.\n",
+    );
     expect(onlyWhenAskedCodexFile(null)).toBe("policy:\n  allow_implicit_invocation: false\n");
   });
 

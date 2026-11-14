@@ -16,6 +16,7 @@ import {
   AttemptId,
   ChapterId,
   ContentId,
+  OWNER_ACTOR,
   RegisteredArtifactId,
   type StoredVersion,
   Thread,
@@ -114,7 +115,7 @@ const Store = Layer.succeed(
 
 const Seed = Layer.effectDiscard(
   Effect.gen(function* () {
-    yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] });
+    yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] }, OWNER_ACTOR);
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(
       new Agent({

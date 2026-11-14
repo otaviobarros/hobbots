@@ -166,6 +166,8 @@ const describeItem = (item: BackpackItem): string => {
       return `a ${payload.checkpoint.kind} reported on Task ${payload.checkpoint.taskId} is not yet read: ${payload.checkpoint.summary}`;
     case "claim-clash":
       return `a clash over ${claimSubject(payload.claim)} is not yet read`;
+    case "claims-taken":
+      return `the user's takeover of Task ${payload.taskId}'s claims is not yet read`;
     default:
       return `a ${item.kind} item about Task ${item.taskId} is not yet dealt with`;
   }

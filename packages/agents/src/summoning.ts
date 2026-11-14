@@ -1471,6 +1471,8 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
           );
           if (made === undefined) return null;
           if (made._tag === "Status") return `${agent.name} is ${made.status} now.`;
+          // A proposal is applied as a version or a status change, never as a hub setting.
+          if (made._tag === "Setting") return null;
           if (row.change === null) return null;
           // What it opened that some sessions still miss is read again from the versions it made,
           // so a row settled after the hub stopped says what one applied at once says (#1347).

@@ -889,14 +889,20 @@ export const turnSigningAgent = (
 export const sessionPolicy = (tools: ToolTurn | null): { readonly policyVersion?: string } =>
   tools === null ? {} : { policyVersion: policyVersion(tools.context) };
 
+/** The Charms' takeovers, the commits the hub holds and the writes to what you took over, as the turn's steering gives them. */
+const steersOf = (steering: PromptRequest["steering"]) => ({
+  ...(steering?.takeovers.length ? { takeovers: steering.takeovers } : {}),
+  ...(steering?.holdsCommit ? { holdsCommit: steering.holdsCommit } : {}),
+  ...(steering?.takenByYou ? { takenByYou: steering.takenByYou } : {}),
+});
+
 /**
  * What the hub points the turn's calls to, or holds them for (ADR 031): the requests the Charms the hob
- * holds take over and the commits it holds, from the turn's steering, `git init` when it offers it, and
+ * holds take over, the commits it holds and the writes to what you took over (#1449), from the turn's steering, `git init` when it offers it, and
  * the GitHub Charm tools it offers, which a `gh` command is pointed to (#1349).
  */
 const hubSteers = (hub: Pick<PromptRequest, "hubTools" | "steering"> | null | undefined) => ({
-  ...(hub?.steering?.takeovers.length ? { takeovers: hub.steering.takeovers } : {}),
-  ...(hub?.steering?.holdsCommit ? { holdsCommit: hub.steering.holdsCommit } : {}),
+  ...steersOf(hub?.steering),
   ...(hub?.hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
   githubTools: (hub?.hubTools?.tools ?? []).flatMap((tool) =>
     GITHUB_CHARM_TOOLS.includes(tool.name) ? [tool.name] : [],
