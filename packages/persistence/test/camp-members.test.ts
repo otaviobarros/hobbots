@@ -213,6 +213,13 @@ describe("a camp's hobs", () => {
           yield* reason(CAMP, hobActor(QUILL)),
           yield* reason(CAMP, BRUNA),
         ];
+        // Pip leads a Quest still open here, whose results come back to the camp: Pip stays.
+        const sql = yield* SqlClient.SqlClient;
+        const quest = { id: "task-pip", owner_id: PIP, root_id: "task-pip", thread_id: CAMP, brief: "Plan" };
+        const at = { created_at: "2026-11-14T09:00:00.000Z", updated_at: "2026-11-14T09:00:00.000Z" };
+        yield* sql`INSERT INTO tasks ${sql.insert({ ...quest, state: "active", ...at })}`;
+        const leading = yield* reason(CAMP, hobActor(PIP));
+        yield* sql`UPDATE tasks SET state = 'completed' WHERE id = 'task-pip'`;
         // One who is not in the camp, as the change is written, changes no one in it.
         const outsider = [
           (yield* Effect.flip(repo.removeMember(CAMP, hobActor(PIP), BRUNA))).reason,
@@ -224,6 +231,7 @@ describe("a camp's hobs", () => {
         return {
           refusals,
           outsider,
+          leading,
           back: types(back.entries),
           bruna: shown(bruna.value),
           members: yield* members(CAMP),
@@ -232,6 +240,7 @@ describe("a camp's hobs", () => {
     );
     expect(result.refusals).toEqual(["direct-message", "owner", "lead", "not-member"]);
     expect(result.outsider).toEqual(["not-member", "not-member"]);
+    expect(result.leading).toBe("leads-quest");
     expect(result.back).toEqual(["ThreadMemberChanged"]);
     expect(result.bruna).toBe("user:bruna:active");
     expect(result.members).toEqual([

@@ -87,6 +87,11 @@ export const makeTurnRequestWrites = (
       return events;
     });
 
+  // Whether `hobId` leads a top-level Quest in the thread that has not ended.
+  const leadsOpenQuest = (threadId: ThreadId, hobId: string) =>
+    sql`SELECT 1 FROM tasks WHERE thread_id = ${threadId} AND owner_id = ${hobId} AND parent_id IS NULL
+      AND state NOT IN ('completed', 'failed', 'cancelled') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
+
   // Drops every request `hobId` still waits to answer in the thread, on any of its lines.
   const dropWaitingOf = (threadId: ThreadId, hobId: string, by: Actor) =>
     selectWaitingOf(sql, threadId, hobId).pipe(
@@ -145,6 +150,10 @@ export const makeTurnRequestWrites = (
             const plan = planMemberRemove(thread, members, actor);
             if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
             if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
+            // A Quest the hob leads here still comes back to the camp for its results and answers.
+            if (actor.kind === "hob" && (yield* leadsOpenQuest(threadId, actor.id))) {
+              return yield* new MemberRefused({ threadId, actor, reason: "leads-quest" });
+            }
             const member = movedMember(plan.member, { _tag: "Remove" }, revision);
             yield* saveState(sql, member);
             // The hob owes nothing here any more: what it was waiting to answer, on any line, is dropped

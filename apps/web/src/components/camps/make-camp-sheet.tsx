@@ -68,7 +68,7 @@ export function MakeCampSheet({
   // Until the hob directory is read, the hob the camp starts from is the one to pick; a failed read
   // says so, with a way to read it again.
   const directory = useQuery(agentsQuery);
-  const hobs = (directory.data ?? [hob]).filter((each) => takesNewWork(each) || each.id === hob.id);
+  const hobs = pickableHobs(directory.data ?? [hob], hob.id, state.draft.hobs);
   const locked: AgentId | null = from !== undefined && state.draft.chapter ? hob.id : null;
   const move = useMoveChapter(from?.chapter.threadId ?? ("" as ThreadId));
   const navigate = useNavigate();
@@ -210,3 +210,10 @@ const failedName = (hobs: ReadonlyArray<Agent>, state: MakeCamp & { step: "faile
   hobs.find((each) => each.id === state.hob)?.name ??
   hobs.find((each) => each.id === campLead(state.draft))?.name ??
   hob.name;
+
+/**
+ * The hobs Make a camp offers: every hob that takes new work, the one the camp starts from, and any
+ * already picked that was paused or retired meanwhile, so it can still be unticked.
+ */
+const pickableHobs = (hobs: ReadonlyArray<Agent>, from: AgentId, picked: ReadonlyArray<AgentId>) =>
+  hobs.filter((each) => takesNewWork(each) || each.id === from || picked.includes(each.id));

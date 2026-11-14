@@ -76,6 +76,7 @@ export const messages = {
     retry: "Try again",
     errors: {
       "hob-unavailable": ({ name }: Named) => `${name} is paused or retired, so it can't join now.`,
+      "leads-quest": ({ name }: Named) => `${name} leads a quest still open here, so it stays until that quest ends.`,
       refused: () => "That change isn't possible in this camp.",
       unreachable: () => "Couldn't change who is here. Hobbots may be reconnecting; try again in a moment.",
     },

@@ -37,6 +37,7 @@ export const MembersReport = Schema.Struct({
   /** The people among them, so the sheet can name them. Who speaks comes from the hub's status. */
   people: Schema.Array(User),
   /** Each hob member's replies in the thread from `since` until `until`. */
+  /** Every hob that answered in the thread in the period, a member or not, so the totals add up. */
   today: Schema.Array(HobToday),
   since: Schema.String,
   until: Schema.String,

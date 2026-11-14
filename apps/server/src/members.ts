@@ -41,8 +41,9 @@ export const MembersHandlers = HttpApiBuilder.group(HobbotsApi, "members", (hand
         const people: ReadonlyArray<User> = known.filter((user) =>
           named.some((actor) => sameActor(actor, { kind: "user", id: user.id })),
         );
-        const hobs = new Set(all.filter((member) => member.actor.kind === "hob").map((member) => member.actor.id));
-        const today = (yield* ledger.threadUsage(threadId, since, until)).filter((hob) => hobs.has(hob.hobId));
+        // Every hob that answered here today, a member or not: replies that moved in with a chapter
+        // count toward the camp's total even when their hob is not in it.
+        const today = yield* ledger.threadUsage(threadId, since, until);
         return { threadId, members: all, people, today, since, until };
       });
 

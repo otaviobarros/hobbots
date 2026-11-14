@@ -106,7 +106,18 @@ export const MemberMachine = defineMachine<MemberState, MemberEvent, ThreadMembe
  * whose camp it is stays. `not-member`: they are not in the thread, or the person asking is not.
  * `unknown`: the hub has no such person.
  */
-export const MemberRefusal = Schema.Literals(["direct-message", "lead", "owner", "not-member", "unknown"]);
+/**
+ * Why a member change was refused. `leads-quest`: the hob leads a Quest still open in the camp, whose
+ * results and answers come back there, so it stays until that Quest ends.
+ */
+export const MemberRefusal = Schema.Literals([
+  "direct-message",
+  "lead",
+  "owner",
+  "not-member",
+  "unknown",
+  "leads-quest",
+]);
 export type MemberRefusal = typeof MemberRefusal.Type;
 
 /** A member a thread refused to add. */
