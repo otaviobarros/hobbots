@@ -16,7 +16,8 @@
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/inbox": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "mdast-util-from-markdown": "2.1.0"
   },
   "devDependencies": {
     "@hobbots/api": "workspace:*",

@@ -640,6 +640,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.1.0
+      mdast-util-from-markdown:
+        specifier: 2.1.0
+        version: 2.1.0(supports-color@10.2.2)
     devDependencies:
       '@hobbots/api':
         specifier: workspace:*

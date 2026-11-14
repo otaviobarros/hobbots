@@ -3,6 +3,7 @@ import { type Actor, MemberRefused, planMemberAdd, type Thread, type ThreadId, T
 import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
+import { unreadMentionsOf } from "./message-mentions.ts";
 import {
   insertMember,
   type MemberRow,
@@ -65,6 +66,7 @@ export const ThreadMemberRepositoryLive = Layer.effect(
       list: (threadId) => selectMembers(sql, threadId).pipe(Effect.orDie),
       find: (threadId, actor) => find(threadId, actor).pipe(Effect.orDie),
       add,
+      unreadMentions: (actor) => unreadMentionsOf(sql, actor).pipe(Effect.orDie),
     });
   }),
 );

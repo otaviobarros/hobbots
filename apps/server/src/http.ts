@@ -16,7 +16,7 @@ import {
   ToolLogs,
   UnattendedSummonLimits,
 } from "@hobbots/agents";
-import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
+import { CONNECT_PROTOCOL, HobbotsApi, MentionRefused, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import type { ThreadId } from "@hobbots/domain";
 import type { Backpack } from "@hobbots/inbox";
 import { Effect, Layer, Option } from "effect";
@@ -145,7 +145,14 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
         );
     return handlers.handleAll({
       messages: ({ params }) => ofThread(params.threadId, repo.listMessages),
-      sendPrompt: ({ params, payload }) => chat.sendPrompt(params.threadId, payload.content, payload.skill ?? null),
+      sendPrompt: ({ params, payload }) =>
+        chat
+          .sendPrompt(params.threadId, payload.content, payload.skill ?? null)
+          .pipe(
+            Effect.catchTag("MentionRefused", (refused) =>
+              Effect.fail(new MentionRefused({ threadId: refused.threadId, hobs: refused.hobs })),
+            ),
+          ),
       removeQueued: ({ params }) => chat.removeQueued(params.threadId, params.messageId),
       sendNow: ({ params }) => chat.sendNow(params.threadId, params.messageId),
       interrupt: ({ params }) => chat.stop(params.threadId),

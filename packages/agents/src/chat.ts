@@ -25,6 +25,7 @@ import {
   hobStanding,
   type IllegalChapterTransition,
   isResumable,
+  type MentionRefused,
   Message,
   MessageId,
   MessageTransitions,
@@ -112,7 +113,7 @@ export class ChatService extends Context.Service<
       askedSkill?: SkillMention | null,
     ) => Effect.Effect<
       { userMessage: Message; assistantMessage: Message | null },
-      ThreadNotFound | HobUnavailable | ThreadArchived
+      ThreadNotFound | HobUnavailable | ThreadArchived | MentionRefused
     >;
     readonly removeQueued: (
       threadId: ThreadId,
@@ -478,8 +479,8 @@ export class ChatService extends Context.Service<
               createdAt: yield* nowIso,
             });
             // Who answers is decided in the transaction that stores the message (ADR 039, Who
-            // answers). You cannot mention a hob yet (#1455), so nothing is refused, and a thread has
-            // one hob until hobs can be added to a camp (#1467): when it names one, it is the thread's.
+            // answers), from the mentions the hub parses in its text: a mention of a hob that cannot
+            // hear it refuses the message, and nothing is stored.
             const sent = yield* repo.sendMessage(userMessage, { mentions: [], repliesTo: null });
             const saved = yield* announce(sent).pipe(Effect.map((value) => value.message));
             if (sent.value.answerers.length === 0) return { userMessage: saved, assistantMessage: null };

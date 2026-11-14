@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Actor } from "./actor.ts";
+import { Actor, sameActor } from "./actor.ts";
 import { ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
@@ -100,8 +100,6 @@ export class MemberRefused extends Schema.TaggedError<MemberRefused>()("MemberRe
   actor: Actor,
   reason: MemberRefusal,
 }) {}
-
-const sameActor = (a: Actor, b: Actor): boolean => a.kind === b.kind && a.id === b.id;
 
 /**
  * What adding `actor` to a thread does, given its members in every state: `add` a new row, `return`
