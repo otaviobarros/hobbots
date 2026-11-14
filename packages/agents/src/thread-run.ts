@@ -36,6 +36,11 @@ export interface ThreadRun {
   readonly run: RunState;
   /** The hob whose turn runs there, while `running` or `carrying`. */
   readonly speaking: AgentId | null;
+  /**
+   * The hob whose backpack work the dispatcher puts through, while `dispatching` or `carrying`, so
+   * Stop all can hold that work before its turn launches (ADR 039).
+   */
+  readonly carrier: AgentId | null;
   /** The hobs whose requests wait for the floor, in the order they will speak, each once. */
   readonly next: ReadonlyArray<AgentId>;
   /** The reply of the turn running there, while `running` or `carrying`. */
@@ -53,8 +58,8 @@ export interface ThreadRun {
 }
 
 export type ThreadRunEvent =
-  /** The dispatcher starts putting the backpack work waiting there into the thread's next turn. */
-  | { readonly _tag: "Dispatch" }
+  /** The dispatcher starts putting the backpack work waiting there for `hobId` into the line's next turn. */
+  | { readonly _tag: "Dispatch"; readonly hobId: AgentId }
   /** A turn of `hobId` starts, with the reply it writes and what that reply is doing. */
   | { readonly _tag: "Launch"; readonly hobId: AgentId; readonly reply: Reply; readonly activity: ReplyActivity | null }
   /** The running reply changed what it is doing; a stale reply, or no change, changes nothing. */
@@ -84,6 +89,7 @@ export const RUN_STATES: ReadonlyArray<RunState> = ThreadRunState.literals;
 export const idleRun: ThreadRun = {
   run: "idle",
   speaking: null,
+  carrier: null,
   next: [],
   reply: null,
   activity: null,
@@ -125,7 +131,11 @@ export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRu
   },
   field: "run",
   events: {
-    Dispatch: { from: ["idle"], to: "dispatching", apply: (r) => ({ ...r, run: "dispatching" }) },
+    Dispatch: {
+      from: ["idle"],
+      to: "dispatching",
+      apply: (r, e) => ({ ...r, run: "dispatching", carrier: e.hobId }),
+    },
     Launch: [
       {
         from: ["idle"],
@@ -162,7 +172,7 @@ export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRu
       { from: ["draining"], to: "idle", apply: (r) => ({ ...r, run: "idle" }) },
       { from: ["idle"], to: "idle", apply: (r) => r },
     ],
-    Delivered: { from: ["dispatching"], to: "idle", apply: (r) => ({ ...r, run: "idle" }) },
+    Delivered: { from: ["dispatching"], to: "idle", apply: (r) => ({ ...r, run: "idle", carrier: null }) },
     // Only a change is a transition, so the run publishes who is next only when it changes.
     Lined: staying(
       RUN_STATES,

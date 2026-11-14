@@ -111,8 +111,8 @@ const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
     }),
   ).pipe(Layer.provide(FakeRuntimeLayer()));
 
-/** Holds the next dispatch that finds no work before the chat frees its thread, until `proceed`. */
-let emptyDispatch: { readonly reached: Deferred.Deferred<void>; readonly proceed: Deferred.Deferred<void> } | null =
+/** Holds the next dispatch once it delivered, before the chat frees its line, until `proceed`. */
+let finishingDispatch: { readonly reached: Deferred.Deferred<void>; readonly proceed: Deferred.Deferred<void> } | null =
   null;
 /** Dispatches that have returned so far. */
 let dispatches = 0;
@@ -121,7 +121,7 @@ let dispatches = 0;
  * Holds the next continuation that runs until `proceed`, once its items are claimed and checked:
  * before the chat starts it (`claimed`), or once the chat has read its work as still due and is
  * about to save its reply (`checked`). `reached` learns the items it holds, and `settled` is done
- * once its dispatch returned and the dispatch the thread's drain started after it found nothing.
+ * once its dispatch returned.
  */
 let holdCarry: {
   readonly at: "claimed" | "checked";
@@ -129,8 +129,6 @@ let holdCarry: {
   readonly proceed: Deferred.Deferred<void>;
   readonly settled: Deferred.Deferred<void>;
 } | null = null;
-/** The held continuation's gate once its dispatch returned, until a later dispatch finds nothing. */
-let heldDispatched: Deferred.Deferred<void> | null = null;
 
 /** `turn`, its first run held as `holdCarry` asks; `wasHeld` tells whether this turn took the gate. */
 const holding = (turn: CarryingTurn) => {
@@ -166,19 +164,17 @@ const observed = Layer.effect(
       deliver: (threadId, agentId, turn) => {
         const carried = holding(turn);
         return live.deliver(threadId, agentId, carried.turn).pipe(
-          Effect.tap((ran) => {
+          Effect.tap(() => {
             dispatches += 1;
             const took = carried.took();
-            if (took !== null) heldDispatched = took.settled;
-            else if (!ran && heldDispatched !== null) {
-              const settled = heldDispatched;
-              heldDispatched = null;
-              return Deferred.succeed(settled, undefined);
-            }
-            const gate = emptyDispatch;
-            if (ran || gate === null) return Effect.void;
-            emptyDispatch = null;
-            return Deferred.succeed(gate.reached, undefined).pipe(Effect.andThen(Deferred.await(gate.proceed)));
+            const settled = took === null ? Effect.void : Deferred.succeed(took.settled, undefined);
+            const gate = finishingDispatch;
+            if (gate === null) return settled;
+            finishingDispatch = null;
+            return settled.pipe(
+              Effect.andThen(Deferred.succeed(gate.reached, undefined)),
+              Effect.andThen(Deferred.await(gate.proceed)),
+            );
           }),
         );
       },
@@ -256,9 +252,8 @@ afterEach(async () => {
   holdContinuations = false;
   holdPrompt = null;
   cutContinuations = false;
-  emptyDispatch = null;
+  finishingDispatch = null;
   holdCarry = null;
-  heldDispatched = null;
   dispatches = 0;
   await runtime?.dispose();
   runtime = undefined;
@@ -851,26 +846,28 @@ describe("continuing a hob when work arrives", () => {
     expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toHaveLength(1);
   }, 10_000);
   // covers IN-004
-  it("[TC-OR-085] work that arrives while a wake finds nothing still starts once the thread is free", async () => {
+  it("[TC-OR-085] work that arrives while a dispatch is finishing still starts once the line is free", async () => {
     const reached = Deferred.makeUnsafe<void>();
     const proceed = Deferred.makeUnsafe<void>();
-    emptyDispatch = { reached, proceed };
+    finishingDispatch = { reached, proceed };
     const { run } = setUp();
-    // A wake finds nothing waiting, and the thread is not yet free again.
+    // A step fails: its continuation runs, and its dispatch has not yet freed the line.
+    await run(failedStep);
     await run(ChatService.use((chat) => chat.wake(threadId)));
     await run(Deferred.await(reached));
 
-    // A step of Frodo's Task fails now: its Failure arrives, and its wake finds the thread busy.
-    const failure = await run(failedStep);
+    // A step of another Task of Frodo's fails now: its Failure arrives, and its wake finds the line busy.
+    const failure = await run(failedStepOf(FRODO, "later-"));
     if (failure === undefined) throw new Error("no Failure recorded");
     await run(ChatService.use((chat) => chat.wake(threadId)));
     await run(Deferred.succeed(proceed, undefined));
 
-    // Freed, the thread looks again: the Failure starts its continuation.
-    const all = await run(messagesWhen((each) => each.length === 1));
-    expect(all[0]?.content).toContain("ended as failed.");
+    // Freed, the line looks again: the second Failure starts a continuation of its own.
     const [settled] = await run(settledItems([failure.id]));
-    expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+    const all = await run(messages());
+    const consumedBy = all.find((m) => settled?.disposition?._tag === "consumed" && m.id === settled.disposition.by);
+    expect(consumedBy?.role).toBe("assistant");
+    expect(consumedBy?.content).toContain("ended as failed.");
   });
 
   /**
@@ -905,11 +902,12 @@ describe("continuing a hob when work arrives", () => {
     );
     await run(Deferred.succeed(proceed, undefined));
 
-    // The work resolves as late. Once its dispatch returned and the thread's drain found nothing
-    // more, the thread is idle: nothing more was asked of the runtime or started.
+    // The work resolves as late. Once its dispatch returned, the line goes idle: nothing more was
+    // asked of the runtime or started.
     const items = await run(settledItems(held));
     expect(items.map((item) => item.disposition?._tag)).toEqual(held.map(() => "late"));
     await run(Deferred.await(settled));
+    await run(settledRun());
     expect(await run(ChatService.use((chat) => chat.activeThreads))).toEqual([]);
     expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toEqual([]);
     const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
@@ -1015,10 +1013,12 @@ describe("coalescing routine progress", () => {
     expect(progress).toHaveLength(30);
     expect(progress.every((item) => item.recipientId === FRODO && !item.actionable)).toBe(true);
 
-    // Even woken, Frodo's thread starts nothing for progress alone: it waits, pending.
+    // Even woken, Frodo's thread starts nothing for progress alone, not even a dispatch: it waits, pending.
+    // The wake decides the floor before it returns, so a dispatch it started would show here already.
     await run(ChatService.use((chat) => chat.wake(threadId)));
-    await run(retry(Effect.suspend(() => (dispatches > 0 ? Effect.void : Effect.fail("not yet" as const)))));
-    await run(Effect.sleep("150 millis"));
+    const { runs } = await run(ChatService.use((chat) => chat.threadRuns));
+    expect(runs.filter((each) => each.threadId === threadId && each.run !== "idle")).toEqual([]);
+    expect(dispatches).toBe(0);
     expect(await run(messages())).toEqual([]);
     expect((await run(itemsOf(progress.map((item) => item.id)))).every((item) => item.state === "pending")).toBe(true);
 

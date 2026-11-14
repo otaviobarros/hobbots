@@ -1,10 +1,15 @@
 import {
+  type Actor,
   type Agent,
   type AgentConfiguration,
   AgentId,
   type BackpackTurnEnd,
   type Brain,
   DEFAULT_THREAD_TITLE,
+  decideFloor,
+  type FloorHob,
+  type FloorPhase,
+  type FloorSnapshot,
   hobActor,
   hobReads,
   holdsEveryTaskTool,
@@ -16,17 +21,19 @@ import {
   MessageId,
   type MessageStatus,
   mainLine,
+  nextRequest,
   openThreadTask,
   QueuedMessageTransitions,
   replyActivity,
+  startsAtOnce,
   systemInstructions,
   Thread,
   type ThreadId,
   ThreadLifecycle,
   ThreadMembers,
   type ThreadRunStatus,
-  type TurnRequest,
-  type TurnRequestId,
+  TurnRequest,
+  TurnRequestId,
   TurnRequests,
   titleFromPrompt,
 } from "@hobbots/domain";
@@ -184,9 +191,6 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // registered after the sweep still stops (ADR 039).
     const stops = yield* Ref.make(HashMap.empty<AgentId, number>());
     const nowMillis = DateTime.now.pipe(Effect.map(DateTime.toEpochMillis));
-    // The hob each dispatching thread is putting backpack work through, until it is delivered, so
-    // Stop all can hold that work before its turn is launched (ADR 039).
-    const dispatches = yield* Ref.make(HashMap.empty<ThreadId, AgentId>());
     // Every line's run (ADR 037, ADR 039), changed only through `ThreadRunMachine`, keyed by
     // `lineKey`. In memory, as turns are; what waits is the stored `TurnRequest`s and backpack items.
     // A line with no entry is idle. `revision` counts every transition, so clients can order what
@@ -539,21 +543,6 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         );
       });
 
-    // The request the line's floor goes to next, among those whose hob takes work now, the
-    // message Send now picked first; null when nobody waiting can speak.
-    const floorNext = (thread: Thread) =>
-      Effect.gen(function* () {
-        const open = yield* repo.openTurnRequests(mainLine(thread.id));
-        const hobs = yield* activeHobs(
-          thread,
-          TurnRequests.waiting(open).map((request) => request.hobId),
-        );
-        const { chosen } = yield* runOf(thread.id);
-        const next = TurnRequests.next(open, (request) => hobs.has(request.hobId), chosen);
-        const agent = next === null ? undefined : hobs.get(next.hobId);
-        return next === null || agent === undefined ? null : { request: next, agent };
-      });
-
     // The hobs that speak in the thread: its own hob, then its active member hobs as they joined.
     const hobsOf = (thread: Thread) => {
       // standards-allow STD-ARCH-021: the hob a thread belongs to speaks there first, and is listed once
@@ -574,19 +563,6 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             );
     };
 
-    // The thread and the hob `agentId` names, the thread's own by default, when that hob speaks
-    // there and takes work, and the thread takes new turns.
-    const workable = (threadId: ThreadId, agentId?: AgentId) =>
-      Effect.gen(function* () {
-        const thread = yield* repo.findThread(threadId);
-        if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return null;
-        // standards-allow STD-ARCH-021: with no hob named, the hob the thread belongs to
-        const hobId = agentId ?? thread.value.agentId;
-        if (!(yield* hobsOf(thread.value)).includes(hobId)) return null;
-        const agent = (yield* activeHobs(thread.value, [hobId])).get(hobId);
-        return agent === undefined ? null : { thread: thread.value, agent };
-      });
-
     // Runs `effect` under the thread's lock, its own hob's, which every turn of the thread takes.
     const underThread = <A>(threadId: ThreadId, effect: Effect.Effect<A>) =>
       repo
@@ -597,156 +573,217 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           ),
         );
 
-    // Whether a request of `agentId` waits in the thread's line, for routine progress to ride along.
-    const requestWaitsFor = (threadId: ThreadId, agentId: AgentId) =>
-      repo
-        .openTurnRequests(mainLine(threadId))
-        .pipe(Effect.map((open) => TurnRequests.waiting(open).some((request) => request.hobId === agentId)));
-
     // Why a turn runs, as its request records it.
     const reasonOf = (request: TurnRequest): TurnReason => ({ cause: request.cause, by: request.causedBy });
 
-    // How a turn starts in its slot: one that carries work runs in its dispatch's slot, and one
-    // handed a slot runs in it; any other takes its own, or waits for one (#1448): null then.
-    const withSlot = (thread: Thread, agent: Agent, start: TurnStart) =>
+    /**
+     * Everything the floor's decision reads for the line, as the records stand now, with the thread
+     * and the hobs that take work there; null when the thread is gone. `asking` names a hob a request
+     * about to be sent waits for. Runs under the line's lock.
+     *
+     * The backpack is read only where the decision looks (ADR 019, IN-005): with a request next, its
+     * hob's work and routine progress; with none, the work of each hob of the camp. An archived line,
+     * a hub holding the work that waited, and a dispatch's own decision read none: `read` says so.
+     */
+    const snapshotOf = (threadId: ThreadId, phase: FloorPhase, sent: MessageId | null = null, asking?: AgentId) =>
       Effect.gen(function* () {
-        if (start.slot !== undefined || start.carry != null) return start;
-        const slot = yield* slotFor(thread, agent);
-        return slot === null ? null : { ...start, slot };
+        const found = yield* repo.findThread(threadId);
+        if (Option.isNone(found)) return null;
+        const thread = found.value;
+        const run = yield* runOf(threadId);
+        const requests = yield* repo.openTurnRequests(mainLine(threadId));
+        const camp = yield* hobsOf(thread);
+        const asked = [
+          ...TurnRequests.waiting(requests).map((request) => request.hobId),
+          ...(asking === undefined ? [] : [asking]),
+        ];
+        const hobIds = [...new Set([...camp, ...asked])];
+        const awake = yield* activeHobs(thread, hobIds);
+        const open = ThreadLifecycle.isOpen(thread);
+        const restoring = yield* held;
+        const queued = run.held.length > 0 && Option.isSome(yield* repo.nextQueuedMessage(threadId));
+        const facts = hobIds.map(
+          (hobId): FloorHob => ({
+            hobId,
+            available: awake.has(hobId),
+            member: camp.includes(hobId),
+            held: run.held.includes(hobId),
+            work: false,
+            progress: false,
+          }),
+        );
+        const bare: FloorSnapshot = {
+          phase,
+          open,
+          restoring,
+          sent,
+          backpack: Option.isSome(continuations),
+          requests,
+          chosen: run.chosen,
+          hobs: facts,
+          queued,
+        };
+        const service = open && !restoring && phase._tag === "Free" ? Option.getOrNull(continuations) : null;
+        if (service === null) return { snapshot: bare, thread, awake, read: false };
+        const next = nextRequest(bare)?.hobId;
+        const riders = new Set([next, asking].filter((hobId): hobId is AgentId => hobId !== undefined));
+        const looked = next === undefined ? new Set([...camp, ...riders]) : riders;
+        const hobs = yield* Effect.forEach(facts, (hob) =>
+          Effect.gen(function* () {
+            if (!hob.member || !looked.has(hob.hobId)) return hob;
+            const work = (yield* service.waiting(hob.hobId)).includes(threadId);
+            const progress = riders.has(hob.hobId) && (yield* service.progressWaits(threadId, hob.hobId));
+            return { ...hob, work, progress };
+          }),
+        );
+        return { snapshot: { ...bare, hobs }, thread, awake, read: true };
       });
 
-    // Gives the line's floor to the next request (ADR 039): the oldest waiting one whose hob takes
-    // work, the message Send now picked first; with `only`, a request of that hob alone. Runs under
-    // the thread's lock while the line is not busy. The request takes the floor together with its
-    // turn's reply, and a queued message starts with them, so a crash cannot leave one without the
-    // others.
-    const startQueued = (threadId: ThreadId, start: TurnStart = {}, only: AgentId | null = null) =>
+    /** A turn the floor started: its reply as saved, the running turn, and the request it answers. */
+    interface Begun {
+      readonly saved: Message;
+      readonly turn: { readonly turn: Fiber.Fiber<unknown, unknown>; readonly reply: Reply };
+      readonly request: TurnRequest;
+    }
+
+    /** The slot a turn starting now was handed, and the hob it counts against (#1448). */
+    interface Handed {
+      readonly hobId: AgentId;
+      readonly slot: TurnSlot;
+    }
+
+    /**
+     * Moves the line's floor on (ADR 039, #1549): the one place a turn or a dispatch starts there,
+     * from `decideFloor`. Runs under the line's lock. A turn may start in the slot it was `handed`,
+     * when that counts against its hob; any other slot handed is given up. `sent` is the message of
+     * yours being sent, which starts even while the hub holds work after a restore. Returns the turn
+     * it started and the request it answers, if any.
+     */
+    const advance = (
+      threadId: ThreadId,
+      handed: Handed | null = null,
+      sent: MessageId | null = null,
+    ): Effect.Effect<Begun | null> =>
       Effect.gen(function* () {
-        if (yield* held) return null;
-        // An archived thread is read-only: what it still owes waits until it is restored.
-        const found = yield* repo.findThread(threadId);
-        if (Option.isNone(found) || !ThreadLifecycle.isOpen(found.value)) return null;
-        const chosen = yield* floorNext(found.value);
-        // Work rides along only the request that is next anyway: it never moves another ahead.
-        if (only !== null && chosen?.agent.id !== only) return null;
-        // Nobody waiting can speak now: the line still says who waits, as after a restart.
-        if (chosen === null) {
-          yield* step(threadId, { _tag: "Unchoose", messageId: null });
-          return yield* lineUp(threadId).pipe(Effect.as(null));
-        }
-        const { request: next, agent } = chosen;
-        // A turn that waits for a slot leaves the line saying who waits.
-        const begin = yield* withSlot(found.value, agent, start);
-        if (begin === null) return yield* lineUp(threadId).pipe(Effect.as(null));
-        yield* step(threadId, { _tag: "Unchoose", messageId: null });
-        const message = yield* repo.findMessage(next.messageId);
-        if (Option.isNone(message)) {
-          yield* begin.slot?.release ?? Effect.void;
+        const giveUp = handed?.slot.release ?? Effect.void;
+        if (isBusy(yield* runOf(threadId))) {
+          yield* giveUp;
+          yield* lineUp(threadId);
           return null;
         }
-        // A queued message starts with its first request's turn; a message already said, as one
-        // that several hobs owe, is the prompt of each later one.
-        // The turn runs for the request, which says why (#1465).
-        const speaker = speakerIn(found.value, agent, reasonOf(next));
-        const started = QueuedMessageTransitions.start(message.value);
-        return started instanceof Message
-          ? yield* beginTurn(speaker, started, (reply) => saveStarted(started, reply, [next.id]), begin)
-          : yield* beginTurn(speaker, message.value, (reply) => saveSpeaking(reply, [next.id]), begin);
-      });
-
-    // Starts what waits in the thread (ADR 019), if its hob takes work. Runs under the hob's lock
-    // while the thread is not busy. With a backpack, the thread stays busy while the dispatcher
-    // puts the work waiting there into its next turn; your queued message still starts first.
-    const startNext = (threadId: ThreadId): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        if (yield* held) return;
+        const read = yield* snapshotOf(threadId, { _tag: "Free" }, sent);
+        if (read === null) {
+          yield* giveUp;
+          return null;
+        }
+        const { snapshot, thread, awake } = read;
+        const { action, release } = decideFloor(snapshot);
         // A message of yours waiting there takes the work you stopped along with it.
-        if ((yield* runOf(threadId)).held.length > 0 && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
-          yield* step(threadId, { _tag: "Release" });
+        if (release) yield* step(threadId, { _tag: "Release" });
+        if (action._tag === "Start") return yield* startIn(thread, awake, action.request, handed);
+        yield* giveUp;
+        if (action._tag !== "Dispatch") return yield* rest(threadId, snapshot, read.read).pipe(Effect.as(null));
+        const carrier = awake.get(action.hobId);
+        if (carrier === undefined || Option.isNone(continuations)) {
+          return yield* Effect.die(new Error("The floor dispatched for a hob that takes no work, or with no backpack"));
         }
-        if (Option.isNone(continuations)) {
-          yield* startQueued(threadId);
-          return;
-        }
-        const thread = yield* repo.findThread(threadId);
-        if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return;
-        // The hob whose request is next carries its own work along: another hob's work waits its
-        // hob's turn. With nobody waiting, the first hob with work there carries it. Work you
-        // stopped stays held, and only its own hob's: another hob's work still runs (ADR 039).
-        const next = yield* floorNext(thread.value);
-        const found =
-          next === null
-            ? yield* carrierOf(continuations.value, thread.value)
-            : (yield* holds(threadId, next.agent.id))
-              ? null
-              : yield* workable(threadId, next.agent.id);
-        if (found === null) {
-          yield* startQueued(threadId);
-          return;
-        }
-        // Work waiting here runs in one slot for the whole dispatch, or waits for one (#1448). A
-        // thread with nothing waiting gives its place up at once, so it holds back no other turn.
-        const slot = yield* slotFor(found.thread, found.agent);
-        if (slot === null) {
-          if (slots !== null && !(yield* anythingWaits(continuations.value, threadId))) {
-            yield* slots.withdraw(`thread:${threadId}`);
-          }
-          return;
-        }
-        // The dispatch reads the backpack after this, so it sees whatever a wake until now announced.
-        yield* must(threadId, { _tag: "Dispatch" });
-        yield* Ref.update(dispatches, HashMap.set(threadId, found.agent.id));
-        yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id, slot), scope);
-      });
-
-    // The first of the thread's hobs, its own first, that takes work now and has work waiting
-    // there; its own hob when none has, so the dispatch still reads the records again.
-    const carrierOf = (service: Continuations["Service"], thread: Thread) =>
-      Effect.gen(function* () {
-        const found = yield* withWork(service, thread);
-        // standards-allow STD-ARCH-021: with no work waiting, the hob the thread belongs to reads the records again
-        if (found !== null || (yield* holds(thread.id, thread.agentId))) return found;
-        return yield* workable(thread.id);
-      });
-
-    // Whether the hob's work in the thread is held, because you stopped its turn there.
-    const holds = (threadId: ThreadId, agentId: AgentId) =>
-      runOf(threadId).pipe(Effect.map((run) => run.held.includes(agentId)));
-
-    // The first of the thread's hobs, its own first, that takes work now and has work waiting
-    // there that you did not stop.
-    const withWork = (service: Continuations["Service"], thread: Thread) =>
-      Effect.gen(function* () {
-        for (const hobId of yield* hobsOf(thread)) {
-          if ((yield* holds(thread.id, hobId)) || !(yield* workWaits(service, thread.id, hobId))) continue;
-          const found = yield* workable(thread.id, hobId);
-          if (found !== null) return found;
-        }
+        yield* dispatch(continuations.value, thread, carrier);
+        // A dispatch that waits for a slot leaves the line saying who waits, as a turn does.
+        yield* lineUp(threadId);
         return null;
       });
 
-    // Delivers the work waiting in the thread, then frees the thread and starts what waits next.
-    // When no turn ran for it, the records are read again: work of the same hob that arrived after
-    // the dispatch looked starts another dispatch, and otherwise the next request starts.
-    const carryWork = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId, slot: TurnSlot) => {
-      // When no turn ran, the next request starts in the dispatch's slot: given up and asked for
-      // again, the slot would go to the threads that waited longer, which would do the same (#1448).
+    // Starts the request the floor gave its turn, in the slot handed for it when that counts against
+    // its hob: one handed for another hob's turn goes back. A turn that waits for a slot leaves the
+    // line saying who waits.
+    const startIn = (
+      thread: Thread,
+      awake: ReadonlyMap<AgentId, Agent>,
+      request: TurnRequest,
+      handed: Handed | null,
+    ): Effect.Effect<Begun | null> =>
+      Effect.gen(function* () {
+        const agent = awake.get(request.hobId);
+        if (agent === undefined) return yield* Effect.die(new Error("The floor started a hob that takes no work"));
+        if (handed !== null && handed.hobId !== agent.id) yield* handed.slot.release;
+        const slot = handed?.hobId === agent.id ? handed.slot : yield* slotFor(thread, agent);
+        if (slot === null) return yield* lineUp(thread.id).pipe(Effect.as(null));
+        return yield* startRequest(thread, agent, request, { slot });
+      });
+
+    // Nobody can take the floor now: the line still says who waits, as after a restart, and a line
+    // whose records were read and hold nothing waiting gives its place for a slot up, so it holds
+    // back no other turn. One whose backpack went unread, as while the hub holds work after a
+    // restore, keeps its place.
+    const rest = (threadId: ThreadId, snapshot: FloorSnapshot, read: boolean) =>
+      Effect.gen(function* () {
+        if (snapshot.open && !snapshot.restoring) yield* step(threadId, { _tag: "Unchoose", messageId: null });
+        const waits = TurnRequests.waiting(snapshot.requests).length > 0 || snapshot.hobs.some((hob) => hob.work);
+        if (slots !== null && read && !waits) yield* slots.withdraw(`thread:${threadId}`);
+        yield* lineUp(threadId);
+      });
+
+    /**
+     * Starts the request's turn: the request takes the floor together with its turn's reply, and a
+     * queued message starts with them, so a crash cannot leave one without the others. A message
+     * already said, as one that several hobs owe, is the prompt of each later one. The turn runs for
+     * the request, which says why (#1465).
+     */
+    const startRequest = (
+      thread: Thread,
+      agent: Agent,
+      request: TurnRequest,
+      start: TurnStart,
+    ): Effect.Effect<Begun | null> =>
+      Effect.gen(function* () {
+        yield* step(thread.id, { _tag: "Unchoose", messageId: null });
+        const message = yield* repo.findMessage(request.messageId);
+        if (Option.isNone(message)) {
+          yield* start.slot?.release ?? Effect.void;
+          return null;
+        }
+        const speaker = speakerIn(thread, agent, reasonOf(request));
+        const started = QueuedMessageTransitions.start(message.value);
+        const begun =
+          started instanceof Message
+            ? yield* beginTurn(speaker, started, (reply) => saveStarted(started, reply, [request.id]), start)
+            : yield* beginTurn(speaker, message.value, (reply) => saveSpeaking(reply, [request.id]), start);
+        return begun === null ? null : { ...begun, request };
+      });
+
+    // The dispatcher puts the backpack work waiting for the hob there into the line's next turn, in
+    // one slot for the whole dispatch, or waits for one (#1448). The dispatch reads the backpack after
+    // this, so it sees whatever a wake until now announced.
+    const dispatch = (service: Continuations["Service"], thread: Thread, agent: Agent) =>
+      Effect.gen(function* () {
+        const slot = yield* slotFor(thread, agent);
+        if (slot === null) return;
+        yield* must(thread.id, { _tag: "Dispatch", hobId: agent.id });
+        yield* Effect.forkIn(carryWork(service, thread.id, agent.id, slot), scope);
+      });
+
+    // Delivers the work waiting for the hob in the thread, then frees the line and moves its floor
+    // on. When no turn ran for it, the next turn may start in the dispatch's slot if it is this hob's:
+    // given up and asked for again, the slot would go to the threads that waited longer, which would
+    // do the same (#1448).
+    const carryWork = (service: Continuations["Service"], threadId: ThreadId, hobId: AgentId, slot: TurnSlot) => {
       let handed = false;
       return Effect.gen(function* () {
         const ran = yield* service
-          .deliver(threadId, agentId, {
-            // Routine progress alone starts no turn: it waits to ride along a message of yours.
+          .deliver(threadId, hobId, {
+            // The floor plans a turn for the work, or none: routine progress alone starts no turn.
             plan: (routineOnly) =>
               underThread(
                 threadId,
-                Effect.gen(function* () {
-                  const found = yield* workable(threadId, agentId);
-                  if (found === null || (yield* holds(threadId, agentId))) return null;
-                  if (routineOnly && !(yield* requestWaitsFor(threadId, agentId))) return null;
-                  return MessageId.make(crypto.randomUUID());
-                }),
+                snapshotOf(threadId, { _tag: "Carrying", hobId, routineOnly, late: false }).pipe(
+                  Effect.map((read) =>
+                    read === null || decideFloor(read.snapshot).action._tag === "Idle"
+                      ? null
+                      : MessageId.make(crypto.randomUUID()),
+                  ),
+                ),
               ),
-            run: (replyId, work) => carryingTurn(threadId, agentId, replyId, work),
+            run: (replyId, work) => carryingTurn(threadId, hobId, replyId, work),
           })
           .pipe(
             Effect.catchCause((cause) =>
@@ -757,51 +794,22 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           threadId,
           Effect.gen(function* () {
             yield* must(threadId, { _tag: "Delivered" });
-            yield* Ref.update(dispatches, HashMap.remove(threadId));
-            // Only this hob's own work dispatches again: another hob's waits until the request
-            // that is next has been answered, so an empty dispatch never takes its place again.
-            if (ran || (yield* workWaits(service, threadId, agentId))) {
-              yield* slot.release;
-              yield* startNext(threadId);
-              return;
-            }
-            // The slot counts against this hob: it goes only to a request of this hob's.
-            handed = (yield* startQueued(threadId, { slot }, agentId)) !== null;
-            if (!handed) yield* afterEmpty(service, threadId, slot);
             handed = true;
+            if (ran) {
+              yield* slot.release;
+              yield* advance(threadId);
+            } else yield* advance(threadId, { hobId, slot });
           }),
         );
       }).pipe(Effect.ensuring(Effect.suspend(() => (handed ? Effect.void : slot.release))));
     };
 
-    // After an empty dispatch whose slot no request of its hob took: the next request takes a slot
-    // of its own hob's, and with none to start, work of another hob that can run takes the floor.
-    // A next request whose hob has work waiting, as routine progress that rides along its answer,
-    // starts through a dispatch of that hob's instead, so the work goes with it (IN-005). Work only
-    // hobs that cannot run now hold waits until one can.
-    const afterEmpty = (service: Continuations["Service"], threadId: ThreadId, slot: TurnSlot) =>
-      Effect.gen(function* () {
-        yield* slot.release;
-        const thread = yield* repo.findThread(threadId);
-        if (Option.isNone(thread)) return;
-        const next = yield* floorNext(thread.value);
-        if (
-          next !== null &&
-          !(yield* holds(threadId, next.agent.id)) &&
-          (yield* workWaits(service, threadId, next.agent.id))
-        ) {
-          yield* startNext(threadId);
-          return;
-        }
-        if ((yield* startQueued(threadId)) !== null) return;
-        if ((yield* withWork(service, thread.value)) !== null) yield* startNext(threadId);
-      });
-
-    // One turn that carries the work: your queued message with the work riding along, else a
-    // continuation whose prompt is the work. Returns once the turn has ended, and how.
+    // One turn that carries the work, as the floor decides it: the hob's request that is next, the
+    // work riding along, else a continuation whose prompt is the work. Returns once the turn has
+    // ended, and how.
     const carryingTurn = (
       threadId: ThreadId,
-      agentId: AgentId,
+      hobId: AgentId,
       replyId: MessageId,
       work: CarriedWork,
     ): Effect.Effect<CarriedEnd> =>
@@ -810,19 +818,26 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         const begun = yield* underThread(
           threadId,
           Effect.gen(function* () {
-            const found = yield* workable(threadId, agentId);
-            if (found === null || (yield* holds(threadId, agentId))) return null;
-            // Work rides along only a request of the hob it is for.
-            const queued = yield* startQueued(threadId, { ...start, context: work.text("context") }, agentId);
-            if (queued !== null) return queued.turn;
-            // The message it was to ride along is gone: routine progress waits for the next one.
-            if (work.routineOnly) return null;
             // Work that went late while the turn waited to start, as when you cancel its Quest,
-            // starts nothing: it resolves as late (#993).
-            if (yield* work.late) return null;
-            const speaker = speakerIn(found.thread, found.agent);
-            const continued = yield* beginTurn(speaker, work.text("prompt"), saveMessage, start);
-            return continued?.turn ?? null;
+            // starts no continuation: it resolves as late (#993).
+            const phase: FloorPhase = {
+              _tag: "Carrying",
+              hobId,
+              routineOnly: work.routineOnly,
+              late: yield* work.late,
+            };
+            const read = yield* snapshotOf(threadId, phase);
+            if (read === null) return null;
+            const { action } = decideFloor(read.snapshot);
+            const agent = read.awake.get(hobId);
+            if (agent === undefined) return null;
+            if (action._tag === "Start") {
+              const context = work.text("context");
+              return (yield* startRequest(read.thread, agent, action.request, { ...start, context }))?.turn ?? null;
+            }
+            if (action._tag !== "Continue") return null;
+            const speaker = speakerIn(read.thread, agent);
+            return (yield* beginTurn(speaker, work.text("prompt"), saveMessage, start))?.turn ?? null;
           }),
         );
         if (begun === null) return { _tag: "EndedEarly", end: "unavailable", diagnostic: null };
@@ -835,77 +850,48 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         return { _tag: "EndedEarly", end: turnEnd(ended.status), diagnostic: ended.error ?? null };
       });
 
-    // After a turn ends, frees its thread and starts what queued behind it.
+    // After a turn ends, frees its line and moves its floor on.
     const drain = (threadId: ThreadId) =>
       Effect.gen(function* () {
         // The ended turn may still be leaving the map; a new turn must not replace it there.
         const ended = yield* FiberMap.get(turns, threadId);
         if (Option.isSome(ended)) yield* Fiber.await(ended.value);
-        const thread = yield* repo.findThread(threadId);
-        if (Option.isNone(thread)) {
-          yield* step(threadId, { _tag: "Drained" });
-          return;
-        }
-        yield* withThreadLock(
-          admission,
-          thread.value,
-          step(threadId, { _tag: "Drained" }).pipe(Effect.andThen(startNext(threadId))),
-        );
+        yield* underThread(threadId, step(threadId, { _tag: "Drained" }).pipe(Effect.andThen(advance(threadId))));
       });
 
-    // Starts what waits in each idle thread: after a restart, when a paused hob wakes, or when
-    // work arrives for its hob. A busy thread reads the records again once it is free.
+    // Moves the floor on in each thread: after a restart, when a paused hob wakes, or when work
+    // arrives for its hob. A busy line moves on once it is free.
     const drainThreads = (threadIds: ReadonlyArray<ThreadId>) =>
-      Effect.forEach(threadIds, (threadId) =>
-        repo.findThread(threadId).pipe(
-          Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.void,
-              onSome: (thread) =>
-                withThreadLock(
-                  admission,
-                  thread,
-                  runOf(threadId).pipe(Effect.flatMap((run) => (isBusy(run) ? Effect.void : startNext(threadId)))),
-                ),
-            }),
-          ),
-        ),
-      );
+      Effect.forEach(threadIds, (threadId) => underThread(threadId, advance(threadId)), { discard: true });
 
-    // Whether work waits in the thread that a dispatch would deliver now: work that needs the hob,
-    // or routine progress when a request of that hob is there for it to ride along.
-    const workWaits = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId) =>
+    /**
+     * Whether a message of yours sent now in the thread, owed by `agentId`, takes the floor at once:
+     * the line is free, nothing ahead of it can speak, and no backpack work of the hob goes first.
+     * Runs under the line's lock.
+     */
+    const sendsAtOnce = (threadId: ThreadId, agentId: AgentId, by: Actor, at: string) =>
       Effect.gen(function* () {
-        if ((yield* service.waiting(agentId)).includes(threadId)) return true;
-        return (yield* requestWaitsFor(threadId, agentId)) && (yield* service.progressWaits(threadId, agentId));
-      });
-
-    // Whether work waits in the thread for any of its hobs.
-    const workWaitsIn = (service: Continuations["Service"], threadId: ThreadId) =>
-      Effect.gen(function* () {
-        const thread = yield* repo.findThread(threadId);
-        if (Option.isNone(thread)) return false;
-        for (const hobId of yield* hobsOf(thread.value)) {
-          if (yield* workWaits(service, threadId, hobId)) return true;
-        }
-        return false;
-      });
-
-    // Whether anything waits in the thread for a turn: a request, or backpack work for any of its hobs.
-    const anythingWaits = (service: Continuations["Service"], threadId: ThreadId) =>
-      Effect.gen(function* () {
-        if (TurnRequests.waiting(yield* repo.openTurnRequests(mainLine(threadId))).length > 0) return true;
-        return yield* workWaitsIn(service, threadId);
-      });
-
-    // Whether your next message carries work: work you stopped in the thread, or routine
-    // progress, which reaches the hob only as a digest along its next turn (IN-005).
-    const workRidesAlong = (threadId: ThreadId, agentId: AgentId) =>
-      Effect.gen(function* () {
-        if (Option.isNone(continuations)) return false;
-        const service = continuations.value;
-        if ((yield* holds(threadId, agentId)) && (yield* service.waiting(agentId)).includes(threadId)) return true;
-        return yield* service.progressWaits(threadId, agentId);
+        if (isBusy(yield* runOf(threadId))) return false;
+        const read = yield* snapshotOf(threadId, { _tag: "Free" }, null, agentId);
+        if (read === null) return false;
+        const messageId = MessageId.make(crypto.randomUUID());
+        const yours = new TurnRequest({
+          id: TurnRequestId.make(messageId),
+          threadId,
+          rootMessageId: null,
+          hobId: agentId,
+          messageId,
+          causedBy: by,
+          cause: "only-hob",
+          relayDepth: 0,
+          state: "waiting",
+          replyId: null,
+          droppedBy: null,
+          queuedAt: Number.MAX_SAFE_INTEGER,
+          position: 0,
+          createdAt: at,
+        });
+        return startsAtOnce(read.snapshot, yours);
       });
 
     const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
@@ -940,9 +926,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const holdDispatch = (threadId: ThreadId) =>
       Effect.gen(function* () {
         const run = yield* runOf(threadId);
-        if (!isDispatching(run)) return;
-        const hobId = HashMap.get(yield* Ref.get(dispatches), threadId);
-        if (Option.isSome(hobId)) yield* step(threadId, { _tag: "Hold", hobId: hobId.value });
+        if (isDispatching(run) && run.carrier !== null) yield* step(threadId, { _tag: "Hold", hobId: run.carrier });
       });
 
     /** Stops the thread's running turn, if any, and returns once it has ended. */
@@ -952,16 +936,15 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       runOf,
       step,
       transition,
-      beginTurn,
       launch,
       slotFor,
-      startNext,
+      advance,
+      sendsAtOnce,
       lineUp,
       drainThreads,
       endTurn,
       stopHob,
       holdDispatch,
-      workRidesAlong,
       hobsOf,
       activeThreads,
       activeTurns,

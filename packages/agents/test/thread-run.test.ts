@@ -27,6 +27,7 @@ const hobs = ["quill", "pip", "rook"].map((id) => AgentId.make(id));
 interface RunView {
   readonly run: RunState;
   readonly speaking: AgentId | null;
+  readonly carrier: AgentId | null;
   readonly next: ReadonlyArray<AgentId>;
   readonly reply: number | null;
   readonly activity: ReplyActivity | null;
@@ -37,6 +38,7 @@ interface RunView {
 const view = (run: ThreadRun): RunView => ({
   run: run.run,
   speaking: run.speaking,
+  carrier: run.carrier,
   next: run.next,
   reply: replyIndex(run.reply),
   activity: run.activity,
@@ -51,7 +53,8 @@ type Rule<T extends ThreadRunEvent["_tag"]> = (
 
 /** The rules of ADR 037's run, written apart from the machine's table. */
 const rules: { readonly [T in ThreadRunEvent["_tag"]]: Rule<T> } = {
-  Dispatch: (m) => (m.run === "idle" ? { ...m, run: "dispatching" } : "refused"),
+  // A dispatch names the hob whose work it puts through, until it is delivered (#1549).
+  Dispatch: (m, e) => (m.run === "idle" ? { ...m, run: "dispatching", carrier: e.hobId } : "refused"),
   Launch: (m, e) => {
     const launched = { speaking: e.hobId, reply: replyIndex(e.reply), activity: e.activity };
     if (m.run === "idle") return { ...m, ...launched, run: "running" };
@@ -73,7 +76,7 @@ const rules: { readonly [T in ThreadRunEvent["_tag"]]: Rule<T> } = {
     if (m.run === "draining") return { ...m, run: "idle" };
     return m.run === "idle" ? m : "refused";
   },
-  Delivered: (m) => (m.run === "dispatching" ? { ...m, run: "idle" } : "refused"),
+  Delivered: (m) => (m.run === "dispatching" ? { ...m, run: "idle", carrier: null } : "refused"),
   // Only a change of who is next is a transition.
   Lined: (m, e) => (JSON.stringify(m.next) === JSON.stringify(e.next) ? "refused" : { ...m, next: e.next }),
   Choose: (m, e) => ({ ...m, chosen: e.messageId }),
@@ -95,7 +98,7 @@ const hob = fc.constantFrom(...hobs);
 const next = fc.array(hob, { maxLength: 3 }).map((ids) => [...new Set(ids)]);
 
 const events: fc.Arbitrary<ThreadRunEvent> = fc.oneof(
-  fc.constant({ _tag: "Dispatch" } as const),
+  hob.map((h) => ({ _tag: "Dispatch", hobId: h }) as const),
   fc.tuple(hob, reply, activity).map(([h, r, a]) => ({ _tag: "Launch", hobId: h, reply: r, activity: a }) as const),
   fc.tuple(reply, activity).map(([r, a]) => ({ _tag: "ReplyChanged", reply: r, activity: a }) as const),
   reply.map((r) => ({ _tag: "TurnEnded", reply: r }) as const),
@@ -117,6 +120,7 @@ const records: fc.Arbitrary<ThreadRun> = fc.oneof(
     .record({
       run: fc.constantFrom(...RUN_STATES),
       speaking: hob,
+      carrier: hob,
       next,
       reply,
       activity,
@@ -125,8 +129,10 @@ const records: fc.Arbitrary<ThreadRun> = fc.oneof(
     })
     .map((r) => {
       const turning = r.run === "running" || r.run === "carrying";
+      const dispatching = r.run === "dispatching" || r.run === "carrying";
       return {
         ...r,
+        carrier: dispatching ? r.carrier : null,
         speaking: turning ? r.speaking : null,
         reply: turning ? r.reply : null,
         activity: turning ? r.activity : null,
@@ -196,16 +202,18 @@ describe("ThreadRunMachine", () => {
     expect(ThreadRunMachine.can(run, { _tag: "TurnEnded", reply: first })).toBe(false);
   });
 
-  it("goes back to dispatching when a carried turn ends, so the dispatcher frees the thread", () => {
+  it("[TC-CH-1549-04] goes back to dispatching when a carried turn ends, naming the dispatch's hob until it is delivered", () => {
     const r = replies[0] as Reply;
+    const pip = hobs[1] as AgentId;
+    const dispatching = apply(idleRun, { _tag: "Dispatch", hobId: pip });
+    expect(dispatching.carrier).toBe(pip);
     const run = apply(
-      idleRun,
-      { _tag: "Dispatch" },
-      { _tag: "Launch", hobId: hobs[0] as AgentId, reply: r, activity: "thinking" },
+      dispatching,
+      { _tag: "Launch", hobId: pip, reply: r, activity: "thinking" },
       { _tag: "TurnEnded", reply: r },
     );
-    expect(run.run).toBe("dispatching");
-    expect(apply(run, { _tag: "Delivered" }).run).toBe("idle");
+    expect(run).toMatchObject({ run: "dispatching", carrier: pip, speaking: null });
+    expect(apply(run, { _tag: "Delivered" })).toMatchObject({ run: "idle", carrier: null });
   });
 
   it("says who speaks while a turn runs, and keeps who is next until nobody waits", () => {
