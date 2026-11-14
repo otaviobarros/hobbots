@@ -36,7 +36,7 @@ import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { joinedMentions, mentionsToStore, parseMentions, type StoredMentions } from "./message-mentions.ts";
-import { relaysFor } from "./relays.ts";
+import { mayRelay, relaysFor } from "./relays.ts";
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
@@ -623,7 +623,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           for (const use of uses) yield* insertSkillUse(sql, use);
           // A hob's reply saved complete owes the hobs it mentions their answers, written with it so
           // no restart loses them, under the journal's lock so Stop all's drop sees them (ADR 039).
-          for (const relay of yield* relaysFor(sql, message)) yield* insertRequest(sql, relay);
+          if (mayRelay(message)) for (const relay of yield* relaysFor(sql, message)) yield* insertRequest(sql, relay);
           const used = uses.map((use): JournaledEvent => ({ _tag: "SkillUsed", use }));
           return { value: message, events: [...messageEvents(message), ...used] };
         }),

@@ -73,6 +73,11 @@ const hub = ChatService.layer.pipe(
   ),
 );
 
+/** The camp's line as the hub publishes it now; null when it publishes none. */
+const line = Effect.flatMap(ChatService, (chat) =>
+  chat.threadRuns.pipe(Effect.map(({ runs }) => runs.find((run) => run.threadId === CAMP) ?? null)),
+);
+
 /** Waits until no turn runs or waits in the camp: what is still owed is paused, if anything. */
 const settled = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
@@ -81,9 +86,12 @@ const settled = Effect.gen(function* () {
     const messages = yield* repo.listMessages(CAMP);
     const owed = yield* repo.openTurnRequests({ threadId: CAMP, rootMessageId: null });
     const running = yield* chat.activeThreads;
+    // The line rests once the last turn's end has moved the floor on.
+    const run = (yield* line)?.run ?? "idle";
     const busy =
       owed.some((request) => request.state !== "paused") ||
       running.length > 0 ||
+      run !== "idle" ||
       messages.some((m) => isInProgress(m.status));
     if (busy) return yield* Effect.fail("busy" as const);
   }).pipe(Effect.retry(Schedule.spaced("5 millis")));
@@ -103,11 +111,6 @@ const allRequests = Effect.flatMap(SqlClient.SqlClient, (sql) =>
     Effect.map((rows) => rows.map((row) => ({ ...row, relayDepth: Number(row.relayDepth) }))),
     Effect.orDie,
   ),
-);
-
-/** The camp's line as the hub publishes it now; null when it publishes none. */
-const line = Effect.flatMap(ChatService, (chat) =>
-  chat.threadRuns.pipe(Effect.map(({ runs }) => runs.find((run) => run.threadId === CAMP) ?? null)),
 );
 
 const hobReplies = (messages: ReadonlyArray<Message>) =>

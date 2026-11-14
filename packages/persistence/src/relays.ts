@@ -22,13 +22,21 @@ import { requestsFor, selectRequestsOfReply } from "./turn-request-rows.ts";
  * reply, that a lead kept quiet, whose turn was stopped, or that already relayed. Only an active
  * member hob of the thread is relayed to: a mention of any other hob, or of a person, wakes nobody.
  */
+/** Whether `message` is a hob's complete chat reply that mentions another hob, the only kind that relays. */
+export const mayRelay = (message: Message): boolean =>
+  message.role === "assistant" &&
+  message.status === "complete" &&
+  !message.quiet &&
+  message.actor?.kind === "hob" &&
+  message.mentions.some((actor) => actor.kind === "hob" && actor.id !== message.actor?.id);
+
 export const relaysFor = (
   sql: SqlClient.SqlClient,
   reply: Message,
 ): Effect.Effect<ReadonlyArray<TurnRequest>, SqlError.SqlError> =>
   Effect.gen(function* () {
     const author = reply.actor;
-    if (reply.role !== "assistant" || reply.status !== "complete" || reply.quiet || author?.kind !== "hob") return [];
+    if (!mayRelay(reply) || author?.kind !== "hob") return [];
     const own = yield* selectRequestsOfReply(sql, reply.id);
     const spoken = own.filter((request) => request.replyId === reply.id);
     // Stop dropped the turn's request, and the reply relays once.
