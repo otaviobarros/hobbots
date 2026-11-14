@@ -139,6 +139,16 @@ export class ReplyNotResumable extends Schema.TaggedError<ReplyNotResumable>()(
 ) {}
 
 /**
+ * Continue found no free turn slot (#1448): the hob, the Quest or the runtime runs as many turns as
+ * its limit allows. Continue again once one ends.
+ */
+export class TurnsAtLimit extends Schema.TaggedError<TurnsAtLimit>()(
+  "TurnsAtLimit",
+  { threadId: ThreadId },
+  { httpApiStatus: 409 },
+) {}
+
+/**
  * A new hob the server will not create: a field that fails the payload schema, or a brain the
  * runtime does not offer. `field` names the payload field, or is null when the body is not a hob.
  */

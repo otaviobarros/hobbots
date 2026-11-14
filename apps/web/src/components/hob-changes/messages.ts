@@ -25,6 +25,7 @@ export const messages = {
   row: {
     version: ({ version }: { version: number }) => `Version ${version}`,
     summoned: "Summoned",
+    summonedUnattended: "Summoned without asking you",
     paused: "Paused",
     woke: "Woke up",
     retired: "Retired",
@@ -43,8 +44,47 @@ export const messages = {
     revertFailed: "Hobbots could not revert this change.",
     notLatest: "Another change came after this one, so it can no longer be reverted.",
     unchanged: "Nothing in the settings changed.",
+    dropped: ({ answers }: { answers: string }) =>
+      `This change also dropped answers it did not name: ${answers}. Those operations fell back to your preset.`,
+    restore: "Restore them",
+    restoring: "Restoring…",
+    restoreFailed: "Hobbots could not restore these answers.",
     showDiff: "Show what changed",
     hideDiff: "Hide what changed",
+  },
+  /** Changes to the hub settings that change what hobs may do (#1357), in Settings and each hob's History. */
+  settings: {
+    heading: "Hub settings",
+    intro: "Changes to the settings that decide what every hob may do, newest first, with who made them.",
+    hobsHeading: "Hobs",
+    empty: "No changes to these settings yet.",
+    failed: "Hobbots could not read the changes to these settings.",
+    names: {
+      safetyPreset: "How careful hobs are",
+      approvedFolders: "Folders hobs can open",
+      summoningForEveryHob: "Summoning for every hob",
+    },
+    turnedOn: ({ setting }: { setting: string }) => `${setting} turned on`,
+    turnedOff: ({ setting }: { setting: string }) => `${setting} turned off`,
+    changed: ({ setting }: { setting: string }) => `${setting} changed`,
+    from: ({ setting }: { setting: string }) => `From ${setting}`,
+    gave: ({ name }: { name: string }) => `Gave ${name} the Summoning Charm.`,
+    tookAway: ({ name }: { name: string }) => `Took the Summoning Charm from ${name}.`,
+    changedFor: ({ name }: { name: string }) => `Changed what ${name} may do with the Summoning Charm.`,
+    presetFor: ({ name }: { name: string }) => `Changed how often ${name} asks you first.`,
+    foldersFor: ({ name }: { name: string }) => `Changed the folders ${name} can open.`,
+    byHub: "By Hobbots",
+    on: "On",
+    off: "Off",
+    parts: {
+      preset: "How careful",
+      folders: "Folders",
+      state: "Turned",
+      scope: "Summoning manages",
+      answers: "Answers",
+    },
+    more: ({ count }: { count: number }) => `Showing the newest ${count} setting changes.`,
+    openSettings: "Open the setting",
   },
   /** A hob that is no longer kept, or whose name is not read yet. */
   someHob: "another hob",
@@ -106,7 +146,8 @@ export const messages = {
     charms: { github: "GitHub", summoning: "Summoning" } as Record<string, string>,
   },
   profile: {
-    summonedBy: ({ hob }: { hob: string }) => `Summoned by ${hob}`,
+    summonedBy: ({ hob, unattended }: { hob: string; unattended: boolean }) =>
+      unattended ? `Summoned by ${hob} without asking you` : `Summoned by ${hob}`,
   },
   home: {
     changedBy: ({ hob }: { hob: string }) => `Changed by ${hob}`,

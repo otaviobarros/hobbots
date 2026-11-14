@@ -34,17 +34,56 @@ Read the [MVP requirements](docs/product/mvp-requirements.md) and [open question
 
 The [project workflow guide](docs/agent-engineering.md) says where each authority lives and lists the checks. It routes each task to an agent-engineering skill: `deliver-change` for a full implementation, or the phase skill for a narrower request. The task's own limits and this file govern. If a skill is missing, report it. This file does not authorize you to install plugins, commit, push or publish.
 
-## Review guidelines
+## Code Review Rules
 
-This is a public open-source project, so be strict about what reaches main. Check the change against [the standards](docs/standards/README.md) and cite the rule ID in each finding. Mark a breach of a rule as P1. A preference that no rule backs is not a finding.
+Codex reviews every pull request with these rules, and with the rules of each nested `AGENTS.md` that covers a changed file. This is a public open-source project, so be strict about what reaches main. Make each pass complete: a pull request should need one review and one check of its fixes, not seven.
 
-- Bugs come first: reachable failures, wrong state transitions, races, lost work on restart, duplicate delivery on retry, and missing error handling. Trace callers and callees beyond the diff when the bug depends on them.
-- Security: untrusted input from hobs, models, files, Git or HTTP crossing a trust boundary, leaked secrets, missing permission checks and data exposure. The [threat model](docs/threat-model.md) names the boundaries, and the [security standards](docs/standards/security.md) the rules.
-- Proper tooling: a hand-rolled parser, validator, retry loop, timer, cache or queue where an established library or Effect module already does the job (STD-DUP-007). A new helper that duplicates an existing one (STD-DUP-001).
-- Unnecessary complexity: speculative abstractions, options nobody uses, functions over cyclomatic complexity 15 (STD-ARCH-012), dead code (STD-DUP-005) and copied blocks (STD-DUP-006). Name the simpler form that keeps the behavior.
-- Runtime parity: a change to how hobs run, resume, stop, use tools or ask for permission covers Claude Code, Codex and the fake runtime, with a test for each, or says why one does not apply.
-- Dependencies are pinned to exact versions (STD-DOCS-006). Effect packages use `catalog:` and the catalog pins the exact version (STD-EFFECT-005).
-- A new migration comes from `pnpm migration:new` and is named by its UTC second ([ADR 040](docs/decisions/040-parallel-pull-requests.md)). Never renumber an existing one.
-- Commit messages and the PR description carry no attribution footer, such as "Generated with" or "Co-Authored-By" for an AI tool.
-- Scope: flag changes beyond what the linked issue asks (STD-DOCS-008), and a contract or ADR the change leaves out of date.
-- Skip formatting that Biome enforces. Each finding states the trigger, the wrong result, its impact and the fix.
+### Read first
+
+- The Standards table above maps each area to its standards file and its contract. Read the contract of every area the diff touches before you judge it (STD-DOCS-002). It holds the invariants that the diff does not show.
+- [The ADR index](docs/decisions/README.md) lists the decided choices. A change that reverses one without a new ADR or an amendment is a finding (STD-DOCS-001).
+- [State and events](docs/architecture/state-and-events.md) says how lifecycles, commands, the journal and projectors work. The pages in `docs/architecture/machines/` show each machine's states and legal moves.
+- For security, read the [threat model](docs/threat-model.md) and the security review guidelines in [SECURITY.md](SECURITY.md).
+- The linked issue's "Done when" list sets the scope (STD-DOCS-008).
+
+### Severity
+
+- **P0:** data loss or corruption, including on upgrade, restart or restore; an enforced boundary from the threat model crossed; a secret leaked; a migration that breaks an existing install.
+- **P1:** a reachable bug; a breach of a rule with an STD ID; a runtime or database the change leaves behind; a contract or ADR the change leaves out of date; a deleted, skipped or loosened test or check.
+- Anything else is not a finding. Do not report P2 or P3. A preference that no rule backs is not a finding.
+
+### What to check
+
+Each rule names what to flag, then the safe path that is not a finding.
+
+- **Bugs come first:** reachable failures, wrong state transitions, races, lost work on restart, duplicate delivery on retry and missing error handling. Trace callers and callees beyond the diff when the bug depends on them. Safe path: the failure is handled where it is expected, as a typed error the caller acts on (STD-EFFECT-002).
+- **Sweep the whole change:** when a change breaks an assumption other code relies on, such as "the hob that owns a camp is the hob that speaks in it", find every reader of that assumption and report each one now. When one command has a bug, check its sibling commands for the same bug, such as reassign and retry, or pause, resume and cancel. Safe path: every reader handles the new case, or the PR limits the change so the old assumption still holds.
+- **Durable state:** coordination or recovery state held only in memory (STD-DATA-001), a check that guards a write but reads outside the write's transaction (STD-ARCH-014), a transition that journals no event or several (STD-ARCH-015), and a record that names who acted without an Actor (STD-ARCH-020). Safe path: the state is a row, the check and the write share one transaction, and on PostgreSQL the check locks the row it reads.
+- **Lifecycles:** a status kept in flags or compared by hand outside its machine (STD-ARCH-013), and a client that works out a status from messages or Task states (STD-REACT-028). Safe path: one machine declared with `defineMachine`; other code asks its `can` or helpers; clients show the hub's projection.
+- **Security:** untrusted input from hobs, models, files, Git or HTTP that crosses a trust boundary unchecked, leaked secrets, missing permission checks and data exposure. The [security standards](docs/standards/security.md) hold the rules. Safe path: the input is parsed with an Effect Schema at the boundary, and the permission is enforced by the sandbox, the runtime's permission mode or the tool policy engine (STD-SEC-002).
+- **Established libraries first:** a hand-rolled parser, validator, retry loop, timer, cache or queue (STD-DUP-007), Markdown read without the CommonMark parser (STD-DUP-008), or a helper that repeats an existing one (STD-DUP-001). Safe path: an installed library or Effect module, or the existing helper. A few lines of glue around a library call are not a hand-rolled parser.
+- **Runtime parity:** a change to how hobs run, resume, stop, use tools or ask for permission that covers only some of Claude Code, Codex and the fake runtime (STD-ARCH-009, STD-ARCH-010). Safe path: each runtime has the change and a test, or the PR says why one does not apply, for example a capability that runtime lacks.
+- **Database parity:** SQL or a migration only one of SQLite and PostgreSQL accepts (STD-DATA-002), and a database test that does not take `TestDatabase` (STD-TEST-006). Safe path: SQL both engines accept, tested on both through `TestDatabase`.
+- **Migrations:** a migration not made by `pnpm migration:new`, and an edit to or renumbering of a migration that is on main ([ADR 040](docs/decisions/040-parallel-pull-requests.md)). Safe path: a new file named by its UTC second; a fix to an applied migration is a new migration.
+- **Tests:** new behavior without a test, an integration or end-to-end test title without its case ID (STD-TEST-001), and a test that waits on elapsed time (STD-TEST-009). Safe path: the test waits on the state it checks.
+- **Unneeded complexity:** speculative abstractions and options nobody uses. Safe path: name the simpler form that keeps the behavior. Code a contract or ADR asks for is not speculative.
+- **Dependencies:** a version range or a version that is not the latest stable release when it was added (STD-DOCS-006), and an Effect package outside the catalog (STD-EFFECT-005). Safe path: an exact version, and `catalog:` for Effect packages.
+- **Public text:** a link to a private source, a secret in code, docs or the PR (STD-DOCS-003), and an attribution footer for an AI tool, such as "Generated with" or "Co-Authored-By", in a commit message or the PR description. Safe path: public links only. Check the commits on the branch and the current PR description; pull requests merge by squash, so the description is what reaches main, and an earlier version of it is not a finding.
+- **Scope and contracts:** a change beyond what the linked issue asks (STD-DOCS-008), and a contract or ADR the change leaves out of date (STD-DOCS-002). Safe path: the contract or ADR changes in the same pull request. A small fix the change needs to work is in scope.
+
+### Do not flag
+
+- What CI already checks: formatting and lint (Biome), types, unused code (knip, STD-DUP-005), copied blocks (jscpd, STD-DUP-006), the complexity limit (STD-ARCH-012), layer imports, implicit state, stale machine pages, the glossary, the Markdown check and the standards index. Flag only what these tools cannot see.
+- Code the diff does not touch, unless the change makes its bug reachable or worse.
+- A race without a concrete interleaving. Name the two operations and the window between them. A race the code already serializes, with a transaction, a row lock or hob admission, is not a finding.
+- A guard for a state that the machine or the types already rule out.
+- A limit the permissions contract marks as checked rather than enforced, unless the change makes the contract claim more than the code does.
+- A finding a reply on this pull request already declined with a reason, unless the code it names has changed.
+- Wording, naming or structure that no rule backs.
+
+### How to report
+
+- Report every finding in one pass. Do not hold findings back for a later pass.
+- After a push, review the new commits as closely as the first pass. A fix often adds a new path; check it and the code it calls.
+- When one cause shows up in several places, report it once and name each place.
+- Each finding states the trigger, the wrong result, its impact and the fix. Cite the STD rule ID, or the contract file and section it breaks.

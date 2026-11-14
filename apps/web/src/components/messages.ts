@@ -234,7 +234,7 @@ export const messages = {
       heading: "Other hobs",
       label: "Visible to other hobs",
       on: ({ name }: { name: string }) =>
-        `Other hobs see ${name}'s name, role, what it is good at, whether it is paused, the AI it thinks with and its Charms. Never its instructions, memory or threads.`,
+        `Other hobs see ${name}'s name, role, what it is good at, whether it is paused, the AI it thinks with, its Charms and its permissions. Never its instructions, memory or threads.`,
       off: ({ name }: { name: string }) =>
         `Other hobs don't see ${name} at all. A hob you tell to give ${name} a Task can still find it by name.`,
     },

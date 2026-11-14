@@ -146,7 +146,7 @@ const attempt = (id: string): NewAttempt => ({
  * copy with a brief only Quill's export holds. Quill also has a thread of its own.
  */
 const seed = Effect.gen(function* () {
-  yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [] });
+  yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [] }, OWNER_ACTOR);
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob(ALDRIC, "Aldric", [project]));
   yield* repo.insertAgent(hob(QUILL, "Quill", []));
@@ -475,6 +475,22 @@ describe("exports", () => {
 
     const again = await run({ _tag: "Everything" });
     expect(again.folder).toBe(`${everything.folder} (2)`);
+  });
+
+  // covers OP-003, #1357
+  it("[TC-OP-1357-02] keeps the history of settings changes in an export of everything, and in no narrower one", async () => {
+    await runtime.runPromise(
+      SetupRepository.use((setup) =>
+        setup.update({ approvedFolders: [project], safetyPreset: "careful" }, OWNER_ACTOR),
+      ),
+    );
+    const everything = decode(readFileSync(join((await run({ _tag: "Everything" })).folder, "export.json"), "utf8"));
+    const hob = decode(readFileSync(join((await run({ _tag: "Hob", agentId: ALDRIC })).folder, "export.json"), "utf8"));
+    expect(everything.settingChanges?.map((change) => [change.diff, change.actor])).toEqual([
+      [{ setting: "approvedFolders", before: [], after: [project] }, OWNER_ACTOR],
+      [{ setting: "safetyPreset", before: "balanced", after: "careful" }, OWNER_ACTOR],
+    ]);
+    expect(hob.settingChanges).toBeUndefined();
   });
 
   // covers OP-003

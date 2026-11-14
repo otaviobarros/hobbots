@@ -46,6 +46,7 @@ import {
   SkillTrialsLive,
   SummoningHub,
   TaskFiles,
+  TurnSlots,
   UnattendedSummonLimits,
 } from "@hobbots/agents";
 import {
@@ -129,6 +130,7 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
   ThreadMemberRepositoryLive,
+  TurnLimitsRepositoryLive,
   UserRepositoryLive,
   WebFoundUrlsLive,
   WebRecordsLive,
@@ -392,6 +394,8 @@ const ServerLive = Layer.unwrap(
       UserRepositoryLive,
       // Who is in each direct message and camp (ADR 039).
       ThreadMemberRepositoryLive,
+      // How many turns run at once, per hob, Quest and runtime (#1448).
+      TurnLimitsRepositoryLive,
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
@@ -710,6 +714,8 @@ const ServerLive = Layer.unwrap(
             WorkHoldLive.pipe(Layer.provideMerge(Persistence)),
             EventBus.layer,
             HobAdmission.layer,
+            // Every turn takes a slot under the limits you set, or waits queued for one (#1448).
+            TurnSlots.layer.pipe(Layer.provide(Persistence)),
             SummoningHub.layer,
             // The caps on summons that run without asking you (ADR 034).
             Layer.succeed(UnattendedSummonLimits, config.summonLimits),

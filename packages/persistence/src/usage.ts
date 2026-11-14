@@ -4,6 +4,7 @@ import {
   type HobUsage,
   type MinuteUsage,
   QuestId,
+  type QuestSpend,
   type QuestUsage,
   RuntimeKind,
 } from "@hobbots/domain";
@@ -92,28 +93,58 @@ export class UsageLedger extends Context.Service<
       readonly quests: ReadonlyArray<QuestUsage>;
       readonly minutes: ReadonlyArray<MinuteUsage>;
     }>;
+    /**
+     * What a top Quest's whole party spent, ever (#1449): its replies and turns outside a chat, as
+     * `usage` attributes them, a sub-quest's included.
+     */
+    readonly spentOn: (questId: QuestId) => Effect.Effect<QuestSpend>;
   }
 >()("@hobbots/persistence/UsageLedger") {
   static readonly layer = Layer.effect(
     UsageLedger,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      return UsageLedger.of({
-        usage: (since, until) => {
-          // Every settled reply and every turn outside a chat that started in the period: who spent it,
-          // on what, when, in which chat (none for a turn) and for which Quest.
-          const spent = sql`(
+      /**
+       * Every settled reply and every turn outside a chat that started in the window, or ever: who
+       * spent it, on what, when, in which chat (none for a turn) and for which Quest.
+       */
+      const spentIn = (window: { readonly since: string; readonly until: string } | null) => {
+        const replies =
+          window === null
+            ? sql.literal("")
+            : sql`AND m.created_at >= ${window.since} AND m.created_at < ${window.until}`;
+        const turns =
+          window === null
+            ? sql.literal("")
+            : sql`AND u.started_at >= ${window.since} AND u.started_at < ${window.until}`;
+        return sql`(
             SELECT t.agent_id AS hob_id, m.runtime, m.model, m.created_at AS at, m.thread_id,
               ${sql.literal(QUEST_OF_REPLY)} AS quest_id,
               m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
             FROM messages m JOIN threads t ON t.id = m.thread_id
-            WHERE ${sql.literal(SETTLED)} AND m.created_at >= ${since} AND m.created_at < ${until}
+            WHERE ${sql.literal(SETTLED)} ${replies}
             UNION ALL
             SELECT u.agent_id, u.runtime, u.model, u.started_at, NULL, ${sql.literal(QUEST_OF_TURN)},
               u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens
             FROM attempt_turns u
-            WHERE ${sql.literal(SETTLED_TURN)} AND u.started_at >= ${since} AND u.started_at < ${until}
+            WHERE ${sql.literal(SETTLED_TURN)} ${turns}
           ) s`;
+      };
+      return UsageLedger.of({
+        spentOn: (questId) =>
+          sql<Record<string, unknown>>`
+            SELECT COALESCE(SUM(${sql.literal(TOKENS)}), 0) AS tokens, COUNT(*) AS turns,
+              COALESCE(SUM(CASE WHEN ${sql.literal(UNREPORTED)} THEN 1 ELSE 0 END), 0) AS unreported
+            FROM ${spentIn(null)} WHERE s.quest_id = ${questId}`.pipe(
+            Effect.map(([row]) => ({
+              tokens: count(row?.tokens),
+              turns: count(row?.turns),
+              unreported: count(row?.unreported),
+            })),
+            Effect.orDie,
+          ),
+        usage: (since, until) => {
+          const spent = spentIn({ since, until });
           return Effect.all(
             [
               sql<Record<string, unknown>>`

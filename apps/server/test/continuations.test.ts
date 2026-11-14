@@ -13,6 +13,8 @@ import {
   RuntimeAdapter,
   TaskControls,
   TaskRepository,
+  TurnLimitsStore,
+  TurnSlots,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
@@ -24,6 +26,7 @@ import {
   type BackpackItem,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
+  DEFAULT_TURN_LIMITS,
   DelegationId,
   IDLE_QUEST,
   Message,
@@ -34,8 +37,10 @@ import {
   TaskId,
   Thread,
   ThreadId,
+  type TurnLimits,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import {
   Backpack,
   DEFAULT_DISPATCH_LIMITS,
@@ -55,7 +60,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Layer, ManagedRuntime, Schedule, Stream } from "effect";
+import { Deferred, Effect, Layer, ManagedRuntime, Option, Schedule, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { BlockersHostLive, BlockOnRetirement } from "../src/blockers.ts";
@@ -191,6 +196,7 @@ const makeApp = (
   requests: Array<PromptRequest>,
   before: Before,
   limits: DispatchLimits,
+  turnLimits: TurnLimits | null,
 ) =>
   Layer.mergeAll(WakeOnArrival, BlockOnRetirement, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
@@ -215,6 +221,13 @@ const makeApp = (
         NoTools,
         HobAdmission.layer,
         held(gate, requests),
+        turnLimits === null
+          ? Layer.empty
+          : TurnSlots.layer.pipe(
+              Layer.provide(
+                Layer.succeed(TurnLimitsStore, { get: Effect.succeed(turnLimits), set: () => Effect.void }),
+              ),
+            ),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",
@@ -269,10 +282,10 @@ const Frodo: Before = Layer.effectDiscard(
   }),
 );
 
-const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS) => {
+const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS, turnLimits: TurnLimits | null = null) => {
   const requests: Array<PromptRequest> = [];
   const gate = Deferred.makeUnsafe<void>();
-  const app = ManagedRuntime.make(makeApp(gate, requests, before, limits));
+  const app = ManagedRuntime.make(makeApp(gate, requests, before, limits, turnLimits));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
   return { run, requests, release: () => run(Deferred.succeed(gate, undefined)) };
@@ -979,5 +992,47 @@ describe("blockers", () => {
     const closed = await run(Effect.flip(choose(failure.id, "retry")));
     expect(closed).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 1, state: "resolved" });
     expect(await run(messages())).toEqual([]);
+  });
+});
+
+describe("turn limits", () => {
+  // covers OR-005
+  it("[TC-OR-1448-02] answers every one of many chats sent at once to one hob that may run four turns at a time", async () => {
+    const ids = Array.from({ length: 13 }, (_, n) => ThreadId.make(`chat-${n + 1}`));
+    const ManyChats: Before = Layer.effectDiscard(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* repo.insertAgent(frodo);
+        for (const id of ids) {
+          yield* repo.upsertThread(new Thread({ id, agentId: FRODO, title: id, createdAt: now, updatedAt: now }));
+        }
+      }),
+    );
+    const perHob = 4;
+    const { run, release } = setUp(ManyChats, LIMITS, { ...DEFAULT_TURN_LIMITS, perHob });
+    // The first four turns hold until the gate opens, so the other nine messages wait, queued.
+    const sent = await Promise.all(
+      ids.map((id) => run(ChatService.use((chat) => chat.sendPrompt(id, `${HOLD} Hello from ${id}`)))),
+    );
+    expect(sent.filter((each) => each.userMessage.status === "queued")).toHaveLength(ids.length - perHob);
+    await release();
+    // A thread that finds no backpack work keeps its slot for your message, so every chat is
+    // answered, never more than four at once.
+    for (const id of ids) {
+      await run(
+        waitUntil(
+          Effect.gen(function* () {
+            const report = yield* Effect.flatMap(
+              Effect.serviceOption(TurnSlots),
+              (slots) => Option.getOrThrow(slots).report,
+            );
+            expect(report.active.length).toBeLessThanOrEqual(perHob);
+            return (yield* HobbotsRepository.use((repo) => repo.listMessages(id))).map((m) => m.status).join();
+          }),
+          (statuses) => statuses === "complete,complete",
+          { what: `${id} to be answered` },
+        ),
+      );
+    }
   });
 });

@@ -15,9 +15,11 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { buildBriefing } from "./briefing.ts";
+import { sinceYouSpoke } from "./context-pack.ts";
 import { turnRoster } from "./hob-directory.ts";
 import { MemoryProjects, MemoryStore } from "./memory.ts";
 import { type TurnMemoryBrief, turnMemoryBrief } from "./memory-brief.ts";
+import { isOwnReply, type PackPeople, reasonLine, type TurnReason } from "./pack-people.ts";
 import type { HobbotsRepository } from "./repository.ts";
 import type { RuntimeAdapterShape, ToolAccess } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
@@ -29,12 +31,26 @@ import type { HobTools } from "./tools.ts";
  * one too when another brain continued it since. Without a record of what it saw, everything after
  * its own latest reply.
  */
-const missedBy = (runtime: RuntimeKind, seenThrough: string | null, before: ReadonlyArray<Message>) => {
+const missedBy = (
+  thread: Thread,
+  runtime: RuntimeKind,
+  agentId: AgentId,
+  seenThrough: string | null,
+  before: ReadonlyArray<Message>,
+) => {
   const seen = before.findIndex((m) => m.id === seenThrough);
   if (seen !== -1) return before.slice(before[seen]?.runtime === runtime ? seen + 1 : seen);
-  const own = before.findLastIndex((m) => m.role === "assistant" && m.runtime === runtime);
+  const own = before.findLastIndex((m) => isOwnReply(m, thread, agentId) && m.runtime === runtime);
   return before.slice(own + 1);
 };
+
+/**
+ * Whether a session missed what others said, not only what its own hob said on another brain: a
+ * reply by another hob, or a person's messages no hob has answered since (ADR 039).
+ */
+const missedOthers = (thread: Thread, agentId: AgentId, missed: ReadonlyArray<Message>) =>
+  missed.some((m) => m.role === "assistant" && !isOwnReply(m, thread, agentId)) ||
+  (missed.some((m) => m.role === "user") && !missed.some((m) => m.role === "assistant"));
 
 /** Whether a reply is `agentId`'s own; one from before replies named their author is the thread's hob's. */
 const isHobsOwn = (message: Message, agentId: AgentId): boolean =>
@@ -129,25 +145,47 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
       });
 
     // What a resumed session missed, told ahead of the prompt (ADR 017), built from the stored
-    // transcript without asking the brain the thread left: what other brains wrote in the live
-    // chapter since it last replied. `before` is the live chapter's transcript before the turn's own
-    // prompt and reply. `switched` when the reply itself moves from another brain, as on Continue.
-    // A new session starts from the context pack instead (ADR 037), so this is null for one.
+    // transcript without asking the brain the thread left. `before` is the live chapter's transcript
+    // before the turn's own prompt and reply. `switched` when the reply itself moves from another
+    // brain, as on Continue. A new session starts from the context pack instead (ADR 037), so this
+    // is null for one. When others spoke since the hob last did, it hears what they said, each
+    // under its author's name, within the live chapter's share, and why it answers now when another
+    // actor asked it (ADR 039, The context pack with several hobs). Otherwise it hears what its own
+    // hob wrote on other brains.
     const brief = (
       thread: Thread,
       runtime: RuntimeKind,
       agentId: AgentId,
       before: ReadonlyArray<Message>,
       switched: boolean,
+      people: PackPeople,
+      reason: TurnReason | null,
     ) =>
       Effect.sync(() => {
         const session = liveSession(thread, runtime, agentId);
         if (session === undefined) return null;
-        const missed = missedBy(runtime, session.seenThrough, before);
+        const missed = missedBy(thread, runtime, agentId, session.seenThrough, before);
+        // The only hob in a thread knows why it answers from its pack: a reason says something only
+        // when another actor asked it.
+        const why =
+          reason === null || reason.cause === "only-hob"
+            ? null
+            : `Why you are answering now: ${reasonLine(reason, people.nameOf)}`;
+        if (missedOthers(thread, agentId, missed)) {
+          return [why, sinceYouSpoke(missed, people.speaker)].filter((part) => part !== null).join("\n\n") || null;
+        }
         // Only a switch needs one: a session is told what other brains wrote that it did not see.
         const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
-        if (!switched && !others) return null;
-        return buildBriefing({ kind: "resumed", messages: missed, checkpoint: null })?.text ?? null;
+        const switchedText =
+          switched || others
+            ? (buildBriefing({
+                kind: "resumed",
+                messages: missed,
+                checkpoint: null,
+                ...(people.shared ? { speaker: people.speaker } : {}),
+              })?.text ?? null)
+            : null;
+        return [why, switchedText].filter((part) => part !== null).join("\n\n") || null;
       });
 
     return { memoryBriefFor, rosterFor, acceptedIn, skillsFor, instructionsChanged, brief } as const;

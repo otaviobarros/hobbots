@@ -61,10 +61,17 @@ describe("reading the camp's artifacts", () => {
     expect(versionBefore(versions, version(1))).toBeNull();
   });
 
-  it("previews a text's first lines that hold something, a heading's marks dropped, each cut", () => {
-    expect(firstLines("\n# Launch plan\n\n## Dates\nShip on Friday.\n")).toEqual(["Launch plan", "Dates"]);
-    expect(firstLines("x".repeat(200), 2, 10)).toEqual([`${"x".repeat(9)}…`]);
-    expect(firstLines("   \n\n")).toEqual([]);
+  it("previews a text's first lines that hold something, a document's Markdown marks dropped, each cut", () => {
+    expect(firstLines("\n# Launch plan\n\n## Dates\nShip on Friday.\n", true)).toEqual(["Launch plan", "Dates"]);
+    expect(firstLines("> **Ship** on [Friday](https://example.com)\n\n```\n# not a heading\n```", true)).toEqual([
+      "Ship on Friday",
+      "# not a heading",
+    ]);
+    expect(firstLines("- one\n- two", true)).toEqual(["one", "two"]);
+    expect(firstLines("foo  \nbar", true)).toEqual(["foo", "bar"]);
+    expect(firstLines("# kept\n<p>as written</p>", false)).toEqual(["# kept", "<p>as written</p>"]);
+    expect(firstLines("x".repeat(200), false, 2, 10)).toEqual([`${"x".repeat(9)}…`]);
+    expect(firstLines("   \n\n", true)).toEqual([]);
   });
 
   it("shows a page under a policy that loads nothing from anywhere", () => {

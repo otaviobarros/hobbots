@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import { type SkillSetSkill, savedSkillInstructions } from "@hobbots/domain";
 import { parseDocument } from "yaml";
 import { rewriteSetLinks, setLinksOf } from "./check.ts";
+import { readSkillMarkdown } from "./markdown.ts";
 import { folderTree } from "./sources/folder.ts";
 import type { SkillTree, TreeEntry } from "./tree.ts";
 
@@ -12,24 +13,22 @@ export interface SkillEdit {
   readonly instructions: string;
 }
 
-const FRONT_MATTER = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-
 /**
  * A `SKILL.md` with the edit applied: the description set in its front matter, every other key kept
  * as it was written, and the instructions after it.
  */
 const editSkillFile = (text: string, edit: SkillEdit): string => {
-  const document = parseDocument(FRONT_MATTER.exec(text)?.[1] ?? "");
+  const document = parseDocument(readSkillMarkdown("SKILL.md", text).frontMatter?.yaml ?? "");
   document.set("description", edit.description);
   return `---\n${document.toString()}---\n\n${savedSkillInstructions(edit.instructions)}`;
 };
 
 /** A `SKILL.md` under another name: `name` set in its front matter, every other line kept as it was. */
 const renameSkillFile = (text: string, name: string): string => {
-  const found = FRONT_MATTER.exec(text);
-  const document = parseDocument(found?.[1] ?? "");
+  const found = readSkillMarkdown("SKILL.md", text).frontMatter;
+  const document = parseDocument(found?.yaml ?? "");
   document.set("name", name);
-  return `---\n${document.toString()}---\n${found === null ? text : text.slice(found[0].length)}`;
+  return `---\n${document.toString()}---\n${found === null ? text : found.rest}`;
 };
 
 const encoder = new TextEncoder();

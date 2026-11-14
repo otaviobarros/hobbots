@@ -34,6 +34,7 @@ import {
   TaskWait,
 } from "./quest.ts";
 import { QuestSummary } from "./quest-summary.ts";
+import { SettingChange } from "./setting-change.ts";
 import { SkillFeedback, SkillProposal } from "./skill-proposals.ts";
 import { SkillUpdate } from "./skill-updates.ts";
 import {
@@ -245,6 +246,8 @@ const ClaimMade = Schema.TaggedStruct("ClaimMade", { claim: Claim, clashes: Sche
 const ClaimContested = Schema.TaggedStruct("ClaimContested", { claim: Claim });
 /** The last claim this one clashed with was released, so it is held alone again. */
 const ClaimCleared = Schema.TaggedStruct("ClaimCleared", { claim: Claim });
+/** You took over the claim's Task (#1449), so the claim is yours and its hob may not write to it. */
+const ClaimTakenOver = Schema.TaggedStruct("ClaimTakenOver", { claim: Claim });
 /** The claim's Task ended, so the claim was released; a released number is never handed out again. */
 const ClaimReleased = Schema.TaggedStruct("ClaimReleased", { claim: Claim });
 /** You pinned a message, so it shows under Mine (ADR 037); pinning it again journals nothing. */
@@ -393,6 +396,8 @@ const WebSearched = Schema.TaggedStruct("WebSearched", { search: WebSearchRecord
 const WebFetched = Schema.TaggedStruct("WebFetched", { fetch: WebFetchRecord });
 /** Settings › Web changed: the limits every hob has, or the blocked sites. */
 const WebSettingsChanged = Schema.TaggedStruct("WebSettingsChanged", { settings: WebSettings });
+/** A hub setting that changes what hobs may do changed (#1357): who changed it, and before and after. */
+const SettingChanged = Schema.TaggedStruct("SettingChanged", { change: SettingChange });
 /** A hob's own web limits changed. */
 const HobWebLimitsChanged = Schema.TaggedStruct("HobWebLimitsChanged", { agentId: AgentId, limits: HobWebLimits });
 /** A hob used a skill in a turn (ADR 029, The use line): the revision the turn mounted, or an organization's skill. */
@@ -519,6 +524,7 @@ export const JournaledEvent = Schema.Union([
   ClaimMade,
   ClaimContested,
   ClaimCleared,
+  ClaimTakenOver,
   ClaimReleased,
   DecisionRecorded,
   DecisionSuperseded,
@@ -565,6 +571,7 @@ export const JournaledEvent = Schema.Union([
   WebFetched,
   WebSettingsChanged,
   HobWebLimitsChanged,
+  SettingChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -656,6 +663,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ClaimMade: 1,
   ClaimContested: 1,
   ClaimCleared: 1,
+  ClaimTakenOver: 1,
   ClaimReleased: 1,
   DecisionRecorded: 1,
   DecisionSuperseded: 1,
@@ -705,6 +713,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   WebFetched: 1,
   WebSettingsChanged: 1,
   HobWebLimitsChanged: 1,
+  SettingChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

@@ -143,9 +143,10 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     case "MessageUpserted":
     case "MessageQueued":
       return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };
-    // Pairing belongs to no hob or thread (ADR 021).
+    // Pairing belongs to no hob or thread (ADR 021), nor does a hub setting (#1357).
     case "PairingRequested":
     case "PairingChanged":
+    case "SettingChanged":
       return NONE;
     default:
       return restCorrelationOf(event);
@@ -236,6 +237,7 @@ type RecordEvent = Extract<
       | "ClaimMade"
       | "ClaimContested"
       | "ClaimCleared"
+      | "ClaimTakenOver"
       | "ClaimReleased"
       | "DecisionRecorded"
       | "DecisionSuperseded"
@@ -251,6 +253,7 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "ClaimMade",
   "ClaimContested",
   "ClaimCleared",
+  "ClaimTakenOver",
   "ClaimReleased",
   "DecisionRecorded",
   "DecisionSuperseded",
@@ -303,6 +306,7 @@ const restCorrelationOf = (
         | "MessageQueued"
         | "PairingRequested"
         | "PairingChanged"
+        | "SettingChanged"
         | "WebSearched"
         | "WebFetched"
         | "WebSettingsChanged"

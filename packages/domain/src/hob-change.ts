@@ -2,6 +2,9 @@ import { Schema } from "effect";
 import { AgentConfiguration, AgentStatus } from "./agent.ts";
 import { ChangeActor } from "./change-actor.ts";
 import { AgentId, MessageId, TaskId, ThreadId } from "./ids.ts";
+import { type HobPolicy, hobAnswers, type PolicyLayer } from "./policy.ts";
+import { SettingChange } from "./setting-change.ts";
+import { SUMMONING_CHARM_NAME } from "./summoning.ts";
 
 /**
  * The request behind a change a hob made or proposed (ADR 034): the Charm whose call made it, the
@@ -39,10 +42,22 @@ const StatusChange = Schema.TaggedStruct("Status", {
 });
 
 /**
- * One change to a hob, for its History and the Changes log (ADR 034): a new configuration version or
- * a change of its status, each with who made it.
+ * A change to a hub setting that reached the hob (#1357), such as "Summoning for every hob" turned
+ * on. Only people change settings (PE-006), so its actor reads as you; `setting` names the person.
  */
-export const HobChange = Schema.Union([VersionChange, StatusChange]);
+const SettingEntry = Schema.TaggedStruct("Setting", {
+  hobId: AgentId,
+  at: Schema.String,
+  actor: ChangeActor,
+  origin: Schema.Null,
+  setting: SettingChange,
+});
+
+/**
+ * One change to a hob, for its History and the Changes log (ADR 034): a new configuration version,
+ * a change of its status, or a hub setting that reached it, each with who made it.
+ */
+export const HobChange = Schema.Union([VersionChange, StatusChange, SettingEntry]);
 export type HobChange = typeof HobChange.Type;
 
 /**
@@ -57,4 +72,26 @@ export const scopeWork = (scope: string): { readonly taskId: TaskId | null; read
     taskId: kind === "task" ? TaskId.make(id) : null,
     messageId: kind === "reply" ? MessageId.make(id) : null,
   };
+};
+
+/**
+ * The answers a Summoning change dropped without naming them (#1352): before the fix, a change that
+ * set some answers replaced every other built-in or Charm answer the hob held. A change you made on
+ * the hob's own tabs drops nothing this way, and a Summoning change now merges what it names.
+ */
+export const droppedAnswers = (change: HobChange): PolicyLayer => {
+  if (change._tag !== "Version" || change.previous === null || change.actor._tag === "You") return {};
+  if (change.origin?.charm !== SUMMONING_CHARM_NAME) return {};
+  const after = hobAnswers(change.config.policy);
+  return Object.fromEntries(
+    Object.entries(hobAnswers(change.previous.policy)).filter(([operation]) => !(operation in after)),
+  ) as PolicyLayer;
+};
+
+/** The answers `change` dropped that the hob, holding `current` now, still lacks: what restoring brings back. */
+export const answersToRestore = (change: HobChange, current: HobPolicy): PolicyLayer => {
+  const now = hobAnswers(current);
+  return Object.fromEntries(
+    Object.entries(droppedAnswers(change)).filter(([operation]) => !(operation in now)),
+  ) as PolicyLayer;
 };

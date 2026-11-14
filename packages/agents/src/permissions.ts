@@ -8,10 +8,8 @@ import {
   type CharmOperation,
   declaredOperations,
   EMPTY_HOB_POLICY,
-  effectiveDecision,
+  effectiveAnswers,
   type HobPolicy,
-  hobAnswers,
-  POLICY_OPERATIONS,
   type PolicyDecision,
   type RuntimeKind,
   type SafetyPreset,
@@ -52,15 +50,10 @@ const effectiveDecisions = (
   preset: SafetyPreset,
   policy: HobPolicy,
   charmOperations: ReadonlyArray<CharmOperation>,
-): Record<AnyOperation, PolicyDecision> => {
-  const answers = hobAnswers(policy);
-  return Object.fromEntries(
-    [...POLICY_OPERATIONS, ...charmOperations.map((operation) => operation.id)].map((operation) => [
-      operation,
-      effectiveDecision(preset, answers, operation, charmOperations),
-    ]),
+): Record<AnyOperation, PolicyDecision> =>
+  Object.fromEntries(
+    effectiveAnswers(preset, policy, charmOperations).map(({ operation, decision }) => [operation, decision]),
   ) as Record<AnyOperation, PolicyDecision>;
-};
 
 /**
  * A hob's policy with what it adds up to under the installation's current preset and shared folders,

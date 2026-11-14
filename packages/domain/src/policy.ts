@@ -288,6 +288,29 @@ export const openTools = (decide: (operation: PolicyOperation) => PolicyDecision
   };
 };
 
+/** The operations that run commands, Git's included (ADR 014). */
+export const COMMAND_OPERATIONS: ReadonlyArray<PolicyOperation> = ["run-commands", "local-git"];
+
+/** The file answers that close commands (ADR 014): Read files other than Allow, or Edit files Ask. */
+export const closesCommands = (operation: PolicyOperation, decision: PolicyDecision): boolean =>
+  operation === "read-files" ? decision !== "allow" : operation === "edit-files" && decision === "ask";
+
+/**
+ * The command operations a hob has open under `decide` but can never use, since its file answers
+ * close commands (`openTools`), and those file operations; null when it can use every one it has.
+ */
+export const unusableCommands = (
+  decide: (operation: PolicyOperation) => PolicyDecision,
+): { readonly commands: ReadonlyArray<PolicyOperation>; readonly closing: ReadonlyArray<PolicyOperation> } | null => {
+  if (openTools(decide).commands) return null;
+  const commands = COMMAND_OPERATIONS.filter((operation) => decide(operation) !== "deny");
+  if (commands.length === 0) return null;
+  const closing = (["read-files", "edit-files"] as const).filter((operation) =>
+    closesCommands(operation, decide(operation)),
+  );
+  return { commands, closing };
+};
+
 /** Per-hob answers. Each may only narrow the preset; a widening needs a separately recorded user grant. */
 export const PolicyOverrides = Schema.Struct({
   "read-files": Schema.optionalKey(PolicyDecision),
@@ -467,4 +490,31 @@ export const effectiveDecision = (
   const answer = presetDecision(preset, operation, declared);
   const override = answers[operation];
   return override === undefined ? answer : narrowest(answer, override);
+};
+
+/**
+ * One operation's answer for a hob: the decision it gets, and whether the hob's own override set it
+ * rather than the preset. An override the preset is already narrower than decides nothing, so it is
+ * not marked.
+ */
+export interface EffectiveAnswer {
+  readonly operation: AnyOperation;
+  readonly decision: PolicyDecision;
+  readonly override: boolean;
+}
+
+/**
+ * A hob's answers under `preset`: each built-in operation, then each of `declared`, in order, after
+ * the hob's overrides. The Permissions tab and the hob's public card (ADR 032) both read these.
+ */
+export const effectiveAnswers = (
+  preset: SafetyPreset,
+  policy: HobPolicy,
+  declared: ReadonlyArray<CharmOperation>,
+): ReadonlyArray<EffectiveAnswer> => {
+  const answers = hobAnswers(policy);
+  return [...POLICY_OPERATIONS, ...declared.map((operation) => operation.id)].map((operation) => {
+    const decision = effectiveDecision(preset, answers, operation, declared);
+    return { operation, decision, override: answers[operation] !== undefined && answers[operation] === decision };
+  });
 };
