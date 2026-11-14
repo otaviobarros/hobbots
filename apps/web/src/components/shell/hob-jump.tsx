@@ -63,26 +63,26 @@ export function HobJump() {
 
 /** The places the sidebar leaves out (ADR 039, The sidebar), which the finder still jumps to. */
 const PAGES = [
-  { label: "Memory", to: "/memory" },
-  { label: "Skills", to: "/skills" },
+  { id: "memory", icon: "Memory", to: "/memory" },
+  { id: "skills", icon: "Skills", to: "/skills" },
 ] as const;
+
+type JumpPage = (typeof PAGES)[number];
 
 type JumpOption =
   | SearchResult
   | {
       readonly kind: "page";
       readonly key: string;
-      readonly label: (typeof PAGES)[number]["label"];
+      readonly page: JumpPage;
       readonly to: string;
     };
 
 /** The pages whose name holds the query, or every page for an empty one. */
 const pagesFor = (query: string): ReadonlyArray<JumpOption> =>
-  PAGES.filter((page) => page.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map((page) => ({
-    kind: "page",
-    key: `page-${page.label}`,
-    ...page,
-  }));
+  PAGES.filter((page) => copy.pages[page.id].toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).map(
+    (page) => ({ kind: "page", key: `page-${page.id}`, page, to: page.to }),
+  );
 
 function JumpList({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
@@ -159,7 +159,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
             onMouseMove={() => setActive(index)}
             className={cn("flex cursor-pointer items-center gap-2.5 px-2 py-1.5", index === current && "bg-line")}
           >
-            {option.kind === "page" ? <PageOption label={option.label} /> : <ResultOption option={option} />}
+            {option.kind === "page" ? <PageOption page={option.page} /> : <ResultOption option={option} />}
             {index === current && <span className="text-meta text-label">{copy.open}</span>}
           </div>
         ))}
@@ -174,13 +174,13 @@ function JumpList({ onDone }: { onDone: () => void }) {
 }
 
 /** A page the finder jumps to, with its section icon. */
-function PageOption({ label }: { label: (typeof PAGES)[number]["label"] }) {
+function PageOption({ page }: { page: JumpPage }) {
   return (
     <>
       <span aria-hidden className="inline-flex size-6 items-center justify-center text-text-secondary">
-        <SectionIcon name={label} />
+        <SectionIcon name={page.icon} />
       </span>
-      <span className="min-w-0 flex-1 font-heading text-ui font-semibold">{label}</span>
+      <span className="min-w-0 flex-1 font-heading text-ui font-semibold">{copy.pages[page.id]}</span>
     </>
   );
 }
