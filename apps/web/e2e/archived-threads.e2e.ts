@@ -116,6 +116,37 @@ test("[TC-CH-160] an archived thread opens read-only from the Archive and comes 
 });
 
 // covers CH-009
+test("[TC-CH-1466] a long message in an archived chat stays inside the column, beside the read-only bar", async ({
+  page,
+}) => {
+  const { current, hob } = await hubWithArchive();
+  // A pasted script: a rule of box-drawing dashes and a long path, neither with a place to break.
+  const script = `What does this script do?\n\n# ${"─".repeat(160)}\nopen_url "https://example.com/${"a".repeat(180)}"`;
+  const pasted = await thread(current, hob.id, "Explain the setup script");
+  await api(current, "POST", `/threads/${pasted.id}/messages`, { content: script });
+  await expect
+    .poll(async () =>
+      (await api<Array<{ status: string }>>(current, "GET", `/threads/${pasted.id}/messages`)).map((m) => m.status),
+    )
+    .toEqual(["complete", "complete", "complete", "complete"]);
+  await api(current, "POST", `/threads/${pasted.id}/archive`);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${current.url}/#/archive/chats/${hob.id}/${pasted.id}`);
+
+  const read = page.getByRole("main", { name: "Explain the setup script" });
+  const bubble = read.getByText(script, { exact: true });
+  const bar = read.getByText("Read-only. Restore it to pick up where it left off.").locator("..");
+  await expect(bubble).toBeVisible();
+  const [mine, column] = await Promise.all([bubble.boundingBox(), bar.boundingBox()]);
+  if (!mine || !column) throw new Error("the bubble and the read-only bar should both be laid out");
+  // The bar spans the column, so the bubble sits within its edges.
+  expect(mine.x).toBeGreaterThanOrEqual(column.x - 1);
+  expect(mine.x + mine.width).toBeLessThanOrEqual(column.x + column.width + 1);
+  // Nothing in the page scrolls sideways.
+  expect(await read.evaluate((main) => main.scrollWidth - main.clientWidth)).toBe(0);
+});
+
+// covers CH-009
 test("[TC-CH-218] Undo after a Restore in the Archive archives the chat again", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/archive`);

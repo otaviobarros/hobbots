@@ -289,8 +289,10 @@ function Transcript({
       </p>
     );
   }
+  // Long words, paths and rules wrap inside the column, as in the live chat, so no message is wider
+  // than the column or runs under the read-only bar.
   return (
-    <div className="flex flex-1 flex-col gap-3.5">
+    <div className="flex min-w-0 flex-1 flex-col gap-3.5 wrap-anywhere">
       {transcript.data.map((message) => (
         <MessageRow key={message.id} message={message} hob={hob} focused={message.id === focusMessageId} />
       ))}
