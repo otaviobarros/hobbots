@@ -26,10 +26,11 @@
     "lint:machines": "node scripts/machines.mjs --check",
     "lint:glossary": "node scripts/check-glossary.mjs",
     "lint:actor": "node scripts/check-owner-actor.mjs",
+    "lint:markdown": "node scripts/check-markdown.mjs",
     "docs:machines": "node scripts/machines.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "turbo run check:standards lint:layers lint:complexity lint:frontend lint:state lint:machines lint:glossary lint:actor test:scripts lint:unused lint:dup lint typecheck test --concurrency=4"
+    "check": "turbo run check:standards lint:layers lint:complexity lint:frontend lint:state lint:machines lint:glossary lint:actor lint:markdown test:scripts lint:unused lint:dup lint typecheck test --concurrency=4"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {

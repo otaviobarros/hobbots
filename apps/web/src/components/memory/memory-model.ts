@@ -16,10 +16,12 @@ import {
   memoryScopeOfKey,
   memorySearchTerms,
   memorySnippetOf,
+  memoryTitleOf,
   type SnippetPart,
   sameMemoryScope,
 } from "@hobbots/domain";
 import { Schema } from "effect";
+import { pageHeading, withoutTitle } from "../markdown/read.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
@@ -312,11 +314,10 @@ export const changesByDay = (changes: ReadonlyArray<MemoryChange>, now: Date) =>
 };
 
 /** A page's body without its `# ` title, which the page shows as its heading. */
-export const pageBody = (markdown: string): string => markdown.replace(/^\s*#\s+[^\n]*\n?/, "").trim();
+export const pageBody = (markdown: string): string => withoutTitle(markdown);
 
 /** A page's title from its markdown, or its file name when it has no `# ` heading. */
-export const pageTitle = (markdown: string, path: MemoryPath): string =>
-  /^#\s+(.+)$/m.exec(markdown)?.[1]?.trim() ?? path.replace(/^.*\//, "").replace(/\.md$/, "");
+export const pageTitle = (markdown: string, path: MemoryPath): string => memoryTitleOf(path, pageHeading(markdown));
 
 /** One version in a page's History, with what it says it did. */
 export interface HistoryRow {

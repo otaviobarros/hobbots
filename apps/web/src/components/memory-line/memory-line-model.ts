@@ -1,5 +1,6 @@
 import { type MemorySave, type MessageId, memoryKindOf, memoryTitleOf } from "@hobbots/domain";
 import { ApiError } from "../../api/client.ts";
+import { pageHeading } from "../markdown/read.ts";
 import { messages as memoryCopy } from "../memory/messages.ts";
 import { messages } from "./messages.ts";
 
@@ -17,7 +18,7 @@ export const replySaves = (saves: ReadonlyArray<MemorySave> | undefined, message
 
 /** What the line says, and whether it offers Open and Undo. */
 export const savedLine = (save: MemorySave, name: string) => {
-  const title = memoryTitleOf(save.path, save.markdown);
+  const title = memoryTitleOf(save.path, pageHeading(save.markdown));
   const kind = memoryCopy.kinds[memoryKindOf(save.path)].one;
   if (save.undoneAt !== undefined) return { title, text: copy.undone({ name }), actions: false };
   if (save.state === "queued") return { title, text: copy.kept({ name, kind, title }), actions: false };

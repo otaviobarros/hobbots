@@ -173,15 +173,13 @@ export interface MemoryDraft {
 export const memoryForgotten = (day: MemoryForgetDay | null | undefined, now: Date): boolean =>
   day !== null && day !== undefined && now.toISOString() > `${day}T23:59:59.999Z`;
 
-/** A page's title: its first `# ` heading, or its file name without `.md`. */
-export const memoryTitleOf = (path: MemoryPath, markdown: string): string => {
-  const heading = markdown
-    .split("\n")
-    .find((line) => line.startsWith("# "))
-    ?.slice(2)
-    .trim();
-  return heading || (path.split("/").at(-1) ?? path).replace(/\.md$/, "");
-};
+/**
+ * A page's title: the text of its first `# ` heading, or its file name without `.md` when it has
+ * none. The domain reads no Markdown: the caller finds the heading with a CommonMark parser
+ * (STD-DUP-008) and passes its text.
+ */
+export const memoryTitleOf = (path: MemoryPath, heading: string | undefined): string =>
+  heading?.trim() || (path.split("/").at(-1) ?? path).replace(/\.md$/, "");
 
 /** The memory engine did not answer. Callers treat it as an outage, never as an empty memory. */
 export class MemoryUnavailable extends Schema.TaggedError<MemoryUnavailable>()("MemoryUnavailable", {

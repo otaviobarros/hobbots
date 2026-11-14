@@ -47,6 +47,7 @@
     "//#lint:machines": {},
     "//#lint:glossary": {},
     "//#lint:actor": {},
+    "//#lint:markdown": {},
     "//#test:scripts": {},
     "dev": {
       "cache": false,

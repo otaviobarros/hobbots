@@ -14,6 +14,9 @@ import {
 import { join, posix, relative, sep } from "node:path";
 import { RuntimeError, type SkillMount } from "@hobbots/agents";
 import { Effect, type Scope } from "effect";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
+import { frontmatter } from "micromark-extension-frontmatter";
 import { Document, isMap, parseDocument } from "yaml";
 
 /** The plugin a Claude Code turn loads its skills from, so each is listed as `hobbots-skills:<name>`. */
@@ -85,19 +88,31 @@ export const skillMountsHash = (mounts: ReadonlyArray<SkillMount>): string =>
     )
     .digest("hex");
 
-/** The `---` front matter at the top of a `SKILL.md`, and the text after it. */
-const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/;
+/**
+ * The YAML front matter at the top of a `SKILL.md` and the text after it, as a CommonMark parser
+ * reads them (STD-DUP-008), or null when the file opens with none.
+ */
+const frontMatterOf = (file: string): { readonly yaml: string; readonly rest: string } | null => {
+  // The parser skips a byte order mark without counting it, so offsets count from after it.
+  const text = file.startsWith("\uFEFF") ? file.slice(1) : file;
+  const tree = fromMarkdown(text, { extensions: [frontmatter()], mdastExtensions: [frontmatterFromMarkdown()] });
+  const first = tree.children[0];
+  const end = first?.position?.end.offset;
+  if (first?.type !== "yaml" || end === undefined) return null;
+  const rest = text.slice(end);
+  return { yaml: first.value, rest: rest.slice(rest.startsWith("\r\n") ? 2 : /^[\n\r]/.test(rest) ? 1 : 0) };
+};
 
 /**
  * A `SKILL.md` that Claude Code never picks on its own (`disable-model-invocation: true`), from the
  * stored one. Its front matter is rewritten, the rest kept as it is.
  */
 export const onlyWhenAskedSkillFile = (text: string): string => {
-  const match = FRONT_MATTER.exec(text);
-  const document = match ? parseDocument(match[1] as string) : new Document({});
+  const found = frontMatterOf(text);
+  const document = found ? parseDocument(found.yaml) : new Document({});
   if (!isMap(document.contents)) document.contents = document.createNode({});
   document.set("disable-model-invocation", true);
-  const body = match ? text.slice(match[0].length) : text;
+  const body = found ? found.rest : text;
   return `---\n${document.toString().trimEnd()}\n---\n${body}`;
 };
 
