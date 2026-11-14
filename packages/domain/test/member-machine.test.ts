@@ -2,12 +2,12 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   type Actor,
+  AgentId,
   IllegalMemberTransition,
   type MemberEvent,
   MemberMachine,
   type MemberState,
   MemberState as MemberStates,
-  AgentId,
   planMemberAdd,
   planMemberRemove,
   ThreadId,

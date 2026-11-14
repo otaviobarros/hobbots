@@ -128,7 +128,11 @@ beforeEach(() => {
     ),
   );
   const web = HttpRouter.toWebHandler(
-    ApiRoutes.pipe(Layer.provideMerge(TestDevices), Layer.provideMerge(App), Layer.provide(NodeHttpServer.layerHttpServices)),
+    ApiRoutes.pipe(
+      Layer.provideMerge(TestDevices),
+      Layer.provideMerge(App),
+      Layer.provide(NodeHttpServer.layerHttpServices),
+    ),
     { disableLogger: true },
   );
   handler = (request) => web.handler(request);

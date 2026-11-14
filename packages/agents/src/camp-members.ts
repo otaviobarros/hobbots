@@ -2,7 +2,6 @@ import { AgentNotFound, HobUnavailable, ThreadArchived, ThreadNotFound } from "@
 import {
   type Actor,
   AgentId,
-  type Committed,
   hobStanding,
   MemberRefused,
   type Thread,
