@@ -13,9 +13,7 @@ import {
 import { Effect, Option } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import type { makeJournaled, makeJournaledChange } from "./journal.ts";
-import { relaysFor } from "./relays.ts";
 import {
-  insertRequest,
   selectOpenRequests,
   selectOpenRequestsOf,
   selectRequestsById,
@@ -26,8 +24,8 @@ import {
 } from "./turn-request-rows.ts";
 
 // The floor's writes (ADR 039, One hob speaks at a time): a request speaks in the transaction that
-// saves its turn's reply, is answered when the turn ends, with the relays its reply's mentions
-// cause, and is dropped by Stop and Stop all. A queued message left with nothing owed leaves the
+// saves its turn's reply, is answered when the turn ends (its reply's relays are written as it is
+// saved complete), and is dropped by Stop and Stop all. A queued message left with nothing owed leaves the
 // queue as it is, said but answered by no one. Let them go on wakes the requests the relay budget
 // paused.
 
@@ -54,24 +52,6 @@ export const speakFor = (sql: SqlClient.SqlClient, ids: ReadonlyArray<TurnReques
     return true;
   });
 
-/**
- * The turn writing `replyId` ended: its speaking requests are answered, and the reply as its turn
- * left it relays to the hobs it mentions, once.
- */
-const answerRelaying =
-  (
-    sql: SqlClient.SqlClient,
-    readMessage: (id: MessageId) => Effect.Effect<Option.Option<Message>, SqlError.SqlError>,
-  ) =>
-  (replyId: MessageId) =>
-    Effect.gen(function* () {
-      const own = yield* selectRequestsOfReply(sql, replyId);
-      yield* stepRequests(sql, own.filter(TurnRequests.isSpeaking), { _tag: "Answer" });
-      const reply = yield* readMessage(replyId);
-      if (Option.isNone(reply)) return;
-      for (const relay of yield* relaysFor(sql, reply.value, own)) yield* insertRequest(sql, relay);
-    });
-
 export const makeTurnRequestWrites = (
   sql: SqlClient.SqlClient,
   journaled: ReturnType<typeof makeJournaled>,
@@ -80,7 +60,6 @@ export const makeTurnRequestWrites = (
   readMessage: (id: MessageId) => Effect.Effect<Option.Option<Message>, SqlError.SqlError>,
   messageEvents: (message: Message) => ReadonlyArray<JournaledEvent>,
 ): Writes => {
-  const answerAndRelay = answerRelaying(sql, readMessage);
   // The queued messages among `messageIds` that nothing is owed for any more, which leave the queue
   // complete, where they were: what was said stays, and no turn answers it.
   const dequeueUnowed = (messageIds: ReadonlyArray<MessageId>, revision: number) =>
@@ -114,12 +93,13 @@ export const makeTurnRequestWrites = (
           return { value: saved, events: messageEvents(saved) };
         }),
       ),
-    // Under the journal's lock, as Stop all's drop is, so a stop either drops the speaking request
-    // before the turn answers it, and the reply relays nothing, or finds the relays it wrote.
     answerTurnRequests: (replyId) =>
-      journaledChange<void, never>(() =>
-        answerAndRelay(replyId).pipe(Effect.as({ value: undefined, events: [] })),
-      ).pipe(Effect.asVoid),
+      selectRequestsOfReply(sql, replyId).pipe(
+        Effect.flatMap((own) => stepRequests(sql, own.filter(TurnRequests.isSpeaking), { _tag: "Answer" })),
+        sql.withTransaction,
+        Effect.asVoid,
+        Effect.orDie,
+      ),
     letHobsGoOn: (line: Line, by: Actor) =>
       journaledChange<ReadonlyArray<TurnRequest>, never>(() =>
         Effect.gen(function* () {
@@ -161,15 +141,10 @@ export const makeTurnRequestWrites = (
       ),
     // A turn that was speaking when the hub stopped was ended as an interrupted reply, which Continue
     // resumes; that reply is its answer, so its request does not start a second turn.
-    // A reply saved complete just before the hub stopped still relays its mentions, as its turn's
-    // end would have; an interrupted one relays nothing.
     answerUnfinishedTurnRequests: selectRequestsIn(sql, "speaking").pipe(
-      Effect.flatMap((speaking) =>
-        Effect.forEach(new Set(speaking.flatMap((request) => request.replyId ?? [])), answerAndRelay, {
-          discard: true,
-        }),
-      ),
+      Effect.flatMap((speaking) => stepRequests(sql, speaking, { _tag: "Answer" })),
       sql.withTransaction,
+      Effect.asVoid,
       Effect.orDie,
     ),
     threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),

@@ -228,7 +228,7 @@ describe("relays owed while a turn ends", () => {
   });
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-PE-1463-02] at start, a reply saved complete before the hub stopped relays once, and an interrupted one never", async () => {
+  it("[TC-PE-1463-02] writes a reply's relays as it is saved complete, so a restart before its turn ends keeps them, once", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -239,11 +239,11 @@ describe("relays owed while a turn ends", () => {
         const [first] = yield* open(camp);
         if (first === undefined) throw new Error("one request");
         yield* speak(first, "reply-done");
-        // The reply was saved complete, then the hub stopped before its turn's end was recorded.
+        // The reply is saved complete; the hub stops before its turn's end is recorded.
         yield* repo.upsertMessage(pipSaid(camp, "reply-done", "@rook check the list", "complete"));
+        const saved = yield* open(camp);
         yield* repo.answerUnfinishedTurnRequests;
-        const afterStart = yield* open(camp);
-        yield* repo.answerUnfinishedTurnRequests;
+        yield* repo.upsertMessage(pipSaid(camp, "reply-done", "@rook check the list", "complete"));
         const again = yield* open(camp);
         // A reply the stop interrupted relays nothing.
         yield* repo.sendMessage(said(camp, "m-2", "complete"), mentioning([PIP]));
@@ -252,11 +252,14 @@ describe("relays owed while a turn ends", () => {
         yield* speak(second, "reply-cut");
         yield* repo.upsertMessage(pipSaid(camp, "reply-cut", "@quill half a", "interrupted"));
         yield* repo.answerUnfinishedTurnRequests;
-        return { afterStart, again, open: yield* open(camp) };
+        return { saved, again, open: yield* open(camp) };
       }),
     );
-    expect(result.afterStart.map((r) => [r.hobId, r.messageId, r.relayDepth])).toEqual([[ROOK, "reply-done", 1]]);
-    expect(result.again).toEqual(result.afterStart);
+    expect(result.saved.map((r) => [r.hobId, r.messageId, r.state, r.relayDepth])).toEqual([
+      [PIP, "m-1", "speaking", 0],
+      [ROOK, "reply-done", "waiting", 1],
+    ]);
+    expect(result.again.map((r) => [r.hobId, r.messageId])).toEqual([[ROOK, "reply-done"]]);
     expect(result.open.map((r) => [r.hobId, r.messageId])).toEqual([[ROOK, "reply-done"]]);
   });
 });
