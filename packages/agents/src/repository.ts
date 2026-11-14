@@ -27,9 +27,9 @@ import type {
   ThreadCheckpoint,
   ThreadId,
   ThreadMember,
-  UnreadThreads,
   TurnRequest,
   TurnRequestId,
+  UnreadThreads,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
