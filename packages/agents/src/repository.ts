@@ -51,10 +51,11 @@ export interface SentTo {
    */
   readonly relayDepth?: number;
   /**
-   * False when the hobs it mentions take it elsewhere, as a Quest member takes your note from its
-   * Task (#1446): no answer is owed here, so no request waits for the floor.
+   * The hobs it mentions that take it elsewhere, as a Quest member takes your note from its Task
+   * (#1446): no answer is owed here by them, so no request of theirs waits for the floor. Every
+   * other hob it is owed by still gets its request.
    */
-  readonly owes?: boolean;
+  readonly takenElsewhere?: ReadonlyArray<AgentId>;
 }
 
 /** A message you sent as stored, the hobs that owe it an answer, in order, and their requests. */

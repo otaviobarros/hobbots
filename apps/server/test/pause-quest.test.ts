@@ -1,5 +1,5 @@
-import { HobbotsRepository, TaskControls } from "@hobbots/agents";
-import { mainLine, noteReceipt, OWNER_ACTOR, type RuntimeKind, type TaskTree } from "@hobbots/domain";
+import { HobbotsRepository, TaskControls, ThreadMemberRepository } from "@hobbots/agents";
+import { hobActor, mainLine, noteReceipt, OWNER_ACTOR, type RuntimeKind, type TaskTree } from "@hobbots/domain";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -118,6 +118,32 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     const messages = await run(HobbotsRepository.use((repo) => repo.listMessages(threadId)));
     expect(messages.map((each) => each.id)).toEqual(replies.map((each) => each.id));
     expect((await run(treeWhen(() => true))).notes.filter((each) => each.text.includes("red theme"))).toEqual([]);
+  }, 30_000);
+
+  // covers ADR 039 (Who answers), #1446
+  it("[TC-CH-1461-25] a message that mentions a member and another hob of the chat sends the member its note and the other hob answers", async () => {
+    const party = partyHub({ lead: runtime, members: runtime });
+    dispose = party.dispose;
+    const { run, gates } = party;
+    gates.set("hold", never);
+    await run(delegated);
+    await run(treeWhen(pipRuns));
+    // Rook joins the lead's chat and holds no Task in its Quest.
+    await run(
+      Effect.orDie(ThreadMemberRepository.use((members) => members.add(threadId, hobActor(ROOK), OWNER_ACTOR))),
+    );
+
+    const { userMessage } = await run(send(["@Pip @Rook pick a theme"]));
+    const tree = await run(treeWhen((each) => each.notes.some((note) => note.messageId === userMessage.id)));
+    expect(tree.notes.filter((note) => note.messageId === userMessage.id).map((note) => note.recipientId)).toEqual([
+      PIP,
+    ]);
+    const replies = await run(
+      messagesWhen((all) => all.some((each) => each.promptId === userMessage.id && each.status === "complete")),
+    );
+    expect(
+      replies.filter((each) => each.promptId === userMessage.id).map((each) => [each.actor?.id, each.status]),
+    ).toEqual([[ROOK, "complete"]]);
   }, 30_000);
 });
 

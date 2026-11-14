@@ -593,11 +593,13 @@ export class ChatService extends Context.Service<
             // reads it in the chat on its next turn without being woken for it (#1446).
             const mentioned = yield* mentions.targets(threadId, agent, content);
             if (mentioned.length > 0) {
-              const saved = yield* mentions.send(
+              const sent = yield* mentions.send(
                 yield* yourMessage(thread, agent, content, askedSkill, false),
                 mentioned,
               );
-              return { userMessage: saved, assistantMessage: null };
+              // Another hob it mentions answers here, when the floor is its.
+              if (sent.requests.length > 0) yield* waitForFloor(threadId, !isBusy(yield* runOf(threadId)));
+              return { userMessage: sent.message, assistantMessage: null };
             }
             const { busy, carries, slot, limited } = yield* howItStarts(thread, agent);
             const free = slot?.release ?? Effect.void;

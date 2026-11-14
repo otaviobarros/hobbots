@@ -34,14 +34,18 @@ export const makeMentionNotes = Effect.gen(function* () {
     targeted: ReadonlyArray<{ readonly id: TaskNote["taskId"]; readonly ownerId: TaskNote["recipientId"] }>,
   ) =>
     Effect.gen(function* () {
-      if (Option.isNone(tasks)) return message;
+      if (Option.isNone(tasks)) return { message, requests: [] };
       const store = tasks.value;
       const { stored, notes } = yield* store.atomically(
         Effect.gen(function* () {
           // Stored as every message you send is, so a mention of a hob that cannot hear it refuses the
           // whole message, and nothing reaches the member either (ADR 039). The member's turn takes
-          // it from its note, so no answer is owed here and no request waits for the floor.
-          const sent = yield* repo.sendMessage(message, { mentions: [], repliesTo: null, owes: false });
+          // it from its note, so it owes no answer here; another hob the message mentions still does.
+          const sent = yield* repo.sendMessage(message, {
+            mentions: [],
+            repliesTo: null,
+            takenElsewhere: targeted.map((task) => task.ownerId),
+          });
           const stored = { ...sent, value: sent.value.message };
           const left = yield* Effect.forEach(targeted, (task) =>
             store
@@ -67,12 +71,12 @@ export const makeMentionNotes = Effect.gen(function* () {
                 ),
               ),
           );
-          return { stored, notes: left.flat() };
+          return { stored: { ...stored, requests: sent.value.requests }, notes: left.flat() };
         }),
       );
       yield* bus.publish(stored.entries);
       for (const note of notes) yield* bus.publish(note.entries);
-      return stored.value;
+      return { message: stored.value, requests: stored.requests };
     });
 
   return { targets, send } as const;

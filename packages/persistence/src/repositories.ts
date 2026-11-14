@@ -613,10 +613,13 @@ export const HobbotsRepositoryLive = Layer.effect(
           const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
           const message = yield* writeMessage(new Message({ ...input, status, revision }), parsed);
           // Each answer owed waits for the floor, written with the message (ADR 039).
-          const requests =
-            to.owes === false
-              ? []
-              : requestsFor(message, message.actor ?? (yield* sessionActor), answerers, to.relayDepth ?? 0);
+          const elsewhere = new Set<string>(to.takenElsewhere ?? []);
+          const requests = requestsFor(
+            message,
+            message.actor ?? (yield* sessionActor),
+            answerers,
+            to.relayDepth ?? 0,
+          ).filter((request) => !elsewhere.has(request.hobId));
           for (const request of requests) yield* insertRequest(sql, request);
           return { value: { message, answerers, requests }, events: messageEvents(message) };
         }),
