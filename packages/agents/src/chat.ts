@@ -504,6 +504,11 @@ export class ChatService extends Context.Service<
           yield* lineUp(threadId);
         });
 
+      // A message nobody takes at once waits for the floor. A line left idle behind a request its
+      // hob cannot take yet gives the floor to the next one that can.
+      const waitForFloor = (threadId: ThreadId, idle: boolean) =>
+        (idle ? startNext(threadId) : Effect.void).pipe(Effect.andThen(lineUp(threadId)));
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
@@ -554,10 +559,7 @@ export class ChatService extends Context.Service<
             if (carries) yield* startNext(threadId);
             const speaker = waits || carries ? null : yield* speakerFor(first.hobId, agent);
             if (speaker === null) {
-              // A line left idle behind a request its hob cannot take yet gives the floor to the
-              // next one that can.
-              if (!busy && !carries) yield* startNext(threadId);
-              yield* lineUp(threadId);
+              yield* waitForFloor(threadId, !busy && !carries);
               return { userMessage: saved, assistantMessage: null };
             }
             // The first hob it is owed by takes the floor at once; the others wait their turn.
