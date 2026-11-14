@@ -8,6 +8,7 @@ import {
   type RuntimeEvent,
   type RuntimeToolName,
 } from "@hobbots/agents";
+import { redactSecrets } from "@hobbots/domain";
 import { Effect, Semaphore } from "effect";
 import { refusedCallLabel } from "../tool-calls.ts";
 
@@ -111,8 +112,10 @@ const labelOf = (
 export const rolloutRefusals = (
   path: string | null | undefined,
   report: (event: RuntimeEvent) => void,
-  redact?: (text: string) => string,
+  redact: (text: string) => string = redactSecrets,
 ) => {
+  /** A name as a refusal keeps it: redacted whole, then bounded, so a secret it holds is never cut first. */
+  const nameOf = (name: string) => clip(redact(name), NOT_OFFERED_NAME_MAX);
   /** Only what a refusal needs of each call waiting for its output, each bounded, never the call itself. */
   const calls = new Map<
     string,
@@ -124,9 +127,9 @@ export const rolloutRefusals = (
   /** Keeps a call until its output is read, dropping the oldest past PENDING_CALLS. */
   const keep = (id: string, item: ResponseItem) => {
     if (typeof item.name !== "string") return;
-    const tool = clip(item.name, NOT_OFFERED_NAME_MAX);
     // A name is the model's or the rollout's own text, so only a name in the map is a runtime tool.
-    const runtimeTool = RUNTIME_TOOLS.get(tool) ?? null;
+    const runtimeTool = RUNTIME_TOOLS.get(item.name) ?? null;
+    const tool = nameOf(item.name);
     const label = clip(labelOf(tool, runtimeTool, item, redact), NOT_OFFERED_LABEL_MAX);
     calls.set(id, { tool, runtimeTool, label });
     const oldest = calls.size > PENDING_CALLS ? calls.keys().next() : null;
@@ -139,8 +142,9 @@ export const rolloutRefusals = (
     const prefix = typeof output === "string" ? UNSUPPORTED.find((each) => output.startsWith(each)) : undefined;
     if (prefix === undefined || typeof output !== "string" || reported >= ROLLOUT_REFUSALS_MAX) return null;
     reported += 1;
-    const tool = call?.tool ?? clip(output.slice(prefix.length).trim(), NOT_OFFERED_NAME_MAX);
-    const runtimeTool = call?.runtimeTool ?? RUNTIME_TOOLS.get(tool) ?? null;
+    const named = output.slice(prefix.length).trim();
+    const tool = call?.tool ?? nameOf(named);
+    const runtimeTool = call?.runtimeTool ?? RUNTIME_TOOLS.get(named) ?? null;
     const label = call?.label ?? labelOf(tool, runtimeTool, undefined, redact);
     return notOfferedDenial({ id, tool, label, runtimeTool });
   };

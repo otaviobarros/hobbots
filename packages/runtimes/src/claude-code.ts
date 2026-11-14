@@ -48,6 +48,7 @@ import {
   RuntimeHealth,
   RuntimeModel,
   RuntimeModels,
+  redactSecrets,
   type SandboxState,
   stableJson,
   unreportedPlan,
@@ -689,7 +690,8 @@ const notOfferedCalls = (redact?: (text: string) => string) => {
       calls.delete(block.tool_use_id);
       // The call's own name, exact; the result's words may add a sentence after it.
       const named = call?.name ?? said;
-      const tool = hubToolOf(named) ?? named;
+      // Redacted whole before notOfferedDenial bounds it, so a secret the name holds is never cut first.
+      const tool = (redact ?? redactSecrets)(hubToolOf(named) ?? named);
       return [
         notOfferedDenial({
           id: block.tool_use_id,

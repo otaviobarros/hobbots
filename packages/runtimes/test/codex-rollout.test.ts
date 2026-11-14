@@ -274,6 +274,36 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(denied?._tag === "ToolDenied" ? denied.label : "").toMatch(/^Running git x+/);
   });
 
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-17] a refused call's name is redacted whole before it is shortened, from its call or only its output", async () => {
+    const path = join(folder, "names.jsonl");
+    writeFileSync(path, "");
+    const secret = "plain-known-value-7f3a9c";
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(
+      path,
+      (event) => reported.push(event),
+      (text) => text.replaceAll(secret, "[secret]"),
+    );
+    await Effect.runPromise(refusals.start);
+    // The secret straddles where a name is cut.
+    const name = `${"n".repeat(NOT_OFFERED_NAME_MAX - 16)}${secret}`;
+    appendFileSync(
+      path,
+      [
+        call("n-1", name, {}),
+        output("n-1", `unsupported call: ${name}`),
+        output("n-2", `unsupported call: ${name}`),
+      ].join(""),
+    );
+    await Effect.runPromise(refusals.read);
+    expect(reported).toHaveLength(2);
+    for (const event of reported) {
+      const kept = event._tag === "ToolDenied" ? [event.tool, event.label, event.reason].join(" ") : "";
+      expect(kept).not.toContain(secret.slice(0, 8));
+    }
+  });
+
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {

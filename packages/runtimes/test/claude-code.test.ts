@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
-import { type RuntimeEvent, RuntimeLimitReached, type ToolAccess } from "@hobbots/agents";
+import { NOT_OFFERED_NAME_MAX, type RuntimeEvent, RuntimeLimitReached, type ToolAccess } from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, hobAppCommitIdentity, policySandbox, type ReplyUsage } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
@@ -620,6 +620,37 @@ describe("reading a Claude Code turn", () => {
     } as unknown as SDKMessage);
     expect(denied).toMatchObject({ _tag: "ToolDenied", tool: "Bash" });
     expect(denied?._tag === "ToolDenied" ? denied.label : "").not.toContain(secret.slice(0, 8));
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-18] a refused call's name is redacted whole with the turn's redactor before it is shortened", () => {
+    const secret = "plain-known-value-7f3a9c";
+    const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
+    // The secret straddles where a name is cut.
+    const name = `${"n".repeat(NOT_OFFERED_NAME_MAX - 16)}${secret}`;
+    read({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { content: [{ type: "tool_use", id: "t-1", name, input: {} }] },
+    } as unknown as SDKMessage);
+    const [denied] = read({
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t-1",
+            is_error: true,
+            content: `<tool_use_error>Error: No such tool available: ${name}</tool_use_error>`,
+          },
+        ],
+      },
+    } as unknown as SDKMessage);
+    const kept = denied?._tag === "ToolDenied" ? [denied.tool, denied.label, denied.reason].join(" ") : "";
+    expect(kept).toContain("n".repeat(8));
+    expect(kept).not.toContain(secret.slice(0, 8));
   });
 
   it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
