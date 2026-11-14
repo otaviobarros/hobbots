@@ -48,6 +48,7 @@ export * from "./memory-views.ts";
 export * from "./not-offered.ts";
 export * from "./notes.ts";
 export * from "./pack-people.ts";
+export * from "./pass-tool.ts";
 export * from "./permissions.ts";
 export * from "./ports.ts";
 export * from "./questions.ts";

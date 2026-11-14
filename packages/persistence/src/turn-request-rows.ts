@@ -32,6 +32,7 @@ interface TurnRequestRow {
   readonly replyId: unknown;
   readonly droppedByKind: unknown;
   readonly droppedById: unknown;
+  readonly passReason: unknown;
   readonly queuedAt: unknown;
   readonly position: unknown;
   readonly createdAt: unknown;
@@ -54,6 +55,7 @@ const requestsFromRows = (rows: ReadonlyArray<TurnRequestRow>) =>
       state: row.state,
       replyId: row.replyId ?? null,
       droppedBy: row.droppedByKind == null ? null : { kind: row.droppedByKind, id: row.droppedById },
+      passReason: row.passReason ?? null,
       queuedAt: Number(row.queuedAt),
       position: Number(row.position),
       createdAt: row.createdAt,
@@ -146,6 +148,7 @@ export const insertRequest = (sql: SqlClient.SqlClient, request: TurnRequest) =>
     reply_id: request.replyId,
     dropped_by_kind: request.droppedBy?.kind ?? null,
     dropped_by_id: request.droppedBy?.id ?? null,
+    pass_reason: request.passReason,
     queued_at: request.queuedAt,
     position: request.position,
     created_at: request.createdAt,
@@ -160,7 +163,8 @@ export const stepRequests = (sql: SqlClient.SqlClient, requests: ReadonlyArray<T
     const next = TurnRequests.transition(request, event);
     if (!(next instanceof TurnRequest)) return Effect.succeed<ReadonlyArray<TurnRequest>>([]);
     return sql`UPDATE turn_requests SET state = ${next.state}, reply_id = ${next.replyId},
-        dropped_by_kind = ${next.droppedBy?.kind ?? null}, dropped_by_id = ${next.droppedBy?.id ?? null}
+        dropped_by_kind = ${next.droppedBy?.kind ?? null}, dropped_by_id = ${next.droppedBy?.id ?? null},
+        pass_reason = ${next.passReason}
       WHERE id = ${next.id} AND state = ${request.state}`.pipe(Effect.as([next]));
   }).pipe(Effect.map((changed) => changed.flat()));
 

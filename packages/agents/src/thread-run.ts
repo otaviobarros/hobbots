@@ -30,6 +30,8 @@ export interface Reply {
   readonly endWait: Deferred.Deferred<void>;
   /** How many commands Stop waiting stopped, once it has ended the turn's stream; null before. */
   readonly waitsStopped: Ref.Ref<number | null>;
+  /** Why the hob passed, once it called `pass` (ADR 039): the turn then ends with no message. */
+  readonly passed: Ref.Ref<string | null>;
 }
 
 export interface ThreadRun {

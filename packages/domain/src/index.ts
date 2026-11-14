@@ -55,6 +55,7 @@ export * from "./memory-views.ts";
 export * from "./mention.ts";
 export * from "./message.ts";
 export * from "./message-pin.ts";
+export * from "./pass-tool.ts";
 export * from "./pause.ts";
 export * from "./policy.ts";
 export * from "./presence.ts";
