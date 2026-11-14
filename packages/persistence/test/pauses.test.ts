@@ -164,6 +164,96 @@ describe("pausing a Quest's work", () => {
   });
 });
 
+describe("work under a paused Task", () => {
+  // covers OR-006
+  it("[TC-OR-1446-16] starts no turn, and is neither retried nor reassigned, until the Task above is resumed", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const { root, copy } = yield* campaign;
+        const attempt = (id: string) => ({
+          id: AttemptId.make(id),
+          runtime: "claude-code" as const,
+          sessionId: null,
+          configVersion: 1,
+          policyVersion: null,
+          startedAt: now,
+        });
+        const started = yield* tasks.startAttempt(copy.id, copy.revision, attempt("a1"));
+        const ended = yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Stopped", reason: "Stopped" },
+          at: later,
+        });
+        const failed = yield* tasks.moveTask(copy.id, ended.value.task.revision, "failed", later);
+        const step = yield* tasks.createTask({
+          task: newTask("step", ALDRIC, "campaign"),
+          delegation: null,
+          milestones: [],
+        });
+        // Only the Quest's own Task is paused: a failed member and a queued step stay as they are.
+        const rootNow = yield* stateOf("campaign");
+        yield* tasks.pauseTask(root.id, rootNow.revision, { at: later, by: you, now: false });
+        const by = { actor: hobActor(ALDRIC), reason: "Try again" };
+        const retried = yield* tasks.retryTask(copy.id, failed.value.revision, later, by).pipe(Effect.flip);
+        const reassigned = yield* tasks
+          .reassignTask(copy.id, failed.value.revision, BRAM, later, {
+            ...by,
+            authority: { overrides: {}, folders: [] },
+          })
+          .pipe(Effect.flip);
+        const startedStep = yield* tasks
+          .startAttempt(step.value.id, step.value.revision, attempt("a2"))
+          .pipe(Effect.flip);
+        return { started, retried, reassigned, startedStep };
+      }),
+    );
+    expect(result.started.value.task.state).toBe("active");
+    expect(result.retried).toMatchObject({ reason: "parent-paused" });
+    expect(result.reassigned).toMatchObject({ reason: "parent-paused" });
+    expect(result.startedStep).toMatchObject({ reason: "parent-paused" });
+  });
+});
+
+describe("a change written with another", () => {
+  // covers OR-006, STD-ARCH-014
+  it("[TC-OR-1446-17] commits a resume with its note, or neither when the note cannot be left", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const { root } = yield* campaign;
+        const paused = yield* tasks.pauseTask(root.id, root.revision, { at: later, by: you, now: false });
+        const note = (taskId: TaskId) => ({
+          id: NoteId.make(`resume:${taskId}`),
+          taskId,
+          text: "Back to work",
+          createdAt: later,
+        });
+        const failed = yield* tasks
+          .atomically(
+            Effect.gen(function* () {
+              yield* tasks.resumeTask(root.id, paused.value.revision, { at: later, by: you });
+              return yield* tasks.leaveNote(note(TaskId.make("missing")));
+            }),
+          )
+          .pipe(Effect.flip);
+        const still = yield* stateOf("campaign");
+        yield* tasks.atomically(
+          Effect.gen(function* () {
+            yield* tasks.resumeTask(root.id, paused.value.revision, { at: later, by: you });
+            return yield* tasks.leaveNote(note(root.id));
+          }),
+        );
+        return { failed, still, after: yield* treeOf };
+      }),
+    );
+    expect(result.failed).toMatchObject({ reason: "task-missing" });
+    expect(result.still.state).toBe("paused");
+    expect(result.after.tasks[0]?.state).toBe("queued");
+    expect(result.after.notes.map((each) => each.text)).toEqual(["Back to work"]);
+  });
+});
+
 describe("a lead's retry and reassign", () => {
   // covers EX-001, OR-006
   it("[TC-OR-1446-12] refuses a retry while the last Attempt may still run", async () => {

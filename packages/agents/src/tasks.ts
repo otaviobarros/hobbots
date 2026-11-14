@@ -484,6 +484,13 @@ export class TaskRepository extends Context.Service<
      * returns the first and changes nothing; the same id with another Task or text is refused.
      */
     readonly leaveNote: (input: NewNote) => Changed<TaskNote>;
+    /**
+     * Runs `effect` in one transaction: every change in it commits together or none does, so a
+     * command whose change needs another written with it (a resume and its note, your message and the
+     * notes it sends) never leaves one without the other (STD-ARCH-014). Announce the changes once it
+     * returns, never inside it.
+     */
+    readonly atomically: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
     /** The questions no lead could answer that wait for you, oldest first. */
     readonly listWaitingQuestions: Effect.Effect<ReadonlyArray<WaitingQuestion>>;
     /** Members' failed Tasks that wait on you while their top Task goes on, oldest first (ADR 027). */

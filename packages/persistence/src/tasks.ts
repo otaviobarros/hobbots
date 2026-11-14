@@ -58,7 +58,7 @@ import {
   unmetCriteriaText,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
-import { SqlClient, type SqlError } from "effect/sql";
+import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { criteriaOf, makeCriteriaChanges, settleWaiverAsks, voidReplacedEvidence } from "./criteria-rows.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
@@ -507,6 +507,21 @@ export const TaskRepositoryLive = Layer.effect(
         }
       });
 
+    /** No turn starts and nothing is queued again under a Task you paused, until you resume it (#1446). */
+    const notUnderPause = (task: Task) =>
+      Effect.gen(function* () {
+        if (task.parentId === null) return;
+        const tree = yield* read.treeOf(task.rootId);
+        const parent = tree.find((each) => each.id === task.parentId);
+        const holder = parent === undefined ? undefined : pausedHolder(parent, tree);
+        if (holder !== undefined) {
+          return yield* refuse(
+            "parent-paused",
+            `Task ${holder.id} above it is paused; nothing starts under it until it is resumed`,
+          );
+        }
+      });
+
     /**
      * A retry reopens a Task only under ancestors that are still open and not being cancelled, and
      * reopens its Quest with it.
@@ -541,6 +556,7 @@ export const TaskRepositoryLive = Layer.effect(
           const before = yield* current(taskId, expected);
           if (yield* liveAttempt(before)) return yield* refuse("attempt-live", `Task ${taskId} has a live Attempt`);
           yield* notUnderCancel(before);
+          yield* notUnderPause(before);
           const quest = yield* reopen(before, revision);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt, yield* readiness(before)))),
@@ -665,6 +681,7 @@ export const TaskRepositoryLive = Layer.effect(
           const before = yield* current(taskId, expected);
           const last = yield* resumable(before, resume);
           yield* notUnderCancel(before);
+          yield* notUnderPause(before);
           const ready = yield* readiness(before);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at, ready))),
@@ -756,6 +773,7 @@ export const TaskRepositoryLive = Layer.effect(
           }
           const task = new Task({ ...(yield* orFail(TaskTransitions.retry(before, at))), revision });
           yield* noUnresolvedAttempt(before);
+          yield* notUnderPause(before);
           const quest = yield* reopen(before, revision);
           yield* saveTask(task);
           const [delegation] = yield* read.delegationsOf(task.id);
@@ -865,6 +883,7 @@ export const TaskRepositoryLive = Layer.effect(
           }
           const task = new Task({ ...(yield* orFail(TaskTransitions.reassign(before, ownerId, at))), revision });
           yield* handable(before, yield* newOwner(before, ownerId));
+          yield* notUnderPause(before);
           const quest = yield* reopen(before, revision);
           yield* saveTask(task);
           // A lead's reassign gives the new hob the authority worked out again for it (#1446).
@@ -1302,6 +1321,13 @@ export const TaskRepositoryLive = Layer.effect(
       );
 
     return TaskRepository.of({
+      atomically: (effect) =>
+        sql.withTransaction(effect).pipe(
+          Effect.catchIf(
+            (error): error is SqlError.SqlError => SqlError.isSqlError(error),
+            (error) => Effect.die(error),
+          ),
+        ) as typeof effect,
       createTask,
       startQuest,
       stopQuest,

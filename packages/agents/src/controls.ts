@@ -246,14 +246,34 @@ export class TaskControls extends Context.Service<
           yield* review;
         });
 
-      /** Resumes every Task under `taskId`, the Task included, that you paused, by `by`. */
-      const resumeTree = (taskId: TaskId, at: string, by: Actor) =>
+      /**
+       * Resumes every Task under `taskId`, the Task included, that you paused, by `by`. Each hob going
+       * back to work hears what changed meanwhile, on its own Task, which wakes it: the note is written
+       * in the resume's own transaction, so no Task is ever resumed without it (STD-ARCH-014).
+       */
+      const resumeTree = (taskId: TaskId, at: string, by: Actor, told: ReadonlyMap<TaskId, string>) =>
         Effect.gen(function* () {
           const { task, tree } = yield* subtree(taskId);
           for (const each of resumeTargets(task, tree)) {
-            yield* tasks
-              .resumeTask(each.id, each.revision, { at, by })
-              .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
+            const text = told.get(each.id);
+            const committed = yield* tasks
+              .atomically(
+                Effect.gen(function* () {
+                  const resumed = yield* tasks.resumeTask(each.id, each.revision, { at, by });
+                  if (text === undefined) return [resumed] as ReadonlyArray<Committed<unknown>>;
+                  const note = yield* tasks.leaveNote({
+                    id: NoteId.make(`resume:${each.id}:${each.pause?.at ?? at}`),
+                    taskId: each.id,
+                    text,
+                    createdAt: at,
+                    author: HUB_ACTOR,
+                    direct: true,
+                  });
+                  return [resumed, note];
+                }),
+              )
+              .pipe(Effect.mapError(refusedFor(taskId)));
+            for (const each of committed) yield* publisher.publish(each.entries);
           }
         });
 
@@ -270,22 +290,11 @@ export class TaskControls extends Context.Service<
             });
           }
           // Read before the moves, with each pause as it was, for what each hob is told.
-          const resumed = resumeTargets(task, tree);
           const at = yield* nowIso;
-          yield* fresh(resumeTree(taskId, at, session.actor));
-          // Each hob going back to work hears what changed meanwhile, on its own Task, which wakes it.
-          for (const each of resumeRecipients(resumed)) {
-            yield* tasks
-              .leaveNote({
-                id: NoteId.make(`resume:${each.id}:${each.pause?.at ?? at}`),
-                taskId: each.id,
-                text: resumeNote(each, tree, at),
-                createdAt: at,
-                author: HUB_ACTOR,
-                direct: true,
-              })
-              .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
-          }
+          const told = new Map(
+            resumeRecipients(resumeTargets(task, tree)).map((each) => [each.id, resumeNote(each, tree, at)] as const),
+          );
+          yield* fresh(resumeTree(taskId, at, session.actor, told));
           yield* review;
         });
 

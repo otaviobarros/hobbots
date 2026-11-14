@@ -1,7 +1,6 @@
 import type { HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import {
   type Agent,
-  type AnyOperation,
   type DelegationAuthority,
   hobActor,
   liveAttemptOn,
@@ -11,7 +10,7 @@ import {
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect } from "effect";
-import { type Authority, narrowBy, type PathSeparator } from "./authority.ts";
+import { type Authority, type PathSeparator, reassignedAuthority } from "./authority.ts";
 import { type CallScope, fromRecords, journalOf, memberTask, newId, refuse } from "./call-scope.ts";
 import { checkMember, findHob } from "./delegating.ts";
 
@@ -57,29 +56,19 @@ const controllable = (scope: CallScope, input: { readonly task_id: string; reado
     return task;
   });
 
-/**
- * The authority the hob taking a member's Task over works with (#1446): the lead's on the Task above,
- * narrowed by what the Task's delegation gave, then by the new hob's own policy, so it never holds
- * more than either. Only the answers the delegation gave stay overrides.
- */
+/** The authority the hob taking a member's Task over works with (#1446); see `reassignedAuthority`. */
 const authorityFor = (deps: Deps, scope: CallScope, parent: Task, given: DelegationAuthority, member: Agent) =>
   Effect.gen(function* () {
-    const lead = narrowBy(yield* deps.authority.of(scope, parent), given, deps.separator);
-    const operations = Object.keys(given.overrides) as ReadonlyArray<AnyOperation>;
-    const overrides = Object.fromEntries(
-      operations.map((operation) => [operation, lead.decisions[operation] ?? "deny"]),
-    );
-    const both = narrowBy(yield* deps.authority.own(member.id), { overrides, folders: lead.folders }, deps.separator);
-    if (both.folders.length === 0 && lead.folders.length > 0) {
+    const lead = yield* deps.authority.of(scope, parent);
+    const own = yield* deps.authority.own(member.id);
+    const result = reassignedAuthority(lead, given, own, deps.separator);
+    if (result._tag === "Unusable") {
       return yield* refuse(
         "authority-unusable",
-        `${member.name} may use none of the folders this Task works in (${lead.folders.join(", ")}), so it could not do it. Pick a hob whose folders hold them.`,
+        `${member.name} may use none of the folders this Task works in (${result.folders.join(", ")}), so it could not do it. Pick a hob whose folders hold them.`,
       );
     }
-    return {
-      overrides: Object.fromEntries(operations.map((operation) => [operation, both.decisions[operation] ?? "deny"])),
-      folders: [...both.folders],
-    } satisfies DelegationAuthority;
+    return result.authority;
   });
 
 /**

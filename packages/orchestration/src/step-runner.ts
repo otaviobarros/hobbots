@@ -32,6 +32,7 @@ import {
   carriedFrom,
   isTerminalTask,
   liveAttemptOn,
+  pausedHolder,
   resumedAs,
   type Task,
   type TaskId,
@@ -460,6 +461,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
+          // Nothing starts under a Task you paused, until you resume it (#1446).
+          if (pausedHolder(step, tree.tasks) !== undefined) continue;
           // A step starts once every step it comes after has completed (ADR 018).
           if (TaskReadiness.of(step, tree.tasks)._tag === "Ready") yield* start(step, tree);
         }

@@ -493,8 +493,10 @@ export class ChatService extends Context.Service<
             // reads it in the chat on its next turn without being woken for it (#1446).
             const mentioned = yield* mentions.targets(threadId, agent, content);
             if (mentioned.length > 0) {
-              const saved = yield* saveMessage(yield* yourMessage(thread, agent, content, askedSkill, false));
-              yield* mentions.send(saved, mentioned);
+              const saved = yield* mentions.send(
+                yield* yourMessage(thread, agent, content, askedSkill, false),
+                mentioned,
+              );
               return { userMessage: saved, assistantMessage: null };
             }
             // A message waits while its hob is paused, while a reply runs, and behind any message

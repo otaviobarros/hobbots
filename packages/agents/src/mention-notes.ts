@@ -24,32 +24,48 @@ export const makeMentionNotes = Effect.gen(function* () {
     });
 
   /**
-   * Leaves `message` as your note on each Task, straight to its owner, whose turn takes it at its
-   * next step, or its next turn, which it wakes. Its id follows from the message and the Task, so
-   * sending it again leaves no second note.
+   * Stores `message`, complete, with your note on each Task, straight to its owner, whose turn takes it
+   * at its next step, or its next turn, which it wakes. The message and its notes commit together, so
+   * the chat never shows a message as sent that reached nobody (STD-ARCH-014). Each note's id follows
+   * from the message and the Task, so sending it again leaves no second note.
    */
   const send = (message: Message, targeted: ReadonlyArray<{ readonly id: TaskNote["taskId"] }>) =>
-    Effect.forEach(targeted, (task) =>
-      Effect.gen(function* () {
-        if (Option.isNone(tasks)) return;
-        const committed = yield* tasks.value.leaveNote({
-          id: NoteId.make(`mention:${message.id}:${task.id}`),
-          taskId: task.id,
-          text: message.content,
-          createdAt: message.createdAt,
-          messageId: message.id,
-          delivery: "steer",
-          ...(message.actor === null ? {} : { author: message.actor }),
-          direct: true,
-        });
-        yield* bus.publish(committed.entries);
-      }).pipe(
-        // A Task that ended or changed hands meanwhile keeps the message in the chat only.
-        Effect.catchTag("TaskRefused", (refused) =>
-          Effect.logInfo(`Could not send a mention to Task ${task.id}: ${refused.message}`),
-        ),
-      ),
-    );
+    Effect.gen(function* () {
+      if (Option.isNone(tasks)) return message;
+      const store = tasks.value;
+      const { stored, notes } = yield* store.atomically(
+        Effect.gen(function* () {
+          const stored = yield* repo.upsertMessage(message);
+          const left = yield* Effect.forEach(targeted, (task) =>
+            store
+              .leaveNote({
+                id: NoteId.make(`mention:${message.id}:${task.id}`),
+                taskId: task.id,
+                text: message.content,
+                createdAt: message.createdAt,
+                messageId: message.id,
+                delivery: "steer",
+                ...(message.actor === null ? {} : { author: message.actor }),
+                direct: true,
+              })
+              .pipe(
+                Effect.map((note) => [note]),
+                // A Task that ended or changed hands meanwhile keeps the message in the chat only.
+                Effect.catchTag("TaskRefused", (refused) =>
+                  Effect.as(
+                    Effect.logInfo(`Could not send a mention to Task ${task.id}: ${refused.message}`),
+                    [] as const,
+                  ),
+                ),
+              ),
+          );
+          return { stored, notes: left.flat() };
+        }),
+      );
+      yield* bus.publish(stored.entries);
+      for (const note of notes) yield* bus.publish(note.entries);
+      return stored.value;
+    });
 
   return { targets, send } as const;
 });
