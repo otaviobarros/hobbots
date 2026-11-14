@@ -15,6 +15,7 @@ import {
   type Thread,
 } from "@hobbots/domain";
 import { testEngine } from "@hobbots/memory/testing";
+import { FAKE_SAY_ANSWERS_DIRECTIVE } from "@hobbots/runtimes";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type HubProcess, killHubProcesses, startHubProcess } from "./hub-process.ts";
 
@@ -93,7 +94,10 @@ const messages = (thread: Thread) => api<ReadonlyArray<Message>>("GET", `/thread
 /** Sends `lines` as one message and waits until its reply has ended. */
 const exchange = async (thread: Thread, ...lines: Array<string>) => {
   const before = (await messages(thread)).length;
-  await api("POST", `/threads/${thread.id}/messages`, { content: lines.join("\n") });
+  // Each reply repeats the hub's answers: these tests check the words of the Memory tools' answers,
+  // which a hob reads in the turn that made the call (#1560).
+  const content = [...lines, FAKE_SAY_ANSWERS_DIRECTIVE].join("\n");
+  await api("POST", `/threads/${thread.id}/messages`, { content });
   return eventually("the reply", async () => {
     const all = await messages(thread);
     const last = all.at(-1);

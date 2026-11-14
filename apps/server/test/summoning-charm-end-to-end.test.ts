@@ -73,6 +73,10 @@ import { SummoningCharm } from "../src/summoning.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the Summoning tools' answers, which a hob reads in the turn that made the call.";
+
 // #406 at hub level: the Summoning Charm's tools on the hub action pipeline (ADR 031, ADR 034), with
 // the hub's own composition, the real policy engine, the fake runtime and a fake GitHub Charm, on
 // SQLite or PostgreSQL (TestDatabase). Claude Code and Codex are offered the same tools through the
@@ -101,7 +105,7 @@ const recorded = (fake: RuntimeAdapterShape): RuntimeAdapterShape => ({
   },
 });
 const runtime = Layer.effect(RuntimeAdapter, Effect.map(RuntimeAdapter, recorded)).pipe(
-  Layer.provide(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node))),
+  Layer.provide(FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS }).pipe(Layer.provide(PolicyEngine.node))),
 );
 const Database = Layer.mergeAll(
   HobbotsRepositoryLive,

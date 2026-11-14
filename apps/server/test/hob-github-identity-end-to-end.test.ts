@@ -75,6 +75,10 @@ import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the GitHub Charm's answers, which a hob reads in the turn that made the call.";
+
 // A hob's own GitHub identity, end to end (ADR 022, #228): the hub's own composition over the HTTP
 // API, as `main.ts` builds it, with the fake runtime making the scripted Charm calls and a fake GitHub
 // on a local port serving the manifest flow, the app's endpoints, the REST API, the Git database API
@@ -241,7 +245,7 @@ beforeAll(async () => {
           // The Charms this hub holds, as the server declares them (ADR 031).
           Layer.succeed(CharmDeclarations, [GITHUB_CHARM]),
           NodeFolderChecks,
-          FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
+          FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS }).pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
           SecretRedaction.layer([]),
           ToolLogsLive(join(dataDir, "tool-logs")),

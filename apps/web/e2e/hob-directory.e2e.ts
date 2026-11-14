@@ -77,7 +77,8 @@ test("[TC-UX-1234-01] a hob's reply sees the visible hobs and reads one card wit
   const main = page.getByRole("main");
   await expect(main).toContainText("Other hobs on this hub");
   await expect(main).toContainText('good at "Release notes, short and plain."');
-  await send(page, ["Who on the team writes release notes?", 'fake:hub read_hob {"hob":"Quill"}']);
+  // The reply repeats read_hob's answer, so the test reads it in the turn that made the call (#1560).
+  await send(page, ["Who on the team writes release notes?", 'fake:hub read_hob {"hob":"Quill"}', "fake:say-answers"]);
   await expect(main).toContainText("read_hob: Hobbots collected this about the other hobs");
   await expect(main).toContainText("Reading a hob's card");
   await expect(main).not.toContainText("Wren");

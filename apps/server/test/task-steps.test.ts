@@ -5,6 +5,7 @@ import {
   HobTools,
   type PromptRequest,
   RuntimeAdapter,
+  type RuntimeEvent,
   SkillFiles,
   SkillLibrary,
   TaskRepository,
@@ -38,7 +39,7 @@ import {
 } from "@hobbots/orchestration";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FAKE_SAY_ANSWERS_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { makeSkillLibraryFake } from "@hobbots/skills/testing";
 import { Deferred, Effect, Layer, ManagedRuntime, Option, Schedule, Scheduler, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
@@ -52,10 +53,15 @@ const now = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const STEP_MARK = "This is step ";
 
-/** The fake runtime, except that a step's session waits until the test lets it go, by its brief's first line. */
+/**
+ * The fake runtime, except that a step's session waits until the test lets it go, by its brief's
+ * first line, and a chat turn the test holds by its prompt's first line ends only once let go.
+ */
 interface Gates {
   readonly requests: Array<PromptRequest>;
   readonly open: (name: string) => Effect.Effect<void>;
+  /** Holds the end of the chat turn whose prompt starts with `name`, until `open(name)`. */
+  readonly hold: (name: string) => Effect.Effect<void>;
   readonly waiting: () => ReadonlyArray<string>;
 }
 
@@ -68,8 +74,20 @@ const gated = (gates: Map<string, Deferred.Deferred<void>>, requests: Array<Prom
         ...fake,
         sendPrompt: (request) => {
           requests.push(request);
-          if (!request.prompt.includes(STEP_MARK)) return fake.sendPrompt(request);
           const name = request.prompt.split("\n")[0] ?? "";
+          if (!request.prompt.includes(STEP_MARK)) {
+            const held = gates.get(name);
+            return held === undefined
+              ? fake.sendPrompt(request)
+              : fake
+                  .sendPrompt(request)
+                  .pipe(
+                    Stream.mapEffect(
+                      (event): Effect.Effect<RuntimeEvent> =>
+                        event._tag === "Completed" ? Effect.as(Deferred.await(held), event) : Effect.succeed(event),
+                    ),
+                  );
+          }
           return Stream.unwrap(
             Effect.gen(function* () {
               const gate = gates.get(name) ?? (yield* Deferred.make<void>());
@@ -228,6 +246,7 @@ const setUp = (options: Options = {}) => {
   const control: Gates = {
     requests,
     open: (name) => Effect.flatMap(gate(name), (made) => Deferred.succeed(made, undefined)),
+    hold: (name) => Effect.asVoid(gate(name)),
     // Steps whose session asked to start and still waits for the test.
     waiting: () =>
       stepsAsked()
@@ -277,6 +296,9 @@ const reply = (threadId: ThreadId) =>
     (last): last is Message => last?.role === "assistant" && last.status !== "streaming" && last.status !== "stopping",
     { what: "the latest reply to end" },
   );
+
+/** `prompt`, with the reply asked to repeat the hub's answers, for a test that reads a refusal's words (#1560). */
+const saying = (prompt: string) => `${prompt}\n${FAKE_SAY_ANSWERS_DIRECTIVE}`;
 
 const send = (threadId: ThreadId, prompt: string) =>
   Effect.gen(function* () {
@@ -554,22 +576,39 @@ describe("a Task's steps in fresh sessions", () => {
       send(first.id, hub("plan_steps", { key: "plan", steps: [{ brief: "North one" }, { brief: "North two" }] })),
     );
     await run(waitFor("the first step to start", () => control.waiting().length === 1));
-    // The second Quest's request waits for the slot, queued, behind the step that holds it.
+    // The second Quest's request waits for the slot, queued, behind the step that holds it. Its turn
+    // is held until its first step waits too, so which asks first is never left to timing (#1560).
+    const south = "Plan the south";
+    await run(control.hold(south));
     await run(
       ChatService.use((chat) =>
         chat.sendPrompt(
           second.id,
-          hub("plan_steps", { key: "plan", steps: [{ brief: "South one" }, { brief: "South two" }] }),
+          [south, hub("plan_steps", { key: "plan", steps: [{ brief: "South one" }, { brief: "South two" }] })].join(
+            "\n",
+          ),
         ),
       ),
     );
-    const waiting = await run(
-      Effect.flatMap(Effect.serviceOption(TurnSlots), (slots) => Option.getOrThrow(slots).report),
-    );
+    const report = Effect.flatMap(Effect.serviceOption(TurnSlots), (slots) => Option.getOrThrow(slots).report);
+    const waiting = await run(report);
     expect(waiting.waiting.map((each) => each.waitingOn)).toEqual(["runtime", "runtime"]);
 
     // Each step's end hands the slot on: the other Quest's turn goes first each time.
     for (const name of ["North one", "South one", "North two", "South two"]) {
+      if (name === "South one") {
+        await run(
+          waitUntil(
+            report,
+            (now) =>
+              new Set(now.waiting.flatMap((each) => (each.id.startsWith("step:") ? [each.quest] : []))).size === 2,
+            {
+              what: "both Quests' next steps to wait",
+            },
+          ),
+        );
+        await run(control.open(south));
+      }
       await run(waitFor(`${name} to start`, () => control.waiting().includes(name)));
       expect(control.waiting()).toEqual([name]);
       await run(control.open(name));
@@ -645,7 +684,9 @@ describe("a Task's steps in fresh sessions", () => {
   it("[TC-OR-032] a chat turn's report outside any Task is refused, and starts no Task", async () => {
     const { run } = setUp();
     const thread = await run(seed);
-    const answer = await run(send(thread.id, hub("report_checkpoint", { key: "r", kind: "progress", summary: "x" })));
+    const answer = await run(
+      send(thread.id, saying(hub("report_checkpoint", { key: "r", kind: "progress", summary: "x" }))),
+    );
     expect(answer.content).toContain("Refused (no-task)");
     expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)))).toEqual([]);
   });
@@ -778,11 +819,13 @@ describe("a Task's steps in fresh sessions", () => {
     const { run } = setUp({ taskLimits: { ...DEFAULT_TASK_TOOL_LIMITS, maxOpenTasksPerHob: 1 } });
     const first = await run(seed);
     const started = await run(
-      send(first.id, `Plan the launch\n${hub("start_quest", { key: "launch", goal: "Launch" })}`),
+      send(first.id, saying(`Plan the launch\n${hub("start_quest", { key: "launch", goal: "Launch" })}`)),
     );
     expect(started.content).not.toContain("Refused");
     const second = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
-    const refused = await run(send(second.id, `Plan the sale\n${hub("start_quest", { key: "sale", goal: "Sale" })}`));
+    const refused = await run(
+      send(second.id, saying(`Plan the sale\n${hub("start_quest", { key: "sale", goal: "Sale" })}`)),
+    );
     expect(refused.content).toContain("Refused (concurrency-limit)");
     // The refused call leaves no Task behind in the second conversation.
     expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(second.id)))).toEqual([]);
@@ -876,7 +919,7 @@ describe("a Task's steps in fresh sessions", () => {
         ),
     };
     const refused = await run(
-      send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "Launched" })),
+      send(thread.id, saying(hub("complete_task", { delivered: true, key: "done", summary: "Launched" }))),
     );
     expect(control.requests.at(-1)?.briefing).toContain(", active: Outline.");
     expect(refused.content).toContain("Refused (items-open)");

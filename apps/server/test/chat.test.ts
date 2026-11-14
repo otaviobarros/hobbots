@@ -6,7 +6,7 @@ import { Agent, AgentId, EMPTY_HOB_POLICY, isInProgress, Message, MessageId, typ
 import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
+import { FAKE_DIRECTIVES, FAKE_SAY_ANSWERS_DIRECTIVE, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
 import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schedule } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -399,7 +399,11 @@ describe("tool calls in a reply", () => {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
       const thread = yield* chat.createThread(HOB_ID);
-      yield* chat.sendPrompt(thread.id, 'How many issues?\nfake:hub github_search {"kind":"issue"}');
+      // The reply repeats the Charm's answer, so the test reads it in the turn that made the call (#1560).
+      yield* chat.sendPrompt(
+        thread.id,
+        `How many issues?\nfake:hub github_search {"kind":"issue"}\n${FAKE_SAY_ANSWERS_DIRECTIVE}`,
+      );
       return yield* repo.listMessages(thread.id).pipe(
         Effect.flatMap((messages) => {
           const last = messages.at(-1);
