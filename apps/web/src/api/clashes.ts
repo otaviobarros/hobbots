@@ -19,19 +19,28 @@ export const clashesQuery = (threadId: ThreadId) =>
 
 export type ClaimEvent = Extract<
   HobbotsEvent,
-  { readonly _tag: "ClaimMade" | "ClaimContested" | "ClaimCleared" | "ClaimTakenOver" | "ClaimReleased" }
+  {
+    readonly _tag:
+      | "ClaimMade"
+      | "ClaimContested"
+      | "ClaimCleared"
+      | "ClaimTakenOver"
+      | "ClaimGivenBack"
+      | "ClaimReleased";
+  }
 >;
 const CLAIM_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ClaimMade",
   "ClaimContested",
   "ClaimCleared",
   "ClaimTakenOver",
+  "ClaimGivenBack",
   "ClaimReleased",
 ]);
 export const isClaimEvent = (event: HobbotsEvent): event is ClaimEvent => CLAIM_EVENTS.has(event._tag);
 
 /**
- * A claim was made, contested, cleared, taken over or released. A claim names its Task, not the thread, and a
+ * A claim was made, contested, cleared, taken over, given back or released. A claim names its Task, not the thread, and a
  * clash can touch two camps, so every thread's clashes are read again (STD-REACT-012), with the
  * claims of the claim's Task (#1449).
  */

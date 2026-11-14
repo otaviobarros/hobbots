@@ -1,4 +1,4 @@
-import type { AgentId } from "@hobbots/domain";
+import type { AgentId, Thread } from "@hobbots/domain";
 import { Context, type Effect, Layer, Semaphore } from "effect";
 
 /**
@@ -24,3 +24,15 @@ export class HobAdmission extends Context.Service<
     return HobAdmission.of({ withHob: (agentId, effect) => Semaphore.withPermit(lock(agentId), effect) });
   });
 }
+
+/**
+ * Runs `effect` under the lock of the hob `thread` belongs to, which every turn and message there is
+ * admitted under (ADR 039), whichever hob speaks. The one place a thread's lock is named.
+ */
+export const withThreadLock = <A, E, R>(
+  admission: HobAdmission["Service"],
+  thread: Pick<Thread, "agentId">,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  // standards-allow STD-ARCH-021: a thread's lock is the hob's it belongs to
+  admission.withHob(thread.agentId, effect);

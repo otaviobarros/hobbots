@@ -28,17 +28,20 @@ const suggestedFrom = (suggestion: CampSuggestion, chapter: Chapter): CampFrom =
 /**
  * The hub's camp suggestions in a chat (ADR 037, #1385): a card for each open one, with Make it a
  * camp, which opens Make a camp with its chapter coming along, and Keep it in my chat, after which
- * it never comes back.
+ * it never comes back. While the chat is `busy`, as while a reply runs there, its chapters cannot
+ * move, so the cards wait and show again once it is idle.
  */
 export function CampSuggestions({
   hob,
   thread,
   chapters,
+  busy,
   onMake,
 }: {
   hob: Agent;
   thread: Thread;
   chapters: ReadonlyArray<Chapter>;
+  busy: boolean;
   onMake: (from: CampFrom) => void;
 }) {
   const suggestions = useQuery({ ...campSuggestionsQuery(thread.id), enabled: thread.kind === "chat" });
@@ -46,7 +49,7 @@ export function CampSuggestions({
   const kept = keep.data === undefined ? undefined : chapters.find((each) => each.id === keep.data.chapterId);
   return (
     <>
-      {(suggestions.data ?? []).map((suggestion) => {
+      {(busy ? [] : (suggestions.data ?? [])).map((suggestion) => {
         const chapter = chapters.find((each) => each.id === suggestion.chapterId);
         return chapter === undefined ? null : (
           <SuggestionCard

@@ -8,6 +8,7 @@ import {
   checkpointText,
   choicesText,
   claimClashText,
+  claimsGivenBackText,
   claimsTakenText,
   type EventEnvelope,
   type HobProposal,
@@ -202,11 +203,16 @@ const arrivalText = (payload: Exclude<BackpackPayload, { readonly _tag: "task" |
   }
 };
 
-/** What the hub itself sent a hob, as its memory keeps it: how a proposal ended, a clash of claims (ADR 037), or your takeover (#1449). */
+/**
+ * What the hub itself sent a hob, as its memory keeps it: how a proposal ended, a clash of claims
+ * (ADR 037), your takeover (#1449), or giving its claims back (#1538).
+ */
 const hubArrivalText = (
   payload: Extract<
     BackpackPayload,
-    { readonly _tag: "skill-proposal" | "hob-proposal" | "claim-clash" | "claims-taken" }
+    {
+      readonly _tag: "skill-proposal" | "hob-proposal" | "claim-clash" | "claims-taken" | "claims-given-back";
+    }
   >,
 ): string => {
   switch (payload._tag) {
@@ -216,6 +222,8 @@ const hubArrivalText = (
       return claimClashText(payload.claim, payload.clashes);
     case "claims-taken":
       return claimsTakenText(payload.taskId, payload.claims);
+    case "claims-given-back":
+      return claimsGivenBackText(payload.taskId, payload.claims);
     default:
       return hobProposalText(payload.proposal);
   }

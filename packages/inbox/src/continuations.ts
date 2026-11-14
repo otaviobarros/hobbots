@@ -5,6 +5,7 @@ import {
   checkpointText,
   choicesText,
   claimClashText,
+  claimsGivenBackText,
   claimsTakenText,
   hobProposalOutcomeText,
   type Question,
@@ -176,13 +177,15 @@ const describeArrival = (item: BackpackItem, results: ResultsIn): string => {
 };
 
 /**
- * A claim the hub tells of (ADR 037): a clash, or your takeover of a Task's claims (#1449); else a
+ * A claim the hub tells of (ADR 037): a clash, your takeover of a Task's claims (#1449) or giving
+ * them back (#1538); else a
  * routine item, as the digest lists it: a Task's progress, or how a skill proposal ended (ADR 029).
  */
 const describeRoutine = (item: BackpackItem): string => {
   const payload = item.payload;
   if (payload._tag === "claim-clash") return claimClashText(payload.claim, payload.clashes);
   if (payload._tag === "claims-taken") return claimsTakenText(payload.taskId, payload.claims);
+  if (payload._tag === "claims-given-back") return claimsGivenBackText(payload.taskId, payload.claims);
   return payload._tag === "skill-proposal" ? skillProposalText(payload.proposal) : (progressDigest([item])[0] ?? "");
 };
 

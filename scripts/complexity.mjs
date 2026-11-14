@@ -55,13 +55,15 @@ const nameOf = (node, parent) => {
   return "anonymous function";
 };
 
-const lineStarts = (source) => {
+/** Where each line of `source` starts, for `lineOf`. Shared with scripts/implicit-state.mjs. */
+export const lineStarts = (source) => {
   const starts = [0];
   for (let i = 0; i < source.length; i++) if (source[i] === "\n") starts.push(i + 1);
   return starts;
 };
 
-const lineOf = (starts, offset) => {
+/** The 1-based line of an offset, by a binary search over `lineStarts`. */
+export const lineOf = (starts, offset) => {
   let low = 0;
   let high = starts.length - 1;
   while (low < high) {

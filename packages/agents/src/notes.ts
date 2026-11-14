@@ -9,7 +9,7 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
@@ -84,7 +84,7 @@ export class Notes extends Context.Service<
       // order and no archive lands between the check and the write.
       const write = (threadId: ThreadId, key: MessageId, content: string) =>
         Effect.flatMap(threadOf(threadId), (thread) =>
-          admission.withHob(thread.agentId, writeIn(threadId, key, content)),
+          withThreadLock(admission, thread, writeIn(threadId, key, content)),
         );
 
       const writeIn = Effect.fn("Notes.write")(function* (threadId: ThreadId, key: MessageId, content: string) {

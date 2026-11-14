@@ -1,11 +1,19 @@
-import { type ClaimOutcome, ClaimRegister, type ClaimRequest, type TakeOverRequest } from "@hobbots/agents";
+import {
+  type ClaimOutcome,
+  ClaimRegister,
+  type ClaimRequest,
+  type GiveBackRequest,
+  type TakeOverRequest,
+} from "@hobbots/agents";
 import {
   AgentId,
   Claim,
   ClaimClash,
   Claims,
   ClashSide,
+  claimsClash,
   clashGroups,
+  hobActor,
   isSequenceScope,
   type JournaledEvent,
   pickNumber,
@@ -32,7 +40,7 @@ interface TaskHolder {
  * claims for one number, from any hub process sharing the database, take turns: the second reads
  * the first and gets the next number. Unique indexes hold each number once per folder of a
  * repository, ever, and a path or branch once per Task. A claim you take over (#1449) keeps its row,
- * with you as its actor.
+ * with you as its actor, and goes back to the Task's hob as its actor when you give it back (#1538).
  */
 export const ClaimRegisterLive = Layer.effect(
   ClaimRegister,
@@ -182,8 +190,65 @@ export const ClaimRegisterLive = Layer.effect(
         }),
       );
 
+    /**
+     * Gives the Task's taken claims back to the hob that owns it now (#1538), each at its own
+     * sequence with its own event, in one transaction: held, or contested when another Task's open
+     * claim clashes with it, and each held claim of another Task that clashes with it is contested
+     * too. Its hob hears of it through its backpack, from the same change. A Task with nothing
+     * taken changes nothing.
+     */
+    const giveBack = (request: GiveBackRequest) =>
+      change<ReadonlyArray<Claim>, never>((first) =>
+        Effect.gen(function* () {
+          const [owner] = yield* sql<{ readonly ownerId: string }>`SELECT owner_id FROM tasks
+            WHERE id = ${request.taskId}`;
+          const taken = yield* claimsFromRows(
+            yield* sql<ClaimRow>`SELECT * FROM claims WHERE task_id = ${request.taskId} AND state = 'taken'
+              ORDER BY created_at, id`,
+          );
+          if (owner === undefined || taken.length === 0) {
+            return { value: [] as ReadonlyArray<Claim>, events: [] as ReadonlyArray<JournaledEvent> };
+          }
+          const repositories = [...new Set(taken.map((claim) => claim.repository))];
+          const open = yield* claimsFromRows(
+            yield* sql<ClaimRow>`SELECT * FROM claims WHERE state <> 'released' AND ${sql.in("repository", repositories)}
+              ORDER BY created_at, id`,
+          );
+          const to = hobActor(AgentId.make(owner.ownerId));
+          const given = taken
+            .map((claim) => ({
+              claim,
+              event: {
+                _tag: "GiveBack" as const,
+                at: request.at,
+                by: request.by,
+                to,
+                clashes: Claims.clashesOf(claim, open).length > 0,
+              },
+            }))
+            .filter(({ claim, event }) => Claims.can(claim, event))
+            .map(({ claim, event }, index) => movedClaim(claim, event, first + index));
+          // A held claim of another Task that clashes with one given back is contested now, as when
+          // it was made; while it was yours, the claim that clashed with it was contested instead.
+          const contested = open
+            .filter((other) => Claims.contestable(other) && given.some((claim) => claimsClash(claim, other)))
+            .map((other, index) =>
+              movedClaim(other, { _tag: "Contest", at: request.at }, first + given.length + index),
+            );
+          for (const claim of [...given, ...contested]) yield* saveClaim(sql, claim);
+          return {
+            value: given,
+            events: [
+              ...given.map((claim) => ({ _tag: "ClaimGivenBack" as const, claim, by: request.by })),
+              ...contested.map((claim) => ({ _tag: "ClaimContested" as const, claim })),
+            ],
+          };
+        }),
+      );
+
     return ClaimRegister.of({
       takeOver,
+      giveBack,
       takenIn: (repository) =>
         sqlOrDie(
           Effect.flatMap(

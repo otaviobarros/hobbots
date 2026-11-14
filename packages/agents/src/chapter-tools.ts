@@ -1,5 +1,5 @@
 import {
-  AgentId,
+  type AgentId,
   ChapterId,
   type ChapterRefusal,
   hobActor,
@@ -12,6 +12,7 @@ import {
   READ_MESSAGE_TOOL,
   ReadMessageInput,
   readMessageJsonSchema,
+  replyHobOf,
   START_CHAPTER_DESCRIPTION,
   START_CHAPTER_LABEL,
   START_CHAPTER_TOOL,
@@ -63,12 +64,12 @@ const REFUSALS: Partial<Record<ChapterRefusal, string>> = {
 /** The id of the chapter a turn's `start_chapter` makes: one per reply, so a retried call starts none twice. */
 export const turnChapterId = (messageId: MessageId): ChapterId => ChapterId.make(`${messageId}:chapter`);
 
-/** Who wrote a message, as `read_message` names them. */
-/** Who wrote `message`, as `reader` reads it: you, the user, or another hob of the camp by name (ADR 039). */
-const authorFor = (message: Message, reader: AgentId, owner: AgentId, nameOf: (hob: AgentId) => string) => {
-  if (message.role === "user") return "the user";
-  // A reply saved before authors were recorded is the thread's own hob's.
-  const writer = message.actor?.kind === "hob" ? AgentId.make(message.actor.id) : owner;
+/**
+ * Who wrote `message`, as `reader` reads it: you, the user, or another hob of the camp by name
+ * (ADR 039). `writer` is the hob that wrote a reply, as `replyHobOf` names it.
+ */
+const authorFor = (message: Message, reader: AgentId, writer: AgentId | null, nameOf: (hob: AgentId) => string) => {
+  if (message.role === "user" || writer === null) return "the user";
   return writer === reader ? "you" : `${nameOf(writer)}, another hob`;
 };
 
@@ -103,6 +104,7 @@ export const ChapterToolsLive = Layer.effect(
     const members = yield* Effect.serviceOption(ThreadMemberRepository);
     // A hob reads the messages of its own threads and of the camps it is an active member of (ADR 039).
     const readsIn = (thread: Thread, turn: CharmTurn) =>
+      // standards-allow STD-ARCH-021: the hob a thread belongs to reads it, as its owner
       thread.agentId === turn.agentId
         ? Effect.succeed(true)
         : Option.isNone(members)
@@ -174,9 +176,12 @@ export const ChapterToolsLive = Layer.effect(
             message: `Message ${input.message_id} has ${parts === 1 ? "1 part" : `${parts} parts`}, so there is no part ${part}.`,
           });
         }
-        const writer = found.value.actor?.kind === "hob" ? AgentId.make(found.value.actor.id) : thread.value.agentId;
-        const name = Option.match(yield* repo.findAgent(writer), { onNone: () => "a hob", onSome: (hob) => hob.name });
-        const author = authorFor(found.value, turn.agentId, thread.value.agentId, () => name);
+        const writer = replyHobOf(found.value, thread.value);
+        const name =
+          writer === null
+            ? "a hob"
+            : Option.match(yield* repo.findAgent(writer), { onNone: () => "a hob", onSome: (hob) => hob.name });
+        const author = authorFor(found.value, turn.agentId, writer, () => name);
         return { text: messageAnswer(found.value, content, part, author), refused: false } satisfies HubToolAnswer;
       });
 

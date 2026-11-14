@@ -31,12 +31,13 @@ import {
   titleFromPrompt,
 } from "@hobbots/domain";
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { runtimeAdapters } from "./runtime.ts";
+import { type Speaker, speakerIn } from "./speaker.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
 import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
@@ -104,11 +105,6 @@ interface TurnStart {
   readonly carry?: Carry | null;
   /** False when whoever started the turn starts what waits next, once it has settled the turn's work. */
   readonly drain?: boolean;
-  /**
-   * Why the turn runs, as the floor's `TurnRequest` records it (#1461). Without one, it is worked
-   * out from the turn's prompt with `turnReasonOf`.
-   */
-  readonly reason?: TurnReason | null;
   /**
    * The slot the turn runs in (#1448), freed when it ends. Absent for a turn that carries backpack
    * work, which runs in its dispatch's slot.
@@ -179,6 +175,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     };
     const scope = yield* Effect.scope;
     const turns = yield* FiberMap.make<ThreadId>();
+    // The hob of each thread's turn, from when `TurnStarted` announces it until `TurnEnded` does, so
+    // a read made on either event names the hob whose runtime runs there, a member's in a camp too.
+    const turnHobs = yield* Ref.make(
+      HashMap.empty<ThreadId, { readonly agentId: AgentId; readonly turn: Fiber.Fiber<unknown, unknown> }>(),
+    );
     // When each hob's running work was last stopped, in epoch milliseconds, so a member turn that
     // registered after the sweep still stops (ADR 039).
     const stops = yield* Ref.make(HashMap.empty<AgentId, number>());
@@ -319,13 +320,13 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // from here until the turn's drain releases it, so later prompts queue behind it.
     // `saveReply` stores the new streaming reply; the turn starts only once it is saved.
     const beginTurn = (
-      thread: Thread,
-      agent: Agent,
+      speaker: Speaker,
       prompt: Message | string,
       saveReply: (reply: Message) => Effect.Effect<Message | null> = saveMessage,
       start: TurnStart = {},
     ) =>
       Effect.gen(function* () {
+        const { thread, agent } = speaker;
         const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
         const brain = brainFor(thread, config);
         const now = yield* nowIso;
@@ -356,7 +357,15 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             : new Thread({ ...latest, updatedAt: now }),
         ).pipe(Effect.map(Option.getOrElse(() => thread)));
         const content = yours === null ? (prompt as string) : yours.content;
-        const turn = yield* launch(agent, config, updated, content, saved, yours?.id ?? null, null, start);
+        const turn = yield* launch(
+          { ...speaker, thread: updated },
+          config,
+          content,
+          saved,
+          yours?.id ?? null,
+          null,
+          start,
+        );
         return { saved, turn };
       }).pipe(Effect.onError(() => start.slot?.release ?? Effect.void));
 
@@ -365,9 +374,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // `continued` the reply Continue resumes, as it was before this turn.
     // Runs under the hob's lock.
     const launch = (
-      agent: Agent,
+      given: Speaker,
       config: AgentConfiguration,
-      found: Thread,
       prompt: string,
       saved: Message,
       promptId: MessageId | null,
@@ -376,7 +384,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     ) =>
       Effect.gen(function* () {
         const launchedAt = yield* nowMillis;
-        const thread = withoutStaleSession(found, brainFor(found, config).runtime, agent.id);
+        const { agent } = given;
+        const thread = withoutStaleSession(given.thread, brainFor(given.thread, config).runtime, agent.id);
+        const speaker: Speaker = { ...given, thread };
         const brain = brainFor(thread, config);
         // A note to self never reaches a turn (ADR 037).
         const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));
@@ -388,11 +398,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         // the live chapter since. Only the live chapter is ever replayed (ADR 037).
         const inChapter = before.filter((m) => m.chapterId === thread.liveChapterId);
         const told = switched ? [...inChapter, continued] : inChapter;
-        const people = yield* packPeople(thread, agent.id);
+        const people = yield* packPeople(speaker);
         const reason =
-          start.reason ??
+          speaker.reason ??
           turnReasonOf(transcript.find((m) => m.id === promptId) ?? null, thread, people.rows, agent.id, people.quest);
-        const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched, people, reason);
+        const briefed = yield* brief(speaker, brain.runtime, told, switched, people, reason);
         const pack =
           liveSession(thread, brain.runtime, agent.id) === undefined
             ? yield* packSources(thread, told, before, people, reason)
@@ -406,12 +416,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         const stopped = lastReply === undefined ? null : stoppedCommands(lastReply.steps);
         const briefing =
           [briefed, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
-        const changed = yield* instructionsChanged(
-          thread,
-          brain.runtime,
-          agent,
-          systemInstructions(config.name, config),
-        );
+        const changed = yield* instructionsChanged(speaker, brain.runtime, systemInstructions(config.name, config));
         // Registered before the turn starts, so a stop sent right away still reaches it.
         const reply: Reply = {
           current: yield* Ref.make(saved),
@@ -432,9 +437,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           turns,
           thread.id,
           runTurn(
-            agent,
+            speaker,
             config,
-            thread,
             brain,
             prompt,
             { text: briefing, pack },
@@ -452,7 +456,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           ),
         );
         yield* announceTurn(thread.id, agent.id, turn);
-        yield* stopIfLeft(thread, agent.id, launchedAt);
+        yield* stopIfLeft(speaker, launchedAt);
         return { turn, reply };
       }).pipe(Effect.onError(() => start.slot?.release ?? Effect.void));
 
@@ -461,9 +465,10 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // stops when the hob is gone, when its work was stopped since the turn launched, or when it
     // retired with its work stopped. A pause, or a retirement that lets running replies finish,
     // leaves the turn to finish (ADR 039).
-    const stopIfLeft = (thread: Thread, agentId: AgentId, launchedAt: number) =>
+    const stopIfLeft = ({ thread, agent, role }: Speaker, launchedAt: number) =>
       Effect.gen(function* () {
-        if (agentId === thread.agentId) return;
+        if (role === "owner") return;
+        const agentId = agent.id;
         const stopped = HashMap.get(yield* Ref.get(stops), agentId);
         const left = memberTurnLeft(yield* repo.findAgent(agentId), Option.getOrNull(stopped), launchedAt);
         if (left) yield* endTurn(thread.id);
@@ -487,9 +492,18 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.gen(function* () {
         // A turn that already ended never joined the map for long; its end is announced below.
         if (yield* FiberMap.has(turns, threadId)) {
+          yield* Ref.update(turnHobs, HashMap.set(threadId, { agentId, turn }));
           yield* bus.publishTransient({ _tag: "TurnStarted", threadId, agentId });
         }
+        // Only this turn's entry goes: the thread's next turn may have started meanwhile.
+        const leave = Ref.update(turnHobs, (all) =>
+          Option.match(HashMap.get(all, threadId), {
+            onNone: () => all,
+            onSome: (entry) => (entry.turn === turn ? HashMap.remove(all, threadId) : all),
+          }),
+        );
         yield* Fiber.await(turn).pipe(
+          Effect.andThen(leave),
           Effect.andThen(bus.publishTransient({ _tag: "TurnEnded", threadId, agentId })),
           Effect.forkIn(scope),
         );
@@ -507,14 +521,16 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // keeps its rules for open Tasks.
     const activeHobs = (thread: Thread, hobIds: ReadonlyArray<AgentId>) =>
       Effect.gen(function* () {
+        // standards-allow STD-ARCH-021: the hob a thread belongs to keeps its own rules for open Tasks
+        const owner = thread.agentId;
         const found = yield* Effect.forEach([...new Set(hobIds)], (hobId) => repo.findAgent(hobId));
         const retiringMember = found.some(
-          (agent) => Option.isSome(agent) && agent.value.retiring !== null && agent.value.id !== thread.agentId,
+          (agent) => Option.isSome(agent) && agent.value.retiring !== null && agent.value.id !== owner,
         );
         const trees =
           retiringMember && Option.isSome(taskRecords) ? yield* taskRecords.value.readThreadTrees(thread.id) : [];
         const mayWork = (agent: Agent) =>
-          agent.retiring === null || agent.id === thread.agentId || openThreadTask(trees, agent.id) !== undefined;
+          agent.retiring === null || agent.id === owner || openThreadTask(trees, agent.id) !== undefined;
         const takesWork = (agent: Agent) => agent.status === "active" && mayWork(agent);
         return new Map(
           found.flatMap((agent) =>
@@ -539,21 +555,24 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       });
 
     // The hobs that speak in the thread: its own hob, then its active member hobs as they joined.
-    const hobsOf = (thread: Thread) =>
-      Option.isNone(members)
-        ? Effect.succeed<ReadonlyArray<AgentId>>([thread.agentId])
+    const hobsOf = (thread: Thread) => {
+      // standards-allow STD-ARCH-021: the hob a thread belongs to speaks there first, and is listed once
+      const owner = thread.agentId;
+      return Option.isNone(members)
+        ? Effect.succeed<ReadonlyArray<AgentId>>([owner])
         : members.value
             .list(thread.id)
             .pipe(
               Effect.map((list) => [
-                thread.agentId,
+                owner,
                 ...list.flatMap((member) =>
-                  member.actor.kind === "hob" && ThreadMembers.isActive(member) && member.actor.id !== thread.agentId
+                  member.actor.kind === "hob" && ThreadMembers.isActive(member) && member.actor.id !== owner
                     ? [AgentId.make(member.actor.id)]
                     : [],
                 ),
               ]),
             );
+    };
 
     // The thread and the hob `agentId` names, the thread's own by default, when that hob speaks
     // there and takes work, and the thread takes new turns.
@@ -561,6 +580,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.gen(function* () {
         const thread = yield* repo.findThread(threadId);
         if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return null;
+        // standards-allow STD-ARCH-021: with no hob named, the hob the thread belongs to
         const hobId = agentId ?? thread.value.agentId;
         if (!(yield* hobsOf(thread.value)).includes(hobId)) return null;
         const agent = (yield* activeHobs(thread.value, [hobId])).get(hobId);
@@ -573,7 +593,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         .findThread(threadId)
         .pipe(
           Effect.flatMap((thread) =>
-            Option.isNone(thread) ? effect : admission.withHob(thread.value.agentId, effect),
+            Option.isNone(thread) ? effect : withThreadLock(admission, thread.value, effect),
           ),
         );
 
@@ -616,8 +636,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         }
         const { request: next, agent } = chosen;
         // A turn that waits for a slot leaves the line saying who waits.
-        // The turn runs for the request, which says why (#1465).
-        const begin = yield* withSlot(found.value, agent, { ...start, reason: reasonOf(next) });
+        const begin = yield* withSlot(found.value, agent, start);
         if (begin === null) return yield* lineUp(threadId).pipe(Effect.as(null));
         yield* step(threadId, { _tag: "Unchoose", messageId: null });
         const message = yield* repo.findMessage(next.messageId);
@@ -627,10 +646,12 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         }
         // A queued message starts with its first request's turn; a message already said, as one
         // that several hobs owe, is the prompt of each later one.
+        // The turn runs for the request, which says why (#1465).
+        const speaker = speakerIn(found.value, agent, reasonOf(next));
         const started = QueuedMessageTransitions.start(message.value);
         return started instanceof Message
-          ? yield* beginTurn(found.value, agent, started, (reply) => saveStarted(started, reply, [next.id]), begin)
-          : yield* beginTurn(found.value, agent, message.value, (reply) => saveSpeaking(reply, [next.id]), begin);
+          ? yield* beginTurn(speaker, started, (reply) => saveStarted(started, reply, [next.id]), begin)
+          : yield* beginTurn(speaker, message.value, (reply) => saveSpeaking(reply, [next.id]), begin);
       });
 
     // Starts what waits in the thread (ADR 019), if its hob takes work. Runs under the hob's lock
@@ -683,6 +704,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const carrierOf = (service: Continuations["Service"], thread: Thread) =>
       Effect.gen(function* () {
         const found = yield* withWork(service, thread);
+        // standards-allow STD-ARCH-021: with no work waiting, the hob the thread belongs to reads the records again
         if (found !== null || (yield* holds(thread.id, thread.agentId))) return found;
         return yield* workable(thread.id);
       });
@@ -798,7 +820,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             // Work that went late while the turn waited to start, as when you cancel its Quest,
             // starts nothing: it resolves as late (#993).
             if (yield* work.late) return null;
-            const continued = yield* beginTurn(found.thread, found.agent, work.text("prompt"), saveMessage, start);
+            const speaker = speakerIn(found.thread, found.agent);
+            const continued = yield* beginTurn(speaker, work.text("prompt"), saveMessage, start);
             return continued?.turn ?? null;
           }),
         );
@@ -823,8 +846,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           yield* step(threadId, { _tag: "Drained" });
           return;
         }
-        yield* admission.withHob(
-          thread.value.agentId,
+        yield* withThreadLock(
+          admission,
+          thread.value,
           step(threadId, { _tag: "Drained" }).pipe(Effect.andThen(startNext(threadId))),
         );
       });
@@ -838,8 +862,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             Option.match({
               onNone: () => Effect.void,
               onSome: (thread) =>
-                admission.withHob(
-                  thread.agentId,
+                withThreadLock(
+                  admission,
+                  thread,
                   runOf(threadId).pipe(Effect.flatMap((run) => (isBusy(run) ? Effect.void : startNext(threadId)))),
                 ),
             }),
@@ -884,6 +909,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       });
 
     const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
+    const activeTurns = Ref.get(turnHobs).pipe(
+      Effect.map((all) => Array.from(all, ([threadId, { agentId }]) => ({ threadId, agentId }))),
+    );
     const threadRuns = Ref.get(runs).pipe(
       Effect.map(({ all, revision }) => ({
         revision,
@@ -936,6 +964,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       workRidesAlong,
       hobsOf,
       activeThreads,
+      activeTurns,
       threadRuns,
       streamingReplies,
     } as const;

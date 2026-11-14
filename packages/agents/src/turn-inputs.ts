@@ -24,6 +24,7 @@ import type { HobbotsRepository } from "./repository.ts";
 import type { RuntimeAdapterShape, ToolAccess } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 import { skillMounter } from "./skill-turn.ts";
+import type { Speaker } from "./speaker.ts";
 import type { HobTools } from "./tools.ts";
 
 /**
@@ -51,10 +52,6 @@ const missedBy = (
 const missedOthers = (thread: Thread, agentId: AgentId, missed: ReadonlyArray<Message>) =>
   missed.some((m) => m.role === "assistant" && !isOwnReply(m, thread, agentId)) ||
   (missed.some((m) => m.role === "user") && !missed.some((m) => m.role === "assistant"));
-
-/** Whether a reply is `agentId`'s own; one from before replies named their author is the thread's hob's. */
-const isHobsOwn = (message: Message, agentId: AgentId): boolean =>
-  message.actor === null || (message.actor.kind === "hob" && message.actor.id === agentId);
 
 /** Why a trial chat's turn did not start, and how to try the draft again (ADR 029, Try in a chat). */
 export const draftGoneText = (name: string) =>
@@ -108,20 +105,15 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // A turn's skills: those its message was accepted with, or, for a continuation, a message
     // from before or a member hob's turn, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
     // A chat that tries a draft loads the draft alone, and records no library skill (ADR 029, Try in a chat).
-    const skillsFor = (
-      agent: Agent,
-      config: AgentConfiguration,
-      tools: ToolAccess | null,
-      thread: Thread,
-      yours?: Message,
-    ) =>
+    const skillsFor = (speaker: Speaker, config: AgentConfiguration, tools: ToolAccess | null, yours?: Message) =>
       Effect.gen(function* () {
+        const { agent, thread } = speaker;
         const trial = thread.skillTrial;
         if (trial !== null) return { recorded: [], mounts: yield* skillMounts.draft(trial), trial };
         // Your message records the skills of the thread's own hob; a member hob that answers it
         // works with its own (ADR 029).
         const recorded =
-          (agent.id === thread.agentId ? yours?.skills : undefined) ??
+          (speaker.role === "owner" ? yours?.skills : undefined) ??
           (yield* skillMounts.resolve({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] }));
         return { recorded, mounts: yield* skillMounts.mounts(recorded), trial };
       });
@@ -130,12 +122,15 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // not have delivered its own, and threads from before #164 never received theirs. So a thread
     // whose replies all ran on the current instructions needs nothing, and any other carries them.
     // Only the hob's own replies count, since only they ran in its session (ADR 039).
-    const instructionsChanged = (thread: Thread, runtime: RuntimeKind, agent: Agent, instructions: string) =>
+    const instructionsChanged = (speaker: Speaker, runtime: RuntimeKind, instructions: string) =>
       Effect.gen(function* () {
+        const { thread, agent } = speaker;
         if (liveSession(thread, runtime, agent.id) === undefined) return false;
         const versions = new Set(
           (yield* repo.listMessages(thread.id)).flatMap((m) =>
-            m.role === "assistant" && m.configVersion !== null && isHobsOwn(m, agent.id) ? [m.configVersion] : [],
+            m.role === "assistant" && m.configVersion !== null && isOwnReply(m, thread, agent.id)
+              ? [m.configVersion]
+              : [],
           ),
         );
         for (const version of versions) {
@@ -155,15 +150,16 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // actor asked it (ADR 039, The context pack with several hobs). Otherwise it hears what its own
     // hob wrote on other brains.
     const brief = (
-      thread: Thread,
+      speaker: Speaker,
       runtime: RuntimeKind,
-      agentId: AgentId,
       before: ReadonlyArray<Message>,
       switched: boolean,
       people: PackPeople,
       reason: TurnReason | null,
     ) =>
       Effect.sync(() => {
+        const { thread } = speaker;
+        const agentId = speaker.agent.id;
         const session = liveSession(thread, runtime, agentId);
         if (session === undefined) return null;
         const missed = missedBy(thread, runtime, agentId, session.seenThrough, before);

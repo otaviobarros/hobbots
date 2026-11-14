@@ -44,6 +44,9 @@ export interface TakeOverRequest {
   readonly at: string;
 }
 
+/** Giving back what you took over of a Task (#1538): which Task, who gave it back and when. */
+export type GiveBackRequest = TakeOverRequest;
+
 /**
  * The claims register (ADR 037), by the hub's database. A claim is written with its events, the
  * claims it contests and the backpack items its clashes call for in one transaction. Claims are
@@ -66,18 +69,31 @@ export class ClaimRegister extends Context.Service<
      * ends. Returns the claims it moved; none when the Task holds no open claim or you hold them all.
      */
     readonly takeOver: (request: TakeOverRequest) => Effect.Effect<Committed<ReadonlyArray<Claim>>>;
+    /**
+     * Gives the Task's taken claims back to the hob that owns it now (#1538), in one transaction:
+     * each goes back to held, or to contested when another Task's open claim clashes with it, with
+     * its own `ClaimGivenBack` event, and the hob hears once through its backpack what it may write
+     * again. This is the one place a claim stops being taken before its Task ends, so the hub's
+     * write check, which reads the register on every call, stops refusing at once. Returns the
+     * claims it gave back; none when you took over nothing of the Task.
+     */
+    readonly giveBack: (request: GiveBackRequest) => Effect.Effect<Committed<ReadonlyArray<Claim>>>;
     /** The claims you took over in a repository, by its identity across clones, oldest first. */
     readonly takenIn: (repository: string) => Effect.Effect<ReadonlyArray<Claim>>;
   }
 >()("@hobbots/agents/ClaimRegister") {}
 
 /**
- * Takes over a Task's files and branches (#1449): its open claims move to you, and its hob hears of
- * it in its backpack. Only a `UserSession` can, so no hob, Charm or runtime tool takes work from
- * another (PE-006). The Task keeps running: the hub refuses only its writes to what you took over.
- * Taking over a hob's live browser is not part of it; it waits for its own decision (#382).
+ * Moves a Task's claims as you asked, from a device session of yours (PE-006): the register writes
+ * the move with its events and backpack item in one transaction, then they are published.
  */
-export const takeOverTask = (taskId: TaskId) =>
+const moveTaskClaims = (
+  taskId: TaskId,
+  move: (
+    register: ClaimRegister["Service"],
+    request: TakeOverRequest,
+  ) => Effect.Effect<Committed<ReadonlyArray<Claim>>>,
+) =>
   Effect.gen(function* () {
     const session = yield* UserSession;
     const tasks = yield* TaskRepository;
@@ -86,7 +102,24 @@ export const takeOverTask = (taskId: TaskId) =>
     if (Option.isNone(tree)) return yield* new TaskNotFound({ taskId });
     const register = yield* ClaimRegister;
     const at = DateTime.formatIso(yield* DateTime.now);
-    const committed = yield* register.takeOver({ taskId, by: session.actor, at });
+    const committed = yield* move(register, { taskId, by: session.actor, at });
     yield* publisher.publish(committed.entries);
     return committed.value;
   });
+
+/**
+ * Takes over a Task's files and branches (#1449): its open claims move to you, and its hob hears of
+ * it in its backpack. Only a `UserSession` can, so no hob, Charm or runtime tool takes work from
+ * another (PE-006). The Task keeps running: the hub refuses only its writes to what you took over.
+ * Taking over a hob's live browser is not part of it; it waits for its own decision (#382).
+ */
+export const takeOverTask = (taskId: TaskId) =>
+  moveTaskClaims(taskId, (register, request) => register.takeOver(request));
+
+/**
+ * Gives back a Task's files and branches you took over (#1538): its hob may write to them again,
+ * and hears so in its backpack. Only a `UserSession` can, as with Take over (PE-006). A Reassign
+ * after it hands them over with the Task, since claims belong to the Task, not to its hob.
+ */
+export const giveBackTask = (taskId: TaskId) =>
+  moveTaskClaims(taskId, (register, request) => register.giveBack(request));
