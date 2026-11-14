@@ -133,3 +133,37 @@ export const delegatedAuthority = (
     },
   };
 };
+
+/** What a hob taking a Task over may be given, or the folders it could not use. */
+export type Reassigned =
+  | { readonly _tag: "Reassigned"; readonly authority: DelegationAuthority }
+  | { readonly _tag: "Unusable"; readonly folders: ReadonlyArray<string> };
+
+/**
+ * The authority a hob taking a member's Task over works with (#1446): the lead's on the Task above as
+ * it stands now, narrowed by what the Task's delegation gave, then by the new hob's own policy, so it
+ * never holds more than either (STD-SEC-003). The answers given on purpose stay overrides: the
+ * delegation's, and every restriction the lead holds now, even one added after the delegation was
+ * made. Where the lead only follows the safety preset, which the new hob follows too, none is held.
+ */
+export const reassignedAuthority = (
+  leadNow: Authority,
+  given: DelegationAuthority,
+  own: Authority,
+  separator: PathSeparator,
+): Reassigned => {
+  const lead = narrowBy(leadNow, given, separator);
+  const operations = operationsOf(lead).filter(
+    (operation) => lead.fixed.includes(operation) || given.overrides[operation] !== undefined,
+  );
+  const overrides = Object.fromEntries(operations.map((operation) => [operation, lead.decisions[operation] ?? "deny"]));
+  const both = narrowBy(own, { overrides, folders: lead.folders }, separator);
+  if (both.folders.length === 0 && lead.folders.length > 0) return { _tag: "Unusable", folders: lead.folders };
+  return {
+    _tag: "Reassigned",
+    authority: {
+      overrides: Object.fromEntries(operations.map((operation) => [operation, both.decisions[operation] ?? "deny"])),
+      folders: [...both.folders],
+    },
+  };
+};

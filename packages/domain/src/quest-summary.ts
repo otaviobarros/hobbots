@@ -22,6 +22,9 @@ export const workTone: Record<TaskState, WorkTone> = {
   active: "working",
   waiting: "waiting",
   blocked: "needs",
+  // A Task you paused waits on you to resume it; one whose turn still ends is still working (#1446).
+  pausing: "working",
+  paused: "idle",
   cancelling: "idle",
   completed: "done",
   failed: "problem",

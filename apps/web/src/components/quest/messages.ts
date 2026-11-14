@@ -154,6 +154,9 @@ export const messages = {
       "task-state": "This task changed meanwhile. Look at where it stands and try again.",
       "task-cancelling": "This task is being cancelled.",
       "parent-cancelling": "The task above it is being cancelled.",
+      "parent-paused": "The task above it is paused. Resume that one first.",
+      "attempt-unresolved":
+        "Its last turn never confirmed it stopped, so it may still be running. Try again once it has.",
       "attempt-live": ({ name }: { name: string }) =>
         `${name} is working on it right now. Reassign it once that turn ends.`,
       "children-open": "Work is still open under this task. Cancel that first.",

@@ -32,7 +32,7 @@ import { makeCampWrites, threadColumns } from "./camps.ts";
 import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
-import { joinedMentions, mentionsToStore, type StoredMentions } from "./message-mentions.ts";
+import { joinedMentions, mentionsToStore, parseMentions, type StoredMentions } from "./message-mentions.ts";
 import { insertSkillUse } from "./skill-uses.ts";
 import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
@@ -678,6 +678,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       findMessage: (id) => findMessage(id).pipe(Effect.orDie),
       upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),
       sendMessage,
+      mentionsIn: (text) => (text.includes("@") ? parseMentions(sql, text, 0) : Effect.succeed([])).pipe(Effect.orDie),
       checkpointMessage: (message) =>
         sql`UPDATE messages SET content = ${message.content}
           WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),

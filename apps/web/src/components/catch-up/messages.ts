@@ -33,6 +33,7 @@ export const messages = {
     plural(count, { one: `${goal} waits on you`, other: `${goal}: ${formatCount(count)} things wait on you` }),
   ended: {
     active: ({ goal }: { readonly goal: string }) => goal,
+    paused: ({ goal }: { readonly goal: string }) => `${goal} is paused`,
     completed: ({ goal }: { readonly goal: string }) => `${goal} is done`,
     failed: ({ goal }: { readonly goal: string }) => `${goal} failed`,
     cancelled: ({ goal }: { readonly goal: string }) => `${goal} was cancelled`,

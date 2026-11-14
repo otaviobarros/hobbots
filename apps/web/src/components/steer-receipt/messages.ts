@@ -18,6 +18,9 @@ export const messages = {
     picked: ({ name }: { name: string }) => `${name} picked it up`,
     pickedPassing: ({ name }: { name: string }) => `${name} picked it up →`,
     unread: ({ name }: { name: string }) => `${name} never read it`,
+    sent: ({ name }: { name: string }) => `Sent to ${name}`,
+    waiting: ({ name }: { name: string }) => `Waiting for ${name}'s turn`,
+    interrupting: ({ name }: { name: string }) => `Interrupting ${name}'s turn`,
   },
   /** One whole sentence per step, for screen readers. */
   say: {
@@ -28,6 +31,9 @@ export const messages = {
       `Your note is held: ${name} is waiting on your approval: ${action}.`,
     picked: ({ name }: { name: string }) => `${name} picked it up.`,
     unread: ({ name }: { name: string }) => `${name} never read it.`,
+    sent: ({ name }: { name: string }) => `Your message was sent to ${name}.`,
+    waiting: ({ name }: { name: string }) => `Your message waits for ${name}'s turn to reach it.`,
+    interrupting: ({ name }: { name: string }) => `Your message is interrupting ${name}'s turn.`,
   },
   /** Your notes as chips in the lanes. */
   chip: {
