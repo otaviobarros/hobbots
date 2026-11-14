@@ -399,7 +399,9 @@ export const partyHub = (
     HobLifecycle.layer,
     TaskControls.layer,
     options.supervisor === true
-      ? Supervisor.layer({ every: null, limits: DEFAULT_TASK_TOOL_LIMITS }).pipe(Layer.provideMerge(SupervisionRecordsLive))
+      ? Supervisor.layer({ every: null, limits: DEFAULT_TASK_TOOL_LIMITS }).pipe(
+          Layer.provideMerge(SupervisionRecordsLive),
+        )
       : Layer.empty,
   ).pipe(
     Layer.provideMerge(ChatService.layer),

@@ -42,7 +42,7 @@ export interface OpenTaskLimits {
 }
 
 /** A retry that waits for the next look, as the hob or the tree has no room for one more open Task now. */
-class NoRoom extends Data.TaggedError("NoRoom")<{}> {}
+class NoRoom extends Data.TaggedError("NoRoom") {}
 
 /** What one look over the work did. */
 export interface SupervisionPass {
@@ -139,7 +139,11 @@ export class Supervisor extends Context.Service<
             if (isTerminalTask(first.state)) return ended;
             if (!holds(first, before)) return undefined;
             const live = stopOrder(first, before).filter((each) => liveAttemptOn(each, before));
-            if (live.length > 0 && Option.isSome(turns)) yield* turns.value.stopUnder(live.map((each) => each.id), why);
+            if (live.length > 0 && Option.isSome(turns))
+              yield* turns.value.stopUnder(
+                live.map((each) => each.id),
+                why,
+              );
             const tree = yield* readTree(task.rootId);
             const current = now(tree);
             if (tree === undefined || current === undefined) return undefined;
