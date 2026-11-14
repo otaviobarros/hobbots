@@ -16,7 +16,9 @@ const ADA = AgentId.make("ada");
 const QUILL = AgentId.make("quill");
 
 describe("20261114004440_hob_sessions", () => {
-  const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "20261114004440")) as typeof migrations;
+  const earlier = Object.fromEntries(
+    Object.entries(migrations).filter(([id]) => id < "20261114004440"),
+  ) as typeof migrations;
   const layer = Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer).pipe(
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
