@@ -1,8 +1,10 @@
 import { ThreadNotFound } from "@hobbots/api";
-import { type CatchUp, type CatchUpQuest, catchUpOf, type ThreadId } from "@hobbots/domain";
+import { type CatchUp, type CatchUpQuest, catchUpOf, deciderOf, sameActor, type ThreadId } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { RecordRepository } from "./records.ts";
 import { HobbotsRepository } from "./repository.ts";
+import { ThreadMemberRepository } from "./thread-members.ts";
+import { hubOwner, sessionActor } from "./users.ts";
 
 /**
  * Catch-up (ADR 037): what changed in a chat or camp since you last read it, worked out on the hub
@@ -32,10 +34,18 @@ export class CatchUps extends Context.Service<
       const reads = yield* CatchUpRepository;
       // A hub without records, as in some tests, catches up on replies and Quests alone.
       const records = yield* Effect.serviceOption(RecordRepository);
+      // A hub without members, as in some tests, has its owner decide every thread.
+      const members = yield* Effect.serviceOption(ThreadMemberRepository);
       return CatchUps.of({
         of: Effect.fn("CatchUps.of")(function* (threadId: ThreadId) {
           if (Option.isNone(yield* repo.findThread(threadId))) return yield* new ThreadNotFound({ threadId });
+          const you = yield* sessionActor;
+          const owner = Option.isNone(members)
+            ? undefined
+            : (yield* members.value.list(threadId)).find((member) => member.role === "owner")?.actor;
           return catchUpOf({
+            you,
+            decides: sameActor(deciderOf({ requester: null, owner: owner ?? null, hubOwner }), you),
             marker: yield* reads.marker(threadId),
             messages: yield* repo.listMessages(threadId),
             decisions: Option.isNone(records) ? [] : yield* records.value.listDecisions(threadId),

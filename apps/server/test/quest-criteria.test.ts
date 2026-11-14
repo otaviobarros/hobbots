@@ -153,9 +153,12 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
         `fake:then fake:then ${hub("complete_task", { key: "whole", delivered: true, summary: "The page is written, without a date" })}`,
       ]),
     );
-    const answer = (choice: string) =>
+    const answer = (choice: string, after: string) =>
       Effect.gen(function* () {
-        const tree = yield* treeWhen((each) => each.questions.some((question) => question.state === "open"));
+        // The call before your answer has had its reply, so your answer never reaches it first.
+        const tree = yield* treeWhen(
+          (each) => answers.has(after) && each.questions.some((question) => question.state === "open"),
+        );
         const question = tree.questions.find((each) => each.state === "open");
         if (question === undefined) throw new Error("no open question");
         const tasks = yield* TaskRepository;
@@ -166,7 +169,7 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
         yield* bus.publish((yield* tasks.answerQuestion(question.id, { _tag: "User" }, choice, at, from)).entries);
         return question;
       });
-    const first = await run(answer("Keep it"));
+    const first = await run(answer("Keep it", "early"));
     expect(first).toMatchObject({
       recipientId: null,
       text: 'Waive "The page names the launch date"? The date is not set',
@@ -178,7 +181,7 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
           tree.questions.filter((question) => question.state === "open").length === 1 && tree.questions.length === 2,
       ),
     );
-    await run(answer("Waive it"));
+    await run(answer("Waive it", "again"));
     const finished = await run(treeWhen(done));
 
     expect(answers.get("waive")).toContain("only the user waives it: the hub asked them");

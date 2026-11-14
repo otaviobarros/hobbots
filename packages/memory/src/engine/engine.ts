@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import type { MemoryEngineExit, MemoryEngineHealth, MemoryEngineOffReason } from "@hobbots/domain";
 import {
   Clock,
@@ -88,6 +89,16 @@ class EngineTurnedOff extends Data.TaggedError("EngineTurnedOff")<{ readonly rea
 
 /** Missed health checks in a row after which a running engine counts as hung and is restarted. */
 const MISSED_CHECKS = 3;
+
+/**
+ * Whether an engine log line says its HTTP server is listening on `port`: ai-memory logs
+ * `MCP HTTP server ready (…) local_addr=127.0.0.1:<port>` once it has bound it.
+ */
+export const holdsPort = (line: string, port: number) => {
+  // Colour codes, should the engine log any despite NO_COLOR, are left out.
+  const plain = stripVTControlCharacters(line);
+  return plain.includes("HTTP server ready") && new RegExp(`local_addr=127\\.0\\.0\\.1:${port}(?!\\d)`).test(plain);
+};
 
 /** A loopback port no listener holds right now. */
 const freePort = Effect.callback<number, Error>((resume) => {
@@ -288,6 +299,11 @@ const run = (options: MemoryEngineOptions) =>
           .pipe(Effect.mapError((cause) => new EngineLaunchFailed({ cause })));
         // The engine logs to its data folder too; the last lines name why a start failed.
         const lastLines: Array<string> = [];
+        // Whether this start's own process says it holds the port. The port is free when it is picked
+        // but not held until the engine binds it, so another engine started meanwhile can hold it and
+        // answer `/healthz` while this one fails to bind. Only the process's own word tells them apart
+        // without sending a bearer to whoever listens there.
+        const bound = Deferred.makeUnsafe<void>();
         yield* handle.all.pipe(
           Stream.decodeText,
           Stream.splitLines,
@@ -295,6 +311,7 @@ const run = (options: MemoryEngineOptions) =>
             Effect.sync(() => {
               lastLines.push(line);
               if (lastLines.length > 5) lastLines.shift();
+              if (holdsPort(line, port)) Deferred.doneUnsafe(bound, Effect.void);
             }),
           ),
           Effect.ignore,
@@ -305,10 +322,12 @@ const run = (options: MemoryEngineOptions) =>
           Effect.orElseSucceed(() => null),
         );
 
-        // Starting: answers, exits, or runs out of time.
+        // Starting: binds its port and answers, exits, or runs out of time.
         const started = yield* Effect.raceFirst(
-          answers(url).pipe(
-            Effect.repeat({ schedule: Schedule.spaced("200 millis"), until: (ok) => ok }),
+          Deferred.await(bound).pipe(
+            Effect.andThen(
+              answers(url).pipe(Effect.repeat({ schedule: Schedule.spaced("200 millis"), until: (ok) => ok })),
+            ),
             Effect.as("answered" as const),
           ),
           exited.pipe(Effect.as("exited" as const)),

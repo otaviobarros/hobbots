@@ -12,7 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
-import { type RuntimeEvent, RuntimeLimitReached, type ToolAccess } from "@hobbots/agents";
+import {
+  NOT_OFFERED_NAME_MAX,
+  NOT_OFFERED_TURN_MAX,
+  type RuntimeEvent,
+  RuntimeLimitReached,
+  type ToolAccess,
+} from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, hobAppCommitIdentity, policySandbox, type ReplyUsage } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
@@ -590,6 +596,185 @@ describe("reading a Claude Code turn", () => {
     // A block left open ends with its message, and the next message counts on.
     read(stream({ type: "content_block_start", index: 0, content_block: { type: "redacted_thinking" } }));
     expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
+  });
+
+  // covers PE-001, ADR 014 (#1356)
+  // covers SEC-001, ADR 014 (#1356)
+  it("[TC-PE-1356-14] a refused call's label is redacted with the turn's redactor before it is shortened", () => {
+    const secret = "plain-known-value-7f3a9c";
+    const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
+    const command = `echo ${"a".repeat(80)} ${secret} done`;
+    read({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { content: [{ type: "tool_use", id: "t-1", name: "Bash", input: { command } }] },
+    } as unknown as SDKMessage);
+    const [denied] = read({
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t-1",
+            is_error: true,
+            content: "<tool_use_error>Error: No such tool available: Bash</tool_use_error>",
+          },
+        ],
+      },
+    } as unknown as SDKMessage);
+    expect(denied).toMatchObject({ _tag: "ToolDenied", tool: "Bash" });
+    expect(denied?._tag === "ToolDenied" ? denied.label : "").not.toContain(secret.slice(0, 8));
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-18] a refused call's name is redacted whole with the turn's redactor before it is shortened", () => {
+    const secret = "plain-known-value-7f3a9c";
+    const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
+    // The secret straddles where a name is cut.
+    const name = `${"n".repeat(NOT_OFFERED_NAME_MAX - 16)}${secret}`;
+    read({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { content: [{ type: "tool_use", id: "t-1", name, input: {} }] },
+    } as unknown as SDKMessage);
+    const [denied] = read({
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t-1",
+            is_error: true,
+            content: `<tool_use_error>Error: No such tool available: ${name}</tool_use_error>`,
+          },
+        ],
+      },
+    } as unknown as SDKMessage);
+    const kept = denied?._tag === "ToolDenied" ? [denied.tool, denied.label, denied.reason].join(" ") : "";
+    expect(kept).toContain("n".repeat(8));
+    expect(kept).not.toContain(secret.slice(0, 8));
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-20] a call waiting for its result is dropped once any result answers it, and only a bounded number wait", () => {
+    const read = turnEvents();
+    const use = (id: string) => ({ type: "tool_use", id, name: "Bash", input: { command: `echo ${id}` } });
+    const result = (id: string, content: string, isError: boolean) => ({
+      type: "tool_result",
+      tool_use_id: id,
+      is_error: isError,
+      content,
+    });
+    const said = (content: ReadonlyArray<unknown>) =>
+      read({ type: "assistant", parent_tool_use_id: null, message: { content } } as unknown as SDKMessage);
+    const answered = (content: ReadonlyArray<unknown>) =>
+      read({ type: "user", parent_tool_use_id: null, message: { role: "user", content } } as unknown as SDKMessage);
+    const noSuch = "<tool_use_error>Error: No such tool available: Bash</tool_use_error>";
+    const labels = (events: ReadonlyArray<RuntimeEvent>) =>
+      events.map((event) => (event._tag === "ToolDenied" ? event.label : event._tag));
+    // A call an ordinary result answered keeps nothing, so a later refusal of its id knows only the result's words.
+    said([use("done")]);
+    answered([result("done", "ok", false)]);
+    expect(labels(answered([result("done", noSuch, true)]))).toEqual(["Running a command"]);
+    // Past the bound, the oldest call waiting is dropped and the newest kept.
+    said(Array.from({ length: 300 }, (_, each) => use(`w-${each}`)));
+    expect(labels(answered([result("w-0", noSuch, true), result("w-299", noSuch, true)]))).toEqual([
+      "Running a command",
+      "Running echo w-299",
+    ]);
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-21] one turn reports a bounded number of refused calls, however many it makes one after another", () => {
+    const read = turnEvents();
+    const reported = Array.from({ length: NOT_OFFERED_TURN_MAX + 40 }, (_, each) => {
+      const id = `s-${each}`;
+      read({
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: { content: [{ type: "tool_use", id, name: "github_comment", input: {} }] },
+      } as unknown as SDKMessage);
+      return read({
+        type: "user",
+        parent_tool_use_id: null,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: id,
+              is_error: true,
+              content: "<tool_use_error>Error: No such tool available: github_comment</tool_use_error>",
+            },
+          ],
+        },
+      } as unknown as SDKMessage);
+    }).flat();
+    expect(reported).toHaveLength(NOT_OFFERED_TURN_MAX);
+  });
+
+  it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
+    const read = turnEvents();
+    const said = (parent: string | null, content: ReadonlyArray<unknown>) =>
+      ({ type: "assistant", parent_tool_use_id: parent, message: { content } }) as unknown as SDKMessage;
+    const results = (parent: string | null, content: ReadonlyArray<unknown>) =>
+      ({ type: "user", parent_tool_use_id: parent, message: { role: "user", content } }) as unknown as SDKMessage;
+    const noSuch = (id: string, name: string, more = "") => ({
+      type: "tool_result",
+      tool_use_id: id,
+      is_error: true,
+      content: `<tool_use_error>Error: No such tool available: ${name}${more}</tool_use_error>`,
+    });
+    expect(
+      read(
+        said(null, [
+          { type: "tool_use", id: "t-1", name: "mcp__hobbots__github_comment", input: { body: "Hi" } },
+          { type: "tool_use", id: "t-2", name: "Bash", input: { command: "git diff" } },
+          { type: "tool_use", id: "t-3", name: "Read", input: { file_path: "/w/a.txt" } },
+        ]),
+      ),
+    ).toEqual([]);
+    expect(
+      read(
+        results(null, [
+          noSuch("t-1", "mcp__hobbots__github_comment"),
+          noSuch("t-2", "Bash", ". Bash is disabled for this session, in subagents as well as here."),
+          // Any other failure is the tool's own, reported by its hooks.
+          { type: "tool_result", tool_use_id: "t-3", is_error: true, content: "File does not exist." },
+        ]),
+      ),
+    ).toEqual([
+      {
+        _tag: "ToolDenied",
+        id: "t-1",
+        tool: "github_comment",
+        operation: "outside-folders",
+        targets: [],
+        label: "Using github_comment",
+        reason: "github_comment is not offered in this session, so it did not run.",
+        decidedBy: "policy",
+        notOffered: { runtimeTool: null },
+      },
+      expect.objectContaining({
+        id: "t-2",
+        tool: "Bash",
+        operation: "run-commands",
+        label: "Running git diff",
+        notOffered: { runtimeTool: "commands" },
+      }),
+    ]);
+    // A result in text blocks, for a call it never saw, is read by the name the result gives.
+    expect(
+      read(
+        results(null, [{ ...noSuch("t-4", "Edit"), content: [{ type: "text", text: noSuch("t-4", "Edit").content }] }]),
+      ),
+    ).toEqual([expect.objectContaining({ id: "t-4", tool: "Edit", notOffered: { runtimeTool: "file_edits" } })]);
+    // A subagent's calls are its own.
+    expect(read(results("task-1", [noSuch("t-5", "Bash")]))).toEqual([]);
   });
 
   // regression for #1027

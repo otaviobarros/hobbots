@@ -1,4 +1,4 @@
-import { RuntimeError, RuntimeLimitReached } from "@hobbots/agents";
+import { notOfferedReason, RuntimeError, RuntimeLimitReached } from "@hobbots/agents";
 import { CONTINUATION_HEADER } from "@hobbots/domain";
 import { Effect, Exit, Stream } from "effect";
 import { describe, expect, it } from "vitest";
@@ -9,7 +9,6 @@ import {
   FAKE_ONCE_DIRECTIVE,
   fakeCutOffError,
   fakeInstructionsPrompt,
-  fakeNotHeld,
   makeFakeRuntime,
 } from "../src/fake.ts";
 
@@ -132,7 +131,7 @@ describe("fake runtime's scripted hub calls", () => {
   it("lets a later call, in any session, refer to what an earlier call gave back by its key", async () => {
     const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
     const hubTools = {
-      tools: [],
+      tools: ["delegate_task", "hand_off"].map((name) => ({ name, description: name, inputSchema: {}, label: name })),
       call: (name: string, input: unknown) =>
         Effect.sync(() => {
           calls.push({ name, input });
@@ -156,6 +155,30 @@ describe("fake runtime's scripted hub calls", () => {
       { key: "build", depends_on: ["t1"] },
       { key: "hand", artifact_id: "a1", to_task_id: "t2", x: "$none.id" },
     ]);
+  });
+
+  // covers PE-001 (#1356)
+  it("[TC-PE-1356-04] refuses a call to a hub tool the turn was not offered, as a runtime does, without the hub", async () => {
+    const calls: Array<string> = [];
+    const hubTools = {
+      tools: [{ name: "read_tasks", description: "Read", inputSchema: {}, label: "Reading" }],
+      call: (name: string) =>
+        Effect.sync(() => {
+          calls.push(name);
+          return { text: "Read.", refused: false };
+        }),
+    };
+    const events = await makeFakeRuntime()
+      .sendPrompt({ ...request(`fake:hub github_comment {"body":"Hi"}\nfake:hub read_tasks {"key":"r"}`), hubTools })
+      .pipe(Stream.runCollect, Effect.runPromise);
+    expect(calls).toEqual(["read_tasks"]);
+    expect(events.filter((event) => event._tag === "ToolDenied")).toEqual([
+      expect.objectContaining({ id: "fake-hub-1", tool: "github_comment", notOffered: { runtimeTool: null } }),
+    ]);
+    const completed = events.find((event) => event._tag === "Completed");
+    expect(completed?._tag === "Completed" ? completed.text : "").toContain(
+      "github_comment: github_comment is not offered in this session, so it did not run.",
+    );
   });
 });
 
@@ -198,7 +221,8 @@ describe("fake runtime's hub tools on a resumed session", () => {
     const sessionId = first.started?._tag === "SessionStarted" ? first.started.sessionId : null;
     const resumed = await turn(fake, sessionId, ["start_quest", "check_criterion"], calls);
     expect(resumed.started).not.toHaveProperty("hubTools");
-    expect(resumed.text).toContain(`check_criterion: ${fakeNotHeld("check_criterion")}`);
+    // A call to a tool it does not hold is refused as not offered, before the hub, as Codex refuses it (#1356).
+    expect(resumed.text).toContain(`check_criterion: ${notOfferedReason("check_criterion")}`);
     expect(calls).toEqual([]);
     // A new session holds what its turn offers.
     const fresh = await turn(fake, null, ["start_quest", "check_criterion"], calls);
@@ -213,10 +237,11 @@ describe("fake runtime's hub tools on a resumed session", () => {
     const first = await turn(fake, null, ["start_quest"], calls);
     expect(first.started).not.toHaveProperty("hubTools");
     const sessionId = first.started?._tag === "SessionStarted" ? first.started.sessionId : null;
-    // Every call reaches the hub, which refuses one the turn does not offer.
-    expect(calls).toEqual(["check_criterion"]);
+    // A call to a tool the turn does not list is refused as not offered, before the hub, as Claude Code refuses it (#1356).
+    expect(first.text).toContain(`check_criterion: ${notOfferedReason("check_criterion")}`);
+    expect(calls).toEqual([]);
     const resumed = await turn(fake, sessionId, ["start_quest", "check_criterion"], calls);
     expect(resumed.text).toContain("check_criterion: check_criterion ran.");
-    expect(calls).toEqual(["check_criterion", "check_criterion"]);
+    expect(calls).toEqual(["check_criterion"]);
   });
 });

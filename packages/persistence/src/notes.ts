@@ -64,6 +64,20 @@ export const PinRepositoryLive = Layer.effect(
   }),
 );
 
+/** The Quests followed in the thread, with their summaries and goals, as catch-up and For you read them. */
+export const threadQuests = (sql: SqlClient.SqlClient, threadId: ThreadId) =>
+  Effect.gen(function* () {
+    const summaries = yield* readQuestSummaries(sql, threadId);
+    if (summaries.length === 0) return [];
+    const goals = yield* sql<{ readonly id: string; readonly goal: string }>`SELECT id, goal FROM quests
+      WHERE ${sql.in(
+        "id",
+        summaries.map((summary) => summary.questId),
+      )}`;
+    const goalOf = new Map(goals.map((row) => [row.id, row.goal]));
+    return summaries.map((summary) => ({ summary, goal: goalOf.get(summary.questId) ?? "" }));
+  });
+
 export const CatchUpRepositoryLive = Layer.effect(
   CatchUpRepository,
   Effect.gen(function* () {
@@ -78,22 +92,9 @@ export const CatchUpRepositoryLive = Layer.effect(
         return row?.readRevision == null ? null : Number(row.readRevision);
       });
 
-    const quests = (threadId: ThreadId) =>
-      Effect.gen(function* () {
-        const summaries = yield* readQuestSummaries(sql, threadId);
-        if (summaries.length === 0) return [];
-        const goals = yield* sql<{ readonly id: string; readonly goal: string }>`SELECT id, goal FROM quests
-          WHERE ${sql.in(
-            "id",
-            summaries.map((summary) => summary.questId),
-          )}`;
-        const goalOf = new Map(goals.map((row) => [row.id, row.goal]));
-        return summaries.map((summary) => ({ summary, goal: goalOf.get(summary.questId) ?? "" }));
-      });
-
     return CatchUpRepository.of({
       marker: (threadId) => sqlOrDie(marker(threadId)),
-      quests: (threadId) => sqlOrDie(quests(threadId)),
+      quests: (threadId) => sqlOrDie(threadQuests(sql, threadId)),
     });
   }),
 );
