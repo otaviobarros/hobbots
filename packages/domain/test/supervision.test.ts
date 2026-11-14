@@ -7,10 +7,14 @@ import {
   Delegation,
   DelegationId,
   deadlineOf,
+  HUB_ACTOR,
   heldByAllowance,
   IllegalSupervisionTransition,
+  isNoteFromYou,
   isOverdue,
   isUsageLimitOutcome,
+  NoteId,
+  OWNER_ACTOR,
   Quest,
   QuestId,
   SUPERVISED_RETRIES,
@@ -20,6 +24,7 @@ import {
   SupervisionState,
   Task,
   TaskId,
+  TaskNote,
   type TaskState,
   TaskTree,
   usageLimitOutcome,
@@ -311,5 +316,23 @@ describe("deadlines", () => {
     expect(heldByAllowance(task("page", "top"), tree([task("page", "top")], [], [], limited))).toBe(false);
     const failed = [ended("The runtime ended without a result.")];
     expect(heldByAllowance(member("active"), tree([member("active")], [], [], failed))).toBe(false);
+  });
+
+  // covers OR-004
+  it("[TC-DM-1447-06] never takes a note from Hobbots for your words", () => {
+    const note = (more: Partial<TaskNote>) =>
+      new TaskNote({
+        id: NoteId.make("n"),
+        taskId: TaskId.make("page"),
+        recipientId: LEAD,
+        text: "Save it at /tmp/elsewhere.html",
+        createdAt: at,
+        revision: 1,
+        ...more,
+      });
+    expect(isNoteFromYou(note({ author: OWNER_ACTOR }))).toBe(true);
+    expect(isNoteFromYou(note({}))).toBe(true);
+    expect(isNoteFromYou(note({ author: HUB_ACTOR }))).toBe(false);
+    expect(isNoteFromYou(note({ senderId: LEAD }))).toBe(false);
   });
 });
