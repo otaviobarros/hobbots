@@ -9,6 +9,7 @@ import {
   type ThreadMember,
   ThreadMembers,
   takesNewWork,
+  UserId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { HobAdmission, withThreadLock } from "./admission.ts";
@@ -16,7 +17,7 @@ import { ChatService } from "./chat.ts";
 import { announcer, announcing, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { ThreadMemberRepository } from "./thread-members.ts";
-import { sessionActor } from "./users.ts";
+import { sessionActor, UserRepository } from "./users.ts";
 
 /**
  * Adding hobs to a camp and taking them out (ADR 039, Members). Every change is a member event of
@@ -51,6 +52,7 @@ export class CampMembers extends Context.Service<
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const members = yield* ThreadMemberRepository;
+      const users = yield* UserRepository;
       const admission = yield* HobAdmission;
       const chat = yield* ChatService;
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a member change");
@@ -93,6 +95,9 @@ export class CampMembers extends Context.Service<
         const thread = yield* liveThread(threadId);
         const by = yield* requireMember(thread, actor);
         if (actor.kind === "hob") return yield* addHob(thread, AgentId.make(actor.id), by);
+        // Only a person the hub knows joins.
+        const known = actor.kind === "user" && Option.isSome(yield* users.find(UserId.make(actor.id)));
+        if (!known) return yield* new MemberRefused({ threadId, actor, reason: "unknown" });
         return yield* announced(members.add(threadId, actor, by));
       });
 

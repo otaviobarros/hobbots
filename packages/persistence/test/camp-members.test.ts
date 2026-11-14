@@ -14,14 +14,12 @@ import {
   Thread,
   ThreadId,
   type ThreadMember,
-  User,
-  UserId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, ThreadMemberRepositoryLive, UsageLedger } from "../src/index.ts";
-import { addTestUser, TestDatabase } from "../src/testing.ts";
+import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1467 (ADR 039, Members): a camp is made with the hobs you pick, and hobs are added and taken
 // out through the member events. Taking a hob out drops the answers it still owed there in the same
@@ -217,16 +215,10 @@ describe("a camp's hobs", () => {
         ];
         yield* repo.removeMember(CAMP, hobActor(ROOK), OWNER_ACTOR);
         const back = yield* repository.add(CAMP, hobActor(ROOK), OWNER_ACTOR);
-        // Only a person or a hob the hub knows joins.
-        const stranger = yield* Effect.flip(repository.add(CAMP, BRUNA, OWNER_ACTOR));
-        yield* addTestUser(
-          new User({ id: UserId.make("bruna"), name: "Bruna", initials: "B", color: "rose", state: "active" }),
-        );
         const bruna = yield* repository.add(CAMP, BRUNA, OWNER_ACTOR);
         return {
           refusals,
           back: types(back.entries),
-          stranger: stranger.reason,
           bruna: shown(bruna.value),
           members: yield* members(CAMP),
         };
@@ -234,7 +226,6 @@ describe("a camp's hobs", () => {
     );
     expect(result.refusals).toEqual(["direct-message", "owner", "lead", "not-member"]);
     expect(result.back).toEqual(["ThreadMemberChanged"]);
-    expect(result.stranger).toBe("unknown");
     expect(result.bruna).toBe("user:bruna:active");
     expect(result.members).toEqual([
       "user:owner:active",

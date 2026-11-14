@@ -219,6 +219,9 @@ describe("a camp's members over the API", () => {
     expect(shown(back.body)).toBe("hob:rook:active");
     const stranger = await request("POST", `/api/threads/${camp.id}/members`, { actor: { kind: "hob", id: "wren" } });
     expect(stranger.status).toBe(404);
+    // Only a person the hub knows joins.
+    const nobody = await request("POST", `/api/threads/${camp.id}/members`, { actor: { kind: "user", id: "nobody" } });
+    expect(nobody).toMatchObject({ status: 409, body: { _tag: "MembershipRefused", reason: "unknown" } });
   });
 
   // covers ADR 039 (Members; One hob speaks at a time), #1467
