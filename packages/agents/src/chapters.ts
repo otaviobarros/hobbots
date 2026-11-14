@@ -1,5 +1,6 @@
 import { ThreadNotFound } from "@hobbots/api";
 import {
+  type CampSuggestionId,
   type Chapter,
   type ChapterId,
   type ChapterNotFound,
@@ -15,6 +16,14 @@ import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
+
+/** A split: the new chapter's id, the message it starts at, its title, and the suggestion it is made for. */
+export interface SplitInput {
+  readonly id: ChapterId;
+  readonly messageId: MessageId;
+  readonly title: string;
+  readonly withdraw?: CampSuggestionId;
+}
 
 /** Where a thread's chapters are kept (ADR 037). Each command runs its rules and journals its event in one transaction. */
 export class ChapterRepository extends Context.Service<
@@ -32,11 +41,13 @@ export class ChapterRepository extends Context.Service<
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
      * Cuts the chapter `messageId` is in, so its messages from there on make chapter `id`, journaled
-     * as `ChapterSplit`. `id` is the idempotency key, as for `startChapter`.
+     * as `ChapterSplit`. `id` is the idempotency key, as for `startChapter`. `withdraw` names the
+     * pending camp suggestion of the cut chapter the hub split it for (#1557): in the same transaction
+     * it is withdrawn, and chapter `id` is suggested if it reaches a threshold on its own.
      */
     readonly splitChapter: (
       threadId: ThreadId,
-      input: { readonly id: ChapterId; readonly messageId: MessageId; readonly title: string },
+      input: SplitInput,
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
      * Merges `chapterId` into the chapter before it, journaled as `ChapterMerged`. Merging a chapter
@@ -65,10 +76,7 @@ export class ChapterService extends Context.Service<
       threadId: ThreadId,
       input: { readonly id: ChapterId; readonly title: string },
     ) => Effect.Effect<ChapterPlan, ChapterErrors>;
-    readonly splitChapter: (
-      threadId: ThreadId,
-      input: { readonly id: ChapterId; readonly messageId: MessageId; readonly title: string },
-    ) => Effect.Effect<ChapterPlan, ChapterErrors>;
+    readonly splitChapter: (threadId: ThreadId, input: SplitInput) => Effect.Effect<ChapterPlan, ChapterErrors>;
     readonly mergeChapters: (threadId: ThreadId, chapterId: ChapterId) => Effect.Effect<ChapterPlan, ChapterErrors>;
   }
 >()("@hobbots/agents/ChapterService") {

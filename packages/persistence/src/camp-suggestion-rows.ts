@@ -12,7 +12,7 @@ import {
 } from "@hobbots/domain";
 import { Array as Arr, DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
-import { chapterRows } from "./chapters.ts";
+import { chapterRows } from "./chapter-rows.ts";
 
 // Camp suggestions (ADR 037, migration 0104). The rule that raises one is the pure
 // `planCampSuggestion` in @hobbots/domain, run here in the transaction whose events grew a chat's
@@ -140,6 +140,36 @@ export const raiseSuggestion = (
     const suggestion = new CampSuggestion({ ...raised, revision });
     yield* sql`INSERT INTO camp_suggestions ${sql.insert(suggestionColumns(suggestion))}`;
     return suggestion;
+  });
+
+/**
+ * In a split made for a pending suggestion (#1557): withdraws it, as its chapter `from` holds several
+ * topics, and suggests the part split off, `part`, if it reaches a threshold on its own, at journal
+ * sequences from `first` on. Answers their events. Only for use within the split's transaction.
+ */
+export const withdrawForSplit = (
+  sql: SqlClient.SqlClient,
+  id: CampSuggestionId,
+  from: ChapterId,
+  part: ChapterId,
+  first: number,
+): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+  Effect.gen(function* () {
+    const at = DateTime.formatIso(yield* DateTime.now);
+    const events: Array<JournaledEvent> = [];
+    const suggestion = yield* suggestionById(sql, id);
+    const withdrawn =
+      suggestion === null || suggestion.chapterId !== from
+        ? null
+        : CampSuggestions.transition(suggestion, { _tag: "Withdraw", at });
+    if (withdrawn instanceof CampSuggestion) {
+      const written = new CampSuggestion({ ...withdrawn, revision: first });
+      yield* settleSuggestion(sql, written);
+      events.push({ _tag: "CampSuggestionExpired", threadId: written.threadId, suggestion: written });
+    }
+    const raised = yield* raiseSuggestion(sql, part, null, first + events.length, at);
+    if (raised !== null) events.push({ _tag: "CampSuggested", threadId: raised.threadId, suggestion: raised });
+    return events;
   });
 
 /** The chapter a settled message, a decision, an artifact or a quest's start grew, if any. */

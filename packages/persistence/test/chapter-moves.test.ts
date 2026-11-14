@@ -209,6 +209,12 @@ const chatWithTwoChapters = Effect.gen(function* () {
   return { first: (first as { id: ChapterId }).id, billing: ChapterId.make("billing") };
 });
 
+/** The revision chapter `chapterId` of the chat is at now, as the projector names a suggestion from it. */
+const revisionOf = (chapterId: ChapterId) =>
+  ChapterRepository.use((chapters) => chapters.listChapters(CHAT)).pipe(
+    Effect.map((all) => (all.find((chapter) => chapter.id === chapterId) as { revision: number }).revision),
+  );
+
 /** Where each record is now, by table: its id and thread, in id order. */
 const placesOf = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -654,7 +660,14 @@ describe("camp suggestions", () => {
         const keptPending = yield* Effect.exit(suggestions.keep(CHAT, suggestion.id, LATER));
         yield* suggestions.recordRound(0, {
           withdrawn: [],
-          offers: [{ id: suggestion.id, title: "Launch", goal: null }],
+          offers: [
+            {
+              id: suggestion.id,
+              title: "Launch",
+              goal: null,
+              chapterRevision: yield* revisionOf(suggestion.chapterId),
+            },
+          ],
           raises: [],
         });
         const open = yield* suggestions.listOpen(CHAT);
@@ -765,15 +778,16 @@ describe("camp suggestions", () => {
         for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++)
           raised.push(...suggested((yield* quest(`billing-${n}`)).entries));
         const first = raised[0] as CampSuggestion;
+        const chapterRevision = yield* revisionOf(first.chapterId);
         const offered = yield* suggestions.recordRound(0, {
           withdrawn: [],
-          offers: [{ id: first.id, title: "Billing", goal: "Fix the invoices." }],
+          offers: [{ id: first.id, title: "Billing", goal: "Fix the invoices.", chapterRevision }],
           raises: [],
         });
         // Offered already, it is neither offered again nor withdrawn.
         const again = yield* suggestions.recordRound(0, {
           withdrawn: [first.id],
-          offers: [{ id: first.id, title: "Other", goal: null }],
+          offers: [{ id: first.id, title: "Other", goal: null, chapterRevision }],
           raises: [],
         });
         const found = yield* suggestions.find(first.id);
@@ -831,6 +845,77 @@ describe("camp suggestions", () => {
     ).toBe("expired");
     expect(result.counted).toEqual([]);
     expect(result.open).toMatchObject([{ chapterId: result.billing, title: "Billing" }]);
+  });
+
+  /** Billing's suggestion, raised pending by its Quests, and the revision billing was at then. */
+  const pendingBilling = Effect.gen(function* () {
+    const { billing } = yield* chatWithTwoChapters;
+    const raised: Array<CampSuggestion> = [];
+    for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++) raised.push(...suggested((yield* quest(`billing-${n}`)).entries));
+    return { billing, suggestion: raised[0] as CampSuggestion, named: yield* revisionOf(billing) };
+  });
+
+  // covers ADR 037 (Records: CampSuggestion), #1557
+  it("[TC-CH-1557-15] leaves an offer pending when its chapter was split after it was named, and offers it named afresh", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { billing, suggestion, named } = yield* pendingBilling;
+        const suggestions = yield* CampSuggestionRepository;
+        yield* (yield* ChapterRepository).splitChapter(CHAT, {
+          id: ChapterId.make("billing-reply"),
+          messageId: MessageId.make("reply-2"),
+          title: "Reply",
+        });
+        const offer = { id: suggestion.id, title: "Billing", goal: null };
+        const stale = yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [{ ...offer, chapterRevision: named }],
+          raises: [],
+        });
+        const pending = Option.getOrThrow(yield* suggestions.find(suggestion.id));
+        const fresh = yield* suggestions.recordRound(0, {
+          withdrawn: [],
+          offers: [{ ...offer, chapterRevision: yield* revisionOf(billing) }],
+          raises: [],
+        });
+        return { named, stale, pending, fresh, now: yield* revisionOf(billing) };
+      }),
+    );
+    expect(result.now).not.toBe(result.named);
+    expect(result.stale).toEqual([]);
+    expect(result.pending.state).toBe("pending");
+    expect(result.fresh.map((entry) => entry.type)).toEqual(["CampSuggestionOffered"]);
+  });
+
+  // covers ADR 037 (Records: CampSuggestion), #1557
+  it("[TC-CH-1557-16] a split made for a suggestion withdraws it in the split's own commit, and only a suggestion of the chapter it cuts", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { suggestion } = yield* pendingBilling;
+        const chapters = yield* ChapterRepository;
+        // The first chapter is not the suggestion's, so a split of it withdraws nothing.
+        const elsewhere = yield* chapters.splitChapter(CHAT, {
+          id: ChapterId.make("first-reply"),
+          messageId: MessageId.make("reply-1"),
+          title: "Reply",
+          withdraw: suggestion.id,
+        });
+        const split = yield* chapters.splitChapter(CHAT, {
+          id: ChapterId.make("billing-reply"),
+          messageId: MessageId.make("reply-2"),
+          title: "Reply",
+          withdraw: suggestion.id,
+        });
+        const found = Option.getOrThrow(yield* (yield* CampSuggestionRepository).find(suggestion.id));
+        return { elsewhere, split, found };
+      }),
+    );
+    expect(result.elsewhere.entries.map((entry) => entry.type)).toEqual(["ChapterSplit"]);
+    expect(result.split.entries.map((entry) => entry.type).slice(0, 2)).toEqual([
+      "ChapterSplit",
+      "CampSuggestionExpired",
+    ]);
+    expect(result.found.state).toBe("expired");
   });
 
   /**

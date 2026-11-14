@@ -27,7 +27,8 @@ import { type ArtifactRow, artifactFromRow, renumberVersions, saveReview } from 
 import { makeItemReads } from "./backpack-rows.ts";
 import { settleSuggestion, suggestionOfChapter } from "./camp-suggestion-rows.ts";
 import type { makeCampWrites } from "./camps.ts";
-import { chapterRows, writeChapters } from "./chapters.ts";
+import { chapterRows } from "./chapter-rows.ts";
+import { writeChapters } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { keepReadersRead } from "./thread-member-rows.ts";

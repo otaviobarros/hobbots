@@ -1,4 +1,4 @@
-import { ChapterRepository } from "@hobbots/agents";
+import { ChapterRepository, type SplitInput } from "@hobbots/agents";
 import {
   Chapter,
   ChapterId,
@@ -9,7 +9,6 @@ import {
   firstChapter,
   type IllegalChapterTransition,
   type JournaledEvent,
-  type MessageId,
   planMerge,
   planSplit,
   planStart,
@@ -17,8 +16,10 @@ import {
   type Thread,
   type ThreadId,
 } from "@hobbots/domain";
-import { DateTime, Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
+import { withdrawForSplit } from "./camp-suggestion-rows.ts";
+import { chapterRows } from "./chapter-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { keepReadersRead } from "./thread-member-rows.ts";
 
@@ -77,11 +78,6 @@ export const writeChapters = (sql: SqlClient.SqlClient, plan: ChapterPlan) =>
         revision = excluded.revision`,
     { discard: true },
   );
-
-// PostgreSQL reads BIGINT as a bigint and SQLite as a number; every number and revision fits a number.
-const decodeChapters = Schema.decodeUnknownSync(Schema.Array(Chapter));
-export const chapterRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
-  decodeChapters(rows.map((row) => ({ ...row, number: Number(row.number), revision: Number(row.revision) })));
 
 /** What a command writes: its plan, and the events that journal it. */
 type Written = { readonly value: ChapterPlan; readonly events: ReadonlyArray<JournaledEvent> };
@@ -210,7 +206,7 @@ export const ChapterRepositoryLive = Layer.effect(
         }),
       );
 
-    const splitChapter = (threadId: ThreadId, input: { id: ChapterId; messageId: MessageId; title: string }) =>
+    const splitChapter = (threadId: ThreadId, input: SplitInput) =>
       making(threadId, input.id, (first, chapters) =>
         Effect.gen(function* () {
           const [at] = yield* sql<{
@@ -245,7 +241,11 @@ export const ChapterRepositoryLive = Layer.effect(
             messageId: input.messageId,
             chapters: plan.chapters,
           };
-          return { value: plan, events: [event] };
+          // A camp suggestion the split was made for is withdrawn with it, and the part split off is
+          // suggested if it reaches a threshold on its own, in this transaction (#1557).
+          const settled =
+            input.withdraw === undefined ? [] : yield* withdrawForSplit(sql, input.withdraw, from, input.id, first + 1);
+          return { value: plan, events: [event, ...settled] };
         }),
       );
 

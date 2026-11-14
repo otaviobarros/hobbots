@@ -23,7 +23,7 @@ import {
   type ThreadId,
   ThreadLifecycle,
 } from "@hobbots/domain";
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Array as Arr, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { summaryLine } from "./briefing.ts";
 import { SUMMARY_INPUT_MAX, summaryInput } from "./chapter-summaries.ts";
@@ -53,16 +53,20 @@ export interface SuggestionRaise {
   readonly reasons: ReadonlyArray<CampSuggestionReason> | null;
 }
 
-/** A pending suggestion the projector offers, with the camp's name and goal it suggests. */
+/**
+ * A pending suggestion the projector offers, with the camp's name and goal it suggests, named from
+ * its chapter at `chapterRevision`.
+ */
 export interface SuggestionOffer {
   readonly id: CampSuggestionId;
   readonly title: string | null;
   readonly goal: string | null;
+  readonly chapterRevision: number;
 }
 
 /** What one page of the projector writes, with its cursor, in one transaction. */
 export interface SuggestionRound {
-  /** Pending suggestions withdrawn, since their chapters hold several topics. */
+  /** Pending suggestions withdrawn, since their chapters hold several topics with nowhere to split. */
   readonly withdrawn: ReadonlyArray<CampSuggestionId>;
   readonly offers: ReadonlyArray<SuggestionOffer>;
   readonly raises: ReadonlyArray<SuggestionRaise>;
@@ -83,6 +87,8 @@ export class CampSuggestionRepository extends Context.Service<
       suggestionId: CampSuggestionId,
       at: string,
     ) => Effect.Effect<Committed<CampSuggestion>, CampSuggestionRefused>;
+    /** The thread's suggestions still pending, oldest first. */
+    readonly listPending: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CampSuggestion>>;
     /** The suggestion `id`, in any state. */
     readonly find: (id: CampSuggestionId) => Effect.Effect<Option.Option<CampSuggestion>>;
     /** The journal sequence the projector has read through. */
@@ -93,8 +99,9 @@ export class CampSuggestionRepository extends Context.Service<
      * In one transaction: withdraws each pending suggestion of `round.withdrawn`, journaled as
      * `CampSuggestionExpired`; offers each of `round.offers`, journaled as `CampSuggestionOffered`;
      * raises each suggestion the rule still allows, journaled as `CampSuggested`; and moves the
-     * projector's cursor to `sequence`. A suggestion settled meanwhile is left as it is. Answers the
-     * entries it journaled.
+     * projector's cursor to `sequence`. A suggestion settled meanwhile is left as it is, and an offer
+     * whose chapter's revision moved since it was named is left pending. Answers the entries it
+     * journaled.
      */
     readonly recordRound: (sequence: number, round: SuggestionRound) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
   }
@@ -162,8 +169,17 @@ const restedBy = (event: JournaledEvent): ReadonlyArray<{ threadId: ThreadId; ch
 };
 
 /** The pending suggestion an entry raised, to be checked and named. */
-const pendingIn = (event: JournaledEvent): CampSuggestion | null =>
+const raisedPending = (event: JournaledEvent): CampSuggestion | null =>
   event._tag === "CampSuggested" && CampSuggestions.isPending(event.suggestion) ? event.suggestion : null;
+
+/** The thread whose chapters an entry changed, whose pending suggestions are named again, or null. */
+const rechaptered = (event: JournaledEvent): ThreadId | null =>
+  event._tag === "ChapterStarted" ||
+  event._tag === "ChapterSplit" ||
+  event._tag === "ChapterMerged" ||
+  event._tag === "ChapterSummarized"
+    ? event.threadId
+    : null;
 
 /** The brain's answer: whether the chapter is a topic of its own, worth a camp. */
 const DriftChoice = Schema.Literals(["camp", "stay"]);
@@ -307,49 +323,52 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
           return { chapterId, reasons: [{ code: "drift", count: found.own.length }] } satisfies SuggestionRaise;
         });
 
-      // A pending suggestion offered, withdrawn, or withdrawn with its chapter's last topic split off
-      // and raised on its own counts; nothing while its chapter is gone, since that expires it.
-      const named = (raised: CampSuggestion, round: Mutable) =>
+      // A pending suggestion offered, withdrawn, or withdrawn with its chapter's last topic split off;
+      // nothing while its chapter is gone, since that expires it. The split withdraws it and raises
+      // the part on its own counts in the split's own transaction, so neither lands without the other.
+      const named = (id: CampSuggestionId, round: Mutable) =>
         Effect.gen(function* () {
-          const suggestion = Option.getOrNull(yield* store.find(raised.id));
+          const suggestion = Option.getOrNull(yield* store.find(id));
           if (suggestion === null || !CampSuggestions.isPending(suggestion)) return;
           const found = yield* inOpenChat(suggestion.threadId, suggestion.chapterId);
           if (found === null) return;
           const naming = namingOf(found.chapter, found.own, yield* decide(namingJudgment(found.chapter, found.own)));
           if (naming._tag === "Offer") {
-            round.offers.push({ id: suggestion.id, title: naming.title, goal: naming.goal });
+            const { title, goal } = naming;
+            round.offers.push({ id: suggestion.id, title, goal, chapterRevision: found.chapter.revision });
             return;
           }
-          round.withdrawn.push(suggestion.id);
-          if (naming._tag === "Withdraw") return;
-          const part = breakChapterId(naming.at.id);
-          const split = yield* commands
-            .splitChapter(suggestion.threadId, { id: part, messageId: naming.at.id, title: naming.title })
+          if (naming._tag === "Withdraw") {
+            round.withdrawn.push(suggestion.id);
+            return;
+          }
+          const split = { id: breakChapterId(naming.at.id), messageId: naming.at.id, title: naming.title };
+          yield* commands
+            .splitChapter(suggestion.threadId, { ...split, withdraw: suggestion.id })
             .pipe(
-              Effect.as(true),
-              Effect.catch((error) =>
-                Effect.logDebug("A suggested chapter's last topic did not split off", error).pipe(Effect.as(false)),
-              ),
+              Effect.catch((error) => Effect.logDebug("A suggested chapter's last topic did not split off", error)),
             );
-          if (!split) return;
-          const drift = suggestion.reasons.some((reason) => reason.code === "drift");
-          const count = found.own.length - found.own.indexOf(naming.at);
-          round.raises.push({ chapterId: part, reasons: drift ? [{ code: "drift", count }] : null });
         });
 
       // Each page's suggestions are written with the cursor, in one transaction.
       const project = (entries: ReadonlyArray<EventEnvelope>, sequence: number) =>
         Effect.gen(function* () {
           const round: Mutable = { withdrawn: [], offers: [], raises: [] };
+          // Each pending suggestion is named once a page, whether the page raised it or changed its
+          // thread's chapters, as an offer named before a change no longer fits its chapter.
+          const toName: Array<CampSuggestionId> = [];
           for (const entry of entries) {
             const event = entry.payload as JournaledEvent;
             for (const { threadId, chapterId } of restedBy(event)) {
               const raise = yield* judged(threadId, chapterId);
               if (raise !== null) round.raises.push(raise);
             }
-            const pending = pendingIn(event);
-            if (pending !== null) yield* named(pending, round);
+            const raised = raisedPending(event);
+            if (raised !== null) toName.push(raised.id);
+            const threadId = rechaptered(event);
+            if (threadId !== null) toName.push(...(yield* store.listPending(threadId)).map((each) => each.id));
           }
+          for (const id of Arr.dedupe(toName)) yield* named(id, round);
           yield* announce(yield* store.recordRound(sequence, round));
         }).pipe(Effect.orDie);
 

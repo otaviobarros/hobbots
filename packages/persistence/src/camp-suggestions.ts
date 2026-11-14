@@ -18,6 +18,7 @@ import {
   suggestionById,
   suggestionFromRow,
 } from "./camp-suggestion-rows.ts";
+import { chapterRows } from "./chapter-rows.ts";
 import { EventJournal, makeJournaledChange } from "./journal.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
@@ -35,8 +36,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
     const journal = yield* EventJournal;
     const change = makeJournaledChange(sql);
 
-    const listOpen = (threadId: ThreadId) =>
-      sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE thread_id = ${threadId} AND state = 'open'
+    const inState = (threadId: ThreadId, state: "open" | "pending") =>
+      sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE thread_id = ${threadId} AND state = ${state}
         ORDER BY raised_at, id`.pipe(Effect.map((rows) => rows.map(suggestionFromRow)));
 
     const keep = (threadId: ThreadId, suggestionId: CampSuggestionId, at: string) =>
@@ -63,14 +64,21 @@ export const CampSuggestionRepositoryLive = Layer.effect(
           const at = DateTime.formatIso(yield* DateTime.now);
           const events: Array<JournaledEvent> = [];
           // A pending suggestion settled meanwhile, as when its chapter moved, is left as it is.
+          // An offer named from a chapter whose boundaries changed since is stale, so it is left
+          // pending: the projector names it again when it reads the change.
           const settle = (
             id: CampSuggestionId,
             event: CampSuggestionEvent,
             tag: "CampSuggestionOffered" | "CampSuggestionExpired",
+            chapterRevision?: number,
           ) =>
             Effect.gen(function* () {
               const suggestion = yield* suggestionById(sql, id);
               if (suggestion === null) return;
+              if (chapterRevision !== undefined) {
+                const [chapter] = chapterRows(yield* sql`SELECT * FROM chapters WHERE id = ${suggestion.chapterId}`);
+                if (chapter?.revision !== chapterRevision) return;
+              }
               const next = CampSuggestions.transition(suggestion, event);
               if (!(next instanceof CampSuggestion)) return;
               const written = new CampSuggestion({ ...next, revision: first + events.length });
@@ -79,7 +87,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
             });
           for (const id of round.withdrawn) yield* settle(id, { _tag: "Withdraw", at }, "CampSuggestionExpired");
           for (const offer of round.offers) {
-            yield* settle(offer.id, { _tag: "Offer", title: offer.title, goal: offer.goal }, "CampSuggestionOffered");
+            const event: CampSuggestionEvent = { _tag: "Offer", title: offer.title, goal: offer.goal };
+            yield* settle(offer.id, event, "CampSuggestionOffered", offer.chapterRevision);
           }
           for (const raise of round.raises) {
             const suggestion = yield* raiseSuggestion(sql, raise.chapterId, raise.reasons, first + events.length, at);
@@ -93,7 +102,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
       ).pipe(Effect.map((committed) => committed.entries));
 
     return CampSuggestionRepository.of({
-      listOpen: (threadId) => sqlOrDie(listOpen(threadId)),
+      listOpen: (threadId) => sqlOrDie(inState(threadId, "open")),
+      listPending: (threadId) => sqlOrDie(inState(threadId, "pending")),
       keep,
       find: (id) => sqlOrDie(suggestionById(sql, id).pipe(Effect.map(Option.fromNullishOr))),
       driftCursor: sqlOrDie(driftCursor),
