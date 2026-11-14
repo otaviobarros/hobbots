@@ -182,6 +182,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // registered after the sweep still stops (ADR 039).
     const stops = yield* Ref.make(HashMap.empty<AgentId, number>());
     const nowMillis = DateTime.now.pipe(Effect.map(DateTime.toEpochMillis));
+    // The hob each dispatching thread is putting backpack work through, until it is delivered, so
+    // Stop all can hold that work before its turn is launched (ADR 039).
+    const dispatches = yield* Ref.make(HashMap.empty<ThreadId, AgentId>());
     // Every line's run (ADR 037, ADR 039), changed only through `ThreadRunMachine`, keyed by
     // `lineKey`. In memory, as turns are; what waits is the stored `TurnRequest`s and backpack items.
     // A line with no entry is idle. `revision` counts every transition, so clients can order what
@@ -670,6 +673,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         }
         // The dispatch reads the backpack after this, so it sees whatever a wake until now announced.
         yield* must(threadId, { _tag: "Dispatch" });
+        yield* Ref.update(dispatches, HashMap.set(threadId, found.agent.id));
         yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id, slot), scope);
       });
 
@@ -730,6 +734,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           threadId,
           Effect.gen(function* () {
             yield* must(threadId, { _tag: "Delivered" });
+            yield* Ref.update(dispatches, HashMap.remove(threadId));
             // Only this hob's own work dispatches again: another hob's waits until the request
             // that is next has been answered, so an empty dispatch never takes its place again.
             if (ran || (yield* workWaits(service, threadId, agentId))) {
@@ -748,13 +753,25 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
 
     // After an empty dispatch whose slot no request of its hob took: the next request takes a slot
     // of its own hob's, and with none to start, work of another hob that can run takes the floor.
-    // Work only hobs that cannot run now hold waits until one can.
+    // A next request whose hob has work waiting, as routine progress that rides along its answer,
+    // starts through a dispatch of that hob's instead, so the work goes with it (IN-005). Work only
+    // hobs that cannot run now hold waits until one can.
     const afterEmpty = (service: Continuations["Service"], threadId: ThreadId, slot: TurnSlot) =>
       Effect.gen(function* () {
         yield* slot.release;
-        if ((yield* startQueued(threadId)) !== null) return;
         const thread = yield* repo.findThread(threadId);
-        if (Option.isSome(thread) && (yield* withWork(service, thread.value)) !== null) yield* startNext(threadId);
+        if (Option.isNone(thread)) return;
+        const next = yield* floorNext(thread.value);
+        if (
+          next !== null &&
+          !(yield* holds(threadId, next.agent.id)) &&
+          (yield* workWaits(service, threadId, next.agent.id))
+        ) {
+          yield* startNext(threadId);
+          return;
+        }
+        if ((yield* startQueued(threadId)) !== null) return;
+        if ((yield* withWork(service, thread.value)) !== null) yield* startNext(threadId);
       });
 
     // One turn that carries the work: your queued message with the work riding along, else a
@@ -886,6 +903,19 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       ),
     ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
 
+    /**
+     * Holds the work a dispatch is putting through, while no turn of it has launched yet: the turn
+     * it would start finds its hob held and starts nothing, and the work waits for you (ADR 039).
+     * Called under the thread's lock, which a dispatch's turn is admitted under.
+     */
+    const holdDispatch = (threadId: ThreadId) =>
+      Effect.gen(function* () {
+        const run = yield* runOf(threadId);
+        if (run.run !== "dispatching" || run.reply !== null) return;
+        const hobId = HashMap.get(yield* Ref.get(dispatches), threadId);
+        if (Option.isSome(hobId)) yield* step(threadId, { _tag: "Hold", hobId: hobId.value });
+      });
+
     /** Stops the thread's running turn, if any, and returns once it has ended. */
     const endTurn = (threadId: ThreadId) => FiberMap.remove(turns, threadId);
 
@@ -901,6 +931,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       drainThreads,
       endTurn,
       stopHob,
+      holdDispatch,
       workRidesAlong,
       hobsOf,
       activeThreads,

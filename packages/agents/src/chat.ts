@@ -455,6 +455,7 @@ export class ChatService extends Context.Service<
         drainThreads,
         endTurn,
         stopHob,
+        holdDispatch,
         workRidesAlong,
         hobsOf,
         activeThreads,
@@ -717,12 +718,16 @@ export class ChatService extends Context.Service<
       // the line, each recording who stopped it. A queued message left with nothing owed stays said.
       // What is owed is dropped first, so the stopped turn's end finds nothing to start next. Both run
       // under the thread's lock, which every turn is admitted under, so a turn admitted meanwhile is
-      // either running for the stop to reach, or never takes its dropped request.
+      // either running for the stop to reach, or never takes its dropped request. Work a dispatch is
+      // putting through before its turn launched is held, so that turn never starts.
       const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
         const { agentId } = yield* findThread(threadId);
         yield* admission.withHob(
           agentId,
-          dropOwed(threadId, TurnRequests.stoppingAll).pipe(Effect.andThen(stop(threadId))),
+          dropOwed(threadId, TurnRequests.stoppingAll).pipe(
+            Effect.andThen(stop(threadId)),
+            Effect.andThen(holdDispatch(threadId)),
+          ),
         );
       });
 
