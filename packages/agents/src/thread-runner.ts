@@ -421,7 +421,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         );
         yield* step(threadId, { _tag: "Unchoose", messageId: null });
         const agent = next === null ? undefined : hobs.get(next.hobId);
-        if (next === null || agent === undefined) return null;
+        // Nobody waiting can speak now: the line still says who waits, as after a restart.
+        if (next === null || agent === undefined) return yield* lineUp(threadId).pipe(Effect.as(null));
         const message = yield* repo.findMessage(next.messageId);
         if (Option.isNone(message)) return null;
         // A queued message starts with its first request's turn; a message already said, as one

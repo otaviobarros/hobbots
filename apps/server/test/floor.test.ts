@@ -244,18 +244,29 @@ describe("one hob speaks at a time", () => {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
       yield* chat.sendPrompt(CAMP, "@rook and you?");
-      const messages = yield* repo.listMessages(CAMP).pipe(
-        Effect.flatMap((all) =>
-          all.some((m) => m.role === "assistant" && m.status === "complete")
-            ? Effect.succeed(all)
+      // The reply completes before its turn ends and answers the request.
+      const done = yield* Effect.all({ messages: repo.listMessages(CAMP), requests: allRequests }).pipe(
+        Effect.flatMap((now) =>
+          now.messages.some((m) => m.role === "assistant" && m.status === "complete") &&
+          now.requests.some((r) => r.hobId === ROOK && r.state === "answered")
+            ? Effect.succeed(now)
             : Effect.fail("not yet" as const),
         ),
         Effect.retry(Schedule.spaced("5 millis")),
       );
-      return { messages, requests: yield* allRequests };
+      // Once the floor is free again, the status still says Pip waits for it.
+      const lineup = yield* chat.threadRuns.pipe(
+        Effect.flatMap(({ runs }) => {
+          const line = runs.find((run) => run.threadId === CAMP);
+          return line?.run === "idle" ? Effect.succeed(line) : Effect.fail("not yet" as const);
+        }),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      return { ...done, lineup };
     }).pipe(Effect.provide(hubOver(left, "2 millis")), Effect.scoped, Effect.runPromise);
 
     expect(replies(result.messages).map(([hobId, , status]) => [hobId, status])).toEqual([[ROOK, "complete"]]);
+    expect([result.lineup.speaking, result.lineup.next]).toEqual([null, [PIP]]);
     // Pip's request keeps its place until Pip wakes.
     expect(result.requests.map((r) => [r.hobId, r.state])).toEqual([
       [PIP, "waiting"],
