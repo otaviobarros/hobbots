@@ -33,6 +33,8 @@ export interface BriefingInput {
   readonly messages: ReadonlyArray<Message>;
   /** The stored summary, reused when it covers a prefix of `messages` (new sessions only). */
   readonly checkpoint: BriefingSummary | null;
+  /** Names each message's author, as the pack does (ADR 039); without it, "User" and "You". */
+  readonly speaker?: (message: Message) => string;
 }
 
 export interface Briefing {
@@ -135,15 +137,23 @@ export const messageBlock = (
   return [`**${who}:**${ending(message)}`, quote(text || "(no text)"), ...(steps === null ? [] : [steps])].join("\n");
 };
 
-/** A message in full, as the briefing's latest messages show it. */
-const verbatim = (message: Message) => messageBlock(message, clipMiddle(message.content.trim()));
+type SpeakerName = (message: Message) => string;
+
+/** A message in full, as the briefing's latest messages show it, under its author's name. */
+const verbatim = (name: SpeakerName) => (message: Message) =>
+  messageBlock(message, clipMiddle(message.content.trim()), name(message));
+
+/** A message in one line, under its author's name. */
+const summaryLineBy =
+  (name: SpeakerName) =>
+  (message: Message): string => {
+    const steps = toolSteps(message);
+    const text = clip(oneLine(message.content), BRIEFING_LIMITS.line) || "(no text)";
+    return `- ${name(message)}:${ending(message)} “${text}”${steps === null ? "" : ` ${steps}`}`;
+  };
 
 /** A message in one line, as the summary of older messages and a chapter's summary input show it. */
-export const summaryLine = (message: Message): string => {
-  const steps = toolSteps(message);
-  const text = clip(oneLine(message.content), BRIEFING_LIMITS.line) || "(no text)";
-  return `- ${speaker(message)}:${ending(message)} “${text}”${steps === null ? "" : ` ${steps}`}`;
-};
+export const summaryLine = (message: Message): string => summaryLineBy(speaker)(message);
 
 /** Keeps the newest lines that fit the summary's budget, counting the older ones it drops. */
 const fit = (lines: ReadonlyArray<string>, omitted: number) => {
@@ -157,20 +167,20 @@ const fit = (lines: ReadonlyArray<string>, omitted: number) => {
 };
 
 /** The newest messages that fit the verbatim budget; at least the last one, clipped. */
-const windowStart = (messages: ReadonlyArray<Message>) => {
+const windowStart = (messages: ReadonlyArray<Message>, name: SpeakerName) => {
   let used = 0;
   for (let index = messages.length - 1; index >= 0; index--) {
-    used += verbatim(messages[index] as Message).length;
+    used += verbatim(name)(messages[index] as Message).length;
     if (used > BRIEFING_LIMITS.verbatim) return Math.min(index + 1, messages.length - 1);
   }
   return 0;
 };
 
 /** Summarizes `older`, starting from the checkpoint when it covers a prefix of them. */
-const summarize = (older: ReadonlyArray<Message>, checkpoint: BriefingSummary | null) => {
+const summarize = (older: ReadonlyArray<Message>, checkpoint: BriefingSummary | null, name: SpeakerName) => {
   const covered = checkpoint === null ? -1 : older.findIndex((m) => m.id === checkpoint.throughMessageId);
   const base = covered === -1 || checkpoint === null ? { lines: [], omitted: 0 } : checkpoint;
-  const fresh = older.slice(covered + 1).map(summaryLine);
+  const fresh = older.slice(covered + 1).map(summaryLineBy(name));
   return { ...fit([...base.lines, ...fresh], base.omitted), anew: fresh.length > 0 };
 };
 
@@ -182,10 +192,11 @@ const summarize = (older: ReadonlyArray<Message>, checkpoint: BriefingSummary | 
 export const buildBriefing = (input: BriefingInput): Briefing | null => {
   const { messages } = input;
   if (messages.length === 0) return null;
-  const start = windowStart(messages);
+  const name = input.speaker ?? speaker;
+  const start = windowStart(messages, name);
   const older = messages.slice(0, start);
   const latest = messages.slice(start);
-  const summary = older.length === 0 ? null : summarize(older, input.kind === "new" ? input.checkpoint : null);
+  const summary = older.length === 0 ? null : summarize(older, input.kind === "new" ? input.checkpoint : null, name);
   const brains = [...new Set(messages.flatMap((m) => (m.runtime === null ? [] : [RUNTIME_NAMES[m.runtime]])))];
   const intro =
     input.kind === "new"
@@ -207,7 +218,7 @@ export const buildBriefing = (input: BriefingInput): Briefing | null => {
           ...summary.lines,
         ]),
     "### Latest messages",
-    latest.map(verbatim).join("\n\n"),
+    latest.map(verbatim(name)).join("\n\n"),
     "## Now",
   ].join("\n\n");
   const last = older.at(-1);

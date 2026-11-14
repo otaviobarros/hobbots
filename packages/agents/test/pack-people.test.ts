@@ -1,5 +1,6 @@
 import { type Actor, AgentId, Message, MessageId, OWNER_ACTOR, Thread, ThreadId, ThreadMember } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { buildBriefing } from "../src/briefing.ts";
 import { reasonLine, type TurnReason, turnReasonOf } from "../src/pack-people.ts";
 
 // Issue #1465 (ADR 039, The context pack with several hobs): why a hob's turn runs, as the floor
@@ -66,5 +67,25 @@ describe("why a turn runs", () => {
     // A continuation has no prompt, and nobody is owed an answer in a camp of two hobs with no mention.
     expect(turnReasonOf(null, thread, alone, WREN)).toBeNull();
     expect(turnReasonOf(said(LEO), thread, two, WREN)).toBeNull();
+
+    // With a Quest running in the camp, its lead answers what mentions nobody, as the floor decides.
+    const quest = { leadId: QUILL, party: [] };
+    const lead = turnReasonOf(said(LEO), thread, two, QUILL, quest);
+    expect(lead).toEqual({ cause: "lead", by: LEO });
+    expect(reasonLine(lead as TurnReason, names)).toBe(
+      "You lead the quest running here, and nobody else was mentioned.",
+    );
+  });
+
+  // covers ADR 039 (The context pack with several hobs), ADR 017
+  it("[TC-CH-1465-07] a brain switch's briefing names each speaker when it is given names", () => {
+    const told = buildBriefing({
+      kind: "resumed",
+      messages: [said(LEO)],
+      checkpoint: null,
+      speaker: () => "Leo (person)",
+    });
+    expect(told?.text).toContain("**Leo (person):**\n> Can you check the dates?");
+    expect(buildBriefing({ kind: "resumed", messages: [said(LEO)], checkpoint: null })?.text).toContain("**User:**");
   });
 });

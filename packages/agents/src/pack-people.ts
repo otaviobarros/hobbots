@@ -5,8 +5,10 @@ import {
   answerersFor,
   brainLabel,
   hobActor,
+  isActiveQuest,
   MentionRefused,
   type Message,
+  type RunningQuest,
   sameActor,
   type Thread,
   type ThreadMember,
@@ -14,6 +16,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HobbotsRepository } from "./repository.ts";
+import { TaskRepository } from "./tasks.ts";
 import { ThreadMemberRepository } from "./thread-members.ts";
 import { UserRepository } from "./users.ts";
 
@@ -57,6 +60,11 @@ export interface PackPeople {
    * shared thread's pack lists who is here: in a direct message it says nothing a hob does not know.
    */
   readonly shared: boolean;
+  /**
+   * The latest top Quest under way in a shared thread, with the hobs it brought in, which
+   * `turnReasonOf` reads; null in a direct message, whose pack says no reason.
+   */
+  readonly quest: RunningQuest | null;
 }
 
 /** The name the pack gives a person it has no record of, as briefings named you before people had names. */
@@ -87,6 +95,22 @@ export const makePackPeople = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   const memberRepo = yield* Effect.serviceOption(ThreadMemberRepository);
   const users = yield* Effect.serviceOption(UserRepository);
+  const tasks = yield* Effect.serviceOption(TaskRepository);
+  // As `answerersFor` reads it when a message is stored: the latest top Quest under way, and its party.
+  const runningQuest = (thread: Thread) =>
+    Effect.gen(function* () {
+      if (Option.isNone(tasks)) return null;
+      const summary = (yield* tasks.value.listQuestSummaries(thread.id))
+        .filter((each) => each.parentQuestId === null && isActiveQuest(each.state))
+        .at(-1);
+      if (summary === undefined) return null;
+      const tree = yield* tasks.value.readTree(summary.taskId);
+      const party = Option.match(tree, {
+        onNone: () => [],
+        onSome: (each) => each.delegations.filter((d) => d.questId === summary.questId).map((d) => d.memberId),
+      });
+      return { leadId: summary.leadId, party: [...new Set(party)] } satisfies RunningQuest;
+    });
   return (thread: Thread, agentId: AgentId) =>
     Effect.gen(function* () {
       const stored = Option.isNone(memberRepo) ? [] : yield* memberRepo.value.list(thread.id);
@@ -125,7 +149,9 @@ export const makePackPeople = Effect.gen(function* () {
       );
       const shared =
         members.filter((m) => m.kind === "hob").length > 1 || members.filter((m) => m.kind === "person").length > 1;
-      return { you: agentId, members, speaker, nameOf, rows: stored, shared } satisfies PackPeople;
+      // Only a shared thread says why its hob answers, so only it reads the Quest under way.
+      const quest = shared ? yield* runningQuest(thread) : null;
+      return { you: agentId, members, speaker, nameOf, rows: stored, shared, quest } satisfies PackPeople;
     });
 });
 
@@ -139,11 +165,12 @@ export const turnReasonOf = (
   thread: Thread,
   members: ReadonlyArray<ThreadMember>,
   agentId: AgentId,
+  quest: RunningQuest | null = null,
 ): TurnReason | null => {
   if (prompt === null) return null;
   const decided = answerersFor(
     { role: prompt.role, actor: prompt.actor, mentions: prompt.mentions, repliesTo: null },
-    { id: thread.id, kind: thread.kind, quest: null },
+    { id: thread.id, kind: thread.kind, quest },
     members,
   );
   if (decided instanceof MentionRefused) return null;

@@ -178,7 +178,12 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
         const switchedText =
           switched || others
-            ? (buildBriefing({ kind: "resumed", messages: missed, checkpoint: null })?.text ?? null)
+            ? (buildBriefing({
+                kind: "resumed",
+                messages: missed,
+                checkpoint: null,
+                ...(people.shared ? { speaker: people.speaker } : {}),
+              })?.text ?? null)
             : null;
         return [why, switchedText].filter((part) => part !== null).join("\n\n") || null;
       });

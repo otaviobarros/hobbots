@@ -276,7 +276,13 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         const people = yield* packPeople(thread, agent.id);
         const reason =
           start.reason === undefined
-            ? turnReasonOf(transcript.find((m) => m.id === promptId) ?? null, thread, people.rows, agent.id)
+            ? turnReasonOf(
+                transcript.find((m) => m.id === promptId) ?? null,
+                thread,
+                people.rows,
+                agent.id,
+                people.quest,
+              )
             : start.reason;
         const briefed = yield* brief(thread, brain.runtime, agent.id, told, switched, people, reason);
         const pack =

@@ -3,7 +3,7 @@
 - **Date:** 2026-11-14
 - **Issue:** [#1465](https://github.com/otaviobarros/hobbots/issues/1465)
 - **Pull request:** [#1532](https://github.com/otaviobarros/hobbots/pull/1532)
-- **Commit:** the pull request branch `claude/project-thread-qrxw3r`, on `main` at `8e6dd57`
+- **Commit:** `b5dc4b6` on the pull request branch `claude/project-thread-qrxw3r`, based on `main` at `8e6dd57`
 - **Setup:** a Linux x86_64 cloud container, from a source checkout. Claude Code 2.1.325, and codex-cli 0.169.0, installed and not signed in, each answered by a stand-in model: Claude Code through a Messages API stand-in, Codex through a Responses API stand-in. The fake runtime in the same run. SQLite, and PostgreSQL 16.
 - **Result:** Passed with gaps: in a camp with two hobs, each hob's new session started from a pack that listed the members and why it answered, named every speaker and carried only its own memory brief; a resumed session heard only what others said since its hob last spoke. The pack reached the model with the prompt, never in its system prompt or instructions, on Claude Code, Codex and the fake runtime. Nothing was run with a real model.
 
