@@ -37,62 +37,96 @@ const listMarkerEnd = (line: string, at: number): number | null => {
   return digits > 0 && digits <= 9 && (after === "." || after === ")") ? at + digits + 1 : null;
 };
 
+/** Spaces and tabs from `at` on. */
+const blankRun = (line: string, at: number): number => runLengthOf(line, at, (c) => c === " " || c === "\t");
+
+/** The block quote markers a line starts with (CommonMark 5.1): how many, and where the rest starts. */
+const quotesOf = (line: string): { readonly depth: number; readonly end: number } => {
+  let depth = 0;
+  let at = blankRun(line, 0);
+  while (line[at] === ">") {
+    depth += 1;
+    at += 1 + blankRun(line, at + 1);
+  }
+  return { depth, end: at };
+};
+
 /**
- * Where a line's text starts once its containers are passed (CommonMark 5): any indentation, each
- * block quote's `>`, and each list item's marker followed by a space or a tab. A fence inside a quote
- * or a list item is then read as a fence, at any depth.
+ * Where a line's text starts once its containers are passed (CommonMark 5): its block quotes' `>`,
+ * then each list item's marker followed by a space or a tab, at any indentation, and any quotes
+ * inside those. A fence inside a quote or a list item is then read as a fence, at any depth.
  */
-const contentStart = (line: string): number => {
-  let at = runLengthOf(line, 0, (c) => c === " " || c === "\t");
+const contentStart = (line: string, at: number): number => {
   for (;;) {
-    if (line[at] === ">") {
-      at += 1;
-    } else {
-      const end = listMarkerEnd(line, at);
-      if (end === null || (line[end] !== " " && line[end] !== "\t")) return at;
-      at = end;
-    }
-    at += runLengthOf(line, at, (c) => c === " " || c === "\t");
+    const end = listMarkerEnd(line, at);
+    if (end === null || (line[end] !== " " && line[end] !== "\t")) return at;
+    const inner = quotesOf(line.slice(end));
+    at = end + inner.end;
   }
 };
 
+type Fence = { readonly char: string; readonly length: number; readonly quotes: number };
+
 /**
- * A fence line's marker (CommonMark 4.5): three or more ` or ~ where the line's text starts. Read at
+ * The fence at `at` (CommonMark 4.5): three or more ` or ~, with what follows on its line. Read at
  * any indentation, so an indented code block's line of backticks also hides what follows it: a
  * missed mention, never a false one.
  */
-const fenceOf = (line: string): { readonly char: string; readonly length: number; readonly rest: string } | null => {
-  const start = contentStart(line);
-  const char = line[start];
+const fenceAt = (
+  line: string,
+  at: number,
+): { readonly char: string; readonly length: number; readonly rest: string } | null => {
+  const char = line[at];
   if (char !== "`" && char !== "~") return null;
-  const length = runLength(line, start, char);
-  return length < 3 ? null : { char, length, rest: line.slice(start + length) };
+  const length = runLength(line, at, char);
+  return length < 3 ? null : { char, length, rest: line.slice(at + length) };
 };
 
-/** Whether `line` closes a fence opened with `open`: the same character, at least as many, nothing after. */
-const closes = (line: string, open: { readonly char: string; readonly length: number }): boolean => {
-  const fence = fenceOf(line);
-  return fence !== null && fence.char === open.char && fence.length >= open.length && fence.rest.trim() === "";
+/** The fence a line opens, with the quotes it sits in. A backtick fence's info string has no backtick. */
+const opens = (line: string): Fence | null => {
+  const quotes = quotesOf(line);
+  const fence = fenceAt(line, contentStart(line, quotes.end));
+  if (fence === null || (fence.char === "`" && fence.rest.includes("`"))) return null;
+  return { char: fence.char, length: fence.length, quotes: quotes.depth };
+};
+
+/**
+ * Whether `line`, inside an open fence, closes it: in the same quotes, the same character, at least
+ * as many and nothing after. What looks like a list item inside the fence is code, so no marker but
+ * the quotes it opened in is passed.
+ */
+const closes = (line: string, quotes: { readonly depth: number; readonly end: number }, open: Fence): boolean => {
+  const fence = fenceAt(line, quotes.end + blankRun(line, quotes.end));
+  return (
+    quotes.depth === open.quotes &&
+    fence !== null &&
+    fence.char === open.char &&
+    fence.length >= open.length &&
+    fence.rest.trim() === ""
+  );
 };
 
 /**
  * The text with its fenced code blocks blanked out (CommonMark 4.5): from a fence line to the line
- * that closes it, or to the end when none does. A backtick fence's info string has no backtick.
+ * that closes it, to the line before one that leaves the quote it opened in, or to the end.
  */
 const withoutFences = (text: string): string => {
   const out = text.split("");
-  let open: { readonly char: string; readonly length: number; readonly from: number } | null = null;
+  let open: (Fence & { readonly from: number }) | null = null;
   let at = 0;
   for (const line of text.split("\n")) {
     const end = at + line.length;
-    if (open !== null) {
-      if (closes(line, open)) {
-        blank(out, open.from, end);
-        open = null;
-      }
-    } else {
-      const fence = fenceOf(line);
-      if (fence !== null && !(fence.char === "`" && fence.rest.includes("`"))) open = { ...fence, from: at };
+    const quotes = quotesOf(line);
+    if (open !== null && quotes.depth < open.quotes) {
+      blank(out, open.from, at);
+      open = null;
+    }
+    if (open === null) {
+      const fence = opens(line);
+      if (fence !== null) open = { ...fence, from: at };
+    } else if (closes(line, quotes, open)) {
+      blank(out, open.from, end);
+      open = null;
     }
     at = end + 1;
   }

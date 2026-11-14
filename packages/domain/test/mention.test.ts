@@ -61,6 +61,11 @@ describe("mentionsIn", () => {
     expect(mentionsIn(">> ```\n>> @Ana\n>> ```\n> @Pip", roster)).toEqual([PIP]);
     expect(mentionsIn("- ```\n  @Ana\n  ```\n1. @Rook", roster)).toEqual([ROOK]);
     expect(mentionsIn("- item\n  - ```\n    @Ana\n    ```\n- @Pip", roster)).toEqual([PIP]);
+    // Inside a fence, what looks like a list item or a quote is code, and closes nothing.
+    expect(mentionsIn("~~~\n- ~~~\n@Ana\n~~~\n@Rook", roster)).toEqual([ROOK]);
+    expect(mentionsIn("```\n> ```\n@Ana\n```\n@Rook", roster)).toEqual([ROOK]);
+    // A fence in a quote ends where the quote does.
+    expect(mentionsIn("> ```\n> @Ana\n@Rook", roster)).toEqual([ROOK]);
     // A quote marker alone is no fence: what it quotes still mentions.
     expect(mentionsIn("> @Ana said hi", roster)).toEqual([ANA]);
   });
