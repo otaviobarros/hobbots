@@ -44,7 +44,9 @@ const QUIET = ThreadId.make("quiet");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
 /** The migrations that ran before 20261114004500, when each thread kept its own read marker. */
-const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "20261114004500")) as typeof migrations;
+const earlier = Object.fromEntries(
+  Object.entries(migrations).filter(([id]) => id < "20261114004500"),
+) as typeof migrations;
 
 type Services =
   | HobbotsRepository

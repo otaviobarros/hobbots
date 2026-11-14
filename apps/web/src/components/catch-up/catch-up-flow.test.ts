@@ -1,6 +1,6 @@
 import { ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { CATCH_UP_START, type CatchUpEvent, type CatchUpFlow, catchUpStep } from "./catch-up-flow.ts";
+import { CATCH_UP_START, type CatchUpEvent, type CatchUpFlow, catchUpStep, seeing } from "./catch-up-flow.ts";
 
 // Issue #1387 (ADR 037): a visit to an unread chat reads its catch-up once; watching it does not.
 
@@ -33,5 +33,16 @@ describe("catch-up visits", () => {
     expect(run([see(B, true, false)], away)).toMatchObject({ step: "idle", threadId: B });
     // A chat behind another window is no visit until it comes to the front.
     expect(run([see(B, false, true)], away)).toMatchObject({ step: "idle" });
+  });
+
+  // covers ADR 039 (Members: the unread line is per person)
+  it("[TC-CH-1454-01] waits for your unread threads before a visit, so a chat that loads first still gets its catch-up", () => {
+    // You open the unread chat by its address: the chat loads before your unread threads do.
+    const early = run([seeing(A, true, undefined)]);
+    expect(early).toMatchObject({ step: "idle", threadId: undefined, visits: 0 });
+    // Once they arrive the visit starts, so catch-up is read before the chat marks itself read.
+    expect(run([seeing(A, true, new Set([A]))], early)).toMatchObject({ step: "open", threadId: A, visits: 1 });
+    // A chat that turns out read starts nothing.
+    expect(run([seeing(A, true, new Set())], early)).toMatchObject({ step: "idle", threadId: A, visits: 0 });
   });
 });

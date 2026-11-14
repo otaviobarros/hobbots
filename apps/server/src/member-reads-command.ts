@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { NodeRuntime } from "@effect/platform-node";
 import {
@@ -10,8 +10,8 @@ import {
   unreadByThreadMarker,
 } from "@hobbots/persistence";
 import { Console, Effect } from "effect";
-import { exitOnFailure, freeDataFolder } from "./command-line.ts";
-import { defaultDataDir } from "./config.ts";
+import { exitOnFailure, freeDataFolder, isHubDataFolder } from "./command-line.ts";
+import { defaultDataDir, ServerConfig } from "./config.ts";
 
 // A dry run of migration 20261114004500 (ADR 039, read markers per member; #1454) on a copy of a hub's data
 // folder: `pnpm --filter @hobbots/server member-reads <copy>` prints each thread's unread replies by
@@ -53,7 +53,9 @@ const report = (before: ReadonlyArray<ThreadUnread>, after: ReadonlyArray<Thread
 const dryRun = Effect.gen(function* () {
   const folder = process.argv[2];
   if (folder === undefined || !existsSync(join(folder, "hobbots.sqlite"))) return yield* Effect.fail(usage);
-  if (existsSync(defaultDataDir()) && realpathSync(folder) === realpathSync(defaultDataDir())) {
+  // The hub's own folder, wherever it is set (HOBBOTS_DATA_DIR) and where it is by default.
+  const config = yield* ServerConfig;
+  if (isHubDataFolder(folder, [config.dataDir, defaultDataDir()])) {
     return yield* Effect.fail(`${folder} is the hub's own data folder. Copy it and give the copy. Nothing changed.`);
   }
   const dataDir = yield* freeDataFolder(folder, "copy the folder while no hub runs");

@@ -18,9 +18,23 @@ export const unreadThreadsQuery = queryOptions({
 const NONE: ReadonlySet<ThreadId> = new Set();
 const asSet = (ids: ReadonlyArray<ThreadId>): ReadonlySet<ThreadId> => new Set(ids);
 
+/** The threads unread for you, or undefined until the hub answers. */
+export const useKnownUnreadThreads = (): ReadonlySet<ThreadId> | undefined =>
+  useQuery({ ...unreadThreadsQuery, select: asSet }).data;
+
 /** The threads unread for you; none until the hub answers. */
-export const useUnreadThreads = (): ReadonlySet<ThreadId> =>
-  useQuery({ ...unreadThreadsQuery, select: asSet }).data ?? NONE;
+export const useUnreadThreads = (): ReadonlySet<ThreadId> => useKnownUnreadThreads() ?? NONE;
+
+/**
+ * Who read what changed, here or on another device, or a chapter moved messages: your unread threads
+ * are read again. A read already in flight may have been taken before the change, and while the list
+ * has no data yet Query would hand that read back instead of starting another, so it is cancelled
+ * first (STD-REACT-012).
+ */
+export const unreadChanged = async (queryClient: QueryClient) => {
+  await queryClient.cancelQueries({ queryKey: queryKeys.unreadThreads, exact: true });
+  await queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true });
+};
 
 /** Sets whether a thread is unread for you, until the hub's list is read again. */
 const setUnread = (queryClient: QueryClient, threadId: ThreadId, unread: boolean) =>
@@ -99,7 +113,7 @@ export const useReadThread = (
     setUnread(queryClient, threadId, false);
     call((c) => c.threads.markRead({ params: { threadId }, payload: { messageId, revision } })).catch(
       // The dot comes back with the next read of the list; nothing else depends on it.
-      () => void queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true }),
+      () => void unreadChanged(queryClient),
     );
   }, [queryClient, threadId, messageId, revision, shown, unread]);
 };

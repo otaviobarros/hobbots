@@ -78,3 +78,12 @@ export const exitOnFailure = <A, R>(command: Effect.Effect<A, unknown, R>) =>
       ),
     ),
   );
+
+const canonical = (path: string) => (existsSync(path) ? realpathSync(path) : path);
+
+/**
+ * Whether `folder` is one of the hub's own data folders, by canonical path: the one set with
+ * HOBBOTS_DATA_DIR and the default, which a command that changes a copy must never take for one.
+ */
+export const isHubDataFolder = (folder: string, hubFolders: ReadonlyArray<string>) =>
+  hubFolders.some((hubFolder) => canonical(hubFolder) === canonical(folder));

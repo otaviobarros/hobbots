@@ -60,7 +60,7 @@ import {
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
-import { showUnread } from "./thread-reads.ts";
+import { showUnread, unreadChanged } from "./thread-reads.ts";
 import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
 
@@ -276,7 +276,7 @@ const readAgain = (
     void applyChapterEvent(queryClient, event);
     if (event._tag === "ChapterSplit" || event._tag === "ChapterMerged") {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true });
+      void unreadChanged(queryClient);
     }
     return true;
   }
@@ -284,7 +284,7 @@ const readAgain = (
   // you is read again, from your own markers. A hob reads nothing.
   if (event._tag === "ThreadMemberChanged") {
     if (event.member.actor.kind === "user") {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true });
+      void unreadChanged(queryClient);
     }
     return true;
   }
@@ -343,7 +343,7 @@ const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
     void chapterMoved(queryClient, event);
     void applyClaimEvent(queryClient);
     // A thread you had read stays read, and a camp just made starts read (ADR 039).
-    void queryClient.invalidateQueries({ queryKey: queryKeys.unreadThreads, exact: true });
+    void unreadChanged(queryClient);
     return;
   }
   // A thread archived or restored elsewhere moves between the hob's two lists.

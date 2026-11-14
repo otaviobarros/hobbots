@@ -1,6 +1,6 @@
 import { Message, MessageId, ThreadId, ThreadMember, UnreadThreads } from "@hobbots/domain";
-import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 import { applyEvent } from "./events.ts";
 import { queryKeys } from "./queries.ts";
 import { syncedUnread } from "./sync.ts";
@@ -19,6 +19,20 @@ const reply = (id: string, status: Message["status"], content = "The plan is rea
     error: null,
     configVersion: 1,
     createdAt: now,
+  });
+
+/** Your member row of the thread, read through `readRevision`, as journaled at `revision`. */
+const readBy = (readRevision: number, revision: number) =>
+  new ThreadMember({
+    threadId,
+    actor: { kind: "user", id: "owner" },
+    role: "owner",
+    state: "active",
+    joinedAt: now,
+    addedBy: { kind: "user", id: "owner" },
+    readRevision,
+    mutedUntil: null,
+    revision,
   });
 
 const listed = (client: QueryClient) =>
@@ -95,22 +109,38 @@ describe("unread threads", () => {
 
     // You read it on another device: your member row moves on, and the list read again agrees, though
     // the reply that ended is still this generation's.
-    const member = new ThreadMember({
-      threadId,
-      actor: { kind: "user", id: "owner" },
-      role: "owner",
-      state: "active",
-      joinedAt: now,
-      addedBy: { kind: "user", id: "owner" },
-      readRevision: 6,
-      mutedUntil: null,
-      revision: 8,
-    });
-    applyEvent(early, { _tag: "ThreadMemberChanged", member });
-    expect(early.getQueryState(queryKeys.unreadThreads)?.isInvalidated).toBe(true);
+    applyEvent(early, { _tag: "ThreadMemberChanged", member: readBy(6, 8) });
+    await vi.waitFor(() => expect(early.getQueryState(queryKeys.unreadThreads)?.isInvalidated).toBe(true));
     await load(early, Promise.resolve(unread(8)));
     expect(reads).toBe(3);
     expect(listed(early)).toBe(false);
+  });
+
+  // covers ADR 039 (Members), STD-REACT-012
+  it("[TC-UX-1454-01] a read of your unread threads taken before you read the thread elsewhere never brings its dot back", async () => {
+    const client = new QueryClient();
+    const answers: Array<(read: UnreadThreads) => void> = [];
+    const observer = new QueryObserver(client, {
+      ...unreadThreadsQuery,
+      queryFn: syncedUnread(
+        () =>
+          new Promise<UnreadThreads>((resolve) => {
+            answers.push(resolve);
+          }),
+      ),
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    // You read the thread on another device while the first read is still on its way.
+    applyEvent(client, { _tag: "ThreadMemberChanged", member: readBy(6, 8) });
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    // The first read, taken before, answers last: it is dropped, and the newer read stands.
+    answers[1]?.(new UnreadThreads({ threadIds: [], through: 8 }));
+    answers[0]?.(new UnreadThreads({ threadIds: [threadId], through: 3 }));
+    await vi.waitFor(() => expect(client.getQueryState(queryKeys.unreadThreads)?.status).toBe("success"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(listed(client)).toBe(false);
+    unsubscribe();
   });
 
   it("reads through the last message seen whole, never one still under way or queued", () => {
