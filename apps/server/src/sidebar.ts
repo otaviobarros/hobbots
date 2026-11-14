@@ -54,6 +54,7 @@ export const SidebarHandlers = HttpApiBuilder.group(HobbotsApi, "sidebar", (hand
         onNone: () =>
           Effect.succeed<SidebarThread["members"]>([
             { actor: you, state: "active" as const },
+            // standards-allow STD-ARCH-021: with no member list, the thread's members are you and the hob it belongs to
             { actor: hobActor(thread.agentId), state: "active" as const },
           ]),
         onSome: (repository) => repository.list(thread.id),
