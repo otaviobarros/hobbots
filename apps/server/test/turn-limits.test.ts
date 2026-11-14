@@ -19,10 +19,11 @@ import {
   ThreadId,
   type TurnLimits,
 } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import { HobbotsRepositoryLive, TurnLimitsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Layer, ManagedRuntime, Schedule, Scope, Stream } from "effect";
+import { Deferred, Effect, Layer, ManagedRuntime, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
@@ -159,14 +160,9 @@ const start = async (threads: Parameters<typeof openDatabase>[1], limits: TurnLi
 const send = (hub: Hub, threadId: string, text: string) =>
   hub.runPromise(ChatService.use((chat) => chat.sendPrompt(ThreadId.make(threadId), text)));
 
-/** Waits until `check` holds, reading again every millisecond: never a fixed delay. */
+/** Waits until `check` holds, reading again every millisecond up to a time limit: never a fixed delay. */
 const until = <A>(hub: Hub, read: Effect.Effect<A, never, HubServices>, check: (value: A) => boolean) =>
-  hub.runPromise(
-    read.pipe(
-      Effect.flatMap((value) => (check(value) ? Effect.succeed(value) : Effect.fail("not yet" as const))),
-      Effect.retry({ schedule: Schedule.spaced("1 millis"), times: 5000 }),
-    ),
-  );
+  hub.runPromise(waitUntil(read, check, { every: "1 millis" }));
 
 const report = (hub: Hub) => hub.runPromise(TurnSlots.use((slots) => slots.report));
 const statusOf = async (hub: Hub, threadId: string) =>

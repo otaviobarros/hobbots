@@ -40,6 +40,7 @@ import {
   type TurnLimits,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
+import { waitUntil } from "@hobbots/domain/testing";
 import {
   Backpack,
   DEFAULT_DISPATCH_LIMITS,
@@ -1019,16 +1020,17 @@ describe("turn limits", () => {
     // answered, never more than four at once.
     for (const id of ids) {
       await run(
-        retry(
+        waitUntil(
           Effect.gen(function* () {
             const report = yield* Effect.flatMap(
               Effect.serviceOption(TurnSlots),
               (slots) => Option.getOrThrow(slots).report,
             );
             expect(report.active.length).toBeLessThanOrEqual(perHob);
-            const statuses = (yield* HobbotsRepository.use((repo) => repo.listMessages(id))).map((m) => m.status);
-            if (statuses.join() !== "complete,complete") return yield* Effect.fail(statuses);
+            return (yield* HobbotsRepository.use((repo) => repo.listMessages(id))).map((m) => m.status).join();
           }),
+          (statuses) => statuses === "complete,complete",
+          { what: `${id} to be answered` },
         ),
       );
     }

@@ -149,17 +149,18 @@ export class TurnSlots extends Context.Service<
           lock,
           Effect.sync(() => {
             const before = waiting.get(request.id);
-            const ticket: TurnTicket = before?.ticket ?? {
-              ...request,
-              state: "waiting",
-              waitingOn: null,
-              asked: counter++,
-            };
+            // A turn that asks again is weighed as it asks now, as when its chat moved to another
+            // runtime while it waited, and keeps its place in the queue.
+            const ticket: TurnTicket =
+              before === undefined
+                ? { ...request, state: "waiting", waitingOn: null, asked: counter++ }
+                : { ...before.ticket, ...request };
+            if (before !== undefined) waiting.set(request.id, { ...before, ticket });
             const mine = plan(before === undefined ? ticket : undefined).find((each) => each.ticket.id === request.id);
             const wait = mine?.wait ?? null;
             if (wait !== null) {
               waiting.set(request.id, {
-                ticket: move({ ...ticket, ...request }, { _tag: "Wait", reason: wait }),
+                ticket: move(ticket, { _tag: "Wait", reason: wait }),
                 wake,
                 asks: counter++,
               });
@@ -167,7 +168,7 @@ export class TurnSlots extends Context.Service<
             }
             waiting.delete(request.id);
             const key = counter++;
-            active.set(key, move({ ...ticket, ...request }, { _tag: "Admit" }));
+            active.set(key, move(ticket, { _tag: "Admit" }));
             served.set(turnGroup(ticket), key);
             return { slot: { release: release(key) } satisfies TurnSlot, others: false };
           }),

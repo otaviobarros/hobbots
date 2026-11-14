@@ -6,13 +6,16 @@ import {
   type TurnHolder,
   type TurnLimits,
 } from "@hobbots/domain";
-import { Effect, Layer, Ref, Schedule } from "effect";
+import { waitUntil } from "@hobbots/domain/testing";
+import { Effect, Layer, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { TurnLimitsStore, type TurnSlot, TurnSlots } from "../src/index.ts";
 
 // Issue #1448 (OR-005): the hub's turn slots. A turn past a limit waits, is woken once a slot may
 // be its, and slots go to Quests in a fair order.
+
+const isSet = <A>(value: A | null): value is A => value !== null;
 
 /** Something that wants turns, as a thread, a step or a member's Task does. */
 interface Work extends TurnHolder {
@@ -89,9 +92,8 @@ const harness = (slots: TurnSlots["Service"], all: ReadonlyArray<Work>) =>
               .sort()
               .join() &&
           waits.every((each) => limitReached(limits, runs, each) !== null);
-        if (!agrees) return yield* Effect.fail("unsettled" as const);
-        return { runs, waits, report };
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("1 millis"), times: 2000 }));
+        return agrees ? { runs, waits, report } : null;
+      }).pipe((read) => waitUntil(read, isSet, { what: "the slots to agree with the work", every: "1 millis" }));
     return { ask, finish, running, waiting, settled, started, phases };
   });
 
@@ -203,12 +205,10 @@ describe("TurnSlots", () => {
         yield* (first as TurnSlot).release;
         // Released twice, it frees one slot: the late turn holds the only one.
         yield* (first as TurnSlot).release;
-        const report = yield* Effect.retry(
-          Effect.flatMap(slots.report, (now) =>
-            now.active.length === 1 && now.waiting.length === 0 ? Effect.succeed(now) : Effect.fail("unsettled"),
-          ),
-          { schedule: Schedule.spaced("1 millis"), times: 2000 },
-        );
+        const report = yield* waitUntil(slots.report, (now) => now.active.length === 1 && now.waiting.length === 0, {
+          what: "the late turn to hold the only slot",
+          every: "1 millis",
+        });
         expect(woken).toEqual(["gone", "late"]);
         expect(report.active.map((each) => each.id)).toEqual(["thread:late"]);
         expect(yield* Ref.get(lateSlot)).not.toBe(null);
@@ -242,6 +242,40 @@ describe("TurnSlots", () => {
           expect(yield* slots.limits).toEqual(wider);
         }).pipe(Effect.provide(TurnSlots.layer.pipe(Layer.provide(store)))),
       ),
+    );
+  });
+
+  // covers OR-005
+  it("[TC-AG-1448-05] weighs a waiting turn as it asks now, when its chat moved to another runtime", async () => {
+    const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
+    await run(limits, (slots) =>
+      Effect.gen(function* () {
+        const claude = yield* slots.take(work("thread:claude", "aldric", "claude-code", null), Effect.void);
+        const codex = yield* slots.take(work("thread:codex", "bram", "codex", null), Effect.void);
+        expect([claude, codex].every((each) => each !== null)).toBe(true);
+        // A chat waits for Claude Code, then moves to Codex while it waits: once woken, it asks on Codex.
+        const moved = work("thread:moved", "cora", "claude-code", null);
+        const wake: Effect.Effect<void> = Effect.suspend(() =>
+          Effect.asVoid(slots.take({ ...moved, runtime: "codex" }, wake)),
+        );
+        expect(yield* slots.take(moved, wake)).toBe(null);
+        // Claude Code's slot frees and wakes the chat, which, now on Codex, still waits for Codex's.
+        yield* (claude as TurnSlot).release;
+        const report = yield* waitUntil(
+          slots.report,
+          (now) => now.active.length === 1 && now.waiting.length === 1 && now.waiting[0]?.runtime === "codex",
+          { what: "the moved chat to wait for Codex", every: "1 millis" },
+        );
+        expect(report.active.map((each) => each.id)).toEqual(["thread:codex"]);
+        expect(report.waiting).toMatchObject([{ id: "thread:moved", runtime: "codex", waitingOn: "runtime" }]);
+        // Codex's slot frees: now it starts.
+        yield* (codex as TurnSlot).release;
+        const after = yield* waitUntil(slots.report, (now) => now.active.length === 1 && now.waiting.length === 0, {
+          what: "the moved chat to start on Codex",
+          every: "1 millis",
+        });
+        expect(after.active).toMatchObject([{ id: "thread:moved", runtime: "codex" }]);
+      }),
     );
   });
 });
