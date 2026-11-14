@@ -39,8 +39,8 @@ export interface GitWorkspaceShape {
   readonly namesOnMain: (repository: string, directory: string) => Effect.Effect<ReadonlyArray<string> | null>;
   /**
    * Where an absolute path is, as the claims register keys it (#1449): the real path of its
-   * repository's top folder and the path inside it with `/` between names, or null when it is in no
-   * repository. The path may not exist yet, as a file a call is about to write: its nearest folder
+   * repository's top folder and the path inside it with `/` between names, empty for the top folder
+   * itself, or null when it is in no repository. The path may not exist yet, as a file a call is about to write: its nearest folder
    * that does is resolved as the kernel walks it. Read without running Git.
    */
   readonly placeOf: (path: string) => Effect.Effect<{ readonly top: string; readonly path: string } | null>;

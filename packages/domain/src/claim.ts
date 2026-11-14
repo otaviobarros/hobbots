@@ -234,10 +234,11 @@ export const claimSubject = (claim: Claim): string => {
 
 /**
  * Whether a write to `path`, inside the claim's repository with `/` between names, touches the path
- * the claim is on: the file itself, a file inside its folder, or a folder that holds it.
+ * the claim is on: the file itself, a file inside its folder, or a folder that holds it. An empty
+ * path is the repository's top folder, which holds every path in it.
  */
 export const touchesPath = (claim: Claim, path: string): boolean =>
-  claim.scope === "path" && pathsOverlap(claim.key, path);
+  claim.scope === "path" && (path === "" || pathsOverlap(claim.key, path));
 
 /** The claims a list names, as a hob reads them: "path docs/a.md and branch feat/x in github.com/me/app". */
 const subjects = (claims: ReadonlyArray<Claim>): string => {

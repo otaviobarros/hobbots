@@ -18,14 +18,24 @@ const taskClaimsQuery = (taskId: TaskId) =>
 
 const NO_CLAIMS: ReadonlyArray<Claim> = [];
 
+/** A Task's claims as the lane reads them: what it holds once read, and whether the read failed. */
+export interface TaskClaimsRead {
+  /** Its open claims, or undefined while they are read or could not be. */
+  readonly claims: ReadonlyArray<Claim> | undefined;
+  /** The read failed after its retries, so what the Task holds is unknown, not none. */
+  readonly failed: boolean;
+  readonly retry: () => void;
+}
+
 /**
- * A Task's open claims, or undefined while they are read. An ended Task holds none: its claims were
- * released when it ended, so a read cached while it ran is never shown as still holding them.
+ * A Task's open claims. An ended Task holds none: its claims were released when it ended, so a read
+ * cached while it ran is never shown as still holding them.
  */
-export const useTaskClaims = (task: Task): ReadonlyArray<Claim> | undefined => {
+export const useTaskClaims = (task: Task): TaskClaimsRead => {
   const ended = isTerminalTask(task.state);
-  const { data } = useQuery({ ...taskClaimsQuery(task.id), enabled: !ended });
-  return ended ? NO_CLAIMS : data;
+  const read = useQuery({ ...taskClaimsQuery(task.id), enabled: !ended });
+  if (ended) return { claims: NO_CLAIMS, failed: false, retry: () => undefined };
+  return { claims: read.data, failed: read.isError && read.data === undefined, retry: () => void read.refetch() };
 };
 
 /** A claim was made, contested, cleared, taken over or released: every Task's claims are read again. */

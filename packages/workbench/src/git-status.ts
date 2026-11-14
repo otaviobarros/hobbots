@@ -238,8 +238,10 @@ const placeOf = async (path: string): Promise<{ readonly top: string; readonly p
   const found = await repositoryOf(real, new Map());
   if (found === null) return null;
   const top = await realpath(found.dir);
-  const inside = insideOf(top, join(real, ...below));
-  return inside === null || inside === "" ? null : { top, path: inside };
+  const file = join(real, ...below);
+  const inside = file === top ? "" : insideOf(top, file);
+  // The top folder itself is "", which holds every path: deleting it deletes what you took over.
+  return inside === null ? null : { top, path: inside };
 };
 
 /** The branch checked out in the repository whose top is `top`, by its short name, or null. */

@@ -30,6 +30,8 @@ export const messages = {
   taken: ({ claims }: { claims: ReadonlyArray<{ readonly scope: string; readonly key: string }> }) =>
     `Yours now: ${formatList(claims.map((claim) => (claim.scope === "path" ? claim.key : claim.scope === "branch" ? `branch ${claim.key}` : `number ${claim.key}`)))}. Hobbots refuses the hob's writes to them.`,
   takeOverFailed: "Taking over didn't go through. Hobbots may be reconnecting.",
+  claimsUnread: "Hobbots couldn't read which files and branches this task holds.",
+  claimsRetry: "Try again",
   /** The attempt picker in a lane's header: "Try 1 ✗ · 2". */
   tries: ({ name }: { name: string }) => `${name}'s attempts`,
   try: "Try",

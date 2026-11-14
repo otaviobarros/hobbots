@@ -515,6 +515,8 @@ describe("the claims register", () => {
       expect(await h.takenWrite({ paths: [`${checkout}${sep}decisions-link${sep}..${sep}a.md`] })).toContain(
         "took over",
       );
+      // Deleting the repository's top folder deletes what you took over inside it.
+      expect(await h.takenWrite({ paths: [checkout] })).toContain("took over");
       // A push of the branch, and a commit where it is checked out, are refused; a commit on main is not.
       expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "refs/heads/camp" }] })).toContain("branch camp");
       expect(await h.takenWrite({ commits: [worktree] })).toContain("branch camp");

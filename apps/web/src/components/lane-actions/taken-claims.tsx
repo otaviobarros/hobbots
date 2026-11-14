@@ -1,4 +1,5 @@
 import { Claims, type Task } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenuItem, DropdownMenuLabel } from "@hobbots/ui/components/menu";
 import { useTaskClaims } from "../../api/task-claims.ts";
 import { Outcome, Refusal } from "../quest/room-controls.tsx";
@@ -8,10 +9,12 @@ import type { LaneActions } from "./use-lane-actions.ts";
 
 /**
  * What you took over of a Task (#1449), as the claims register holds it, while Take over is on its
- * way, and why it did not go through.
+ * way, and why it did not go through. A read that failed says so, with Try again, rather than
+ * showing the Task as holding nothing.
  */
 export function TakenClaims({ task, actions }: { task: Task; actions: LaneActions }) {
-  const taken = (useTaskClaims(task) ?? []).filter(Claims.isTaken);
+  const read = useTaskClaims(task);
+  const taken = (read.claims ?? []).filter(Claims.isTaken);
   const refusal = actions.takeOverRefusal(task.id);
   return (
     <>
@@ -23,6 +26,14 @@ export function TakenClaims({ task, actions }: { task: Task; actions: LaneAction
             : null}
       </Outcome>
       <Refusal>{refusal === null ? null : messages.takeOverFailed}</Refusal>
+      {read.failed && (
+        <p className="m-0 flex flex-wrap items-center gap-2 text-meta text-text-secondary">
+          <span role="alert">{messages.claimsUnread}</span>
+          <Button type="button" variant="chip" size="xs" onClick={read.retry}>
+            {messages.claimsRetry}
+          </Button>
+        </p>
+      )}
     </>
   );
 }
@@ -32,7 +43,7 @@ export function TakenClaims({ task, actions }: { task: Task; actions: LaneAction
  * not taken over, with what it leaves the hob. The menu stays open until the hub moved them to you.
  */
 export function TakeOverItems({ task, owner, actions }: { task: Task; owner: string; actions: LaneActions }) {
-  const claims = useTaskClaims(task);
+  const { claims } = useTaskClaims(task);
   if (!canTakeOver(task, claims)) return null;
   return (
     <>
