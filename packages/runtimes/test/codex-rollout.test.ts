@@ -153,6 +153,31 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(past).toHaveLength(1);
   });
 
+  // covers PE-001, SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-11] a refused call named as an Object property is no runtime tool, and is decided as an unknown one", async () => {
+    const path = join(folder, "names.jsonl");
+    writeFileSync(path, "");
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    const names = ["constructor", "__proto__", "toString", "hasOwnProperty"];
+    appendFileSync(
+      path,
+      names.map((name) => `${call(name, name, {})}${output(name, `unsupported call: ${name}`)}`).join(""),
+    );
+    await Effect.runPromise(refusals.read);
+    expect(reported).toEqual(
+      names.map((name) =>
+        expect.objectContaining({
+          id: name,
+          tool: name,
+          operation: "outside-folders",
+          notOffered: { runtimeTool: null },
+        }),
+      ),
+    );
+  });
+
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {

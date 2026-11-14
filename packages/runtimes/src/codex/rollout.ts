@@ -28,14 +28,14 @@ const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants
 const UNSUPPORTED = ["unsupported call: ", "unsupported custom tool call: "];
 
 /** The runtime tool each of Codex's own tools belongs to, as a session's offer names them (#1348). */
-const RUNTIME_TOOLS: Readonly<Record<string, RuntimeToolName>> = {
-  shell: "commands",
-  local_shell: "commands",
-  exec_command: "commands",
-  write_stdin: "commands",
-  apply_patch: "file_edits",
-  view_image: "file_reads",
-};
+const RUNTIME_TOOLS: ReadonlyMap<string, RuntimeToolName> = new Map([
+  ["shell", "commands"],
+  ["local_shell", "commands"],
+  ["exec_command", "commands"],
+  ["write_stdin", "commands"],
+  ["apply_patch", "file_edits"],
+  ["view_image", "file_reads"],
+]);
 
 interface ResponseItem {
   readonly type?: unknown;
@@ -119,7 +119,8 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
       const prefix = typeof output === "string" ? UNSUPPORTED.find((each) => output.startsWith(each)) : undefined;
       if (prefix === undefined || typeof output !== "string") continue;
       const tool = typeof call?.name === "string" ? call.name : output.slice(prefix.length).trim();
-      const runtimeTool = RUNTIME_TOOLS[tool] ?? null;
+      // A name is the model's or the rollout's own text, so only a name in the map is a runtime tool.
+      const runtimeTool = RUNTIME_TOOLS.get(tool) ?? null;
       report(notOfferedDenial({ id: item.call_id, tool, label: labelOf(tool, runtimeTool, call), runtimeTool }));
     }
   };
