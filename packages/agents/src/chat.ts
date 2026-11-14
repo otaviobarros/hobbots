@@ -49,6 +49,7 @@ import { HobAdmission } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
+import { makePackPeople } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
@@ -678,6 +679,7 @@ export class ChatService extends Context.Service<
       const resume = (threadId: ThreadId) => step(threadId, { _tag: "Release" }).pipe(Effect.andThen(wake(threadId)));
 
       const packSources = yield* makePackSources;
+      const packPeople = yield* makePackPeople;
       const packReports = yield* Effect.serviceOption(PackReports);
       const contextPack = (threadId: ThreadId) =>
         Effect.gen(function* () {
@@ -685,7 +687,8 @@ export class ChatService extends Context.Service<
           if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
           const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
           const live = transcript.filter((m) => m.chapterId === thread.value.liveChapterId);
-          const sources = yield* packSources(thread.value, live, transcript);
+          const people = yield* packPeople(thread.value, thread.value.agentId);
+          const sources = yield* packSources(thread.value, live, transcript, people, null);
           const agent = yield* repo.findAgent(thread.value.agentId);
           const memory = Option.isNone(agent)
             ? null

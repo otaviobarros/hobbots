@@ -125,17 +125,19 @@ Built in [#1385](https://github.com/otaviobarros/hobbots/issues/1385): `CampSugg
 Built in [#1380](https://github.com/otaviobarros/hobbots/issues/1380). `buildPack(records, budget)` in `packages/agents/src/context-pack.ts` is pure and deterministic. It makes a new runtime session's starting context, on every runtime, from:
 
 1. the memory brief (its own budget, ADR 028), sent beside the pack as before and counted against its budget,
-2. the camp brief, as the brief projector last wrote it ([#1384](https://github.com/otaviobarros/hobbots/issues/1384)),
-3. active decisions,
-4. the thread's open work: its open Tasks with their last step, the questions in them still waiting for an answer, and the backpack items its turns carry, as Start fresh would carry them,
-5. what Start fresh carried, until the hob first replies in the new chat,
-6. the artifacts index,
-7. one line per resting chapter,
-8. the live chapter's turns before the prompt.
+2. in a shared thread, who is here and why the turn runs ([#1465](https://github.com/otaviobarros/hobbots/issues/1465)),
+3. the camp brief, as the brief projector last wrote it ([#1384](https://github.com/otaviobarros/hobbots/issues/1384)),
+4. active decisions,
+5. the thread's open work: the Quests under way in it, from their `QuestSummary`, then its open Tasks with their last step, the questions in them still waiting for an answer, and the backpack items its turns carry, as Start fresh would carry them,
+6. what Start fresh carried, until the hob first replies in the new chat,
+7. the artifacts index,
+8. one line per resting chapter,
+9. the live chapter's turns before the prompt, each under its author's name.
 
 Each part has a share of the budget (`PACK_BUDGET`: 12,000 tokens, counted as four characters a token), and the shares add up to it. The pack never goes over its budget, even when the briefs and the active decisions alone would.
 
 - **Which session.** A turn with no session to resume in its live chapter starts from the pack: a new chapter's first turn, a turn after a split or merge of the live chapter, and a brain switch, whose pack replays the live chapter. A resumed session hears only what other brains wrote in the live chapter since it last replied (ADR 017).
+- **Several hobs** ([ADR 039](../decisions/039-shared-camps.md#the-context-pack-with-several-hobs), [#1465](https://github.com/otaviobarros/hobbots/issues/1465)). The transcript names every speaker: "Marina (person)", "Quill (hob)", and "You" for the hob's own replies. `makePackPeople` in `packages/agents/src/pack-people.ts` reads the names from the members, the users and the hobs. A shared thread, with more than one hob or more than one person, also gets the members part: "## Who is here", the hob's own name, why the turn runs ("Leo mentioned you.", "You are the only hob here.") and the active members, the reason kept when the list is cut. A direct message gets none, since it says nothing the hob does not know. The reason is the floor's `TurnRequest` cause when a turn is handed one; until then `turnReasonOf` works it out from the prompt with `answerersFor`. A resumed session that missed what others said, another hob's reply or people's messages no hob answered, hears it as "## Since you last spoke": the messages since its hob last spoke in the line, each under its author's name, within the live chapter's share, the oldest counted with the ids of the newest of them for `read_message`, and the reason when another actor asked it. Otherwise a resumed session hears only what its own hob wrote on other brains, as before. The memory brief is always the turn's own hob's (ADR 028): a hob never reads another member hob's.
 - **Over budget**, the parts with a fixed share are cut at it: the briefs at their share, and the parts that never drop silently fitted to theirs. What the others leave goes first to the live chapter, then the artifacts, then the resting chapter lines, so they trim in ADR 037's order: resting chapter lines, the oldest artifacts, the live chapter's oldest turns. Each trim leaves one line saying what was left out.
 - **Active decisions and open work never drop silently.** Decisions: the newest in full while every older one still fits by title, newest first; past that, the newest titles and a count. Open work: what does not fit is counted.
 - **A last turn too large for its share** is carried as its start and end with `[… N characters left out. Read the rest with read_message, message_id <id>.]` ([#1381](https://github.com/otaviobarros/hobbots/issues/1381)).
