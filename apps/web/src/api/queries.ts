@@ -30,6 +30,7 @@ export const queryKeys = {
   threads: (agentId: AgentId) => ["agents", agentId, "threads"] as const,
   archivedThreads: (agentId: AgentId) => ["agents", agentId, "archivedThreads"] as const,
   messages: (threadId: ThreadId) => ["threads", threadId, "messages"] as const,
+  unreadThreads: ["unreadThreads"] as const,
   runtimes: ["runtimes"] as const,
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
   permissions: (agentId: AgentId) => ["agents", agentId, "permissions"] as const,

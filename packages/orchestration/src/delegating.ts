@@ -302,6 +302,11 @@ const NEEDS: ReadonlyArray<{
 }> = [
   { tool: ["github_comment"], words: /\bcomment/i, work: "commenting" },
   { tool: ["github_open_pull_request"], words: /\bpull requests?\b|\bPRs?\b/, work: "opening a pull request" },
+  {
+    tool: ["github_open_issue"],
+    words: /\b(?:open|file|raise|create)\b[^.\n]{0,40}\bissues?\b|\bsub-issues?\b/i,
+    work: "opening an issue",
+  },
   { tool: ["github_push"], words: /\bpush/i, work: "pushing", or: "commands" },
   { tool: ["commands", "read_only_commands"], words: /\bcommit|\brun\b|\btests?\b/i, work: "running commands" },
   { tool: ["file_edits"], words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },
@@ -320,6 +325,15 @@ const briefNeeds = (member: Agent, brief: string, offer: SessionToolOffer): stri
   );
   return ` Warning: the brief names ${each.join("; ")}. Do that part yourself, give ${member.name} what it lacks, or bring in a hob that has it.`;
 };
+
+/**
+ * A warning for the lead when the brief names `gh`, which no hob can run: no credential enters its
+ * sandbox, so GitHub goes through the GitHub Charm's tools (#1349). Empty otherwise.
+ */
+const briefNamesGh = (brief: string): string =>
+  /\bgh\b/.test(brief)
+    ? " Warning: the brief names gh, which no hob can run: GitHub goes through the GitHub Charm's tools, so name the work instead."
+    : "";
 
 /** The offer as the call's details carry it, for a lead that reads them. */
 const offerDetails = (offer: SessionToolOffer) => ({
@@ -496,7 +510,7 @@ export const makeDelegating = ({
             : (input.prepared ?? NO_OFFER);
         const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders }, offer);
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
-        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}`;
+        const offered = `${offerWords(member, offer)}${briefNeeds(member, input.brief, offer)}${briefNamesGh(input.brief)}`;
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
         // Refused here, not only by the records, so a check is refused as the call would be.
         yield* placeable(scope, task, input.depends_on ?? []);

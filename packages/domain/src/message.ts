@@ -253,6 +253,17 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
   ),
+  /**
+   * The hobs and people the text @mentions (ADR 039, Who answers), in the order first mentioned, each
+   * once. Parsed with `mentionsIn` when the message is stored with its final text: as it is sent, or
+   * when a reply ends; a reply continued with Continue keeps them and adds those of its new text when
+   * it ends again. Empty while a reply first streams, for a message that mentions nobody, and for
+   * messages from before mentions were kept.
+   */
+  mentions: Schema.Array(Actor).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
   createdAt: Schema.String,
   revision: Revision,
 }) {}

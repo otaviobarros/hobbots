@@ -103,6 +103,17 @@ export class ThreadNotCamp extends Schema.TaggedError<ThreadNotCamp>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * A message refused before it was stored, for mentioning hobs that cannot hear it (ADR 039, Who
+ * answers): their ids, each once, in the order mentioned. The composer names them ("Rook isn't in
+ * this camp. Add Rook?").
+ */
+export class MentionRefused extends Schema.TaggedError<MentionRefused>()(
+  "MentionRefused",
+  { threadId: ThreadId, hobs: Schema.Array(AgentId) },
+  { httpApiStatus: 409 },
+) {}
+
 /** An archived thread is read-only: it takes no new messages, replies or brain switch until it is restored. */
 export class ThreadArchived extends Schema.TaggedError<ThreadArchived>()(
   "ThreadArchived",

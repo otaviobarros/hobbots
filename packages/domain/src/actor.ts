@@ -18,6 +18,9 @@ export type Actor = typeof Actor.Type;
  */
 export const OWNER_ACTOR: Actor = { kind: "user", id: "owner" };
 
+/** Whether two actors are the same person, hob or hub. */
+export const sameActor = (a: Actor, b: Actor): boolean => a.kind === b.kind && a.id === b.id;
+
 /** A hob as the author of a record. */
 export const hobActor = (agentId: AgentId): Actor => ({ kind: "hob", id: agentId });
 

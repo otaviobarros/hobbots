@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useUnreadThreads } from "../../api/thread-reads.ts";
 import { usePinThread, useRenameThread } from "../../api/thread-settings.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { ArchiveItem } from "../archive/thread-menu.tsx";
@@ -55,6 +56,7 @@ export function ChatRow({
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = thread.pinnedAt !== null;
+  const unread = useUnreadThreads().has(thread.id);
   const pin = usePinThread();
 
   return (
@@ -70,8 +72,8 @@ export function ChatRow({
       <span className="flex h-[22px] items-center justify-center text-label">
         {live ? (
           <span role="img" aria-label={copy.working} className="size-2 flex-none rounded-dot bg-mint" />
-        ) : thread.unread ? (
-          // The hob wrote since you read the chat on any device (ADR 027).
+        ) : unread ? (
+          // The hob wrote since you read the chat on any device of yours (ADR 027, ADR 039).
           <span role="img" aria-label={copy.unread} className="size-2 flex-none rounded-dot bg-lantern" />
         ) : (
           pinned && <PinIcon label={copy.pinned} />

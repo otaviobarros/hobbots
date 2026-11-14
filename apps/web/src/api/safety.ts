@@ -133,6 +133,11 @@ export const RULES: ReadonlyArray<RuleInfo> = [
     note: "Comments on issues and pull requests in the repository of its folders.",
   },
   {
+    operation: "github.open-issue",
+    label: "Open issues",
+    note: "New issues and sub-issues in the repository of its folders.",
+  },
+  {
     operation: "outside-folders",
     label: "Anything outside its folders",
     note: "Any other file on the hub. Always Never.",
@@ -180,6 +185,7 @@ export const GITHUB_OPERATIONS = [
   "push",
   "github.open-pull-request",
   "github.comment",
+  "github.open-issue",
 ] as const satisfies ReadonlyArray<AnyOperation>;
 
 const isGitHub = (operation: AnyOperation) => (GITHUB_OPERATIONS as ReadonlyArray<AnyOperation>).includes(operation);

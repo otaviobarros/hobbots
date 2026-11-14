@@ -70,7 +70,13 @@ describe("HobbotsRepository", () => {
           agentId,
           title: "Renamed",
           sessions: [
-            { runtime: "claude-code", sessionId: "s1", chapterId: ChapterId.make("chapter-1"), seenThrough: null },
+            {
+              runtime: "claude-code",
+              agentId,
+              sessionId: "s1",
+              chapterId: ChapterId.make("chapter-1"),
+              seenThrough: null,
+            },
           ],
           brain: { runtime: "codex", model: "gpt", effort: null },
           createdAt: now,
@@ -172,7 +178,7 @@ describe("HobbotsRepository", () => {
         }),
       );
       yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
-      const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
+      const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
       const asked = new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(asked);
       const yours = yield* unread();
@@ -181,7 +187,7 @@ describe("HobbotsRepository", () => {
       const streaming = yield* unread();
       const seen = (yield* repo.upsertMessage(message("m2"))).value.revision;
       const ended = yield* unread();
-      const listed = (yield* repo.listThreads(agentId))[0]?.unread;
+      const listed = (yield* repo.listUnreadThreads).threadIds;
       const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"), seen);
       const after = yield* unread();
       // Reading an older message, again or a message of another thread changes nothing.
@@ -197,7 +203,12 @@ describe("HobbotsRepository", () => {
         streaming,
         ended,
         listed,
-        marked: Option.map(marked, (c) => ({ unread: c.value.unread, events: c.entries.map((e) => e.type) })),
+        marked: Option.map(marked, (c) => ({
+          reader: c.value.actor,
+          read: c.value.readRevision,
+          events: c.entries.map((e) => e.type),
+        })),
+        seen,
         after,
         back: Option.isNone(back),
         again: Option.isNone(again),
@@ -211,8 +222,9 @@ describe("HobbotsRepository", () => {
       yours: false,
       streaming: false,
       ended: true,
-      listed: true,
-      marked: Option.some({ unread: false, events: ["ThreadUpserted"] }),
+      listed: [threadId],
+      marked: Option.some({ reader: OWNER_ACTOR, read: result.seen, events: ["ThreadMemberChanged"] }),
+      seen: result.seen,
       after: false,
       back: true,
       again: true,
@@ -249,14 +261,22 @@ describe("HobbotsRepository", () => {
         new Message({ ...message("m2"), content: "Quill finished; I wait on Ada.", quiet: true }),
       );
       const quiet = Option.getOrThrow(yield* repo.findThread(threadId));
+      const quietUnread = (yield* repo.listUnreadThreads).threadIds.includes(threadId);
       yield* repo.upsertMessage(new Message({ ...message("m3"), content: "The launch page is live." }));
       const finish = Option.getOrThrow(yield* repo.findThread(threadId));
-      return { quiet, finish, stored: (yield* repo.listMessages(threadId)).map((each) => [each.id, each.quiet]) };
+      const finishUnread = (yield* repo.listUnreadThreads).threadIds.includes(threadId);
+      return {
+        quiet,
+        quietUnread,
+        finish,
+        finishUnread,
+        stored: (yield* repo.listMessages(threadId)).map((each) => [each.id, each.quiet]),
+      };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect(result.quiet.unread).toBe(false);
+    expect(result.quietUnread).toBe(false);
     expect(result.quiet.lastLine).toBe("Quill drafts the copy.");
-    expect(result.finish.unread).toBe(true);
+    expect(result.finishUnread).toBe(true);
     expect(result.finish.lastLine).toBe("The launch page is live.");
     expect(result.stored).toEqual([
       ["m1", false],
@@ -285,7 +305,7 @@ describe("HobbotsRepository", () => {
         }),
       );
       yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
-      const unread = () => repo.findThread(threadId).pipe(Effect.map((t) => Option.getOrThrow(t).unread));
+      const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
       yield* repo.upsertMessage(
         new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null }),
       );
@@ -301,7 +321,7 @@ describe("HobbotsRepository", () => {
       // Another device's read of the cut-off reply, landing only now, leaves the rest unread.
       const late = yield* repo.markThreadRead(threadId, MessageId.make("m2"), half.value.revision);
       // A fresh read of the list says the same, and reading the rest clears it.
-      const listed = (yield* repo.listThreads(agentId))[0]?.unread;
+      const listed = (yield* repo.listUnreadThreads).threadIds.includes(threadId);
       const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"), whole.value.revision);
       return {
         read,
@@ -309,7 +329,7 @@ describe("HobbotsRepository", () => {
         continued,
         late: Option.isNone(late),
         listed,
-        cleared: Option.map(marked, (change) => change.value.unread),
+        cleared: Option.map(marked, (change) => change.value.readRevision === whole.value.revision),
         after: yield* unread(),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
@@ -320,7 +340,7 @@ describe("HobbotsRepository", () => {
       continued: true,
       late: true,
       listed: true,
-      cleared: Option.some(false),
+      cleared: Option.some(true),
       after: false,
     });
   });

@@ -6,7 +6,7 @@ import { DEFAULT_DISPATCH_LIMITS } from "@hobbots/inbox";
 import { DEFAULT_STEP_LIMITS, DEFAULT_TASK_TOOL_LIMITS } from "@hobbots/orchestration";
 import { Config, Option } from "effect";
 
-const defaultDataDir = () =>
+export const defaultDataDir = () =>
   platform() === "darwin" ? join(homedir(), "Library", "Application Support", "Hobbots") : join(homedir(), ".hobbots");
 
 export const ServerConfig = Config.all({

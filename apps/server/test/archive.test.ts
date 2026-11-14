@@ -3,11 +3,12 @@ import { ThreadArchived, ThreadArchiveRefused } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  type JournaledEvent,
   type Message,
+  OWNER_ACTOR,
   SkillName,
   SkillRevisionHash,
   SkillTrial,
-  type Thread,
   type ThreadId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SearchIndex } from "@hobbots/persistence";
@@ -78,22 +79,32 @@ const finishedThread = (prompt = "Plan the kettle repair") =>
   });
 
 // Records the thread events published from here on.
-const recordThreadEvents = Effect.gen(function* () {
-  const bus = yield* EventBus;
-  const threads: Array<Thread> = [];
-  yield* bus.stream.pipe(
-    Stream.runForEach((published) =>
-      Effect.sync(() => {
-        if (published._tag === "Journaled" && published.entry.payload._tag === "ThreadUpserted") {
-          threads.push(published.entry.payload.thread);
-        }
-      }),
-    ),
-    Effect.forkScoped,
-  );
-  yield* Effect.yieldNow;
-  return threads;
-});
+/** What `pick` takes from every entry the bus journals from now on. */
+const recordJournaled = <A>(pick: (payload: JournaledEvent) => A | undefined) =>
+  Effect.gen(function* () {
+    const bus = yield* EventBus;
+    const picked: Array<A> = [];
+    yield* bus.stream.pipe(
+      Stream.runForEach((published) =>
+        Effect.sync(() => {
+          const value = published._tag === "Journaled" ? pick(published.entry.payload) : undefined;
+          if (value !== undefined) picked.push(value);
+        }),
+      ),
+      Effect.forkScoped,
+    );
+    yield* Effect.yieldNow;
+    return picked;
+  });
+
+const recordThreadEvents = recordJournaled((payload) =>
+  payload._tag === "ThreadUpserted" ? payload.thread : undefined,
+);
+
+/** Every member change (ADR 039). */
+const recordMemberEvents = recordJournaled((payload) =>
+  payload._tag === "ThreadMemberChanged" ? payload.member : undefined,
+);
 
 const refusal = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) && exit.cause.reasons[0]?._tag === "Fail" ? exit.cause.reasons[0].error : undefined;
@@ -339,36 +350,42 @@ describe("read threads", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
+        const unread = (threadId: ThreadId) =>
+          chat.unreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
         const thread = yield* finishedThread("Plan the kettle repair");
+        const before = yield* unread(thread.id);
         const reply = (yield* repo.listMessages(thread.id)).at(-1);
         if (reply === undefined) throw new Error("no reply");
-        const events = yield* recordThreadEvents;
+        const events = yield* recordMemberEvents;
         const read = yield* chat.markRead(thread.id, reply.id, reply.revision);
+        const afterRead = yield* unread(thread.id);
         const readAgain = yield* chat.markRead(thread.id, reply.id, reply.revision);
         yield* chat.sendPrompt(thread.id, "And the lid?");
         yield* settled(thread.id);
-        const written = Option.getOrThrow(yield* repo.findThread(thread.id));
+        const written = yield* unread(thread.id);
         const missing = yield* Effect.exit(chat.markRead("nope" as ThreadId, reply.id, reply.revision));
         yield* Effect.yieldNow;
         return {
-          before: thread.unread,
+          before,
           read,
+          afterRead,
           readAgain,
-          written: written.unread,
+          written,
           missing: Exit.isFailure(missing),
-          events: events.filter((t) => t.id === thread.id).map((t) => t.unread),
+          events: events.filter((member) => member.threadId === thread.id),
         };
       }),
     );
     expect(result.before).toBe(true);
-    expect(result.read.unread).toBe(false);
-    expect(result.read.updatedAt).toBe(result.readAgain.updatedAt);
-    expect(result.readAgain).toEqual(result.read);
+    // Your own member row moves: the owner's, since no device asked.
+    expect(result.read).toMatchObject({ actor: OWNER_ACTOR, role: "owner" });
+    expect(result.read?.readRevision).toBeGreaterThan(0);
+    expect(result.afterRead).toBe(false);
+    expect(result.readAgain).toBeNull();
     expect(result.written).toBe(true);
     expect(result.missing).toBe(true);
     // The read goes out to every device; reading the same message again sends nothing.
-    expect(result.events[0]).toBe(false);
-    expect(result.events.filter((unread) => !unread).length).toBeGreaterThanOrEqual(1);
+    expect(result.events).toEqual([result.read]);
   });
 
   // covers CH-009

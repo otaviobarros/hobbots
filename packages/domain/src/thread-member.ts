@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Actor } from "./actor.ts";
+import { Actor, sameActor } from "./actor.ts";
 import { ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
@@ -31,13 +31,23 @@ export class ThreadMember extends Schema.Class<ThreadMember>("ThreadMember")({
   addedBy: Actor,
   /**
    * How far this member read the thread: the revision of the newest message they saw, or null before
-   * they read any. A hob's stays null. Written beside the thread's own marker; unread counts move onto
-   * it later (ADR 039, read markers per member).
+   * they read any. A hob's stays null. Unread counts, the unread line and catch-up read the member
+   * row of the person asking (ADR 039, read markers per member).
    */
   readRevision: Schema.NullOr(Schema.Number),
   /** Until when the member muted the thread, or null. A muted thread still counts mentions of them. */
   mutedUntil: Schema.NullOr(Schema.String),
   revision: Revision,
+}) {}
+
+/**
+ * The threads unread for the person asking (ADR 039, read markers per member): those where a hob
+ * wrote since their own read marker, as the hub works it out. `through` is the newest journal
+ * sequence the read could see, so a reply that lands after it is unread whatever the list says.
+ */
+export class UnreadThreads extends Schema.Class<UnreadThreads>("UnreadThreads")({
+  threadIds: Schema.Array(ThreadId),
+  through: Schema.Number,
 }) {}
 
 /** What can happen to a member. */
@@ -100,8 +110,6 @@ export class MemberRefused extends Schema.TaggedError<MemberRefused>()("MemberRe
   actor: Actor,
   reason: MemberRefusal,
 }) {}
-
-const sameActor = (a: Actor, b: Actor): boolean => a.kind === b.kind && a.id === b.id;
 
 /**
  * What adding `actor` to a thread does, given its members in every state: `add` a new row, `return`

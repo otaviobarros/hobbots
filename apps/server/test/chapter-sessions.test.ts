@@ -171,7 +171,7 @@ describe("runtime sessions keyed by chapter", () => {
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
-      const first = liveSession(await thread(id), runtime);
+      const first = liveSession(await thread(id), runtime, WREN);
       expect(first?.sessionId).toMatch(/^fake-/);
       await say(id, "She is three.");
       expect(asked[runtime][1]?.sessionId).toBe(first?.sessionId);
@@ -180,7 +180,7 @@ describe("runtime sessions keyed by chapter", () => {
       const moved = await thread(id);
       expect(moved.liveChapterId).toBe("chapter-2");
       // The first chapter's session is kept on the thread, but no turn of the new chapter resumes it.
-      expect(liveSession(moved, runtime)).toBeUndefined();
+      expect(liveSession(moved, runtime, WREN)).toBeUndefined();
 
       const reply = await say(id, "What should I plant?");
       const fresh = asked[runtime][2] as PromptRequest;
@@ -191,7 +191,7 @@ describe("runtime sessions keyed by chapter", () => {
       expect(fresh.briefing).not.toContain("She is three.");
       expect(fresh.briefing).not.toContain("> My cat is called Miso.");
       expect(reply).toMatchObject({ status: "complete", chapterId: "chapter-2" });
-      const second = liveSession(await thread(id), runtime);
+      const second = liveSession(await thread(id), runtime, WREN);
       expect(second).toMatchObject({ runtime, chapterId: "chapter-2" });
       expect(second?.sessionId).not.toBe(first?.sessionId);
 
@@ -228,7 +228,7 @@ describe("runtime sessions keyed by chapter", () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     const plants = await say(id, "What should I plant?");
-    const before = liveSession(await thread(id), "claude-code");
+    const before = liveSession(await thread(id), "claude-code", WREN);
 
     const prompt = (await run(HobbotsRepository.use((repo) => repo.listMessages(id)))).find(
       (m) => m.role === "user" && m.content === "What should I plant?",
@@ -252,7 +252,7 @@ describe("runtime sessions keyed by chapter", () => {
     ]);
     await say(id, "When?");
     expect(asked["claude-code"][2]?.sessionId).toBeNull();
-    const garden = liveSession(await thread(id), "claude-code");
+    const garden = liveSession(await thread(id), "claude-code", WREN);
     expect(garden?.sessionId).not.toBe(before?.sessionId);
 
     await run(ChapterService.use((chapters) => chapters.mergeChapters(id, ChapterId.make("garden"))));
@@ -265,7 +265,7 @@ describe("runtime sessions keyed by chapter", () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     await say(id, "What should I plant?");
-    const kept = liveSession(await thread(id), "claude-code");
+    const kept = liveSession(await thread(id), "claude-code", WREN);
     expect(kept?.sessionId).toMatch(/^fake-/);
 
     await splitAt(id, "What should I plant?", "garden");
@@ -273,7 +273,7 @@ describe("runtime sessions keyed by chapter", () => {
     const merged = await thread(id);
     expect(merged.liveChapterId).toBe(kept?.chapterId);
     // The live chapter's old session is dropped, not resumed.
-    expect(liveSession(merged, "claude-code")).toBeUndefined();
+    expect(liveSession(merged, "claude-code", WREN)).toBeUndefined();
     await say(id, "Thanks.");
     expect(asked["claude-code"][2]?.sessionId).toBeNull();
   });
@@ -298,7 +298,7 @@ describe("runtime sessions keyed by chapter", () => {
       expect(all.some((m) => isInProgress(m.status) || m.status === "queued")).toBe(false);
     });
 
-    expect(liveSession(await thread(id), "claude-code")).toBeUndefined();
+    expect(liveSession(await thread(id), "claude-code", WREN)).toBeUndefined();
     await say(id, "Thanks.");
     expect(asked["claude-code"][2]?.sessionId).toBeNull();
   });

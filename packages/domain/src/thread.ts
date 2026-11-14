@@ -51,8 +51,9 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withConstructorDefault(Effect.succeed("open" as const)),
   ),
   /**
-   * One session per runtime the thread has used, kept separate from the thread's identity (ADR 017),
-   * each in the chapter it started in (ADR 037): read the one a turn resumes with `liveSession`.
+   * One session per hob and runtime the thread has used, kept separate from the thread's identity
+   * (ADR 017, ADR 039), each in the chapter it started in (ADR 037): read the one a turn resumes
+   * with `liveSession`.
    * Thread events journaled before this carry none; their Claude Code session moved here in migration 0020.
    */
   sessions: Schema.Array(RuntimeSession).pipe(
@@ -106,15 +107,6 @@ export class Thread extends Schema.Class<Thread>("Thread")({
   pinnedAt: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
-  ),
-  /**
-   * Whether the hob wrote in the thread since the last message you read on any device (ADR 027): a
-   * reply that ended after it. Worked out when the thread is read from the read marker the hub
-   * keeps, never sent by a client; false for threads from before it was kept.
-   */
-  unread: Schema.Boolean.pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(false)),
-    Schema.withConstructorDefault(Effect.succeed(false)),
   ),
   /**
    * The draft this chat tries (ADR 029, Try in a chat), or null for an ordinary chat. Set when the chat
@@ -235,16 +227,21 @@ export const ThreadLifecycle = {
   isOpenChat: (thread: Thread): boolean => thread.kind === "chat" && thread.state === "open",
 };
 
+/** Whether `session` is `agentId`'s session on `runtime` (ADR 039), whichever chapter it belongs to. */
+export const isSessionOf = (session: RuntimeSession, runtime: RuntimeKind, agentId: AgentId): boolean =>
+  session.runtime === runtime && session.agentId === agentId;
+
 /**
- * The thread's session on `runtime` that a turn in its live chapter resumes, or undefined when the
- * chapter has none yet: a session from an earlier chapter is never resumed (ADR 037).
+ * The session of `agentId` on `runtime` that a turn in the thread's live chapter resumes, or undefined
+ * when the hob has none there yet: a session from an earlier chapter is never resumed (ADR 037), nor
+ * another hob's (ADR 039), so a hob that has not spoken in the chapter starts from the context pack.
  */
-export const liveSession = (thread: Thread, runtime: RuntimeKind): RuntimeSession | undefined =>
+export const liveSession = (thread: Thread, runtime: RuntimeKind, agentId: AgentId): RuntimeSession | undefined =>
   thread.liveChapterId === null
     ? undefined
     : thread.sessions.find(
         (session) =>
-          session.runtime === runtime &&
+          isSessionOf(session, runtime, agentId) &&
           session.chapterId === thread.liveChapterId &&
           (session.chapterMerges ?? 0) === thread.liveChapterMerges,
       );
