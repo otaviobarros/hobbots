@@ -493,14 +493,17 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                   currentAccess: currentAccess(agent.id),
                   redactor,
                   approvals: callApprovals,
+                  ...(taskTurn?.takenByYou === undefined ? {} : { takenByYou: taskTurn.takenByYou }),
                 };
                 // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                 const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
                 const offer = yield* charmsFor(charmTurn);
                 const holdsCommit = taskTurn?.holdsCommit;
+                const takenByYou = taskTurn?.takenByYou;
                 const steering: CallSteering = {
                   takeovers: offer.steering?.takeovers ?? [],
                   ...(holdsCommit === undefined ? {} : { holdsCommit }),
+                  ...(takenByYou === undefined ? {} : { takenByYou }),
                 };
                 return {
                   hubTools: joinHubTools([

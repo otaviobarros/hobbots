@@ -17,6 +17,7 @@ import {
   ActivityStore,
   DeviceRepository,
   HobbotsRepository,
+  HobChanges,
   type NewAttempt,
   SaveDestinations,
   SkillLibrary,
@@ -41,6 +42,7 @@ import {
   QuestId,
   SkillName,
   SkillRevisionHash,
+  SUMMONING_DEFAULTS,
   TaskId,
   Thread,
   ThreadId,
@@ -60,10 +62,12 @@ import {
   DeviceRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
+  HobChangesLive,
   knownMigrationIds,
   knownSchemaVersion,
   migrations,
   RestoreRepository,
+  SetupRepository,
   SkillLibraryLive,
   SqliteLive,
   TaskRepositoryLive,
@@ -142,6 +146,8 @@ const hubOn = (dir: string, record = migrations) =>
     RestoreRepository.layer,
     EventJournal.layer,
     WebRecordsLive,
+    SetupRepository.layer,
+    HobChangesLive,
   ).pipe(Layer.provideMerge(RestoreRulesLive(dir)), Layer.provideMerge(SqliteLive(databaseOf(dir), record)));
 
 type Hub = Layer.Success<ReturnType<typeof hubOn>>;
@@ -409,6 +415,37 @@ describe("backup and restore", () => {
     expect(restored.usage.pages).toEqual([page]);
     expect(restored.settings).toEqual(settings);
     expect(restored.limits).toEqual(limits);
+  });
+
+  // covers OP-003, #1357
+  it("[TC-OP-1357-01] brings back the history of settings changes, and each hob's History still shows them", async () => {
+    const everyHob = { scope: { summoned: true, self: false, hobs: [] }, overrides: SUMMONING_DEFAULTS };
+    const before = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        yield* seed;
+        const setup = yield* SetupRepository;
+        yield* setup.update({ summoningForEveryHob: everyHob, safetyPreset: "careful" }, OWNER_ACTOR);
+        return yield* setup.changes(10);
+      }),
+    );
+    const folder = join(destination, "settings.hobbots-backup");
+    await backUp(dataDir, folder);
+    await rm(dataDir, { recursive: true, force: true });
+    await Effect.runPromise(performRestore(dataDir, folder));
+    const restored = await onHub(
+      dataDir,
+      Effect.gen(function* () {
+        const history = yield* (yield* HobChanges).forHob(FRODO);
+        return {
+          changes: yield* (yield* SetupRepository).changes(10),
+          history: history.flatMap((change) => (change._tag === "Setting" ? [change.setting] : [])),
+        };
+      }),
+    );
+    expect(before.map((change) => change.diff.setting)).toEqual(["summoningForEveryHob", "safetyPreset"]);
+    expect(restored.changes).toEqual(before);
+    expect(restored.history).toEqual(before);
   });
 
   // covers OP-003

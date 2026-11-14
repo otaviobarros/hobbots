@@ -10,6 +10,7 @@ import {
   type ThreadKeyReused,
   type ThreadNotCamp,
   ThreadNotFound,
+  TurnsAtLimit,
 } from "@hobbots/api";
 import {
   type Agent,
@@ -145,7 +146,7 @@ export class ChatService extends Context.Service<
     readonly continueReply: (
       threadId: ThreadId,
       messageId: MessageId,
-    ) => Effect.Effect<Message, ThreadNotFound | HobUnavailable | ReplyNotResumable | ThreadArchived>;
+    ) => Effect.Effect<Message, ThreadNotFound | HobUnavailable | ReplyNotResumable | ThreadArchived | TurnsAtLimit>;
     /** Stops every turn the hob has in progress and waits until each has ended (stopped if the user had asked, otherwise interrupted). */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /**
@@ -422,6 +423,7 @@ export class ChatService extends Context.Service<
         transition,
         beginTurn,
         launch,
+        slotFor,
         startNext,
         drainThreads,
         endTurn,
@@ -448,6 +450,22 @@ export class ChatService extends Context.Service<
           );
         });
 
+      // How a message you send starts: now, in a slot of its own; through the dispatcher, carrying
+      // work (`carries`); or queued (no slot either way).
+      const howItStarts = (thread: Thread, agent: Agent) =>
+        Effect.gen(function* () {
+          // A message waits while its hob is paused, while a reply runs, and behind any message
+          // already waiting, so the thread's messages start in the order they were sent (CH-008).
+          const busy = isBusy(yield* runOf(thread.id));
+          const waits = agent.status === "paused" || busy || Option.isSome(yield* repo.nextQueuedMessage(thread.id));
+          // Work you stopped here, and routine progress, ride along: the message starts through the
+          // dispatcher, under their claims.
+          const carries = !waits && (yield* workRidesAlong(thread.id, agent.id));
+          // A message that would start now waits, queued, while its turn has no slot (#1448).
+          const slot = waits || carries ? null : yield* slotFor(thread, agent);
+          return { carries, slot };
+        });
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (
         threadId: ThreadId,
         content: string,
@@ -461,13 +479,7 @@ export class ChatService extends Context.Service<
             if (agent.status === "retired") yield* requireActive(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
             yield* requireLive(thread);
-            // A message waits while its hob is paused, while a reply runs, and behind any message
-            // already waiting, so the thread's messages start in the order they were sent (CH-008).
-            const busy = isBusy(yield* runOf(threadId));
-            const waits = agent.status === "paused" || busy || Option.isSome(yield* repo.nextQueuedMessage(threadId));
-            // Work you stopped here, and routine progress, ride along: the message starts through the
-            // dispatcher, under their claims.
-            const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
+            const { carries, slot } = yield* howItStarts(thread, agent);
             const accepted = yield* acceptedIn(thread, agent);
             const named = namedSkills(accepted, thread.skillTrial);
             const userMessage = new Message({
@@ -476,7 +488,7 @@ export class ChatService extends Context.Service<
               actor: yield* sessionActor,
               role: "user",
               content,
-              status: waits || carries ? "queued" : "complete",
+              status: slot === null ? "queued" : "complete",
               error: null,
               configVersion: null,
               skills: accepted,
@@ -486,17 +498,25 @@ export class ChatService extends Context.Service<
             // Who answers is decided in the transaction that stores the message (ADR 039, Who
             // answers), from the mentions the hub parses in its text: a mention of a hob that cannot
             // hear it refuses the message, and nothing is stored.
-            const sent = yield* repo.sendMessage(userMessage, { mentions: [], repliesTo: null });
-            const saved = yield* announce(sent).pipe(Effect.map((value) => value.message));
-            if (sent.value.answerers.length === 0) return { userMessage: saved, assistantMessage: null };
+            const sent = yield* repo
+              .sendMessage(userMessage, { mentions: [], repliesTo: null })
+              .pipe(Effect.onError(() => slot?.release ?? Effect.void));
+            const saved = yield* announce(sent).pipe(
+              Effect.map((value) => value.message),
+              Effect.onError(() => slot?.release ?? Effect.void),
+            );
+            if (sent.value.answerers.length === 0) {
+              yield* slot?.release ?? Effect.void;
+              return { userMessage: saved, assistantMessage: null };
+            }
             // A message that waits behind a busy thread has the thread look at its work again once it
             // is free, so a dispatch that already found nothing does not start it without its progress.
             if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });
             // Work you stopped in this thread may start again once this message is answered.
             yield* step(threadId, { _tag: "Release" });
             if (carries) yield* startNext(threadId);
-            if (waits || carries) return { userMessage: saved, assistantMessage: null };
-            const begun = yield* beginTurn(thread, agent, saved);
+            if (slot === null) return { userMessage: saved, assistantMessage: null };
+            const begun = yield* beginTurn(thread, agent, saved, saveMessage, { slot });
             return { userMessage: saved, assistantMessage: begun?.saved ?? null };
           }),
         );
@@ -586,6 +606,9 @@ export class ChatService extends Context.Service<
             }
             const resumed = MessageTransitions.resume(message);
             if (!(resumed instanceof Message)) return yield* new ReplyNotResumable({ messageId });
+            // Continue has no queue to wait in: with no free slot it is refused, and asked again later.
+            const slot = yield* slotFor(thread, agent);
+            if (slot === null) return yield* new TurnsAtLimit({ threadId });
             const config = yield* repo
               .findAgentConfig(agent.id, agent.configVersion)
               .pipe(Effect.map(Option.getOrThrow));
@@ -593,8 +616,8 @@ export class ChatService extends Context.Service<
             const brain = brainFor(thread, config);
             const saved = yield* saveMessage(
               new Message({ ...resumed, configVersion: config.version, runtime: brain.runtime, model: brain.model }),
-            );
-            yield* launch(agent, config, thread, continuePrompt(message), saved, null, message);
+            ).pipe(Effect.onError(() => slot.release));
+            yield* launch(agent, config, thread, continuePrompt(message), saved, null, message, { slot });
             return saved;
           }),
         );

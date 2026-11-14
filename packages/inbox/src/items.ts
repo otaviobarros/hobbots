@@ -402,6 +402,32 @@ const proposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
     ];
   });
 
+/**
+ * The claims you took over (#1449), for the hob that owns each Task: one item per Task, naming every
+ * claim of it the change moved to you, so the hob hears of the takeover once.
+ */
+const takenOverItems = (events: ReadonlyArray<JournaledEvent>, trees: Trees): ReadonlyArray<Draft> => {
+  const byTask = new Map<TaskId, Array<Claim>>();
+  for (const event of events) {
+    if (event._tag !== "ClaimTakenOver") continue;
+    byTask.set(event.claim.taskId, [...(byTask.get(event.claim.taskId) ?? []), event.claim]);
+  }
+  return [...byTask].flatMap(([taskId, claims]) => {
+    const task = trees.byId.get(taskId);
+    if (task === undefined) return [];
+    return [
+      {
+        recipientId: task.ownerId,
+        task,
+        attemptId: null,
+        payload: { _tag: "claims-taken" as const, taskId, claims },
+        record: `claims-taken:${claims.map((claim) => claim.id).join(",")}`,
+        version: null,
+      },
+    ];
+  });
+};
+
 /** Whether a change's events call for items that need no Task trees, such as how a skill proposal ended. */
 export const needsItemsWithoutTasks = (events: ReadonlyArray<JournaledEvent>): boolean => events.some(decidedProposal);
 
@@ -444,8 +470,8 @@ export const backpackItemsFor = (
     context.approvalOutcomes === true
       ? [...approvalOutcomes(events, context.toolCall), ...hobProposalOutcomes(events, context.toolCall)]
       : [];
-  const fromTasks = events.flatMap((event) =>
-    drafts(event, trees).map((draft) => ({
+  const fromTasks = [...events.flatMap((event) => drafts(event, trees)), ...takenOverItems(events, trees)].map(
+    (draft) => ({
       recipientId: draft.recipientId,
       taskId: draft.task.id,
       questId: questAbove(draft.task, trees, context.quests),
@@ -454,7 +480,7 @@ export const backpackItemsFor = (
       dedupeKey: dedupeKey(draft, draft.payload._tag, context.toolCall),
       payload: draft.payload,
       notBefore: null,
-    })),
+    }),
   );
   return [...fromTasks, ...outcomes, ...proposalOutcomes(events, context.toolCall)];
 };
@@ -481,6 +507,8 @@ export const tasksTouched = (events: ReadonlyArray<JournaledEvent>): ReadonlyArr
           return [event.handOff.toTaskId];
         case "ClaimMade":
           return [event.claim.taskId, ...event.clashes.map((other) => other.taskId)];
+        case "ClaimTakenOver":
+          return [event.claim.taskId];
         default:
           return [];
       }

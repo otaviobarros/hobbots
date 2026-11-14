@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+  cardAnswers,
   type HubTool,
   type HubTools,
   hobCard,
@@ -13,6 +14,7 @@ import {
 import {
   Agent,
   AgentId,
+  EMPTY_HOB_POLICY,
   roleFields,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_LABEL,
@@ -363,8 +365,16 @@ export const CONTRACT_ROSTER = ((): string => {
     });
   const roster = renderRoster(
     [
-      hobCard(hob("0d6e2f0a-0000-4000-8000-000000000011", "Pip", "Launch emails."), ["GitHub"]),
-      hobCard(hob("0d6e2f0a-0000-4000-8000-000000000012", "Quill", ROSTER_INJECTION), []),
+      hobCard(
+        hob("0d6e2f0a-0000-4000-8000-000000000011", "Pip", "Launch emails."),
+        ["GitHub"],
+        cardAnswers("balanced", EMPTY_HOB_POLICY, []),
+      ),
+      hobCard(
+        hob("0d6e2f0a-0000-4000-8000-000000000012", "Quill", ROSTER_INJECTION),
+        [],
+        cardAnswers("balanced", EMPTY_HOB_POLICY, []),
+      ),
     ],
     new Set(),
     true,

@@ -7,6 +7,7 @@ import type {
   HobGitHubApp,
   InstallationSetup,
   MessageId,
+  SettingChange,
   ThreadId,
   TransientEvent,
 } from "@hobbots/domain";
@@ -41,6 +42,15 @@ export class InstallationSettings extends Context.Service<
     readonly get: Effect.Effect<Pick<InstallationSetup, "safetyPreset" | "approvedFolders" | "summoningForEveryHob">>;
   }
 >()("@hobbots/agents/InstallationSettings") {}
+
+/** The history of the settings that change what hobs may do (#1357), as exports read it. */
+export class SettingHistory extends Context.Service<
+  SettingHistory,
+  {
+    /** The newest `limit` changes, newest first. */
+    readonly latest: (limit: number) => Effect.Effect<ReadonlyArray<SettingChange>>;
+  }
+>()("@hobbots/agents/SettingHistory") {}
 
 export interface FolderChecksShape {
   /**

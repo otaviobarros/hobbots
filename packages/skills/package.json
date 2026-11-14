@@ -15,6 +15,8 @@
     "@hobbots/domain": "workspace:*",
     "@hobbots/permissions": "workspace:*",
     "effect": "catalog:",
+    "micromark": "4.0.3",
+    "micromark-extension-frontmatter": "2.0.0",
     "yaml": "2.9.1",
     "yauzl": "3.4.0"
   },

@@ -1,6 +1,9 @@
 import {
   type Agent,
   type AgentId,
+  type CharmOperation,
+  type EffectiveAnswer,
+  effectiveAnswers,
   findInDirectory,
   holdsCharm,
   listedForHob,
@@ -11,6 +14,7 @@ import {
   type RosterMark,
   RUNTIME_NAMES,
   readHobJsonSchema,
+  type SafetyPreset,
   SUMMONING_CHARM_ID,
   SUMMONING_CHARM_NAME,
   type SummoningForEveryHob,
@@ -53,12 +57,34 @@ export interface HobCard {
   readonly brain: { readonly runtime: string; readonly model: string; readonly effort: string };
   /** The display names of the Charms it holds that are connected now. */
   readonly charms: ReadonlyArray<string>;
+  /**
+   * Its Allow, Ask and Never answers under the installation's preset (#1351): every built-in
+   * operation, then each operation of the Charms on the card, after its overrides, each marked when
+   * its override set it. Never its grants or folders.
+   */
+  readonly answers: CardAnswers;
   /** Set when it holds the Summoning Charm only from "Summoning for every hob" (ADR 034, #1352). */
   readonly summoningFromEveryHob?: true;
 }
 
-/** The card of `agent`, holding `charms`. A retired hob has none: the directory never lists it. */
-export const hobCard = (agent: Agent, charms: ReadonlyArray<string>): HobCard => ({
+/** A card's answers: the preset they start from, and each operation's answer. */
+export interface CardAnswers {
+  readonly preset: SafetyPreset;
+  readonly operations: ReadonlyArray<EffectiveAnswer>;
+}
+
+/**
+ * The answers of a hob with `policy` under `preset`, for the built-in operations and `declared`, the
+ * operations of the Charms its card lists: what its Permissions tab shows.
+ */
+export const cardAnswers = (
+  preset: SafetyPreset,
+  policy: Agent["policy"],
+  declared: ReadonlyArray<CharmOperation>,
+): CardAnswers => ({ preset, operations: effectiveAnswers(preset, policy, declared) });
+
+/** The card of `agent`, holding `charms`, with `answers`. A retired hob has none: the directory never lists it. */
+export const hobCard = (agent: Agent, charms: ReadonlyArray<string>, answers: CardAnswers): HobCard => ({
   id: agent.id,
   name: agent.name,
   role: { title: agent.roleTitle, sigil: starterRole(agent.sigil).title },
@@ -70,6 +96,7 @@ export const hobCard = (agent: Agent, charms: ReadonlyArray<string>): HobCard =>
     effort: agent.effort ?? "default",
   },
   charms,
+  answers,
 });
 
 /** Active hobs, then paused ones, each by name ignoring case, then by id: the same hub, the same order. */
@@ -128,16 +155,46 @@ const fromEveryHobWords = (card: HobCard) =>
     ? ` (${SUMMONING_CHARM_NAME} comes from the "Summoning for every hob" setting, not from its own grant)`
     : "";
 
-/** A hob's full card, as `read_hob` answers it. */
+const PRESET_WORDS: Readonly<Record<SafetyPreset, string>> = {
+  careful: "Careful",
+  balanced: "Balanced",
+  trusting: "Trusting",
+};
+
+const ANSWER_WORDS: Readonly<Record<EffectiveAnswer["decision"], string>> = {
+  allow: "Allow",
+  ask: "Ask",
+  deny: "Never",
+};
+
+/**
+ * The card's answers as a short table: one row per operation with its answer, marked "override"
+ * where the hob's own override set it rather than the preset (#1351).
+ */
+const answersTable = (answers: CardAnswers) =>
+  [
+    `Answers, from the ${PRESET_WORDS[answers.preset]} preset:`,
+    "| Operation | Answer |",
+    "| --- | --- |",
+    ...answers.operations.map(
+      ({ operation, decision, override }) =>
+        `| ${operation} | ${ANSWER_WORDS[decision]}${override ? " (override)" : ""} |`,
+    ),
+  ].join("\n");
+
+/** A hob's full card, as `read_hob` answers it: the fields its roster line has, then its answers. */
 export const cardText = (card: HobCard, shared: ReadonlySet<string>): string =>
   [
-    `### ${shownName(card, shared)}`,
-    `- Role: ${roleWords(card)}`,
-    `- Good at: ${card.goodAt === null ? "(not set)" : quoted(card.goodAt, 200)}`,
-    `- Status: ${card.status === "retiring" ? "retiring, takes no new work" : card.status}`,
-    `- Brain: ${brainWords(card)}`,
-    `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}${fromEveryHobWords(card)}`,
-  ].join("\n");
+    [
+      `### ${shownName(card, shared)}`,
+      `- Role: ${roleWords(card)}`,
+      `- Good at: ${card.goodAt === null ? "(not set)" : quoted(card.goodAt, 200)}`,
+      `- Status: ${card.status === "retiring" ? "retiring, takes no new work" : card.status}`,
+      `- Brain: ${brainWords(card)}`,
+      `- Charms: ${card.charms.length === 0 ? "none" : card.charms.join(", ")}${fromEveryHobWords(card)}`,
+    ].join("\n"),
+    answersTable(card.answers),
+  ].join("\n\n");
 
 /** The roster's budgets, in characters (ADR 032). */
 export const ROSTER_LIMITS = {
@@ -152,10 +209,11 @@ const ROSTER_HEADING = "## Other hobs on this hub";
 const CLOSING_INTRO = "Also on this hub, left out for space: ";
 
 /**
- * Each line already holds all a card does, so the hob is told to answer from the list and read a card
- * only when asked to, or for a hob the list left out (#1307).
+ * Each line holds all a card does but the hob's answers, so the hob is told to answer from the list,
+ * and to read a card only when asked to, for a hob the list leaves out (#1307), or to check what a
+ * hob may do (#1351).
  */
-const READ_HOB_LINE = `${READ_HOB_TOOL} returns a hob's card by its name or id, and a card holds no more than the hob's line below. Answer questions about these hobs from this list. Read a card only when you are asked to, or for a hob this list leaves out.`;
+const READ_HOB_LINE = `${READ_HOB_TOOL} returns a hob's card by its name or id: the hob's line below, and its Allow, Ask or Never answer for each operation. Answer questions about these hobs from this list. Read a card only when you are asked to, for a hob this list leaves out, or to check what a hob may do.`;
 
 /**
  * Who summons and changes hobs (ADR 034, Finding who can summon): only a hob that holds the Summoning
@@ -261,35 +319,45 @@ export class HobDirectory extends Context.Service<
         ? Effect.map(settings.value.get, (setup) => setup.summoningForEveryHob)
         : Effect.succeed(null);
 
-      /** The display names of the Charms `agent` holds that are connected for it now, with `setting` applied. */
-      const charmsOf = (agent: Agent, setting: SummoningForEveryHob | null) =>
-        Effect.filter(
-          registered.filter((charm) => holdsCharm(withSummoningForEveryHob(agent, setting), charm.declaration.id)),
-          (charm) => {
-            const connected = charm.connected(agent.id);
-            return charm.context === undefined ? connected : Effect.provideContext(connected, charm.context);
-          },
-        ).pipe(Effect.map((held) => held.map((charm) => charm.name)));
+      // The installation's preset, which the answers start from; a hub without setup starts at Balanced.
+      const presetNow = Option.isSome(settings)
+        ? Effect.map(settings.value.get, (setup) => setup.safetyPreset)
+        : Effect.succeed<SafetyPreset>("balanced");
 
-      /** The card of `agent`, marked when its Summoning Charm comes from `setting` alone. */
-      const cardOf = (agent: Agent, held: ReadonlyArray<string>, setting: SummoningForEveryHob | null): HobCard => {
-        const card = hobCard(agent, held);
-        const fromSetting =
-          !holdsCharm(agent.policy, SUMMONING_CHARM_ID) &&
-          holdsCharm(withSummoningForEveryHob(agent, setting), SUMMONING_CHARM_ID);
-        return fromSetting ? { ...card, summoningFromEveryHob: true } : card;
-      };
+      /**
+       * The card of `agent` with `setting` applied: the Charms it holds that are connected for it now,
+       * and its answers under `preset` for the built-in operations and those Charms' operations.
+       */
+      const cardOf = (agent: Agent, setting: SummoningForEveryHob | null, preset: SafetyPreset) =>
+        Effect.gen(function* () {
+          const policy = withSummoningForEveryHob(agent, setting);
+          const held = yield* Effect.filter(
+            registered.filter((charm) => holdsCharm(policy, charm.declaration.id)),
+            (charm) => {
+              const connected = charm.connected(agent.id);
+              return charm.context === undefined ? connected : Effect.provideContext(connected, charm.context);
+            },
+          );
+          const declared = held.flatMap((charm) => charm.declaration.operations);
+          const card = hobCard(
+            agent,
+            held.map((charm) => charm.name),
+            cardAnswers(preset, policy, declared),
+          );
+          // Marked when its Summoning Charm comes from `setting` alone (#1352).
+          const fromSetting = !holdsCharm(agent.policy, SUMMONING_CHARM_ID) && holdsCharm(policy, SUMMONING_CHARM_ID);
+          return fromSetting ? { ...card, summoningFromEveryHob: true as const } : card;
+        });
 
       const cardsOf = (agents: ReadonlyArray<Agent>) =>
-        Effect.flatMap(everyHob, (setting) =>
-          Effect.forEach(
-            agents,
-            (agent) => Effect.map(charmsOf(agent, setting), (held) => cardOf(agent, held, setting)),
-            {
-              concurrency: "unbounded",
-            },
-          ),
-        ).pipe(Effect.map((cards) => [...cards].sort(byRosterOrder)));
+        Effect.gen(function* () {
+          const setting = yield* everyHob;
+          const preset = yield* presetNow;
+          const cards = yield* Effect.forEach(agents, (agent) => cardOf(agent, setting, preset), {
+            concurrency: "unbounded",
+          });
+          return [...cards].sort(byRosterOrder);
+        });
 
       /** The names the reader's view shares: its own and every hob it sees. */
       const sharedIn = (agents: ReadonlyArray<Agent>, reader: AgentId) =>
