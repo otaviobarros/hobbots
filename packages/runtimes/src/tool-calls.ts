@@ -775,6 +775,9 @@ const STASH_READS = new Set(["list", "show", "create"]);
 
 const rewritesTree = (sub: string, rest: ReadonlyArray<string>) => {
   if (sub === "branch") return rest.some((word) => BRANCH_MOVES.has(word));
+  // A fetch whose refspec names where it lands, such as `HEAD:refs/heads/taken`, may move a local branch.
+  if (sub === "fetch")
+    return rest.some((word) => word === "--update-head-ok" || (!word.startsWith("-") && word.includes(":")));
   if (sub === "stash") return rest[0] === undefined || !STASH_READS.has(rest[0]);
   return !TREE_KEEPS.has(sub);
 };
