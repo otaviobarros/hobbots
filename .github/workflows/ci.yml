@@ -247,6 +247,23 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The one browser check the main ruleset requires. A matrix job that is skipped reports one check
+  # under its unexpanded name, never the eight shard names, so the ruleset cannot require the shards
+  # themselves. This passes when every shard passed, or when the change reaches no browser test.
+  browser:
+    name: Browser tests
+    needs: [changes, browser-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULT: ${{ needs.browser-tests.result }}
+          BROWSER: ${{ needs.changes.outputs.browser }}
+        run: |
+          echo "The browser shards ended: $RESULT."
+          [[ "$RESULT" == success || ("$RESULT" == skipped && "$BROWSER" == false) ]]
+
   # Runs each browser test a pull request adds or changes, and each test whose spec file imports a
   # changed helper, five times, and fails on one that passes only on a retry. A new flaky test then
   # fails its own pull request instead of main (STD-TEST-009). A change that reaches more tests than
