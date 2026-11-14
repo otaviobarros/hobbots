@@ -15,6 +15,7 @@
 // (`Task`), so code that never names a Task, such as a socket's `.state === "running"`, is left alone.
 
 import { parseSync, visitorKeys } from "oxc-parser";
+import { lineOf, lineStarts } from "./complexity.mjs";
 
 const RULE = "STD-ARCH-013";
 const KEYED_BY_ID = /Id$/;
@@ -45,14 +46,19 @@ const idKey = (declaration) => {
   return fromType ?? idKeyOf(init.callee.name, init.typeArguments);
 };
 
+/** The 1-based line of an offset in `text`. */
+const lineFinder = (text) => {
+  const starts = lineStarts(text);
+  return (offset) => lineOf(starts, offset);
+};
+
 /**
  * The lines an opt-out of `rule` covers: a real comment, with a reason, ending on a line or the line
  * above it. Shared with the speaker check (scripts/speaker.mjs).
  */
-export const optOutLines = (text, comments, rule) => {
+export const optOutLines = (text, comments, rule, lineAt = lineFinder(text)) => {
   const optOut = new RegExp(`^\\s*standards-allow ${rule}:\\s*\\S`);
-  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
-  const ends = (comments ?? []).filter((comment) => optOut.test(comment.value)).map((comment) => lineOf(comment.end));
+  const ends = (comments ?? []).filter((comment) => optOut.test(comment.value)).map((comment) => lineAt(comment.end));
   return { has: (line) => ends.includes(line) || ends.includes(line - 1) };
 };
 
@@ -63,8 +69,8 @@ export const optOutLines = (text, comments, rule) => {
 export const parsedWithOptOuts = (file, text, rule) => {
   const { program, errors, comments } = parseSync(file, text);
   if (errors.length > 0) return null;
-  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
-  return { program, lineOf, optedOut: optOutLines(text, comments, rule) };
+  const lineAt = lineFinder(text);
+  return { program, lineOf: lineAt, optedOut: optOutLines(text, comments, rule, lineAt) };
 };
 
 /** Calls `visit` on every node under `root`, parents first. */
@@ -147,7 +153,7 @@ export const checkFile = (file, text, machines = []) => {
   const source = parsedWithOptOuts(file, text, RULE);
   if (source === null) return [];
   // An opt-out is a real comment, with a reason, ending on the declaration's line or the line above.
-  const { program, lineOf, optedOut } = source;
+  const { program, lineOf: lineAt, optedOut } = source;
   const problems = [];
 
   const walk = (node) => {
@@ -178,7 +184,7 @@ export const checkFile = (file, text, machines = []) => {
           walk(each.init);
           continue;
         }
-        const line = lineOf(each.start);
+        const line = lineAt(each.start);
         if (optedOut.has(line)) continue;
         problems.push(
           `${file}:${line}: \`${each.id?.name ?? "collection"}\` is a collection keyed by ${key} held for a service's or module's life; make it one explicit machine, or move a fold into a plain function (${RULE})`,
@@ -210,7 +216,7 @@ export const checkFile = (file, text, machines = []) => {
   const compared = (node, field, state) => {
     const machine = machineOf(field, state);
     if (machine === undefined) return;
-    const line = lineOf(node.start);
+    const line = lineAt(node.start);
     if (optedOut.has(line)) return;
     problems.push(
       `${file}:${line}: compares \`.${field}\` with "${state}", a state of the ${machine.name} machine in ${machine.module}; outside that module ask the machine, through \`can\` or a helper it exports, and a field of another lifecycle is declared as its own machine (${RULE})`,

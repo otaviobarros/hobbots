@@ -27,10 +27,15 @@ export interface Speaker {
   readonly role: "owner" | "member";
 }
 
-/** `agent` speaking in `thread`'s main line, for `reason`. */
-export const speakerIn = (thread: Thread, agent: Agent, reason: TurnReason | null = null): Speaker => ({
+/** `agent` speaking in `line` of `thread`, its main line until reply threads come (#1472), for `reason`. */
+export const speakerIn = (
+  thread: Thread,
+  agent: Agent,
+  reason: TurnReason | null = null,
+  line: Line = mainLine(thread.id),
+): Speaker => ({
   thread,
-  line: mainLine(thread.id),
+  line,
   agent,
   reason,
   // standards-allow STD-ARCH-021: the speaker's role compares it with the hob the thread belongs to

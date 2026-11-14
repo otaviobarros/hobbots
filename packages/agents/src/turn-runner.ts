@@ -1,5 +1,4 @@
 import {
-  type Agent,
   type AgentConfiguration,
   type AgentId,
   type Brain,

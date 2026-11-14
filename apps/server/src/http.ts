@@ -186,18 +186,15 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     // A hob is working while one of its threads has a turn running, until the turn's runtime has
     // exited. `TurnStarted` and `TurnEnded` announce each change once it has happened, so a read made
     // on either event already agrees with it.
-    // In a camp the hob speaking may be a member, so the line's speaker names it (ADR 039), never the
-    // hob the camp belongs to. A turn that has ended but whose runtime is still exiting names none.
-    const activity = Effect.all([chat.activeThreads, chat.threadRuns]).pipe(
-      Effect.flatMap(([threadIds, { runs }]) =>
-        Effect.forEach(threadIds, (threadId) => {
-          const speaking = runs.find((each) => each.threadId === threadId)?.speaking ?? null;
-          return speaking === null
-            ? Effect.succeed(Option.none())
-            : repo
-                .findAgent(speaking)
-                .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, threadId }))));
-        }),
+    // In a camp the hob speaking may be a member, so each turn names its own hob (ADR 039), never
+    // the hob the camp belongs to.
+    const activity = chat.activeTurns.pipe(
+      Effect.flatMap((turns) =>
+        Effect.forEach(turns, ({ threadId, agentId }) =>
+          repo
+            .findAgent(agentId)
+            .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, threadId })))),
+        ),
       ),
       Effect.map((hobs) => ({ working: hobs.flatMap(Option.toArray) })),
     );

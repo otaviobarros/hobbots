@@ -14,7 +14,7 @@ import {
 } from "@hobbots/api";
 import {
   type Agent,
-  AgentId,
+  type AgentId,
   type Brain,
   type ChapterId,
   type ChapterMove,
@@ -33,6 +33,7 @@ import {
   mainLine,
   openThreadTask,
   type PackReport,
+  replyHobOf,
   type SkillMention,
   type SkillTrial,
   type StartedFresh,
@@ -49,7 +50,7 @@ import {
   waitedSteps,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
@@ -281,6 +282,11 @@ export class ChatService extends Context.Service<
      */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /**
+     * The hob of each turn in progress, by thread, from its `TurnStarted` until its `TurnEnded`: in a
+     * camp, the hob speaking, which need not be the hob the camp belongs to (ADR 039).
+     */
+    readonly activeTurns: Effect.Effect<ReadonlyArray<{ readonly threadId: ThreadId; readonly agentId: AgentId }>>;
+    /**
      * Every line whose run is not idle or has hobs waiting for its floor, as `ThreadRunChanged`
      * publishes it, and the revision of the last transition of any run: a line left out is idle with
      * nobody waiting as of that revision (ADR 037, ADR 039).
@@ -460,6 +466,7 @@ export class ChatService extends Context.Service<
         workRidesAlong,
         hobsOf,
         activeThreads,
+        activeTurns,
         threadRuns,
         streamingReplies,
       } = yield* makeThreadRunner({
@@ -479,10 +486,9 @@ export class ChatService extends Context.Service<
         body: (thread: Thread, agent: Agent) => Effect.Effect<A, E, R>,
       ) =>
         Effect.gen(function* () {
-          // standards-allow STD-ARCH-021: the camp's lock is its owner's
-          const { agentId } = yield* findThread(threadId);
-          return yield* admission.withHob(
-            agentId,
+          return yield* withThreadLock(
+            admission,
+            yield* findThread(threadId),
             Effect.gen(function* () {
               const thread = yield* findThread(threadId);
               // standards-allow STD-ARCH-021: the hob the thread belongs to, its default answerer
@@ -650,10 +656,9 @@ export class ChatService extends Context.Service<
       });
 
       const removeQueued = Effect.fn("ChatService.removeQueued")(function* (threadId: ThreadId, messageId: MessageId) {
-        // standards-allow STD-ARCH-021: the camp's lock is its owner's
-        const { agentId } = yield* findThread(threadId);
-        yield* admission.withHob(
-          agentId,
+        yield* withThreadLock(
+          admission,
+          yield* findThread(threadId),
           Effect.gen(function* () {
             if (!(yield* saveRemoved(threadId, messageId))) return yield* new MessageNotQueued({ messageId });
             yield* step(threadId, { _tag: "Unchoose", messageId });
@@ -667,10 +672,9 @@ export class ChatService extends Context.Service<
 
       // The choice is held in memory: after a restart the queue simply keeps its order.
       const sendNow = Effect.fn("ChatService.sendNow")(function* (threadId: ThreadId, messageId: MessageId) {
-        // standards-allow STD-ARCH-021: the camp's lock is its owner's
-        const { agentId } = yield* findThread(threadId);
-        yield* admission.withHob(
-          agentId,
+        yield* withThreadLock(
+          admission,
+          yield* findThread(threadId),
           Effect.gen(function* () {
             const messages = yield* repo.listMessages(threadId);
             if (!messages.some((m) => m.id === messageId && m.status === "queued")) {
@@ -728,10 +732,9 @@ export class ChatService extends Context.Service<
       // either running for the stop to reach, or never takes its dropped request. Work a dispatch is
       // putting through before its turn launched is held, so that turn never starts.
       const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
-        // standards-allow STD-ARCH-021: the camp's lock is its owner's
-        const { agentId } = yield* findThread(threadId);
-        yield* admission.withHob(
-          agentId,
+        yield* withThreadLock(
+          admission,
+          yield* findThread(threadId),
           dropOwed(threadId, TurnRequests.stoppingAll).pipe(
             Effect.andThen(stop(threadId)),
             Effect.andThen(holdDispatch(threadId)),
@@ -764,10 +767,8 @@ export class ChatService extends Context.Service<
             const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued" && hobReads(m));
             const message = transcript.at(-1);
             // The hob that wrote the reply goes on with it, in a camp it joined too.
-            const author =
-              message?.actor?.kind === "hob" && message.actor.id !== own.id
-                ? yield* repo.findAgent(AgentId.make(message.actor.id))
-                : Option.some(own);
+            const writer = message === undefined ? null : replyHobOf(message, thread);
+            const author = writer !== null && writer !== own.id ? yield* repo.findAgent(writer) : Option.some(own);
             if (Option.isNone(author)) return yield* new ReplyNotResumable({ messageId });
             const agent = author.value;
             // Only a hob of the camp goes on: a reply moved here from another camp is not its to
@@ -922,6 +923,7 @@ export class ChatService extends Context.Service<
         wake,
         resume,
         activeThreads,
+        activeTurns,
         threadRuns,
         streamingReplies,
       });

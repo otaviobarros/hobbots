@@ -182,7 +182,7 @@ A field that says who did something, such as `requestedBy`, `addedBy` or `author
 A camp has one floor and many speakers (ADR 039), so a thread's `agentId` means one thing: the hob the thread belongs to, for listing, ownership, its lock and its own default answerer. Code that asks which hob a turn, a reply or a message is for never answers with it. Inside a turn, the hob is the turn's `Speaker` (`packages/agents/src/speaker.ts`): its thread, line, hob, reason and role. Outside one, it is the run's `speaking`, or the message's author through `authorOf` and `replyHobOf` (`packages/domain/src/message.ts`), the one place a message not stored yet falls back to the thread's hob.
 
 - **Why:** #1461 turned one hob per thread into one floor with many speakers, and about seventeen review findings on it were code that still read the turn's hob from `thread.agentId`.
-- **Enforced by:** `scripts/speaker.mjs`, run by `pnpm lint:speaker`, which fails on every read of `agentId` from a thread in `packages/agents/src` and `apps/server/src`. A read that means the owner says so with `// standards-allow STD-ARCH-021: <reason>` on its line or the line above. Review covers the web app, which reads authors through `replyHobOf`.
+- **Enforced by:** `scripts/speaker.mjs`, run by `pnpm lint:speaker`, which fails on a read of `agentId` from a thread in `packages/agents/src` and `apps/server/src`: a value named like a thread, bound from one (`const found = yield* repo.findThread(id)`) or typed `Thread`. A read that means the owner says so with `// standards-allow STD-ARCH-021: <reason>` on its line or the line above. Review covers the web app, which reads authors through `replyHobOf`.
 - **Applies to:** `packages/agents`, `apps/server`, `apps/web`.
 
 ## Guidance

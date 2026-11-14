@@ -31,7 +31,7 @@ import {
   titleFromPrompt,
 } from "@hobbots/domain";
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { EventPublisher } from "./ports.ts";
@@ -175,6 +175,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     };
     const scope = yield* Effect.scope;
     const turns = yield* FiberMap.make<ThreadId>();
+    // The hob of each thread's turn, from when `TurnStarted` announces it until `TurnEnded` does, so
+    // a read made on either event names the hob whose runtime runs there, a member's in a camp too.
+    const turnHobs = yield* Ref.make(
+      HashMap.empty<ThreadId, { readonly agentId: AgentId; readonly turn: Fiber.Fiber<unknown, unknown> }>(),
+    );
     // When each hob's running work was last stopped, in epoch milliseconds, so a member turn that
     // registered after the sweep still stops (ADR 039).
     const stops = yield* Ref.make(HashMap.empty<AgentId, number>());
@@ -487,9 +492,18 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.gen(function* () {
         // A turn that already ended never joined the map for long; its end is announced below.
         if (yield* FiberMap.has(turns, threadId)) {
+          yield* Ref.update(turnHobs, HashMap.set(threadId, { agentId, turn }));
           yield* bus.publishTransient({ _tag: "TurnStarted", threadId, agentId });
         }
+        // Only this turn's entry goes: the thread's next turn may have started meanwhile.
+        const leave = Ref.update(turnHobs, (all) =>
+          Option.match(HashMap.get(all, threadId), {
+            onNone: () => all,
+            onSome: (entry) => (entry.turn === turn ? HashMap.remove(all, threadId) : all),
+          }),
+        );
         yield* Fiber.await(turn).pipe(
+          Effect.andThen(leave),
           Effect.andThen(bus.publishTransient({ _tag: "TurnEnded", threadId, agentId })),
           Effect.forkIn(scope),
         );
@@ -575,12 +589,13 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
 
     // Runs `effect` under the thread's lock, its own hob's, which every turn of the thread takes.
     const underThread = <A>(threadId: ThreadId, effect: Effect.Effect<A>) =>
-      repo.findThread(threadId).pipe(
-        Effect.flatMap((thread) =>
-          // standards-allow STD-ARCH-021: the camp's lock is its owner's
-          Option.isNone(thread) ? effect : admission.withHob(thread.value.agentId, effect),
-        ),
-      );
+      repo
+        .findThread(threadId)
+        .pipe(
+          Effect.flatMap((thread) =>
+            Option.isNone(thread) ? effect : withThreadLock(admission, thread.value, effect),
+          ),
+        );
 
     // Whether a request of `agentId` waits in the thread's line, for routine progress to ride along.
     const requestWaitsFor = (threadId: ThreadId, agentId: AgentId) =>
@@ -831,9 +846,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           yield* step(threadId, { _tag: "Drained" });
           return;
         }
-        yield* admission.withHob(
-          // standards-allow STD-ARCH-021: the camp's lock is its owner's
-          thread.value.agentId,
+        yield* withThreadLock(
+          admission,
+          thread.value,
           step(threadId, { _tag: "Drained" }).pipe(Effect.andThen(startNext(threadId))),
         );
       });
@@ -847,9 +862,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             Option.match({
               onNone: () => Effect.void,
               onSome: (thread) =>
-                admission.withHob(
-                  // standards-allow STD-ARCH-021: the camp's lock is its owner's
-                  thread.agentId,
+                withThreadLock(
+                  admission,
+                  thread,
                   runOf(threadId).pipe(Effect.flatMap((run) => (isBusy(run) ? Effect.void : startNext(threadId)))),
                 ),
             }),
@@ -894,6 +909,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       });
 
     const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
+    const activeTurns = Ref.get(turnHobs).pipe(
+      Effect.map((all) => Array.from(all, ([threadId, { agentId }]) => ({ threadId, agentId }))),
+    );
     const threadRuns = Ref.get(runs).pipe(
       Effect.map(({ all, revision }) => ({
         revision,
@@ -946,6 +964,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       workRidesAlong,
       hobsOf,
       activeThreads,
+      activeTurns,
       threadRuns,
       streamingReplies,
     } as const;

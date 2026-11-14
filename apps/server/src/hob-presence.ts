@@ -133,8 +133,8 @@ export class HobPresences extends Context.Service<
             Effect.map(repo.findThread(threadId), (thread) =>
               Option.match(thread, {
                 onNone: () => [],
-                // standards-allow STD-ARCH-021: what a chat waits on asks for the hob it belongs to
-                onSome: (found) => [[threadId, found.agentId] as const],
+                // What waits in a chat on you asks for the hob the chat belongs to.
+                onSome: (owned) => [[threadId, owned.agentId] as const],
               }),
             ),
           ).pipe(Effect.map((pairs) => pairs.flat())),

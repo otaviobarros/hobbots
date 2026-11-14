@@ -20,7 +20,21 @@ test("an Option of a thread, a found thread and a destructured agentId fail too"
   assert.equal(checkFile("a.ts", "const { agentId, title } = thread;").length, 1);
 });
 
+test("a binding set from a thread, a typed parameter and an unwrapped Option fail too", () => {
+  assert.equal(
+    checkFile("a.ts", gen("const found = yield* repo.findThread(id);\n  use(found.value.agentId);")).length,
+    1,
+  );
+  assert.equal(checkFile("a.ts", "const owner = (t: Thread) => t.agentId;").length, 1);
+  assert.equal(checkFile("a.ts", "const owner = (t: Option.Option<Thread>) => t.value.agentId;").length, 1);
+  assert.equal(checkFile("a.ts", "const owner = Option.getOrThrow(liveThread).agentId;").length, 1);
+  assert.equal(checkFile("a.ts", "const owner = ({ agentId }: Thread) => agentId;").length, 1);
+});
+
 test("an agentId of something that is not a thread passes", () => {
+  assert.deepEqual(checkFile("a.ts", "const hob = threadMember.agentId;"), []);
+  assert.deepEqual(checkFile("a.ts", "const hob = threadTask.agentId;"), []);
+  assert.deepEqual(checkFile("a.ts", "const found = attempts[0];\nconst hob = found.agentId;"), []);
   assert.deepEqual(checkFile("a.ts", "const hob = turn.agentId;"), []);
   assert.deepEqual(checkFile("a.ts", "const hob = scope.agentId;"), []);
   assert.deepEqual(checkFile("a.ts", "const ids = threads.map((each) => each.agentId);"), []);
