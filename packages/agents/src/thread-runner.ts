@@ -45,6 +45,7 @@ import {
   idleRun,
   isAtRest,
   isBusy,
+  isDispatching,
   type Reply,
   runStatus,
   type ThreadRun,
@@ -911,7 +912,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const holdDispatch = (threadId: ThreadId) =>
       Effect.gen(function* () {
         const run = yield* runOf(threadId);
-        if (run.run !== "dispatching" || run.reply !== null) return;
+        if (!isDispatching(run)) return;
         const hobId = HashMap.get(yield* Ref.get(dispatches), threadId);
         if (Option.isSome(hobId)) yield* step(threadId, { _tag: "Hold", hobId: hobId.value });
       });

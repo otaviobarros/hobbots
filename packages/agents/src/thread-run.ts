@@ -189,6 +189,9 @@ export const ThreadRunMachine = defineMachine<RunState, ThreadRunEvent, ThreadRu
   illegal: (r, e, to) => `ThreadRun: ${e._tag} cannot move a run from ${r.run} to ${to}`,
 });
 
+/** Whether the dispatcher is putting backpack work through and no turn of it has launched yet. */
+export const isDispatching = (run: ThreadRun) => run.run === "dispatching";
+
 /** Whether a turn runs in the thread or its work is being dispatched, so a prompt waits. */
 export const isBusy = (run: ThreadRun) => run.run !== "idle";
 
