@@ -5,6 +5,7 @@ import { join, sep } from "node:path";
 import {
   type CallWrites,
   ClaimRegister,
+  giveBackTask,
   HobbotsRepository,
   HobTools,
   makeRedactor,
@@ -19,6 +20,10 @@ import {
   type Claim,
   ClaimId,
   type ClaimScope,
+  CriterionId,
+  DEFAULT_QUEST_LIMITS,
+  DelegationId,
+  QuestId,
   type TaskId,
   TaskId as TaskIds,
   type TaskToolDone,
@@ -264,30 +269,83 @@ const hub = () => {
         yield* Effect.orDie(tasks.retryTask(taskId, (yield* latest).revision, now));
       }),
     );
+  /**
+   * A party member's Task under `parentId`, given to `agentId`, that has not started yet; the parent
+   * leads a Quest for it.
+   */
+  const member = (agentId: AgentId, taskId: TaskId, parentId: TaskId) =>
+    run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make(`quest-${parentId}`),
+          taskId: parentId,
+          goal: "Ship it",
+          acceptance: ["It ships"],
+          criteria: [{ id: CriterionId.make(`criterion-${parentId}`), text: "It ships", required: false }],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        return yield* tasks.createTask({
+          task: {
+            id: taskId,
+            ownerId: agentId,
+            parentId,
+            threadId: null,
+            brief: "Help",
+            dependsOn: [],
+            createdAt: now,
+          },
+          delegation: {
+            id: DelegationId.make(`delegation-${taskId}`),
+            brief: "Help",
+            expectedOutput: null,
+            authority: { overrides: {}, folders: null },
+            timeoutMs: null,
+          },
+          milestones: [],
+        });
+      }),
+    );
+  /** You give a member Task to another hob (ADR 018), as Reassign does once nothing runs on it. */
+  const reassign = (taskId: TaskId, agentId: AgentId) =>
+    run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const task = Option.getOrThrow(yield* tasks.readTree(taskId)).tasks.find((each) => each.id === taskId);
+        if (task === undefined) throw new Error(`no Task ${taskId}`);
+        yield* Effect.orDie(tasks.reassignTask(taskId, task.revision, agentId, now));
+      }),
+    );
   /** You take over a Task's claims (#1449), from a device session of yours. */
   const takeOver = (taskId: TaskId) => run(takeOverTask(taskId).pipe(Effect.provideService(UserSession, YOU)));
-  /** Why the hub refuses `writes` of any hob's session, as every runtime asks it (#1449). */
-  const takenWrite = (writes: Partial<CallWrites>) =>
+  /** You give back what you took over of a Task (#1538), from a device session of yours. */
+  const giveBack = (taskId: TaskId) => run(giveBackTask(taskId).pipe(Effect.provideService(UserSession, YOU)));
+  /**
+   * Why the hub refuses `writes` of a hob's session, Sam's on his request unless `as` says, as every
+   * runtime asks it (#1449).
+   */
+  const takenWrite = (
+    writes: Partial<CallWrites>,
+    as: { readonly agentId: AgentId; readonly taskId: TaskId } = { agentId: SAM, taskId: B },
+  ) =>
     run(
       Effect.gen(function* () {
         const tools = yield* TaskTools;
-        const session = yield* tools.forSession(
-          { agentId: SAM, taskId: B },
-          {
-            attemptId: AttemptId.make(`${B}-1`),
-            threadId: null,
-            currentAccess: Effect.succeed(null),
-            redactor: makeRedactor(),
-            approvals: null,
-          },
-        );
+        const session = yield* tools.forSession(as, {
+          attemptId: AttemptId.make(`${as.taskId}-1`),
+          threadId: null,
+          currentAccess: Effect.succeed(null),
+          redactor: makeRedactor(),
+          approvals: null,
+        });
         const ask = session.steering?.takenByYou;
         if (ask === undefined) throw new Error("expected the session to check writes to what you took over");
         return yield* ask({ paths: [], pushes: [], commits: [], trees: [], ...writes });
       }),
     );
-  /** The claims-taken items in the backpack, by recipient and Task. */
-  const takenItems = () =>
+  /** The claims-taken items, or the items of `kind`, in the backpack, by recipient and Task. */
+  const takenItems = (kind: "claims-taken" | "claims-given-back" = "claims-taken") =>
     run(
       Effect.flatMap(
         SqlClient.SqlClient,
@@ -295,8 +353,8 @@ const hub = () => {
           readonly recipientId: string;
           readonly taskId: string;
           readonly actionable: number | boolean;
-        }>`SELECT recipient_id, task_id, actionable FROM backpack_items WHERE kind = 'claims-taken'
-          ORDER BY recipient_id, task_id`,
+        }>`SELECT recipient_id, task_id, actionable FROM backpack_items WHERE kind = ${kind}
+          ORDER BY recipient_id, task_id, created_at`,
       ),
     );
   const taskOf = (taskId: TaskId) =>
@@ -315,7 +373,10 @@ const hub = () => {
     end,
     failAndRetry,
     taskOf,
+    member,
+    reassign,
     takeOver,
+    giveBack,
     takenWrite,
     takenItems,
     dispose: () => runtime.dispose(),
@@ -568,6 +629,105 @@ describe("the claims register", () => {
     }
   });
 
+  // covers OR-004, OR-006, PE-006, #1538
+  it("[TC-OR-1538-02] gives a Task's taken claims back to its hob, tells it once, and lets its writes run again", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      await h.request(FRODO, A, false);
+      await h.request(SAM, B, false);
+      await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
+      await h.call(FRODO, A, { key: "b", scope: "branch", branch: "camp" });
+      const frodo = { agentId: FRODO, taskId: A };
+      const plan = { paths: [join(checkout, "docs", "plan.md")] };
+      // Give back on a Task with nothing taken changes nothing.
+      expect(await h.giveBack(A)).toEqual([]);
+      expect(await h.takenItems("claims-given-back")).toEqual([]);
+
+      await h.takeOver(A);
+      expect(await h.takenWrite(plan, frodo)).toContain("took over path docs");
+      // While it is yours, Sam's claim inside it is contested.
+      expect((await h.call(SAM, B, { key: "p", scope: "path", path: "docs/a.md" })).details.state).toBe("contested");
+
+      const given = await h.giveBack(A);
+      // The folder comes back contested, since Sam's claim clashes with it; the branch held.
+      expect(given.map((claim) => [claim.key, claim.state, claim.actor])).toEqual([
+        ["docs", "contested", { kind: "hob", id: FRODO }],
+        ["camp", "held", { kind: "hob", id: FRODO }],
+      ]);
+      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["contested", "held"]);
+      expect((await h.claimsOf(B)).map((claim) => claim.state)).toEqual(["contested"]);
+      // Frodo hears once what he may write again, and every write runs again at once.
+      expect(
+        (await h.takenItems("claims-given-back")).map((item) => [
+          item.recipientId,
+          item.taskId,
+          Boolean(Number(item.actionable)),
+        ]),
+      ).toEqual([[FRODO, A, true]]);
+      expect(await h.takenWrite(plan, frodo)).toBeNull();
+      expect(await h.takenWrite({ trees: [worktree] }, frodo)).toBeNull();
+      expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "refs/heads/camp" }] }, frodo)).toBeNull();
+      expect(await h.takenWrite({ commits: [worktree] }, frodo)).toBeNull();
+      // Claiming the folder again tells him his Task holds it, not that it is yours.
+      expect((await h.call(FRODO, A, { key: "p-again", scope: "path", path: "docs" })).message).not.toContain(
+        "took over",
+      );
+      // Giving back again changes nothing and tells him nothing more.
+      expect(await h.giveBack(A)).toEqual([]);
+      expect(await h.takenItems("claims-given-back")).toHaveLength(1);
+
+      // Taking it over and giving it back again tells him each time.
+      expect((await h.takeOver(A)).map((claim) => claim.key)).toEqual(["docs", "camp"]);
+      expect(await h.takenItems()).toHaveLength(2);
+      expect(await h.takenWrite(plan, frodo)).toContain("took over");
+      expect((await h.giveBack(A)).map((claim) => claim.state)).toEqual(["contested", "held"]);
+      expect(await h.takenItems("claims-given-back")).toHaveLength(2);
+      expect(await h.takenWrite(plan, frodo)).toBeNull();
+      // Once Sam's Task ends, Frodo's folder is held alone again.
+      await h.end(B);
+      expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["held", "held"]);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers OR-004, OR-006, #1538
+  it("[TC-OR-1538-03] hands given-back files over with a reassigned Task, so the new hob may write to them", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      // Merry leads the Quest; Frodo works on a step of it in his checkout.
+      await h.request(MERRY, C, false);
+      await h.member(FRODO, MEMBER, C);
+      await h.call(FRODO, MEMBER, { key: "p", scope: "path", path: "docs" });
+      const sam = { agentId: SAM, taskId: MEMBER };
+      const plan = { paths: [join(worktree, "docs", "plan.md")] };
+
+      // Take over, Give back, then Reassign: Sam gets the Task with its files, and may write to them.
+      await h.takeOver(MEMBER);
+      await h.giveBack(MEMBER);
+      await h.reassign(MEMBER, SAM);
+      expect((await h.claimsOf(MEMBER)).map((claim) => [claim.key, claim.state])).toEqual([["docs", "held"]]);
+      expect(await h.takenWrite(plan, sam)).toBeNull();
+
+      // Reassigning while they are yours keeps them yours; giving them back then gives them to Sam.
+      await h.takeOver(MEMBER);
+      await h.reassign(MEMBER, FRODO);
+      expect(await h.takenWrite(plan, { agentId: FRODO, taskId: MEMBER })).toContain("took over path docs");
+      await h.reassign(MEMBER, SAM);
+      const given = await h.giveBack(MEMBER);
+      expect(given.map((claim) => claim.actor)).toEqual([{ kind: "hob", id: SAM }]);
+      expect(await h.takenWrite(plan, sam)).toBeNull();
+      expect((await h.takenItems("claims-given-back")).map((item) => [item.recipientId, item.taskId])).toEqual([
+        [FRODO, MEMBER],
+        [SAM, MEMBER],
+      ]);
+    } finally {
+      await h.dispose();
+    }
+  });
+
   // covers PE-002, PE-004
   it("[TC-OR-1388-06] claims nothing outside the hob's folders, whatever the folder's spelling", async () => {
     const h = hub();
@@ -607,7 +767,8 @@ type Step =
       readonly key: string;
     }
   | { readonly _tag: "End"; readonly task: number }
-  | { readonly _tag: "TakeOver"; readonly task: number };
+  | { readonly _tag: "TakeOver"; readonly task: number }
+  | { readonly _tag: "GiveBack"; readonly task: number };
 
 const TASKS = 3;
 const keys = fc.constantFrom("a", "a/b", "b", "c");
@@ -622,6 +783,7 @@ const steps: fc.Arbitrary<Step> = fc.oneof(
   }),
   fc.record({ _tag: fc.constant("End" as const), task: fc.nat({ max: TASKS - 1 }) }),
   fc.record({ _tag: fc.constant("TakeOver" as const), task: fc.nat({ max: TASKS - 1 }) }),
+  fc.record({ _tag: fc.constant("GiveBack" as const), task: fc.nat({ max: TASKS - 1 }) }),
 );
 
 /** The model: each claim by Task and key with its state, how many numbers were handed out, and which Tasks ended. */
@@ -641,7 +803,7 @@ const overlaps = (scope: ClaimScope, a: string, b: string) =>
 
 /**
  * Contested exactly while another Task's open claim on the same scope overlaps it. A claim you took
- * over (#1449) stays yours, and still clashes with the others.
+ * over (#1449) stays yours, and still clashes with the others, until you give it back (#1538).
  */
 const settle = (model: Model) => {
   for (const claim of model.claims) {
@@ -675,9 +837,22 @@ const claimInModel = (model: Model, task: number, scope: ClaimScope, key: string
   settle(model);
 };
 
+/**
+ * You take over a Task's open claims, or give its taken ones back (#1538): each comes back held,
+ * then contested where it clashes.
+ */
+const moveInModel = (model: Model, move: "TakeOver" | "GiveBack", task: number) => {
+  for (const claim of model.claims) {
+    if (claim.task !== task) continue;
+    if (move === "TakeOver" && claim.state !== "released") claim.state = "taken";
+    if (move === "GiveBack" && claim.state === "taken") claim.state = "held";
+  }
+  if (move === "GiveBack") settle(model);
+};
+
 describe("ClaimRegister", () => {
   // covers OR-004
-  it("[TC-OR-1388-04] agrees with a model of claims, clashes, takeovers and releases over random runs, claims at once included", async () => {
+  it("[TC-OR-1388-04] agrees with a model of claims, clashes, takeovers, give-backs and releases over random runs, claims at once included", async () => {
     const taskIds = Array.from({ length: TASKS }, (_, index) => TaskIds.make(`model-${index}`));
     await fc.assert(
       fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 10 }), async (run) => {
@@ -717,11 +892,9 @@ describe("ClaimRegister", () => {
               // Either order leaves the same claims and states.
               claimInModel(model, x, step.scope, step.key);
               claimInModel(model, y, step.scope, step.key);
-            } else if (step._tag === "TakeOver") {
-              await h.takeOver(taskIds[step.task] as TaskId);
-              for (const claim of model.claims) {
-                if (claim.task === step.task && claim.state !== "released") claim.state = "taken";
-              }
+            } else if (step._tag === "TakeOver" || step._tag === "GiveBack") {
+              await (step._tag === "TakeOver" ? h.takeOver : h.giveBack)(taskIds[step.task] as TaskId);
+              moveInModel(model, step._tag, step.task);
             } else if (open(step.task)) {
               await h.end(taskIds[step.task] as TaskId);
               model.ended.add(step.task);

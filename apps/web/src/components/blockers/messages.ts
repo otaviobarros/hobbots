@@ -20,6 +20,7 @@ export const messages = {
     "hob-proposal": "Hearing how you decided its proposal",
     "claim-clash": "Reading about a clash with another task",
     "claims-taken": "Reading that you took over its files and branches",
+    "claims-given-back": "Reading that you gave back its files and branches",
     progress: "Reading progress",
   },
   why: {

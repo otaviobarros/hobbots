@@ -8,7 +8,7 @@ Its state is in the `state` field.
 | --- | --- |
 | held | The Task holds it, and no other open claim clashes with it |
 | contested | Another Task's open claim on the same path or branch clashes with it; neither Task is stopped |
-| taken | You took it over from its Task: it is yours, and the hub refuses its hob's writes to it until the Task ends |
+| taken | You took it over from its Task: it is yours, and the hub refuses its hob's writes to it until you give it back or the Task ends |
 | released | Its Task ended; a released number is never handed out again |
 
 ```mermaid
@@ -17,6 +17,8 @@ stateDiagram-v2
   contested --> held: Clear
   held --> taken: TakeOver (guarded)
   contested --> taken: TakeOver (guarded)
+  taken --> contested: GiveBack (guarded)
+  taken --> held: GiveBack (guarded)
   held --> released: Release
   contested --> released: Release
   taken --> released: Release
@@ -28,4 +30,6 @@ stateDiagram-v2
 | Contest | held | contested | yes |
 | Clear | contested | held | no |
 | TakeOver | held, contested | taken | yes |
+| GiveBack | taken | contested | yes |
+| GiveBack | taken | held | yes |
 | Release | held, contested, taken | released | no |

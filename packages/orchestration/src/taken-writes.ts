@@ -71,7 +71,7 @@ const touchesKey = (key: string, inside: string) =>
 
 /**
  * Why a call's writes are refused (#1449): the first path or branch it writes that you took over
- * from a Task, which is yours until the Task ends. Every hob's call is checked, whatever Task it
+ * from a Task, which is yours until you give it back or the Task ends. Every hob's call is checked, whatever Task it
  * works on, so no other hob writes there either. Paths are matched inside the repository by its
  * identity, so another clone or worktree of it is refused too. Null when nothing it writes is yours,
  * or when the hub keeps no claims register.

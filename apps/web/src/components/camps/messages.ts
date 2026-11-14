@@ -58,8 +58,9 @@ export const messages = {
     } satisfies Record<CampProblem, string>,
     errors: {
       "hob-unavailable": ({ name }: Named) => `${name} is paused or retired, so it can't take a new camp now.`,
-      "chapter-refused": () =>
-        "Couldn't move that chapter: it changed meanwhile, or a reply is still running. Try again once it ends.",
+      "chapter-busy": ({ name }: Named) =>
+        `${name} is still working in this chapter, so it can't move yet. Try again once that ends.`,
+      "chapter-refused": () => "Couldn't move that chapter: it changed meanwhile. Try again.",
       unreachable: () => "Couldn't make the camp. Hobbots may be reconnecting; try again in a moment.",
     } satisfies Record<MakeCampError, (named: Named) => string>,
     made: ({ title }: { readonly title: string }) => `${title} is now a camp.`,
@@ -67,6 +68,9 @@ export const messages = {
     chapter: ({ title }: { readonly title: string }) => `The ${title} chapter`,
     chapterDetail: ({ from }: { readonly from: string }) => `From your chat: ${from}. It moves into the camp.`,
     chapterLink: "Your chat keeps a link to the camp. Other topics stay in the chat.",
+    /** Why the chapter cannot move yet, while Make the camp waits; switching it off makes the camp now. */
+    held: ({ name }: Named) =>
+      `${name} is still replying here. The chapter can move once the reply ends, or switch it off to make the camp now.`,
   },
   suggestion: {
     eyebrow: ({ name }: Named) => `${name} suggests`,

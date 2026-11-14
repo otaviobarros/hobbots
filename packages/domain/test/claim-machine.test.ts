@@ -69,7 +69,19 @@ const view = (c: Claim): ClaimView => ({
 
 // The rules of #1388, written apart from the machine so the two can disagree: a number is never
 // contested, a released claim never comes back. #1449: only you take a claim over, held or
-// contested, and it is yours until its Task ends.
+// contested, and it is yours until you give it back or its Task ends. #1538: only you give a claim
+// back, to its Task's hob: contested when another Task's claim clashes with it, a path or a branch
+// only, held otherwise.
+const giveBackModel = (m: ClaimView, e: Extract<ClaimEvent, { readonly _tag: "GiveBack" }>): ClaimView | "refused" =>
+  m.state === "taken" && e.by.kind === "user"
+    ? {
+        ...m,
+        state: e.clashes && !m.numbered ? "contested" : "held",
+        updatedAt: e.at,
+        actor: `${e.to.kind}:${e.to.id}`,
+      }
+    : "refused";
+
 const stepModel = (m: ClaimView, e: ClaimEvent): ClaimView | "refused" => {
   switch (e._tag) {
     case "Contest":
@@ -80,6 +92,8 @@ const stepModel = (m: ClaimView, e: ClaimEvent): ClaimView | "refused" => {
       return (m.state === "held" || m.state === "contested") && e.by.kind === "user"
         ? { ...m, state: "taken", updatedAt: e.at, actor: `${e.by.kind}:${e.by.id}` }
         : "refused";
+    case "GiveBack":
+      return giveBackModel(m, e);
     case "Release":
       return m.state === "released" ? "refused" : { ...m, state: "released", updatedAt: e.at, releasedAt: e.at };
   }
@@ -88,6 +102,10 @@ const stepModel = (m: ClaimView, e: ClaimEvent): ClaimView | "refused" => {
 const times = fc
   .integer({ min: 0, max: 10_000 })
   .map((minute) => new Date(Date.UTC(2026, 10, 11) + minute * 60_000).toISOString());
+const actors = fc.record({
+  kind: fc.constantFrom<Actor["kind"]>("user", "hob", "hub"),
+  id: fc.constantFrom("owner", "hob-2"),
+});
 const events: fc.Arbitrary<ClaimEvent> = fc.oneof(
   fc.record({ _tag: fc.constant("Contest" as const), at: times }),
   fc.record({ _tag: fc.constant("Clear" as const), at: times }),
@@ -95,16 +113,20 @@ const events: fc.Arbitrary<ClaimEvent> = fc.oneof(
   fc.record({
     _tag: fc.constant("TakeOver" as const),
     at: times,
-    by: fc.record({
-      kind: fc.constantFrom<Actor["kind"]>("user", "hob", "hub"),
-      id: fc.constantFrom("owner", "hob-2"),
-    }),
+    by: actors,
+  }),
+  fc.record({
+    _tag: fc.constant("GiveBack" as const),
+    at: times,
+    by: actors,
+    to: fc.record({ kind: fc.constant<Actor["kind"]>("hob"), id: fc.constantFrom("hob-1", "hob-3") }),
+    clashes: fc.boolean(),
   }),
 );
 const scopes = fc.constantFrom<ClaimScope>("sequence", "path", "branch");
 
 describe("ClaimMachine", () => {
-  it("agrees with a model of contest, clear, take over and release over random runs of events", () => {
+  it("agrees with a model of contest, clear, take over, give back and release over random runs of events", () => {
     agreesWithModel({
       machine: ClaimMachine,
       records: fc
@@ -122,6 +144,8 @@ describe("ClaimMachine", () => {
       ["Contest", ["held"], "contested", true],
       ["Clear", ["contested"], "held", false],
       ["TakeOver", ["held", "contested"], "taken", true],
+      ["GiveBack", ["taken"], "contested", true],
+      ["GiveBack", ["taken"], "held", true],
       ["Release", ["held", "contested", "taken"], "released", false],
     ]);
   });
@@ -149,6 +173,34 @@ describe("taking a claim over (#1449)", () => {
     expect(Claims.contestable(taken)).toBe(false);
     expect(claimsClash(taken, claim({ id: "claim-2", taskId: "task-2" }))).toBe(true);
     expect(Claims.can(taken, { _tag: "Release", at })).toBe(true);
+  });
+
+  it("[TC-OR-1538-01] gives a taken claim back to its Task's hob, never by a hob, contested only when it clashes", () => {
+    const you: Actor = { kind: "user", id: "owner" };
+    const hob: Actor = { kind: "hob", id: "hob-3" };
+    const back = (state: ClaimState, clashes: boolean, scope: ClaimScope = "path") =>
+      Claims.transition(claim({ state, scope, key: scope === "path" ? "docs" : "7" }), {
+        _tag: "GiveBack",
+        at,
+        by: you,
+        to: hob,
+        clashes,
+      });
+    const held = back("taken", false);
+    expect(held).toBeInstanceOf(Claim);
+    expect([(held as Claim).state, (held as Claim).actor]).toEqual(["held", hob]);
+    expect(Claims.isTaken(held as Claim)).toBe(false);
+    expect((back("taken", true) as Claim).state).toBe("contested");
+    expect((back("taken", true, "branch") as Claim).state).toBe("contested");
+    // A number never clashes, so it comes back held.
+    expect((back("taken", true, "sequence") as Claim).state).toBe("held");
+    // Only a claim you took over is given back, and only by you.
+    for (const state of ["held", "contested", "released"] as const) {
+      expect(back(state, false)).toBeInstanceOf(IllegalClaimTransition);
+    }
+    expect(Claims.can(claim({ state: "taken" }), { _tag: "GiveBack", at, by: hob, to: hob, clashes: false })).toBe(
+      false,
+    );
   });
 
   it("finds the writes a path claim covers: the file, inside its folder, or a folder holding it", () => {
