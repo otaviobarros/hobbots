@@ -1,6 +1,7 @@
 import { isAbsolute, join, relative, sep } from "node:path";
 import {
   AdditionalRuntimes,
+  type HubTools,
   hubCallStep,
   notOfferedDenial,
   type PromptRequest,
@@ -749,6 +750,51 @@ export const scriptedHubEvents = (
   );
 };
 
+/** What fake Codex answers a call to a hub tool its resumed session did not start with, as Codex's own refusal reads. */
+export const fakeNotHeld = (tool: string) =>
+  `${tool} is not offered in this session, so it did not run. Use the tools you were given.`;
+
+/**
+ * The hub tools a turn's session holds on fake Codex, which keeps those a session started with
+ * (#1543): a new session, or one the fake does not know, as after a restart, holds what the turn
+ * offers. `started` is what `SessionStarted` says of a new session's.
+ */
+const heldTools = (request: PromptRequest, known: ReadonlySet<string> | null | undefined) => {
+  const offered = (request.hubTools?.tools ?? []).map((tool) => tool.name);
+  const started = request.sessionId == null && offered.length > 0 ? { hubTools: offered } : {};
+  return { held: known ?? new Set(offered), started };
+};
+
+/**
+ * What a turn's session holds of the hub tools: on a runtime that keeps a session's first tools,
+ * those it started with, what `SessionStarted` says of a new one's, and the tools it can call.
+ */
+const sessionTools = (
+  keepsTools: boolean,
+  request: PromptRequest,
+  known: { readonly hubTools: ReadonlySet<string> | null } | undefined,
+) => {
+  if (!keepsTools) return { held: null, started: {}, hubTools: heldOnly(request.hubTools, null) };
+  const { held, started } = heldTools(request, known?.hubTools);
+  return { held, started, hubTools: heldOnly(request.hubTools, held) };
+};
+
+/**
+ * The hub tools a resumed session of a runtime that keeps the tools it started with can call, as a
+ * Codex thread can (ADR 024, #1543): only those among `held`, whatever the turn offers. Nothing
+ * changes on a runtime offered each turn's tools.
+ */
+const heldOnly = (hub: HubTools | null | undefined, held: ReadonlySet<string> | null): { hubTools?: HubTools } =>
+  hub == null || held === null
+    ? {}
+    : {
+        hubTools: {
+          tools: hub.tools.filter((tool) => held.has(tool.name)),
+          call: (name, input, step) =>
+            held.has(name) ? hub.call(name, input, step) : Effect.succeed({ text: fakeNotHeld(name), refused: true }),
+        },
+      };
+
 /**
  * A prompt line `fake:then <line>` keeps `<line>` for the session's next turn, which runs it as if
  * its own prompt began with it. So a continuation, whose prompt Hobbots writes (ADR 019), can be
@@ -850,8 +896,18 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const availability = options.availability ?? "ready";
   const sandbox = options.sandbox ?? "on";
   const enforcement = fakeEnforcement(sandbox);
-  // Each session's instructions, and the lines its previous turn kept for its next.
-  const sessions = new Map<string, { readonly instructions: string; readonly later: ReadonlyArray<string> }>();
+  // Fake Codex keeps the hub tools a session started with, as Codex does (ADR 024, #1543).
+  const keepsTools = runtime === "codex";
+  // Each session's instructions, the lines its previous turn kept for its next, and on fake Codex
+  // the hub tools it started with.
+  const sessions = new Map<
+    string,
+    {
+      readonly instructions: string;
+      readonly later: ReadonlyArray<string>;
+      readonly hubTools: ReadonlySet<string> | null;
+    }
+  >();
   // What scripted hub calls gave back, by key, for later calls in any session to refer to.
   const details = new Map<string, unknown>();
   // The `fake:once` lines already run, in any session.
@@ -870,7 +926,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     // What the previous turn kept runs ahead of this turn's own prompt.
     const later = known?.later ?? [];
     const scripted = onceOnly([...later, request.prompt].join("\n"), ran);
-    sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted) });
+    const held = sessionTools(keepsTools, request, known);
+    sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted), hubTools: held.held });
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
     judgments.keep(request, scripted);
     const echo = judgments.answer(request) ?? fakeEcho(request, followed);
@@ -911,6 +968,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         sessionId,
         billing: "fake",
         ...sessionPolicy(searchTurn),
+        ...held.started,
       },
       ...(scripted.split("\n").some((line) => line.trim() === FAKE_COMPACT_DIRECTIVE)
         ? [{ _tag: "SessionCompacted" } as const]
@@ -930,7 +988,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
           }),
         ),
       ),
-      Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
+      Stream.concat(scriptedHubEvents({ ...request, ...held.hubTools, prompt: scripted }, answers, details)),
       // Like Claude Code, the turn completes once its background commands that end have ended.
       Stream.concat(Stream.suspend(() => backgroundEnds(background.filter((run) => !run.outlives)))),
       Stream.concat(written),
@@ -962,6 +1020,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     enforcement: Effect.succeed(enforcement),
     // Fake Claude Code reports a plan with fixed meters; fake Codex reports none, as an API key would.
     ...(runtime === "claude-code" ? { planUsage: fakePlanUsage } : {}),
+    // As Codex, fake Codex keeps the hub tools a session started with (#1543).
+    ...(keepsTools ? { resumeKeepsHubTools: true } : {}),
     // As the real runtime's search: fake Codex's is offered only where every page is read without asking.
     searchOpensPages: runtime === "codex",
     // A message that arrives while a turn runs is taken before its next scripted hub call (#1345).

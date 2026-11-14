@@ -289,7 +289,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
             // The session has now seen the thread through this reply.
             case "SessionStarted":
               return Effect.gen(function* () {
-                session.begin(event.sessionId, event.policyVersion ?? null);
+                session.begin(event.sessionId, event.policyVersion ?? null, event.hubTools);
                 skillUses.organization(event.organizationSkills);
                 // The runtime accepted the turn: the work it carries is now being processed.
                 yield* carry.accepted(event.sessionId);

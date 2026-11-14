@@ -370,6 +370,15 @@ const requestHandlers = (
 };
 
 /**
+ * What `SessionStarted` says of the hub tools a thread Codex started holds for good (#1543). A
+ * resumed thread keeps what it started with, so it says nothing, as a thread started with none.
+ */
+const startedWith = (request: PromptRequest): { readonly hubTools?: ReadonlyArray<string> } => {
+  const names = request.sessionId ? [] : dynamicToolsOf(request.hubTools).map((tool) => tool.name);
+  return names.length === 0 ? {} : { hubTools: names };
+};
+
+/**
  * Opens the turn's Codex thread: resumes the Hobbots thread's session, or starts one with the turn's
  * hub tools. A resumed thread keeps the hub tools it started with, since `thread/resume` takes none.
  */
@@ -885,6 +894,7 @@ const turnEvents = (
         billing: billingOf(tokens),
         ...launch.session,
         ...(admitted.organization.length > 0 ? { organizationSkills: admitted.organization } : {}),
+        ...startedWith(request),
       });
       yield* Deferred.await(accepted);
 
