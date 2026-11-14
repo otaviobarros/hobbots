@@ -1,4 +1,4 @@
-import type { ThreadArchived, ThreadKeyReused } from "@hobbots/api";
+import type { HobUnavailable, ThreadArchived, ThreadKeyReused } from "@hobbots/api";
 import type {
   Actor,
   Agent,
@@ -237,13 +237,14 @@ export class HobbotsRepository extends Context.Service<
     /**
      * Writes a new camp and journals `CampMade`, in one transaction (ADR 037). The camp's id is the
      * command's key: the same camp stored under it already is returned as it is, with nothing
-     * journaled, and a different thread under it is refused.
+     * journaled, and a different thread under it is refused. A hob it is made with that no longer
+     * takes new work as it is written is refused `HobUnavailable`, and no camp is made.
      */
     readonly makeCamp: (
       camp: Thread,
       /** The other hobs it is made with, each journaled `ThreadMemberAdded` after its first two members. */
       hobs?: ReadonlyArray<AgentId>,
-    ) => Effect.Effect<Committed<Thread>, ThreadKeyReused>;
+    ) => Effect.Effect<Committed<Thread>, ThreadKeyReused | HobUnavailable>;
     /**
      * Moves a chapter into a camp, in one transaction (ADR 037, #1385): re-parents its messages,
      * decisions, artifacts and the quests started in it with their open questions and backpack
@@ -258,7 +259,7 @@ export class HobbotsRepository extends Context.Service<
       readonly at: string;
     }) => Effect.Effect<
       Committed<ChapterMove>,
-      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused
+      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused | HobUnavailable
     >;
     /**
      * Start fresh, in one transaction (ADR 037): writes `superseded`, the chat after its Supersede,

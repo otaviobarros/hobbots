@@ -1,5 +1,5 @@
 import type { ChapterMoveTarget } from "@hobbots/agents";
-import type { ThreadKeyReused } from "@hobbots/api";
+import type { HobUnavailable, ThreadKeyReused } from "@hobbots/api";
 import {
   Artifact,
   type BackpackItem,
@@ -54,10 +54,11 @@ const BY_MESSAGE = [
   "web_fetches",
 ] as const;
 
-type Refusal = ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused;
+type Refusal = ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused | HobUnavailable;
 
-const isPlan = (planned: ChapterMovePlan | Exclude<Refusal, ThreadKeyReused>): planned is ChapterMovePlan =>
-  "stub" in planned;
+const isPlan = (
+  planned: ChapterMovePlan | Exclude<Refusal, ThreadKeyReused | HobUnavailable>,
+): planned is ChapterMovePlan => "stub" in planned;
 
 export const makeChapterMoves = (
   sql: SqlClient.SqlClient,

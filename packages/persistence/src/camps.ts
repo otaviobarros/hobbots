@@ -1,4 +1,4 @@
-import { ThreadKeyReused } from "@hobbots/api";
+import { type HobUnavailable, ThreadKeyReused } from "@hobbots/api";
 import {
   type AgentId,
   ApprovalRequest,
@@ -156,7 +156,7 @@ export const makeCampWrites = (
     });
 
   const makeCamp = (camp: Thread, hobs: ReadonlyArray<AgentId> = []) =>
-    change<Thread, ThreadKeyReused>((first) => insertCamp(camp, first, hobs));
+    change<Thread, ThreadKeyReused | HobUnavailable>((first) => insertCamp(camp, first, hobs));
 
   // The open work in a chat, as it stands before it moves: the Tasks you asked for there that are not
   // over, with their trees, the questions in them still open, and the backpack items held for the

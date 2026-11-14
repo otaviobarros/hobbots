@@ -1,7 +1,8 @@
 import { sessionActor } from "@hobbots/agents";
+import { HobUnavailable } from "@hobbots/api";
 import {
   type Actor,
-  type AgentId,
+  AgentId,
   type JournaledEvent,
   type MemberEvent,
   type Thread,
@@ -131,11 +132,18 @@ export const startMembersIn =
       return yield* added(sql, members, first);
     });
 
+/** A hob's standing for new work, as its row stores it. */
+interface AgentStanding {
+  readonly id: string;
+  readonly status: "active" | "paused" | "retired";
+  readonly retiring: string | null;
+}
+
 /**
  * Adds the other hobs a camp is made with (ADR 039, Members), after its first two members, at journal
  * sequences from `first` on, each added by the person whose session made it: their
- * `ThreadMemberAdded` events. A hob retired meanwhile joins as a member that left, as it would have
- * had it joined first.
+ * `ThreadMemberAdded` events. A hob paused, retiring or retired since it was picked is refused
+ * `HobUnavailable`, so the camp is not made.
  */
 export const addHobsIn =
   (sql: SqlClient.SqlClient) =>
@@ -143,20 +151,29 @@ export const addHobsIn =
     thread: Thread,
     hobs: ReadonlyArray<AgentId>,
     first: number,
-  ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+  ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError | HobUnavailable> =>
     Effect.gen(function* () {
       if (hobs.length === 0) return [];
       const owner = yield* sessionActor;
-      const rows = yield* sql<{ readonly id: string; readonly status: string }>`SELECT id, status FROM agents
-        WHERE ${sql.in("id", hobs)}`;
-      const retired = new Set(rows.filter((row) => row.status === "retired").map((row) => row.id));
+      // Read in the camp's own transaction, so a hob paused or retired since it was picked is refused
+      // here and the camp is not made, rather than joining with work it no longer takes. On PostgreSQL
+      // the rows stay locked until the camp commits, so a pause waits for it.
+      const rows = yield* sql.onDialectOrElse({
+        pg: () => sql<AgentStanding>`SELECT id, status, retiring FROM agents WHERE ${sql.in("id", hobs)} FOR UPDATE`,
+        orElse: () => sql<AgentStanding>`SELECT id, status, retiring FROM agents WHERE ${sql.in("id", hobs)}`,
+      });
+      const unavailable = rows.find((row) => row.status !== "active" || row.retiring !== null);
+      if (unavailable !== undefined) {
+        const status = unavailable.status === "active" ? "retiring" : unavailable.status;
+        return yield* new HobUnavailable({ agentId: AgentId.make(unavailable.id), status });
+      }
       const members = hobs.map(
         (hobId) =>
           new ThreadMember({
             threadId: thread.id,
             actor: { kind: "hob", id: hobId },
             role: "member",
-            state: retired.has(hobId) ? "left" : "active",
+            state: "active",
             joinedAt: thread.createdAt,
             addedBy: owner,
             readRevision: null,

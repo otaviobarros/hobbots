@@ -122,17 +122,22 @@ const refusal = (error: MemberRefused | ThreadArchived) => (error._tag === "Memb
 
 describe("a camp's hobs", () => {
   // covers ADR 039 (Members)
-  it("[TC-PE-1467-01] makes a camp with the hobs picked, each journaled after its first two, the lead once and a retired hob as left, and refuses its key asked again with other hobs", async () => {
+  it("[TC-PE-1467-01] makes a camp with the hobs picked, each journaled after its first two, the lead once, refuses a hob that takes no new work and its key asked again with other hobs", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         for (const id of [QUILL, PIP]) yield* repo.insertAgent(hob(id));
         yield* repo.insertAgent(hob(ROOK, "retired"));
-        const made = yield* repo.makeCamp(camp(), [PIP, QUILL, PIP, ROOK]);
+        // A hob that no longer takes new work as the camp is written makes no camp at all.
+        const refused = yield* repo.makeCamp(camp(), [PIP, ROOK]).pipe(Effect.flip);
+        const none = yield* repo.findThread(CAMP);
+        const made = yield* repo.makeCamp(camp(), [PIP, QUILL, PIP]);
         // The same camp asked again, its hobs in another order, changes nothing; with other hobs, its key is reused.
-        const again = yield* repo.makeCamp(camp(), [ROOK, QUILL, PIP]);
-        const otherHobs = yield* repo.makeCamp(camp(), [PIP]).pipe(Effect.flip);
+        const again = yield* repo.makeCamp(camp(), [QUILL, PIP]);
+        const otherHobs = yield* repo.makeCamp(camp(), [ROOK]).pipe(Effect.flip);
         return {
+          refused: refused._tag === "HobUnavailable" ? `${refused.agentId}:${refused.status}` : refused._tag,
+          none: Option.isNone(none),
           made: types(made.entries),
           again: types(again.entries),
           otherHobs: otherHobs._tag,
@@ -140,17 +145,18 @@ describe("a camp's hobs", () => {
         };
       }),
     );
+    expect(result.refused).toBe("rook:retired");
+    expect(result.none).toBe(true);
     expect(result.made).toEqual([
       "CampMade",
       "ChapterStarted",
       "ThreadMemberAdded",
       "ThreadMemberAdded",
       "ThreadMemberAdded",
-      "ThreadMemberAdded",
     ]);
     expect(result.again).toEqual([]);
     expect(result.otherHobs).toBe("ThreadKeyReused");
-    expect(result.members).toEqual(["user:owner:active", "hob:pip:active", "hob:quill:active", "hob:rook:left"]);
+    expect(result.members).toEqual(["user:owner:active", "hob:pip:active", "hob:quill:active"]);
   });
 
   // covers ADR 039 (Members, One hob speaks at a time)
