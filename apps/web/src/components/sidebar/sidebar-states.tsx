@@ -17,7 +17,9 @@ export function SidebarLoading({ label }: { label: string }) {
           className="flex min-h-[34px] w-full items-center gap-2.5 px-2 max-wide:h-11 max-wide:w-12 max-wide:justify-center max-wide:p-0"
         >
           <Skeleton shape="tile" className="size-hob-tile max-wide:size-7.5" />
-          <Skeleton width={width} className="text-ui max-wide:hidden" />
+          <span className="text-ui max-wide:hidden">
+            <Skeleton width={width} />
+          </span>
         </li>
       ))}
     </ul>
@@ -27,8 +29,10 @@ export function SidebarLoading({ label }: { label: string }) {
 /** A section with nothing in it yet: one line saying so. The rail reads it out without showing it. */
 export function SidebarEmpty({ message }: { message: string }) {
   return (
-    <Empty className="gap-0 px-2.5 py-2 max-wide:sr-only">
-      <EmptyDescription className="text-detail">{message}</EmptyDescription>
-    </Empty>
+    <div className="w-full max-wide:sr-only">
+      <Empty size="row">
+        <EmptyDescription>{message}</EmptyDescription>
+      </Empty>
+    </div>
   );
 }
