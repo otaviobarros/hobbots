@@ -147,6 +147,7 @@ describe("passing", () => {
           rows: yield* stored,
           messages: (yield* repo.listMessages(CAMP)).map((m) => m.id),
           reply: yield* repo.findMessage(replyId),
+          kept: yield* sql`SELECT reply_id, thread_id, agent_id FROM passed_turns`,
           open: yield* repo.openTurnRequests(mainLine(CAMP)),
         };
       }),
@@ -172,6 +173,8 @@ describe("passing", () => {
     // The conversation keeps your message and no reply of Pip's; Quill is next.
     expect(result.messages).toEqual(["plan"]);
     expect(Option.isNone(result.reply)).toBe(true);
+    // What the removed reply's turn used stays, under the hob that passed (OP-002).
+    expect(result.kept).toEqual([{ replyId: "reply-pip", threadId: CAMP, agentId: PIP }]);
     expect(result.open.map((r: TurnRequest) => [r.hobId, r.state])).toEqual([[QUILL, "waiting"]]);
   });
 
@@ -234,5 +237,25 @@ describe("passing", () => {
       [QUILL, "waiting"],
     ]);
     expect(result.messages).toEqual(["plan", "reply-pip"]);
+  });
+
+  // covers ADR 039 (One hob speaks at a time), STD-DATA-001
+  it("[TC-PE-1462-04] passes, when the hub starts again, a turn whose hob passed before the hub stopped", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* asked;
+        const replyId = yield* pipSpeaks;
+        // Pip passed, then the hub stopped before the turn ended.
+        yield* repo.markPassing(replyId, "Quill covered it");
+        yield* repo.answerUnfinishedTurnRequests;
+        return { rows: yield* stored, messages: (yield* repo.listMessages(CAMP)).map((m) => m.id) };
+      }),
+    );
+    expect(result.rows).toEqual([
+      { hobId: PIP, state: "passed", passReason: "Quill covered it" },
+      { hobId: QUILL, state: "waiting", passReason: null },
+    ]);
+    expect(result.messages).toEqual(["plan"]);
   });
 });

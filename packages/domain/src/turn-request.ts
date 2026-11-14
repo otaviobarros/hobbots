@@ -57,7 +57,10 @@ export class TurnRequest extends Schema.Class<TurnRequest>("TurnRequest")({
   replyId: Schema.NullOr(MessageId),
   /** Who stopped it, once dropped by Stop or Stop all; null otherwise, or when the hub dropped it. */
   droppedBy: Schema.NullOr(Actor),
-  /** Why its hob passed, in the hob's words, once `passed` (the `pass` tool); null otherwise. */
+  /**
+   * Why its hob passed, in the hob's words: written as the hob passes, while it still speaks, so a
+   * restart passes it too, and kept once `passed`. Null otherwise.
+   */
   passReason: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
@@ -115,7 +118,8 @@ export const TurnRequestMachine = defineMachine<
     Answer: {
       from: ["speaking"],
       to: "answered",
-      apply: (request) => new TurnRequest({ ...request, state: "answered" }),
+      // A pass its turn did not keep leaves no reason behind (#1462).
+      apply: (request) => new TurnRequest({ ...request, state: "answered", passReason: null }),
     },
     Pass: {
       from: ["speaking"],
@@ -125,7 +129,8 @@ export const TurnRequestMachine = defineMachine<
     Drop: {
       from: ["waiting", "paused", "speaking"],
       to: "dropped",
-      apply: (request, event) => new TurnRequest({ ...request, state: "dropped", droppedBy: event.by }),
+      apply: (request, event) =>
+        new TurnRequest({ ...request, state: "dropped", droppedBy: event.by, passReason: null }),
     },
   },
   illegal: (request, _event, to) => new IllegalTurnRequestTransition({ id: request.id, from: request.state, to }),

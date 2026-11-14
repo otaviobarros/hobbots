@@ -520,7 +520,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                   hubTools: joinHubTools([
                     { owner: "the Task tools", tools: taskTurn?.hubTools ?? null },
                     // Every chat turn may pass (ADR 039), whatever its tool access.
-                    { owner: PASS_OWNER, tools: passTools(reply, repo.turnRequestsOf, redactor) },
+                    { owner: PASS_OWNER, tools: passTools(reply, repo, redactor) },
                     { owner: "the hub's other tools", tools: recorded(offer.hubTools) },
                   ]),
                   steering,

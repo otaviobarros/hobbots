@@ -65,12 +65,12 @@ const stepModel = (m: RequestView, e: TurnRequestEvent): RequestView | "refused"
     case "Speak":
       return m.state === "waiting" ? { ...m, state: "speaking", replyId: e.replyId } : "refused";
     case "Answer":
-      return m.state === "speaking" ? { ...m, state: "answered" } : "refused";
+      return m.state === "speaking" ? { ...m, state: "answered", passReason: null } : "refused";
     case "Pass":
       return m.state === "speaking" ? { ...m, state: "passed", passReason: e.reason } : "refused";
     case "Drop":
       return m.state === "waiting" || m.state === "paused" || m.state === "speaking"
-        ? { ...m, state: "dropped", droppedBy: e.by }
+        ? { ...m, state: "dropped", droppedBy: e.by, passReason: null }
         : "refused";
   }
 };
@@ -88,7 +88,11 @@ describe("TurnRequestMachine", () => {
   it("[TC-DM-1461-01] agrees with a model of speaking, answering, passing and dropping over random runs", () => {
     agreesWithModel({
       machine: TurnRequests,
-      records: fc.constantFrom(...TurnRequestStates.literals).map((state) => request(state)),
+      records: fc
+        .tuple(fc.constantFrom(...TurnRequestStates.literals), fc.constantFrom(null, "Quill covered it"))
+        .map(([state, passReason]) =>
+          request(state, { passReason: state === "speaking" || state === "passed" ? passReason : null }),
+        ),
       events,
       model: { init: view, step: stepModel, view },
       isError: (result): result is IllegalTurnRequestTransition => result instanceof IllegalTurnRequestTransition,

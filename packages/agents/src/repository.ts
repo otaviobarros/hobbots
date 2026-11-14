@@ -195,9 +195,15 @@ export class HobbotsRepository extends Context.Service<
     /** The requests still owed that the turn writing `replyId` speaks for. */
     readonly turnRequestsOf: (replyId: MessageId) => Effect.Effect<ReadonlyArray<TurnRequest>>;
     /**
+     * The hob of the turn writing `replyId` passed (ADR 039): its speaking requests keep `reason` at
+     * once, so a hub that stops before the turn ends passes them when it starts again.
+     */
+    readonly markPassing: (replyId: MessageId, reason: string) => Effect.Effect<void>;
+    /**
      * The turn writing `replyId` ended with its hob's `pass` (ADR 039): its speaking requests end
      * `passed` with `reason`, and the reply is removed, journaled `TurnPassed`, so it leaves no
-     * message. A reply an approval names stays, and its requests are answered. Returns the passed.
+     * message. What it used stays counted (`passed_turns`), and a request its text caused is dropped.
+     * A reply an approval names stays, and its requests are answered. Returns the passed.
      */
     readonly passTurnRequests: (
       replyId: MessageId,
@@ -212,8 +218,11 @@ export class HobbotsRepository extends Context.Service<
       ids: ReadonlyArray<TurnRequestId>,
       by: Actor | null,
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
-    /** At start: requests whose turn was speaking when the hub stopped are answered by its interrupted reply. */
-    readonly answerUnfinishedTurnRequests: Effect.Effect<void>;
+    /**
+     * At start: requests whose turn was speaking when the hub stopped are answered by its interrupted
+     * reply, or passed, with its reply removed, when its hob had passed.
+     */
+    readonly answerUnfinishedTurnRequests: Effect.Effect<Committed<void>>;
     /** Threads with a `TurnRequest` waiting. */
     readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */

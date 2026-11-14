@@ -380,7 +380,7 @@ export class ChatService extends Context.Service<
         const next = MessageTransitions.interrupt(message);
         if (next instanceof Message) yield* saveMessage(next);
       }
-      yield* repo.answerUnfinishedTurnRequests;
+      yield* announce(yield* repo.answerUnfinishedTurnRequests);
 
       // A queued message's start and removal write, then announce the change once it is committed (CH-008).
       const saveStarted = (message: Message, reply: Message, speaking: ReadonlyArray<TurnRequestId>) =>

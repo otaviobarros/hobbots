@@ -524,8 +524,27 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         if (reason === null || !passStands(yield* Ref.get(reply.current), reply.stepsFrom)) {
           return yield* repo.answerTurnRequests(replyId);
         }
-        yield* bus.publish((yield* repo.passTurnRequests(replyId, reason)).entries);
+        const threadId = (yield* Ref.get(reply.current)).threadId;
+        const transcript = yield* repo.listMessages(threadId);
+        const before = transcript[transcript.findIndex((m) => m.id === replyId) - 1]?.id;
+        const committed = yield* repo.passTurnRequests(replyId, reason);
+        yield* bus.publish(committed.entries);
+        if (committed.value.length > 0 && before !== undefined) yield* seenBefore(threadId, replyId, before);
       });
+
+    // A session that saw the thread through a reply that is gone saw it through the message before
+    // it, so the session's next turn is told only what came after (#1462).
+    const seenBefore = (threadId: ThreadId, gone: MessageId, before: MessageId) =>
+      changeThread(threadId, (latest) =>
+        latest.sessions.some((session) => session.seenThrough === gone)
+          ? new Thread({
+              ...latest,
+              sessions: latest.sessions.map((session) =>
+                session.seenThrough === gone ? { ...session, seenThrough: before } : session,
+              ),
+            })
+          : null,
+      ).pipe(Effect.asVoid);
 
     // Publishes who waits for the line's floor, from its requests as stored now.
     const lineUp = (threadId: ThreadId) =>

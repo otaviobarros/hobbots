@@ -1,6 +1,5 @@
 import {
   type Message,
-  type MessageId,
   PASS_DESCRIPTION,
   PASS_LABEL,
   PASS_TOOL,
@@ -13,6 +12,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Ref, Schema } from "effect";
 import { hubAnswer } from "./charms.ts";
+import type { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 import type { Reply } from "./thread-run.ts";
@@ -88,22 +88,27 @@ export const passRefusal = (reply: Message, stepsFrom: number, requests: Readonl
 
 const decodePass = Schema.decodeUnknownEffect(PassInput);
 
-/** The `pass` tool for the chat turn writing `reply`; every answer is redacted with the turn's redactor. */
-export const passTools = (
-  reply: Reply,
-  requestsOf: (replyId: MessageId) => Effect.Effect<ReadonlyArray<TurnRequest>>,
-  redactor: Redactor,
-): HubTools => {
+/** What `pass` reads and writes of the turn's requests: the repository's own. */
+export type PassRecords = Pick<HobbotsRepository["Service"], "turnRequestsOf" | "markPassing">;
+
+/**
+ * The `pass` tool for the chat turn writing `reply`; every answer is redacted with the turn's
+ * redactor. An accepted pass is written on its requests before the hob hears it was accepted, so a
+ * hub that stops meanwhile still passes the turn when it starts again.
+ */
+export const passTools = (reply: Reply, records: PassRecords, redactor: Redactor): HubTools => {
   const pass = (raw: unknown) =>
     Effect.gen(function* () {
       const input = yield* decodePass(raw).pipe(Effect.mapError(() => new Refused({ message: PASS_UNREADABLE })));
       const reason = input.reason.trim();
       if (reason === "") return yield* new Refused({ message: PASS_UNREADABLE });
       const current = yield* Ref.get(reply.current);
-      const refusal = passRefusal(current, reply.stepsFrom, yield* requestsOf(current.id));
+      const refusal = passRefusal(current, reply.stepsFrom, yield* records.turnRequestsOf(current.id));
       if (refusal !== null) return yield* new Refused({ message: refusal });
       // What the hob gave is kept as the conversation shows it, without a secret it may quote.
-      yield* Ref.set(reply.passed, redactor.text(reason));
+      const kept = redactor.text(reason);
+      yield* records.markPassing(current.id, kept);
+      yield* Ref.set(reply.passed, kept);
       return { text: PASS_TAKEN, refused: false } satisfies HubToolAnswer;
     });
   return {
