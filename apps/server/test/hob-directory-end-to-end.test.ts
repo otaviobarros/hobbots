@@ -214,7 +214,7 @@ describe("the hob directory, end to end", () => {
     const { sent } = await exchange(thread, "Who on the team can push to GitHub?");
     const roster = sent.briefing ?? "";
     expect(roster).toMatch(/^## Other hobs on this hub\n\nHobbots collected this about the other hobs/);
-    expect(roster).toContain("a card holds no more than the hob's line below");
+    expect(roster).toContain("the hob's line below, and its Allow, Ask or Never answer for each operation");
     const lines = roster.split("\n").filter((line) => line.startsWith("- "));
     // Active hobs first, then paused ones; never the reader, a hidden hob or a retired one.
     expect(lines.map((line) => line.split(":")[0])).toEqual(['- "Pip"', '- "Quill"']);
@@ -272,6 +272,10 @@ describe("the hob directory, end to end", () => {
     expect(reply.content).toContain("read_hob: Hobbots collected this about the other hobs");
     expect(reply.content).toContain('### "Pip"\n- Role: "Writer"\n- Good at: "Release notes."\n- Status: active');
     expect(reply.content).toContain("- Charms: GitHub");
+    // Pip's answers under Balanced, with its GitHub Charm's operations after the built-in ones (#1351).
+    expect(reply.content).toContain("Answers, from the Balanced preset:");
+    expect(reply.content).toContain("| push | Ask |\n");
+    expect(reply.content).toContain("| github.read | Allow |\n| github.write | Allow |");
     expect(reply.content).toContain('### "Quill"');
     expect(reply.content).toContain("- Status: paused\n- Brain: Codex, model default, effort default");
     for (const name of ["Wren", "Rook", "Nobody"]) {

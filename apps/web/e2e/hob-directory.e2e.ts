@@ -164,3 +164,31 @@ test("[TC-UX-1235-01] good at edited and Visible to other hobs turned off and on
   await saveQuill(page);
   await expect(await pipsRoster(page, url, pip)).toContainText('"Quill": "Writer"');
 });
+
+// covers ADR 032 (Answers), #1351
+test("[TC-UX-1351-01] a hob reads another's card with its answers, and a change on the Permissions tab shows on its next read", async ({
+  page,
+  scan,
+}) => {
+  const { url, pip, quill } = await hubWithTeam();
+  const readQuill = async () => {
+    await page.goto(`${url}/#/hobs/${pip.id}/chat`);
+    await send(page, ["What may Quill do?", 'fake:hub read_hob {"hob":"Quill"}']);
+    return page.getByRole("article").last();
+  };
+  const before = await readQuill();
+  await expect(before).toContainText("Answers, from the Balanced preset:");
+  await expect(before).toContainText(/read-hobs\s*\|?\s*Allow/);
+  await scan();
+
+  await page.goto(`${url}/#/hobs/${quill.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  const read = page.getByRole("region", { name: "Other hobs" }).getByRole("radiogroup", { name: "Read other hobs" });
+  await read.getByText("Never", { exact: true }).click();
+  await expect(read.getByRole("radio", { name: "Never" })).toBeChecked();
+
+  const after = await readQuill();
+  await expect(after).toContainText(/read-hobs\s*\|?\s*Never \(override\)/);
+  await expect(after).not.toContainText("Quill's private notes");
+  await scan();
+});

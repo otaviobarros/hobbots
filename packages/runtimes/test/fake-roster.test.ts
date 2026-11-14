@@ -1,5 +1,5 @@
-import { hobCard, renderRoster } from "@hobbots/agents";
-import { Agent, AgentId, roleFields } from "@hobbots/domain";
+import { cardAnswers, hobCard, renderRoster } from "@hobbots/agents";
+import { Agent, AgentId, EMPTY_HOB_POLICY, roleFields } from "@hobbots/domain";
 import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { fakeRosterPrompt, makeFakeRuntime } from "../src/fake.ts";
@@ -19,6 +19,7 @@ const pip = hobCard(
     createdAt: "2026-11-08T00:00:00.000Z",
   }),
   [],
+  cardAnswers("balanced", EMPTY_HOB_POLICY, []),
 );
 const roster = renderRoster([pip], new Set(), true) ?? "";
 

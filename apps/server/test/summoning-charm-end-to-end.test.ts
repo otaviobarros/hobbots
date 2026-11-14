@@ -606,6 +606,37 @@ describe("the Summoning Charm, end to end", () => {
     expect(await hob(bo.id)).toMatchObject({ name: before.name, configVersion: before.configVersion });
   });
 
+  // covers ADR 032 (Answers), #1351
+  it("[TC-AG-1351-04] read_hob shows a hob's answers, and after a Summoning change its new ones at once", async () => {
+    await chiefAnswers({ "summoning.charms": "allow" });
+    const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
+    const was = (await hob(bo.id)).policy;
+    await permissions(bo, { overrides: {} });
+    const read = async () => {
+      const { reply } = await turn(chief, hub("read_hob", { hob: "Bo" }));
+      expect(reply?.content).toContain("read_hob: Hobbots collected this about the other hobs");
+      return reply?.content ?? "";
+    };
+    const before = await read();
+    expect(before).toContain("Answers, from the Balanced preset:");
+    expect(before).toContain("| delete-files | Ask |\n");
+    // Bo holds no Charm yet, so no Charm operation is listed.
+    expect(before).not.toContain("| github.");
+
+    const changed = await turn(
+      chief,
+      hub("summoning_change", {
+        key: "bo-answers",
+        changes: [{ hob: bo.id, charms: ["github"], answers: { "delete-files": "deny", "github.write": "ask" } }],
+      }),
+    );
+    expect(changed.reply?.content).toContain("- Bo: changed charms.");
+    const after = await read();
+    expect(after).toContain("| delete-files | Never (override) |");
+    expect(after).toContain("| github.read | Allow |\n| github.write | Ask (override) |");
+    await permissions(bo, { overrides: was.overrides, charms: was.charms ?? { granted: [] } });
+  });
+
   // covers ADR 034 (The confused deputy)
   it("[TC-AG-406-06] a change to a hob wider than the chief asks on every field, whatever its answers say", async () => {
     await chiefAnswers({ "summoning.name": "allow" });
