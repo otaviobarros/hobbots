@@ -1,6 +1,7 @@
 import { InstallationSettings, SettingHistory } from "@hobbots/agents";
 import {
   type Actor,
+  Agent,
   type Committed,
   InstallationSetup,
   type RuntimeKind,
@@ -8,10 +9,12 @@ import {
   SettingChange,
   type SummoningForEveryHob,
   settingDiffs,
+  settingReaches,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
+import { agentRows } from "./repositories.ts";
 
 /** A partial change to the setup; missing fields keep their stored value. Setup cannot be reopened. */
 export interface SetupChange {
@@ -41,6 +44,8 @@ const fromRow = (row: {
 
 const encodeChange = Schema.encodeSync(SettingChange);
 const decodeChanges = Schema.decodeUnknownEffect(Schema.Array(SettingChange));
+const decodeAgents = Schema.decodeUnknownEffect(Schema.Array(Agent));
+const decodeReached = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)));
 
 interface ChangeRow {
   readonly id: string;
@@ -48,6 +53,7 @@ interface ChangeRow {
   readonly setting: string;
   readonly beforeValue: string;
   readonly afterValue: string;
+  readonly reached: string;
   readonly createdAt: string;
 }
 
@@ -58,9 +64,10 @@ const changeOf = (row: ChangeRow) => ({
   diff: { setting: row.setting, before: JSON.parse(row.beforeValue), after: JSON.parse(row.afterValue) },
 });
 
-/** Every change to an authority setting made at or after `since`, an ISO time, newest first. */
-export const settingChangesSince = (sql: SqlClient.SqlClient, since: string) =>
-  sql<ChangeRow>`SELECT * FROM setting_changes WHERE created_at >= ${since} ORDER BY revision DESC`.pipe(
+/** Every change to an authority setting that reached the hob, newest first (#1357). */
+export const settingChangesReaching = (sql: SqlClient.SqlClient, hobId: string) =>
+  sql<ChangeRow>`SELECT * FROM setting_changes ORDER BY revision DESC`.pipe(
+    Effect.map((rows) => rows.filter((row) => decodeReached(row.reached).includes(hobId))),
     Effect.flatMap((rows) => decodeChanges(rows.map(changeOf))),
     Effect.orDie,
   );
@@ -142,7 +149,15 @@ export class SetupRepository extends Context.Service<
                 const recorded = settingDiffs(before, after).map(
                   (diff): SettingChange => ({ id: crypto.randomUUID(), at, actor: by, diff }),
                 );
+                // Every hob as committed now: the journal's lock is held, so no hob's edit lands between.
+                const hobs =
+                  recorded.length === 0
+                    ? []
+                    : yield* sql`SELECT * FROM agents ORDER BY id`.pipe(
+                        Effect.flatMap((rows) => decodeAgents(agentRows(rows))),
+                      );
                 for (const [index, settingChange] of recorded.entries()) {
+                  const reached = hobs.filter((hob) => settingReaches(settingChange.diff, hob)).map((hob) => hob.id);
                   const encoded = encodeChange(settingChange);
                   yield* sql`INSERT INTO setting_changes ${sql.insert({
                     id: encoded.id,
@@ -151,6 +166,7 @@ export class SetupRepository extends Context.Service<
                     actor: JSON.stringify(encoded.actor),
                     before_value: JSON.stringify(encoded.diff.before),
                     after_value: JSON.stringify(encoded.diff.after),
+                    reached: JSON.stringify(reached),
                     created_at: encoded.at,
                   })}`;
                 }

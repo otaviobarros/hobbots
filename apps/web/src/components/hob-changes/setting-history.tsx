@@ -1,6 +1,8 @@
+import type { SettingChangesLog } from "@hobbots/api";
 import type { AgentId, SettingChange, SettingDiff } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@hobbots/ui/components/skeleton";
+import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { settingChangesQuery } from "../../api/hob-changes.ts";
@@ -45,6 +47,8 @@ function SettingRow({ change, nameOf }: { change: SettingChange; nameOf: (id: st
         <Link
           to="/settings/$section"
           params={{ section: SECTION_OF[change.diff.setting] }}
+          // Summoning for every hob is on the Charms tab of Connections.
+          search={change.diff.setting === "summoningForEveryHob" ? { tab: "charms" } : {}}
           className="text-link underline-offset-2 hover:underline"
         >
           {copy.openSettings}
@@ -78,14 +82,13 @@ function SettingRow({ change, nameOf }: { change: SettingChange; nameOf: (id: st
 /**
  * The history of the hub settings that change what hobs may do (#1357): the preset, the folders hobs
  * can open and Summoning for every hob, newest first. It follows the hub's events, so a change made on
- * another device shows live. Nothing shows until a setting has changed.
+ * another device shows live.
  */
 export function SettingHistory() {
   const log = useQuery(settingChangesQuery);
   const changes = log.data?.changes ?? [];
   const hobs = useHobsNamed(pickedHobs(changes));
   const headingId = useId();
-  if (changes.length === 0) return null;
   const nameOf = (id: string) => hobs.get(id as AgentId)?.name ?? messages.someHob;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2">
@@ -93,12 +96,47 @@ export function SettingHistory() {
         {copy.heading}
       </h3>
       <p className="m-0 text-detail text-text-secondary">{copy.intro}</p>
+      <SettingHistoryBody log={log} nameOf={nameOf} />
+    </section>
+  );
+}
+
+/** The list once it is read, a wait while it is read, or what went wrong with Try again (STD-REACT-015). */
+function SettingHistoryBody({
+  log,
+  nameOf,
+}: {
+  log: UseQueryResult<SettingChangesLog>;
+  nameOf: (id: string) => string;
+}) {
+  if (log.isPending) {
+    return (
+      <div role="status" className="flex flex-col gap-2">
+        <span className="sr-only">{messages.history.waiting}</span>
+        <Skeleton surface="card" width="50%" />
+      </div>
+    );
+  }
+  if (log.isError) {
+    return (
+      <p className="m-0 flex flex-wrap items-center gap-3 text-ui text-text-secondary">
+        <span role="alert">{copy.failed}</span>
+        <Button type="button" variant="chip" size="xs" onClick={() => void log.refetch()}>
+          {messages.history.retry}
+        </Button>
+      </p>
+    );
+  }
+  const { changes, more } = log.data;
+  if (changes.length === 0) return <p className="m-0 text-ui text-text-secondary">{copy.empty}</p>;
+  return (
+    <>
       <ol aria-label={copy.heading} className="m-0 flex list-none flex-col gap-1.5 p-0">
         {changes.map((change) => (
           <SettingRow key={change.id} change={change} nameOf={nameOf} />
         ))}
       </ol>
-      {log.data?.more === true && <p className="m-0 text-meta text-label">{copy.more({ count: changes.length })}</p>}
-    </section>
+      {more && <p className="m-0 text-meta text-label">{copy.more({ count: changes.length })}</p>}
+    </>
   );
 }

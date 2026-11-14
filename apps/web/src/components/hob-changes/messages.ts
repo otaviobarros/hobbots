@@ -51,6 +51,8 @@ export const messages = {
     heading: "Hub settings",
     intro: "Changes to the settings that decide what every hob may do, newest first, with who made them.",
     hobsHeading: "Hobs",
+    empty: "No changes to these settings yet.",
+    failed: "Hobbots could not read the changes to these settings.",
     names: {
       safetyPreset: "How careful hobs are",
       approvedFolders: "Folders hobs can open",

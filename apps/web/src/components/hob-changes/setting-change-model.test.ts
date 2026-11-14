@@ -60,4 +60,21 @@ describe("setting changes", () => {
       "By Hobbots",
     ]);
   });
+
+  // covers AG-002, #1357
+  it("[TC-UX-1357-03] tells a scope that swapped one picked hob for another of the same name apart by id", () => {
+    const swapped: SettingDiff = {
+      setting: "summoningForEveryHob",
+      before: { scope: { ...scope, hobs: ["ada-1111-aaaa"] }, overrides: {} },
+      after: { scope: { ...scope, hobs: ["ada-2222-bbbb"] }, overrides: {} },
+    };
+    expect(settingLines(swapped, () => "Ada")).toEqual([
+      {
+        label: "Summoning manages",
+        before: "Hobs it summoned: Yes\nItself: No\nPicked by you: Ada (ada-1111)",
+        after: "Hobs it summoned: Yes\nItself: No\nPicked by you: Ada (ada-2222)",
+        lines: true,
+      },
+    ]);
+  });
 });

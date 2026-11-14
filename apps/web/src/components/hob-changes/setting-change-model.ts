@@ -1,7 +1,7 @@
 import type { AnyOperation, SettingChange, SettingDiff, SummoningForEveryHob } from "@hobbots/domain";
 import { presetInfo } from "../../api/safety.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
-import type { FieldDiff } from "./hob-changes-model.ts";
+import { type FieldDiff, idFirst } from "./hob-changes-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.settings;
@@ -69,6 +69,16 @@ const answersText = (everyHob: SummoningForEveryHob | null) =>
 const part = (label: string, before: string, after: string, lines: boolean): ReadonlyArray<SettingLines> =>
   before === after ? [] : [{ label, before, after, lines }];
 
+/** Summoning's scope before and after, compared by the ids of the hobs it picks (#1357). */
+const scopePart = (
+  before: SummoningForEveryHob | null,
+  after: SummoningForEveryHob | null,
+  nameOf: (id: string) => string,
+): ReadonlyArray<SettingLines> => {
+  const shown = idFirst((name) => ({ before: scopeText(before, name), after: scopeText(after, name) }), nameOf);
+  return shown === null ? [] : [{ label: copy.parts.scope, ...shown, lines: true }];
+};
+
 /** What the change moved, part by part, with each part before and after; `nameOf` names a picked hob. */
 export const settingLines = (
   diff: SettingDiff,
@@ -87,7 +97,7 @@ export const settingLines = (
           diff.after === null ? copy.off : copy.on,
           false,
         ),
-        ...part(copy.parts.scope, scopeText(diff.before, nameOf), scopeText(diff.after, nameOf), true),
+        ...scopePart(diff.before, diff.after, nameOf),
         ...part(copy.parts.answers, answersText(diff.before), answersText(diff.after), true),
       ];
   }

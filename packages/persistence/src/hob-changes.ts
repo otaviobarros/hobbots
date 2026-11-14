@@ -8,14 +8,13 @@ import {
   type HobChangeOrigin,
   MessageId,
   scopeWork,
-  settingReaches,
   ThreadId,
   YOU,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { agentRows } from "./repositories.ts";
-import { settingChangesSince } from "./setup.ts";
+import { settingChangesReaching } from "./setup.ts";
 
 interface StatusRow {
   readonly agentId: string;
@@ -132,23 +131,15 @@ export const HobChangesLive = Layer.effect(
       );
 
     /**
-     * The hub setting changes that reached the hob (#1357): each made since its first version, and,
-     * for "Summoning for every hob", judged by the version it held when the setting changed.
-     * `versions` is every version of the hob, newest first.
+     * The hub setting changes that reached the hob (#1357), as each recorded the hobs it reached
+     * when it was made.
      */
-    const settingChanges = (hobId: AgentId, versions: ReadonlyArray<AgentConfiguration>) =>
-      Effect.gen(function* () {
-        const first = versions.at(-1);
-        if (first === undefined) return [];
-        const [hob] = yield* sql<{ readonly summonedBy: string | null }>`SELECT summoned_by FROM agents
-          WHERE id = ${hobId}`;
-        const summonedBy = hob?.summonedBy ?? null;
-        return (yield* settingChangesSince(sql, first.createdAt)).flatMap((setting): ReadonlyArray<HobChange> => {
-          const held = versions.find((config) => config.createdAt <= setting.at);
-          if (held === undefined || !settingReaches(setting.diff, { policy: held.policy, summonedBy })) return [];
-          return [{ _tag: "Setting", hobId, at: setting.at, actor: YOU, origin: null, setting }];
-        });
-      });
+    const settingChanges = (hobId: AgentId) =>
+      Effect.map(settingChangesReaching(sql, hobId), (found) =>
+        found.map(
+          (setting): HobChange => ({ _tag: "Setting", hobId, at: setting.at, actor: YOU, origin: null, setting }),
+        ),
+      );
 
     return HobChanges.of({
       forHob: (hobId) =>
@@ -157,7 +148,7 @@ export const HobChangesLive = Layer.effect(
             ORDER BY version DESC`.pipe(Effect.flatMap(configs));
           const statuses = yield* sql<StatusRow>`SELECT * FROM agent_status_changes WHERE agent_id = ${hobId}
             ORDER BY revision DESC`;
-          const settings = yield* settingChanges(hobId, versions);
+          const settings = yield* settingChanges(hobId);
           return [...(yield* assemble(versions, statuses)), ...settings].sort(newestFirst);
         }).pipe(Effect.orDie),
       latest: (limit) =>

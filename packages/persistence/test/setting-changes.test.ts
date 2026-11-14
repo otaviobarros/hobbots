@@ -93,7 +93,7 @@ describe("Setting changes", () => {
   });
 
   // covers AG-002, DP-003
-  it("[TC-PE-1357-02] shows a setting change in the History of each hob it reached, judged by the version the hob held then", async () => {
+  it("[TC-PE-1357-02] shows a setting change in the History of each hob it reached, judged by the policy each held when it was made", async () => {
     const history = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const setup = yield* SetupRepository;
@@ -102,10 +102,10 @@ describe("Setting changes", () => {
       yield* repo.insertAgent(
         hob("withheld", { policy: { ...EMPTY_HOB_POLICY, charms: { withheld: ["summoning"] } } }),
       );
-      // Made after the changes, so they reached it at creation and its History has none of them.
-      yield* repo.insertAgent(hob("later", { createdAt: "2999-01-01T00:00:00.000Z" }));
       yield* setup.update({ summoningForEveryHob: everyHob }, OWNER_ACTOR);
       yield* setup.update({ safetyPreset: "trusting" }, OWNER_ACTOR);
+      // Made after the changes, so they reached it at creation and its History has none of them.
+      yield* repo.insertAgent(hob("later"));
       const changes = yield* HobChanges;
       const settingsOf = (id: string) =>
         Effect.map(changes.forHob(AgentId.make(id)), (list) =>
