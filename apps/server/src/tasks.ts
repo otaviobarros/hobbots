@@ -7,7 +7,15 @@ import {
   TaskNotFound,
   ThreadNotFound,
 } from "@hobbots/api";
-import { type AgentId, HISTORY_PAGE_DAYS, historyEvents, historyPage, partyOf, type TaskId } from "@hobbots/domain";
+import {
+  type AgentId,
+  HISTORY_PAGE_DAYS,
+  historyEvents,
+  historyPage,
+  partyOf,
+  type QuestId,
+  type TaskId,
+} from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -127,7 +135,7 @@ export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (
   }),
 ).pipe(Layer.provide(QuestionService.layer));
 
-// Your Cancel, Retry and Reassign on a Task (ADR 018), for user sessions only (PE-006). Each answers
+// Your Cancel, Pause, Resume, Retry and Reassign on a Task (ADR 018), for user sessions only (PE-006). Each answers
 // with the tree once the change is recorded, and the cursor taken after it, so the stream brings
 // each outcome the hub confirms later.
 export const TaskControlsHandlers = HttpApiBuilder.group(HobbotsApi, "taskControls", (handlers) =>
@@ -142,19 +150,24 @@ export const TaskControlsHandlers = HttpApiBuilder.group(HobbotsApi, "taskContro
         if (Option.isNone(tree)) return yield* new TaskNotFound({ taskId });
         return { cursor: formatCursor(head.epoch, head.sequence), tree: tree.value };
       });
+    /** The tree of the Task the Quest sits on. */
+    const questTree = (questId: QuestId) =>
+      Effect.flatMap(tasks.findQuest(questId), (quest) =>
+        Option.isNone(quest)
+          ? Effect.fail(new QuestNotFound({ questId }))
+          : treeOf(quest.value.taskId).pipe(
+              Effect.catchTag("TaskNotFound", () => Effect.fail(new QuestNotFound({ questId }))),
+            ),
+      );
     return handlers.handleAll({
       cancel: ({ params }) => controls.cancel(params.taskId).pipe(Effect.andThen(treeOf(params.taskId))),
-      cancelQuest: ({ params }) =>
-        controls.cancelQuest(params.questId).pipe(
-          Effect.andThen(tasks.findQuest(params.questId)),
-          Effect.flatMap((quest) =>
-            Option.isNone(quest)
-              ? Effect.fail(new QuestNotFound({ questId: params.questId }))
-              : treeOf(quest.value.taskId).pipe(
-                  Effect.catchTag("TaskNotFound", () => Effect.fail(new QuestNotFound({ questId: params.questId }))),
-                ),
-          ),
-        ),
+      cancelQuest: ({ params }) => controls.cancelQuest(params.questId).pipe(Effect.andThen(questTree(params.questId))),
+      pause: ({ params, payload }) =>
+        controls.pause(params.taskId, payload.now === true).pipe(Effect.andThen(treeOf(params.taskId))),
+      pauseQuest: ({ params, payload }) =>
+        controls.pauseQuest(params.questId, payload.now === true).pipe(Effect.andThen(questTree(params.questId))),
+      resume: ({ params }) => controls.resume(params.taskId).pipe(Effect.andThen(treeOf(params.taskId))),
+      resumeQuest: ({ params }) => controls.resumeQuest(params.questId).pipe(Effect.andThen(questTree(params.questId))),
       retry: ({ params }) => controls.retry(params.taskId).pipe(Effect.andThen(treeOf(params.taskId))),
       reassign: ({ params, payload }) =>
         controls.reassign(params.taskId, payload.agentId).pipe(Effect.andThen(treeOf(params.taskId))),

@@ -76,6 +76,9 @@ interface Session {
  * kept beside the page as the engine keeps it in frontmatter, and a body of each item, with no `# `
  * heading of its own.
  */
+/** The fake keeps a session's summary page under the session's own id, in the scope it was sent to. */
+const sessionPage = (sessionId: MemorySessionId) => MemoryPath.make(`sessions/${sessionId.toLowerCase()}.md`);
+
 const summaryOf = (sessionId: MemorySessionId, items: ReadonlyArray<MemoryCaptureItem>) => ({
   title: items.find((item) => item.kind === "message")?.text.split("\n", 1)[0] ?? `Session ${sessionId}`,
   markdown: [
@@ -328,6 +331,7 @@ export const makeMemoryStoreFake = (): {
           ? Effect.fail(conflict(scope, path))
           : append(scope, path, { ...old, author: memoryAuthorOf(actor), forgotten: false });
       }),
+    sessionPage: (_scope, sessionId) => sessionPage(sessionId),
     capture: (_actor, scope, sessionId, items) =>
       Effect.map(up, () => {
         const session = sessionOf(scope, sessionId);
@@ -341,7 +345,7 @@ export const makeMemoryStoreFake = (): {
     endSession: (actor, scope, sessionId, key) =>
       Effect.flatMap(up, () => {
         const session = sessionOf(scope, sessionId);
-        const path = MemoryPath.make(`sessions/${sessionId.toLowerCase()}.md`);
+        const path = sessionPage(sessionId);
         // A pinned chat note is never rewritten: the end waits, its key unused, until you unpin it.
         if (currentOf(scope, path)?.pinned === true) return Effect.succeed(false);
         if (session.seen.has(key)) return Effect.succeed(true);

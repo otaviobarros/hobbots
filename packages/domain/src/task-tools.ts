@@ -95,6 +95,11 @@ const Authority = Schema.Struct({
   ),
 });
 
+/** The version of a Task a lead last read, so a change that happened since is refused, not overwritten. */
+const revision = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+  description: "The Task's revision as read_tasks last showed it. The call is refused if the Task changed since.",
+});
+
 export const TaskToolInputs = {
   plan_steps: Schema.Struct({
     key,
@@ -271,6 +276,19 @@ export const TaskToolInputs = {
           "How it reaches a member whose turn is running now. steer (the default): at the member's next step in that turn, between two tool calls, never inside one. interrupt: its turn stops at once and starts again with your message first; use it when what the member is doing now is wrong. next-turn: only once that turn ends. A member with no turn running gets it with its next turn whichever you pick.",
       }),
     ),
+  }),
+  retry_task: Schema.Struct({
+    key,
+    task_id: id("A member's Task directly under one of yours that failed."),
+    reason: text("Why it is worth another try, in a sentence. The member reads it with its brief."),
+    expected_revision: revision,
+  }),
+  reassign_task: Schema.Struct({
+    key,
+    task_id: id("A member's Task directly under one of yours."),
+    hob: text("The name or id of the hob that takes it over."),
+    reason: text("Why it changes hands, in a sentence. The new hob reads it with its brief."),
+    expected_revision: revision,
   }),
   complete_task: Schema.Struct({
     key,
@@ -461,6 +479,18 @@ export const TASK_TOOLS: ReadonlyArray<{
     label: "Messaging a member",
   },
   {
+    name: "retry_task",
+    description:
+      "Queue a failed member's Task directly under one of yours again, as a new Attempt by the same hob, with your reason. Pass the revision read_tasks showed: the call is refused if the Task changed since, if it is not yours to lead, or while its last Attempt may still run.",
+    label: "Retrying a Task",
+  },
+  {
+    name: "reassign_task",
+    description:
+      "Give a member's Task directly under one of yours to another hob, which starts on it afresh with your reason; what the Task did so far stays. The new hob's authority is worked out again: yours on the Task, narrowed by the Task's delegation and by its own policy. Pass the revision read_tasks showed: the call is refused if the Task changed since, while a turn runs on it or its last Attempt may still run, and for a hob that cannot take it.",
+    label: "Reassigning a Task",
+  },
+  {
     name: "complete_task",
     description: `Return the result of a Task you own. It completes only when everything under it has ended, its dependencies completed and its questions are answered. For the Task of a request in the user's chat: ${FINISH_RULE}`,
     label: "Completing the Task",
@@ -523,6 +553,8 @@ export const TaskToolRefusal = Schema.Literals([
   "no-attempt",
   "no-task",
   "task-state",
+  // A lead's retry or reassign naming a revision of the Task older than the one recorded (#1446).
+  "task-changed",
   "claim-stale",
   "uncommitted-changes",
   // A file the Task returns that no one could open once it completes, such as one in the turn's $TMPDIR.

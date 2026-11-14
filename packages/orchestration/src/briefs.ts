@@ -98,11 +98,33 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     step.brief,
     "---",
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
+    ...stoppedBefore(step, tree),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(step, tree),
     COMMIT_RULE,
     `Report findings or blockers with report_checkpoint. ${CHECKPOINT_RULE} If the work is already done or you cannot do it as briefed, report a finding or blocker and end without complete_task: the step then waits for its owner. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
+};
+
+/** Most checkpoints of an earlier session a step's fresh prompt lists. */
+const STOPPED_CHECKPOINTS = 5;
+
+/**
+ * A step whose earlier session was stopped before it ended, as Pause now stops one (#1446), starts
+ * fresh: it is told so, with what that session reported, so it checks what was already done rather
+ * than doing it twice (STD-DATA-001).
+ */
+const stoppedBefore = (step: Task, tree: TaskTree): ReadonlyArray<string> => {
+  const stopped = tree.attempts.filter((each) => each.taskId === step.id && each.state === "interrupted");
+  if (stopped.length === 0) return [];
+  const reported = tree.checkpoints
+    .filter((each) => each.taskId === step.id)
+    .slice(-STOPPED_CHECKPOINTS)
+    .map((each) => `  - ${each.kind}: ${cut(each.summary, SUMMARY_LIMIT)}`);
+  return [
+    "An earlier session of this step was stopped before it finished, and may have done part of the work. Check what is already done before you go on, so nothing is done twice.",
+    ...(reported.length === 0 ? [] : ["What it reported:", ...reported]),
+  ];
 };
 
 /**

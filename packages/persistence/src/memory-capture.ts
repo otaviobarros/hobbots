@@ -5,10 +5,11 @@ import {
   type MemoryCaptureWork,
   PrivateCamps,
 } from "@hobbots/agents";
-import { AgentId, TaskId, ThreadId } from "@hobbots/domain";
-import { Effect, Layer } from "effect";
+import { AgentId, Message, TaskId, ThreadId } from "@hobbots/domain";
+import { DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { EventJournal } from "./journal.ts";
+import { messageRows } from "./repositories.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
 interface SessionRow {
@@ -26,7 +27,8 @@ const sessionOf = (row: SessionRow): MemoryCaptureSession => ({
 });
 
 /**
- * The capture worker's cursor and open sessions (migrations 0056 and 0061, ADR 028). Journal compaction reads
+ * The capture worker's cursor and open sessions (migrations 0056, 0061 and
+ * 20261114150837_memory_capture_sessions_per_hob, ADR 028), each session under its hob (ADR 039). Journal compaction reads
  * the same row, and keeps every entry after the cursor while it holds.
  */
 export const MemoryCaptureLive = Layer.effect(
@@ -59,12 +61,13 @@ export const MemoryCaptureLive = Layer.effect(
       });
 
     const hold = Effect.gen(function* () {
-      const [row] = yield* sql<{ readonly sequence: unknown; readonly holding: unknown }>`
-        SELECT sequence, holding FROM memory_capture WHERE id = 1`;
+      const [row] = yield* sql<{ readonly sequence: unknown; readonly holding: unknown; readonly sinceAt: unknown }>`
+        SELECT sequence, holding, since_at FROM memory_capture WHERE id = 1`;
       if (Number(row?.holding) === 1) {
-        const sessions = yield* sql<SessionRow>`SELECT * FROM memory_capture_sessions ORDER BY session_id`;
+        const sessions = yield* sql<SessionRow>`SELECT * FROM memory_capture_sessions ORDER BY session_id, agent_id`;
         return {
           sequence: Number(row?.sequence),
+          since: String(row?.sinceAt),
           sessions: sessions.map(sessionOf),
           exclusions: yield* exclusionsAtCursor,
         };
@@ -73,10 +76,11 @@ export const MemoryCaptureLive = Layer.effect(
       // Starting at the head, capture takes the camps private now, and keeps out what it kept out before.
       yield* sql`DELETE FROM memory_capture_private_threads`;
       yield* sql`INSERT INTO memory_capture_private_threads (thread_id) SELECT id FROM threads WHERE private = 1`;
+      const since = DateTime.formatIso(yield* DateTime.now);
       const [moved] = yield* sql<{ readonly sequence: unknown }>`UPDATE memory_capture
-        SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1), holding = 1
+        SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1), holding = 1, since_at = ${since}
         WHERE id = 1 RETURNING sequence`;
-      return { sequence: Number(moved?.sequence), sessions: [], exclusions: yield* exclusionsAtCursor };
+      return { sequence: Number(moved?.sequence), since, sessions: [], exclusions: yield* exclusionsAtCursor };
     }).pipe(sql.withTransaction, sqlOrDie);
 
     /** Of `work`, the camps private now, and the thread of each Task in one (ADR 037). */
@@ -99,8 +103,20 @@ export const MemoryCaptureLive = Layer.effect(
         };
       }).pipe(sqlOrDie);
 
+    const decodeMessages = Schema.decodeUnknownEffect(Schema.Array(Message));
+    /** The messages of `ids` as stored now, for the hobs that took a turn on them (ADR 039). */
+    const messages = (ids: ReadonlyArray<string>) =>
+      ids.length === 0
+        ? Effect.succeed([])
+        : sql`SELECT * FROM messages WHERE ${sql.in("id", [...ids])}`.pipe(
+            Effect.map(messageRows),
+            Effect.flatMap(decodeMessages),
+            Effect.orDie,
+          );
+
     return MemoryCaptureLog.of({
       privacy,
+      messages,
       hold,
       release: sqlOrDie(sql`UPDATE memory_capture SET holding = 0 WHERE id = 1`.pipe(Effect.asVoid)),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),
@@ -108,9 +124,11 @@ export const MemoryCaptureLive = Layer.effect(
         Effect.gen(function* () {
           yield* sql`UPDATE memory_capture SET sequence = ${sequence} WHERE id = 1`;
           yield* saveExclusions(exclusions);
-          if (ended.length > 0) yield* sql`DELETE FROM memory_capture_sessions WHERE ${sql.in("session_id", ended)}`;
+          for (const session of [...ended, ...active]) {
+            yield* sql`DELETE FROM memory_capture_sessions
+              WHERE agent_id = ${session.agentId} AND session_id = ${session.sessionId}`;
+          }
           for (const session of active) {
-            yield* sql`DELETE FROM memory_capture_sessions WHERE session_id = ${session.sessionId}`;
             yield* sql`INSERT INTO memory_capture_sessions ${sql.insert({
               session_id: session.sessionId,
               agent_id: session.agentId,

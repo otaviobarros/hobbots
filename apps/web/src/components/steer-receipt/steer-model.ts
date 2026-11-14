@@ -16,8 +16,12 @@ import {
  * - `held`: its hob's turn waits on you to decide `approval`, so the note waits too.
  * - `picked`: a turn of its hob picked it up.
  * - `unread`: the work it went to ended, or went to another hob, before any turn read it.
+ * Your own note to a member, as an @mention sends it (#1446), shows how it waits more closely:
+ * - `sent`: it waits for its hob's next turn, which it wakes.
+ * - `waiting`: its hob's turn runs and takes it at its next step, or once it ends.
+ * - `interrupting`: its hob's turn stops for it, and the next starts with it.
  */
-type HopState = "passing" | "held" | "picked" | "unread";
+type HopState = "passing" | "held" | "picked" | "unread" | "sent" | "waiting" | "interrupting";
 
 /** One hob a note of yours reached, and the hobs it passed the note on to in turn. */
 export interface ReceiptHop {
@@ -34,25 +38,41 @@ export interface ReceiptHop {
  */
 export interface SteerReceipt {
   readonly lead: AgentId;
+  /** Sent straight to the members it mentions (#1446): the lead never read it, so the receipt starts at them. */
+  readonly direct: boolean;
   /** False while the lead's turn on your message runs and has passed nothing on yet. */
   readonly read: boolean;
   readonly hops: ReadonlyArray<ReceiptHop>;
 }
 
+/** How your own note to a member waits, or null when it does not wait. */
+const directWait = (receipt: PassedNote["receipt"]): HopState | null => {
+  if (receipt._tag === "Sent") return "sent";
+  if (receipt._tag !== "Held") return null;
+  if (receipt.reason === "turn-running") return "waiting";
+  return receipt.reason === "interrupting" ? "interrupting" : null;
+};
+
+/** Whether a note is yours to a member, sent from a chat message, rather than one a lead passed on. */
+const isDirect = (passed: PassedNote) => passed.note.senderId === null;
+
 const toHop = (passed: PassedNote, approvals: ReadonlyArray<ApprovalRequest>): ReceiptHop => {
   const { receipt, note } = passed;
+  const waits = isDirect(passed) ? directWait(receipt) : null;
   const approval =
     receipt._tag === "Held" && receipt.reason === "approval-pending"
       ? (approvals.find((each) => each.id === receipt.approvalId) ?? null)
       : null;
   const state: HopState =
-    receipt._tag === "PickedUp"
-      ? "picked"
-      : receipt._tag === "Unread"
-        ? "unread"
-        : approval !== null
-          ? "held"
-          : "passing";
+    waits !== null
+      ? waits
+      : receipt._tag === "PickedUp"
+        ? "picked"
+        : receipt._tag === "Unread"
+          ? "unread"
+          : approval !== null
+            ? "held"
+            : "passing";
   return {
     hob: note.recipientId,
     state,
@@ -115,7 +135,13 @@ export const steerReceiptOf = (
   // With no reply on record, "reading" is true only while the work still runs.
   if (passed.length === 0 && reply === undefined && !during.some(runsNow)) return null;
   const approvals = trees.flatMap((tree) => tree.approvals);
-  return { lead, read: answered || passed.length > 0, hops: passed.map((each) => toHop(each, approvals)) };
+  const direct = passed.length > 0 && passed.every(isDirect);
+  return {
+    lead,
+    direct,
+    read: answered || passed.length > 0,
+    hops: passed.map((each) => toHop(each, approvals)),
+  };
 };
 
 /**

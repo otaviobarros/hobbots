@@ -9,6 +9,7 @@ import {
   type Task,
   type TaskId,
   type TaskMove,
+  TaskPauses,
   type TaskState,
   type TaskTree,
   type TurnEndInput,
@@ -47,6 +48,14 @@ export interface TurnOnTask {
   readonly at: string;
 }
 
+/** The Task as ending its Attempt left it, or as read again when its Attempt had already ended. */
+const taskNow = (deps: TurnEndDeps, taskId: TaskId, after: Option.Option<{ readonly task: Task }>) =>
+  Option.isSome(after)
+    ? Effect.succeed(Option.some(after.value.task))
+    : Effect.map(deps.tasks.readTree(taskId), (tree) =>
+        Option.flatMap(tree, (each) => Option.fromNullishOr(each.tasks[0])),
+      );
+
 /**
  * Makes the Task's move once its Attempt has ended. A move with a reason records it as a blocker in
  * the same change, so its lead hears of it once (#683). Ending the Attempt gives the Task's version;
@@ -60,9 +69,7 @@ const moveAfter = (
   { at, carried }: TurnOnTask,
 ) =>
   Effect.gen(function* () {
-    const now = Option.isSome(after)
-      ? Option.some(after.value.task)
-      : Option.flatMap(yield* deps.tasks.readTree(taskId), (tree) => Option.fromNullishOr(tree.tasks[0]));
+    const now = yield* taskNow(deps, taskId, after);
     if (Option.isSome(now) && !isTerminalTask(now.value.state))
       yield* deps.attempt(
         deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, {
@@ -71,6 +78,23 @@ const moveAfter = (
           ...(move.reason === undefined ? {} : { reason: cut(move.reason, RESULT_LIMIT) }),
         }),
         `move a Task to ${move.to}`,
+      );
+  });
+
+/** Pauses the Task its turn was paused on (#1446), once its Attempt has ended, as it now is. */
+const settleAfter = (
+  deps: TurnEndDeps,
+  taskId: TaskId,
+  move: Extract<TaskMove, { _tag: "SettlePause" }>,
+  after: Option.Option<{ readonly task: Task }>,
+  { at }: TurnOnTask,
+) =>
+  Effect.gen(function* () {
+    const now = yield* taskNow(deps, taskId, after);
+    if (Option.isSome(now) && TaskPauses.isPausing(now.value))
+      yield* deps.attempt(
+        deps.tasks.settlePause(now.value.id, now.value.revision, move.otherwise, at),
+        "pause a Task once its turn ended",
       );
   });
 
@@ -190,5 +214,6 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
       move = again._tag === "Complete" ? again.otherwise : again;
     }
     if (move._tag === "Move") yield* moveAfter(deps, task.id, move, after, turn);
+    if (move._tag === "SettlePause") yield* settleAfter(deps, task.id, move, after, turn);
     return { decided, completed: false, sentBack: false };
   });
