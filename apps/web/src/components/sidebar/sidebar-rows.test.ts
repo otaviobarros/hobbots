@@ -1,6 +1,6 @@
 import { Agent, AgentId, SidebarPlace, Thread, ThreadId, User, UserId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { campRows, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
+import { authorName, campRows, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
 
 // Issue #1469 (ADR 039, The sidebar): rows join the hub's sections with the live threads and hobs.
 
@@ -71,6 +71,7 @@ describe("sidebar rows", () => {
       ],
       threads,
       hobs: [aldric, quill],
+      you: undefined,
       people: [marina],
       unread: undefined,
     });
@@ -80,6 +81,34 @@ describe("sidebar rows", () => {
       { _tag: "person", person: marina },
     ]);
     expect(rows[0]?.needs).toBe(true);
+  });
+
+  it("[TC-UX-1563-01] names who wrote a camp's last line: You, a hob or a person, and nobody it does not know", () => {
+    const you = new User({ id: UserId.make("owner"), name: "Otavio", initials: "OB", color: "amber", state: "active" });
+    const known = { you, hobs: [hob("aldric")], people: [marina] };
+    expect(authorName({ ...known, author: { kind: "user", id: "owner" } })).toBe("You");
+    expect(authorName({ ...known, author: { kind: "user", id: "marina" } })).toBe("Marina");
+    expect(authorName({ ...known, author: { kind: "hob", id: "aldric" } })).toBe("aldric");
+    expect(authorName({ ...known, author: { kind: "user", id: "leo" } })).toBeNull();
+    expect(authorName({ ...known, author: { kind: "hub", id: "hub" } })).toBeNull();
+    expect(authorName({ ...known, author: null })).toBeNull();
+  });
+
+  it("[TC-UX-1563-02] gives a camp's row the name of who wrote its last line", () => {
+    const team = new Thread({
+      ...thread("team", "aldric", "camp"),
+      lastLine: "one caption idea each?",
+      lastAuthor: { kind: "user", id: "marina" },
+    });
+    const [row] = campRows({
+      places: [place("team", "aldric", "shared-camp", [{ kind: "user", id: "marina" }])],
+      threads: new Map([[team.id, team]]),
+      hobs: [hob("aldric")],
+      you: undefined,
+      people: [marina],
+      unread: undefined,
+    });
+    expect(row?.lastAuthor).toBe("Marina");
   });
 
   it("[TC-UX-1469-05] lists every hob in its order, each with its direct message once the hub lists one", () => {

@@ -21,6 +21,7 @@ import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import chaptersMigration from "../src/migrations/0099_chapters.ts";
+import recordsMigration from "../src/migrations/0101_records.ts";
 import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
@@ -181,6 +182,10 @@ describe("0099_chapters", () => {
       yield* chaptersMigration;
       // Sessions now also name their hob (20261114005209_hob_sessions), which the hub reads them with.
       yield* hobSessionsMigration;
+      // The entries as 0099 left them, before 0101 names every message's author, which the hub reads
+      // a thread's last line with.
+      const entries = yield* (yield* EventJournal).readAfter(0);
+      yield* recordsMigration;
 
       const repo = yield* HobbotsRepository;
       const chapters = yield* ChapterRepository;
@@ -191,7 +196,7 @@ describe("0099_chapters", () => {
         threads,
         chapters: yield* Effect.forEach(threads, (thread) => chapters.listChapters(thread.id)),
         messages: yield* repo.listMessages(ThreadId.make("lamps")),
-        entries: yield* (yield* EventJournal).readAfter(0),
+        entries,
       };
     }).pipe(Effect.provide(layer), Effect.runPromise);
 

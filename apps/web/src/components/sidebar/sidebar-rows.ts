@@ -1,5 +1,6 @@
-import type { Agent, SidebarPlace, Thread, ThreadId, User } from "@hobbots/domain";
+import type { Actor, Agent, SidebarPlace, Thread, ThreadId, User } from "@hobbots/domain";
 import { formatMonthDay, formatTime } from "../../lib/format.ts";
+import { messages as copy } from "./messages.ts";
 
 /** A face in a camp's stack: a hob's tile or a person's initials. */
 export type Face = { readonly _tag: "hob"; readonly hob: Agent } | { readonly _tag: "person"; readonly person: User };
@@ -15,6 +16,8 @@ export interface CampRow {
   readonly needs: boolean;
   /** Replies you have not read. */
   readonly unread: number;
+  /** Who wrote the last line, as a shared camp's row names them; null when it can't tell. */
+  readonly lastAuthor: string | null;
 }
 
 /**
@@ -45,6 +48,29 @@ const faceOf =
   };
 
 /**
+ * The name a camp's row gives the author of its last line: You, a hob's name or a person's, from the
+ * hobs and people this client already holds. Null for the hub or anyone it does not know yet, so the
+ * row shows the line alone rather than an id.
+ */
+export const authorName = ({
+  author,
+  you,
+  hobs,
+  people,
+}: {
+  readonly author: Actor | null;
+  readonly you: User | undefined;
+  readonly hobs: ReadonlyArray<Agent>;
+  readonly people: ReadonlyArray<User>;
+}): string | null => {
+  if (author === null) return null;
+  if (author.kind === "hob") return hobs.find((each) => each.id === author.id)?.name ?? null;
+  if (author.kind !== "user") return null;
+  if (author.id === you?.id) return copy.you;
+  return people.find((each) => each.id === author.id)?.name ?? null;
+};
+
+/**
  * The camps' rows in the hub's order, each joined with its thread and hob. A camp whose thread or
  * hob this client has not loaded yet waits for them, so a row never shows half a camp.
  */
@@ -52,12 +78,14 @@ export const campRows = ({
   places,
   threads,
   hobs,
+  you,
   people,
   unread,
 }: {
   readonly places: ReadonlyArray<SidebarPlace>;
   readonly threads: ReadonlyMap<ThreadId, Thread>;
   readonly hobs: ReadonlyArray<Agent>;
+  readonly you: User | undefined;
   readonly people: ReadonlyArray<User>;
   readonly unread: ReadonlySet<ThreadId> | undefined;
 }): ReadonlyArray<CampRow> =>
@@ -73,6 +101,7 @@ export const campRows = ({
         faces: place.others.flatMap(faceOf(hobs, people)).slice(0, 2),
         needs: place.needsYou,
         unread: unreadCount(place, unread),
+        lastAuthor: authorName({ author: thread.lastAuthor, you, hobs, people }),
       },
     ];
   });

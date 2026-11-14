@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { Actor } from "./actor.ts";
 import type { RuntimeKind } from "./agent.ts";
 import { Brain, RuntimeSession } from "./brain.ts";
 import { AgentId, ChapterId, ThreadId } from "./ids.ts";
@@ -97,6 +98,15 @@ export class Thread extends Schema.Class<Thread>("Thread")({
    * lists of chats. Worked out when the thread is read, never stored; null while it has none.
    */
   lastLine: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * Who wrote `lastLine` (ADR 039, The sidebar): the actor stored with that message, read in the same
+   * query as the line, never stored on the thread; null while it has no last line. A shared camp's
+   * row names them before the line.
+   */
+  lastAuthor: Schema.NullOr(Actor).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
