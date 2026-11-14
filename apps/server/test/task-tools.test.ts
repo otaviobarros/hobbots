@@ -490,6 +490,29 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, TOP, "plan_steps", { key: "many", steps })).reason).toBe("concurrency-limit");
   });
 
+  // covers OR-004, OR-006
+  it("[TC-OR-1446-18] a reassign at the tree's limit counts the Task once, as it only changes hands", async () => {
+    await run(seed);
+    const copy: Array<TaskId> = [];
+    for (const key of ["a", "b", "c", "d"]) copy.push(await delegate(ALDRIC, TOP, "Quill", key));
+    for (const key of ["e", "f", "g", "h"]) await delegate(ALDRIC, TOP, "Ada", key);
+    await delegate(ALDRIC, TOP, "Rook", "i");
+    // Ten open Tasks: the tree is full, so nothing new lands in it.
+    expect((await refused(ALDRIC, TOP, "delegate_task", { key: "j", hob: "Pip", brief: "One more" })).reason).toBe(
+      "concurrency-limit",
+    );
+    const moving = (await tree()).tasks.find((each) => each.id === copy[0]);
+    if (moving === undefined) throw new Error("no Task");
+    const moved = await done(ALDRIC, TOP, "reassign_task", {
+      key: "move",
+      task_id: moving.id,
+      hob: "Pip",
+      reason: "Pip has room",
+      expected_revision: moving.revision,
+    });
+    expect(moved.details).toMatchObject({ task_id: moving.id, hob: "Pip" });
+  });
+
   // covers OR-001, OR-003, OR-006
   it("[TC-OR-016] questions climb, results hand off, waits record and cancels reach the subtree", async () => {
     await run(seed);

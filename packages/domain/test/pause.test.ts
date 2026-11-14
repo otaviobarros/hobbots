@@ -95,6 +95,19 @@ describe("pause targets", () => {
     expect(pausedHolder(paused.tasks[1] as Task, paused.tasks)?.id).toBe("ada");
   });
 
+  it("[TC-OR-1446-19] moves each parent before its children, whatever order the tree lists them in", () => {
+    // A nested lead's step listed before the nested lead's own Task, as one id order can put them.
+    const nested = tree([
+      task("top", LEAD, null, "paused"),
+      task("a-step", ADA, "z-ada", "paused"),
+      task("z-ada", ADA, "top", "paused"),
+    ]);
+    const top = nested.tasks[0] as Task;
+    expect(resumeTargets(top, nested).map((each) => each.id)).toEqual(["top", "z-ada", "a-step"]);
+    const running = tree(nested.tasks.map((each) => new Task({ ...each, state: "active" })));
+    expect(pauseTargets(running.tasks[0] as Task, running).map((each) => each.id)).toEqual(["top", "z-ada", "a-step"]);
+  });
+
   it("[TC-OR-1446-04] sends a Task whose paused turn ended without its runner back where a restart would", () => {
     const tasks = [
       task("top", LEAD, null, "paused"),

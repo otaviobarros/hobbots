@@ -1192,9 +1192,11 @@ export const TaskRepositoryLive = Layer.effect(
       const { senderId } = input;
       // Yours straight to the member, as an @mention in its quest sends it (#1446).
       if (input.direct === true) {
-        return isTerminalTask(task.state)
-          ? refuse("task-ended", `Task ${task.id} has ended`)
-          : Effect.succeed(task.ownerId);
+        if (isTerminalTask(task.state)) return refuse("task-ended", `Task ${task.id} has ended`);
+        if (input.to !== undefined && input.to !== task.ownerId) {
+          return refuse("not-recipient", `Task ${task.id} is no longer ${input.to}'s; it is ${task.ownerId}'s now`);
+        }
+        return Effect.succeed(task.ownerId);
       }
       if (senderId === undefined) return Effect.succeed(noteRecipientOf(task, tree));
       const parent = tree.find((each) => each.id === task.parentId);

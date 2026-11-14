@@ -29,7 +29,10 @@ export const makeMentionNotes = Effect.gen(function* () {
    * the chat never shows a message as sent that reached nobody (STD-ARCH-014). Each note's id follows
    * from the message and the Task, so sending it again leaves no second note.
    */
-  const send = (message: Message, targeted: ReadonlyArray<{ readonly id: TaskNote["taskId"] }>) =>
+  const send = (
+    message: Message,
+    targeted: ReadonlyArray<{ readonly id: TaskNote["taskId"]; readonly ownerId: TaskNote["recipientId"] }>,
+  ) =>
     Effect.gen(function* () {
       if (Option.isNone(tasks)) return message;
       const store = tasks.value;
@@ -47,6 +50,7 @@ export const makeMentionNotes = Effect.gen(function* () {
                 delivery: "steer",
                 ...(message.actor === null ? {} : { author: message.actor }),
                 direct: true,
+                to: task.ownerId,
               })
               .pipe(
                 Effect.map((note) => [note]),

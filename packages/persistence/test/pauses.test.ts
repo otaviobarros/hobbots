@@ -345,6 +345,36 @@ describe("your note straight to a member", () => {
     expect(result.viaLead).toMatchObject({ recipientId: ALDRIC, author: { kind: "user" } });
   });
 
+  // covers STD-ARCH-019
+  it("[TC-OR-1446-24] refuses your note to a member whose Task changed hands meanwhile", async () => {
+    const refused = await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const { copy } = yield* campaign;
+        const by = {
+          actor: hobActor(ALDRIC),
+          reason: "Bram knows the site",
+          authority: { overrides: {}, folders: [] },
+        };
+        yield* tasks.reassignTask(copy.id, copy.revision, BRAM, later, by);
+        return yield* tasks
+          .leaveNote({
+            id: NoteId.make("mention:m2:copy"),
+            taskId: copy.id,
+            text: "@Quill use the blue theme",
+            createdAt: later,
+            messageId: MessageId.make("m2"),
+            delivery: "steer",
+            author: you,
+            direct: true,
+            to: QUILL,
+          })
+          .pipe(Effect.flip);
+      }),
+    );
+    expect(refused).toMatchObject({ reason: "not-recipient" });
+  });
+
   // covers IN-004
   it("[TC-OR-1446-06] finds whom a message mentions as the hub stores it, and nobody in Markdown code", async () => {
     const found = await run(

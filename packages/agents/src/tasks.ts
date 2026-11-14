@@ -258,6 +258,11 @@ export interface NewNote {
    * member in a quest. Its lead is not woken for it.
    */
   readonly direct?: true;
+  /**
+   * The hob a direct note is meant for. Refused when the Task is no longer theirs, so a note you
+   * wrote to one hob never reaches another that took the Task over meanwhile.
+   */
+  readonly to?: AgentId;
 }
 
 /** A question that climbed every lead and waits for you, with the Task it asks about. */

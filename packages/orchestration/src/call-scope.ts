@@ -294,11 +294,15 @@ export const makeHobRoom = (limits: TaskToolLimits) =>
 export const makeCapacity = (limits: TaskToolLimits) =>
   Effect.gen(function* () {
     const hobRoom = yield* makeHobRoom(limits);
-    return (scope: CallScope, ownerId: AgentId, adding: number) =>
+    /**
+     * Whether `ownerId` can take `adding` more open Tasks, and the tree `toTree` more: a Task that only
+     * changes hands is already open in its tree, so it adds none there (#1446).
+     */
+    return (scope: CallScope, ownerId: AgentId, adding: number, toTree: number = adding) =>
       Effect.gen(function* () {
         yield* hobRoom(ownerId, adding);
         const inTree = scope.tree.tasks.filter((task) => !isTerminalTask(task.state)).length;
-        if (inTree + adding > limits.maxOpenTasksPerTree) {
+        if (toTree > 0 && inTree + toTree > limits.maxOpenTasksPerTree) {
           return yield* refuse(
             "concurrency-limit",
             `This work has ${inTree} open Tasks; the limit is ${limits.maxOpenTasksPerTree}. Wait for some to end.`,

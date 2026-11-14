@@ -40,6 +40,9 @@ import { TaskRepository } from "./tasks.ts";
 type Refusal = TaskRefused | StaleTask | IllegalTaskTransition;
 
 /** A refusal from the records, as the Quest tab is told it. */
+/** Most reads a pause makes of the tree under it before it gives up looking for Tasks placed meanwhile. */
+const PAUSE_READS = 5;
+
 const refusedFor = (taskId: TaskId) => (error: Refusal) => {
   if (error._tag === "TaskRefused") {
     return error.reason === "task-missing"
@@ -216,13 +219,22 @@ export class TaskControls extends Context.Service<
         );
 
       /** Pauses every Task under `taskId`, the Task included, that is under way now, by `by`. */
+      /**
+       * Pauses `taskId` and every Task under it, top first. A Task a running hob placed under it before
+       * its pause committed is found on the next read, which runs until a read finds none left to pause:
+       * once a Task is paused nothing new lands under it, so the reads end.
+       */
       const pauseTree = (taskId: TaskId, pause: { readonly at: string; readonly by: Actor; readonly now: boolean }) =>
         Effect.gen(function* () {
-          const { task, tree } = yield* subtree(taskId);
-          for (const each of pauseTargets(task, tree)) {
-            yield* tasks
-              .pauseTask(each.id, each.revision, pause)
-              .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
+          for (let read = 0; read < PAUSE_READS; read++) {
+            const { task, tree } = yield* subtree(taskId);
+            const targets = pauseTargets(task, tree);
+            if (targets.length === 0) return;
+            for (const each of targets) {
+              yield* tasks
+                .pauseTask(each.id, each.revision, pause)
+                .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
+            }
           }
         });
 

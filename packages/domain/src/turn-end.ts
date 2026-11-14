@@ -173,14 +173,23 @@ const rootAfter = (task: Task, open: ReadonlyArray<LedgerEntry>, was: TaskState 
 const RESUMED_AS: Record<TurnRunner, PausedFrom> = { step: "queued", member: "waiting", root: "active" };
 
 /**
+ * Whether the turn stopped for its owner or lead to decide, as without the pause it would be blocked:
+ * a step that replied after a finding or blocker, or a member that replied after a blocker.
+ */
+const stoppedToDecide = (input: TurnEndInput) =>
+  input.ending._tag === "Replied" &&
+  (input.lastReport === "blocker" || (input.runner === "step" && input.lastReport === "finding"));
+
+/**
  * A Task you paused while its turn ran (#1446): a step that finished still completes with its reply;
- * any other is paused now, for Resume to take on from where it stood.
+ * any other is paused now, for Resume to take on from where it stood. One whose turn stopped on a
+ * blocker goes back to blocked, so Resume never runs it again before the blocker is settled.
  */
 const pausedAfter = (input: TurnEndInput): TaskMove => {
+  if (stoppedToDecide(input)) return { _tag: "SettlePause", otherwise: "blocked" };
   const settle: TaskMove = { _tag: "SettlePause", otherwise: RESUMED_AS[input.runner] };
   const { ending } = input;
   if (input.runner !== "step" || ending._tag !== "Replied") return settle;
-  if (input.lastReport === "finding" || input.lastReport === "blocker") return settle;
   return { _tag: "Complete", summary: ending.text.trim() || NO_STEP_REPLY, otherwise: settle, explainRefusal: false };
 };
 

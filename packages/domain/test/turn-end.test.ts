@@ -196,6 +196,24 @@ describe("turnEnded", () => {
       held("active", ENDINGS.failed, "finding"),
       held("cancelling", ENDINGS.replied, "finding"),
     ]).toEqual(["→blocked", "→blocked", "complete|→failed", "→failed", "→cancelled"]);
+    // Paused while it ran, such a step, and a member that replied after a blocker, go back to blocked
+    // on Resume, never queued to run again before the blocker is settled (#1446).
+    const pausedOn = (runner: TurnRunner, lastReport: "finding" | "blocker") =>
+      shown(
+        turnEnded({
+          runner,
+          task: task("pausing"),
+          ending: ENDINGS.replied,
+          ledger: [],
+          carried: new Set(),
+          lastReport,
+        }).task,
+      );
+    expect([pausedOn("step", "finding"), pausedOn("step", "blocker"), pausedOn("member", "blocker")]).toEqual([
+      "paused|blocked",
+      "paused|blocked",
+      "paused|blocked",
+    ]);
   });
 
   // covers EX-001, OR-006

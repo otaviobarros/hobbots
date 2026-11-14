@@ -3,6 +3,7 @@ import {
   type Agent,
   type DelegationAuthority,
   hobActor,
+  isTerminalTask,
   liveAttemptOn,
   NoteId,
   type Task,
@@ -17,7 +18,12 @@ import { checkMember, findHob } from "./delegating.ts";
 interface Deps {
   readonly tasks: TaskRepository["Service"];
   readonly hobs: HobbotsRepository["Service"];
-  readonly capacity: (scope: CallScope, ownerId: Agent["id"], adding: number) => Effect.Effect<void, TaskToolRefused>;
+  readonly capacity: (
+    scope: CallScope,
+    ownerId: Agent["id"],
+    adding: number,
+    toTree?: number,
+  ) => Effect.Effect<void, TaskToolRefused>;
   readonly authority: {
     readonly of: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
     readonly own: (agentId: Agent["id"]) => Effect.Effect<Authority>;
@@ -123,7 +129,8 @@ export const makeControlling = (deps: Deps) => {
           return yield* refuse("same-owner", `Task ${before.id} is already ${member.name}'s.`);
         }
         yield* checkMember(scope, parent, member);
-        yield* deps.capacity(scope, member.id, 1);
+        // The new hob takes one more open Task; the tree gains one only when a failed Task reopens.
+        yield* deps.capacity(scope, member.id, 1, isTerminalTask(before.state) ? 1 : 0);
         const authority = yield* authorityFor(deps, scope, parent, delegation.authority, member);
         const journal = journalOf();
         const by = { actor: hobActor(scope.caller.agentId), reason: input.reason, authority };

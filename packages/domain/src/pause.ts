@@ -7,13 +7,26 @@ import { ancestorsOf, descendantsOf, type PausedFrom, type Task, TaskPauses } fr
  * command moves, and what Resume tells each hob that goes back to work.
  */
 
+/**
+ * `target` and every Task under it, each parent before its children whatever order the tree lists
+ * them in, so a resume never reaches a Task while the one above it is still paused.
+ */
+const topDown = (target: Task, tasks: ReadonlyArray<Task>): ReadonlyArray<Task> => {
+  const order: Array<Task> = [target];
+  for (let at = 0; at < order.length; at++) {
+    const parent = order[at];
+    for (const each of tasks) if (each.parentId === parent?.id && !order.includes(each)) order.push(each);
+  }
+  return order;
+};
+
 /** The Tasks a pause of `target` moves, top first: it and every Task under it still under way. */
 export const pauseTargets = (target: Task, tree: TaskTree): ReadonlyArray<Task> =>
-  [target, ...descendantsOf(target, tree.tasks)].filter(TaskPauses.canPause);
+  topDown(target, tree.tasks).filter(TaskPauses.canPause);
 
 /** The Tasks a resume of `target` moves, top first: it and every Task under it you paused. */
 export const resumeTargets = (target: Task, tree: TaskTree): ReadonlyArray<Task> =>
-  [target, ...descendantsOf(target, tree.tasks)].filter(TaskPauses.isPaused);
+  topDown(target, tree.tasks).filter(TaskPauses.isPaused);
 
 /** The paused Task above `task` that still holds it, which a resume of `task` alone would not lift. */
 export const pausedAbove = (task: Task, tree: TaskTree): Task | undefined =>
