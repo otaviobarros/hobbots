@@ -1,5 +1,8 @@
 import {
+  isStopAsked,
   type Message,
+  type MessageId,
+  type MessageStatus,
   relayDepthAfter,
   type ThreadKind,
   ThreadMembers,
@@ -22,13 +25,22 @@ import { requestsFor, selectRequestsOfReply } from "./turn-request-rows.ts";
  * reply, that a lead kept quiet, whose turn was stopped, or that already relayed. Only an active
  * member hob of the thread is relayed to: a mention of any other hob, or of a person, wakes nobody.
  */
+/** Whether `message` is a hob's chat reply saved complete and not kept quiet, before its mentions are read. */
+export const mayComplete = (message: Message): boolean =>
+  message.role === "assistant" && message.status === "complete" && !message.quiet && message.actor?.kind === "hob";
+
 /** Whether `message` is a hob's complete chat reply that mentions another hob, the only kind that relays. */
 export const mayRelay = (message: Message): boolean =>
-  message.role === "assistant" &&
-  message.status === "complete" &&
-  !message.quiet &&
-  message.actor?.kind === "hob" &&
-  message.mentions.some((actor) => actor.kind === "hob" && actor.id !== message.actor?.id);
+  mayComplete(message) && message.mentions.some((actor) => actor.kind === "hob" && actor.id !== message.actor?.id);
+
+/**
+ * Whether the reply stored as `replyId` is one you asked to stop, read before it is saved again: a
+ * stop of a turn that answers no request, as a carried backpack's, leaves no dropped request to say so.
+ */
+export const stopWasAsked = (sql: SqlClient.SqlClient, replyId: MessageId) =>
+  sql<{ readonly status: MessageStatus }>`SELECT status FROM messages WHERE id = ${replyId}`.pipe(
+    Effect.map(([row]) => row !== undefined && isStopAsked(row.status)),
+  );
 
 export const relaysFor = (
   sql: SqlClient.SqlClient,

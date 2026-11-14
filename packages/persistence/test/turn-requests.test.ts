@@ -262,6 +262,25 @@ describe("relays owed while a turn ends", () => {
     expect(result.again.map((r) => [r.hobId, r.messageId])).toEqual([[ROOK, "reply-done"]]);
     expect(result.open.map((r) => [r.hobId, r.messageId])).toEqual([[ROOK, "reply-done"]]);
   });
+
+  // covers ADR 039 (Hobs talking to hobs)
+  it("[TC-PE-1463-03] a reply you asked to stop relays nothing when it completes, even with no request to drop", async () => {
+    const camp = ThreadId.make("camp");
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* summonAll;
+        yield* campOfThree(camp);
+        // Two turns nobody asked for, as a carried backpack's: one you stop, one you let finish.
+        for (const id of ["reply-stopped", "reply-done"]) yield* repo.upsertMessage(pipSaid(camp, id, "", "streaming"));
+        yield* repo.upsertMessage(pipSaid(camp, "reply-stopped", "", "stopping"));
+        yield* repo.upsertMessage(pipSaid(camp, "reply-stopped", "@rook check the list", "complete"));
+        yield* repo.upsertMessage(pipSaid(camp, "reply-done", "@rook check the list", "complete"));
+        return yield* open(camp);
+      }),
+    );
+    expect(result.map((r) => [r.hobId, r.messageId, r.relayDepth])).toEqual([[ROOK, "reply-done", 1]]);
+  });
 });
 
 describe("recording the answers already owed", () => {

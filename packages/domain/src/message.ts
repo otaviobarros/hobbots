@@ -52,6 +52,9 @@ export type MessageStatus = typeof MessageStatus.Type;
 /** A reply whose turn has not ended yet, so its thread is busy. */
 export const isInProgress = (status: MessageStatus): boolean => status === "streaming" || status === "stopping";
 
+/** Whether you asked to stop the reply, and the runtime has not yet confirmed it stopped. */
+export const isStopAsked = (status: MessageStatus): boolean => status === "stopping";
+
 /** A reply that ended early and that Continue can resume in place. */
 export const isResumable = (status: MessageStatus): boolean => status === "interrupted" || status === "limited";
 
