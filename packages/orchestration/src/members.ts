@@ -15,7 +15,9 @@ import {
   type TaskRepository,
   type ToolAccess,
   type ToolStartedEvent,
+  type TurnSlots,
   type TurnSteers,
+  takeSlot,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -64,6 +66,10 @@ export interface MemberDeps {
   /** Taken while a session's tools are read and it registers, and while authority is reviewed (PE-008). */
   readonly authority: Semaphore.Semaphore;
   readonly maxRunningPerHob: number;
+  /** The hub's turn slots (#1448), or null on a hub without them. */
+  readonly slots: TurnSlots["Service"] | null;
+  /** Runs the runner's whole round, once at a time with any other, as when a slot may be free. */
+  readonly wake: Effect.Effect<void>;
   readonly announce: <A>(committed: Committed<A>) => Effect.Effect<A>;
   /** A change the records may refuse: logged, never fatal. */
   readonly attempt: <A, E>(change: Effect.Effect<Committed<A>, E>, what: string) => Effect.Effect<Option.Option<A>>;
@@ -447,6 +453,14 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         // Its work waits, queued, until every Task it comes after has completed: that completion
         // wakes the runner again, as it does for a step (ADR 018).
         if (TaskReadiness.of(task, tree.tasks)._tag !== "Ready") return;
+        // Past a turn limit its work stays waiting in its backpack, and the next round once a slot
+        // frees starts it (#1448).
+        const slot = yield* takeSlot(
+          deps.slots,
+          { id: `member:${taskId}`, agentId, runtime: config.value.runtime, quest: task.rootId },
+          deps.wake,
+        );
+        if (slot === null) return;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can
         // stop the fiber it finds (PE-008).
@@ -469,6 +483,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 Effect.catchCause((cause) => Effect.logWarning("Could not run a member's turn", cause)),
                 Effect.ensuring(
                   Effect.sync(() => running.delete(taskId)).pipe(
+                    Effect.andThen(slot.release),
                     Effect.andThen(deps.settleCancels),
                     Effect.andThen(deps.notify),
                   ),
@@ -476,7 +491,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               ),
             );
           }),
-        );
+        ).pipe(Effect.onError(() => slot.release));
       }),
     );
 
@@ -504,7 +519,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
   });
 
   /** Starts a turn on each member's Task where work waits, one at a time per Task, within the per-hob limit. */
-  const round = Effect.gen(function* () {
+  const round: Effect.Effect<void> = Effect.gen(function* () {
     yield* steerRunning;
     for (const waiting of yield* deps.continuations.waiting) {
       if (running.has(waiting.taskId) || runningFor(waiting.agentId) >= deps.maxRunningPerHob) continue;

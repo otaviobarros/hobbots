@@ -69,6 +69,7 @@ export * from "./tool-output.ts";
 export * from "./tools.ts";
 export * from "./turn-activity.ts";
 export { makePackSources, PackRecordSource, PackReports, type PackSources } from "./turn-pack.ts";
+export * from "./turn-slots.ts";
 export * from "./users.ts";
 export * from "./web-fetch.ts";
 export * from "./web-mark.ts";

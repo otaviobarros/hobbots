@@ -46,6 +46,7 @@ import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
 import { applyRecordEvent, isRecordEvent } from "./records.ts";
 import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
+import { setupQueryKey } from "./setup.ts";
 import { skillProposalsChanged } from "./skill-proposals.ts";
 import { refreshSkillUpdates } from "./skill-updates.ts";
 import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.ts";
@@ -263,7 +264,7 @@ const readAgain = (
 ): event is
   | WebEvent
   | ChapterEvent
-  | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" }>
+  | Extract<HobbotsEvent, { readonly _tag: "SkillUsed" | "SettingChanged" }>
   | Parameters<typeof applyRecordEvent>[1]
   | Parameters<typeof applySuggestionEvent>[1]
   | Parameters<typeof applyPinEvent>[1]
@@ -288,6 +289,12 @@ const readAgain = (
     }
     return true;
   }
+  // A setting that changes what hobs may do changed, maybe on another device (#1357): the setup is
+  // read again; Settings › Changes and each History follow it through applyHobChanges.
+  if (event._tag === "SettingChanged") {
+    void queryClient.invalidateQueries({ queryKey: setupQueryKey, exact: true });
+    return true;
+  }
   // A search or a page recorded, or Settings › Web or a hob's limits changed (ADR 036).
   if (isWebEvent(event)) {
     void webChanged(queryClient);
@@ -308,7 +315,7 @@ const readAgain = (
   }
   // A claim made, contested, cleared or released changes the Heads-ups (#1390).
   if (isClaimEvent(event)) {
-    void applyClaimEvent(queryClient);
+    void applyClaimEvent(queryClient, event);
     return true;
   }
   // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.
