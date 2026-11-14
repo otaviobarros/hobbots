@@ -68,6 +68,7 @@ export const messages = {
       }),
     costReading: "Counting what it cost…",
     costUnread: "What it cost could not be read.",
+    costRetry: "Try again",
     showWork: "Show the work",
     showWorkHint: "Changes, files and terminals, in the Workbench beside the chat",
     team: "Who's on it",
