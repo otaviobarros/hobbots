@@ -415,6 +415,32 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
   }, 60_000);
 });
 
+describe("gh in a member's commands (#1349)", () => {
+  // covers PE-005, SEC-002, ADR 020
+  it("[TC-OR-1349-01] a member's gh pr comment is refused at once with a pointer to github_comment, reaches nothing, and its turn goes on", async () => {
+    const { run, answers, denied } = await startGitHubHub();
+    const before = github.requests.length;
+    await run(
+      delegate("Rook", [
+        `fake:tool Bash gh pr comment 1 --body 'Looks good'`,
+        hub("complete_task", { delivered: true, key: "gh-done", summary: "Could not comment with gh" }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, ROOK)?.state === "completed"));
+    expect(taskOf(tree, ROOK).state).toBe("completed");
+    expect(denied).toEqual([
+      expect.objectContaining({
+        tool: "Bash",
+        decidedBy: "policy",
+        reason: expect.stringContaining("Use the github_comment tool instead of gh pr comment"),
+      }),
+    ]);
+    // The lead was warned that the brief names gh, before the member started.
+    expect(answers.get("work-Rook")).toContain("Warning: the brief names gh, which no hob can run");
+    expect(github.requests.slice(before).filter((sent) => sent.path.endsWith("/comments"))).toEqual([]);
+  }, 60_000);
+});
+
 /** The tree of the lead's request, or none while nothing started it. */
 const threadTrees = TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
 

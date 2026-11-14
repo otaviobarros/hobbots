@@ -1,6 +1,7 @@
 export * from "./activity.ts";
 export * from "./actor.ts";
 export * from "./agent.ts";
+export * from "./answerers.ts";
 export * from "./approval.ts";
 export * from "./artifact.ts";
 export * from "./artifact-versions.ts";
@@ -28,6 +29,7 @@ export * from "./export.ts";
 export * from "./find.ts";
 export * from "./github.ts";
 export * from "./github-account.ts";
+export * from "./github-cli.ts";
 export * from "./good-at.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";

@@ -4,7 +4,7 @@ import { SqlClient } from "effect/sql";
 import { memberUnreadCount, unreadReplies } from "./thread-columns.ts";
 
 // Unread counts per thread, from the thread's own read marker as the hub kept it before migration
-// 0115 and from the member row of the person asking after it (ADR 039, read markers per member;
+// 20261114004500 and from the member row of the person asking after it (ADR 039, read markers per member;
 // #1454), so a dry run on a copy of a real database can show they read the same.
 
 /** One thread's unread replies. */
@@ -30,7 +30,7 @@ const rows = (read: ReadonlyArray<Row>): ReadonlyArray<ThreadUnread> =>
     unread: Number(row.unread),
   }));
 
-/** Whether the threads still keep their own read marker: the database is from before migration 0115. */
+/** Whether the threads still keep their own read marker: the database is from before migration 20261114004500. */
 export const keepsThreadMarker = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const found = yield* sql.onDialectOrElse({
@@ -41,7 +41,7 @@ export const keepsThreadMarker = Effect.gen(function* () {
   return found.length > 0;
 });
 
-/** Each thread's unread replies by its own read marker, as the hub counted them before migration 0115. */
+/** Each thread's unread replies by its own read marker, as the hub counted them before migration 20261114004500. */
 export const unreadByThreadMarker = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   return rows(

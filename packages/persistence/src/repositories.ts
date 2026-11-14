@@ -1,4 +1,4 @@
-import { HobbotsRepository, sessionActor } from "@hobbots/agents";
+import { HobbotsRepository, type SendMessage, type SentMessage, type SentTo, sessionActor } from "@hobbots/agents";
 import {
   type Actor,
   Agent,
@@ -11,6 +11,7 @@ import {
   type HobPolicy,
   heldCharms,
   type JournaledEvent,
+  type MentionRefused,
   Message,
   type MessageId,
   messageEvents,
@@ -26,6 +27,7 @@ import {
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { answerersIn } from "./answerer-reads.ts";
 import { makeCampWrites, threadColumns } from "./camps.ts";
 import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
@@ -581,6 +583,22 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
+    // Who answers is decided after the journal's head is locked, so a member added or a Quest
+    // started at the same moment commits wholly before this reads or wholly after it (ADR 039).
+    const sendMessage = (input: Message, to: SentTo) =>
+      journaledChange<SentMessage, MentionRefused>((revision) =>
+        Effect.gen(function* () {
+          const [thread] = yield* sql<{ readonly kind: Thread["kind"] }>`SELECT kind FROM threads
+            WHERE id = ${input.threadId}`;
+          if (thread === undefined) return yield* Effect.die(new Error(`Thread ${input.threadId} does not exist`));
+          const answerers = yield* answerersIn(sql, { id: input.threadId, kind: thread.kind }, { ...input, ...to });
+          // A message nobody answers starts no turn, so it never waits in the queue.
+          const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
+          const message = yield* writeMessage(new Message({ ...input, status, revision }));
+          return { value: { message, answerers }, events: messageEvents(message) };
+        }),
+      );
+
     // The new sequence is read in the same statement, as an insert's is. Events: the started
     // message, its dequeue, then the reply's.
     const startQueuedMessage = (input: Message, inputReply: Message) =>
@@ -645,6 +663,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
       findMessage: (id) => findMessage(id).pipe(Effect.orDie),
       upsertMessage: (message, uses = []) => always(upsertMessage(message, uses)),
+      sendMessage: sendMessage as SendMessage,
       checkpointMessage: (message) =>
         sql`UPDATE messages SET content = ${message.content}
           WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),

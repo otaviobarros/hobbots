@@ -13,7 +13,7 @@ import { Console, Effect } from "effect";
 import { exitOnFailure, freeDataFolder } from "./command-line.ts";
 import { defaultDataDir } from "./config.ts";
 
-// A dry run of migration 0115 (ADR 039, read markers per member; #1454) on a copy of a hub's data
+// A dry run of migration 20261114004500 (ADR 039, read markers per member; #1454) on a copy of a hub's data
 // folder: `pnpm --filter @hobbots/server member-reads <copy>` prints each thread's unread replies by
 // the thread's own read marker, migrates the copy to this checkout's schema, and prints them again by
 // the owner's member row. It exits with status 1 when any thread reads differently. It changes the

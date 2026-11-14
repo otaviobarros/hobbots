@@ -28,11 +28,11 @@ import {
   unreadByMember,
   unreadByThreadMarker,
 } from "../src/index.ts";
-import memberReads from "../src/migrations/0115_member_reads.ts";
+import memberReads from "../src/migrations/20261114004500_member_reads.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1454 (ADR 039, read markers per member): unread counts, the unread line and catch-up read
-// the member row of the person asking. Migration 0115 drops the thread's own marker after moving the
+// the member row of the person asking. Migration 20261114004500 drops the thread's own marker after moving the
 // owner's forward to it, and takes `unread` out of every journaled thread, and unread counts read the
 // same before and after. On SQLite and PostgreSQL alike (STD-TEST-006).
 
@@ -43,8 +43,8 @@ const CAMP = ThreadId.make("camp");
 const QUIET = ThreadId.make("quiet");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
-/** The migrations that ran before 0115, when each thread kept its own read marker. */
-const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0115")) as typeof migrations;
+/** The migrations that ran before 20261114004500, when each thread kept its own read marker. */
+const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "20261114004500")) as typeof migrations;
 
 type Services =
   | HobbotsRepository

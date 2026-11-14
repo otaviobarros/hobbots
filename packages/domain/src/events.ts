@@ -590,10 +590,10 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly. 4: its `kind`, `goal`, `private`, `origin` and `state` (ADR 037).
   // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0099).
-  // 6: no `unread`, which is each person's own now (ADR 039, migration 0115).
+  // 6: no `unread`, which is each person's own now (ADR 039, migration 20261114004500).
   ThreadUpserted: 6,
   // 2: its threads' sessions' `chapterId` and `liveChapterId`, as `ThreadUpserted` 5 (migration 0099).
-  // 3: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 0115).
+  // 3: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 20261114004500).
   CampMade: 3,
   ChatStartedFresh: 3,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
@@ -608,7 +608,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChapterSplit: 1,
   ChapterMerged: 1,
   ChapterSummarized: 1,
-  // 2: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 0115).
+  // 2: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 20261114004500).
   ChapterMoved: 2,
   CampSuggested: 1,
   CampSuggestionKept: 1,
