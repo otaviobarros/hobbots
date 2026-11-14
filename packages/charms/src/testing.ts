@@ -48,6 +48,8 @@ export interface FakePullRequestFields {
 
 /** An issue or a pull request, which share their numbers as on GitHub. */
 export interface FakeItem {
+  /** GitHub's ID for it, which attaching a sub-issue takes. */
+  readonly id: number;
   readonly number: number;
   title: string;
   body: string;
@@ -59,6 +61,8 @@ export interface FakeItem {
   updatedAt: string;
   readonly pullRequest: FakePullRequestFields | null;
   readonly comments: Array<FakeComment>;
+  /** The issue's sub-issues, by number, in the order they were attached. */
+  readonly subIssues: Array<number>;
 }
 
 export interface FakeRepositoryOptions {
@@ -69,6 +73,8 @@ export interface FakeRepositoryOptions {
   readonly description?: string | null;
   /** A local repository whose branches it starts with; empty otherwise. */
   readonly from?: string;
+  /** The labels it has; GitHub's defaults when left out. */
+  readonly labels?: ReadonlyArray<string>;
 }
 
 export interface FakeItemOptions {
@@ -203,7 +209,21 @@ interface Repository {
   readonly description: string | null;
   readonly path: string;
   readonly items: Array<FakeItem>;
+  readonly labels: ReadonlyArray<string>;
 }
+
+/** The labels GitHub gives a new repository. */
+const DEFAULT_LABELS = [
+  "bug",
+  "documentation",
+  "duplicate",
+  "enhancement",
+  "good first issue",
+  "help wanted",
+  "invalid",
+  "question",
+  "wontfix",
+];
 
 const GIT_PATH = /^\/([^/]+)\/([^/]+)\.git(\/.*)$/;
 const PAGE = 30;
@@ -328,6 +348,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   const now = () => new Date(clock()).toISOString();
 
   const itemJson = (repository: Repository, item: FakeItem) => ({
+    id: item.id,
     number: item.number,
     title: item.title,
     state: item.state,
@@ -364,8 +385,10 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
 
   const addItem = (repository: Repository, item: FakeItemOptions) => {
     const at = now();
+    const number = repository.items.length + 1;
     const added: FakeItem = {
-      number: repository.items.length + 1,
+      id: 7_000_000 + number,
+      number,
       title: item.title,
       body: item.body ?? "",
       state: item.state ?? "open",
@@ -384,6 +407,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
               mergedAt: item.pullRequest.merged ? at : null,
             },
       comments: [],
+      subIssues: [],
     };
     repository.items.push(added);
     return added;
@@ -492,10 +516,17 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       return sha === null ? notFound : json(200, { ref: `refs/heads/${branch}`, object: { sha, type: "commit" } });
     }
     if (rest === "/pulls") return pulls(request, repository, actor);
-    const issue = /^\/issues\/(\d+)(\/comments)?$/.exec(rest);
+    if (rest === "/issues" || rest.startsWith("/labels/")) return issuesAndLabels(request, repository, rest, actor);
+    return oneItem(request, repository, rest, actor);
+  };
+
+  /** One issue or pull request, its comments, or an issue's sub-issues. */
+  const oneItem = (request: FakeGitHubRequest, repository: Repository, rest: string, actor: string) => {
+    const issue = /^\/issues\/(\d+)(\/comments|\/sub_issues)?$/.exec(rest);
     const item = repository.items.find((each) => each.number === Number(issue?.[1]));
     if (issue === null || item === undefined) return notFound;
     if (issue[2] === undefined) return request.method === "GET" ? json(200, itemJson(repository, item)) : notFound;
+    if (issue[2] === "/sub_issues") return subIssues(request, repository, item);
     return comments(request, repository, item, actor);
   };
 
@@ -634,6 +665,62 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       200,
       page(request, found).map((item) => pullJson(repository, item)),
     );
+  };
+
+  /** A repository's issue list and its labels, one by name. */
+  const issuesAndLabels = (request: FakeGitHubRequest, repository: Repository, rest: string, actor: string) => {
+    if (rest === "/issues") return issues(request, repository, actor);
+    if (request.method !== "GET") return notFound;
+    const name = decodeURIComponent(rest.slice("/labels/".length)).toLowerCase();
+    const found = repository.labels.find((each) => each.toLowerCase() === name);
+    return found === undefined ? notFound : json(200, { name: found });
+  };
+
+  const itemsPage = (request: FakeGitHubRequest, repository: Repository, list: ReadonlyArray<FakeItem>) =>
+    json(
+      200,
+      page(request, list).map((item) => itemJson(repository, item)),
+    );
+
+  /** Opens an issue, with labels the repository has, or lists issues as GitHub's issues endpoint does. */
+  const issues = (request: FakeGitHubRequest, repository: Repository, actor: string) => {
+    if (request.method === "POST") {
+      const body = parseBody(request);
+      const wanted = Array.isArray(body.labels) ? body.labels.map(String) : [];
+      const unknown = wanted.find((name) => !repository.labels.some((l) => l.toLowerCase() === name.toLowerCase()));
+      // GitHub would create the label; the hub must never send one the repository does not have.
+      if (unknown !== undefined) return invalid(`The fake has no label ${unknown}.`);
+      const added = addItem(repository, {
+        title: String(body.title ?? ""),
+        body: String(body.body ?? ""),
+        labels: wanted,
+        author: actor,
+      });
+      return json(201, itemJson(repository, added));
+    }
+    const since = request.query.get("since");
+    const state = request.query.get("state") ?? "open";
+    const found = repository.items
+      .filter((item) => since === null || item.updatedAt >= since)
+      .filter((item) => state === "all" || item.state === state)
+      .sort((a, b) => b.number - a.number);
+    return itemsPage(request, repository, found);
+  };
+
+  /** Attaches an issue under another by its ID, or lists an issue's sub-issues. */
+  const subIssues = (request: FakeGitHubRequest, repository: Repository, parent: FakeItem) => {
+    if (request.method === "POST") {
+      const id = Number(parseBody(request).sub_issue_id);
+      const child = repository.items.find((each) => each.id === id && each.pullRequest === null);
+      if (child === undefined || parent.pullRequest !== null) return invalid("sub_issue_id is not an issue here");
+      if (repository.items.some((each) => each.subIssues.includes(child.number))) {
+        return invalid("The sub-issue already has a parent.");
+      }
+      parent.subIssues.push(child.number);
+      return json(201, itemJson(repository, parent));
+    }
+    const found = parent.subIssues.flatMap((number) => repository.items.filter((each) => each.number === number));
+    return itemsPage(request, repository, found);
   };
 
   const comments = (request: FakeGitHubRequest, repository: Repository, item: FakeItem, actor: string) => {
@@ -1117,6 +1204,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
         description: repository.description ?? null,
         path,
         items: [],
+        labels: [...(repository.labels ?? DEFAULT_LABELS)],
       });
       return path;
     },

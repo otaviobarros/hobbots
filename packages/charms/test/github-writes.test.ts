@@ -34,6 +34,7 @@ import {
   GITHUB_CHARM,
   GitHubApi,
   GitHubCharm,
+  type GitHubOpenedIssue,
   type GitHubPostedComment,
   type GitHubPullRequest,
   type GitHubWrite,
@@ -83,6 +84,9 @@ const makeFakeGitHub = () => {
   const sent: Array<string> = [];
   const script: Array<Script> = [];
   const branches = new Set(["main", "feat/x", "feat/y", "feat/z"]);
+  const issues: Array<GitHubOpenedIssue & { readonly title: string; readonly labels: ReadonlyArray<string> }> = [];
+  const subIssues = new Map<number, Array<number>>();
+  const labels = ["bug", "Docs"];
   const items = new Map([
     [7, { title: "Fix the login", pullRequest: false }],
     [8, { title: "Add charms", pullRequest: true }],
@@ -174,6 +178,28 @@ const makeFakeGitHub = () => {
         }),
       gitObject: () => Effect.die("not used"),
       rateLimit: () => Effect.die("not used"),
+      label: (_agentId, _repository, name) =>
+        Effect.succeed(labels.find((label) => label.toLowerCase() === name.toLowerCase()) ?? null),
+      openIssue: (_agentId, _repository, issue) =>
+        writeWith(`issue ${issue.title}`, () => {
+          const number = 200 + issues.length;
+          const stored = {
+            ...issue,
+            id: 9000 + number,
+            number,
+            url: `https://github.com/octo/app/issues/${number}`,
+            author,
+          };
+          issues.push(stored);
+          return stored;
+        }),
+      issuesSince: () => Effect.succeed(issues.toReversed()),
+      addSubIssue: (_agentId, _repository, parent, subIssueId) =>
+        writeWith(`sub-issue ${subIssueId} under #${parent}`, () => {
+          const child = issues.find((issue) => issue.id === subIssueId);
+          if (child !== undefined) subIssues.set(parent, [...(subIssues.get(parent) ?? []), child.number]);
+        }),
+      subIssues: (_agentId, _repository, parent) => Effect.succeed(subIssues.get(parent) ?? []),
       comment: (_agentId, _repository, number, body) =>
         writeWith(`comment #${number}`, () => {
           const stored = {
@@ -188,7 +214,7 @@ const makeFakeGitHub = () => {
         }),
     }),
   );
-  return { layer, pulls, comments, sent, script, branches };
+  return { layer, pulls, comments, sent, script, branches, issues, subIssues };
 };
 
 type FakeGitHub = ReturnType<typeof makeFakeGitHub>;
@@ -829,5 +855,170 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(JSON.stringify(asked)).not.toContain(SECRET);
     expect(JSON.stringify(hub.github.comments)).not.toContain(SECRET);
     expect(JSON.stringify([...hub.rows.values()])).not.toContain(SECRET);
+  });
+});
+
+describe("the GitHub Charm's issues (#1350)", () => {
+  const MARKED = /^Found while testing\.\n\n<!-- hobbots-call: [0-9a-f-]{36} -->$/;
+
+  // covers PE-003, ADR 020
+  it("[TC-PE-1350-01] opens an issue after approval, with the card showing title, body and labels, and a marker the hob never sees", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    const answer = await hub.call(
+      "github_open_issue",
+      { title: "Login fails", body: "Found while testing.", labels: ["bug", "docs"], key: "i-1" },
+      { asked },
+    );
+    expect(answer).toMatchObject({
+      refused: false,
+      text: expect.stringContaining("Opened issue #200 in octo/app: https://github.com/octo/app/issues/200"),
+    });
+    const [opened] = hub.github.issues;
+    // GitHub's own label names are sent.
+    expect(opened).toMatchObject({ title: "Login fails", labels: ["bug", "Docs"], author: ME });
+    expect(opened?.body).toMatch(MARKED);
+    const nonce = /hobbots-call: ([0-9a-f-]{36})/.exec(opened?.body ?? "")?.[1] ?? "";
+    const [card] = asked as [ApprovalAction];
+    expect(card).toMatchObject({
+      tool: "github_open_issue",
+      operation: "github.open-issue",
+      targets: ["github.com/octo/app issues"],
+      grantable: true,
+      rules: [
+        {
+          _tag: "CharmSite",
+          charm: "github",
+          operation: "github.open-issue",
+          cwd: folder,
+          site: { repository: "octo/app" },
+        },
+      ],
+    });
+    expect(card.arguments).toMatchObject({
+      title: "Login fails",
+      body: "Found while testing.",
+      labels: ["bug", "Docs"],
+      parent: null,
+    });
+    expect(String(card.arguments.summary)).toBe(
+      [
+        "Open an issue in octo/app",
+        "Title: Login fails",
+        "Labels: bug, Docs",
+        "",
+        "Found while testing.",
+        "",
+        "As you (@otaviobarros).",
+      ].join("\n"),
+    );
+    expect(JSON.stringify(card)).not.toContain(nonce);
+    expect(answer.text).not.toContain(nonce);
+  });
+
+  // covers PE-003, ADR 020
+  it("[TC-PE-1350-02] opens a sub-issue under a parent in one call, after one approval, and shows the parent on the card", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    const answer = await hub.call(
+      "github_open_issue",
+      { title: "Check the token", body: "Found while testing.", parent: 7, key: "i-2" },
+      { asked },
+    );
+    expect(answer).toMatchObject({ refused: false, text: expect.stringContaining("Opened sub-issue #200") });
+    expect(answer.text).toContain("It is a sub-issue of #7.");
+    expect(hub.github.subIssues.get(7)).toEqual([200]);
+    expect(hub.github.sent).toEqual(["issue Check the token", "sub-issue 9200 under #7"]);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ targets: ["github.com/octo/app #7"] });
+    expect(asked[0]?.arguments).toMatchObject({ parent: { number: 7, title: "Fix the login" } });
+    expect(String(asked[0]?.arguments.summary)).toContain("Open a sub-issue in octo/app under #7: Fix the login");
+  });
+
+  // covers PE-003
+  it("[TC-PE-1350-03] refuses a label the repository does not have, and a pull request as parent, before the card", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    const missing = await hub.call(
+      "github_open_issue",
+      { title: "Nope", labels: ["bug", "urgent"], key: "i-3" },
+      { asked, access: accessFor("trusting") },
+    );
+    expect(missing).toMatchObject({ refused: true, text: expect.stringContaining('octo/app has no label "urgent"') });
+    const underPull = await hub.call("github_open_issue", { title: "Nope", parent: 8, key: "i-4" }, { asked });
+    expect(underPull).toMatchObject({
+      refused: true,
+      text: expect.stringContaining("#8 in octo/app is a pull request"),
+    });
+    expect(asked).toEqual([]);
+    expect(hub.github.sent).toEqual([]);
+  });
+
+  // covers IN-003, EX-004
+  it("[TC-IN-1350-04] returns the first answer for a retried key without asking or opening again", async () => {
+    const hub = makeHub();
+    const asked: Array<ApprovalAction> = [];
+    const issue = { title: "Once", key: "i-same" };
+    const first = await hub.call("github_open_issue", issue, { asked });
+    const again = await hub.call("github_open_issue", issue, { asked, step: "toolu_2" });
+    expect(first.refused).toBe(false);
+    expect(again.text).toContain("You made this call before, so it was not sent again.");
+    expect(again.text).toContain("#200");
+    expect(asked).toHaveLength(1);
+    expect(hub.github.issues).toHaveLength(1);
+  });
+
+  // covers EX-003, EX-004
+  it("[TC-IN-1350-05] reads a lost answer back by its marker and author, and keeps it uncertain when nothing is there", async () => {
+    const hub = makeHub();
+    // Someone else opens an issue that copies the marker shape; only the hub's own nonce counts.
+    hub.github.script.push("posted-by-other");
+    const turn = { access: accessFor("trusting") };
+    const other = await hub.call("github_open_issue", { title: "Not mine", key: "i-other" }, turn);
+    expect(other).toMatchObject({ refused: true, text: expect.stringContaining("Do not repeat it") });
+    const hubTwo = makeHub();
+    hubTwo.github.script.push("lost");
+    const lost = await hubTwo.call(
+      "github_open_issue",
+      { title: "Lost", body: "Found while testing.", key: "i-lost" },
+      turn,
+    );
+    expect(lost).toMatchObject({
+      refused: false,
+      text: expect.stringContaining("https://github.com/octo/app/issues/200"),
+    });
+    expect(states(hubTwo.rows)).toEqual([["i-lost", "applied"]]);
+    expect(hubTwo.github.issues).toHaveLength(1);
+
+    const hubThree = makeHub();
+    hubThree.github.script.push("dropped");
+    const dropped = await hubThree.call("github_open_issue", { title: "Dropped", key: "i-drop" }, turn);
+    expect(dropped).toMatchObject({ refused: true, text: expect.stringContaining("Do not repeat it") });
+    expect(states(hubThree.rows)).toEqual([["i-drop", "uncertain"]]);
+    const blocked = await hubThree.call("github_open_issue", { title: "Again", key: "i-drop-2" }, turn);
+    expect(blocked).toMatchObject({ refused: true, text: expect.stringContaining("has not settled yet") });
+    expect(hubThree.github.sent).toEqual(["issue Dropped"]);
+  });
+
+  // covers EX-003, EX-004
+  it("[TC-IN-1350-06] reads a lost sub-issue step back, and tells the hob when GitHub refused to attach it", async () => {
+    const turn = { access: accessFor("trusting") };
+    const lost = makeHub();
+    lost.github.script.push("ok", "lost");
+    const attached = await lost.call("github_open_issue", { title: "Child", parent: 9, key: "s-lost" }, turn);
+    expect(attached).toMatchObject({ refused: false, text: expect.stringContaining("It is a sub-issue of #9.") });
+    expect(states(lost.rows)).toEqual([["s-lost", "applied"]]);
+    expect(lost.github.sent).toEqual(["issue Child", "sub-issue 9200 under #9"]);
+
+    const refused = makeHub();
+    refused.github.script.push("ok", "refused");
+    const answer = await refused.call("github_open_issue", { title: "Child", parent: 9, key: "s-no" }, turn);
+    expect(answer).toMatchObject({
+      refused: false,
+      text: expect.stringContaining("It is not under #9: GitHub refused it"),
+    });
+    expect(answer.text).toContain("Do not open it again.");
+    expect(states(refused.rows)).toEqual([["s-no", "applied"]]);
+    expect(refused.github.issues).toHaveLength(1);
   });
 });

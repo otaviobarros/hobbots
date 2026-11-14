@@ -4,13 +4,30 @@ import { SkillName, SkillScope, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Schema, String as Str } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { migrations } from "./migrations/index.ts";
+import { appliedMigrationIds } from "./migrator.ts";
 
 /**
- * The schema version a Hobbots knows: the highest migration in `record`, such as 38. A backup from a
- * higher one is refused (ADR 026).
+ * The schema version a Hobbots knows: the highest migration id in `record`, such as 114 or, since
+ * ADR 040, 20261113231542. A backup from a higher one is refused (ADR 026).
  */
 export const knownSchemaVersion = (record: Record<string, unknown> = migrations): number =>
   Math.max(0, ...Object.keys(record).map((key) => Number.parseInt(key, 10)));
+
+/**
+ * The migration ids a Hobbots knows. Since ADR 040 a newer Hobbots can add an id below this one's
+ * highest, so a restore compares these, not only the highest (ADR 026).
+ */
+export const knownMigrationIds = (record: Record<string, unknown> = migrations): ReadonlySet<number> =>
+  new Set(Object.keys(record).map((key) => Number.parseInt(key, 10)));
+
+/**
+ * Whether the database lacks a migration `record` has, so the migrator would apply one. Ids are not
+ * applied in a fixed order since ADR 040, so a database can lack one below its highest.
+ */
+export const hasPendingMigrations = (record: Record<string, unknown> = migrations) =>
+  Effect.map(appliedMigrationIds, (applied) =>
+    Object.keys(record).some((key) => !applied.has(Number.parseInt(key, 10))),
+  );
 
 /** The highest migration the database has applied, or 0 for a database that has none. */
 export const schemaVersion: Effect.Effect<number, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(function* () {
@@ -179,6 +196,8 @@ export const onDatabaseFile = <A, E>(
 /** What a backup's copy of the database says, once it is scrubbed, for the manifest. */
 export interface FinishedCopy {
   readonly schemaVersion: number;
+  /** Every migration id the copy has applied, in order, so a restore can refuse one it does not know. */
+  readonly migrations: ReadonlyArray<number>;
   readonly counts: BackupCounts;
   readonly hobFolders: ReadonlyArray<HobFolders>;
   /**
@@ -208,6 +227,7 @@ export const finishBackupCopy = (filename: string) =>
       if (!(yield* integrityOk)) return yield* new BackupCopyDamaged();
       return {
         schemaVersion: yield* schemaVersion,
+        migrations: [...(yield* appliedMigrationIds)].sort((a, b) => a - b),
         counts: yield* backupCounts(schema),
         hobFolders: yield* hobFolders(schema),
         backedUpRevisions: yield* backedUpRevisions(schema),

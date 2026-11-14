@@ -82,13 +82,14 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-ARCH-017 | The bus only wakes things up | Active |
 | STD-ARCH-018 | A turn reads records, not the transcript | Active |
 | STD-ARCH-019 | Records move, and every author is named | Active |
+| STD-ARCH-020 | A record names who did something with an Actor | Active |
 | STD-DUP-001 | Search before writing | Active |
 | STD-DUP-002 | Extract logic at its second real copy | Active |
 | STD-DUP-003 | Shared code lives in the layer that owns it | Active |
 | STD-DUP-004 | Effect Schemas are the single source of a contract | Active |
 | STD-DUP-005 | No unused files, exports or dependencies | Active |
 | STD-DUP-006 | No copied blocks of code | Active |
-| STD-DUP-007 | Use what installed libraries provide before writing your own | Active |
+| STD-DUP-007 | Use an established library before writing your own | Active |
 | STD-EFFECT-001 | Backend code and the HTTP API use Effect v4 | Active |
 | STD-EFFECT-002 | Expected failures are typed errors | Active |
 | STD-EFFECT-003 | Dependencies are services provided by Layers | Active |

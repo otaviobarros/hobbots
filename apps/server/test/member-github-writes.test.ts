@@ -210,6 +210,7 @@ const delegate = (hob: string, lines: ReadonlyArray<string>, decisions: Record<s
           push: "allow",
           "github.open-pull-request": "allow",
           "github.comment": "ask",
+          "github.open-issue": "allow",
           ...decisions,
         },
         folders: "all",
@@ -259,6 +260,7 @@ const writesOn = async (runtime: HubCallRuntime) => {
       hub("github_comment", { key: `review-${name}`, folder: project, number: 1, body }),
       hub("github_push", { key: `push-${name}`, folder: project, branch }),
       hub("github_open_pull_request", { key: `pr-${name}`, folder: project, head: branch, title: `Tidy on ${name}` }),
+      hub("github_open_issue", { key: `issue-${name}`, folder: project, title: `Parser notes on ${name}`, parent: 1 }),
       hub("complete_task", { delivered: true, key: `done-${name}`, summary: "Reviewed and opened a pull request" }),
     ]),
   );
@@ -282,7 +284,7 @@ const writesOn = async (runtime: HubCallRuntime) => {
       name,
     ).toBe(true);
   expect(offered(request), name).toEqual(
-    expect.arrayContaining(["github_push", "github_open_pull_request", "github_comment"]),
+    expect.arrayContaining(["github_push", "github_open_pull_request", "github_comment", "github_open_issue"]),
   );
   // What the delegation listed is what the session was offered, on this runtime (#1348).
   const listed = listedIn(answers.get("work-Rook"));
@@ -305,13 +307,18 @@ const writesOn = async (runtime: HubCallRuntime) => {
   ).toHaveLength(1);
   expect(answers.get(`push-${name}`), name).toContain("Pushed");
   expect(answers.get(`pr-${name}`), name).toContain("Opened draft pull request");
+  // An issue under Allow opens as a sub-issue of #1, once (#1350).
+  const notes = github.items(SLUG).filter((item) => item.title === `Parser notes on ${name}`);
+  expect(notes, name).toEqual([expect.objectContaining({ author: "otaviobarros", pullRequest: null })]);
+  expect(github.items(SLUG)[0]?.subIssues, name).toContain(notes[0]?.number);
+  expect(answers.get(`issue-${name}`), name).toContain("It is a sub-issue of #1.");
   expect(await run(ApprovalService.use((approvals) => approvals.listForThread(threadId))), name).toHaveLength(1);
   expect(tree.refusals, name).toEqual([]);
 };
 
 describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
   // covers PE-003, PE-005, OR-002, ADR 038 (every runtime: Claude Code, Codex, fake)
-  it("[TC-OR-1343-01] on each runtime, a member comments after one approval card, pushes and opens a pull request under Allow, each once, and a git push is steered to github_push", async () => {
+  it("[TC-OR-1343-01] on each runtime, a member comments after one approval card, pushes, opens a pull request and a sub-issue under Allow, each once, and a git push is steered to github_push", async () => {
     const runtimes = await hubCallRuntimes();
     try {
       expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
@@ -531,6 +538,32 @@ describe("A call to a tool a member's session was not offered (#1356)", () => {
   }, 60_000);
 });
 
+describe("gh in a member's commands (#1349)", () => {
+  // covers PE-005, SEC-002, ADR 020
+  it("[TC-OR-1349-01] a member's gh pr comment is refused at once with a pointer to github_comment, reaches nothing, and its turn goes on", async () => {
+    const { run, answers, denied } = await startGitHubHub();
+    const before = github.requests.length;
+    await run(
+      delegate("Rook", [
+        `fake:tool Bash gh pr comment 1 --body 'Looks good'`,
+        hub("complete_task", { delivered: true, key: "gh-done", summary: "Could not comment with gh" }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, ROOK)?.state === "completed"));
+    expect(taskOf(tree, ROOK).state).toBe("completed");
+    expect(denied).toEqual([
+      expect.objectContaining({
+        tool: "Bash",
+        decidedBy: "policy",
+        reason: expect.stringContaining("Use the github_comment tool instead of gh pr comment"),
+      }),
+    ]);
+    // The lead was warned that the brief names gh, before the member started.
+    expect(answers.get("work-Rook")).toContain("Warning: the brief names gh, which no hob can run");
+    expect(github.requests.slice(before).filter((sent) => sent.path.endsWith("/comments"))).toEqual([]);
+  }, 60_000);
+});
+
 /** The tree of the lead's request, or none while nothing started it. */
 const threadTrees = TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
 
@@ -557,13 +590,16 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
     const checked = answers.get("same") ?? "";
     expect(checked).toContain("Checked only: nothing was delegated, and no Task started.");
-    expect(checked).toContain("github_push, and github_open_pull_request (Allow); github_comment (Ask).");
+    expect(checked).toContain(
+      "github_push, github_open_pull_request, and github_open_issue (Allow); github_comment (Ask).",
+    );
     const { tools, dropped } = listedIn(checked);
     expect(tools).toMatchObject({
       file_reads: "allow",
       github_push: "allow",
       github_comment: "ask",
       github_open_pull_request: "allow",
+      github_open_issue: "allow",
       github_search: "allow",
       delegate_task: "allow",
     });
@@ -622,7 +658,7 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
           key: "no-charm",
           hob: "Rook",
           brief: [
-            "Review the parser and comment on it",
+            "Review the parser and comment on it, then file an issue for each bug",
             hub("complete_task", { delivered: true, key: "nc", summary: "Read it" }),
           ].join("\n"),
           authority: { decisions: { "read-files": "allow", "edit-files": "allow" }, folders: "all" },
@@ -636,6 +672,7 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     const answer = started.answers.get("no-charm") ?? "";
     expect(answer.slice(0, answer.lastIndexOf("\n{"))).not.toContain("github_push");
     expect(answer).toContain("Warning: the brief names commenting, but github_comment will not be offered");
+    expect(answer).toContain("opening an issue, but github_open_issue will not be offered");
   }, 60_000);
 
   // covers OR-004, ADR 014 (Amendment: what a delegation tells its lead)

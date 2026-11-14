@@ -14,6 +14,7 @@ import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Semaphore, Stream } from "effect";
 import { grantedHosts } from "../approval.ts";
 import {
+  holdsGitHub,
   sandboxNote,
   sessionPolicy,
   type ToolTurn,
@@ -669,11 +670,12 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
           tools.commitAs,
           commits.note,
           readOnly,
+          holdsGitHub(tools),
         ),
       ),
       commits: commits.now,
       // A resumed thread keeps its first developer instructions, so the turn says this again (#1344).
-      sandboxNote: sandboxNote(sandbox !== null, readOnly),
+      sandboxNote: sandboxNote(sandbox !== null, readOnly, holdsGitHub(tools)),
       gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
       session: sessionPolicy(tools),
       webSearch,

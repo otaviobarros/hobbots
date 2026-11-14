@@ -34,6 +34,8 @@ import {
   cleanRuntimeFixture,
   contractPageText,
   FOREIGN_MARKERS,
+  HOB_SESSION_MARKERS,
+  HOB_SESSION_PROMPTS,
   LIBRARY_SKILL,
   ROSTER_INJECTION,
   SET_RULES,
@@ -296,6 +298,33 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     ]);
     // Neither reached the hub or was recorded as started.
     expect(contract.order).toEqual([]);
+  });
+
+  // covers ADR 039 (The context pack with several hobs), RT-001
+  it("[TC-RT-1464-02] two hobs' sessions in one workspace each resume their own history, never the other's", {
+    timeout: 180_000,
+  }, async () => {
+    const started = async (prompt: string) => {
+      const { exit } = await turn({ prompt });
+      expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+      const events = Exit.isSuccess(exit) ? exit.value : [];
+      const event = events.find((e) => e._tag === "SessionStarted");
+      return event?._tag === "SessionStarted" ? event.sessionId : null;
+    };
+    const wren = await started(HOB_SESSION_PROMPTS.wren);
+    const quill = await started(HOB_SESSION_PROMPTS.quill);
+    expect(wren).not.toBeNull();
+    expect(quill).not.toBeNull();
+    expect(quill).not.toBe(wren);
+    for (const [sessionId, own, other] of [
+      [wren, HOB_SESSION_MARKERS.wren, HOB_SESSION_MARKERS.quill],
+      [quill, HOB_SESSION_MARKERS.quill, HOB_SESSION_MARKERS.wren],
+    ] as const) {
+      const resumed = await turn({ prompt: "And now?", sessionId });
+      expect(Exit.isSuccess(resumed.exit), String(resumed.exit)).toBe(true);
+      expect(resumed.offered).toContain(own);
+      expect(resumed.offered).not.toContain(other);
+    }
   });
 
   // covers ADR 036 (On every runtime)

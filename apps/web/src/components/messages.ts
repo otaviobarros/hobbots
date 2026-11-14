@@ -1,4 +1,4 @@
-import { formatCount, plural as pluralForm } from "../lib/format.ts";
+import { formatCount, formatList, plural as pluralForm } from "../lib/format.ts";
 
 /**
  * User-facing copy for the components in this folder, grouped by feature (STD-I18N-001). Copy moves
@@ -435,6 +435,23 @@ export const messages = {
     placeholder: ({ name, title }: { name: string; title: string }) => `Message ${name} in “${title}”…`,
   },
   composer: {
+    /**
+     * A message refused for mentioning hobs that are not in the thread (ADR 039, Who answers). A
+     * direct message takes no one else, so it only says so.
+     */
+    mentionRefused: ({ names, kind }: { names: ReadonlyArray<string>; kind: "chat" | "camp" }) => {
+      const who = formatList(names);
+      if (kind === "chat") {
+        return pluralForm(names.length, {
+          one: `${who} isn't in this direct message.`,
+          other: `${who} aren't in this direct message.`,
+        });
+      }
+      return pluralForm(names.length, {
+        one: `${who} isn't in this camp. Add ${who}?`,
+        other: `${who} aren't in this camp. Add them?`,
+      });
+    },
     pausedPlaceholder: ({ name }: { name: string }) => `${name} is paused. Wake ${name} to start a thread.`,
     stop: "■ Stop",
     stopping: "Stopping…",
@@ -672,6 +689,7 @@ export const messages = {
         `let ${name} open pull requests into ${base} in ${repository}`,
       comment: ({ name, repository }: { name: string; repository: string }) =>
         `let ${name} comment on issues and pull requests in ${repository}`,
+      issue: ({ name, repository }: { name: string; repository: string }) => `let ${name} open issues in ${repository}`,
       charm: ({ name, operation, site }: { name: string; operation: string; site: string }) =>
         site === "" ? `let ${name} use ${operation}` : `let ${name} use ${operation} for ${site}`,
       runner: ({ name, command, file }: { name: string; command: string; file: string }) =>
@@ -710,6 +728,7 @@ export const messages = {
       "github.read": "Reads only. Nothing changes.",
       "github.open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
       "github.comment": "Posts a comment others can see at once. You can edit or delete it.",
+      "github.open-issue": "Opens an issue others can see at once. You can close or edit it.",
       "outside-folders": "Acts outside the folders this hob may use.",
       "search-memory": "Reads only. Nothing changes.",
       "save-memory": "Writes a page to its own memory. You can edit or undo it.",
@@ -755,11 +774,15 @@ export const messages = {
           label: "Comment and reply",
           note: "Comments on issues and pull requests in the repository of its folders.",
         },
+        "github.open-issue": {
+          label: "Open issues",
+          note: "New issues and sub-issues, with labels the repository has, in the repository of its folders.",
+        },
       },
       reads: ({ name }: { name: string }) =>
-        `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
+        `Reads, pushes to, opens pull requests and issues in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
       readsAsBot: ({ name, bot }: { name: string; bot: string }) =>
-        `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as ${bot}. The hub keeps the app's key, so no key reaches ${name}.`,
+        `Reads, pushes to, opens pull requests and issues in and comments on the repository of ${name}'s folders, as ${bot}. The hub keeps the app's key, so no key reaches ${name}.`,
       grant: ({ name }: { name: string }) => `Let ${name} use GitHub`,
       off: ({ name }: { name: string }) =>
         `${name} can't use GitHub. Turn it back on and its rules and its app are as you left them.`,

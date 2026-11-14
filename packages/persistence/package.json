@@ -11,18 +11,19 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/inbox": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "mdast-util-from-markdown": "2.1.0"
   },
   "devDependencies": {
     "@hobbots/api": "workspace:*",
     "@types/node": "26.6.5",
     "fast-check": "4.10.2",
+    "vite": "8.3.5",
     "vitest": "5.0.5"
   }
 }

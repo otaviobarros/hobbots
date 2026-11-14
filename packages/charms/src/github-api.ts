@@ -87,6 +87,40 @@ export class GitHubApi extends Context.Service<
     ) => Effect.Effect<GitHubWrite<{ readonly sha: string }>>;
     /** How many core requests the push's token has left this hour, and when that resets. */
     readonly rateLimit: (agentId: AgentId, scope: GitHubTokenScope) => Effect.Effect<RateLimit, GitHubError>;
+    /** The label as GitHub names it, or null when the repository has no label by that name (#1350). */
+    readonly label: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      name: string,
+    ) => Effect.Effect<string | null, GitHubError>;
+    /** Opens an issue inside the repository; never retried here (#1350). */
+    readonly openIssue: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      issue: NewIssue,
+    ) => Effect.Effect<GitHubWrite<GitHubOpenedIssue>>;
+    /** Issues, not pull requests, in any state updated at or after `since`, newest first (#1350). */
+    readonly issuesSince: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      since: string,
+    ) => Effect.Effect<ReadonlyArray<GitHubOpenedIssue>, GitHubError>;
+    /**
+     * Attaches an issue, by its ID rather than its number, under `parent` as a sub-issue, with the
+     * token for opening issues; never retried here (#1350).
+     */
+    readonly addSubIssue: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      parent: number,
+      subIssueId: number,
+    ) => Effect.Effect<GitHubWrite<void>>;
+    /** The numbers of an issue's sub-issues (#1350). */
+    readonly subIssues: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      parent: number,
+    ) => Effect.Effect<ReadonlyArray<number>, GitHubError>;
     /** Adds one comment to an issue or pull request; never retried here (#324). */
     readonly comment: (
       agentId: AgentId,
@@ -137,6 +171,21 @@ export interface GitHubPostedComment {
   readonly url: string;
   readonly author: string | null;
   readonly body: string;
+}
+
+/** An issue the hub opened or reads back: its ID, which attaching it to a parent takes, and its number. */
+export interface GitHubOpenedIssue {
+  readonly id: number;
+  readonly number: number;
+  readonly url: string;
+  readonly author: string | null;
+  readonly body: string;
+}
+
+export interface NewIssue {
+  readonly title: string;
+  readonly body: string;
+  readonly labels: ReadonlyArray<string>;
 }
 
 export interface NewPullRequest {
@@ -207,6 +256,25 @@ const PostedCommentJson = Schema.Struct({
   body: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
+const OpenedIssueJson = Schema.Struct({
+  id: Schema.Number,
+  number: Schema.Number,
+  html_url: Schema.String,
+  user: User,
+  body: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  pull_request: Schema.optionalKey(Schema.Unknown),
+});
+const LabelJson = Schema.Struct({ name: Schema.String });
+const SubIssueJson = Schema.Struct({ number: Schema.Number });
+
+const openedIssueOf = (json: typeof OpenedIssueJson.Type): GitHubOpenedIssue => ({
+  id: json.id,
+  number: json.number,
+  url: json.html_url,
+  author: json.user?.login ?? null,
+  body: json.body ?? "",
+});
+
 const pullRequestOf = (json: typeof PullRequestJson.Type): GitHubPullRequest => ({
   number: json.number,
   url: json.html_url,
@@ -218,6 +286,9 @@ const postedCommentOf = (json: typeof PostedCommentJson.Type): GitHubPostedComme
   author: json.user?.login ?? null,
   body: json.body ?? "",
 });
+
+/** The pages of issues reading back looks through: 1,000 issues changed since the call. */
+const ISSUE_PAGES = 10;
 
 /** The pages of comments reading back looks through: 1,000 comments since the call, far more than a thread gets in minutes. */
 const COMMENT_PAGES = 10;
@@ -534,6 +605,68 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
               result._tag === "Done" ? { ...result, value: pullRequestOf(result.value) } : result,
             ),
           ),
+        label: (agentId, repository, name) =>
+          read(
+            agentId,
+            repository,
+            `/repos/${repositorySlug(repository)}/labels/${encodeURIComponent(name)}`,
+            LabelJson,
+            `label ${name} in ${repositorySlug(repository)}`,
+          ).pipe(
+            Effect.map((json) => json.name),
+            Effect.catchIf(
+              (error) => error.reason === "not-found",
+              () => Effect.succeed(null),
+            ),
+          ),
+        openIssue: (agentId, repository, issue) =>
+          signedWrite(
+            agentId,
+            { repository, action: "open-issue" },
+            `/repos/${repositorySlug(repository)}/issues`,
+            { title: issue.title, body: issue.body, labels: [...issue.labels] },
+            OpenedIssueJson,
+          ).pipe(
+            Effect.map((result) =>
+              result._tag === "Done" ? { ...result, value: openedIssueOf(result.value) } : result,
+            ),
+          ),
+        issuesSince: (agentId, repository, since) =>
+          Effect.gen(function* () {
+            const found: Array<GitHubOpenedIssue> = [];
+            for (let page = 1; page <= ISSUE_PAGES; page++) {
+              const list = yield* read(
+                agentId,
+                repository,
+                `/repos/${repositorySlug(repository)}/issues`,
+                Schema.Array(OpenedIssueJson),
+                `the issues in ${repositorySlug(repository)}`,
+                { state: "all", since, sort: "created", direction: "desc", per_page: "100", page: String(page) },
+              );
+              // GitHub lists pull requests among issues.
+              found.push(...list.filter((json) => json.pull_request === undefined).map(openedIssueOf));
+              if (list.length < 100) break;
+            }
+            return found;
+          }),
+        addSubIssue: (agentId, repository, parent, subIssueId) =>
+          signedWrite(
+            agentId,
+            { repository, action: "open-issue" },
+            `/repos/${repositorySlug(repository)}/issues/${parent}/sub_issues`,
+            { sub_issue_id: subIssueId },
+            SubIssueJson,
+          ).pipe(Effect.map((result) => (result._tag === "Done" ? { _tag: "Done", value: undefined } : result))),
+        // GitHub keeps at most 100 sub-issues under one issue, so one page holds them all.
+        subIssues: (agentId, repository, parent) =>
+          read(
+            agentId,
+            repository,
+            `/repos/${repositorySlug(repository)}/issues/${parent}/sub_issues`,
+            Schema.Array(SubIssueJson),
+            `the sub-issues of #${parent}`,
+            { per_page: "100" },
+          ).pipe(Effect.map((list) => list.map((json) => json.number))),
         comment: (agentId, repository, number, body) =>
           signedWrite(
             agentId,

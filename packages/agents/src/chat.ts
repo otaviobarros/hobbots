@@ -25,6 +25,7 @@ import {
   hobStanding,
   type IllegalChapterTransition,
   isResumable,
+  type MentionRefused,
   Message,
   MessageId,
   MessageTransitions,
@@ -36,8 +37,10 @@ import {
   Thread,
   ThreadId,
   ThreadLifecycle,
+  type ThreadMember,
   type ThreadRunStatus,
   takesNewWork,
+  type UnreadThreads,
   waitedSteps,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
@@ -60,6 +63,17 @@ import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources, PackReports } from "./turn-pack.ts";
 import { sessionActor } from "./users.ts";
+
+/**
+ * The skill a message asks for: the one you picked with `/`, or one its text names. A skill of a set
+ * picked by its name alone is recorded with its set, when that names one.
+ */
+const pickedSkill = (
+  content: string,
+  askedSkill: SkillMention | null,
+  named: Parameters<typeof mentionedSkill>[1],
+): SkillMention | null =>
+  askedSkill === null ? mentionedSkill(content, named) : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill);
 
 /** How much of a cut-off reply the runtime is shown when asked to continue it. */
 const CONTINUE_CONTEXT = 4_000;
@@ -101,7 +115,7 @@ export class ChatService extends Context.Service<
       askedSkill?: SkillMention | null,
     ) => Effect.Effect<
       { userMessage: Message; assistantMessage: Message | null },
-      ThreadNotFound | HobUnavailable | ThreadArchived
+      ThreadNotFound | HobUnavailable | ThreadArchived | MentionRefused
     >;
     readonly removeQueued: (
       threadId: ThreadId,
@@ -180,15 +194,18 @@ export class ChatService extends Context.Service<
       value: boolean,
     ) => Effect.Effect<Thread, ThreadNotFound | ThreadArchived | ThreadNotCamp>;
     /**
-     * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027), so
-     * its unread dot clears on every device. The marker only moves forward: a message you had read
-     * past, or one from another thread, returns the thread as it is. An archived thread takes it too.
+     * Records that the person asking read the thread through `messageId`, as they saw it at
+     * `revision` (ADR 027), so its unread dot clears on every device of theirs: their member row,
+     * with its marker moved (ADR 039). The marker only moves forward: a message they had read past,
+     * or one from another thread, returns null. An archived thread takes it too.
      */
     readonly markRead: (
       threadId: ThreadId,
       messageId: MessageId,
       revision: number,
-    ) => Effect.Effect<Thread, ThreadNotFound>;
+    ) => Effect.Effect<ThreadMember | null, ThreadNotFound>;
+    /** The threads where a hob wrote since the person asking last read them (ADR 039). */
+    readonly unreadThreads: Effect.Effect<UnreadThreads>;
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /**
@@ -463,14 +480,15 @@ export class ChatService extends Context.Service<
               error: null,
               configVersion: null,
               skills: accepted,
-              // A skill of a set picked by its name alone is recorded with its set, when that names one.
-              askedSkill:
-                askedSkill === null
-                  ? mentionedSkill(content, named)
-                  : (mentionedSkill(`/${askedSkill}`, named) ?? askedSkill),
+              askedSkill: pickedSkill(content, askedSkill, named),
               createdAt: yield* nowIso,
             });
-            const saved = yield* saveMessage(userMessage);
+            // Who answers is decided in the transaction that stores the message (ADR 039, Who
+            // answers), from the mentions the hub parses in its text: a mention of a hob that cannot
+            // hear it refuses the message, and nothing is stored.
+            const sent = yield* repo.sendMessage(userMessage, { mentions: [], repliesTo: null });
+            const saved = yield* announce(sent).pipe(Effect.map((value) => value.message));
+            if (sent.value.answerers.length === 0) return { userMessage: saved, assistantMessage: null };
             // A message that waits behind a busy thread has the thread look at its work again once it
             // is free, so a dispatch that already found nothing does not start it without its progress.
             if (isBusy(yield* runOf(threadId))) yield* step(threadId, { _tag: "WakeLater" });
@@ -678,6 +696,7 @@ export class ChatService extends Context.Service<
         setPinned,
         setPrivate,
         markRead,
+        unreadThreads: repo.listUnreadThreads,
         restore,
         makeCamp,
         startFresh,

@@ -110,18 +110,18 @@ describe("pins", () => {
         yield* repo.markThreadRead(CHAT, reply.id, reply.revision);
         const first = yield* pin("reply");
         const again = yield* pin("reply");
-        const thread = Option.getOrThrow(yield* repo.findThread(CHAT));
+        const unread = (yield* repo.listUnreadThreads).threadIds.includes(CHAT);
         const listed = yield* (yield* PinRepository).listPins(CHAT);
         const off = yield* pin("reply", false);
         const offAgain = yield* pin("reply", false);
         const elsewhere = yield* Effect.exit(pin("reply", true, ThreadId.make("other")));
-        return { first, again, thread, listed, off, offAgain, elsewhere };
+        return { first, again, unread, listed, off, offAgain, elsewhere };
       }),
     );
     expect(result.first.value).toMatchObject({ messageId: "reply", threadId: CHAT, pinnedAt: NOW });
     expect(result.first.entries.map((entry) => entry.type)).toEqual(["MessagePinned"]);
     expect(result.again).toMatchObject({ value: result.first.value, entries: [] });
-    expect(result.thread.unread).toBe(false);
+    expect(result.unread).toBe(false);
     expect(result.listed).toEqual([result.first.value]);
     expect(result.off.entries.map((entry) => entry.payload)).toEqual([
       { _tag: "MessageUnpinned", threadId: CHAT, messageId: "reply" },

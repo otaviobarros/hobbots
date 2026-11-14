@@ -3,9 +3,24 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { type CallSteering, Charms, makeRedactor, type PromptRequest, type ToolAccess } from "@hobbots/agents";
+import {
+  type CallSteering,
+  Charms,
+  type HubTools,
+  makeRedactor,
+  type PromptRequest,
+  type ToolAccess,
+} from "@hobbots/agents";
 import { charmTakeoversFor, fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
-import { AgentId, type CommitsAs, EMPTY_HOB_POLICY, settleCommitsAs } from "@hobbots/domain";
+import {
+  AgentId,
+  type CommitsAs,
+  EMPTY_HOB_POLICY,
+  GITHUB_CHARM_NOTE,
+  GITHUB_TOOLS,
+  GITHUB_WRITE_TOOLS,
+  settleCommitsAs,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
@@ -69,7 +84,12 @@ interface Runtime {
    * What the hob is told when the runtime refuses `command`, which sets its own commit identity or
    * makes a commit the turn's `steering` holds, or nothing when it does not refuse it.
    */
-  readonly refusal: (tools: ToolAccess, command: string, steering?: CallSteering) => Promise<string>;
+  readonly refusal: (
+    tools: ToolAccess,
+    command: string,
+    steering?: CallSteering,
+    hubTools?: HubTools,
+  ) => Promise<string>;
 }
 
 const BASE_ENV = { PATH: process.env.PATH } satisfies NodeJS.ProcessEnv;
@@ -80,8 +100,8 @@ const claudeCode: Runtime = {
     const started = claudeTurnStart(turn, "on", true);
     return { env: started.commits.env(BASE_ENV), instructions: started.instructions, prompt: started.prompt };
   },
-  refusal: async (tools, command, steering) => {
-    const turn = toolTurn(tools, "on", { steering: steering ?? null });
+  refusal: async (tools, command, steering, hubTools) => {
+    const turn = toolTurn(tools, "on", { steering: steering ?? null, hubTools: hubTools ?? null });
     if (turn === null) throw new Error("expected a tool turn");
     const { hooks } = policyHooks(engine, turn, () => undefined);
     const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
@@ -140,8 +160,8 @@ const codex: Runtime = {
       prompt: input.map((part) => part.text ?? "").join("\n"),
     };
   },
-  refusal: async (tools, command, steering) => {
-    const turn = toolTurn(tools, "on", { steering: steering ?? null }, CODEX_MODEL_HOSTS);
+  refusal: async (tools, command, steering, hubTools) => {
+    const turn = toolTurn(tools, "on", { steering: steering ?? null, hubTools: hubTools ?? null }, CODEX_MODEL_HOSTS);
     if (turn === null) throw new Error("expected a tool turn");
     // What the hob reads is the note told to its turn: Codex's own answer to a declined call has no text (#1082).
     const told: Array<string> = [];
@@ -167,11 +187,12 @@ const codex: Runtime = {
 const fake: Runtime = {
   name: "the fake runtime",
   start: null,
-  refusal: async (tools, command, steering) => {
+  refusal: async (tools, command, steering, hubTools) => {
     const turn = {
       ...request(tools.commitsAs),
       tools,
       ...(steering === undefined ? {} : { steering }),
+      ...(hubTools === undefined ? {} : { hubTools }),
       prompt: `fake:run ${JSON.stringify({ command, exitCode: 0 })}`,
     };
     const events = await Effect.runPromise(Stream.runCollect(scriptedToolEvents(turn, engine)));
@@ -369,4 +390,52 @@ describe.each(RUNTIMES)("how $name steers a git push a Charm takes over (ADR 031
       expect(refused).toContain("push");
     }
   });
+});
+
+/** Hub tools that offer `names` and answer nothing, as a turn's GitHub Charm tools are offered. */
+const offering = (names: ReadonlyArray<string>): HubTools => ({
+  tools: names.map((name) => ({ name, description: name, inputSchema: { type: "object" }, label: name })),
+  call: () => Effect.succeed({ text: "", refused: false }),
+});
+
+const GITHUB_CHARM = offering([...GITHUB_TOOLS, ...GITHUB_WRITE_TOOLS].map((tool) => tool.name));
+
+describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runtime) => {
+  // covers PE-005, SEC-002, ADR 020
+  it("[TC-PE-1349-01] refuses gh before it runs, naming the Charm tool for what it tried, also inside env, sh -c, if and $(…)", async () => {
+    const tools = access(settleCommitsAs(null, NONE, null));
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["gh pr create --fill", "Use the github_open_pull_request tool instead of gh pr create"],
+      ["env GH_PAGER=cat gh pr comment 1 --body hi", "Use the github_comment tool instead of gh pr comment"],
+      ["sh -c 'gh issue view 1'", "Use the github_item tool instead of gh issue view"],
+      ["pnpm test && gh pr list", "Use the github_search tool instead of gh pr list"],
+      ["if gh pr view 1; then echo found; fi", "Use the github_item tool instead of gh pr view"],
+      ['echo "$(gh repo view)"', "Use the github_repository tool instead of gh repo view"],
+      ["gh issue create -t Parser", "Use the github_open_issue tool instead of gh issue create"],
+    ];
+    for (const [command, pointer] of cases) {
+      expect(await runtime.refusal(tools, command, undefined, GITHUB_CHARM), command).toContain(pointer);
+    }
+    // Without the Charm, gh is refused all the same, and the hob is told to ask the user.
+    expect(await runtime.refusal(tools, "gh pr create --fill")).toContain(
+      "GitHub goes through the GitHub Charm, whose tools you are not offered now.",
+    );
+    // A command that runs no gh is decided as before.
+    expect(await runtime.refusal(tools, "echo gh pr create", undefined, GITHUB_CHARM)).not.toContain(
+      "gh cannot sign in",
+    );
+  });
+
+  it.skipIf(runtime.start === null)(
+    "[TC-PE-1349-02] tells a hob holding the GitHub Charm that GitHub goes through it, and a resumed session again",
+    async () => {
+      const as = settleCommitsAs(null, NONE, null);
+      const start = runtime.start as NonNullable<Runtime["start"]>;
+      expect((await start({ ...request(as), hubTools: GITHUB_CHARM })).instructions).toContain(GITHUB_CHARM_NOTE);
+      expect((await start({ ...request(as, "session-1"), hubTools: GITHUB_CHARM })).prompt).toContain(
+        GITHUB_CHARM_NOTE,
+      );
+      expect((await start(request(as))).instructions).not.toContain(GITHUB_CHARM_NOTE);
+    },
+  );
 });

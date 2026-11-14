@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { FAKE_HUB_DIRECTIVE, fakeRosterPrompt, fakeSkillsPrompt, makeFakeRuntime } from "../src/fake.ts";
+import {
+  FAKE_HUB_DIRECTIVE,
+  fakeInstructionsPrompt,
+  fakeRosterPrompt,
+  fakeSkillsPrompt,
+  makeFakeRuntime,
+} from "../src/fake.ts";
 import {
   AGENTS_SKILL,
   ASKED_SKILL,
@@ -110,5 +116,27 @@ describe("a clean fake runtime (ADR 029)", () => {
       .pipe(Stream.runCollect, Effect.runPromise)
       .then((events) => Array.from(events).flatMap((event) => (event._tag === "Completed" ? [event.text] : [])));
     expect(told).toEqual([CONTRACT_ROSTER]);
+  });
+
+  // covers ADR 039 (The context pack with several hobs), RT-001
+  it("[TC-RT-1464-03] two hobs' sessions each resume their own instructions, never the other's", async () => {
+    const fake = makeFakeRuntime();
+    const turn = (instructions: string, sessionId: string | null, prompt = "Say hello.") =>
+      fake
+        .sendPrompt({ prompt, sessionId, instructions, instructionsChanged: false, model: null, effort: null })
+        .pipe(Stream.runCollect, Effect.runPromise)
+        .then((events) => Array.from(events).find((event) => event._tag === "Completed"))
+        .then((done) => (done?._tag === "Completed" ? done : null));
+    const wren = await turn("You are Wren.", null);
+    const quill = await turn("You are Quill.", null);
+    expect(wren?.sessionId).not.toBe(quill?.sessionId);
+    // A resumed session keeps the instructions it started with, so each answers as its own hob.
+    const resumed = await Promise.all(
+      [wren, quill].map((done) => turn("", done?.sessionId ?? null, fakeInstructionsPrompt)),
+    );
+    expect(resumed.map((done) => [done?.sessionId, done?.text])).toEqual([
+      [wren?.sessionId, "You are Wren."],
+      [quill?.sessionId, "You are Quill."],
+    ]);
   });
 });

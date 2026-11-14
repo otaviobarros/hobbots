@@ -147,6 +147,14 @@ export const MAX_GITHUB_BODY = 60_000;
 const githubBody = (description: string) =>
   Schema.String.check(Schema.isMaxLength(MAX_GITHUB_BODY)).annotate({ description });
 
+/** The most labels an issue a hob opens may carry. */
+export const MAX_ISSUE_LABELS = 10;
+
+// A label GitHub has: at most 50 characters, as GitHub allows, and on one line.
+const issueLabel = Schema.String.check(
+  Schema.isPattern(/^[^\r\n\t]{1,50}$/, { message: "A label is 1 to 50 characters, on one line." }),
+);
+
 /**
  * The GitHub writes' inputs, as each action declares them. The hub action pipeline adds the `key`
  * every Charm write carries (ADR 031).
@@ -181,6 +189,25 @@ export const GitHubWriteInputs = {
       description: "The issue or pull request number to comment on.",
     }),
     body: githubBody("The comment, in GitHub Markdown.").check(Schema.isNonEmpty()),
+  }),
+  github_open_issue: Schema.Struct({
+    folder: writeFolder("open the issue in"),
+    title: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(256)).annotate({
+      description: "The issue's title.",
+    }),
+    body: Schema.optionalKey(githubBody("The issue's description, in GitHub Markdown.")),
+    labels: Schema.optionalKey(
+      Schema.Array(issueLabel)
+        .check(Schema.isMaxLength(MAX_ISSUE_LABELS))
+        .annotate({
+          description: `Labels the repository already has, at most ${MAX_ISSUE_LABELS}. A label it does not have is refused.`,
+        }),
+    ),
+    parent: Schema.optionalKey(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+        description: "An issue number in the same repository to open this one under, as its sub-issue.",
+      }),
+    ),
   }),
 } as const;
 
@@ -219,6 +246,12 @@ export const GITHUB_WRITE_TOOLS: ReadonlyArray<{
     description:
       "Comment on an issue or pull request in your folder's GitHub repository, as your own GitHub app's bot when you have one, and as the user otherwise. Use this instead of `gh issue comment` or `gh pr comment`. Under most policies the user approves it first.",
     label: "Commenting on GitHub",
+  },
+  {
+    name: "github_open_issue",
+    description:
+      "Open an issue in your folder's GitHub repository, as your own GitHub app's bot when you have one, and as the user otherwise. Give a parent issue number to open it as that issue's sub-issue. Labels must already exist in the repository. Use this instead of `gh issue create`. Under most policies the user approves it first.",
+    label: "Opening an issue",
   },
 ];
 
@@ -314,6 +347,20 @@ export interface GitHubCommentPlan {
   readonly actingAs: GitHubActor;
 }
 
+/** What opening an issue sends and where, as the hub fixed it when deciding. */
+export interface GitHubIssuePlan {
+  readonly repository: string;
+  readonly folder: string;
+  /** The title and body after redaction, the body without the hub's marker: exactly what the hob wrote that is sent. */
+  readonly title: string;
+  readonly body: string;
+  /** The labels as GitHub names them. */
+  readonly labels: ReadonlyArray<string>;
+  /** The issue it opens under, as GitHub had it when deciding, or null for an issue of its own. */
+  readonly parent: { readonly number: number; readonly title: string } | null;
+  readonly actingAs: GitHubActor;
+}
+
 /** How much of a pull request's body its approval card shows, which ADR 020 calls the start of the body. */
 export const PULL_REQUEST_BODY_SHOWN = 1200;
 
@@ -326,6 +373,26 @@ export const githubPullRequestSummary = (plan: GitHubPullRequestPlan): string =>
   return [
     `Open a ${plan.draft ? "draft " : ""}pull request in ${plan.repository} from ${plan.head} into ${plan.base}`,
     `Title: ${plan.title}`,
+    ...(body === "" ? ["No description."] : ["", body, ""]),
+    sentence(githubActorText(plan.actingAs)),
+  ].join("\n");
+};
+
+/** The start of a body, as an approval card shows it: up to `PULL_REQUEST_BODY_SHOWN` characters. */
+const bodyShown = (body: string) =>
+  body.length <= PULL_REQUEST_BODY_SHOWN
+    ? body
+    : `${body.slice(0, PULL_REQUEST_BODY_SHOWN)}\n[${body.length - PULL_REQUEST_BODY_SHOWN} more characters]`;
+
+/** Opening an issue in words, as the approval card shows it and its digest covers it. */
+export const githubIssueSummary = (plan: GitHubIssuePlan): string => {
+  const body = bodyShown(plan.body);
+  return [
+    plan.parent === null
+      ? `Open an issue in ${plan.repository}`
+      : `Open a sub-issue in ${plan.repository} under #${plan.parent.number}: ${plan.parent.title}`,
+    `Title: ${plan.title}`,
+    ...(plan.labels.length === 0 ? [] : [`Labels: ${plan.labels.join(", ")}`]),
     ...(body === "" ? ["No description."] : ["", body, ""]),
     sentence(githubActorText(plan.actingAs)),
   ].join("\n");

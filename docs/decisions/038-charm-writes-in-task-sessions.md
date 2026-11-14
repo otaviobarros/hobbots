@@ -18,7 +18,7 @@ The rest is already in place:
 
 ### Offer
 
-- **The GitHub Charm offers its writes outside chats.** It declares `writesOutsideChats`, so a member's session and a step's session are offered `github_push`, `github_open_pull_request` and `github_comment` beside the reads. This works on every runtime, because the offer and the steering come from the hub.
+- **The GitHub Charm offers its writes outside chats.** It declares `writesOutsideChats`, so a member's session and a step's session are offered `github_push`, `github_open_pull_request`, `github_comment` and `github_open_issue` ([#1350](https://github.com/otaviobarros/hobbots/issues/1350)) beside the reads. This works on every runtime, because the offer and the steering come from the hub.
 - **Never is not offered.** Outside chats, a write whose operation the session's authority answers Never is left out of the offer. The steering that would lead to it is left out too. A call to it anyway is refused on the Task as an unknown tool and never reaches GitHub. Chat turns are unchanged: a write under Never there is still offered and refused when called, as before.
 - **Ask asks, Allow runs.** A write on Ask shows one approval card in the lead's thread, as a member's other requests do, and runs once after Allow. Each write is sent once for its key.
 - **The push takeover stays.** A `git push` from the member's folder goes to `github_push`, as it does in chat.

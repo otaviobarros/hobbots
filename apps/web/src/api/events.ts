@@ -60,7 +60,7 @@ import {
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
-import { showUnread } from "./thread-reads.ts";
+import { showUnread, unreadChanged } from "./thread-reads.ts";
 import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
 
@@ -212,9 +212,8 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
-  // Nothing on screen shows members yet (ADR 039).
+  // Nothing on screen shows members yet (ADR 039); a new member has read nothing.
   "ThreadMemberAdded",
-  "ThreadMemberChanged",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -227,8 +226,7 @@ type UnappliedEvent = Extract<
       | "ThreadRunChanged"
       | "HobPresenceChanged"
       | "HobPresenceRemoved"
-      | "ThreadMemberAdded"
-      | "ThreadMemberChanged";
+      | "ThreadMemberAdded";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -269,13 +267,24 @@ const readAgain = (
   | Parameters<typeof applyRecordEvent>[1]
   | Parameters<typeof applySuggestionEvent>[1]
   | Parameters<typeof applyPinEvent>[1]
-  | ClaimEvent => {
+  | ClaimEvent
+  | Extract<HobbotsEvent, { readonly _tag: "ThreadMemberChanged" }> => {
   // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
-  // again. A started or summarized chapter moves none.
+  // again, and which threads are unread, since a read thread stays read. A started or summarized
+  // chapter moves none.
   if (isChapterEvent(event)) {
     void applyChapterEvent(queryClient, event);
     if (event._tag === "ChapterSplit" || event._tag === "ChapterMerged") {
       void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
+      void unreadChanged(queryClient);
+    }
+    return true;
+  }
+  // A person read a thread, or a member left or came back (ADR 039): which threads are unread for
+  // you is read again, from your own markers. A hob reads nothing.
+  if (event._tag === "ThreadMemberChanged") {
+    if (event.member.actor.kind === "user") {
+      void unreadChanged(queryClient);
     }
     return true;
   }
@@ -333,6 +342,8 @@ const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
   if (event._tag === "ChapterMoved") {
     void chapterMoved(queryClient, event);
     void applyClaimEvent(queryClient);
+    // A thread you had read stays read, and a camp just made starts read (ADR 039).
+    void unreadChanged(queryClient);
     return;
   }
   // A thread archived or restored elsewhere moves between the hob's two lists.

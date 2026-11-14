@@ -372,3 +372,13 @@ export const CONTRACT_ROSTER = ((): string => {
   if (roster === null) throw new Error("No roster");
   return roster;
 })();
+
+/**
+ * Two hobs' prompts in one thread (ADR 039, #1464): each hob's session is started with its own and
+ * resumed by its own id, so a resumed session's history holds its own marker and never the other's.
+ */
+export const HOB_SESSION_PROMPTS = {
+  wren: "Marker wren-session-said. Say hello.",
+  quill: "Marker quill-session-said. Say hello.",
+} as const;
+export const HOB_SESSION_MARKERS = { wren: "wren-session-said", quill: "quill-session-said" } as const;

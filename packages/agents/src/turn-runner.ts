@@ -99,8 +99,8 @@ const markedSession = (known: RuntimeSession, mark: WebReadMark): RuntimeSession
 const attemptReadWeb = (turn: ChatTaskTurn | null, mark: WebReadMark | null): Effect.Effect<void> =>
   turn === null || mark === null ? Effect.void : turn.readWeb(mark);
 
-const taskBriefIn = (thread: Thread, runtime: RuntimeKind): TaskBriefMark | null =>
-  liveSession(thread, runtime)?.taskBrief ?? null;
+const taskBriefIn = (thread: Thread, runtime: RuntimeKind, agentId: AgentId): TaskBriefMark | null =>
+  liveSession(thread, runtime, agentId)?.taskBrief ?? null;
 
 /** A chat turn's web search, recorded for its hob, chat and reply, and the Task and Attempt it works on (ADR 036). */
 const chatWebTurn = (
@@ -232,6 +232,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         const session = makeTurnSession({
           thread,
           runtime: brain.runtime,
+          agentId: agent.id,
           changeThread,
           toldOfTask: () => onTask?.told ?? null,
         });
@@ -408,7 +409,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 runtime: brain.runtime,
                 configVersion: config.version,
                 holding: carry.holding,
-                told: taskBriefIn(thread, brain.runtime),
+                told: taskBriefIn(thread, brain.runtime, agent.id),
                 webMark: webMark.current,
               }),
               (turn) =>
