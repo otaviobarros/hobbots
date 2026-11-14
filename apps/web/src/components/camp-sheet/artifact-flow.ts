@@ -1,4 +1,5 @@
 import type { ArtifactVersion, RegisteredArtifactId } from "@hobbots/domain";
+import { markdownLines } from "../markdown/read.ts";
 import type { ArtifactFilter } from "./artifact-rows.ts";
 
 // Reading the camp's artifacts (ADR 037, #1434) as one reducer over a union of its steps
@@ -70,15 +71,14 @@ const decoder = new TextDecoder();
 export const textOf = (bytes: Uint8Array): string => decoder.decode(bytes);
 
 /**
- * The first lines a row previews of a text: up to `lines` that hold something, blank ones and a
- * Markdown heading's marks dropped, each cut to `width` characters.
+ * The first lines a row previews of a text: up to `lines` that hold something, blank ones dropped,
+ * each cut to `width` characters. A Markdown document is read by its parser, so a heading's marks,
+ * emphasis and link targets are left out.
  */
-export const firstLines = (text: string, lines = 2, width = 120): ReadonlyArray<string> => {
+export const firstLines = (text: string, markdown: boolean, lines = 2, width = 120): ReadonlyArray<string> => {
   const kept: Array<string> = [];
-  for (const line of text.split("\n")) {
-    let trimmed = line.trim();
-    while (trimmed.startsWith("#")) trimmed = trimmed.slice(1);
-    trimmed = trimmed.trim();
+  for (const line of markdown ? markdownLines(text) : text.split("\n")) {
+    const trimmed = line.trim();
     if (trimmed === "") continue;
     kept.push(trimmed.length > width ? `${trimmed.slice(0, width - 1)}…` : trimmed);
     if (kept.length === lines) break;

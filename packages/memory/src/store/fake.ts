@@ -25,6 +25,7 @@ import {
 } from "@hobbots/domain";
 import { diffLines } from "diff";
 import { DateTime, Effect, Layer } from "effect";
+import { pageHeading } from "./heading.ts";
 
 /**
  * An in-memory `MemoryStore` for tests (ADR 028), so the memory tools, the brief and the Memory page
@@ -86,7 +87,8 @@ const summaryOf = (sessionId: MemorySessionId, items: ReadonlyArray<MemoryCaptur
 });
 
 /** A version's title as the engine names it: the title kept beside it, its first `# ` heading, or its file name. */
-const titleOf = (path: MemoryPath, version: StoredVersion) => version.title ?? memoryTitleOf(path, version.markdown);
+const titleOf = (path: MemoryPath, version: StoredVersion) =>
+  version.title ?? memoryTitleOf(path, pageHeading(version.markdown));
 
 const scopeKey = (scope: MemoryScope) => {
   switch (scope._tag) {
@@ -296,7 +298,7 @@ export const makeMemoryStoreFake = (): {
         meets(latestOf(scope, draft.path), expected)
           ? append(scope, draft.path, {
               // As the engine does, a page written again without a `# ` heading keeps the title it had.
-              title: /^# \S/m.test(draft.markdown) ? null : (latestOf(scope, draft.path)?.title ?? null),
+              title: pageHeading(draft.markdown) !== undefined ? null : (latestOf(scope, draft.path)?.title ?? null),
               markdown: draft.markdown,
               tags: draft.tags,
               pinned: draft.pinned,
