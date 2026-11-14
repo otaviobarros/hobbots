@@ -5,13 +5,13 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { useRevertChange } from "../../api/hob-changes.ts";
-import { useSavingPermissions, useUpdatePermissions } from "../../api/queries.ts";
 import { formatMoment } from "../../lib/format.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { DiffLines } from "../skills/skill-diff.tsx";
-import { canRevert, type FieldDiff, fieldDiffs, makerOf, restoreOf, type VersionChange } from "./hob-changes-model.ts";
+import { canRevert, type FieldDiff, fieldDiffs, makerOf, type VersionChange } from "./hob-changes-model.ts";
 import { HobName, NamingHob, namedIn, useHobsNamed } from "./hob-names.tsx";
 import { messages } from "./messages.ts";
+import { RestoreAnswers } from "./restore-answers.tsx";
 import { settingLines, settingMakerLine, settingName, settingReachLine } from "./setting-change-model.ts";
 
 const copy = messages.row;
@@ -110,40 +110,6 @@ function Revert({ change }: { change: VersionChange }) {
           {notLatest ? copy.notLatest : copy.revertFailed}
         </span>
       )}
-    </div>
-  );
-}
-
-/**
- * What a Summoning change dropped without naming it, with Restore them, which gives those answers
- * back as a change made by you (#1352). Nothing is restored until you press it.
- */
-function RestoreAnswers({ change, hob }: { change: HobChange; hob: Agent | undefined }) {
-  const restore = restoreOf(change, hob);
-  const update = useUpdatePermissions(change.hobId);
-  // Each payload is built from the hob's policy as it stands, so one restore waits for another of
-  // the same hob to save: two at once would each leave out what the other restores.
-  const saving = useSavingPermissions(change.hobId);
-  if (restore === null) return null;
-  return (
-    <div className="flex flex-col gap-1.5 rounded-control border border-line bg-deep px-3 py-2">
-      <span className="text-meta text-text-secondary">{copy.dropped({ answers: restore.words })}</span>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          disabled={saving}
-          onClick={() => update.mutate(restore.payload)}
-        >
-          {update.isPending ? copy.restoring : copy.restore}
-        </Button>
-        {update.isError && (
-          <span role="alert" className="text-meta text-rose">
-            {copy.restoreFailed}
-          </span>
-        )}
-      </div>
     </div>
   );
 }
