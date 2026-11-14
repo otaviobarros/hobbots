@@ -19,6 +19,8 @@ import {
   type ToolAccess,
   type ToolStartedEvent,
   type TurnApprovals,
+  takeSlot,
+  turnSlots,
   workHeld,
 } from "@hobbots/agents";
 import {
@@ -98,6 +100,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       const held = yield* workHeld;
       const hobTools = yield* HobTools;
       const admission = yield* HobAdmission;
+      // Every step and member's turn takes a slot of the hub's turn limits, or waits queued (#1448).
+      const slots = yield* turnSlots;
       const publisher = yield* EventPublisher;
       const adapters = yield* runtimeAdapters;
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
@@ -319,6 +323,13 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             if (Option.isNone(agent) || agent.value.status !== "active") return;
             const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
             if (Option.isNone(config)) return;
+            // Past a turn limit the step stays queued, and the next round once a slot frees starts it.
+            const slot = yield* takeSlot(
+              slots,
+              { id: `step:${queued.id}`, agentId: queued.ownerId, runtime: config.value.runtime, quest: queued.rootId },
+              Effect.suspend(() => round),
+            );
+            if (slot === null) return;
             const attemptId = AttemptIdSchema.make(newId());
             // The step is registered and its fiber forked under one permit, so a narrower policy
             // either sees neither or can stop the fiber it finds (PE-008).
@@ -341,7 +352,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   }),
                   "start a step",
                 );
-                if (Option.isNone(started)) return;
+                if (Option.isNone(started)) return yield* slot.release;
                 const step = started.value.task;
                 const { tree: shown, carried } = yield* startingPoint(step, tree);
                 const run: Running = {
@@ -363,6 +374,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(
                       Effect.sync(() => running.delete(step.id)).pipe(
+                        Effect.andThen(slot.release),
                         Effect.andThen(settleCancels),
                         Effect.andThen(signal.notify),
                       ),
@@ -370,7 +382,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   ),
                 );
               }),
-            );
+            ).pipe(Effect.onError(() => slot.release));
           }),
         );
 
@@ -397,6 +409,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             fibers,
             authority,
             maxRunningPerHob: limits.maxRunningStepsPerHob,
+            slots,
+            wake: Effect.suspend(() => round),
             announce,
             attempt,
             recordToolStart,
@@ -411,7 +425,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
        * member's Task where work waits. A step that returned its result keeps running until its
        * session ends.
        */
-      const round = Effect.gen(function* () {
+      const round: Effect.Effect<void> = Effect.gen(function* () {
         for (const [id, run] of running) {
           const task = yield* currentTask(id);
           if (Option.isSome(task) && task.value.state === "cancelling" && run.stop === null) {
