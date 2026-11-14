@@ -358,7 +358,8 @@ reviews:
       requirements: >-
         A Conventional Commit header (STD-DOCS-004): `type(scope): summary`, where type is one of
         feat, fix, docs, style, refactor, perf, test, build, ci, chore or revert, with an optional
-        `!` for a breaking change. The summary is lowercase, imperative and has no trailing period.
+        `!` for a breaking change. The scope is optional: `ci: add a check` passes. The summary is
+        lowercase, imperative and has no trailing period.
     description:
       mode: warning
     issue_assessment:
@@ -381,9 +382,9 @@ reviews:
       - name: Exact dependency versions
         mode: error
         instructions: >-
-          Fail when any package.json in the PR adds or changes a dependency with a range (^, ~, *, x,
-          >=, latest) instead of an exact version, or uses an alpha, beta, canary or nightly release
-          (STD-DOCS-006). Fail when a package.json gives an effect or @effect/* package anything but
+          Fail when any package.json in the PR adds or changes a registry dependency with a range (^,
+          ~, *, x, >=, latest) instead of an exact version, or uses an alpha, beta, canary or nightly
+          release (STD-DOCS-006). Internal packages use `workspace:*`, which is correct. Fail when a package.json gives an effect or @effect/* package anything but
           `catalog:`, or when the catalog in pnpm-workspace.yaml gives an effect or @effect/* package
           a range or a different version from the others (STD-EFFECT-005). An exact version in the
           catalog is correct. Pass when no dependency changed.
