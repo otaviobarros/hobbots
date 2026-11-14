@@ -13,169 +13,6 @@ export interface Mentionable {
 /** Letters, digits and `_`: a mention never starts right after one, nor stops right before one. */
 const isWordChar = (char: string | undefined): boolean => char !== undefined && /[\p{L}\p{N}_]/u.test(char);
 
-/** Blanks `from` to `to` of the characters, line breaks kept, so offsets still match the text. */
-const blank = (chars: Array<string>, from: number, to: number): void => {
-  for (let at = from; at < to; at++) if (chars[at] !== "\n") chars[at] = " ";
-};
-
-/** How many characters from `at` on pass `test`. */
-const runLengthOf = (text: string, at: number, test: (char: string) => boolean): number => {
-  let end = at;
-  while (end < text.length && test(text[end] ?? "")) end++;
-  return end - at;
-};
-
-/** How many times `char` repeats from `at` on. */
-const runLength = (text: string, at: number, char: string): number => runLengthOf(text, at, (c) => c === char);
-
-/** Whether a list item's marker starts at `at`: `-`, `*` or `+`, or up to nine digits and `.` or `)`. */
-const listMarkerEnd = (line: string, at: number): number | null => {
-  const char = line[at];
-  if (char === "-" || char === "*" || char === "+") return at + 1;
-  const digits = runLengthOf(line, at, (c) => c >= "0" && c <= "9");
-  const after = line[at + digits];
-  return digits > 0 && digits <= 9 && (after === "." || after === ")") ? at + digits + 1 : null;
-};
-
-/** Spaces and tabs from `at` on. */
-const blankRun = (line: string, at: number): number => runLengthOf(line, at, (c) => c === " " || c === "\t");
-
-/** The block quote markers a line starts with (CommonMark 5.1): how many, and where the rest starts. */
-const quotesOf = (line: string): { readonly depth: number; readonly end: number } => {
-  let depth = 0;
-  let at = blankRun(line, 0);
-  while (line[at] === ">") {
-    depth += 1;
-    at += 1 + blankRun(line, at + 1);
-  }
-  return { depth, end: at };
-};
-
-/**
- * Where a line's text starts once its containers are passed (CommonMark 5): its block quotes' `>`,
- * then each list item's marker followed by a space or a tab, at any indentation, and any quotes
- * inside those. A fence inside a quote or a list item is then read as a fence, at any depth.
- */
-const contentStart = (line: string, at: number): number => {
-  for (;;) {
-    const end = listMarkerEnd(line, at);
-    if (end === null || (line[end] !== " " && line[end] !== "\t")) return at;
-    const inner = quotesOf(line.slice(end));
-    at = end + inner.end;
-  }
-};
-
-type Fence = { readonly char: string; readonly length: number; readonly quotes: number };
-
-/**
- * The fence at `at` (CommonMark 4.5): three or more ` or ~, with what follows on its line. Read at
- * any indentation, so an indented code block's line of backticks also hides what follows it: a
- * missed mention, never a false one.
- */
-const fenceAt = (
-  line: string,
-  at: number,
-): { readonly char: string; readonly length: number; readonly rest: string } | null => {
-  const char = line[at];
-  if (char !== "`" && char !== "~") return null;
-  const length = runLength(line, at, char);
-  return length < 3 ? null : { char, length, rest: line.slice(at + length) };
-};
-
-/** The fence a line opens, with the quotes it sits in. A backtick fence's info string has no backtick. */
-const opens = (line: string): Fence | null => {
-  const quotes = quotesOf(line);
-  const fence = fenceAt(line, contentStart(line, quotes.end));
-  if (fence === null || (fence.char === "`" && fence.rest.includes("`"))) return null;
-  return { char: fence.char, length: fence.length, quotes: quotes.depth };
-};
-
-/**
- * Whether `line`, inside an open fence, closes it: in the same quotes, the same character, at least
- * as many and nothing after. What looks like a list item inside the fence is code, so no marker but
- * the quotes it opened in is passed.
- */
-const closes = (line: string, quotes: { readonly depth: number; readonly end: number }, open: Fence): boolean => {
-  const fence = fenceAt(line, quotes.end + blankRun(line, quotes.end));
-  return (
-    quotes.depth === open.quotes &&
-    fence !== null &&
-    fence.char === open.char &&
-    fence.length >= open.length &&
-    fence.rest.trim() === ""
-  );
-};
-
-/**
- * The text with its fenced code blocks blanked out (CommonMark 4.5): from a fence line to the line
- * that closes it, to the line before one that leaves the quote it opened in, or to the end.
- */
-const withoutFences = (text: string): string => {
-  const out = text.split("");
-  let open: (Fence & { readonly from: number }) | null = null;
-  let at = 0;
-  for (const line of text.split("\n")) {
-    const end = at + line.length;
-    const quotes = quotesOf(line);
-    if (open !== null && quotes.depth < open.quotes) {
-      blank(out, open.from, at);
-      open = null;
-    }
-    if (open === null) {
-      const fence = opens(line);
-      if (fence !== null) open = { ...fence, from: at };
-    } else if (closes(line, quotes, open)) {
-      blank(out, open.from, end);
-      open = null;
-    }
-    at = end + 1;
-  }
-  if (open !== null) blank(out, open.from, text.length);
-  return out.join("");
-};
-
-/**
- * The text with its code spans blanked out (CommonMark 6.1): a run of backticks opens a span that
- * the next run of exactly as many closes, across lines too; a run nothing closes is plain text.
- * Runs are grouped by length, and each group is read forward once, so it stays linear.
- */
-const withoutSpans = (text: string): string => {
-  const runs: Array<{ readonly at: number; readonly length: number }> = [];
-  const byLength = new Map<number, Array<number>>();
-  for (let at = text.indexOf("`"); at !== -1; at = text.indexOf("`", at)) {
-    const length = runLength(text, at, "`");
-    const same = byLength.get(length);
-    if (same === undefined) byLength.set(length, [runs.length]);
-    else same.push(runs.length);
-    runs.push({ at, length });
-    at += length;
-  }
-  // For each length, how far along its runs the search has moved.
-  const read = new Map<number, number>();
-  const out = text.split("");
-  for (let i = 0; i < runs.length; i++) {
-    const open = runs[i];
-    if (open === undefined) continue;
-    const same = byLength.get(open.length) ?? [];
-    let k = read.get(open.length) ?? 0;
-    while (k < same.length && (same[k] ?? 0) <= i) k++;
-    read.set(open.length, k);
-    const j = same[k];
-    const close = j === undefined ? undefined : runs[j];
-    if (j === undefined || close === undefined) continue;
-    blank(out, open.at, close.at + close.length);
-    i = j;
-  }
-  return out.join("");
-};
-
-/**
- * The text with its Markdown code blanked out, so `@Pip` in code is never a mention: fenced blocks
- * with ``` or ~~~, then code spans of any number of backticks. Each character keeps its place, so
- * offsets still match the text. No pattern that can backtrack (STD-SEC-005).
- */
-const withoutCode = (text: string): string => withoutSpans(withoutFences(text));
-
 /**
  * The roster's names, longest first, so `@Pip Two` finds "Pip Two" before "Pip", each with the form
  * it is compared in. Blank names are left out.
@@ -201,29 +38,67 @@ const namedAt = (text: string, at: number, names: ReturnType<typeof byLongestNam
       !isWordChar(text[at + 1 + entry.length]),
   );
 
+/** A stretch of a text, by UTF-16 offsets, `from` included and `to` not. */
+export interface TextRange {
+  readonly from: number;
+  readonly to: number;
+}
+
+/** Which parts of a text to read for mentions, and which to skip; see `mentionsIn`. */
+export interface MentionScope {
+  /**
+   * Read only the mentions whose name ends past this offset, for text that grew after its start was
+   * parsed, such as a reply continued with Continue: what that start mentioned was decided then,
+   * against the roster of then, and is never read again. Zero reads the whole text.
+   */
+  readonly after?: number;
+  /**
+   * Stretches that mention nobody, such as the text's Markdown code. Finding them is the caller's: a
+   * CommonMark parser does it outside the domain, which reads no Markdown itself.
+   */
+  readonly skip?: ReadonlyArray<TextRange>;
+}
+
+/**
+ * Whether each offset asked, in increasing order, falls in one of the ranges. The ranges are sorted
+ * once and passed by moving forward, so a text with many `@` and many ranges stays linear.
+ */
+const insideOf = (ranges: ReadonlyArray<TextRange>) => {
+  const sorted = [...ranges].sort((a, b) => a.from - b.from);
+  let next = 0;
+  let reach = -1;
+  return (at: number): boolean => {
+    while (next < sorted.length && (sorted[next]?.from ?? 0) <= at) {
+      reach = Math.max(reach, sorted[next]?.to ?? 0);
+      next++;
+    }
+    return at < reach;
+  };
+};
+
 /**
  * The hobs and people a message's text @mentions (ADR 039, Who answers), in the order they are first
- * mentioned, each once. Parsed once, when the message is stored, into `Message.mentions`, so who
- * answers and who is told read the same list.
+ * mentioned, each once. The hub parses a message once, when it stores it, into `Message.mentions`, so
+ * who answers and who is told read the same list.
  *
  * A mention is `@` and a roster name, matched without regard to case, where the `@` starts the text
  * or follows something other than a letter or a digit (so `ana@pip.dev` mentions nobody) and the name
- * ends at something other than a letter or a digit. Of two names that both fit, the longer wins.
- * Markdown code mentions nobody: fenced blocks, in quotes and list items too, and code spans, as
- * CommonMark reads them.
- *
- * `after` reads only the mentions whose name ends past that offset, for text that grew after its
- * start was parsed, such as a reply continued with Continue: what that start mentioned was decided
- * then, against the roster of then, and is never read again. The whole text still decides what is code.
+ * ends at something other than a letter or a digit. Of two names that both fit, the longer wins. An
+ * `@` in a range of `scope.skip` mentions nobody.
  */
-export const mentionsIn = (text: string, roster: ReadonlyArray<Mentionable>, after = 0): ReadonlyArray<Actor> => {
+export const mentionsIn = (
+  text: string,
+  roster: ReadonlyArray<Mentionable>,
+  scope: MentionScope = {},
+): ReadonlyArray<Actor> => {
   if (!text.includes("@")) return [];
+  const { after = 0, skip = [] } = scope;
   const names = byLongestName(roster);
-  const plain = withoutCode(text);
+  const skipped = insideOf(skip);
   const found: Array<Actor> = [];
-  for (let at = plain.indexOf("@"); at !== -1; at = plain.indexOf("@", at + 1)) {
-    if (isWordChar(plain[at - 1])) continue;
-    const entry = namedAt(plain, at, names);
+  for (let at = text.indexOf("@"); at !== -1; at = text.indexOf("@", at + 1)) {
+    if (skipped(at) || isWordChar(text[at - 1])) continue;
+    const entry = namedAt(text, at, names);
     if (entry === undefined || at + 1 + entry.length <= after) continue;
     if (!found.some((seen) => sameActor(seen, entry.actor))) found.push(entry.actor);
   }

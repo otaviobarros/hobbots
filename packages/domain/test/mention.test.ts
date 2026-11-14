@@ -35,50 +35,30 @@ describe("mentionsIn", () => {
     expect(mentionsIn("write to ana@pip.dev or rook@ROOK", roster)).toEqual([]);
   });
 
-  it("never finds a mention in Markdown code", () => {
-    const text = "Run `@Pip build` and\n```\n@Rook deploy\n```\nthen ask @Ana";
-    expect(mentionsIn(text, roster)).toEqual([ANA]);
-  });
-
-  it("reads code spans as CommonMark does: any run of backticks, closed by a run as long, across lines", () => {
-    expect(mentionsIn("``@Ana and ` @Rook`` then @Pip", roster)).toEqual([PIP]);
-    expect(mentionsIn("`spans\n@Rook two lines` and @Ana", roster)).toEqual([ANA]);
-    // A run nothing as long closes is plain text, so what follows it still mentions.
-    expect(mentionsIn("a stray `` here\n@Rook please `x`", roster)).toEqual([ROOK]);
-    expect(mentionsIn("😀 `@Pip` @Rook", roster)).toEqual([ROOK]);
-  });
-
-  it("reads fenced blocks of ``` or ~~~, closed only by a fence as long of the same kind", () => {
-    expect(mentionsIn("~~~\n@Rook\n~~~\n@Ana", roster)).toEqual([ANA]);
-    expect(mentionsIn("````md\n```\n@Rook\n```\n````\n@Pip", roster)).toEqual([PIP]);
-    expect(mentionsIn("   ```\n@Rook\n~~~\n@Ana", roster)).toEqual([]);
-    // A line of backticks is read as a fence at any indentation: at worst a mention is missed, never invented.
-    expect(mentionsIn("    ```\n@Rook", roster)).toEqual([]);
-  });
-
-  it("reads fences inside block quotes and list items, at any depth", () => {
-    expect(mentionsIn("> ~~~\n> @Ana\n> ~~~\n@Rook", roster)).toEqual([ROOK]);
-    expect(mentionsIn(">> ```\n>> @Ana\n>> ```\n> @Pip", roster)).toEqual([PIP]);
-    expect(mentionsIn("- ```\n  @Ana\n  ```\n1. @Rook", roster)).toEqual([ROOK]);
-    expect(mentionsIn("- item\n  - ```\n    @Ana\n    ```\n- @Pip", roster)).toEqual([PIP]);
-    // Inside a fence, what looks like a list item or a quote is code, and closes nothing.
-    expect(mentionsIn("~~~\n- ~~~\n@Ana\n~~~\n@Rook", roster)).toEqual([ROOK]);
-    expect(mentionsIn("```\n> ```\n@Ana\n```\n@Rook", roster)).toEqual([ROOK]);
-    // A fence in a quote ends where the quote does.
-    expect(mentionsIn("> ```\n> @Ana\n@Rook", roster)).toEqual([ROOK]);
-    // A quote marker alone is no fence: what it quotes still mentions.
-    expect(mentionsIn("> @Ana said hi", roster)).toEqual([ANA]);
+  it("skips the ranges it is given, such as Markdown code a parser found", () => {
+    const text = "Run `@Pip build`, then ask @Ana";
+    const code = { from: text.indexOf("`"), to: text.lastIndexOf("`") + 1 };
+    expect(mentionsIn(text, roster, { skip: [code] })).toEqual([ANA]);
+    // Ranges in any order, overlapping or not, skip what any of them covers.
+    const all = { from: 0, to: text.length };
+    expect(mentionsIn(text, roster, { skip: [all, code] })).toEqual([]);
+    expect(
+      mentionsIn("@Rook @Pip @Ana", roster, {
+        skip: [
+          { from: 11, to: 15 },
+          { from: 0, to: 5 },
+        ],
+      }),
+    ).toEqual([PIP]);
   });
 
   it("reads only the mentions that end past `after`, for text that grew after its start was parsed", () => {
     const kept = "Asking @Rook";
     // Rook was renamed since: the start is not read again, so a new hob called Rook is not added.
     const renamed: ReadonlyArray<Mentionable> = [{ actor: PIP, name: "Rook" }, ...roster.slice(3)];
-    expect(mentionsIn(`${kept}, then @Ana`, renamed, kept.length)).toEqual([ANA]);
+    expect(mentionsIn(`${kept}, then @Ana`, renamed, { after: kept.length })).toEqual([ANA]);
     // A mention cut in two by the end of what was parsed counts as new.
-    expect(mentionsIn("Asking @Ro" + "ok", roster, "Asking @Ro".length)).toEqual([ROOK]);
-    // What decides code reads the whole text: a fence opened before `after` still hides what follows.
-    expect(mentionsIn("```\nhi" + "\n@Rook", roster, "```\nhi".length)).toEqual([]);
+    expect(mentionsIn("Asking @Ro" + "ok", roster, { after: "Asking @Ro".length })).toEqual([ROOK]);
   });
 
   it("finds no one with no @, an unknown name or a blank roster name", () => {

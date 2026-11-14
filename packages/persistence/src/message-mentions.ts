@@ -1,6 +1,7 @@
 import { type Actor, isInProgress, type Message, mentionsIn, sameActor, type ThreadId } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
+import { markdownCode } from "./markdown-code.ts";
 
 // The hobs and people each message @mentions (ADR 039, Who answers; migration 20261114003022), stored as JSON
 // on the message, and the mentions of one person that they have not read yet.
@@ -21,7 +22,7 @@ const parse = (sql: SqlClient.SqlClient, text: string, after: number) =>
         ...hobs.map((row) => ({ actor: { kind: "hob" as const, id: row.id }, name: row.name })),
         ...people.map((row) => ({ actor: { kind: "user" as const, id: row.id }, name: row.name })),
       ],
-      after,
+      { after, skip: markdownCode(text) },
     );
   });
 
