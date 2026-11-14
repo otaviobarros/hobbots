@@ -15,19 +15,14 @@ export const GITHUB_CHARM_TOOLS: ReadonlyArray<string> = [...GITHUB_TOOLS, ...GI
 export const GITHUB_CHARM_NOTE =
   "GitHub goes through your GitHub Charm tools, never `gh`: no credential enters your sandbox, so gh cannot sign in there, and a gh command is refused.";
 
-/**
- * Where each `gh` command a hob may try goes instead, by its command and subcommand, aliases
- * included. `tool: null` is work no hob can do yet, which `unavailable` says: opening issues waits
- * for the issue tool (#1350), which only has to name its tool here.
- */
+/** Where each `gh` command a hob may try goes instead, by its command and subcommand, aliases included. */
 const ROUTES: ReadonlyArray<{
   readonly commands: ReadonlyArray<string>;
-  readonly tool: GitHubToolName | GitHubWriteToolName | null;
-  readonly unavailable?: string;
+  readonly tool: GitHubToolName | GitHubWriteToolName;
 }> = [
   { commands: ["pr create", "pr new"], tool: "github_open_pull_request" },
   { commands: ["pr comment", "issue comment"], tool: "github_comment" },
-  { commands: ["issue create", "issue new"], tool: null, unavailable: "GitHub issues are not available to hobs yet." },
+  { commands: ["issue create", "issue new"], tool: "github_open_issue" },
   { commands: ["pr view", "issue view"], tool: "github_item" },
   {
     commands: [
@@ -71,7 +66,6 @@ export const steerGh = (args: ReadonlyArray<string>, offered: ReadonlyArray<stri
   const command = ghCommandOf(args);
   const tried = command === "" ? "gh" : `gh ${command}`;
   const route = ROUTES.find((each) => each.commands.includes(command));
-  if (route?.tool === null) return `${route.unavailable} ${SIGN_IN} ${ASK_USER}`;
   if (route !== undefined && offered.includes(route.tool)) {
     return `Use the ${route.tool} tool instead of ${tried}: Hobbots reaches GitHub for you through the GitHub Charm, under your policy. ${SIGN_IN}`;
   }

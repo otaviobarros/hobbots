@@ -87,7 +87,7 @@ export class GitHubConnectRefused extends Schema.TaggedError<GitHubConnectRefuse
  * What a call does on GitHub, which bounds the permissions of a hob's app token (ADR 022). `push`
  * leaves out workflows; `push-workflows` is for commits that change `.github/workflows`.
  */
-export type GitHubAction = "read" | "push" | "push-workflows" | "open-pull-request" | "comment";
+export type GitHubAction = "read" | "push" | "push-workflows" | "open-pull-request" | "comment" | "open-issue";
 
 /** The one repository a call acts on and what it does there. */
 export interface GitHubTokenScope {

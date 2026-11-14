@@ -51,7 +51,7 @@ export type RosterMark = typeof RosterMark.Type;
  */
 export const RuntimeSession = Schema.Struct({
   runtime: RuntimeKind,
-  /** The hob whose turns run in the session; migration 20261114004440_hob_sessions gave every earlier session its thread's hob. */
+  /** The hob whose turns run in the session; migration 20261114005209_hob_sessions gave every earlier session its thread's hob. */
   agentId: AgentId,
   /** The runtime's own id for the session. */
   sessionId: Schema.String,

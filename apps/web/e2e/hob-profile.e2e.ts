@@ -357,7 +357,7 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   // The GitHub Charm card sets each GitHub action: reads Allow, writes Ask under Balanced.
   await page.getByRole("tab", { name: "Charms" }).click();
   const card = page.getByRole("region", { name: "GitHub Charm" });
-  await expect(card.getByText("Reads, pushes to, opens pull requests in and comments on")).toBeVisible();
+  await expect(card.getByText("Reads, pushes to, opens pull requests and issues in and comments on")).toBeVisible();
   // No GitHub account is connected on this hub, so the Charm is not ready yet.
   await expect(card.getByText("Not ready", { exact: true })).toBeVisible();
   for (const [name, answer] of [
@@ -365,12 +365,13 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     ["Push changes", "Ask"],
     ["Open pull requests", "Ask"],
     ["Comment and reply", "Ask"],
+    ["Open issues", "Ask"],
   ] as const) {
     await expect(card.getByRole("radiogroup", { name }).getByRole("radio", { name: answer })).toBeChecked();
   }
   await page.getByRole("tab", { name: "Permissions" }).click();
   // Permissions no longer lists the GitHub actions.
-  for (const name of ["Read GitHub", "Push your work", "Open pull requests", "Comment on GitHub"]) {
+  for (const name of ["Read GitHub", "Push your work", "Open pull requests", "Comment on GitHub", "Open issues"]) {
     await expect(page.getByRole("radiogroup", { name })).toHaveCount(0);
   }
 
@@ -419,7 +420,7 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     .toMatchObject({ decisions: { "github.read": "deny" } });
   await read.getByText("Allow", { exact: true }).click();
   await expect(read.getByRole("radio", { name: "Allow" })).toBeChecked();
-  for (const name of ["Push changes", "Open pull requests", "Comment and reply"]) {
+  for (const name of ["Push changes", "Open pull requests", "Comment and reply", "Open issues"]) {
     await expect(card.getByRole("radiogroup", { name }).getByRole("radio")).toHaveCount(3);
   }
   await expect

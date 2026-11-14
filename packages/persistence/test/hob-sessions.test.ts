@@ -4,7 +4,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
-import hobSessionsMigration from "../src/migrations/20261114004440_hob_sessions.ts";
+import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1464 (ADR 039): a runtime session belongs to one hob. The migration gives each session a
@@ -15,15 +15,15 @@ const NOW = "2026-11-13T00:00:00.000Z";
 const ADA = AgentId.make("ada");
 const QUILL = AgentId.make("quill");
 
-describe("20261114004440_hob_sessions", () => {
+describe("20261114005209_hob_sessions", () => {
   const earlier = Object.fromEntries(
-    Object.entries(migrations).filter(([id]) => id < "20261114004440"),
+    Object.entries(migrations).filter(([id]) => id < "20261114005209"),
   ) as typeof migrations;
   const layer = Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer).pipe(
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
 
-  /** A thread of `agentId` with one session per runtime in its one live chapter, as stored before 20261114004440_hob_sessions. */
+  /** A thread of `agentId` with one session per runtime in its one live chapter, as stored just before this migration. */
   const stored = (threadId: string, agentId: string, runtimes: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
@@ -69,7 +69,6 @@ describe("20261114004440_hob_sessions", () => {
         archivedAt: null,
         lastLine: null,
         pinnedAt: null,
-        unread: false,
         skillTrial: null,
         liveChapterId: chapterId,
         createdAt: NOW,
@@ -116,9 +115,9 @@ describe("20261114004440_hob_sessions", () => {
       const garden = yield* stored("garden", QUILL, ["codex"]);
       const fresh = yield* stored("fresh", QUILL, []);
       yield* stored("empty", ADA, []);
-      yield* journal("ThreadUpserted", 5, ADA, "lamps", { thread: lamps });
-      yield* journal("CampMade", 2, QUILL, "garden", { thread: garden });
-      yield* journal("ChatStartedFresh", 2, QUILL, "fresh", { superseded: garden, chat: fresh, carried: [] });
+      yield* journal("ThreadUpserted", 6, ADA, "lamps", { thread: lamps });
+      yield* journal("CampMade", 3, QUILL, "garden", { thread: garden });
+      yield* journal("ChatStartedFresh", 3, QUILL, "fresh", { superseded: garden, chat: fresh, carried: [] });
 
       yield* hobSessionsMigration;
       const once = yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM threads ORDER BY id`;
@@ -155,9 +154,9 @@ describe("20261114004440_hob_sessions", () => {
 
     // Every old entry decodes, its sessions with their thread's hob, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ThreadUpserted", 6],
-      ["CampMade", 3],
-      ["ChatStartedFresh", 3],
+      ["ThreadUpserted", 7],
+      ["CampMade", 4],
+      ["ChatStartedFresh", 4],
     ]);
     const hobsOf = result.entries.flatMap((e) => {
       const p = e.payload;

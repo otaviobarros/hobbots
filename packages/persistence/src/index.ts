@@ -19,6 +19,7 @@ export * from "./hob-github-apps.ts";
 export * from "./hob-proposals.ts";
 export * from "./hub-questions.ts";
 export * from "./journal.ts";
+export * from "./member-reads.ts";
 export * from "./memory-capture.ts";
 export * from "./memory-saves.ts";
 export * from "./memory-shares.ts";

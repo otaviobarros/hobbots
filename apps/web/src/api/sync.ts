@@ -7,8 +7,9 @@ import {
   leavesUnread,
   Message,
   openBlocker,
-  Thread,
+  type Thread,
   type ThreadId,
+  type UnreadThreads,
 } from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
 import { inboxWindow } from "./inbox-window.ts";
@@ -222,23 +223,27 @@ export const syncedAgents = (
 ) => synced(fetch, "agent", (agent) => (agent.status === "retired") === retired, order);
 
 /**
- * Threads with a reply that ended this generation after their last revision, shown unread. Whether a
- * thread is unread is worked out by the hub when it reads it and takes no revision of its own, so a
- * response or a thread event from before the reply landed still holds it read (ADR 027). Any read of
- * the thread since moves its revision past the reply's, and the hub never counts a reply read beyond
- * its read marker, which is never past the thread's revision.
+ * Your unread threads as the hub read them (ADR 039), with every thread a reply that ended this
+ * generation after `through` landed in: the hub's list could not hold it yet. A reply you read since
+ * is in it or before it, since reading it moves your marker, journaled after the reply (ADR 027).
  */
-const withLandedReplies = (client: QueryClient, threads: Array<Thread>): Array<Thread> => {
-  const landed = new Map<string, number>();
-  for (const entry of syncState(client).overlay.values()) {
-    if (!isEntry(entry, "message") || !leavesUnread(entry.value)) continue;
-    const { threadId, revision } = entry.value;
-    landed.set(threadId, Math.max(landed.get(threadId) ?? 0, revision));
-  }
-  return threads.map((thread) =>
-    !thread.unread && (landed.get(thread.id) ?? 0) > thread.revision ? new Thread({ ...thread, unread: true }) : thread,
-  );
-};
+export const syncedUnread =
+  (fetch: () => Promise<UnreadThreads>) =>
+  async ({ client }: QueryFunctionContext): Promise<ReadonlyArray<ThreadId>> => {
+    const state = syncState(client);
+    for (;;) {
+      const generation = state.generation;
+      const read = await fetch();
+      if (state.generation !== generation) continue;
+      const unread = new Set(read.threadIds);
+      for (const entry of state.overlay.values()) {
+        if (isEntry(entry, "message") && leavesUnread(entry.value) && entry.value.revision > read.through) {
+          unread.add(entry.value.threadId);
+        }
+      }
+      return [...unread];
+    }
+  };
 
 /** A hob's live threads, or with `archived` its archived ones; a thread moves between them by its `archivedAt`. */
 export const syncedThreads = (
@@ -247,12 +252,7 @@ export const syncedThreads = (
   order: (items: Array<Thread>) => Array<Thread>,
   archived: boolean,
 ) =>
-  synced(
-    fetch,
-    "thread",
-    (thread) => thread.agentId === agentId && (thread.archivedAt !== null) === archived,
-    (threads, client) => order(withLandedReplies(client, threads)),
-  );
+  synced(fetch, "thread", (thread) => thread.agentId === agentId && (thread.archivedAt !== null) === archived, order);
 
 export const syncedMessages = (
   threadId: ThreadId,

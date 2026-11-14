@@ -92,4 +92,22 @@ describe("who answers a message you send", () => {
     expect(result.camp.map((m) => [m.role, m.content, m.status])).toEqual([["user", "morning, everyone", "complete"]]);
     expect(result.running).toEqual([]);
   }, 30_000);
+
+  // covers ADR 039 (Who answers, rule 2)
+  it("[TC-OR-1455-05] reads the mentions in what you write: its hob's starts its turn, another hob's is refused unstored", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const direct = yield* chat.createThread(QUILL);
+      const refused = yield* Effect.flip(chat.sendPrompt(direct.id, "@Pip are you there?"));
+      const before = yield* repo.listMessages(direct.id);
+      const sent = yield* chat.sendPrompt(direct.id, "@quill hello");
+      return { refused, before, sent };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.refused).toMatchObject({ _tag: "MentionRefused", hobs: [PIP] });
+    expect(result.before).toEqual([]);
+    expect(result.sent.userMessage.mentions).toEqual([hobActor(QUILL)]);
+    expect(result.sent.assistantMessage).not.toBeNull();
+  }, 30_000);
 });

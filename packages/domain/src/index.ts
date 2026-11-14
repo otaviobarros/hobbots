@@ -49,6 +49,7 @@ export * from "./memory-settings.ts";
 export * from "./memory-shares.ts";
 export * from "./memory-tools.ts";
 export * from "./memory-views.ts";
+export * from "./mention.ts";
 export * from "./message.ts";
 export * from "./message-pin.ts";
 export * from "./policy.ts";

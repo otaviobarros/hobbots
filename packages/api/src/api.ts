@@ -24,7 +24,9 @@ import {
   THREAD_TITLE_MAX,
   Thread,
   ThreadId,
+  ThreadMember,
   ThreadRunStatus,
+  UnreadThreads,
   Voice,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -43,6 +45,7 @@ import {
   AgentNotFound,
   HobUnavailable,
   InvalidHob,
+  MentionRefused,
   MessageNotQueued,
   ReplyNotResumable,
   StartFreshRefused,
@@ -344,7 +347,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       payload: SendPromptPayload,
       success: SendPromptResult,
-      error: [ThreadNotFound, HobUnavailable, ThreadArchived],
+      error: [ThreadNotFound, HobUnavailable, ThreadArchived, MentionRefused],
     }),
     HttpApiEndpoint.delete("removeQueued", "/threads/:threadId/messages/:messageId", {
       params: { threadId: ThreadId, messageId: MessageId },
@@ -403,12 +406,17 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       success: Thread,
       error: [ThreadNotFound, ThreadArchived, ThreadNotCamp],
     }),
-    // Moves how far you read the thread forward, for every device; never back (ADR 027).
+    // Moves how far you read the thread forward, for every device of yours; never back (ADR 027).
+    // Answers your member row as it is now, or null when it did not move (ADR 039).
     HttpApiEndpoint.put("markRead", "/threads/:threadId/read", {
       params: { threadId: ThreadId },
       payload: MarkThreadReadPayload,
-      success: Thread,
+      success: Schema.NullOr(ThreadMember),
       error: ThreadNotFound,
+    }),
+    // The threads where a hob wrote since you last read them, from your own read markers (ADR 039).
+    HttpApiEndpoint.get("unreadThreads", "/unread-threads", {
+      success: UnreadThreads,
     }),
     // Archiving again, or restoring a live thread, returns the thread unchanged.
     HttpApiEndpoint.post("archive", "/threads/:threadId/archive", {

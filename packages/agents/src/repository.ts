@@ -25,6 +25,8 @@ import type {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  ThreadMember,
+  UnreadThreads,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
@@ -33,7 +35,10 @@ export type ChapterMoveTarget =
   | { readonly _tag: "camp"; readonly campId: ThreadId }
   | { readonly _tag: "new"; readonly camp: Thread };
 
-/** Whom a message you send mentions and replies to; see `SaidMessage`. */
+/**
+ * Whom a message you send mentions and replies to; see `SaidMessage`. The hub parses the mentions in
+ * its text as it stores it (`mentionsIn`); `mentions` adds any it names besides, after those.
+ */
 export interface SentTo {
   readonly mentions: ReadonlyArray<Actor>;
   readonly repliesTo: Actor | null;
@@ -45,11 +50,11 @@ export interface SentMessage {
   readonly answerers: ReadonlyArray<AnswerOwed>;
 }
 
-/** Stores a message you send with who answers it; one with no mentions is never refused. */
-export interface SendMessage {
-  (message: Message, to: SentTo & { readonly mentions: readonly [] }): Effect.Effect<Committed<SentMessage>>;
-  (message: Message, to: SentTo): Effect.Effect<Committed<SentMessage>, MentionRefused>;
-}
+/**
+ * Stores a message you send with who answers it. Refused, with nothing stored, when it mentions a
+ * hob that cannot hear it (`MentionRefused`).
+ */
+export type SendMessage = (message: Message, to: SentTo) => Effect.Effect<Committed<SentMessage>, MentionRefused>;
 
 /** Where hobs, their configuration versions, threads and messages are stored. Each write journals its events. */
 export class HobbotsRepository extends Context.Service<
@@ -103,16 +108,19 @@ export class HobbotsRepository extends Context.Service<
      */
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
     /**
-     * Records that you read the thread through `messageId`, as you saw it at `revision` (ADR 027):
-     * the marker takes the newest revision of the messages up to it, but never past `revision`, so a
-     * reply continued after you saw it stays unread. It only moves forward: none, and nothing
-     * journaled, when the message is not in the thread or you had read past it.
+     * Records that the person asking read the thread through `messageId`, as they saw it at
+     * `revision` (ADR 027): their member row's marker takes the newest revision of the messages up to
+     * it, but never past `revision`, so a reply continued after they saw it stays unread, and is
+     * journaled as `ThreadMemberChanged` (ADR 039). It only moves forward: none, and nothing journaled,
+     * when the message is not in the thread, they had read past it or they are not a member.
      */
     readonly markThreadRead: (
       threadId: ThreadId,
       messageId: MessageId,
       revision: number,
-    ) => Effect.Effect<Option.Option<Committed<Thread>>>;
+    ) => Effect.Effect<Option.Option<Committed<ThreadMember>>>;
+    /** The threads where a hob wrote since the person asking last read them (ADR 039, read markers per member). */
+    readonly listUnreadThreads: Effect.Effect<UnreadThreads>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
     /** The message with `id`, in whichever thread it is. */
     readonly findMessage: (id: MessageId) => Effect.Effect<Option.Option<Message>>;

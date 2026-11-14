@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useHobPresence } from "../../api/hub-status.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
+import { useUnreadThreads } from "../../api/thread-reads.ts";
 import { presenceState } from "../../lib/hob-state.ts";
 import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
@@ -85,7 +86,8 @@ function SidebarHob({
   const state = sidebarState(full);
   const word = copy.state[state];
   const mark = MARK[state];
-  const unread = threads.data?.some((thread) => thread.unread) ?? false;
+  const unreadThreads = useUnreadThreads();
+  const unread = threads.data?.some((thread) => unreadThreads.has(thread.id)) ?? false;
   const showThreads = expanded && open;
 
   return (

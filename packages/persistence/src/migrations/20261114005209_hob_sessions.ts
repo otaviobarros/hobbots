@@ -6,8 +6,8 @@ import { SqlClient } from "effect/sql";
 // had one hob until now, so each session a thread keeps is given its thread's hob, and goes on being
 // resumed by it.
 //
-// Journaled entries get the same field: the sessions of a `ThreadUpserted` (version 6), and of the
-// threads of a `CampMade` and a `ChatStartedFresh` (version 3), each take the hob of the thread that
+// Journaled entries get the same field: the sessions of a `ThreadUpserted` (version 7), and of the
+// threads of a `CampMade` and a `ChatStartedFresh` (version 4), each take the hob of the thread that
 // carries them, so every old entry decodes.
 
 const PAGE = 500;
@@ -30,13 +30,13 @@ interface Rewrite {
 const REWRITES: ReadonlyArray<Rewrite> = [
   {
     type: "ThreadUpserted",
-    version: 6,
+    version: 7,
     change: (payload) => ({ ...payload, thread: withHob(payload.thread as Stored) }),
   },
-  { type: "CampMade", version: 3, change: (payload) => ({ ...payload, thread: withHob(payload.thread as Stored) }) },
+  { type: "CampMade", version: 4, change: (payload) => ({ ...payload, thread: withHob(payload.thread as Stored) }) },
   {
     type: "ChatStartedFresh",
-    version: 3,
+    version: 4,
     change: (payload) => ({
       ...payload,
       superseded: withHob(payload.superseded as Stored),

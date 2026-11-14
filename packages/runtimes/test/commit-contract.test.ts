@@ -411,7 +411,7 @@ describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runt
       ["pnpm test && gh pr list", "Use the github_search tool instead of gh pr list"],
       ["if gh pr view 1; then echo found; fi", "Use the github_item tool instead of gh pr view"],
       ['echo "$(gh repo view)"', "Use the github_repository tool instead of gh repo view"],
-      ["gh issue create -t Parser", "GitHub issues are not available to hobs yet."],
+      ["gh issue create -t Parser", "Use the github_open_issue tool instead of gh issue create"],
     ];
     for (const [command, pointer] of cases) {
       expect(await runtime.refusal(tools, command, undefined, GITHUB_CHARM), command).toContain(pointer);

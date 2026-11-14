@@ -21,7 +21,7 @@ import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import chaptersMigration from "../src/migrations/0099_chapters.ts";
-import hobSessionsMigration from "../src/migrations/20261114004440_hob_sessions.ts";
+import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1379 (ADR 037): a thread's transcript is split into chapters. The migration gives each
@@ -179,7 +179,7 @@ describe("0099_chapters", () => {
       yield* stored("empty", [], []);
 
       yield* chaptersMigration;
-      // Sessions now also name their hob (20261114004440_hob_sessions), which the hub reads them with.
+      // Sessions now also name their hob (20261114005209_hob_sessions), which the hub reads them with.
       yield* hobSessionsMigration;
 
       const repo = yield* HobbotsRepository;
@@ -225,11 +225,11 @@ describe("0099_chapters", () => {
     ]);
     // Every old entry decodes, with the chapter its thread now has, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ThreadUpserted", 6],
+      ["ThreadUpserted", 7],
       ["MessageUpserted", 5],
       ["MessageUpserted", 5],
       ["MessageQueued", 2],
-      ["ThreadUpserted", 6],
+      ["ThreadUpserted", 7],
     ]);
     const payloads = result.entries.map((e) => e.payload);
     expect(payloads.flatMap((p) => ("message" in p ? [p.message.chapterId] : []))).toEqual([
@@ -593,8 +593,10 @@ describe("chapters in the database", () => {
           messageId: MessageId.make("v3"),
           title: "Later",
         });
+        const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
         const afterSplit = {
           messages: yield* revisions(),
+          unread: yield* unread(),
           thread: Option.getOrThrow(yield* repo.findThread(threadId)),
           checkpoint: yield* repo.findCheckpoint(threadId),
         };
@@ -602,6 +604,7 @@ describe("chapters in the database", () => {
         const merged = yield* store.mergeChapters(threadId, ChapterId.make("versions-c2"));
         const afterMerge = {
           messages: yield* revisions(),
+          unread: yield* unread(),
           thread: Option.getOrThrow(yield* repo.findThread(threadId)),
           checkpoint: yield* repo.findCheckpoint(threadId),
         };
@@ -625,7 +628,7 @@ describe("chapters in the database", () => {
       ["v4", result.first, mergedAt],
     ]);
     // A thread you had read stays read, and the briefing summary of the old boundaries is gone.
-    expect([result.afterSplit.thread.unread, result.afterMerge.thread.unread]).toEqual([false, false]);
+    expect([result.afterSplit.unread, result.afterMerge.unread]).toEqual([false, false]);
     expect([Option.isNone(result.afterSplit.checkpoint), Option.isNone(result.afterMerge.checkpoint)]).toEqual([
       true,
       true,
