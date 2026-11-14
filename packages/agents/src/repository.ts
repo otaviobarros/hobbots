@@ -217,7 +217,8 @@ export class HobbotsRepository extends Context.Service<
      * recording who removed it, so it never takes the floor again. A queued message left with nothing
      * owed leaves the queue said. The answer it is speaking stays for Stop to end. One already gone is
      * returned as it is, with nothing journaled. A direct message, its owner, the hob a camp leads
-     * with and someone not in it are refused.
+     * with and someone not in it are refused, and so is `by` when it is no longer an active member
+     * as the change is written.
      */
     readonly removeMember: (
       threadId: ThreadId,

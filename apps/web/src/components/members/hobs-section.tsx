@@ -145,7 +145,8 @@ function HobRow({
           <br />
           {copy.tokens({ tokens: formatCompact(today?.tokens ?? 0) })}
         </span>
-        {!lead && (
+        {/* A hob that retired left the camp, and comes back with it when it returns: nothing to take out. */}
+        {!lead && ThreadMembers.isActive(member) && (
           <button
             type="button"
             aria-label={copy.remove({ name })}

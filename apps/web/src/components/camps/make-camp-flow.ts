@@ -1,4 +1,4 @@
-import type { MakeCampPayload } from "@hobbots/api";
+import { CAMP_HOBS_MAX, type MakeCampPayload } from "@hobbots/api";
 import { AgentId, CAMP_GOAL_MAX, THREAD_TITLE_MAX, type ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { ApiError } from "../../api/client.ts";
@@ -21,7 +21,7 @@ export interface CampDraft {
 }
 
 /** Why a field cannot be sent yet. */
-export type CampProblem = "title-missing" | "title-long" | "goal-long" | "hobs-missing";
+export type CampProblem = "title-missing" | "title-long" | "goal-long" | "hobs-missing" | "hobs-many";
 
 /**
  * Why the hub did not make the camp. `chapter-busy`: a reply still runs in the chat, so its chapter
@@ -79,6 +79,15 @@ export const toggleHob = (
   return hobs.includes(hob) ? hobs.filter((each) => each !== hob) : [...hobs, hob];
 };
 
+/**
+ * The hobs picked once the chapter's own hob comes along again: the chapter moves to the camp its
+ * hob leads, so that hob is picked and first, and the others keep their order.
+ */
+export const withChapterHob = (hobs: ReadonlyArray<AgentId>, hob: AgentId): ReadonlyArray<AgentId> => [
+  hob,
+  ...hobs.filter((each) => each !== hob),
+];
+
 // The rules the hub checks, stated once here for the sheet (STD-REACT-017).
 const Title = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX));
 const Goal = Schema.String.check(Schema.isMaxLength(CAMP_GOAL_MAX));
@@ -92,6 +101,8 @@ export const campProblems = (draft: CampDraft): Partial<Record<keyof CampDraft, 
     ...(!titleFits && { title: title.length === 0 ? ("title-missing" as const) : ("title-long" as const) }),
     ...(!goalFits && { goal: "goal-long" as const }),
     ...(draft.hobs.length === 0 && { hobs: "hobs-missing" as const }),
+    // The lead and at most CAMP_HOBS_MAX others, as the hub takes them.
+    ...(draft.hobs.length > CAMP_HOBS_MAX + 1 && { hobs: "hobs-many" as const }),
   };
 };
 

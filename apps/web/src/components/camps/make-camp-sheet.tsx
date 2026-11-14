@@ -5,13 +5,11 @@ import { Input } from "@hobbots/ui/components/input";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useId, useReducer } from "react";
+import { useReducer } from "react";
 import { useMoveChapter } from "../../api/camp-suggestions.ts";
 import { useMakeCamp } from "../../api/camps.ts";
 import { agentsQuery } from "../../api/queries.ts";
-import { sidebarQuery } from "../../api/sidebar.ts";
-import { HobPicker } from "../members/hob-picker.tsx";
-import { messages as memberCopy } from "../members/messages.ts";
+import { MembersField } from "../members/members-field.tsx";
 import { AlongRow, CampField } from "./camp-parts.tsx";
 import {
   type CampDraft,
@@ -25,6 +23,7 @@ import {
   refusedHob,
   startMakeCamp,
   toggleHob,
+  withChapterHob,
 } from "./make-camp-flow.ts";
 import { messages } from "./messages.ts";
 
@@ -66,7 +65,10 @@ export function MakeCampSheet({
   );
   const make = useMakeCamp();
   // Every hob that takes new work can be picked; the one whose chapter moves in stays first.
-  const hobs = (useQuery(agentsQuery).data ?? []).filter((each) => takesNewWork(each) || each.id === hob.id);
+  // Until the hob directory is read, the hob the camp starts from is the one to pick; a failed read
+  // says so, with a way to read it again.
+  const directory = useQuery(agentsQuery);
+  const hobs = (directory.data ?? [hob]).filter((each) => takesNewWork(each) || each.id === hob.id);
   const locked: AgentId | null = from !== undefined && state.draft.chapter ? hob.id : null;
   const move = useMoveChapter(from?.chapter.threadId ?? ("" as ThreadId));
   const navigate = useNavigate();
@@ -154,6 +156,8 @@ export function MakeCampSheet({
               picked={draft.hobs}
               locked={locked}
               problem={problemOf("hobs")}
+              failed={directory.isError}
+              onRetry={() => void directory.refetch()}
               onToggle={(id) => edit({ hobs: toggleHob(draft.hobs, id, locked) })}
             />
             {from !== undefined && (
@@ -162,7 +166,9 @@ export function MakeCampSheet({
                   title={copy.chapter({ title: from.title })}
                   detail={copy.chapterDetail({ from: from.detail })}
                   checked={draft.chapter}
-                  onChange={(value) => edit({ chapter: value })}
+                  onChange={(value) =>
+                    edit(value ? { chapter: true, hobs: withChapterHob(draft.hobs, hob.id) } : { chapter: false })
+                  }
                 />
                 <p className="m-0 text-meta text-label">{copy.chapterLink}</p>
               </>
@@ -204,47 +210,3 @@ const failedName = (hobs: ReadonlyArray<Agent>, state: MakeCamp & { step: "faile
   hobs.find((each) => each.id === state.hob)?.name ??
   hobs.find((each) => each.id === campLead(state.draft))?.name ??
   hob.name;
-
-/** The hobs the camp is made with (ADR 039, Members), picked in order, with why the first leads. */
-function MembersField({
-  hobs,
-  picked,
-  locked,
-  problem,
-  onToggle,
-}: {
-  hobs: ReadonlyArray<Agent>;
-  picked: ReadonlyArray<AgentId>;
-  locked: AgentId | null;
-  problem: string | undefined;
-  onToggle: (id: AgentId) => void;
-}) {
-  const you = useQuery(sidebarQuery).data?.you;
-  const membersId = useId();
-  const noteId = `${membersId}-note`;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span id={membersId} className="lbl text-meta text-label">
-        {memberCopy.picker.label}
-      </span>
-      <HobPicker
-        you={you}
-        hobs={hobs}
-        picked={picked}
-        locked={locked}
-        labelledBy={membersId}
-        describedBy={noteId}
-        onToggle={onToggle}
-      />
-      {problem !== undefined ? (
-        <span id={noteId} role="alert" className="text-meta text-rose">
-          {problem}
-        </span>
-      ) : (
-        <span id={noteId} className="text-meta text-label">
-          {memberCopy.picker.note}
-        </span>
-      )}
-    </div>
-  );
-}

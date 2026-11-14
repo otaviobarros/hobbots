@@ -1,6 +1,7 @@
 import type { HobbotsRepository } from "@hobbots/agents";
 import {
   type Actor,
+  isActiveMember,
   type JournaledEvent,
   MemberRefused,
   Message,
@@ -136,7 +137,12 @@ export const makeTurnRequestWrites = (
             const [thread] = yield* sql<Pick<Thread, "kind" | "agentId">>`SELECT kind, agent_id FROM threads
             WHERE id = ${threadId}`;
             if (thread === undefined) return yield* Effect.die(new Error(`No thread ${threadId}`));
-            const plan = planMemberRemove(thread, yield* selectMembers(sql, threadId), actor);
+            const members = yield* selectMembers(sql, threadId);
+            // A person must still be in the camp as the change is written, not only when it was asked.
+            if (by.kind === "user" && !isActiveMember(members, by)) {
+              return yield* new MemberRefused({ threadId, actor: by, reason: "not-member" });
+            }
+            const plan = planMemberRemove(thread, members, actor);
             if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
             if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
             const member = movedMember(plan.member, { _tag: "Remove" }, revision);

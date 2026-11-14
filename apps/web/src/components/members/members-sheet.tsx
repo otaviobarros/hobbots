@@ -1,5 +1,5 @@
 import type { MembersReport } from "@hobbots/api";
-import { type Thread, type ThreadMember, ThreadMembers } from "@hobbots/domain";
+import { type Agent, type Thread, type ThreadMember, ThreadMembers } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Sheet, SheetCloseButton, SheetContent, SheetHeader, SheetTitle } from "@hobbots/ui/components/sheet";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
@@ -29,20 +29,27 @@ const shownMembers = (members: ReadonlyArray<ThreadMember>, lead: string): Reado
  */
 export function MembersSheet({ camp, onClose }: { camp: Thread; onClose: () => void }) {
   const read = useQuery(membersToday(camp.id));
+  // The sheet names hobs from the hob directory: until it is read too, the sheet waits or says why.
+  const directory = useQuery(agentsQuery);
+  const failed = read.isError || directory.isError;
+  const retry = () => {
+    if (read.isError) void read.refetch();
+    if (directory.isError) void directory.refetch();
+  };
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent aria-describedby={undefined} aria-busy={read.isPending}>
-        {read.data === undefined ? (
+      <SheetContent aria-describedby={undefined} aria-busy={read.isPending || directory.isPending}>
+        {read.data === undefined || directory.data === undefined ? (
           <>
             <SheetHeader>
               <span className="text-meta font-semibold text-star">{copy.loading}</span>
               <SheetCloseButton label={copy.close} />
             </SheetHeader>
             <SheetTitle>{camp.title}</SheetTitle>
-            {read.isError ? (
+            {failed ? (
               <div role="alert" className="flex flex-col items-start gap-2 text-ui text-text-secondary">
                 {copy.failed}
-                <Button variant="outline" size="xs" onClick={() => void read.refetch()}>
+                <Button variant="outline" size="xs" onClick={retry}>
                   {copy.retry}
                 </Button>
               </div>
@@ -54,15 +61,14 @@ export function MembersSheet({ camp, onClose }: { camp: Thread; onClose: () => v
             )}
           </>
         ) : (
-          <SheetBody camp={camp} report={read.data} />
+          <SheetBody camp={camp} report={read.data} hobs={directory.data} />
         )}
       </SheetContent>
     </Sheet>
   );
 }
 
-function SheetBody({ camp, report }: { camp: Thread; report: MembersReport }) {
-  const hobs = useQuery(agentsQuery).data ?? [];
+function SheetBody({ camp, report, hobs }: { camp: Thread; report: MembersReport; hobs: ReadonlyArray<Agent> }) {
   const shown = shownMembers(report.members, camp.agentId);
   const hobMembers = shown.filter((member) => member.actor.kind === "hob");
   const people = shown.filter((member) => member.actor.kind === "user");

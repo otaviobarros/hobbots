@@ -18,6 +18,8 @@ export const messages = {
     noRole: "Hob",
     lockedLine: "Its chapter moves into the camp",
     tick: "✓",
+    failed: "Couldn't read your other hobs. Hobbots may be reconnecting.",
+    retry: "Try again",
     note: "The first hob you pick leads the quests asked here. With several hobs, only the ones you @mention answer. People join once they have an account on this hub.",
   },
   sheet: {
@@ -56,8 +58,17 @@ export const messages = {
     cost: "Today's cost",
     plan: ({ provider }: { readonly provider: string }) => `${provider} plan`,
     noPlan: "Plan not reported",
-    here: ({ turns, tokens }: { readonly turns: number; readonly tokens: string }) =>
-      `${count(turns, "turn", "turns")} here today · ${tokens} tokens. Every turn runs on your sign-in, whoever asked.`,
+    /** What the camp's hobs spent here today, on the owner's sign-in: yours when `owner` is null. */
+    here: ({
+      turns,
+      tokens,
+      owner,
+    }: {
+      readonly turns: number;
+      readonly tokens: string;
+      readonly owner: string | null;
+    }) =>
+      `${count(turns, "turn", "turns")} here today · ${tokens} tokens. Every turn runs on ${owner === null ? "your" : `${owner}'s`} sign-in, whoever asked.`,
     memory:
       "Each hob keeps its own memory and reads only that. Make the camp private and nothing said here is saved to any hob's memory.",
     loading: "Reading who is here…",

@@ -16,12 +16,14 @@ export class ThreadMemberRepository extends Context.Service<
      * Adds `actor` to the thread as an active member, added by `addedBy`, journaled as
      * `ThreadMemberAdded`; one who left or was removed comes back, journaled as `ThreadMemberChanged`.
      * Nothing is journaled for a member already active. A direct message takes no one but its person
-     * and its hob: `MemberRefused`. Dies when the thread does not exist.
+     * and its hob: `MemberRefused`. Dies when the thread does not exist. `asMember`: `addedBy` must
+     * be an active member when the change is written, or it is refused `not-member`.
      */
     readonly add: (
       threadId: ThreadId,
       actor: Actor,
       addedBy: Actor,
+      asMember?: boolean,
     ) => Effect.Effect<Committed<ThreadMember>, MemberRefused>;
     /**
      * The mentions of `actor` they have not read, per thread they are an active member of (ADR 039,

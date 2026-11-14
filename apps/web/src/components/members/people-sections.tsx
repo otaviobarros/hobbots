@@ -2,7 +2,9 @@ import type { MembersReport } from "@hobbots/api";
 import type { Actor, Agent, RuntimeKind, ThreadMember, User } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Progress } from "@hobbots/ui/components/progress";
+import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
+import { sidebarQuery } from "../../api/sidebar.ts";
 import { formatCompact } from "../../lib/format.ts";
 import { PROVIDER_NAMES } from "../../lib/providers.ts";
 import { PersonBadge } from "../sidebar/sidebar-faces.tsx";
@@ -14,9 +16,10 @@ import { row, sectionTitle } from "./sheet-styles.ts";
 
 const copy = messages.sheet;
 
-/** The camp's people, the owner marked. */
+/** The camp's people: you, whoever owns the camp, and the owner marked. */
 export function PeopleSection({ report, members }: { report: MembersReport; members: ReadonlyArray<ThreadMember> }) {
   const headingId = useId();
+  const you = useQuery(sidebarQuery).data?.you;
   const personOf = (actor: Actor): User | undefined => report.people.find((user) => user.id === actor.id);
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1.5">
@@ -27,6 +30,8 @@ export function PeopleSection({ report, members }: { report: MembersReport; memb
         {members.map((member) => {
           const person = personOf(member.actor);
           const owner = member.role === "owner";
+          // You are the person on this device, whoever owns the camp.
+          const isYou = you !== undefined && member.actor.kind === "user" && member.actor.id === you.id;
           return (
             <li key={member.actor.id} className={row}>
               {person === undefined ? (
@@ -38,10 +43,10 @@ export function PeopleSection({ report, members }: { report: MembersReport; memb
               )}
               <span className="flex min-w-0 flex-col">
                 <b className="flex items-center gap-1.5 text-ui font-semibold">
-                  <span className="truncate">{owner ? messages.picker.you : (person?.name ?? member.actor.id)}</span>
+                  <span className="truncate">{isYou ? messages.picker.you : (person?.name ?? member.actor.id)}</span>
                   {owner && <Badge variant="muted">{copy.owner}</Badge>}
                 </b>
-                <small className="truncate text-meta text-text-secondary">{owner ? copy.ownerLine : copy.member}</small>
+                <small className="truncate text-meta text-text-secondary">{isYou ? copy.ownerLine : copy.member}</small>
               </span>
               <span />
             </li>
@@ -72,6 +77,11 @@ export function CostSection({
       }),
     ),
   ];
+  const you = useQuery(sidebarQuery).data?.you;
+  // Every turn here runs on the camp owner's sign-in, whoever asked: yours, or theirs by name.
+  const owner = report.members.find((member) => member.role === "owner");
+  const ownerName = report.people.find((user) => user.id === owner?.actor.id)?.name;
+  const yours = owner === undefined || owner.actor.id === you?.id || ownerName === undefined;
   const turns = report.today.reduce((sum, hob) => sum + hob.turns, 0);
   const tokens = report.today.reduce((sum, hob) => sum + hob.tokens, 0);
   const now = new Date();
@@ -102,7 +112,9 @@ export function CostSection({
             </div>
           );
         })}
-        <small className="text-meta text-label">{copy.here({ turns, tokens: formatCompact(tokens) })}</small>
+        <small className="text-meta text-label">
+          {copy.here({ turns, tokens: formatCompact(tokens), owner: yours ? null : ownerName })}
+        </small>
       </div>
     </section>
   );

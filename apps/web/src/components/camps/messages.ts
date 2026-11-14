@@ -1,3 +1,4 @@
+import { CAMP_HOBS_MAX } from "@hobbots/api";
 import { CAMP_GOAL_MAX, type CampSuggestionCode, type CarriedOverRef, THREAD_TITLE_MAX } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
 import type { CampProblem, MakeCampError } from "./make-camp-flow.ts";
@@ -49,6 +50,7 @@ export const messages = {
       "title-long": `Keep the name to ${formatCount(THREAD_TITLE_MAX)} characters.`,
       "goal-long": `Keep the goal to ${formatCount(CAMP_GOAL_MAX)} characters.`,
       "hobs-missing": "Pick at least one hob to lead the camp.",
+      "hobs-many": `A camp takes up to ${CAMP_HOBS_MAX + 1} hobs. Untick one or more.`,
     } satisfies Record<CampProblem, string>,
     errors: {
       "hob-unavailable": ({ name }: Named) => `${name} is paused or retired, so it can't take a new camp now.`,

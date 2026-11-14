@@ -33,7 +33,16 @@ const membersChanged = async (queryClient: QueryClient, threadId: ThreadId) => {
   await queryClient.invalidateQueries({ queryKey: membersKey(threadId) });
 };
 
-/** The thread whose members sheet an event changes: a member's, or that of a hob's reply that settled. */
+/**
+ * The threads whose members sheets an event changes: a member's, that of a hob's reply that settled,
+ * or both threads of a chapter that moved, whose replies count where they now are.
+ */
+const changedThreads = (event: HobbotsEvent): ReadonlyArray<ThreadId> => {
+  if (event._tag === "ChapterMoved") return [event.thread.id, event.camp.id];
+  const one = changedThread(event);
+  return one === null ? [] : [one];
+};
+
 const changedThread = (event: HobbotsEvent): ThreadId | null => {
   if (event._tag === "ThreadMemberAdded" || event._tag === "ThreadMemberChanged") return event.member.threadId;
   // A reply counts once it settles: streaming updates change no total.
@@ -46,8 +55,7 @@ const changedThread = (event: HobbotsEvent): ThreadId | null => {
 
 /** Reads a members sheet again after an event that changes it; the event's own handling goes on. */
 export const applyMembersEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
-  const threadId = changedThread(event);
-  if (threadId !== null) void membersChanged(queryClient, threadId);
+  for (const threadId of changedThreads(event)) void membersChanged(queryClient, threadId);
 };
 
 /** Adds a hob to the camp, or brings back one taken out. */

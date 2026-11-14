@@ -213,11 +213,17 @@ describe("a camp's hobs", () => {
           yield* reason(CAMP, hobActor(QUILL)),
           yield* reason(CAMP, BRUNA),
         ];
+        // One who is not in the camp, as the change is written, changes no one in it.
+        const outsider = [
+          (yield* Effect.flip(repo.removeMember(CAMP, hobActor(PIP), BRUNA))).reason,
+          (yield* Effect.flip(repository.add(CAMP, hobActor(PIP), BRUNA, true))).reason,
+        ];
         yield* repo.removeMember(CAMP, hobActor(ROOK), OWNER_ACTOR);
         const back = yield* repository.add(CAMP, hobActor(ROOK), OWNER_ACTOR);
         const bruna = yield* repository.add(CAMP, BRUNA, OWNER_ACTOR);
         return {
           refusals,
+          outsider,
           back: types(back.entries),
           bruna: shown(bruna.value),
           members: yield* members(CAMP),
@@ -225,6 +231,7 @@ describe("a camp's hobs", () => {
       }),
     );
     expect(result.refusals).toEqual(["direct-message", "owner", "lead", "not-member"]);
+    expect(result.outsider).toEqual(["not-member", "not-member"]);
     expect(result.back).toEqual(["ThreadMemberChanged"]);
     expect(result.bruna).toBe("user:bruna:active");
     expect(result.members).toEqual([

@@ -158,6 +158,10 @@ export const planMemberRemove = (
   return member.state === "active" ? { _tag: "remove", member } : { _tag: "gone", member };
 };
 
+/** Whether `actor` is an active member among `members`: the one who may change who is in a camp. */
+export const isActiveMember = (members: ReadonlyArray<ThreadMember>, actor: Actor): boolean =>
+  members.some((member) => member.state === "active" && sameActor(member.actor, actor));
+
 /** `MemberMachine` with the questions code outside this module asks of a member's state. */
 export const ThreadMembers = {
   ...MemberMachine,

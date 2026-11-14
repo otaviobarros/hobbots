@@ -87,7 +87,7 @@ export class CampMembers extends Context.Service<
             if (!takesNewWork(agent.value)) {
               return yield* new HobUnavailable({ agentId: hobId, status: hobStanding(agent.value) });
             }
-            return yield* announced(members.add(thread.id, { kind: "hob", id: hobId }, by));
+            return yield* announced(members.add(thread.id, { kind: "hob", id: hobId }, by, true));
           }),
         );
 
@@ -98,7 +98,7 @@ export class CampMembers extends Context.Service<
         // Only a person the hub knows joins.
         const known = actor.kind === "user" && Option.isSome(yield* users.find(UserId.make(actor.id)));
         if (!known) return yield* new MemberRefused({ threadId, actor, reason: "unknown" });
-        return yield* announced(members.add(threadId, actor, by));
+        return yield* announced(members.add(threadId, actor, by, true));
       });
 
       // Under the camp's lock, which every turn there is admitted under: a turn either took its

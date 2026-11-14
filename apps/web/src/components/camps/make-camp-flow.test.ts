@@ -1,3 +1,4 @@
+import { CAMP_HOBS_MAX } from "@hobbots/api";
 import { AgentId, THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -13,6 +14,7 @@ import {
   refusedHob,
   startMakeCamp,
   toggleHob,
+  withChapterHob,
 } from "./make-camp-flow.ts";
 
 const ALDRIC = AgentId.make("aldric");
@@ -54,6 +56,13 @@ describe("Make a camp", () => {
     expect(campPayload(draft({ hobs: [QUILL, ALDRIC, PIP] }), K1).hobs).toEqual([ALDRIC, PIP]);
     expect(refusedHob(new ApiError("", "HobUnavailable", { agentId: "pip", status: "paused" }))).toBe(PIP);
     expect(refusedHob(new TypeError("Failed to fetch"))).toBeNull();
+    // A camp takes its lead and up to CAMP_HOBS_MAX others, as the hub does.
+    const many = (n: number) => Array.from({ length: n }, (_, i) => AgentId.make(`hob-${i}`));
+    expect(campProblems(draft({ hobs: many(CAMP_HOBS_MAX + 1) }))).toEqual({});
+    expect(campProblems(draft({ hobs: many(CAMP_HOBS_MAX + 2) }))).toEqual({ hobs: "hobs-many" });
+    // The chapter's hob, brought back with its chapter, is picked again and leads.
+    expect(withChapterHob([QUILL, PIP], ALDRIC)).toEqual([ALDRIC, QUILL, PIP]);
+    expect(withChapterHob([QUILL, ALDRIC], ALDRIC)).toEqual([ALDRIC, QUILL]);
   });
 
   it("sends a trimmed camp, with no goal when the goal is blank", () => {
