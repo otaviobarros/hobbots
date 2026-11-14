@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentId,
   hobActor,
-  mentionedIn,
+  mentionsIn,
   mentionTargets,
   pausedAbove,
   pausedHolder,
@@ -132,15 +132,9 @@ describe("quest mentions", () => {
     { actor: hobActor(LEAD), name: "Aldric" },
   ];
 
-  it("[TC-OR-1446-06] finds @ and a whole name, ignoring case, never inside an address or a longer name", () => {
-    expect(mentionedIn("@ada use the blue theme", roster)).toEqual([hobActor(ADA)]);
-    expect(mentionedIn("mail ops@ada.dev or @Bobby", roster)).toEqual([]);
-    expect(mentionedIn("@Bob and @Ada, both of you", roster)).toEqual([hobActor(ADA), hobActor(BOB)]);
-  });
-
   it("[TC-OR-1446-07] reaches a member's open Task in an open Quest, never the lead's or one without a Task there", () => {
     const work = tree([task("top", LEAD, null, "waiting"), task("ada", ADA, "top", "active")], [quest]);
-    const mentioned = mentionedIn("@Ada @Bob @Aldric stop", roster);
+    const mentioned = mentionsIn("@Ada @Bob @Aldric stop", roster);
     expect(mentionTargets([work], LEAD, mentioned).map((each) => each.id)).toEqual(["ada"]);
     // Without a Quest, as for a request a hob works alone, nothing is mentioned.
     expect(mentionTargets([tree(work.tasks)], LEAD, mentioned)).toEqual([]);

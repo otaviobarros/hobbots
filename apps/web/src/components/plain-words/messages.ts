@@ -29,6 +29,7 @@ export const messages = {
     "github.read": "Reading GitHub",
     "github.open-pull-request": "Opening a pull request",
     "github.comment": "Commenting on GitHub",
+    "github.open-issue": "Opening an issue",
     "outside-folders": "Working outside its folders",
     "search-memory": "Searching its memory",
     "save-memory": "Saving to its memory",

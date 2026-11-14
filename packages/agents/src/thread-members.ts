@@ -23,5 +23,13 @@ export class ThreadMemberRepository extends Context.Service<
       actor: Actor,
       addedBy: Actor,
     ) => Effect.Effect<Committed<ThreadMember>, MemberRefused>;
+    /**
+     * The mentions of `actor` they have not read, per thread they are an active member of (ADR 039,
+     * Users as actors): a count for each thread with any. Pass the session's actor, so each person
+     * sees their own. Their own messages, notes to self and a lead's quiet progress never count.
+     */
+    readonly unreadMentions: (
+      actor: Actor,
+    ) => Effect.Effect<ReadonlyArray<{ readonly threadId: ThreadId; readonly count: number }>>;
   }
 >()("@hobbots/agents/ThreadMemberRepository") {}

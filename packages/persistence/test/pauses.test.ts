@@ -254,4 +254,20 @@ describe("your note straight to a member", () => {
     });
     expect(result.viaLead).toMatchObject({ recipientId: ALDRIC, author: { kind: "user" } });
   });
+
+  // covers IN-004
+  it("[TC-OR-1446-06] finds whom a message mentions as the hub stores it, and nobody in Markdown code", async () => {
+    const found = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const repo = yield* HobbotsRepository;
+        return {
+          plain: yield* repo.mentionsIn("@quill use the blue theme"),
+          code: yield* repo.mentionsIn("Run `@Quill` or\n\n    @Bram\n"),
+          address: yield* repo.mentionsIn("mail ops@quill.dev"),
+        };
+      }),
+    );
+    expect(found).toEqual({ plain: [hobActor(QUILL)], code: [], address: [] });
+  });
 });

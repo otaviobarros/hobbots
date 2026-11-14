@@ -1,4 +1,4 @@
-import { CatchUpRepository, PinRepository } from "@hobbots/agents";
+import { CatchUpRepository, PinRepository, sessionActor } from "@hobbots/agents";
 import { MessageNotFound } from "@hobbots/api";
 import { type JournaledEvent, MessageId, MessagePin, ThreadId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
@@ -69,10 +69,14 @@ export const CatchUpRepositoryLive = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
 
+    // The read marker of the person asking (ADR 039, read markers per member).
     const marker = (threadId: ThreadId) =>
-      sql<{ readonly readRevision: unknown }>`SELECT read_revision FROM threads WHERE id = ${threadId}`.pipe(
-        Effect.map(([row]) => (row?.readRevision == null ? null : Number(row.readRevision))),
-      );
+      Effect.gen(function* () {
+        const reader = yield* sessionActor;
+        const [row] = yield* sql<{ readonly readRevision: unknown }>`SELECT read_revision FROM thread_members
+          WHERE thread_id = ${threadId} AND actor_kind = ${reader.kind} AND actor_id = ${reader.id}`;
+        return row?.readRevision == null ? null : Number(row.readRevision);
+      });
 
     const quests = (threadId: ThreadId) =>
       Effect.gen(function* () {

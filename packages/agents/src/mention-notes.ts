@@ -1,13 +1,4 @@
-import {
-  type Agent,
-  hobActor,
-  type Message,
-  mentionedIn,
-  mentionTargets,
-  NoteId,
-  type TaskNote,
-  type ThreadId,
-} from "@hobbots/domain";
+import { type Agent, type Message, mentionTargets, NoteId, type TaskNote, type ThreadId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -28,8 +19,8 @@ export const makeMentionNotes = Effect.gen(function* () {
       if (Option.isNone(tasks) || !content.includes("@")) return [];
       const trees = yield* tasks.value.readThreadTrees(threadId);
       if (trees.length === 0) return [];
-      const roster = (yield* repo.listAgents).map((agent) => ({ actor: hobActor(agent.id), name: agent.name }));
-      return mentionTargets(trees, lead.id, mentionedIn(content, roster));
+      // Parsed as the hub parses the message it stores, so a mention in Markdown code reaches nobody.
+      return mentionTargets(trees, lead.id, yield* repo.mentionsIn(content));
     });
 
   /**

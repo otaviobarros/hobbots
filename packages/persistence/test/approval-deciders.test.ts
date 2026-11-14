@@ -175,6 +175,7 @@ describe("0040_approval_deciders", () => {
       "0101_records",
       "0103_quest_summaries",
       "0114_thread_members",
+      "20261114003022_message_mentions",
     ]);
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(([key]) => key < "0040" || kept.has(key)),

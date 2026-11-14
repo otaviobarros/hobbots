@@ -302,6 +302,11 @@ const NEEDS: ReadonlyArray<{
 }> = [
   { tool: ["github_comment"], words: /\bcomment/i, work: "commenting" },
   { tool: ["github_open_pull_request"], words: /\bpull requests?\b|\bPRs?\b/, work: "opening a pull request" },
+  {
+    tool: ["github_open_issue"],
+    words: /\b(?:open|file|raise|create)\b[^.\n]{0,40}\bissues?\b|\bsub-issues?\b/i,
+    work: "opening an issue",
+  },
   { tool: ["github_push"], words: /\bpush/i, work: "pushing", or: "commands" },
   { tool: ["commands", "read_only_commands"], words: /\bcommit|\brun\b|\btests?\b/i, work: "running commands" },
   { tool: ["file_edits"], words: /\bedit|\bfix\b|\bwrite\b/i, work: "editing files" },

@@ -37,6 +37,8 @@ export const ACTION_PERMISSIONS: Readonly<Record<GitHubAction, Permissions>> = {
   "push-workflows": { metadata: "read", contents: "write", workflows: "write" },
   "open-pull-request": { metadata: "read", pull_requests: "write", contents: "read" },
   comment: { metadata: "read", issues: "write", pull_requests: "write" },
+  // Opening an issue, adding its labels and attaching it to a parent issue.
+  "open-issue": { metadata: "read", issues: "write" },
 };
 
 /** A token this close to expiry is replaced on its next use. */

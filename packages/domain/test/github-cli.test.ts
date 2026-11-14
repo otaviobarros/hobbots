@@ -18,6 +18,8 @@ describe("where a gh command is pointed (#1349)", () => {
     expect(steer("pr create --fill")).toContain("Use the github_open_pull_request tool instead of gh pr create:");
     expect(steer("pr new")).toContain("Use the github_open_pull_request tool instead of gh pr new:");
     expect(steer("pr comment 3 --body hi")).toContain("Use the github_comment tool instead of gh pr comment:");
+    expect(steer("issue create -t x")).toContain("Use the github_open_issue tool instead of gh issue create:");
+    expect(steer("issue new")).toContain("Use the github_open_issue tool instead of gh issue new:");
     expect(steer("issue comment 3 --body hi")).toContain("Use the github_comment tool instead of gh issue comment:");
     expect(steer("pr view 3")).toContain("Use the github_item tool instead of gh pr view:");
     expect(steer("issue view 3")).toContain("Use the github_item tool instead of gh issue view:");
@@ -29,9 +31,10 @@ describe("where a gh command is pointed (#1349)", () => {
     }
   });
 
-  it("says issues are not available yet, names every Charm tool for other commands, and asks the user without them", () => {
-    expect(steerGh(words("issue create -t x"), GITHUB_CHARM_TOOLS)).toBe(
-      "GitHub issues are not available to hobs yet. gh cannot sign in from your sandbox, since no credential enters it. Tell the user what you need from GitHub instead.",
+  it("names every Charm tool for other commands, and asks the user without them", () => {
+    // Opening issues is the GitHub Charm's own tool (#1350); where Never keeps it out, it is named, not pointed to.
+    expect(steerGh(words("issue create -t x"), ["github_item"])).toBe(
+      "gh cannot sign in from your sandbox, since no credential enters it. The github_open_issue tool does what gh issue create would, and you are not offered it now. Tell the user what you need from GitHub instead.",
     );
     expect(steerGh(words("api user"), ["github_item", "github_search"])).toBe(
       "Reach GitHub with your GitHub Charm tools instead of gh api user: github_item, github_search. gh cannot sign in from your sandbox, since no credential enters it.",

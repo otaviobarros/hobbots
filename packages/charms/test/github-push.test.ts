@@ -125,6 +125,11 @@ const fakeApi = Layer.succeed(
     gitObject: () => Effect.die("not used"),
     rateLimit: () => Effect.die("not used"),
     comment: () => Effect.die("not used"),
+    label: () => Effect.die("not used"),
+    openIssue: () => Effect.die("not used"),
+    issuesSince: () => Effect.die("not used"),
+    addSubIssue: () => Effect.die("not used"),
+    subIssues: () => Effect.die("not used"),
   }),
 );
 
