@@ -736,7 +736,7 @@ export const commitFolders = (
 
 /**
  * Git subcommands known to leave the working tree's files alone. Every other subcommand, such as
- * `reset --hard`, `checkout`, `checkout-index -f`, `clean` or one Git adds later, is read as one
+ * `reset` in any mode, `checkout`, `checkout-index -f`, `clean` or one Git adds later, is read as one
  * that may rewrite them, so a subcommand missing here is refused rather than let through.
  */
 const TREE_KEEPS = new Set([
@@ -772,11 +772,8 @@ const TREE_KEEPS = new Set([
 const BRANCH_MOVES = new Set(["-f", "--force", "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy"]);
 /** `git stash` forms that only read. */
 const STASH_READS = new Set(["list", "show", "create"]);
-/** `git reset` modes that rewrite the working tree, where the default mode leaves it. */
-const RESET_REWRITES = new Set(["--hard", "--merge", "--keep"]);
 
 const rewritesTree = (sub: string, rest: ReadonlyArray<string>) => {
-  if (sub === "reset") return rest.some((word) => RESET_REWRITES.has(word));
   if (sub === "branch") return rest.some((word) => BRANCH_MOVES.has(word));
   if (sub === "stash") return rest[0] === undefined || !STASH_READS.has(rest[0]);
   return !TREE_KEEPS.has(sub);

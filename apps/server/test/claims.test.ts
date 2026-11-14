@@ -515,6 +515,9 @@ describe("the claims register", () => {
       expect(await h.takenWrite({ paths: [`${checkout}${sep}decisions-link${sep}..${sep}a.md`] })).toContain(
         "took over",
       );
+      // Deleting a link inside the taken folder removes the link, whatever it points to.
+      symlinkSync(join(checkout, "packages"), join(checkout, "docs", "packages-link"));
+      expect(await h.takenWrite({ paths: [join(checkout, "docs", "packages-link")] })).toContain("took over");
       // Deleting the repository's top folder deletes what you took over inside it.
       expect(await h.takenWrite({ paths: [checkout] })).toContain("took over");
       // A Git command that rewrites the working tree, as `git reset --hard`, may reach the folder.

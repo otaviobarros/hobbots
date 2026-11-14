@@ -81,12 +81,22 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             const top = yield* git.repository(cwd);
             return top === null ? undefined : yield* pick(top, yield* takenAt(top));
           });
-        const pathHit = (path: string) =>
+        const placeHit = (path: string, name = "") =>
           Effect.gen(function* () {
             const place = yield* git.placeOf(path);
-            return place === null
-              ? undefined
-              : (yield* takenAt(place.top)).find((claim) => touchesPath(claim, place.path));
+            if (place === null) return undefined;
+            const inside = name === "" ? place.path : place.path === "" ? name : `${place.path}/${name}`;
+            return (yield* takenAt(place.top)).find((claim) => touchesPath(claim, inside));
+          });
+        // A path is checked where it lands with its links followed, and as the entry it names in its
+        // folder, so deleting a link inside a taken folder is refused though its target is not.
+        const pathHit = (path: string) =>
+          Effect.gen(function* () {
+            const at = Math.max(path.lastIndexOf("/"), path.lastIndexOf(separator));
+            const name = path.slice(at + 1);
+            const entry =
+              at > 0 && name !== "" && name !== "." && name !== ".." ? placeHit(path.slice(0, at), name) : undefined;
+            return (yield* placeHit(path)) ?? (entry === undefined ? undefined : yield* entry);
           });
         // A push whose words do not name its branches, such as `git push --all`, may reach any
         // branch, so any branch you took over in the repository refuses it.

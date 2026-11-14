@@ -286,6 +286,8 @@ describe("what a call writes", () => {
     expect(bash("git branch -f taken HEAD")).toEqual([project]);
     // A subcommand not known to leave the working tree alone is read as one that may rewrite it.
     expect(bash("git frobnicate")).toEqual([project]);
-    expect(bash("git reset HEAD~1; git status; git stash list; git add . && git diff; git branch")).toEqual([]);
+    // Every reset may move the checked-out branch, `--soft` and the default mode included.
+    expect(bash("git reset --soft HEAD~1")).toEqual([project]);
+    expect(bash("git status; git stash list; git add . && git diff; git branch")).toEqual([]);
   });
 });
