@@ -7,7 +7,6 @@ import {
   hobActor,
   MentionRefused,
   type Message,
-  OWNER_ACTOR,
   sameActor,
   type Thread,
   type ThreadMember,
@@ -64,19 +63,25 @@ export interface PackPeople {
 export const UNKNOWN_PERSON = "User";
 
 /**
- * A message's author: its actor, or, for a message from before authors were recorded, the owner
- * for yours and the thread's hob for a reply.
+ * A message's author: its actor, or, for a message from before authors were recorded, the thread's
+ * hob for a reply and its owner, `owner`, for yours: null when the thread has no owner member stored.
  */
-export const authorOf = (message: Message, thread: Pick<Thread, "agentId">): Actor =>
-  message.actor ?? (message.role === "assistant" ? hobActor(thread.agentId) : OWNER_ACTOR);
+export const authorOf = (message: Message, thread: Pick<Thread, "agentId">, owner: Actor | null): Actor | null =>
+  message.actor ?? (message.role === "assistant" ? hobActor(thread.agentId) : owner);
 
 /** The hob's own replies: written by it, or by the thread's hob before authors were recorded. */
-export const isOwnReply = (message: Message, thread: Pick<Thread, "agentId">, agentId: AgentId): boolean =>
-  message.role === "assistant" && sameActor(authorOf(message, thread), hobActor(agentId));
+export const isOwnReply = (message: Message, thread: Pick<Thread, "agentId">, agentId: AgentId): boolean => {
+  const author = authorOf(message, thread, null);
+  return message.role === "assistant" && author !== null && sameActor(author, hobActor(agentId));
+};
+
+/** The thread's owner, as its member rows record them, or null when none is stored. */
+const ownerOf = (members: ReadonlyArray<ThreadMember>): Actor | null =>
+  members.find((member) => member.role === "owner")?.actor ?? null;
 
 /**
- * The people and hobs of `thread` as `agentId`'s turn names them. Without members stored, the
- * thread's own two: its owner and its hob. Without user records, a person is named "Someone".
+ * The people and hobs of `thread` as `agentId`'s turn names them. Without members stored, only
+ * the thread's hob is listed. A person with no user record is named "User".
  */
 export const makePackPeople = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
@@ -85,8 +90,10 @@ export const makePackPeople = Effect.gen(function* () {
   return (thread: Thread, agentId: AgentId) =>
     Effect.gen(function* () {
       const stored = Option.isNone(memberRepo) ? [] : yield* memberRepo.value.list(thread.id);
-      const active = stored.filter(ThreadMembers.isActive).map((member) => member.actor);
-      const actors: ReadonlyArray<Actor> = active.length > 0 ? active : [OWNER_ACTOR, hobActor(thread.agentId)];
+      const active = stored.filter(ThreadMembers.isActive);
+      const owner = ownerOf(stored);
+      const actors: ReadonlyArray<Actor> =
+        active.length > 0 ? active.map((member) => member.actor) : [hobActor(thread.agentId)];
       const people = Option.isNone(users) ? [] : yield* users.value.list;
       const agents = yield* repo.listAgents;
       const nameOf = (actor: Actor): string => {
@@ -101,7 +108,8 @@ export const makePackPeople = Effect.gen(function* () {
       };
       const you = hobActor(agentId);
       const speaker = (message: Message): string => {
-        const author = authorOf(message, thread);
+        const author = authorOf(message, thread, owner);
+        if (author === null) return `${UNKNOWN_PERSON} (person)`;
         if (sameActor(author, you)) {
           return message.runtime === null ? "You" : `You, thinking with ${brainLabel(message.runtime, message.model)}`;
         }
@@ -112,7 +120,7 @@ export const makePackPeople = Effect.gen(function* () {
           name: nameOf(actor),
           kind: actor.kind === "hob" ? "hob" : "person",
           you: sameActor(actor, you),
-          owner: sameActor(actor, OWNER_ACTOR),
+          owner: owner !== null && sameActor(actor, owner),
         }),
       );
       const shared =
@@ -140,7 +148,7 @@ export const turnReasonOf = (
   );
   if (decided instanceof MentionRefused) return null;
   const owed = decided.find((each) => each.hobId === agentId);
-  return owed === undefined ? null : { cause: owed.cause, by: prompt.actor ?? OWNER_ACTOR };
+  return owed === undefined ? null : { cause: owed.cause, by: prompt.actor ?? ownerOf(members) };
 };
 
 /** The line that says why the turn runs: "Leo mentioned you.", or "You are the only hob here." */
