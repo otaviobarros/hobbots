@@ -20,6 +20,7 @@ export const messages = {
     "hob-proposal": "How you decided its proposal",
     "claim-clash": "A clash with another task's claim",
     "claims-taken": "You took over its files and branches",
+    "claims-given-back": "You gave back its files and branches",
   },
   /** Who owes a response, and since when. */
   awaiting: ({ name }: { name: string }) => `awaiting ${name}`,

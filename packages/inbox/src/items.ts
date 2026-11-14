@@ -407,13 +407,19 @@ const proposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
   });
 
 /**
- * The claims you took over (#1449), for the hob that owns each Task: one item per Task, naming every
- * claim of it the change moved to you, so the hob hears of the takeover once.
+ * The claims you took over (#1449) or gave back (#1538), for the hob that owns each Task: one item
+ * per Task and change, naming every claim of it the change moved, so the hob hears of each once.
+ * The newest revision among them keys the item, so a takeover after a give back is told again.
  */
-const takenOverItems = (events: ReadonlyArray<JournaledEvent>, trees: Trees): ReadonlyArray<Draft> => {
+const claimMoveItems = (
+  events: ReadonlyArray<JournaledEvent>,
+  trees: Trees,
+  moved: "ClaimTakenOver" | "ClaimGivenBack",
+  kind: "claims-taken" | "claims-given-back",
+): ReadonlyArray<Draft> => {
   const byTask = new Map<TaskId, Array<Claim>>();
   for (const event of events) {
-    if (event._tag !== "ClaimTakenOver") continue;
+    if (event._tag !== moved) continue;
     byTask.set(event.claim.taskId, [...(byTask.get(event.claim.taskId) ?? []), event.claim]);
   }
   return [...byTask].flatMap(([taskId, claims]) => {
@@ -424,9 +430,9 @@ const takenOverItems = (events: ReadonlyArray<JournaledEvent>, trees: Trees): Re
         recipientId: task.ownerId,
         task,
         attemptId: null,
-        payload: { _tag: "claims-taken" as const, taskId, claims },
-        record: `claims-taken:${claims.map((claim) => claim.id).join(",")}`,
-        version: null,
+        payload: { _tag: kind, taskId, claims },
+        record: `${kind}:${claims.map((claim) => claim.id).join(",")}`,
+        version: Math.max(...claims.map((claim) => claim.revision)),
       },
     ];
   });
@@ -474,18 +480,20 @@ export const backpackItemsFor = (
     context.approvalOutcomes === true
       ? [...approvalOutcomes(events, context.toolCall), ...hobProposalOutcomes(events, context.toolCall)]
       : [];
-  const fromTasks = [...events.flatMap((event) => drafts(event, trees)), ...takenOverItems(events, trees)].map(
-    (draft) => ({
-      recipientId: draft.recipientId,
-      taskId: draft.task.id,
-      questId: questAbove(draft.task, trees, context.quests),
-      attemptId: draft.attemptId,
-      threadId: draft.task.threadId,
-      dedupeKey: dedupeKey(draft, draft.payload._tag, context.toolCall),
-      payload: draft.payload,
-      notBefore: null,
-    }),
-  );
+  const fromTasks = [
+    ...events.flatMap((event) => drafts(event, trees)),
+    ...claimMoveItems(events, trees, "ClaimTakenOver", "claims-taken"),
+    ...claimMoveItems(events, trees, "ClaimGivenBack", "claims-given-back"),
+  ].map((draft) => ({
+    recipientId: draft.recipientId,
+    taskId: draft.task.id,
+    questId: questAbove(draft.task, trees, context.quests),
+    attemptId: draft.attemptId,
+    threadId: draft.task.threadId,
+    dedupeKey: dedupeKey(draft, draft.payload._tag, context.toolCall),
+    payload: draft.payload,
+    notBefore: null,
+  }));
   return [...fromTasks, ...outcomes, ...proposalOutcomes(events, context.toolCall)];
 };
 
@@ -512,6 +520,7 @@ export const tasksTouched = (events: ReadonlyArray<JournaledEvent>): ReadonlyArr
         case "ClaimMade":
           return [event.claim.taskId, ...event.clashes.map((other) => other.taskId)];
         case "ClaimTakenOver":
+        case "ClaimGivenBack":
           return [event.claim.taskId];
         default:
           return [];

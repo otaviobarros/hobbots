@@ -24,12 +24,17 @@ export const messages = {
   /** Take over (#1449): the Task's files and branches move to you. */
   takeOver: "Take over its files and branches",
   takeOverKeeps: ({ name }: { name: string }) =>
-    `${name} keeps working, but Hobbots refuses its writes to them until the task ends.`,
+    `${name} keeps working, but Hobbots refuses its writes to them until you give them back or the task ends.`,
   takingOver: "Taking over its files and branches…",
   /** What you took over of a Task, as the claims register holds it. */
   taken: ({ claims }: { claims: ReadonlyArray<{ readonly scope: string; readonly key: string }> }) =>
     `Yours now: ${formatList(claims.map((claim) => (claim.scope === "path" ? claim.key : claim.scope === "branch" ? `branch ${claim.key}` : `number ${claim.key}`)))}. Hobbots refuses the hob's writes to them.`,
   takeOverFailed: "Taking over didn't go through. Hobbots may be reconnecting.",
+  /** Give back (#1538): what you took over of the Task goes back to its hob. */
+  giveBack: "Give back its files and branches",
+  giveBackLets: ({ name }: { name: string }) => `${name} may write to them again, and hears what it got back.`,
+  givingBack: "Giving back its files and branches…",
+  giveBackFailed: "Giving back didn't go through. Hobbots may be reconnecting.",
   claimsUnread: "Hobbots couldn't read which files and branches this task holds.",
   claimsRetry: "Try again",
   /** The attempt picker in a lane's header: "Try 1 ✗ · 2". */

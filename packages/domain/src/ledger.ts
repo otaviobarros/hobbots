@@ -168,6 +168,8 @@ const describeItem = (item: BackpackItem): string => {
       return `a clash over ${claimSubject(payload.claim)} is not yet read`;
     case "claims-taken":
       return `the user's takeover of Task ${payload.taskId}'s claims is not yet read`;
+    case "claims-given-back":
+      return `the claims the user gave back to Task ${payload.taskId} are not yet read`;
     default:
       return `a ${item.kind} item about Task ${item.taskId} is not yet dealt with`;
   }

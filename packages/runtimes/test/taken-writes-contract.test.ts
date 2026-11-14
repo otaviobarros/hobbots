@@ -27,7 +27,8 @@ import { scriptedToolEvents } from "../src/fake.ts";
 // it took over, whichever runtime makes them. Each runtime Hobbots supports is listed in RUNTIMES
 // and passes every case here: a file tool's write, a command's redirection, a push of the branch
 // and a commit while it is checked out are refused with the hub's reason, and a read or a write
-// elsewhere runs. A new runtime is added to RUNTIMES; it cannot be supported without passing these.
+// elsewhere runs. Once you give them back (#1538), the next call goes through. A new runtime is added
+// to RUNTIMES; it cannot be supported without passing these.
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-taken-writes-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -202,6 +203,28 @@ describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
     const before = asked.length;
     expect(await runtime.run(`cat ${PLAN}`, steering(asked))).not.toContain(TAKEN);
     expect(asked).toHaveLength(before);
+  });
+
+  // covers OR-006, #1538
+  it("[TC-OR-1538-04] lets a write through once you give back what it writes, asking the hub on every call", async () => {
+    const asked: Array<CallWrites> = [];
+    let yours = true;
+    const live: CallSteering = {
+      takeovers: [],
+      takenByYou: (writes) =>
+        Effect.sync(() => {
+          asked.push(writes);
+          return yours ? TAKEN : null;
+        }),
+    };
+    expect(await runtime.write(PLAN, live)).toContain(TAKEN);
+    expect(await runtime.run(`echo plan > ${PLAN}`, live)).toContain(TAKEN);
+    // You gave it back: the same session's next calls go through, with nothing kept from before.
+    yours = false;
+    const before = asked.length;
+    expect(await runtime.write(PLAN, live)).not.toContain(TAKEN);
+    expect(await runtime.run(`echo plan > ${PLAN}`, live)).not.toContain(TAKEN);
+    expect(asked.length).toBe(before + 2);
   });
 });
 

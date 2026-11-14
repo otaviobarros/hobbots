@@ -162,3 +162,7 @@ export const laneCharmCalls = (
 /** Whether Take over would move anything (#1449): the Task is open and holds a claim you have not taken over. */
 export const canTakeOver = (task: Task, claims: ReadonlyArray<Claim> | undefined): boolean =>
   !isTerminalTask(task.state) && (claims ?? []).some((claim) => !Claims.isTaken(claim));
+
+/** Whether Give back would return anything (#1538): the Task is open and holds a claim you took over. */
+export const canGiveBack = (task: Task, claims: ReadonlyArray<Claim> | undefined): boolean =>
+  !isTerminalTask(task.state) && (claims ?? []).some(Claims.isTaken);

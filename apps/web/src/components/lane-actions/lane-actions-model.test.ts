@@ -1,4 +1,4 @@
-import { Attempt, AttemptId, Checkpoint, type Task, TaskId, type TaskTree } from "@hobbots/domain";
+import { Attempt, AttemptId, Checkpoint, Claim, ClaimId, type Task, TaskId, type TaskTree } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ADA,
@@ -14,7 +14,16 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { failureReason, laneFailures, laneMenu, laneQuestions, laneTries, pickedTry } from "./lane-actions-model.ts";
+import {
+  canGiveBack,
+  canTakeOver,
+  failureReason,
+  laneFailures,
+  laneMenu,
+  laneQuestions,
+  laneTries,
+  pickedTry,
+} from "./lane-actions-model.ts";
 
 const find = (from: TaskTree, id: Task["id"]): Task => {
   const found = from.tasks.find((each) => each.id === id);
@@ -166,5 +175,40 @@ describe("laneFailures", () => {
     expect(laneFailures(failed, [find(failed, COPY)]).map((each) => [each.task.id, each.retry, each.reassign])).toEqual(
       [[COPY, true, true]],
     );
+  });
+});
+
+describe("Take over and Give back (#1449, #1538)", () => {
+  const claim = (key: string, state: Claim["state"]) =>
+    new Claim({
+      id: ClaimId.make(`claim-${key}`),
+      scope: "path",
+      repository: "github.com/me/app",
+      directory: null,
+      key,
+      taskId: COPY,
+      actor: state === "taken" ? { kind: "user", id: "owner" } : { kind: "hob", id: QUILL },
+      state,
+      createdAt: "2026-11-14T00:00:00.000Z",
+      updatedAt: "2026-11-14T00:00:00.000Z",
+      releasedAt: null,
+      revision: 1 as Claim["revision"],
+    });
+
+  it("[TC-UX-1538-06] offers Give back while the Task holds something you took over, and Take over while it holds something you did not", () => {
+    const copy = find(blackFriday(), COPY);
+    expect([canTakeOver(copy, undefined), canGiveBack(copy, undefined)]).toEqual([false, false]);
+    expect([canTakeOver(copy, []), canGiveBack(copy, [])]).toEqual([false, false]);
+    expect([canTakeOver(copy, [claim("docs", "held")]), canGiveBack(copy, [claim("docs", "held")])]).toEqual([
+      true,
+      false,
+    ]);
+    const taken = [claim("docs", "taken")];
+    expect([canTakeOver(copy, taken), canGiveBack(copy, taken)]).toEqual([false, true]);
+    // Both show while it holds some of each, and neither once the Task ended.
+    const both = [claim("docs", "taken"), claim("web", "contested")];
+    expect([canTakeOver(copy, both), canGiveBack(copy, both)]).toEqual([true, true]);
+    const ended = task(COPY, { ownerId: QUILL, state: "completed" });
+    expect([canTakeOver(ended, both), canGiveBack(ended, both)]).toEqual([false, false]);
   });
 });
