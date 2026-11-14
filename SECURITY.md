@@ -46,3 +46,14 @@ Out of scope:
 - Attacks that need an already compromised Mac or user account.
 - Missing hardening without a demonstrated impact, such as absent headers or best-practice reports from scanners.
 - The app being unsigned. This is known; see [Install the Mac app](README.md#install-the-mac-app).
+
+## Security review guidelines
+
+Automated and human security reviews of pull requests follow these rules.
+
+- Read the [threat model](docs/threat-model.md) first. It names what Hobbots protects, who can attack it and which boundaries are enforced or only checked.
+- Rate a finding by the boundary it crosses. Crossing an enforced boundary, such as the sandbox, the device middleware or the rule that only a user session approves, is high or critical. Getting around a rule the permissions contract marks as checked is a known limit, not a finding, unless the change makes the contract claim more than the code delivers.
+- Prompt text and labels on outside data are guidance to the model, never a boundary (STD-SEC-002). Do not accept them as the fix for a finding.
+- A finding names the attacker from the threat model, what they control, the steps that reach the flaw and what they gain.
+- Treat the same rule on Claude Code and on Codex as one rule: a change that holds it for one runtime and not the other is a finding.
+- The out-of-scope list above applies to reviews too.
