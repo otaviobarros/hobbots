@@ -224,7 +224,8 @@ export class ChatService extends Context.Service<
     /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /**
-     * Makes a camp for the hob, with a title, a goal and whether it is private (ADR 037). Its key
+     * Makes a camp for the hob, with a title, a goal and whether it is private (ADR 037), and the other
+     * hobs it is made with, which join as members (ADR 039); the hob leads its quests. Its key
      * becomes the camp's id: the same camp asked for again is returned unchanged, and a key that
      * names another thread is refused. Refused for a hob that takes no new work.
      */
@@ -253,7 +254,13 @@ export class ChatService extends Context.Service<
       request: MoveRequest,
     ) => Effect.Effect<
       ChapterMove,
-      ThreadNotFound | HobUnavailable | ThreadKeyReused | ChapterRefused | ChapterNotFound | IllegalChapterTransition
+      | ThreadNotFound
+      | AgentNotFound
+      | HobUnavailable
+      | ThreadKeyReused
+      | ChapterRefused
+      | ChapterNotFound
+      | IllegalChapterTransition
     >;
     /**
      * The context pack the thread's next new session would start from, and the report of the pack

@@ -111,7 +111,9 @@ export const makeChapterMoves = (
   const campFor = (target: ChapterMoveTarget, first: number) =>
     target._tag === "camp"
       ? readThread(target.campId).pipe(Effect.map((camp) => ({ camp, events: [] as ReadonlyArray<JournaledEvent> })))
-      : camps.insertCamp(target.camp, first).pipe(Effect.map(({ value, events }) => ({ camp: value, events })));
+      : camps
+          .insertCamp(target.camp, first, target.hobs)
+          .pipe(Effect.map(({ value, events }) => ({ camp: value, events })));
 
   // Moves the messages to the camp's chapter in their order, after the camp's own, at `revision`. A
   // thread you had read stays read, and a camp just made starts read.

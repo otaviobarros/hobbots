@@ -1,7 +1,7 @@
 import { ThreadMemberRepository } from "@hobbots/agents";
 import { type Actor, MemberRefused, planMemberAdd, type Thread, type ThreadId, ThreadMember } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option } from "effect";
-import { SqlClient } from "effect/sql";
+import { SqlClient, type SqlError } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
 import { unreadMentionsOf } from "./message-mentions.ts";
 import { memberUnread, memberUnreadCount } from "./thread-columns.ts";
@@ -30,10 +30,20 @@ export const ThreadMemberRepositoryLive = Layer.effect(
       sql<{ readonly kind: Thread["kind"] }>`SELECT kind FROM threads WHERE id = ${threadId}`.pipe(
         Effect.flatMap(([row]) => (row === undefined ? Effect.die(`No thread ${threadId}`) : Effect.succeed(row))),
       );
+    const known = (actor: Actor): Effect.Effect<boolean, SqlError.SqlError> => {
+      if (actor.kind === "hub") return Effect.succeed(false);
+      const rows =
+        actor.kind === "user"
+          ? sql`SELECT 1 AS found FROM users WHERE id = ${actor.id}`
+          : sql`SELECT 1 AS found FROM agents WHERE id = ${actor.id}`;
+      return Effect.map(rows, (found) => found.length > 0);
+    };
     const add = (threadId: ThreadId, actor: Actor, addedBy: Actor) =>
       change<ThreadMember, MemberRefused>((first) =>
         Effect.gen(function* () {
           const thread = yield* readThread(threadId);
+          // Only a person or a hob the hub knows joins.
+          if (!(yield* known(actor))) return yield* new MemberRefused({ threadId, actor, reason: "unknown" });
           const plan = planMemberAdd(thread, yield* selectMembers(sql, threadId), actor);
           switch (plan._tag) {
             case "refused":

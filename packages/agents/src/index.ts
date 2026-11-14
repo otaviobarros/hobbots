@@ -7,6 +7,7 @@ export * from "./asking.ts";
 export * from "./brief-log.ts";
 export { clip, contextBlock } from "./briefing.ts";
 export * from "./camp-briefs.ts";
+export * from "./camp-members.ts";
 export * from "./camp-suggestions.ts";
 export * from "./catch-up.ts";
 export * from "./change-reach.ts";

@@ -1,4 +1,4 @@
-import { type AgentNotFound, StartFreshRefused, ThreadKeyReused } from "@hobbots/api";
+import { AgentNotFound, StartFreshRefused, ThreadKeyReused } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -27,6 +27,11 @@ export interface CampRequest {
   readonly title: string;
   readonly goal: string | null;
   readonly private: boolean;
+  /**
+   * The other hobs it is made with (ADR 039, Members), in the order picked; the hob it is made for
+   * leads its quests. Each must take new work.
+   */
+  readonly hobs?: ReadonlyArray<AgentId>;
 }
 
 /** What the camp commands take from ChatService: its guards and locks, and the writes it announces. */
@@ -43,6 +48,10 @@ export type MoveRequest =
   | { readonly _tag: "camp"; readonly campId: ThreadId }
   | ({ readonly _tag: "new" } & CampRequest);
 
+// The other hobs a camp is made with, each once, without the hob it is made for.
+const othersOf = (lead: AgentId, hobs: ReadonlyArray<AgentId> = []) =>
+  [...new Set(hobs)].filter((hobId) => hobId !== lead);
+
 // The chat changed between its read and the write, as a turn that recorded its session would; read again.
 class StaleChat extends Data.TaggedError("StaleChat") {}
 
@@ -52,12 +61,25 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
     const repo = yield* HobbotsRepository;
     const archiveBlockers = yield* archiveBlockersOf;
 
+    // Another hob a camp is made with: one the hub knows that takes new work. A retirement that
+    // lands before the camp is stored leaves it a member that left.
+    const requireJoins = (hobId: AgentId) =>
+      Effect.gen(function* () {
+        const agent = yield* repo.findAgent(hobId);
+        if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId: hobId });
+        yield* requireActive(agent.value);
+      });
+
     const makeCamp = Effect.fn("ChatService.makeCamp")(function* (agentId: AgentId, request: CampRequest) {
       return yield* withHob(agentId, (agent) =>
         Effect.gen(function* () {
           // The same camp asked for again is answered as it is, whatever the hob does now.
           const stored = yield* repo.findThread(request.key);
-          if (Option.isNone(stored)) yield* requireActive(agent);
+          const hobs = othersOf(agentId, request.hobs);
+          if (Option.isNone(stored)) {
+            yield* requireActive(agent);
+            yield* Effect.forEach(hobs, requireJoins, { discard: true });
+          }
           const now = yield* nowIso;
           const camp = new Thread({
             id: request.key,
@@ -69,7 +91,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
             createdAt: now,
             updatedAt: now,
           });
-          return yield* repo.makeCamp(camp).pipe(Effect.flatMap(announce));
+          return yield* repo.makeCamp(camp, hobs).pipe(Effect.flatMap(announce));
         }),
       );
     });
@@ -140,7 +162,12 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
       Effect.gen(function* () {
         if (request._tag === "camp") return { _tag: "camp", campId: request.campId } satisfies ChapterMoveTarget;
         // The same camp asked for again is answered as it is, whatever the hob does now.
-        if (Option.isNone(yield* repo.findThread(request.key))) yield* requireActive(agent);
+        // standards-allow STD-ARCH-021: a camp made from a chapter is led by the hob the chapter belongs to
+        const hobs = othersOf(thread.agentId, request.hobs);
+        if (Option.isNone(yield* repo.findThread(request.key))) {
+          yield* requireActive(agent);
+          yield* Effect.forEach(hobs, requireJoins, { discard: true });
+        }
         const now = yield* nowIso;
         const camp = new Thread({
           id: request.key,
@@ -154,7 +181,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
           createdAt: now,
           updatedAt: now,
         });
-        return { _tag: "new", camp } satisfies ChapterMoveTarget;
+        return { _tag: "new", camp, hobs } satisfies ChapterMoveTarget;
       });
 
     const moveChapter = Effect.fn("ChatService.moveChapter")(function* (

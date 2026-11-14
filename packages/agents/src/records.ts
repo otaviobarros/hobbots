@@ -25,7 +25,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { CharmTurn } from "./charms.ts";
-import { announcer, EventPublisher } from "./ports.ts";
+import { announcer, announcing, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
 import { PackRecordSource } from "./turn-pack.ts";
@@ -198,8 +198,7 @@ export class Records extends Context.Service<
         Effect.flatMap(repo.findThread(threadId), (found) =>
           Option.isNone(found) ? Effect.fail(new ThreadNotFound({ threadId })) : Effect.void,
         );
-      const announced = <A, E>(command: Effect.Effect<Committed<A>, E>) =>
-        Effect.flatMap(command, (committed) => Effect.as(announce(committed.entries), committed.value));
+      const announced = announcing(announce);
 
       return Records.of({
         recordYours: (threadId, input) =>

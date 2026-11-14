@@ -2,9 +2,14 @@ import type { HobbotsRepository } from "@hobbots/agents";
 import {
   type Actor,
   type JournaledEvent,
+  MemberRefused,
   Message,
   type MessageId,
+  planMemberRemove,
   QueuedMessageTransitions,
+  type Thread,
+  type ThreadId,
+  type ThreadMember,
   type TurnRequest,
   type TurnRequestId,
   TurnRequests,
@@ -12,12 +17,14 @@ import {
 import { Effect, Option } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import type { makeJournaled, makeJournaledChange } from "./journal.ts";
+import { movedMember, saveState, selectMembers } from "./thread-member-rows.ts";
 import {
   selectOpenRequests,
   selectOpenRequestsOf,
   selectRequestsById,
   selectRequestsIn,
   selectThreadsWaiting,
+  selectWaitingOf,
   stepRequests,
 } from "./turn-request-rows.ts";
 
@@ -33,6 +40,7 @@ type Writes = Pick<
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
   | "threadsWithWaitingRequests"
+  | "removeMember"
 >;
 
 /**
@@ -78,6 +86,12 @@ export const makeTurnRequestWrites = (
       return events;
     });
 
+  // Drops every request `hobId` still waits to answer in the thread, on any of its lines.
+  const dropWaitingOf = (threadId: ThreadId, hobId: string, by: Actor) =>
+    selectWaitingOf(sql, threadId, hobId).pipe(
+      Effect.flatMap((waiting) => stepRequests(sql, waiting, { _tag: "Drop", by })),
+    );
+
   return {
     openTurnRequests: (line) => selectOpenRequests(sql, line).pipe(Effect.orDie),
     startReply: (reply, speaking) =>
@@ -115,5 +129,28 @@ export const makeTurnRequestWrites = (
       Effect.orDie,
     ),
     threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),
+    removeMember: (threadId, actor, by) =>
+      journaledChange<{ readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> }, MemberRefused>(
+        (revision) =>
+          Effect.gen(function* () {
+            const [thread] = yield* sql<Pick<Thread, "kind" | "agentId">>`SELECT kind, agent_id FROM threads
+            WHERE id = ${threadId}`;
+            if (thread === undefined) return yield* Effect.die(new Error(`No thread ${threadId}`));
+            const plan = planMemberRemove(thread, yield* selectMembers(sql, threadId), actor);
+            if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
+            if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
+            const member = movedMember(plan.member, { _tag: "Remove" }, revision);
+            yield* saveState(sql, member);
+            // The hob owes nothing here any more: what it was waiting to answer, on any line, is dropped
+            // with it. The answer it is speaking now ends with its turn.
+            const dropped = actor.kind === "hob" ? yield* dropWaitingOf(threadId, actor.id, by) : [];
+            const dequeued = yield* dequeueUnowed(
+              dropped.map((request) => request.messageId),
+              revision + 1,
+            );
+            const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ThreadMemberChanged", member }, ...dequeued];
+            return { value: { member, dropped }, events };
+          }),
+      ),
   };
 };

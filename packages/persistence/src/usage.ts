@@ -1,3 +1,4 @@
+import type { HobToday } from "@hobbots/api";
 import {
   AgentId,
   AgentStatus,
@@ -7,6 +8,7 @@ import {
   type QuestSpend,
   type QuestUsage,
   RuntimeKind,
+  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -30,6 +32,10 @@ const UNREPORTED =
   "s.input_tokens IS NULL AND s.output_tokens IS NULL AND s.cache_read_tokens IS NULL AND s.cache_write_tokens IS NULL";
 const TOKENS =
   "COALESCE(s.input_tokens, 0) + COALESCE(s.output_tokens, 0) + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.cache_write_tokens, 0)";
+
+// The hob that wrote a reply: in a camp a member hob answers too (ADR 039), so a reply names its
+// own author. A reply stored before authors were recorded counts for its thread's hob.
+const REPLY_HOB = "CASE WHEN m.actor_kind = 'hob' THEN m.actor_id ELSE t.agent_id END";
 
 // PostgreSQL reads COUNT and SUM as bigint or numeric text, so every count is read back as a number.
 const count = (value: unknown) => Number(value ?? 0);
@@ -94,6 +100,11 @@ export class UsageLedger extends Context.Service<
       readonly minutes: ReadonlyArray<MinuteUsage>;
     }>;
     /**
+     * What each hob's settled replies in one thread used from `since` until `until` (ADR 039, Status
+     * and cost), from the same columns as `usage`, and when each hob last answered there at all.
+     */
+    readonly threadUsage: (threadId: ThreadId, since: string, until: string) => Effect.Effect<ReadonlyArray<HobToday>>;
+    /**
      * What a top Quest's whole party spent, ever (#1449): its replies and turns outside a chat, as
      * `usage` attributes them, a sub-quest's included.
      */
@@ -118,7 +129,7 @@ export class UsageLedger extends Context.Service<
             ? sql.literal("")
             : sql`AND u.started_at >= ${window.since} AND u.started_at < ${window.until}`;
         return sql`(
-            SELECT t.agent_id AS hob_id, m.runtime, m.model, m.created_at AS at, m.thread_id,
+            SELECT ${sql.literal(REPLY_HOB)} AS hob_id, m.runtime, m.model, m.created_at AS at, m.thread_id,
               ${sql.literal(QUEST_OF_REPLY)} AS quest_id,
               m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
             FROM messages m JOIN threads t ON t.id = m.thread_id
@@ -131,6 +142,44 @@ export class UsageLedger extends Context.Service<
           ) s`;
       };
       return UsageLedger.of({
+        threadUsage: (threadId, since, until) =>
+          Effect.all(
+            [
+              sql<Record<string, unknown>>`
+                SELECT s.hob_id, COUNT(*) AS turns, COALESCE(SUM(${sql.literal(TOKENS)}), 0) AS tokens,
+                  COALESCE(SUM(CASE WHEN ${sql.literal(UNREPORTED)} THEN 1 ELSE 0 END), 0) AS unreported
+                FROM (
+                  SELECT ${sql.literal(REPLY_HOB)} AS hob_id,
+                    m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
+                  FROM messages m JOIN threads t ON t.id = m.thread_id
+                  WHERE m.thread_id = ${threadId} AND ${sql.literal(SETTLED)}
+                    AND m.created_at >= ${since} AND m.created_at < ${until}
+                ) s
+                GROUP BY s.hob_id`,
+              sql<Record<string, unknown>>`
+                SELECT ${sql.literal(REPLY_HOB)} AS hob_id, MAX(m.created_at) AS last_at
+                FROM messages m JOIN threads t ON t.id = m.thread_id
+                WHERE m.thread_id = ${threadId} AND ${sql.literal(SETTLED)}
+                GROUP BY ${sql.literal(REPLY_HOB)}`,
+            ],
+            { concurrency: 1 },
+          ).pipe(
+            Effect.map(([spent, last]) => {
+              const lastAt = new Map(last.map((row) => [String(row.hobId), String(row.lastAt)]));
+              const hobs = new Set([...spent.map((row) => String(row.hobId)), ...lastAt.keys()]);
+              return [...hobs].sort().map((hobId): HobToday => {
+                const row = spent.find((each) => String(each.hobId) === hobId);
+                return {
+                  hobId: decodeAgentId(hobId),
+                  turns: count(row?.turns),
+                  tokens: count(row?.tokens),
+                  unreported: count(row?.unreported),
+                  lastAnsweredAt: lastAt.get(hobId) ?? null,
+                };
+              });
+            }),
+            Effect.orDie,
+          ),
         spentOn: (questId) =>
           sql<Record<string, unknown>>`
             SELECT COALESCE(SUM(${sql.literal(TOKENS)}), 0) AS tokens, COUNT(*) AS turns,

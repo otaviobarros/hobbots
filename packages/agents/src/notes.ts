@@ -10,7 +10,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission, withThreadLock } from "./admission.ts";
-import { announcer, EventPublisher } from "./ports.ts";
+import { announcer, announcing, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
 /**
@@ -75,10 +75,7 @@ export class Notes extends Context.Service<
           Option.isNone(found) ? Effect.fail(new ThreadNotFound({ threadId })) : Effect.succeed(found.value),
         );
 
-      const announced = <A, E>(command: Effect.Effect<Committed<A>, E>) =>
-        Effect.tap(command, (committed) => announce(committed.entries)).pipe(
-          Effect.map((committed) => committed.value),
-        );
+      const announced = announcing(announce);
 
       // Under the hob's lock, as a message you send is, so the note takes its place in the thread's
       // order and no archive lands between the check and the write.

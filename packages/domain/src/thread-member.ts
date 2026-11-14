@@ -100,8 +100,13 @@ export const MemberMachine = defineMachine<MemberState, MemberEvent, ThreadMembe
     new IllegalMemberTransition({ threadId: member.threadId, actor: member.actor, from: member.state, to }),
 });
 
-/** Why a member cannot be added. `direct-message`: a direct message keeps exactly its person and its hob. */
-export const MemberRefusal = Schema.Literals(["direct-message"]);
+/**
+ * Why a member cannot be added or removed. `direct-message`: a direct message keeps exactly its person
+ * and its hob. `lead`: the hob a camp was made with leads its quests and stays. `owner`: the person
+ * whose camp it is stays. `not-member`: they are not in the thread, or the person asking is not.
+ * `unknown`: the hub has no such person.
+ */
+export const MemberRefusal = Schema.Literals(["direct-message", "lead", "owner", "not-member", "unknown"]);
 export type MemberRefusal = typeof MemberRefusal.Type;
 
 /** A member a thread refused to add. */
@@ -130,6 +135,27 @@ export const planMemberAdd = (
     return member.state === "active" ? { _tag: "active", member } : { _tag: "return", member };
   }
   return thread.kind === "chat" ? { _tag: "refused", reason: "direct-message" } : { _tag: "add" };
+};
+
+/**
+ * What removing `actor` from a thread does, given its members in every state: `remove` the active
+ * member, keep one who already `left` or was removed, or refuse. A direct message keeps its two, a
+ * camp keeps its owner and the hob it was made with, which leads its quests (ADR 039, Members).
+ */
+export const planMemberRemove = (
+  thread: Pick<Thread, "kind" | "agentId">,
+  members: ReadonlyArray<ThreadMember>,
+  actor: Actor,
+):
+  | { readonly _tag: "remove"; readonly member: ThreadMember }
+  | { readonly _tag: "gone"; readonly member: ThreadMember }
+  | { readonly _tag: "refused"; readonly reason: MemberRefusal } => {
+  if (thread.kind === "chat") return { _tag: "refused", reason: "direct-message" };
+  const member = members.find((each) => sameActor(each.actor, actor));
+  if (member === undefined) return { _tag: "refused", reason: "not-member" };
+  if (member.role === "owner") return { _tag: "refused", reason: "owner" };
+  if (actor.kind === "hob" && actor.id === thread.agentId) return { _tag: "refused", reason: "lead" };
+  return member.state === "active" ? { _tag: "remove", member } : { _tag: "gone", member };
 };
 
 /** `MemberMachine` with the questions code outside this module asks of a member's state. */

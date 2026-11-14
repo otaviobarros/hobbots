@@ -64,6 +64,7 @@ import { HobChangesGroup } from "./hob-changes.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
 import { HobMemoryGroup } from "./hob-memory.ts";
 import { HobProposalsGroup } from "./hob-proposals.ts";
+import { MembersGroup } from "./members.ts";
 import { MemoryGroup } from "./memory.ts";
 import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
@@ -505,6 +506,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(NotesGroup)
   .add(ForYouGroup)
   .add(SidebarGroup)
+  .add(MembersGroup)
   .add(ClaimsGroup)
   .add(SystemGroup)
   .add(SetupGroup)

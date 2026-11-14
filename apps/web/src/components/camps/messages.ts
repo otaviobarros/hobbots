@@ -34,20 +34,13 @@ export const messages = {
   },
   make: {
     title: "Make a camp",
-    lead: ({ name }: Named) =>
-      `A camp holds one goal. ${name} keeps going there while the goal stays the same, and your chat stays for everything else.`,
+    lead: "A camp is a place for a goal. Add one hob or several, and other people.",
     name: "Name",
     namePlaceholder: "What is this camp called?",
     goal: "Goal",
     goalPlaceholder: "What is this camp for?",
-    goalHint: ({ name }: Named) => `${name} uses the goal to notice when something belongs here.`,
-    comesAlong: "Comes along",
-    memory: ({ name }: Named) => `${name}'s memory`,
-    memoryAlways: "What they know about you. Always comes along.",
     private: "Private camp",
-    privateOn: ({ name }: Named) =>
-      `Nothing said here goes into ${name}'s memory. ${name} still uses what they already know.`,
-    privateOff: ({ name }: Named) => `What ${name} learns here can go into memory, like anywhere else.`,
+    privateDetail: "Nothing said here goes into any hob's memory.",
     cancel: "Cancel",
     make: "Make the camp",
     making: "Making the camp…",
@@ -55,6 +48,7 @@ export const messages = {
       "title-missing": "Give the camp a name.",
       "title-long": `Keep the name to ${formatCount(THREAD_TITLE_MAX)} characters.`,
       "goal-long": `Keep the goal to ${formatCount(CAMP_GOAL_MAX)} characters.`,
+      "hobs-missing": "Pick at least one hob to lead the camp.",
     } satisfies Record<CampProblem, string>,
     errors: {
       "hob-unavailable": ({ name }: Named) => `${name} is paused or retired, so it can't take a new camp now.`,

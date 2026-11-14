@@ -1,6 +1,7 @@
 import { sessionActor } from "@hobbots/agents";
 import {
   type Actor,
+  type AgentId,
   type JournaledEvent,
   type MemberEvent,
   type Thread,
@@ -127,6 +128,42 @@ export const startMembersIn =
           mutedUntil: null,
         }),
       ];
+      return yield* added(sql, members, first);
+    });
+
+/**
+ * Adds the other hobs a camp is made with (ADR 039, Members), after its first two members, at journal
+ * sequences from `first` on, each added by the person whose session made it: their
+ * `ThreadMemberAdded` events. A hob retired meanwhile joins as a member that left, as it would have
+ * had it joined first.
+ */
+export const addHobsIn =
+  (sql: SqlClient.SqlClient) =>
+  (
+    thread: Thread,
+    hobs: ReadonlyArray<AgentId>,
+    first: number,
+  ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
+    Effect.gen(function* () {
+      if (hobs.length === 0) return [];
+      const owner = yield* sessionActor;
+      const rows = yield* sql<{ readonly id: string; readonly status: string }>`SELECT id, status FROM agents
+        WHERE ${sql.in("id", hobs)}`;
+      const retired = new Set(rows.filter((row) => row.status === "retired").map((row) => row.id));
+      const members = hobs.map(
+        (hobId) =>
+          new ThreadMember({
+            threadId: thread.id,
+            actor: { kind: "hob", id: hobId },
+            role: "member",
+            state: retired.has(hobId) ? "left" : "active",
+            joinedAt: thread.createdAt,
+            addedBy: owner,
+            readRevision: null,
+            mutedUntil: null,
+            revision: first,
+          }),
+      );
       return yield* added(sql, members, first);
     });
 
