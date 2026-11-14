@@ -44,6 +44,7 @@ import {
   ALDRIC,
   givePolicy,
   hub,
+  memberTask,
   messagesWhen,
   project,
   promptsTo,
@@ -204,7 +205,7 @@ const gated = (gates: Map<string, () => Promise<void>>, keys: ReadonlyArray<stri
 
 const isLive = (state: string) => state === "starting" || state === "running";
 
-const rookTask = (tree: TaskTree) => tree.tasks.find((task) => task.ownerId === ROOK && task.parentId !== null);
+const rookTask = (tree: TaskTree) => memberTask(tree, ROOK);
 
 /** Rook's Task's Attempts. */
 const rookAttempts = (tree: TaskTree) => tree.attempts.filter((each) => each.taskId === rookTask(tree)?.id);
