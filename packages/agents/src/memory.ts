@@ -22,6 +22,8 @@ import {
   type MemoryUnavailable,
   type MemoryVersion,
   type MemoryVersionChanges,
+  type Message,
+  type MessageId,
   memoryProjectIdentity,
   memoryScopeAllowed,
   memoryScopeKey,
@@ -121,9 +123,9 @@ export interface MemoryStoreShape {
   /**
    * Sends what happened in a memory session (ADR 028, Capture and summaries), a thread's or an
    * Attempt's outside any chat, to that session in `scope`, a hob's own memory, in order, and
-   * answers how many of the first items memory acknowledged. A thread is one session, so a brain
-   * switch never splits it. An item whose key memory has seen in the last 30 days is acknowledged
-   * and skipped.
+   * answers how many of the first items memory acknowledged. A thread is one session in each hob's
+   * memory, so a brain switch never splits it, and a thread with several hobs has one in each of
+   * theirs (ADR 039). An item whose key memory has seen in the last 30 days is acknowledged and skipped.
    */
   readonly capture: (
     actor: MemoryActor,
@@ -132,8 +134,8 @@ export interface MemoryStoreShape {
     items: ReadonlyArray<MemoryCaptureItem>,
   ) => Memory<number>;
   /**
-   * Ends the session, so memory writes its summary page, `sessions/<session id>.md`, with the
-   * memory model or without one. `key` names this end, as an item's does. Items captured later
+   * Ends the session, so memory writes its summary page, at `sessionPage`, with the memory model or
+   * without one. `key` names this end, as an item's does. Items captured later
    * continue the same session, and the next end writes its page again. Answers false, writing
    * nothing, while you have that page pinned: the end waits, and is sent again until it is taken.
    */
@@ -143,6 +145,11 @@ export interface MemoryStoreShape {
     sessionId: MemorySessionId,
     key: string,
   ) => Memory<boolean>;
+  /**
+   * Where the session's summary page is in `scope`: `sessions/<name>.md`, by the name memory keeps
+   * the session under in that scope.
+   */
+  readonly sessionPage: (scope: MemoryScope, sessionId: MemorySessionId) => MemoryPath;
   /**
    * Checks `scope` for pages that disagree and pages that look out of date (ADR 028, Check now), and
    * answers what it found, changing nothing. Only you check.
@@ -255,6 +262,8 @@ export const guardMemoryStore = (store: MemoryStoreShape): MemoryStoreShape => (
   restore: guarded("restore", store.restore, one),
   capture: guarded("capture", store.capture, one),
   endSession: guarded("capture", store.endSession, one),
+  // A name, not a read: the page itself is read through `page`, which is guarded.
+  sessionPage: store.sessionPage,
   check: guarded("check", store.check, one),
   health: store.health,
 });
@@ -376,12 +385,20 @@ export class MemoryTools extends Context.Service<
 >()("@hobbots/agents/MemoryTools") {}
 
 /**
+ * A memory session in a hob's own memory (ADR 028), a thread's or an Attempt's. A thread with several
+ * hobs has a session in each one's memory, named by the thread (ADR 039, Memory in a shared thread),
+ * so a session is its hob and its id together.
+ */
+export interface MemorySessionRef {
+  readonly sessionId: MemorySessionId;
+  readonly agentId: AgentId;
+}
+
+/**
  * A memory session that is open (ADR 028), a thread's or an Attempt's: its hob, when it was last
  * active, and the key of its last item.
  */
-export interface MemoryCaptureSession {
-  readonly sessionId: MemorySessionId;
-  readonly agentId: AgentId;
+export interface MemoryCaptureSession extends MemorySessionRef {
   /** When the session's last captured entry was committed (ISO 8601), so a backlog sent late still ends on time. */
   readonly lastAt: string;
   /** The key of the session's last captured item, which names the session's end. */
@@ -401,6 +418,11 @@ export interface MemoryCaptureExclusions {
 /** Where capture stands: the last journal entry memory acknowledged, the sessions that are open, and its exclusions. */
 export interface MemoryCaptureState {
   readonly sequence: number;
+  /**
+   * When capture last started from the journal's head (ISO 8601). Capture never read a message
+   * written before it, so it cannot know whether its camp was private then, and keeps none of them.
+   */
+  readonly since: string;
   readonly sessions: ReadonlyArray<MemoryCaptureSession>;
   readonly exclusions: MemoryCaptureExclusions;
 }
@@ -433,8 +455,8 @@ export class MemoryCaptureLog extends Context.Service<
     /**
      * Takes the hold, so compaction keeps every entry after the cursor, and answers where capture
      * stands. A cursor that was not holding, because memory was off or never on, starts again at the
-     * journal's head with no open session and the camps private now, keeping the units it kept out:
-     * memory gets what happens from now on.
+     * journal's head with no open session and the camps private now, keeping the units it kept out,
+     * and `since` now: memory gets what happens from now on.
      */
     readonly hold: Effect.Effect<MemoryCaptureState>;
     /** Lets compaction go on as if there were no capture, for a hub whose memory is turned off. */
@@ -450,9 +472,14 @@ export class MemoryCaptureLog extends Context.Service<
     readonly save: (
       sequence: number,
       active: ReadonlyArray<MemoryCaptureSession>,
-      ended: ReadonlyArray<MemorySessionId>,
+      ended: ReadonlyArray<MemorySessionRef>,
       exclusions: MemoryCaptureExclusions,
     ) => Effect.Effect<void>;
+    /**
+     * The messages of `ids` as they are stored now, those it finds: the people's messages hobs took a
+     * turn on, which each of those hobs captures (ADR 039, Memory in a shared thread).
+     */
+    readonly messages: (ids: ReadonlyArray<MessageId>) => Effect.Effect<ReadonlyArray<Message>>;
     /** Of `work`, the camps private now and the thread of each Task (ADR 037), read as capture sends. */
     readonly privacy: (work: MemoryCaptureWork) => Effect.Effect<MemoryCapturePrivacy>;
   }

@@ -5,7 +5,7 @@
     "packages/agents/src/approvals.ts": 1,
     "packages/agents/src/controls.ts": 2,
     "packages/agents/src/devices.ts": 1,
-    "packages/agents/src/memory-capture.ts": 3,
+    "packages/agents/src/memory-capture.ts": 1,
     "packages/agents/src/turn-activity.ts": 5,
     "packages/agents/src/turn-grants.ts": 1,
     "packages/charms/src/hob-app-tokens.ts": 1,

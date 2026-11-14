@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { MemoryCaptureItem, MemorySessionId } from "@hobbots/domain";
 import { Schema } from "effect";
+import { v5 as uuidV5 } from "uuid";
 import type { EngineProject } from "./scopes.ts";
 
 /**
@@ -10,12 +11,25 @@ import type { EngineProject } from "./scopes.ts";
  * wrote a reply, so a brain switch never splits the session. A message of yours, or a Task's goal, is
  * a prompt, a reply ends a turn (`stop`), a tool step and a Quest are events of Hobbots' own
  * vocabulary, and the end of the session (`session-end`) has ai-memory write its summary page,
- * `sessions/<session id>.md`. Each event carries the time it happened as `occurred_at`, so one sent
+ * `sessions/<engine session>.md`, named by `engineSessionOf`. Each event carries the time it happened as `occurred_at`, so one sent
  * late, as after an outage, keeps its own time and not the time it reached ai-memory.
  */
 
 /** Hobbots' producer name, in every event's `agent` and `extension`. */
 const PRODUCER = "hobbots";
+
+/** Hobbots' namespace for the names of the sessions it keeps in ai-memory (a UUID v5 namespace). */
+const SESSION_NAMESPACE = "6f1f3a5e-2b7d-4c0e-9a51-8d2c4e7b9f10";
+
+/**
+ * The session ai-memory keeps a memory session in. ai-memory names a session once for all its
+ * projects, while a hob's memory names its own sessions: a thread with several hobs has a session
+ * named by the thread in each hob's memory (ADR 039, Memory in a shared thread). So each one is named
+ * by its project too, as a UUID v5, which ai-memory keeps as it is, and the same session always gets
+ * the same name. Its summary page is `sessions/<that name>.md`.
+ */
+export const engineSessionOf = (where: EngineProject, sessionId: MemorySessionId): string =>
+  uuidV5(JSON.stringify([where.workspace, where.project, sessionId]), SESSION_NAMESPACE);
 
 /** The most events ai-memory takes in one batch. */
 export const HOOK_BATCH_MAX = 256;
@@ -78,7 +92,7 @@ export const hookEventOf = (
   const at = item.at === undefined ? {} : { occurred_at: item.at };
   return {
     url: `/hook?${query.toString()}`,
-    body: { session_id: sessionId, ...bodyOf(item.kind, item.text), ...at },
+    body: { session_id: engineSessionOf(where, sessionId), ...bodyOf(item.kind, item.text), ...at },
   };
 };
 

@@ -14,7 +14,7 @@ captureContract("the fake", () =>
         Effect.sync(() =>
           controls
             .captured({ _tag: "Hob", agentId }, sessionId)
-            .map((item) => ({ title: item.text.split("\n", 1)[0] ?? "", at: item.at ?? "" })),
+            .map((item) => ({ title: item.text.split("\n", 1)[0] ?? "", body: item.text, at: item.at ?? "" })),
         ),
       down: Effect.sync(() => controls.setDown(true)),
       up: Effect.sync(() => controls.setDown(false)),
