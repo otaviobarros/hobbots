@@ -497,6 +497,9 @@ describe("the claims register", () => {
         (await h.takenItems()).map((item) => [item.recipientId, item.taskId, Boolean(Number(item.actionable))]),
       ).toEqual([[FRODO, A, true]]);
       expect((await h.taskOf(A))?.state).toBe(before);
+      // Claiming it again tells Frodo it is yours, not that his Task holds it.
+      const again = await h.call(FRODO, A, { key: "p-again", scope: "path", path: "docs" });
+      expect(again.message).toContain("The user took over path docs");
       // Taking over again changes nothing.
       expect(await h.takeOver(A)).toEqual([]);
       expect(await h.takenItems()).toHaveLength(1);

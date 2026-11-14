@@ -12,6 +12,7 @@ import {
   numberLike,
   numbersIn,
   type TaskToolInput,
+  takenWriteText,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { holds, type PathSeparator } from "./authority.ts";
@@ -106,10 +107,13 @@ const madeText = (claim: Claim, onMain: OnMain, taken: number | null) => {
 const doneOf = (outcome: ClaimOutcome, onMain: OnMain) => {
   const names = onMain ?? [];
   const clashes = outcome.clashes.length === 0 ? "" : ` ${claimClashText(outcome.claim, outcome.clashes)}`;
+  // A claim you took over is the Task's in name only: the hob is told it is yours, not that it holds it.
   const text =
-    outcome._tag === "Held"
-      ? `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`
-      : madeText(outcome.claim, onMain, outcome.taken);
+    outcome._tag !== "Held"
+      ? madeText(outcome.claim, onMain, outcome.taken)
+      : outcome.claim.state === "taken"
+        ? takenWriteText(outcome.claim)
+        : `Your Task already holds ${claimSubject(outcome.claim)}, so nothing changed.`;
   return {
     message: `${text}${clashes}`,
     details: {

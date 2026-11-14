@@ -274,6 +274,11 @@ describe("what a call writes", () => {
       commits: [],
       trees: [],
     });
+    // A relative write is joined to the folder it is written from, after any `cd`.
+    const writes = (command: string) => callWrites({ id: "6", tool: "Bash", input: { command }, cwd: project }).paths;
+    expect(writes("echo x > docs/plan.md")).toEqual([`${project}/docs/plan.md`]);
+    expect(writes("cp a.md docs/plan.md")).toEqual([`${project}/a.md`, `${project}/docs/plan.md`]);
+    expect(writes("cd docs && touch plan.md")).toEqual([`${project}/docs/plan.md`]);
     // A Git command that rewrites the working tree is named by its folder, whichever files it reaches.
     const bash = (command: string) => callWrites({ id: "5", tool: "Bash", input: { command }, cwd: project }).trees;
     expect(bash("git reset --hard HEAD")).toEqual([project]);
@@ -284,6 +289,8 @@ describe("what a call writes", () => {
     expect(bash("git --work-tree=/other reset --hard")).toEqual(expect.arrayContaining(["/other", project]));
     expect(bash("git switch taken && git commit -am x")).toEqual([project]);
     expect(bash("git branch -f taken HEAD")).toEqual([project]);
+    expect(bash("git branch -Df taken")).toEqual([project]);
+    expect(bash("git branch --force taken HEAD")).toEqual([project]);
     expect(bash("git fetch --force origin HEAD:refs/heads/taken")).toEqual([project]);
     expect(bash("git -c remote.origin.fetch=+refs/heads/main:refs/heads/taken fetch origin")).toEqual([project]);
     // A subcommand not known to leave the working tree alone is read as one that may rewrite it.

@@ -308,7 +308,7 @@ const readAgain = (
   }
   // A claim made, contested, cleared or released changes the Heads-ups (#1390).
   if (isClaimEvent(event)) {
-    void applyClaimEvent(queryClient);
+    void applyClaimEvent(queryClient, event);
     return true;
   }
   // A reply's use line comes with the reply; the counts a skill's Activity and a hob's Used lately show are read again.

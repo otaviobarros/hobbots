@@ -43,13 +43,6 @@ const pushTarget = (branch: string): PushTarget => {
 };
 
 /**
- * Why a call's writes are refused (#1449): the first path or branch it writes that you took over
- * from a Task, which is yours until the Task ends. Every hob's call is checked, whatever Task it
- * works on, so no other hob writes there either. Paths are matched inside the repository by its
- * identity, so another clone or worktree of it is refused too. Null when nothing it writes is yours,
- * or when the hub keeps no claims register.
- */
-/**
  * Whether a write at `inside` touches the taken path `key`, without regard to case, as a
  * case-insensitive volume reads `DOCS` and `docs` as one folder; on a case-sensitive one this
  * refuses at most a few writes too many.
@@ -57,6 +50,13 @@ const pushTarget = (branch: string): PushTarget => {
 const touchesKey = (key: string, inside: string) =>
   touchesPath({ scope: "path", key: key.toLowerCase() }, inside.toLowerCase());
 
+/**
+ * Why a call's writes are refused (#1449): the first path or branch it writes that you took over
+ * from a Task, which is yours until the Task ends. Every hob's call is checked, whatever Task it
+ * works on, so no other hob writes there either. Paths are matched inside the repository by its
+ * identity, so another clone or worktree of it is refused too. Null when nothing it writes is yours,
+ * or when the hub keeps no claims register.
+ */
 export const makeTakenWrites = (separator: PathSeparator) =>
   Effect.gen(function* () {
     const register = yield* Effect.serviceOption(ClaimRegister);

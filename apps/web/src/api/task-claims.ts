@@ -39,9 +39,10 @@ export const useTaskClaims = (task: Task): TaskClaimsRead => {
 };
 
 /** A claim was made, contested, cleared, taken over or released: every Task's claims are read again. */
-export const refreshTaskClaims = async (queryClient: QueryClient): Promise<void> => {
-  await queryClient.cancelQueries({ queryKey: ["task-claims"] });
-  await queryClient.invalidateQueries({ queryKey: ["task-claims"] });
+export const refreshTaskClaims = async (queryClient: QueryClient, taskId?: TaskId): Promise<void> => {
+  const queryKey = taskId === undefined ? ["task-claims"] : taskClaimsKey(taskId);
+  await queryClient.cancelQueries({ queryKey });
+  await queryClient.invalidateQueries({ queryKey });
 };
 
 /**

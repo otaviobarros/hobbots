@@ -768,8 +768,13 @@ const TREE_KEEPS = new Set([
   "tag",
   "version",
 ]);
-/** `git branch` options that move, copy or delete a branch; without them it only lists or makes one. */
-const BRANCH_MOVES = new Set(["-f", "--force", "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy"]);
+/** `git branch` long options that move, copy or delete a branch; without them it only lists or makes one. */
+const BRANCH_MOVES = new Set(["--force", "--delete", "--move", "--copy"]);
+/** Short `git branch` options that move, copy or delete a branch, alone or bundled, as in `-Df`. */
+const BRANCH_MOVE_LETTERS = /^-[a-zA-Z]*[fdDmMcC]/;
+
+const movesBranch = (word: string) =>
+  BRANCH_MOVES.has(word.split("=")[0] ?? word) || (!word.startsWith("--") && BRANCH_MOVE_LETTERS.test(word));
 /** `git stash` forms that only read. */
 const STASH_READS = new Set(["list", "show", "create"]);
 
@@ -777,7 +782,7 @@ const rewritesTree = (sub: string, rest: ReadonlyArray<string>, settings: Readon
   // A setting given on the line, such as `-c remote.origin.fetch=...:refs/heads/taken`, can make
   // any subcommand write where its words don't say, so the line is read as a rewrite.
   if (settings.length > 0) return true;
-  if (sub === "branch") return rest.some((word) => BRANCH_MOVES.has(word));
+  if (sub === "branch") return rest.some(movesBranch);
   // A fetch whose refspec names where it lands, such as `HEAD:refs/heads/taken`, may move a local branch.
   if (sub === "fetch")
     return rest.some((word) => word === "--update-head-ok" || (!word.startsWith("-") && word.includes(":")));
@@ -1118,12 +1123,16 @@ export const commandWritesTo = (
   cwd: string,
   matches: (path: string) => boolean,
   home: string = homedir(),
+  relative = false,
 ): ReadonlyArray<string> => {
   const command = tool === "Bash" ? text(input, "command") : undefined;
   if (command === undefined) return [];
   const found = new Set<string>();
-  const add = (word: string) => {
-    if (isAbsolute(word) && matches(word)) found.add(word);
+  // With `relative`, a relative word is joined to the folder it is written from, as written, so the
+  // hub follows its links before any `..` (#1449); otherwise only absolute words are read.
+  const add = (word: string, at: string) => {
+    const path = isAbsolute(word) ? word : relative && word !== "" ? joinedAsWritten(at, word) : null;
+    if (path !== null && matches(path)) found.add(path);
   };
   const raw = rawTokens(command);
   raw.forEach((token, index) => {
@@ -1133,17 +1142,29 @@ export const commandWritesTo = (
     const rest = token.word.slice(operator.length);
     const next = raw[index + 1];
     const target = rest !== "" ? rest : next !== undefined && "word" in next ? next.word : "";
-    add(unquoted(target));
+    // A redirection's folder after a `cd` is not followed here; it is read from the call's folder.
+    add(unquoted(target), cwd);
   });
-  for (const token of commandLine(command)) {
-    if (!("words" in token)) continue;
-    const [name, ...args] = unwrap(token.words, cwd, home).words;
-    if (name !== undefined && PATH_WRITERS.has(basename(name))) {
-      for (const arg of args) if (!arg.startsWith("-")) add(arg);
+  const tokens = commandLine(command);
+  const folders = folderFlow(cwd, home);
+  tokens.forEach((token, index) => {
+    if ("separator" in token) {
+      folders.separator(token.separator);
+      return;
     }
-  }
+    const shell = folders.command(unwrap(token.words, cwd, home).words, separatorOf(tokens[index + 1]));
+    const { words, folder } = unwrap(token.words, shell, home);
+    const [name, ...args] = words;
+    if (name !== undefined && PATH_WRITERS.has(basename(name))) {
+      for (const arg of args) if (!arg.startsWith("-")) add(arg, folder);
+    }
+  });
   return [...found];
 };
+
+/** `path` joined to `folder` as written, without collapsing `..`, which the hub reads after links. */
+const joinedAsWritten = (folder: string, path: string) =>
+  `${folder.endsWith("/") || folder.endsWith("\\") ? folder : `${folder}${sep}`}${path}`;
 
 /**
  * The policy requests a tool call makes, or null for a tool Hobbots does not know. Relative paths

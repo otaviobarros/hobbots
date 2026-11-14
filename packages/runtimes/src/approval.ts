@@ -141,7 +141,7 @@ export const callWrites = (call: ToolCall): CallWrites => {
       : [],
   );
   return {
-    paths: [...new Set([...files, ...commandWritesTo(call.tool, call.input, call.cwd, () => true)])],
+    paths: [...new Set([...files, ...commandWritesTo(call.tool, call.input, call.cwd, () => true, undefined, true)])],
     pushes: requests.flatMap((request) =>
       request._tag === "Push" ? [{ cwd: request.cwd ?? call.cwd, branch: request.branch }] : [],
     ),
