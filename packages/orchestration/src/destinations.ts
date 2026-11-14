@@ -1,5 +1,5 @@
 import type { FolderChecksShape } from "@hobbots/agents";
-import type { AttemptId, Question, Task, TaskToolInput } from "@hobbots/domain";
+import { type AttemptId, isNoteFromYou, type Question, type Task, type TaskToolInput } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { PathSeparator } from "./authority.ts";
 import type { CallScope } from "./call-scope.ts";
@@ -54,7 +54,7 @@ const userWordsSince = (scope: CallScope): ReadonlyArray<string> => [
     question.answeredBy?._tag === "User" && question.answer !== null ? [question.answer] : [],
   ),
   ...picked(scope),
-  ...scope.tree.notes.flatMap((note) => (note.senderId === undefined || note.senderId === null ? [note.text] : [])),
+  ...scope.tree.notes.flatMap((note) => (isNoteFromYou(note) ? [note.text] : [])),
   ...(scope.caller.steers === undefined ? [] : [scope.caller.steers]),
 ];
 

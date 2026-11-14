@@ -61,7 +61,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { criteriaOf, makeCriteriaChanges, settleWaiverAsks, voidReplacedEvidence } from "./criteria-rows.ts";
-import { makeJournaled, makeJournaledChange } from "./journal.ts";
+import { lockJournal, makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
 import { readQuestSummaries } from "./quest-summary-rows.ts";
 import { insertQuestion, makeTaskReads, taskColumns } from "./task-rows.ts";
@@ -1331,8 +1331,9 @@ export const TaskRepositoryLive = Layer.effect(
       );
 
     return TaskRepository.of({
+      // The journal's head is locked first, so what the change reads is not stale when it writes.
       atomically: (effect) =>
-        sql.withTransaction(effect).pipe(
+        sql.withTransaction(Effect.andThen(lockJournal(sql), effect)).pipe(
           Effect.catchIf(
             (error): error is SqlError.SqlError => SqlError.isSqlError(error),
             (error) => Effect.die(error),

@@ -110,9 +110,19 @@ const describeQuestion = (question: Question) =>
 /** A message: your note on a Task, or a hob's, with the Task it is about. */
 const describeMessage = (
   item: BackpackItem,
-  message: { readonly senderId: string | null; readonly text: string; readonly aboutTaskId?: string | undefined },
+  message: {
+    readonly senderId: string | null;
+    readonly text: string;
+    readonly aboutTaskId?: string | undefined;
+    readonly byHub?: true;
+  },
 ) => {
-  const from = message.senderId === null ? "The user left a note" : `Hob ${message.senderId} sent you a message`;
+  const from =
+    message.byHub === true
+      ? "Hobbots left a note"
+      : message.senderId === null
+        ? "The user left a note"
+        : `Hob ${message.senderId} sent you a message`;
   const about = message.aboutTaskId ?? item.taskId;
   return `${from}${about === null ? "" : ` about Task ${about}`}: ${message.text}`;
 };

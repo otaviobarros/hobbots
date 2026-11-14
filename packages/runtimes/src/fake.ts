@@ -141,6 +141,12 @@ export const FAKE_DIRECTIVES = {
 export const FAKE_FAIL_DIRECTIVE = "fake:fail";
 
 /**
+ * A prompt line `fake:limit` on its own, anywhere in it, makes the fake hit the usage limit, as a
+ * prompt that starts with it does, so a step or member brief can run out of allowance (#1447).
+ */
+export const FAKE_LIMIT_DIRECTIVE = FAKE_DIRECTIVES.limit;
+
+/**
  * A prompt line `fake:once <line>` runs `<line>` the first time this fake sees it, in any session,
  * and is dropped after: a retried step that starts from the same brief then does less than the try
  * before it, as a retry can.
@@ -806,7 +812,8 @@ const keptForNext = (prompt: string) =>
 const fakeEnding = (prompt: string) =>
   prompt.startsWith(FAKE_DIRECTIVES.cutOff) || prompt.split("\n").some((line) => line.trim() === FAKE_FAIL_DIRECTIVE)
     ? "cutOff"
-    : prompt.startsWith(FAKE_DIRECTIVES.limit)
+    : prompt.startsWith(FAKE_DIRECTIVES.limit) ||
+        prompt.split("\n").some((line) => line.trim() === FAKE_LIMIT_DIRECTIVE)
       ? "limit"
       : "complete";
 

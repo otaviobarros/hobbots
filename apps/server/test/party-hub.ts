@@ -43,7 +43,7 @@ import {
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { Dispatcher } from "@hobbots/inbox";
-import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
+import { DEFAULT_TASK_TOOL_LIMITS, StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ActivityRepositoryLive,
@@ -52,6 +52,7 @@ import {
   ChapterRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
+  SupervisionRecordsLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
   UsageLedger,
@@ -59,6 +60,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import type { HubCallRuntime, ScriptedHubCall } from "@hobbots/runtimes/testing";
+import { Supervisor } from "@hobbots/supervision";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
 import { DispatcherHostLive } from "../src/backpack.ts";
@@ -257,6 +259,8 @@ export const partyHub = (
     readonly chapters?: boolean;
     /** The installed runtime every turn runs on instead of the fake, with its stand-in model (STD-TEST-002). */
     readonly turnsOn?: HubCallRuntime;
+    /** Whether the supervisor (#1447) looks over the work, each time a test calls its `pass`. */
+    readonly supervisor?: boolean;
     /**
      * The hub tools a turn is not offered, as on a hub from before they existed (#1543): its runtime
      * neither lists them nor reaches the hub with them.
@@ -390,7 +394,16 @@ export const partyHub = (
     }
   });
 
-  const app = Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
+  const app = Layer.mergeAll(
+    WakeOnArrival,
+    HobLifecycle.layer,
+    TaskControls.layer,
+    options.supervisor === true
+      ? Supervisor.layer({ every: null, limits: DEFAULT_TASK_TOOL_LIMITS }).pipe(
+          Layer.provideMerge(SupervisionRecordsLive),
+        )
+      : Layer.empty,
+  ).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
     Layer.provideMerge(

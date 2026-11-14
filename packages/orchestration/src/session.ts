@@ -47,6 +47,7 @@ import {
   systemInstructions,
   type TaskId,
   type ThreadId,
+  usageLimitOutcome,
   type WebReadMark,
 } from "@hobbots/domain";
 import { DateTime, Effect, Option, Semaphore, Stream } from "effect";
@@ -321,7 +322,7 @@ export const runSessionTurn = (
             Effect.sync(() => {
               ending = {
                 _tag: "Failed",
-                reason: `The usage limit was reached; it resets at ${error.resetsAt}.`,
+                reason: usageLimitOutcome(error.resetsAt),
                 limited: true,
               };
             }),
@@ -335,7 +336,7 @@ export const runSessionTurn = (
   );
 
 /** Why a running session was stopped, which decides what its Task becomes. */
-export type StopReason = "cancel" | "authority" | "hob" | "interrupt" | "pause";
+export type StopReason = "cancel" | "authority" | "hob" | "interrupt" | "pause" | "deadline" | "ended";
 
 export const STOPPED: Record<StopReason, string> = {
   cancel: "Cancelled.",
@@ -343,6 +344,8 @@ export const STOPPED: Record<StopReason, string> = {
   authority: "Stopped because its hob's permissions were narrowed.",
   hob: "Stopped by Hobbots before it finished, with its hob's other work.",
   interrupt: "Stopped by its lead's message, which the next turn starts with.",
+  deadline: "Stopped because its Task passed its deadline.",
+  ended: "Stopped because Hobbots failed the Task above it.",
 };
 
 /** A session the runner holds open for a Task: a step's, or a party member's turn. */

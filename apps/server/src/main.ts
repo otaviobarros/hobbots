@@ -127,6 +127,7 @@ import {
   SkillLibraryLive,
   SkillProposalLogLive,
   SqliteLive,
+  SupervisionRecordsLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
   ThreadMemberRepositoryLive,
@@ -144,6 +145,7 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { RepositorySkillFinderLive, SkillRepositoriesLive, SkillToolsLive } from "@hobbots/skills";
+import { Supervisor } from "@hobbots/supervision";
 import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
 import { Deferred, Duration, Effect, Layer, Option, Redacted, References } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/http";
@@ -396,6 +398,8 @@ const ServerLive = Layer.unwrap(
       ThreadMemberRepositoryLive,
       // How many turns run at once, per hob, Quest and runtime (#1448).
       TurnLimitsRepositoryLive,
+      // The supervisor's record of each Task it acted on (#1447).
+      SupervisionRecordsLive,
       HubQuestionRepositoryLive,
       HubCommitIdentityRepository,
       CodingSetupDismissalRepository,
@@ -566,6 +570,8 @@ const ServerLive = Layer.unwrap(
             ActivityRetention,
             // Two Tasks of one Quest changing the same file is a finding for their lead (#570).
             OverlappingChanges,
+            // Delegation deadlines and recovery by fixed rules, with no model call (#1447).
+            Supervisor.layer({ limits: config.taskLimits }),
             // Work that arrives for a hob wakes its thread (ADR 019).
             WakeOnArrival,
             // A retired hob's work fails as blockers that wait for you (IN-007).

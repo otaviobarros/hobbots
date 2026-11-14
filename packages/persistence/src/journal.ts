@@ -284,6 +284,15 @@ const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
   return { ...NONE, threadId, agentId: actor.kind === "hob" ? AgentId.make(actor.id) : null };
 };
 
+/** A record the hub keeps about a Task: a refused call names its hob too; the supervisor's, the Task alone (#1447). */
+type TaskRecordEvent = Extract<JournaledEventType, { readonly _tag: "ToolCallRefused" | "TaskSupervised" }>;
+const isTaskRecord = (event: JournaledEventType): event is TaskRecordEvent =>
+  event._tag === "ToolCallRefused" || event._tag === "TaskSupervised";
+const taskRecordCorrelation = (event: TaskRecordEvent): RowCorrelation =>
+  event._tag === "ToolCallRefused"
+    ? { ...NONE, agentId: event.refusal.agentId, taskId: event.refusal.taskId }
+    : { ...NONE, taskId: event.supervision.taskId };
+
 /** Task and Workbench events, and the message events that name their thread and message. */
 const restCorrelationOf = (
   event: Exclude<
@@ -323,9 +332,8 @@ const restCorrelationOf = (
   if (isSkillEvent(event)) return skillCorrelationOf(event);
   // The Workbench's records name their Task (ADR 023).
   if (isWorkbenchRecord(event)) return { ...NONE, taskId: workbenchTaskOf(event) };
+  if (isTaskRecord(event)) return taskRecordCorrelation(event);
   switch (event._tag) {
-    case "ToolCallRefused":
-      return { ...NONE, agentId: event.refusal.agentId, taskId: event.refusal.taskId };
     // A hob's save names its hob, and the reply it was made from when it came from a chat turn.
     case "MemorySaveRecorded":
     case "MemorySaveChanged":
