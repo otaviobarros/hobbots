@@ -1,7 +1,7 @@
 import {
   type Agent,
   type AgentConfiguration,
-  type AgentId,
+  AgentId,
   type BackpackTurnEnd,
   type Brain,
   DEFAULT_THREAD_TITLE,
@@ -21,6 +21,7 @@ import {
   Thread,
   type ThreadId,
   ThreadLifecycle,
+  ThreadMembers,
   type ThreadRunStatus,
   type TurnRequestId,
   TurnRequests,
@@ -32,6 +33,7 @@ import { type CarriedEnd, type CarriedWork, Continuations } from "./continuation
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
+import { ThreadMemberRepository } from "./thread-members.ts";
 import {
   idleRun,
   isAtRest,
@@ -105,6 +107,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     const admission = yield* HobAdmission;
     // Without a backpack, a thread starts only your queued messages.
     const continuations = yield* Effect.serviceOption(Continuations);
+    // Without members, a thread's own hob is the only one that speaks there.
+    const members = yield* Effect.serviceOption(ThreadMemberRepository);
     // After a restore nothing that waited starts on its own until you resume work (ADR 026).
     const held = yield* workHeld;
     const scope = yield* Effect.scope;
@@ -403,15 +407,44 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         return next === null || agent === undefined ? null : { request: next, agent };
       });
 
-    // The thread and its hob, when the hob takes work and the thread takes new turns.
-    const workable = (threadId: ThreadId) =>
+    // The hobs that speak in the thread: its own hob, then its active member hobs as they joined.
+    const hobsOf = (thread: Thread) =>
+      Option.isNone(members)
+        ? Effect.succeed<ReadonlyArray<AgentId>>([thread.agentId])
+        : members.value
+            .list(thread.id)
+            .pipe(
+              Effect.map((list) => [
+                thread.agentId,
+                ...list.flatMap((member) =>
+                  member.actor.kind === "hob" && ThreadMembers.isActive(member) && member.actor.id !== thread.agentId
+                    ? [AgentId.make(member.actor.id)]
+                    : [],
+                ),
+              ]),
+            );
+
+    // The thread and the hob `agentId` names, the thread's own by default, when that hob speaks
+    // there and takes work, and the thread takes new turns.
+    const workable = (threadId: ThreadId, agentId?: AgentId) =>
       Effect.gen(function* () {
         const thread = yield* repo.findThread(threadId);
         if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return null;
-        const agent = yield* repo.findAgent(thread.value.agentId);
-        if (Option.isNone(agent) || agent.value.status !== "active") return null;
-        return { thread: thread.value, agent: agent.value };
+        const hobId = agentId ?? thread.value.agentId;
+        if (!(yield* hobsOf(thread.value)).includes(hobId)) return null;
+        const agent = (yield* activeHobs(thread.value, [hobId])).get(hobId);
+        return agent === undefined ? null : { thread: thread.value, agent };
       });
+
+    // Runs `effect` under the thread's lock, its own hob's, which every turn of the thread takes.
+    const underThread = <A>(threadId: ThreadId, effect: Effect.Effect<A>) =>
+      repo
+        .findThread(threadId)
+        .pipe(
+          Effect.flatMap((thread) =>
+            Option.isNone(thread) ? effect : admission.withHob(thread.value.agentId, effect),
+          ),
+        );
 
     // Whether a request of `agentId` waits in the thread's line, for routine progress to ride along.
     const requestWaitsFor = (threadId: ThreadId, agentId: AgentId) =>
@@ -461,16 +494,30 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           yield* startQueued(threadId);
           return;
         }
-        const found = yield* workable(threadId);
-        // Another hob's request that is next takes the floor first; the work waits its hob's turn.
-        const next = found === null ? null : yield* floorNext(found.thread);
-        if (found === null || (next !== null && next.agent.id !== found.agent.id)) {
+        const thread = yield* repo.findThread(threadId);
+        if (Option.isNone(thread) || !ThreadLifecycle.isOpen(thread.value)) return;
+        // The hob whose request is next carries its own work along: another hob's work waits its
+        // hob's turn. With nobody waiting, the first hob with work there carries it.
+        const next = yield* floorNext(thread.value);
+        const hobId = next?.agent.id ?? (yield* carrierOf(continuations.value, thread.value));
+        const found = hobId === null ? null : yield* workable(threadId, hobId);
+        if (found === null) {
           yield* startQueued(threadId);
           return;
         }
         // The dispatch reads the backpack after this, so it sees whatever a wake until now announced.
         yield* must(threadId, { _tag: "Dispatch" });
         yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id), scope);
+      });
+
+    // The first of the thread's hobs, its own first, with work waiting there; its own hob when none
+    // has, so the dispatch still reads the records again.
+    const carrierOf = (service: Continuations["Service"], thread: Thread) =>
+      Effect.gen(function* () {
+        for (const hobId of yield* hobsOf(thread)) {
+          if (yield* workWaits(service, thread.id, hobId)) return hobId;
+        }
+        return thread.agentId;
       });
 
     // Delivers the work waiting in the thread, then frees the thread and starts what waits next.
@@ -482,10 +529,10 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           .deliver(threadId, agentId, {
             // Routine progress alone starts no turn: it waits to ride along a message of yours.
             plan: (routineOnly) =>
-              admission.withHob(
-                agentId,
+              underThread(
+                threadId,
                 Effect.gen(function* () {
-                  const found = yield* workable(threadId);
+                  const found = yield* workable(threadId, agentId);
                   if (found === null || (yield* runOf(threadId)).held) return null;
                   if (routineOnly && !(yield* requestWaitsFor(threadId, agentId))) return null;
                   return MessageId.make(crypto.randomUUID());
@@ -498,11 +545,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
               Effect.logWarning("Could not deliver a hob's backpack work", cause).pipe(Effect.as(false)),
             ),
           );
-        yield* admission.withHob(
-          agentId,
+        yield* underThread(
+          threadId,
           Effect.gen(function* () {
             yield* must(threadId, { _tag: "Delivered" });
-            const again = ran || (yield* workWaits(service, threadId, agentId));
+            const again = ran || (yield* workWaitsIn(service, threadId));
             yield* again ? startNext(threadId) : Effect.asVoid(startQueued(threadId));
           }),
         );
@@ -518,10 +565,10 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     ): Effect.Effect<CarriedEnd> =>
       Effect.gen(function* () {
         const start = { replyId, carry: work, drain: false } as const;
-        const begun = yield* admission.withHob(
-          agentId,
+        const begun = yield* underThread(
+          threadId,
           Effect.gen(function* () {
-            const found = yield* workable(threadId);
+            const found = yield* workable(threadId, agentId);
             if (found === null || (yield* runOf(threadId)).held) return null;
             // Work rides along only a request of the hob it is for.
             const queued = yield* startQueued(threadId, { ...start, context: work.text("context") }, agentId);
@@ -586,6 +633,17 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.gen(function* () {
         if ((yield* service.waiting(agentId)).includes(threadId)) return true;
         return (yield* requestWaitsFor(threadId, agentId)) && (yield* service.progressWaits(threadId, agentId));
+      });
+
+    // Whether work waits in the thread for any of its hobs.
+    const workWaitsIn = (service: Continuations["Service"], threadId: ThreadId) =>
+      Effect.gen(function* () {
+        const thread = yield* repo.findThread(threadId);
+        if (Option.isNone(thread)) return false;
+        for (const hobId of yield* hobsOf(thread.value)) {
+          if (yield* workWaits(service, threadId, hobId)) return true;
+        }
+        return false;
       });
 
     // Whether your next message carries work: work you stopped in the thread, or routine

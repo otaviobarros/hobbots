@@ -89,8 +89,8 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // (ADR 029, Try in a chat).
     const acceptedIn = (thread: Thread, agent: Agent) =>
       thread.skillTrial === null ? acceptedSkills(agent) : Effect.succeed<Message["skills"]>([]);
-    // A turn's skills: those its message was accepted with, or, for a continuation or a message
-    // from before, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
+    // A turn's skills: those its message was accepted with, or, for a continuation, a message
+    // from before or a member hob's turn, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
     // A chat that tries a draft loads the draft alone, and records no library skill (ADR 029, Try in a chat).
     const skillsFor = (
       agent: Agent,
@@ -102,8 +102,10 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
       Effect.gen(function* () {
         const trial = thread.skillTrial;
         if (trial !== null) return { recorded: [], mounts: yield* skillMounts.draft(trial), trial };
+        // Your message records the skills of the thread's own hob; a member hob that answers it
+        // works with its own (ADR 029).
         const recorded =
-          yours?.skills ??
+          (agent.id === thread.agentId ? yours?.skills : undefined) ??
           (yield* skillMounts.resolve({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] }));
         return { recorded, mounts: yield* skillMounts.mounts(recorded), trial };
       });

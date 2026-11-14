@@ -15,8 +15,19 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type SkillMount,
+  ThreadMemberRepository,
 } from "@hobbots/agents";
-import { type Agent, isInProgress, type Message, roleFields, type Thread } from "@hobbots/domain";
+import {
+  type Agent,
+  AgentId,
+  hobActor,
+  isInProgress,
+  type Message,
+  OWNER_ACTOR,
+  roleFields,
+  type Thread,
+  type ThreadId,
+} from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -27,6 +38,7 @@ import {
   SetupRepository,
   SkillLibraryLive,
   TaskRepositoryLive,
+  ThreadMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
@@ -55,6 +67,8 @@ let release: () => void;
 let held: Promise<void>;
 /** When set, the next save of a reply with a skill use waits for `saving.release` before it writes. */
 let saving: { reached: () => void; release: Promise<void> } | undefined;
+/** Adds a hob to a camp as a member, as the owner. */
+let joinCamp: (threadId: ThreadId, agentId: string) => Promise<void>;
 
 const skillMd = (name: string, description = `What ${name} is for.`, extra = "") =>
   `---\nname: ${name}\ndescription: ${description}\n${extra}---\n\n# ${name}\n`;
@@ -128,7 +142,15 @@ beforeEach(async () => {
     SetupRepository.layer,
     SearchIndex.layer,
     SkillLibraryLive,
+    ThreadMemberRepositoryLive,
   ).pipe(Layer.provideMerge(TestDatabase));
+  const Members = Layer.effectDiscard(
+    Effect.gen(function* () {
+      const members = yield* ThreadMemberRepository;
+      joinCamp = (threadId, agentId) =>
+        Effect.runPromise(Effect.asVoid(members.add(threadId, hobActor(AgentId.make(agentId)), OWNER_ACTOR)));
+    }),
+  );
   const App = HobLifecycle.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -137,6 +159,7 @@ beforeEach(async () => {
         GrantService.layer,
         HobService.layer,
         PermissionSummary.layer,
+        Members,
       ),
     ),
     Layer.provideMerge(SkillsLive(data, agentsFolder)),
@@ -270,6 +293,26 @@ describe("skill assignments", () => {
     expect((await request("DELETE", `/api/skills/assignments/${toPip.body.id}`)).status).toBe(200);
     await send(pipThread, "/skills");
     expect((await replies(pipThread, 3)).content).toBe("review (only when asked)\nshared");
+  });
+
+  // covers ADR 029 (Scopes), ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-08] a member hob mentioned in a camp answers with its own skills, never the camp's hob's", async () => {
+    const pip = await summon("Pip", 963);
+    const quill = await summon("Quill", 964);
+    const releaseSkill = await importSkill("release");
+    await request("POST", `/api/skills/${releaseSkill.skill.id}/assignments`, {
+      scope: { _tag: "Hob", agentId: pip.id },
+    });
+    await request("POST", `/api/agents/${pip.id}/threads`);
+    const camp: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    expect(camp.kind).toBe("camp");
+    await joinCamp(camp.id, quill.id);
+
+    await send(camp, "@quill what do you know?");
+    const reply = await replies(camp, 1);
+    expect(reply.actor).toMatchObject({ kind: "hob", id: quill.id });
+    expect(given.at(-1)?.map((mount) => mount.name)).toEqual(["shared"]);
+    expect(reply.skills?.map((skill) => skill.name)).toEqual(["shared"]);
   });
 
   // covers RT-001, ADR 029 (Pins and rollout)

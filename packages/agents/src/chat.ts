@@ -746,8 +746,10 @@ export class ChatService extends Context.Service<
             .openTurnRequests(mainLine(threadId))
             .pipe(Effect.map((open) => TurnRequests.waiting(open).some((request) => request.hobId === agentId))),
         );
+        // And the work its backpack holds for camps it joined, which it carries there.
+        const work = Option.isSome(continuations) ? yield* continuations.value.waiting(agentId) : [];
         yield* Effect.forEach(own, (threadId) => step(threadId, { _tag: "Release" }));
-        yield* drainThreads([...new Set([...own, ...owed])]);
+        yield* drainThreads([...new Set([...own, ...owed, ...work])]);
         if (Option.isSome(taskTurns)) yield* taskTurns.value.drainAgent(agentId);
       });
 

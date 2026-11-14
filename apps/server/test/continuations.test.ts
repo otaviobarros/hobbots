@@ -13,6 +13,7 @@ import {
   RuntimeAdapter,
   TaskControls,
   TaskRepository,
+  ThreadMemberRepository,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
@@ -25,6 +26,7 @@ import {
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
+  hobActor,
   IDLE_QUEST,
   Message,
   MessageId,
@@ -52,6 +54,7 @@ import {
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  ThreadMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -181,7 +184,11 @@ const observed = Layer.effect(
 const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null) }));
 
 /** What the hub's records hold before it starts, as after a restart. */
-type Before = Layer.Layer<never, never, HobbotsRepository | TaskRepository | ApprovalRepository>;
+type Before = Layer.Layer<
+  never,
+  never,
+  HobbotsRepository | TaskRepository | ApprovalRepository | ThreadMemberRepository
+>;
 
 /** Quick retries, so a test that exhausts them stays short. */
 const LIMITS: DispatchLimits = { ...DEFAULT_DISPATCH_LIMITS, firstRetry: "5 millis", maxRetry: "20 millis" };
@@ -205,6 +212,7 @@ const makeApp = (
     Layer.provideMerge(
       Layer.mergeAll(
         HobbotsRepositoryLive,
+        ThreadMemberRepositoryLive,
         TaskRepositoryLive,
         TaskToolCallsLive,
         ApprovalRepositoryLive,
@@ -426,6 +434,47 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.role).toBe("assistant");
     expect(all[0]?.content).toContain("ended as failed.");
     const [settled] = await run(settledItems([id]));
+    expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
+
+  // covers IN-004, ADR 039 (One hob speaks at a time)
+  it("[TC-CH-1461-09] a member hob's work that arrives in a camp it joined starts its own continuation there once it wakes", async () => {
+    const sam = AgentId.make("sam");
+    const { run } = setUp(
+      Layer.effectDiscard(
+        Effect.gen(function* () {
+          const repo = yield* HobbotsRepository;
+          yield* repo.insertAgent(frodo);
+          yield* repo.insertAgent(new Agent({ ...frodo, id: sam, name: "Sam", roleTitle: "Gardener" }));
+          // Sam's camp, which Frodo joined: Frodo's Task runs from there.
+          yield* repo.upsertThread(
+            new Thread({
+              id: threadId,
+              agentId: sam,
+              title: "The quest",
+              kind: "camp",
+              createdAt: now,
+              updatedAt: now,
+            }),
+          );
+          yield* Effect.orDie(
+            ThreadMemberRepository.use((members) => members.add(threadId, hobActor(FRODO), OWNER_ACTOR)),
+          );
+        }),
+      ),
+    );
+    await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(Effect.sleep("150 millis"));
+    expect(await run(messages())).toEqual([]);
+
+    // Frodo wakes and carries his own work in Sam's camp; Sam's turn never takes it.
+    await run(HobLifecycle.use((hobs) => hobs.wake(FRODO)));
+    const all = await run(messagesWhen((each) => each.length === 1));
+    expect(all[0]?.actor).toMatchObject({ kind: "hob", id: FRODO });
+    expect(all[0]?.content).toContain("ended as failed.");
+    const [settled] = await run(settledItems([failure.id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
   });
 
