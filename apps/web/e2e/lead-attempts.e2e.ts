@@ -5,20 +5,26 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-/** Sends one message to Aldric and waits for his turn to end. */
+/**
+ * Sends one message to Aldric and waits for his turn to end. The hub may wake him first on its own,
+ * when his last turn left the Quest with nothing moving it (#1081): the message then waits for that
+ * turn, so this allows two. Each of the fake's turns here echoes a long brief, word by word.
+ */
 const send = async (page: Page, lines: ReadonlyArray<string>) => {
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(lines.join("\n"));
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 60_000 });
 };
 
 // covers EX-001, OR-003, UX-002
 test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its Workbench keeps what each turn changed", async ({
   page,
 }) => {
+  // Three sends, each of which may wait for one turn ahead of its own.
+  test.setTimeout(150_000);
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
 
