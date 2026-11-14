@@ -499,6 +499,8 @@ export class ChatService extends Context.Service<
           // Only a hob of the camp speaks here, with its own policy (ADR 039): a Quest member that
           // is not one takes your mention from its Task instead (#1446).
           if (!(yield* hobsOf(thread)).includes(hobId)) return null;
+          // Work of its own that rides along starts through the dispatcher, as the floor starts it.
+          if (yield* workRidesAlong(thread.id, hobId)) return null;
           const hob = yield* repo.findAgent(hobId);
           if (Option.isNone(hob) || hob.value.status !== "active") return null;
           const mayWork = yield* requireOpenTaskWhileRetiring(hob.value, thread.id).pipe(
@@ -683,9 +685,10 @@ export class ChatService extends Context.Service<
           saveMessage,
         );
         // Work the turn carried waits for you instead of starting again on its own.
+        // The hob held is the one this reply's run named, read before the stop: by now its turn may
+        // have ended, or another started.
         if (Option.isSome(requested) && reply.carries) {
-          const { speaking } = yield* runOf(threadId);
-          yield* step(threadId, { _tag: "Hold", hobId: speaking ?? (yield* findThread(threadId)).agentId });
+          yield* step(threadId, { _tag: "Hold", hobId: run.speaking ?? (yield* findThread(threadId)).agentId });
         }
         if (Option.isNone(requested)) return;
         // The turn's request, and those its mentions caused, are dropped with it; a person's stay.

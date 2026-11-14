@@ -1,4 +1,5 @@
 import {
+  AgentId,
   ChapterId,
   type ChapterRefusal,
   hobActor,
@@ -63,13 +64,19 @@ const REFUSALS: Partial<Record<ChapterRefusal, string>> = {
 export const turnChapterId = (messageId: MessageId): ChapterId => ChapterId.make(`${messageId}:chapter`);
 
 /** Who wrote a message, as `read_message` names them. */
-const author = (message: Message) => (message.role === "user" ? "the user" : "you");
+/** Who wrote `message`, as `reader` reads it: you, the user, or another hob of the camp by name (ADR 039). */
+const authorFor = (message: Message, reader: AgentId, owner: AgentId, nameOf: (hob: AgentId) => string) => {
+  if (message.role === "user") return "the user";
+  // A reply saved before authors were recorded is the thread's own hob's.
+  const writer = message.actor?.kind === "hob" ? AgentId.make(message.actor.id) : owner;
+  return writer === reader ? "you" : `${nameOf(writer)}, another hob`;
+};
 
 /**
  * What the hob is told of a message: part `part` of `content`, and how to read the next. `content` is
  * the message's text already redacted whole, since a secret split across two parts matches nowhere.
  */
-export const messageAnswer = (message: Message, content: string, part: number): string => {
+export const messageAnswer = (message: Message, content: string, part: number, author = "you"): string => {
   const parts = pageParts(content, MESSAGE_PART_CHARS);
   const where =
     parts.length === 1
@@ -77,7 +84,7 @@ export const messageAnswer = (message: Message, content: string, part: number): 
       : part < parts.length
         ? `Part ${part} of ${parts.length}. Read the next with ${READ_MESSAGE_TOOL}, the same message_id and part ${part + 1}.`
         : `Part ${part} of ${parts.length}, the last.`;
-  const head = `Message ${message.id}, written by ${author(message)} at ${message.createdAt}.`;
+  const head = `Message ${message.id}, written by ${message.role === "user" ? "the user" : author} at ${message.createdAt}.`;
   return [head, ...(where === null ? [] : [where]), "", (parts[part - 1] ?? "").trim() || "(no text)"].join("\n");
 };
 
@@ -167,7 +174,10 @@ export const ChapterToolsLive = Layer.effect(
             message: `Message ${input.message_id} has ${parts === 1 ? "1 part" : `${parts} parts`}, so there is no part ${part}.`,
           });
         }
-        return { text: messageAnswer(found.value, content, part), refused: false } satisfies HubToolAnswer;
+        const writer = found.value.actor?.kind === "hob" ? AgentId.make(found.value.actor.id) : thread.value.agentId;
+        const name = Option.match(yield* repo.findAgent(writer), { onNone: () => "a hob", onSome: (hob) => hob.name });
+        const author = authorFor(found.value, turn.agentId, thread.value.agentId, () => name);
+        return { text: messageAnswer(found.value, content, part, author), refused: false } satisfies HubToolAnswer;
       });
 
     const forTurn = (turn: CharmTurn): Effect.Effect<HubTools | null> =>

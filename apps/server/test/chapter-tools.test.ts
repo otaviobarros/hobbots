@@ -224,10 +224,18 @@ describe("read_message", () => {
     const camp = await run(ChatService.use((chat) => chat.createThread(PIP)));
     await run(ChatService.use((chat) => chat.sendPrompt(camp.id, "The camp's plan")));
     await run(ThreadMemberRepository.use((members) => members.add(camp.id, hobActor(FRODO), OWNER_ACTOR)));
-    const [said] = await run(HobbotsRepository.use((repo) => repo.listMessages(camp.id)));
+    const [said, replied] = await run(HobbotsRepository.use((repo) => repo.listMessages(camp.id)));
     const id = (said as Message).id;
 
-    await say([hub("read_message", { key: "camp", message_id: id })], 2);
+    await say(
+      [
+        hub("read_message", { key: "camp", message_id: id }),
+        hub("read_message", { key: "reply", message_id: (replied as Message).id }),
+      ],
+      2,
+    );
     expect(answers.get("camp")).toContain("The camp's plan");
+    // Pip's reply reads as Pip's, not as Frodo's own (ADR 039, The context pack with several hobs).
+    expect(answers.get("reply")).toContain("written by Pip, another hob");
   });
 });

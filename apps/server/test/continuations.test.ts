@@ -319,6 +319,20 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const messages = () => HobbotsRepository.use((repo) => repo.listMessages(threadId));
 
+/**
+ * Waits until the thread has nothing running, dispatching or draining, so whatever a wake or a
+ * turn's end was going to start has started (STD-TEST-009).
+ */
+const settledRun = () =>
+  retry(
+    Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const { runs } = yield* chat.threadRuns;
+      const busy = runs.some((each) => each.threadId === threadId && each.run !== "idle");
+      return busy || (yield* chat.activeThreads).includes(threadId) ? yield* Effect.fail("busy" as const) : undefined;
+    }),
+  );
+
 /** The thread's messages once `ready` holds for them, every reply ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
@@ -475,7 +489,9 @@ describe("continuing a hob when work arrives", () => {
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
-    await run(Effect.sleep("150 millis"));
+    // A wake now finds no hob that can carry it: Frodo is paused, and Sam has nothing there.
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(settledRun());
     expect(await run(messages())).toEqual([]);
 
     // Frodo wakes and carries his own work in Sam's camp; Sam's turn never takes it.
@@ -554,7 +570,7 @@ describe("continuing a hob when work arrives", () => {
     await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
     holdContinuations = false;
     await release();
-    await run(Effect.sleep("300 millis"));
+    await run(settledRun());
     expect((await run(messages())).map((m) => m.status)).toEqual(["stopped"]);
   };
 
@@ -565,7 +581,7 @@ describe("continuing a hob when work arrives", () => {
 
     // Sam waking leaves Frodo's stopped work held; Frodo waking takes it up.
     await run(HobLifecycle.use((hobs) => hobs.pause(SAM).pipe(Effect.andThen(hobs.wake(SAM)))));
-    await run(Effect.sleep("300 millis"));
+    await run(settledRun());
     expect(await run(messages())).toHaveLength(1);
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO).pipe(Effect.andThen(hobs.wake(FRODO)))));
     const all = await run(messagesWhen((each) => each.length === 2));
@@ -588,7 +604,7 @@ describe("continuing a hob when work arrives", () => {
       ["stopped", FRODO],
       ["complete", SAM],
     ]);
-    await run(Effect.sleep("300 millis"));
+    await run(settledRun());
     expect(await run(messages())).toHaveLength(2);
   });
 
@@ -627,7 +643,7 @@ describe("continuing a hob when work arrives", () => {
     await release();
 
     // Neither starts again on its own once Sam's turn has ended.
-    await run(Effect.sleep("300 millis"));
+    await run(settledRun());
     expect((await run(messages())).map((m) => [m.status, m.actor?.kind === "hob" ? m.actor.id : null])).toEqual([
       ["stopped", FRODO],
       ["stopped", SAM],
@@ -654,7 +670,7 @@ describe("continuing a hob when work arrives", () => {
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     await run(failedStep);
     await run(ChatService.use((chat) => chat.wake(threadId)));
-    await run(Effect.sleep("300 millis"));
+    await run(settledRun());
     // At most the one dispatch the wake started, which found nothing of Sam's.
     expect(dispatches).toBeLessThanOrEqual(1);
     expect(await run(messages())).toEqual([]);
