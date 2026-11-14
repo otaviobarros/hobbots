@@ -1,4 +1,4 @@
-import type { HobbotsRepository } from "@hobbots/agents";
+import { type HobbotsRepository, passStands } from "@hobbots/agents";
 import {
   type Actor,
   type JournaledEvent,
@@ -30,6 +30,10 @@ type Writes = Pick<
   | "openTurnRequests"
   | "startReply"
   | "answerTurnRequests"
+  | "turnRequestsOf"
+  | "passTurnRequests"
+  | "markPassing"
+  | "passedConfigVersions"
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
   | "threadsWithWaitingRequests"
@@ -78,6 +82,33 @@ export const makeTurnRequestWrites = (
       return events;
     });
 
+  // Passes `speaking`, the requests the turn writing `replyId` spoke for, and removes the reply, so a
+  // pass leaves no message (ADR 039). What the turn used stays in `passed_turns` (OP-002), and a
+  // request the reply's own text caused goes with it. A reply an approval names stays, since that
+  // record needs it, and its requests are answered instead.
+  const passReply = (replyId: MessageId, speaking: ReadonlyArray<TurnRequest>, reason: string) =>
+    Effect.gen(function* () {
+      const none = { value: [] as ReadonlyArray<TurnRequest>, events: [] as ReadonlyArray<JournaledEvent> };
+      if (speaking.length === 0) return none;
+      const named = yield* sql`SELECT 1 AS named FROM approval_requests WHERE message_id = ${replyId}`;
+      if (named.length > 0) {
+        yield* stepRequests(sql, speaking, { _tag: "Answer" });
+        return none;
+      }
+      yield* sql`INSERT INTO passed_turns (reply_id, thread_id, agent_id, runtime, model, config_version, created_at,
+          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
+        SELECT id, thread_id, actor_id, runtime, model, config_version, created_at, input_tokens, output_tokens,
+          cache_read_tokens, cache_write_tokens
+        FROM messages WHERE id = ${replyId}`;
+      yield* sql`DELETE FROM messages WHERE id = ${replyId}`;
+      const passed = yield* stepRequests(sql, speaking, { _tag: "Pass", reason });
+      yield* stepRequests(sql, yield* selectOpenRequestsOf(sql, "message_id", [replyId]), { _tag: "Drop", by: null });
+      const events = passed.map(
+        (request): JournaledEvent => ({ _tag: "TurnPassed", threadId: request.threadId, messageId: replyId, request }),
+      );
+      return { value: passed, events };
+    });
+
   return {
     openTurnRequests: (line) => selectOpenRequests(sql, line).pipe(Effect.orDie),
     startReply: (reply, speaking) =>
@@ -95,6 +126,17 @@ export const makeTurnRequestWrites = (
         Effect.asVoid,
         Effect.orDie,
       ),
+    turnRequestsOf: (replyId) => selectOpenRequestsOf(sql, "reply_id", [replyId]).pipe(Effect.orDie),
+    markPassing: (replyId, reason) =>
+      sql`UPDATE turn_requests SET pass_reason = ${reason}
+        WHERE reply_id = ${replyId} AND state = 'speaking'`.pipe(Effect.asVoid, Effect.orDie),
+    passTurnRequests: (replyId, reason) =>
+      journaledChange<ReadonlyArray<TurnRequest>, never>(() =>
+        Effect.gen(function* () {
+          const speaking = (yield* selectOpenRequestsOf(sql, "reply_id", [replyId])).filter(TurnRequests.isSpeaking);
+          return yield* passReply(replyId, speaking, reason);
+        }),
+      ),
     dropTurnRequests: (ids: ReadonlyArray<TurnRequestId>, by: Actor | null) =>
       journaledChange<ReadonlyArray<TurnRequest>, never>((revision) =>
         Effect.gen(function* () {
@@ -107,13 +149,35 @@ export const makeTurnRequestWrites = (
         }),
       ),
     // A turn that was speaking when the hub stopped was ended as an interrupted reply, which Continue
-    // resumes; that reply is its answer, so its request does not start a second turn.
-    answerUnfinishedTurnRequests: selectRequestsIn(sql, "speaking").pipe(
-      Effect.flatMap((speaking) => stepRequests(sql, speaking, { _tag: "Answer" })),
-      sql.withTransaction,
-      Effect.asVoid,
-      Effect.orDie,
+    // resumes; that reply is its answer, so its request does not start a second turn. A turn whose
+    // hob had passed passes now, as its end would have, unless its reply holds text or work a removed
+    // reply would hide: steps after the pass, or any a continued reply carried from before, keep it.
+    answerUnfinishedTurnRequests: journaledChange<void, never>(() =>
+      Effect.gen(function* () {
+        const speaking = yield* selectRequestsIn(sql, "speaking");
+        const events: Array<JournaledEvent> = [];
+        for (const replyId of new Set(speaking.flatMap((request) => request.replyId ?? []))) {
+          const turn = speaking.filter((request) => request.replyId === replyId);
+          const reason = turn.find((request) => request.passReason !== null)?.passReason ?? null;
+          const reply = yield* readMessage(replyId);
+          const stands = reason !== null && Option.isSome(reply) && passStands(reply.value, 0);
+          if (!stands) yield* stepRequests(sql, turn, { _tag: "Answer" });
+          else events.push(...(yield* passReply(replyId, turn, reason)).events);
+        }
+        yield* stepRequests(
+          sql,
+          speaking.filter((request) => request.replyId === null),
+          { _tag: "Answer" },
+        );
+        return { value: undefined, events };
+      }),
     ),
     threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),
+    passedConfigVersions: (threadId, agentId) =>
+      sql<{ readonly configVersion: number }>`SELECT DISTINCT config_version FROM passed_turns
+        WHERE thread_id = ${threadId} AND agent_id = ${agentId} AND config_version IS NOT NULL`.pipe(
+        Effect.map((rows) => rows.map((row) => Number(row.configVersion))),
+        Effect.orDie,
+      ),
   };
 };

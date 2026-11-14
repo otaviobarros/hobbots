@@ -52,6 +52,7 @@ import { Supervision } from "./supervision.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 import { ThreadMember } from "./thread-member.ts";
+import { TurnRequest } from "./turn-request.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
 /**
@@ -170,6 +171,15 @@ const CampSuggestionExpired = Schema.TaggedStruct("CampSuggestionExpired", {
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
 const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, messageId: MessageId });
+/**
+ * A hob passed (ADR 039, One hob speaks at a time): `request` ended `passed`, with its hob's reason,
+ * and the turn's reply `messageId` is gone, so the conversation shows the pass and no message.
+ */
+const TurnPassed = Schema.TaggedStruct("TurnPassed", {
+  threadId: ThreadId,
+  messageId: MessageId,
+  request: TurnRequest,
+});
 /** A tool call the policy answered Ask for paused its turn until the user decides (PE-003). */
 const ApprovalRequested = Schema.TaggedStruct("ApprovalRequested", { approval: ApprovalRequest });
 /** A pending approval was approved, denied or expired; `approval.state` says which. */
@@ -535,6 +545,7 @@ export const JournaledEvent = Schema.Union([
   CampSuggestionExpired,
   TurnStopRequested,
   TurnStopped,
+  TurnPassed,
   ApprovalRequested,
   ApprovalResolved,
   ApprovalMoved,
@@ -668,6 +679,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   CampSuggestionExpired: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
+  TurnPassed: 1,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   ApprovalRequested: 1,
