@@ -120,7 +120,7 @@ Verify denial, grant scoping/expiry, policy changes during waits, child privileg
 
 [ADR 032](../decisions/032-hob-directory.md) decides what a hob sees of the others:
 
-- **Public cards only.** Another hob sees a hob's name, role, good at, status, brain and the connected Charms it holds, and who summoned it once that is recorded. Never its instructions, memory, threads, Tasks, folders, overrides, grants, credentials or GitHub app.
+- **Public cards only.** Another hob sees a hob's name, role, good at, status, brain and the connected Charms it holds, who summoned it once that is recorded, and, on its card, the Allow, Ask or Never answer it has for each built-in operation and each operation of those Charms under the installation's preset, each marked when the hob's own override set it ([#1351](https://github.com/otaviobarros/hobbots/issues/1351)). Never its instructions, memory, threads, Tasks, folders, the override map itself, grants, credentials or GitHub app. An answer says what the hob may do, not which approvals it was given.
 - **A display setting, not authority.** "Visible to other hobs" keeps a hob out of other hobs' rosters and `read_hob`, but delegation by name still reaches it. Seeing a hob's Charms grants nothing: a hob that lacks a Charm forwards the work.
 - **Outside data.** Good at, names and role titles reach other hobs quoted, labeled as data and never instructions, and redacted with the reading turn's redactor, best effort like all redaction below. Good at is public to every hob, so nothing private belongs in it.
 

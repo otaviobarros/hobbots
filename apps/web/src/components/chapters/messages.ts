@@ -89,6 +89,7 @@ export const messages = {
     archivedNote: "Not read. Find still searches it.",
     part: {
       "memory-brief": ({ name }: Named) => `${name}'s memory and your preferences`,
+      members: () => "Who is here, and why it answers",
       "camp-brief": () => "The camp's brief",
       decisions: () => "Active decisions",
       "open-work": () => "Open work",

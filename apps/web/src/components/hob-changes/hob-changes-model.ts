@@ -1,7 +1,9 @@
+import type { UpdateHobPermissionsPayload } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
   type AnyOperation,
+  answersToRestore,
   configurationFields,
   DEFAULT_SUMMONING_SCOPE,
   type HobChange,
@@ -9,6 +11,7 @@ import {
   hobAnswers,
   hobBehind,
   holdsCharm,
+  isCharmOperation,
   lengthChoice,
   ROLE_HAT_TITLES,
   ROLE_TOOL_TITLES,
@@ -113,20 +116,29 @@ export const fieldDiffs = (
 ): ReadonlyArray<FieldDiff> => {
   const after = configurationFields(change.config);
   const before = change.previous === null ? null : configurationFields(change.previous);
-  const byId = (id: string) => id;
   return FIELDS.flatMap(([key, text, lines]) => {
-    // Whether the field changed is decided by ids, never by names, which two hobs can share.
-    if (before !== null && text(after, byId) === text(before, byId)) return [];
-    const show = (name: (id: string) => string) => ({
-      after: text(after, name),
-      before: before === null ? "" : text(before, name),
-    });
-    const named = show(nameOf);
-    // Hobs with the same name are told apart by the start of their id.
-    const shown = named.after === named.before ? show((id) => `${nameOf(id)} (${id.slice(0, 8)})`) : named;
-    if (shown.after === "" && shown.before === "") return [];
+    const shown = idFirst(
+      (name) => ({ after: text(after, name), before: before === null ? "" : text(before, name) }),
+      nameOf,
+    );
+    if (shown === null || (shown.after === "" && shown.before === "")) return [];
     return [{ key, label: messages.fields[key], ...shown, lines }];
   });
+};
+
+/**
+ * A value before and after as text, where `show` writes each hob it names with the name it is given.
+ * Whether it changed is decided by ids, never by names, which two hobs can share: null when the ids
+ * are the same. Hobs with the same name are told apart by the start of their id.
+ */
+export const idFirst = (
+  show: (name: (id: string) => string) => { readonly before: string; readonly after: string },
+  nameOf: (id: string) => string,
+): { readonly before: string; readonly after: string } | null => {
+  const ids = show((id) => id);
+  if (ids.before === ids.after) return null;
+  const named = show(nameOf);
+  return named.after === named.before ? show((id) => `${nameOf(id)} (${id.slice(0, 8)})`) : named;
 };
 
 /** Who made a change: you, you on a hob's proposal, or a hob on its own. */
@@ -144,6 +156,33 @@ export const makerOf = (change: HobChange): ChangeMaker => {
     case "Hob":
       return { kind: "hob", hobId: change.actor.hobId };
   }
+};
+
+/**
+ * The answers a Summoning change dropped that the hob still lacks, in words, with the change that
+ * brings them back as yours (#1352); null when there is nothing to restore.
+ */
+export const restoreOf = (
+  change: HobChange,
+  hob: Pick<Agent, "policy"> | undefined,
+): { readonly words: string; readonly payload: UpdateHobPermissionsPayload } | null => {
+  if (hob === undefined) return null;
+  const restore = Object.entries(answersToRestore(change, hob.policy)).sort(([a], [b]) => a.localeCompare(b));
+  if (restore.length === 0) return null;
+  const words = restore
+    .map(([operation, answer]) =>
+      values.rule({ operation: operationLabel(operation as AnyOperation), answer: values.answers[answer] ?? answer }),
+    )
+    .join(", ");
+  const builtIn = restore.filter(([operation]) => !isCharmOperation(operation as AnyOperation));
+  const charm = restore.filter(([operation]) => isCharmOperation(operation as AnyOperation));
+  const payload: UpdateHobPermissionsPayload = {
+    ...(builtIn.length === 0 ? {} : { overrides: { ...hob.policy.overrides, ...Object.fromEntries(builtIn) } }),
+    ...(charm.length === 0
+      ? {}
+      : { charms: { overrides: { ...hob.policy.charms?.overrides, ...Object.fromEntries(charm) } } }),
+  };
+  return { words, payload };
 };
 
 /** Whether the change can be reverted now: the hob's latest version, and not the one it was summoned with. */

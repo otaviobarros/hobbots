@@ -37,6 +37,7 @@ import {
   FileChangeId,
   FolderScan,
   FolderScanId,
+  OWNER_ACTOR,
   QuestId,
   TaskId,
   Thread,
@@ -225,7 +226,7 @@ const start = (taskId: string, attemptId: string) =>
 
 /** The campaign, its party and their records, and another request of Aldric's beside it. */
 const campaign = Effect.gen(function* () {
-  yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] });
+  yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [project] }, OWNER_ACTOR);
   const repo = yield* HobbotsRepository;
   for (const [id, name] of [
     [ALDRIC, "Aldric"],
