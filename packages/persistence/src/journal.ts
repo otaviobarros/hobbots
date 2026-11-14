@@ -236,6 +236,7 @@ type RecordEvent = Extract<
       | "ClaimMade"
       | "ClaimContested"
       | "ClaimCleared"
+      | "ClaimTakenOver"
       | "ClaimReleased"
       | "DecisionRecorded"
       | "DecisionSuperseded"
@@ -251,6 +252,7 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "ClaimMade",
   "ClaimContested",
   "ClaimCleared",
+  "ClaimTakenOver",
   "ClaimReleased",
   "DecisionRecorded",
   "DecisionSuperseded",

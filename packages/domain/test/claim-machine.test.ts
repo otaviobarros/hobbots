@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  type Actor,
   Claim,
   type ClaimEvent,
   ClaimId,
@@ -18,6 +19,7 @@ import {
   numbersIn,
   pickNumber,
   type TaskId,
+  touchesPath,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -54,6 +56,7 @@ interface ClaimView {
   readonly updatedAt: string;
   readonly releasedAt: string | null;
   readonly numbered: boolean;
+  readonly actor: string;
 }
 
 const view = (c: Claim): ClaimView => ({
@@ -61,16 +64,22 @@ const view = (c: Claim): ClaimView => ({
   updatedAt: c.updatedAt,
   releasedAt: c.releasedAt,
   numbered: c.scope === "sequence",
+  actor: `${c.actor.kind}:${c.actor.id}`,
 });
 
 // The rules of #1388, written apart from the machine so the two can disagree: a number is never
-// contested, a released claim never comes back.
+// contested, a released claim never comes back. #1449: only you take a claim over, held or
+// contested, and it is yours until its Task ends.
 const stepModel = (m: ClaimView, e: ClaimEvent): ClaimView | "refused" => {
   switch (e._tag) {
     case "Contest":
       return m.state === "held" && !m.numbered ? { ...m, state: "contested", updatedAt: e.at } : "refused";
     case "Clear":
       return m.state === "contested" ? { ...m, state: "held", updatedAt: e.at } : "refused";
+    case "TakeOver":
+      return (m.state === "held" || m.state === "contested") && e.by.kind === "user"
+        ? { ...m, state: "taken", updatedAt: e.at, actor: `${e.by.kind}:${e.by.id}` }
+        : "refused";
     case "Release":
       return m.state === "released" ? "refused" : { ...m, state: "released", updatedAt: e.at, releasedAt: e.at };
   }
@@ -83,11 +92,19 @@ const events: fc.Arbitrary<ClaimEvent> = fc.oneof(
   fc.record({ _tag: fc.constant("Contest" as const), at: times }),
   fc.record({ _tag: fc.constant("Clear" as const), at: times }),
   fc.record({ _tag: fc.constant("Release" as const), at: times }),
+  fc.record({
+    _tag: fc.constant("TakeOver" as const),
+    at: times,
+    by: fc.record({
+      kind: fc.constantFrom<Actor["kind"]>("user", "hob", "hub"),
+      id: fc.constantFrom("owner", "hob-2"),
+    }),
+  }),
 );
 const scopes = fc.constantFrom<ClaimScope>("sequence", "path", "branch");
 
 describe("ClaimMachine", () => {
-  it("agrees with a model of contest, clear and release over random runs of events", () => {
+  it("agrees with a model of contest, clear, take over and release over random runs of events", () => {
     agreesWithModel({
       machine: ClaimMachine,
       records: fc
@@ -104,7 +121,8 @@ describe("ClaimMachine", () => {
     expect(ClaimMachine.table.map((row) => [row.event, row.from, row.to, row.guarded])).toEqual([
       ["Contest", ["held"], "contested", true],
       ["Clear", ["contested"], "held", false],
-      ["Release", ["held", "contested"], "released", false],
+      ["TakeOver", ["held", "contested"], "taken", true],
+      ["Release", ["held", "contested", "taken"], "released", false],
     ]);
   });
 
@@ -114,6 +132,32 @@ describe("ClaimMachine", () => {
     const released = claim({ state: "released" });
     expect(Claims.transition(released, { _tag: "Clear", at })).toBeInstanceOf(IllegalClaimTransition);
     expect(Claims.can(released, { _tag: "Release", at })).toBe(false);
+  });
+});
+
+describe("taking a claim over (#1449)", () => {
+  it("moves a held or contested claim to you, never to a hob, and keeps it clashing", () => {
+    const you: Actor = { kind: "user", id: "owner" };
+    for (const state of ["held", "contested"] as const) {
+      const taken = Claims.transition(claim({ state }), { _tag: "TakeOver", at, by: you });
+      expect(taken).toBeInstanceOf(Claim);
+      expect(Claims.isTaken(taken as Claim)).toBe(true);
+      expect((taken as Claim).actor).toEqual(you);
+    }
+    expect(Claims.can(claim(), { _tag: "TakeOver", at, by: { kind: "hob", id: "hob-2" } })).toBe(false);
+    const taken = claim({ state: "taken" });
+    expect(Claims.contestable(taken)).toBe(false);
+    expect(claimsClash(taken, claim({ id: "claim-2", taskId: "task-2" }))).toBe(true);
+    expect(Claims.can(taken, { _tag: "Release", at })).toBe(true);
+  });
+
+  it("finds the writes a path claim covers: the file, inside its folder, or a folder holding it", () => {
+    const folder = claim({ key: "web/shop" });
+    expect(touchesPath(folder, "web/shop/cart.ts")).toBe(true);
+    expect(touchesPath(folder, "web/shop")).toBe(true);
+    expect(touchesPath(folder, "web")).toBe(true);
+    expect(touchesPath(folder, "web/shopping.ts")).toBe(false);
+    expect(touchesPath(claim({ scope: "branch", key: "web/shop" }), "web/shop")).toBe(false);
   });
 });
 

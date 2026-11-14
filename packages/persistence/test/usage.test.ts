@@ -9,6 +9,7 @@ import {
   MessageId,
   type MessageStatus,
   OWNER_ACTOR,
+  QuestId,
   type ReplyUsage,
   Thread,
   ThreadId,
@@ -255,6 +256,23 @@ describe("UsageLedger", () => {
       replies: 1,
       tokens: 4440,
     });
+  });
+
+  // covers OP-002, #1449
+  it("[TC-OP-1449-04] sums what a Quest's whole party ever spent, a sub-quest's and turns outside a chat included", async () => {
+    const spent = await Effect.gen(function* () {
+      yield* seed;
+      yield* seedQuests;
+      yield* seedTurns;
+      return yield* UsageLedger.use((ledger) =>
+        Effect.all([ledger.spentOn(QuestId.make("q-plan")), ledger.spentOn(QuestId.make("q-none"))]),
+      );
+    }).pipe(Effect.provide(TasksLayer), Effect.scoped, Effect.runPromise);
+    // The same replies and turns the Usage screen counts for it, from any time.
+    expect(spent).toEqual([
+      { tokens: 600 + 4440, turns: 3, unreported: 1 },
+      { tokens: 0, turns: 0, unreported: 0 },
+    ]);
   });
 
   // covers OP-002
