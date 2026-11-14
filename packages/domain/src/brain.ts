@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Effort, RUNTIME_NAMES, RuntimeKind } from "./agent.ts";
-import { ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { TaskId } from "./task.ts";
 import { WebReadMark } from "./web-mark.ts";
 
@@ -43,13 +43,16 @@ export const RosterMark = Schema.Struct({
 export type RosterMark = typeof RosterMark.Type;
 
 /**
- * A thread's binding to one runtime's session (ADR 017), keyed by thread, runtime and chapter (ADR
- * 037). A thread keeps one per runtime it has used, so switching back inside a chapter resumes that
- * runtime's own session. A session belongs to the chapter it started in: a turn in a later chapter
- * starts a new one in its place and never resumes it.
+ * A thread's binding to one runtime's session (ADR 017), keyed by thread, chapter (ADR 037), runtime
+ * and hob (ADR 039). A thread keeps one per hob and runtime it has used, so switching back inside a
+ * chapter resumes that hob's session on that runtime, and each hob in a shared thread resumes only
+ * its own. A session belongs to the chapter it started in: a turn in a later chapter starts a new one
+ * in its place and never resumes it. ADR 039 also keys it by reply thread, which is not built yet.
  */
 export const RuntimeSession = Schema.Struct({
   runtime: RuntimeKind,
+  /** The hob whose turns run in the session; migration 20261114005209_hob_sessions gave every earlier session its thread's hob. */
+  agentId: AgentId,
   /** The runtime's own id for the session. */
   sessionId: Schema.String,
   /** The chapter the session belongs to; migration 0099 gave every earlier session its thread's first. */

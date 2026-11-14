@@ -16,7 +16,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { hub, messagesWhen, PIP, partyHub, send, threadId } from "./party-hub.ts";
+import { FRODO, hub, messagesWhen, PIP, partyHub, send, threadId } from "./party-hub.ts";
 
 // Issue #1381 (ADR 037): the hob ends a chapter itself with `start_chapter`, and reads back a message
 // the context pack cut with `read_message`. Both are hub tools, so Claude Code and Codex serve them
@@ -54,7 +54,7 @@ describe("start_chapter", () => {
       const { say, chapters, thread, requests, answers } = chapterHub(runtime);
       await say(["My cat is called Miso."], 2);
       expect(offered(requests[0])).toEqual(expect.arrayContaining([START_CHAPTER_TOOL, READ_MESSAGE_TOOL]));
-      const first = liveSession(await thread(), runtime);
+      const first = liveSession(await thread(), runtime, FRODO);
       expect(first?.sessionId).toMatch(/^fake-/);
 
       await say(["Let's talk about the garden.", hub("start_chapter", { key: "chapter", title: "The garden" })], 4);
@@ -65,14 +65,14 @@ describe("start_chapter", () => {
       ]);
       // The turn that started it ran in the first chapter's session, which no later turn resumes.
       expect(requests[1]?.sessionId).toBe(first?.sessionId);
-      expect(liveSession(await thread(), runtime)).toBeUndefined();
+      expect(liveSession(await thread(), runtime, FRODO)).toBeUndefined();
 
       const all = await say(["What should I plant?"], 6);
       const fresh = requests[2] as PromptRequest;
       expect(fresh.sessionId).toBeNull();
       expect(offered(fresh)).toEqual(expect.arrayContaining([START_CHAPTER_TOOL, READ_MESSAGE_TOOL]));
       expect((all.at(-1) as Message).chapterId).toBe((await thread()).liveChapterId);
-      const second = liveSession(await thread(), runtime);
+      const second = liveSession(await thread(), runtime, FRODO);
       expect(second?.sessionId).not.toBe(first?.sessionId);
     },
   );
