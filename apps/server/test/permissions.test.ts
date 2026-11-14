@@ -17,7 +17,7 @@ import {
 } from "@hobbots/agents";
 import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
 import { GITHUB_CHARM } from "@hobbots/charms";
-import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
+import { type Agent, type Message, OWNER_ACTOR, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -104,7 +104,7 @@ const start = (
     Effect.gen(function* () {
       if (legacyFolders === undefined) return;
       const setup = yield* SetupRepository;
-      yield* setup.update({ safetyPreset: "balanced", approvedFolders: legacyFolders });
+      yield* setup.update({ safetyPreset: "balanced", approvedFolders: legacyFolders }, OWNER_ACTOR);
     }),
   );
   const App = HobLifecycle.layer

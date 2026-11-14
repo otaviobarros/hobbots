@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { AgentConfiguration, AgentStatus } from "./agent.ts";
 import { ChangeActor } from "./change-actor.ts";
 import { AgentId, MessageId, TaskId, ThreadId } from "./ids.ts";
+import { SettingChange } from "./setting-change.ts";
 
 /**
  * The request behind a change a hob made or proposed (ADR 034): the Charm whose call made it, the
@@ -39,10 +40,22 @@ const StatusChange = Schema.TaggedStruct("Status", {
 });
 
 /**
- * One change to a hob, for its History and the Changes log (ADR 034): a new configuration version or
- * a change of its status, each with who made it.
+ * A change to a hub setting that reached the hob (#1357), such as "Summoning for every hob" turned
+ * on. Only people change settings (PE-006), so its actor reads as you; `setting` names the person.
  */
-export const HobChange = Schema.Union([VersionChange, StatusChange]);
+const SettingEntry = Schema.TaggedStruct("Setting", {
+  hobId: AgentId,
+  at: Schema.String,
+  actor: ChangeActor,
+  origin: Schema.Null,
+  setting: SettingChange,
+});
+
+/**
+ * One change to a hob, for its History and the Changes log (ADR 034): a new configuration version,
+ * a change of its status, or a hub setting that reached it, each with who made it.
+ */
+export const HobChange = Schema.Union([VersionChange, StatusChange, SettingEntry]);
 export type HobChange = typeof HobChange.Type;
 
 /**
