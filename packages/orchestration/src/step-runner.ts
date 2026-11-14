@@ -10,6 +10,7 @@ import {
   MemberContinuations,
   makeRedactor,
   narrows,
+  narrowsPolicy,
   type RecoveryStep,
   recordRecovery,
   runtimeAdapters,
@@ -20,6 +21,7 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
   takeSlot,
+  takesMore,
   turnSlots,
   workHeld,
 } from "@hobbots/agents";
@@ -533,14 +535,22 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         drainAgent: () => signal.notify,
         reviewTasks: signal.notify,
         interruptAgent: (agentId) => stopWhere("hob", (run) => Effect.succeed(run.agentId === agentId)),
-        reviewAuthority: (agentId) =>
-          stopWhere("authority", (run) =>
+        reviewAuthority: (agentId) => {
+          const narrowed = (kind: typeof narrows) => (run: Running) =>
             agentId !== undefined && run.agentId !== agentId
               ? Effect.succeed(false)
               : Effect.map(run.accessNow ?? accessNow(repo, hobTools, run.agentId), (access) =>
-                  narrows(run.access, access),
-                ),
-          ),
+                  kind(run.access, access),
+                );
+          // A session that keeps its permissions but writes where you took over is told that (#1537).
+          return Effect.andThen(
+            stopWhere(
+              "taken",
+              narrowed((before, after) => takesMore(before, after) && !narrowsPolicy(before, after)),
+            ),
+            stopWhere("authority", narrowed(narrows)),
+          );
+        },
         stopUnder: (taskIds, why) => {
           const under = new Set<TaskId>(taskIds);
           return stopWhere(why, (_, taskId) => Effect.succeed(under.has(taskId)));

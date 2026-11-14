@@ -582,4 +582,69 @@ describe("tool calls in a reply", () => {
     }).pipe(Effect.scoped, Effect.runPromise);
     expect(status).toBe("interrupted");
   });
+
+  // covers OR-006, PE-008, #1537
+  it("[TC-OR-1537-04] stops a running turn once you take over what its command may write, and keeps it when you give it back", async () => {
+    const docs = join(folder, "docs");
+    let taken: ReadonlyArray<string> = [];
+    const changing = Layer.succeed(
+      HobTools,
+      HobTools.of({
+        access: () =>
+          Effect.sync(() => ({
+            policy: {
+              preset: "balanced" as const,
+              sharedFolders: [folder],
+              hob: EMPTY_HOB_POLICY,
+              dataFolder: join(root, "data"),
+              restrictions: [],
+            },
+            folders: [folder],
+            runtimeFolder: join(root, "runtimes", HOB_ID),
+            commitsAs: { _tag: "UserConfig" as const, config: { name: "Ada", email: "ada@example.com" } },
+            ...(taken.length === 0 ? {} : { taken }),
+          })),
+      }),
+    );
+    // A test run that goes on until its turn ends, and would write the plan without naming it: the
+    // reply waits on it, so the turn is running for as long as nothing stops it.
+    const testRun = `fake:run ${JSON.stringify({
+      command: "pnpm test --watch",
+      writes: { "docs/plan.md": "written" },
+      background: true,
+      outlives: true,
+    })}`;
+    /** The reply's status once the hub reviewed the running turn after `change`. */
+    const statusAfter = (change: () => void) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, testRun);
+        // The command is running.
+        yield* chat.streamingReplies.pipe(
+          Effect.flatMap((replies) =>
+            replies.some((m) => m.steps.some((step) => step.kind === "tool" && step.state === "running"))
+              ? Effect.void
+              : Effect.fail("waiting"),
+          ),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+        change();
+        // The turn has ended when review returns, if it stopped it.
+        yield* chat.reviewAuthority(HOB_ID);
+        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+      }).pipe(
+        Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), changing)),
+        Effect.scoped,
+        Effect.runPromise,
+      );
+
+    // Nothing changes: the turn goes on.
+    expect(await statusAfter(() => undefined)).toBe("streaming");
+    // You take over the folder while its command runs: the turn stops, and its command with it.
+    expect(await statusAfter(() => (taken = [docs]))).toBe("interrupted");
+    // You give it back: what runs keeps the sandbox it started with, closed, and goes on.
+    expect(await statusAfter(() => (taken = []))).toBe("streaming");
+  });
 });

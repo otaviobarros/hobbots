@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   AdditionalRuntimes,
   type HubTools,
@@ -549,6 +549,30 @@ const throughProxy = <C extends { readonly effect?: ScriptedEffect }>(
   });
 
 /**
+ * The call as it runs in the turn's sandbox, which closes what you took over to writes (#1537),
+ * whatever the call-level check read of the command: its writes there are not made, and it fails,
+ * printing what the sandbox refused, as a script's write fails under the real one. Its other writes
+ * are made. Unchanged when it writes nothing you took over.
+ */
+const throughSandbox = <C extends { readonly effect?: ScriptedEffect }>(
+  call: C,
+  folder: string | undefined,
+  taken: ReadonlyArray<string>,
+): C => {
+  const writes = call.effect?.writes;
+  if (writes === undefined || folder === undefined || taken.length === 0) return call;
+  const closed = (path: string) => {
+    const target = resolve(folder, path);
+    return taken.some((place) => target === place || target.startsWith(`${place}${sep}`));
+  };
+  const refused = Object.keys(writes).filter(closed);
+  if (refused.length === 0) return call;
+  const output = refused.map((path) => `${path}: Operation not permitted\n`).join("");
+  const kept = Object.fromEntries(Object.entries(writes).filter(([path]) => !closed(path)));
+  return { ...call, effect: { ...call.effect, writes: kept, output, exitCode: 1 } };
+};
+
+/**
  * The tool calls a prompt scripts, decided as Claude Code's would be: by the policy engine, and for
  * Ask by the user through the turn's approvals. Each is reported as started and finished, or denied.
  * Only `fake:run` and `fake:write` change files, and only in the hob's first folder; nothing is run.
@@ -603,7 +627,7 @@ export const scriptedToolEvents = (
             }));
           if (ran) {
             const reached = yield* throughProxy(engine, turn.context, request.approvals, call);
-            yield* ranScripted(reached, turn.folders, background, queue);
+            yield* ranScripted(throughSandbox(reached, turn.folders[0], turn.taken), turn.folders, background, queue);
           } else {
             yield* Queue.offer(queue, {
               _tag: "ToolDenied",

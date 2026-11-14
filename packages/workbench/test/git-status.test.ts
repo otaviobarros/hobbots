@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorkspace } from "@hobbots/agents";
@@ -125,4 +125,46 @@ describe("The repository Git finds from a folder (#742)", () => {
     expect(await repositoryFrom(join(work, "missing"))).toBeNull();
     expect(await repositoryFrom("ledger")).toBeNull();
   });
+});
+
+describe("What the sandbox closes for what you took over (#1537)", () => {
+  const read = <A>(use: (git: GitWorkspace["Service"]) => Effect.Effect<A>) =>
+    Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-05] finds the repositories a folder reaches: the one around it and every one below it", async () => {
+    const ledger = join(work, "projects", "ledger");
+    const vendor = join(ledger, "vendor", "lib");
+    const deep = join(work, "projects", "a", "b", "c", "deep");
+    const hidden = join(work, "projects", ".worktrees", "task");
+    for (const dir of [join(ledger, "src"), vendor, deep, hidden, join(work, "projects", "node_modules", "pkg")]) {
+      mkdirSync(dir, { recursive: true });
+    }
+    for (const dir of [ledger, vendor, deep, hidden, join(work, "projects", "node_modules", "pkg")]) {
+      gitIn(dir, "init", "-q");
+    }
+    // From inside a repository: that one. From a folder of checkouts: each, however deep or hidden,
+    // past installed packages, and the scan saw every folder.
+    expect(await read((git) => git.repositoriesIn(join(ledger, "src")))).toEqual({ tops: [ledger], complete: true });
+    const reached = await read((git) => git.repositoriesIn(join(work, "projects")));
+    expect([...reached.tops].sort()).toEqual([hidden, deep, ledger, vendor].sort());
+    expect(reached.complete).toBe(true);
+    expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual({ tops: [], complete: true });
+  });
+
+  // covers PE-005, STD-SEC-002, #1537
+  it.skipIf(process.getuid?.() === 0)(
+    "[TC-PE-1537-13] says a scan did not see every folder when one below it cannot be read",
+    async () => {
+      const locked = join(work, "projects", "locked");
+      mkdirSync(join(locked, "checkout"), { recursive: true });
+      gitIn(join(locked, "checkout"), "init", "-q");
+      chmodSync(locked, 0o000);
+      try {
+        expect((await read((git) => git.repositoriesIn(join(work, "projects")))).complete).toBe(false);
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+    },
+  );
 });

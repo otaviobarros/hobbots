@@ -274,6 +274,13 @@ export interface ToolAccess {
    * runtime applies it as given and reads no Git config to decide it.
    */
   readonly commitsAs: CommitsAs;
+  /**
+   * What no process of the turn may write, because you took it over from a Task (#1537): each
+   * taken file or folder in the turn's folders, by absolute path (as claimed and where its links
+   * land). The runtime's sandbox closes them to writes for the whole turn, beside the call-level
+   * refusal (#1449), which alone holds taken branches. Absent or empty, none.
+   */
+  readonly taken?: ReadonlyArray<string>;
 }
 
 /** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */
