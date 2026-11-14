@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
-import { Actor } from "./actor.ts";
+import { Actor, hobActor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";
@@ -267,6 +267,22 @@ export class Message extends Schema.Class<Message>("Message")({
   createdAt: Schema.String,
   revision: Revision,
 }) {}
+
+/**
+ * Who wrote `message` (ADR 039, A member hob works as itself): its actor, always, since in a camp a
+ * reply's hob need not be the hob the camp belongs to. A message not stored yet has no actor: its
+ * reply is then `thread`'s own hob's, and a person's is null. This is the one place a message's
+ * author falls back to the hob a thread belongs to (STD-ARCH-021).
+ */
+export const authorOf = (message: Message, thread: { readonly agentId: AgentId }): Actor | null =>
+  message.actor ?? (message.role === "assistant" ? hobActor(thread.agentId) : null);
+
+/** The hob that wrote a reply, as `authorOf` names it; null for a message that is not a hob's reply. */
+export const replyHobOf = (message: Message, thread: { readonly agentId: AgentId }): AgentId | null => {
+  if (message.role !== "assistant") return null;
+  const author = authorOf(message, thread);
+  return author?.kind === "hob" ? AgentId.make(author.id) : null;
+};
 
 export class InvalidMessageTransition extends Schema.TaggedError<InvalidMessageTransition>()(
   "InvalidMessageTransition",

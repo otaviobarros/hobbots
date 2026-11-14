@@ -131,6 +131,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
           );
         // One step under the hob's lock: an archived thread changes nothing, not even its hob's
         // default, and no archive lands between the hob's edit and the thread following it.
+        // standards-allow STD-ARCH-021: a thread's brain changes under the lock of the hob it belongs to
         return yield* hobs.updateThen(thread.agentId, brain, chat.checkBrainSwitch(threadId), () =>
           chat.followHob(threadId),
         );
@@ -185,21 +186,14 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     // A hob is working while one of its threads has a turn running, until the turn's runtime has
     // exited. `TurnStarted` and `TurnEnded` announce each change once it has happened, so a read made
     // on either event already agrees with it.
-    // In a camp the hob speaking may be a member, so the line's speaker names it (ADR 039).
-    const activity = Effect.all([chat.activeThreads, chat.threadRuns]).pipe(
-      Effect.flatMap(([threadIds, { runs }]) =>
-        Effect.forEach(threadIds, (threadId) =>
-          repo.findThread(threadId).pipe(
-            Effect.flatMap(
-              Option.match({
-                onNone: () => Effect.succeed(Option.none()),
-                onSome: (thread) =>
-                  repo
-                    .findAgent(runs.find((each) => each.threadId === threadId)?.speaking ?? thread.agentId)
-                    .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, threadId })))),
-              }),
-            ),
-          ),
+    // In a camp the hob speaking may be a member, so each turn names its own hob (ADR 039), never
+    // the hob the camp belongs to.
+    const activity = chat.activeTurns.pipe(
+      Effect.flatMap((turns) =>
+        Effect.forEach(turns, ({ threadId, agentId }) =>
+          repo
+            .findAgent(agentId)
+            .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, threadId })))),
         ),
       ),
       Effect.map((hobs) => ({ working: hobs.flatMap(Option.toArray) })),

@@ -24,7 +24,7 @@ import {
   ThreadLifecycle,
 } from "@hobbots/domain";
 import { Array as Arr, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { summaryLine } from "./briefing.ts";
 import { SUMMARY_INPUT_MAX, summaryInput } from "./chapter-summaries.ts";
 import { ChapterRepository, ChapterService } from "./chapters.ts";
@@ -143,8 +143,9 @@ export class CampSuggestionService extends Context.Service<
         keep: (threadId, suggestionId) =>
           Effect.gen(function* () {
             const thread = yield* threadOf(threadId);
-            const committed = yield* admission.withHob(
-              thread.agentId,
+            const committed = yield* withThreadLock(
+              admission,
+              thread,
               DateTime.now.pipe(
                 Effect.flatMap((now) => suggestions.keep(threadId, suggestionId, DateTime.formatIso(now))),
               ),

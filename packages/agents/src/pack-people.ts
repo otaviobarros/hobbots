@@ -3,12 +3,14 @@ import {
   type AgentId,
   type AnswerCause,
   answerersFor,
+  authorOf,
   brainLabel,
   hobActor,
   isActiveQuest,
   MentionRefused,
   type Message,
   type RunningQuest,
+  replyHobOf,
   sameActor,
   type Thread,
   type ThreadMember,
@@ -16,6 +18,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HobbotsRepository } from "./repository.ts";
+import type { Speaker } from "./speaker.ts";
 import { TaskRepository } from "./tasks.ts";
 import { ThreadMemberRepository } from "./thread-members.ts";
 import { UserRepository } from "./users.ts";
@@ -71,24 +74,22 @@ export interface PackPeople {
 export const UNKNOWN_PERSON = "User";
 
 /**
- * A message's author: its actor, or, for a message from before authors were recorded, the thread's
- * hob for a reply and its owner, `owner`, for yours: null when the thread has no owner member stored.
+ * A message's author as the pack names them: `authorOf`, and for a person's message not stored yet,
+ * the thread's owner, `owner`: null when the thread has no owner member stored.
  */
-export const authorOf = (message: Message, thread: Pick<Thread, "agentId">, owner: Actor | null): Actor | null =>
-  message.actor ?? (message.role === "assistant" ? hobActor(thread.agentId) : owner);
+const packAuthorOf = (message: Message, thread: Thread, owner: Actor | null): Actor | null =>
+  authorOf(message, thread) ?? owner;
 
-/** The hob's own replies: written by it, or by the thread's hob before authors were recorded. */
-export const isOwnReply = (message: Message, thread: Pick<Thread, "agentId">, agentId: AgentId): boolean => {
-  const author = authorOf(message, thread, null);
-  return message.role === "assistant" && author !== null && sameActor(author, hobActor(agentId));
-};
+/** The hob's own replies, as `replyHobOf` names their hob. */
+export const isOwnReply = (message: Message, thread: Thread, agentId: AgentId): boolean =>
+  replyHobOf(message, thread) === agentId;
 
 /** The thread's owner, as its member rows record them, or null when none is stored. */
 const ownerOf = (members: ReadonlyArray<ThreadMember>): Actor | null =>
   members.find((member) => member.role === "owner")?.actor ?? null;
 
 /**
- * The people and hobs of `thread` as `agentId`'s turn names them. Without members stored, only
+ * The people and hobs of the speaker's thread as its turn names them. Without members stored, only
  * the thread's hob is listed. A person with no user record is named "User".
  */
 export const makePackPeople = Effect.gen(function* () {
@@ -111,12 +112,14 @@ export const makePackPeople = Effect.gen(function* () {
       });
       return { leadId: summary.leadId, party: [...new Set(party)] } satisfies RunningQuest;
     });
-  return (thread: Thread, agentId: AgentId) =>
+  return ({ thread, agent }: Pick<Speaker, "thread"> & { readonly agent: Pick<Speaker["agent"], "id"> }) =>
     Effect.gen(function* () {
+      const agentId = agent.id;
       const stored = Option.isNone(memberRepo) ? [] : yield* memberRepo.value.list(thread.id);
       const active = stored.filter(ThreadMembers.isActive);
       const owner = ownerOf(stored);
       const actors: ReadonlyArray<Actor> =
+        // standards-allow STD-ARCH-021: without members stored, the thread is the hob's it belongs to, alone
         active.length > 0 ? active.map((member) => member.actor) : [hobActor(thread.agentId)];
       const people = Option.isNone(users) ? [] : yield* users.value.list;
       const agents = yield* repo.listAgents;
@@ -132,7 +135,7 @@ export const makePackPeople = Effect.gen(function* () {
       };
       const you = hobActor(agentId);
       const speaker = (message: Message): string => {
-        const author = authorOf(message, thread, owner);
+        const author = packAuthorOf(message, thread, owner);
         if (author === null) return `${UNKNOWN_PERSON} (person)`;
         if (sameActor(author, you)) {
           return message.runtime === null ? "You" : `You, thinking with ${brainLabel(message.runtime, message.model)}`;

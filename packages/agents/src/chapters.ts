@@ -13,7 +13,7 @@ import {
   ThreadLifecycle,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
-import { HobAdmission } from "./admission.ts";
+import { HobAdmission, withThreadLock } from "./admission.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
@@ -96,8 +96,9 @@ export class ChapterService extends Context.Service<
         Effect.gen(function* () {
           const found = yield* repo.findThread(threadId);
           if (Option.isNone(found)) return yield* new ThreadNotFound({ threadId });
-          const committed = yield* admission.withHob(
-            found.value.agentId,
+          const committed = yield* withThreadLock(
+            admission,
+            found.value,
             Effect.gen(function* () {
               const thread = yield* repo.findThread(threadId);
               if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
