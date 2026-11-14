@@ -89,7 +89,7 @@ const stepModel = (before: TaskView, e: TaskEvent): TaskView | "refused" => {
     case "RequestCancel":
       return ends("cancelling", ["queued", "active", "waiting", "blocked", "pausing", "paused"]);
     case "Cancel":
-      return ends("cancelled", ["queued", "paused", "cancelling"]);
+      return ends("cancelled", ["queued", "pausing", "paused", "cancelling"]);
     case "Start":
       return !open(m.state) || e.readiness._tag !== "Ready"
         ? "refused"

@@ -273,9 +273,10 @@ export const TaskMachine = defineMachine<TaskState, TaskEvent, Task, IllegalTask
       to: "cancelling",
       apply: (task, e) => new Task({ ...task, state: "cancelling", pause: null, updatedAt: e.at }),
     },
-    // A queued or paused Task has nothing running, so its cancel is confirmed at once.
+    // A queued or paused Task has nothing running, so its cancel is confirmed at once; so is a pausing
+    // one whose turn has ended before its pause settled (#1446).
     Cancel: {
-      from: ["queued", "paused", "cancelling"],
+      from: ["queued", "pausing", "paused", "cancelling"],
       to: "cancelled",
       apply: (task, e) => new Task({ ...task, state: "cancelled", pause: null, updatedAt: e.at }),
     },

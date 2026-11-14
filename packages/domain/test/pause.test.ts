@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentId,
+  cancelMoves,
   hobActor,
   mentionsIn,
   mentionTargets,
@@ -16,6 +17,7 @@ import {
   Task,
   TaskId,
   type TaskState,
+  TaskTransitions,
   TaskTree,
 } from "../src/index.ts";
 
@@ -115,6 +117,16 @@ describe("pause targets", () => {
       task("ada", ADA, "top", "paused"),
     ];
     expect(tasks.map((each) => resumedAs(each, tasks))).toEqual(["active", "queued", "waiting"]);
+  });
+});
+
+describe("cancelling while a pause settles", () => {
+  it("[TC-OR-1446-28] confirms the cancel of a pausing Task whose turn has ended, on a move its machine allows", () => {
+    const pausing = task("ada", ADA, null, "pausing");
+    const [move] = cancelMoves(pausing, tree([pausing]));
+    expect(move?.to).toBe("cancelled");
+    const moved = TaskTransitions.moveTo(pausing, "cancelled", later);
+    expect(moved).toMatchObject({ state: "cancelled", pause: null });
   });
 });
 

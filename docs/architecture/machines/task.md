@@ -39,6 +39,7 @@ stateDiagram-v2
   pausing --> cancelling: RequestCancel
   paused --> cancelling: RequestCancel
   queued --> cancelled: Cancel
+  pausing --> cancelled: Cancel
   paused --> cancelled: Cancel
   cancelling --> cancelled: Cancel
   queued --> active: Start (guarded)
@@ -80,7 +81,7 @@ stateDiagram-v2
 | Resume | waiting, blocked | active | no |
 | Fail | queued, active, waiting, blocked, pausing, paused | failed | no |
 | RequestCancel | queued, active, waiting, blocked, pausing, paused | cancelling | no |
-| Cancel | queued, paused, cancelling | cancelled | no |
+| Cancel | queued, pausing, paused, cancelling | cancelled | no |
 | Start | queued, active, waiting, blocked, failed | active | yes |
 | Retry | failed | queued | no |
 | Reassign | queued, active, waiting, blocked, failed | queued | no |

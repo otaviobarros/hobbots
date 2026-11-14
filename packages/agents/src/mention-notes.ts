@@ -38,7 +38,11 @@ export const makeMentionNotes = Effect.gen(function* () {
       const store = tasks.value;
       const { stored, notes } = yield* store.atomically(
         Effect.gen(function* () {
-          const stored = yield* repo.upsertMessage(message);
+          // Stored as every message you send is, so a mention of a hob that cannot hear it refuses the
+          // whole message, and nothing reaches the member either (ADR 039). The member's turn takes
+          // it from its note, so the answerers decided here start no turn.
+          const sent = yield* repo.sendMessage(message, { mentions: [], repliesTo: null });
+          const stored = { ...sent, value: sent.value.message };
           const left = yield* Effect.forEach(targeted, (task) =>
             store
               .leaveNote({

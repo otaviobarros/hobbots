@@ -24,7 +24,8 @@ export const cancelMoves = (target: Task, tree: TaskTree): ReadonlyArray<CancelM
   for (const task of deepestFirst) {
     const state = states.get(task.id);
     if (state === undefined || isTerminalTask(state) || state === "cancelling") continue;
-    // A paused Task has nothing running, as a queued one has not (#1446).
+    // A paused Task has nothing running, as a queued one has not, nor has a pausing one once its turn
+    // ended, before its pause settled (#1446).
     const quiet =
       (state === "queued" || TaskPauses.isPaused({ state })) &&
       (task.currentAttemptId === null || !live.has(task.currentAttemptId)) &&

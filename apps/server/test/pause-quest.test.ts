@@ -89,8 +89,13 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     expect(noteReceipt(note, tree)).toEqual({ _tag: "Held", reason: "turn-running" });
     await run(Effect.sleep("300 millis"));
     expect(leadTurns()).toBe(before);
+    // A mention of a hob that cannot hear the thread refuses the whole message, as any message's does
+    // (ADR 039): it is not stored, and the member it also mentions gets no note.
+    const refused = await run(Effect.flip(send(["@Pip @Rook use the red theme"])));
+    expect(refused).toMatchObject({ _tag: "MentionRefused", hobs: [ROOK] });
     const messages = await run(HobbotsRepository.use((repo) => repo.listMessages(threadId)));
     expect(messages.at(-1)?.id).toBe(userMessage.id);
+    expect((await run(treeWhen(() => true))).notes.filter((each) => each.text.includes("red theme"))).toEqual([]);
   }, 30_000);
 });
 
