@@ -75,6 +75,7 @@ const quest = (id: string, revision: number, fields: Partial<CatchUpQuest["summa
 
 const input = (fields: Partial<CatchUpInput>): CatchUpInput => ({
   you: OWNER_ACTOR,
+  decides: true,
   marker: 10,
   messages: [],
   decisions: [],

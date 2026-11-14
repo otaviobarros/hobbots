@@ -78,6 +78,11 @@ export type AwayMessage = Pick<
 export interface AwayInput {
   /** The person catching up: their own decisions, artifacts and messages are no news to them. */
   readonly you: Actor;
+  /**
+   * Whether you decide what the thread's Quests ask (ADR 039, the decider): only then does a Quest
+   * waiting on its approvals and questions say it needs you. Other members still hear it ended.
+   */
+  readonly decides: boolean;
   /** The newest message revision you read through, or null when you never read the thread. */
   readonly marker: number | null;
   readonly messages: ReadonlyArray<AwayMessage>;
@@ -96,7 +101,7 @@ interface Ranked {
   readonly waits: boolean;
 }
 
-const questItems = (quests: AwayInput["quests"], since: number): ReadonlyArray<Ranked> =>
+const questItems = (quests: AwayInput["quests"], since: number, decides: boolean): ReadonlyArray<Ranked> =>
   quests.flatMap(({ summary, goal }): ReadonlyArray<Ranked> => {
     // A member's Quest reaches you through its lead's, which is the one started here.
     if (summary.parentQuestId !== null || summary.revision <= since) return [];
@@ -106,7 +111,7 @@ const questItems = (quests: AwayInput["quests"], since: number): ReadonlyArray<R
         { item: { _tag: "QuestEnded", questId, goal, state: summary.state, messageId: null }, revision, waits: false },
       ];
     }
-    if (summary.needsYou === 0) return [];
+    if (summary.needsYou === 0 || !decides) return [];
     return [
       { item: { _tag: "NeedsYou", questId, goal, count: summary.needsYou, messageId: null }, revision, waits: true },
     ];
@@ -168,7 +173,7 @@ export const awayItems = (input: AwayInput): ReadonlyArray<CatchUpItem> => {
   const since = input.marker ?? 0;
   return [
     ...mentionItems(input, since),
-    ...questItems(input.quests, since),
+    ...questItems(input.quests, since, input.decides),
     ...decisionItems(input.decisions, input.you, since),
     ...artifactItems(input.artifacts, input.you, since),
   ]

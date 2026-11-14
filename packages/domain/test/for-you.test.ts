@@ -19,9 +19,11 @@ import {
   HubQuestionId,
   MessageId,
   OWNER_ACTOR,
+  QuestId,
   Question,
   QuestionId,
   RegisteredArtifactId,
+  sameActor,
   Task,
   TaskId,
   ThreadId,
@@ -221,12 +223,14 @@ describe("forYouOf", () => {
         expect(forYou.for).toEqual(you);
         for (const each of threads) {
           // Its part of While you were away is exactly the catch-up of that thread.
-          const caught = catchUpOf({ ...each, you });
+          // With no owner listed, the hub's owner decides each thread.
+          const decides = sameActor(you, OWNER_ACTOR);
+          const caught = catchUpOf({ ...each, you, decides });
           const away = forYou.away.find((part) => part.threadId === each.threadId);
           expect(away?.items ?? []).toEqual(caught.items);
           expect(away?.more ?? 0).toBe(caught.more);
           // And the list's mentions are every mention of you the away summary has, uncapped.
-          const mentioned = awayItems({ ...each, you }).flatMap((item) =>
+          const mentioned = awayItems({ ...each, you, decides }).flatMap((item) =>
             item._tag === "Mentioned" ? [item.messageId] : [],
           );
           const listed = forYou.items.flatMap((item) =>
@@ -327,5 +331,25 @@ describe("forYouOf", () => {
     });
     expect(forYou.away.map((part) => part.threadId)).toEqual(["later", "earlier"]);
     expect(forYou.away[0]).toMatchObject({ readRevision: 10, more: 0 });
+  });
+
+  // covers ADR 039 (Cards every thread shares › Approval: the decider)
+  it("[TC-DM-1456-06] says a Quest needs you only to its decider, and tells every member when it ends", () => {
+    const quest = (id: string, revision: number, state: "active" | "completed", needsYou: number) => ({
+      summary: { questId: QuestId.make(id), parentQuestId: null, state, needsYou, revision },
+      goal: `Goal ${id}`,
+    });
+    const camp = thread("brunas-camp", {
+      quests: [quest("waits", 12, "active", 2), quest("done", 11, "completed", 0)],
+    });
+    const awayOf = (you: Actor) =>
+      forYouOf({
+        you,
+        threads: [camp],
+        ...empty,
+        owners: new Map<ThreadId, Actor>([[ThreadId.make("brunas-camp"), BRUNA]]),
+      }).away.flatMap((part) => part.items.map((item) => item._tag));
+    expect(awayOf(BRUNA)).toEqual(["NeedsYou", "QuestEnded"]);
+    expect(awayOf(LEO)).toEqual(["QuestEnded"]);
   });
 });

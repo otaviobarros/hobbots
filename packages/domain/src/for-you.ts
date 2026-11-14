@@ -74,7 +74,7 @@ export const deciderOf = (from: {
 }): Actor => from.requester ?? from.owner ?? from.hubOwner;
 
 /** A thread you are an active member of, as For you reads it: your marker and its records since. */
-export interface ForYouThread extends Omit<AwayInput, "you"> {
+export interface ForYouThread extends Omit<AwayInput, "you" | "decides"> {
   readonly threadId: ThreadId;
 }
 
@@ -122,8 +122,9 @@ export const forYouOf = (input: ForYouInput): ForYou => {
       owner: threadId === null ? null : (input.owners.get(threadId) ?? null),
       hubOwner: input.hubOwner,
     });
+  const decides = (threadId: ThreadId) => sameActor(decider(threadId), you);
   const mentions: ReadonlyArray<ForYouItem> = input.threads.flatMap((thread) =>
-    awayItems({ ...thread, you }).flatMap((item): ReadonlyArray<ForYouItem> => {
+    awayItems({ ...thread, you, decides: decides(thread.threadId) }).flatMap((item): ReadonlyArray<ForYouItem> => {
       if (item._tag !== "Mentioned") return [];
       const message = thread.messages.find((each) => each.id === item.messageId);
       if (message === undefined) return [];
@@ -175,7 +176,11 @@ export const forYouOf = (input: ForYouInput): ForYou => {
     ),
   ];
   const away = input.threads
-    .map((thread) => ({ thread, summary: awaySummaryOf({ ...thread, you }), latest: latestChange(thread) }))
+    .map((thread) => ({
+      thread,
+      summary: awaySummaryOf({ ...thread, you, decides: decides(thread.threadId) }),
+      latest: latestChange(thread),
+    }))
     .filter(({ summary }) => summary.items.length > 0)
     .sort((a, b) => b.latest - a.latest)
     .map(
