@@ -17,6 +17,8 @@ import { toolLabel } from "../tool-calls.ts";
 export const ROLLOUT_CHUNK_BYTES = 1024 * 1024;
 /** How much of the rollout one read takes at most; the rest waits for the next read. */
 export const ROLLOUT_READ_BYTES = 16 * ROLLOUT_CHUNK_BYTES;
+/** How many reads the end of a turn takes at most to catch up, so a rollout gained a lot is read to its end. */
+export const ROLLOUT_DRAIN_READS = 16;
 /** How many calls still waiting for their output are kept; the oldest is dropped past it. */
 const PENDING_CALLS = 256;
 /** Opens the rollout only as itself, never through a symlink, nor waiting on a pipe put in its place. */
@@ -123,14 +125,15 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
   };
   /**
    * The whole lines appended past `from`, a chunk at a time and at most ROLLOUT_READ_BYTES of them,
-   * and where the last of them ends. A rollout that shrank is read on from its new end.
+   * where the last of them ends, and whether the read stopped at that bound with more to read. A
+   * rollout that shrank is read on from its new end.
    */
   const appended = async (file: string, from: number) => {
     const handle = await open(file, OPEN_FLAGS);
     try {
       const info = await handle.stat();
-      if (!info.isFile()) return { lines: [], end: from };
-      if (info.size < from) return { lines: [], end: info.size };
+      if (!info.isFile()) return { lines: [], end: from, more: false };
+      if (info.size < from) return { lines: [], end: info.size, more: false };
       const lines: Array<string> = [];
       const buffer = Buffer.alloc(Math.min(ROLLOUT_CHUNK_BYTES, info.size - from));
       let end = from;
@@ -143,11 +146,27 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
         if (whole > 0) lines.push(...buffer.subarray(0, whole).toString("utf8").split("\n"));
         end += whole === 0 ? bytesRead : whole;
       }
-      return { lines: lines.filter((line) => line.trim() !== ""), end };
+      const more = end < info.size && end - from >= ROLLOUT_READ_BYTES;
+      return { lines: lines.filter((line) => line.trim() !== ""), end, more };
     } finally {
       await handle.close();
     }
   };
+  /** One read: reports what it read, and whether the rollout has more past where it stopped. */
+  const readOnce = Effect.suspend(() => {
+    if (path == null || offset === null) return Effect.succeed(false);
+    const from = offset;
+    return Effect.tryPromise(() => appended(path, from)).pipe(
+      Effect.flatMap(({ lines, end, more }) =>
+        Effect.sync(() => {
+          offset = end;
+          refusedIn(lines);
+          return more;
+        }),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
+  });
   return {
     /** Starts reading where the rollout ends now, so only what this turn's run appends is read. */
     start: Semaphore.withPermit(
@@ -167,20 +186,15 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
       ),
     ),
     /** Reports the unsupported calls in what the rollout gained since the last read; a rollout it cannot read adds none. */
-    read: Semaphore.withPermit(
+    read: Semaphore.withPermit(turns, readOnce),
+    /**
+     * Reads as `read` does until the rollout is read to its end, at most ROLLOUT_DRAIN_READS reads,
+     * so a turn that ends after its rollout gained more than one read takes is still read whole.
+     */
+    drain: Semaphore.withPermit(
       turns,
-      Effect.suspend(() => {
-        if (path == null || offset === null) return Effect.void;
-        const from = offset;
-        return Effect.tryPromise(() => appended(path, from)).pipe(
-          Effect.flatMap(({ lines, end }) =>
-            Effect.sync(() => {
-              offset = end;
-              refusedIn(lines);
-            }),
-          ),
-          Effect.orElseSucceed(() => undefined),
-        );
+      Effect.gen(function* () {
+        for (let reads = 0; reads < ROLLOUT_DRAIN_READS; reads += 1) if (!(yield* readOnce)) return;
       }),
     ),
   };

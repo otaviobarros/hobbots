@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { RuntimeEvent } from "@hobbots/agents";
 import { Effect } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { ROLLOUT_CHUNK_BYTES, ROLLOUT_READ_BYTES, rolloutRefusals } from "../src/codex/rollout.ts";
+import { ROLLOUT_CHUNK_BYTES, ROLLOUT_DRAIN_READS, ROLLOUT_READ_BYTES, rolloutRefusals } from "../src/codex/rollout.ts";
 
 // What Codex 0.166.0 to 0.169.0 write to a thread's rollout for a call to a tool it has none of
 // (#1356): the model's call, then the output Codex answers it with, as response items.
@@ -125,6 +125,32 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     appendFileSync(path, refused("after-cut"));
     await Effect.runPromise(refusals.read);
     expect(idsOf(reported)).toEqual(["after-long", "far", "after-cut"]);
+  });
+
+  // covers PE-001, ADR 014 (#1356)
+  it("[TC-PE-1356-10] the end of a turn reads its rollout to the end, though it gained more than one read takes", async () => {
+    const path = join(folder, "drained.jsonl");
+    writeFileSync(path, "");
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    const far = `${call("far", "github_comment", {})}${output("far", "unsupported call: github_comment")}`;
+    truncateSync(path, 3 * ROLLOUT_READ_BYTES);
+    appendFileSync(path, `\n${far}`);
+    await Effect.runPromise(refusals.drain);
+    expect(reported.map((event) => (event._tag === "ToolDenied" ? event.id : event._tag))).toEqual(["far"]);
+    // A drain is bounded too: what lies past its last read waits for the next.
+    const beyond = join(folder, "beyond.jsonl");
+    writeFileSync(beyond, "");
+    const past: Array<RuntimeEvent> = [];
+    const bounded = rolloutRefusals(beyond, (event) => past.push(event));
+    await Effect.runPromise(bounded.start);
+    truncateSync(beyond, (ROLLOUT_DRAIN_READS + 1) * ROLLOUT_READ_BYTES);
+    appendFileSync(beyond, `\n${far}`);
+    await Effect.runPromise(bounded.drain);
+    expect(past).toEqual([]);
+    await Effect.runPromise(bounded.drain);
+    expect(past).toHaveLength(1);
   });
 
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {

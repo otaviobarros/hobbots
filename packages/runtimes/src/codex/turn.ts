@@ -945,7 +945,7 @@ const turnEvents = (
 
       yield* startTurn(turnPrompt(request, launch.instructions, launch.commits, launch.sandboxNote), asked);
       return yield* finish(
-        yield* settle(signals, mapper, now, startTurn, report, refusals.read),
+        yield* settle(signals, mapper, now, startTurn, report, refusals.drain),
         mapper,
         report,
         Queue.end(queue),
