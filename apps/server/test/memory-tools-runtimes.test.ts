@@ -128,8 +128,14 @@ const saveAndSearch = async (runtime: HubCallRuntime, records: boolean, threadId
   const hub = memoryHub(threadId);
   const hubTools = await hub.tools;
   if (hubTools === null) throw new Error("No memory tools");
+  // What the hub answered each call, in order, as the hob's model reads it.
+  const answers: Array<string> = [];
   const { exit } = await runtime.turn({
-    hubTools,
+    hubTools: {
+      ...hubTools,
+      call: (name, input, step) =>
+        Effect.tap(hubTools.call(name, input, step), (answer) => Effect.sync(() => answers.push(answer.text))),
+    },
     recordToolStart: (event) =>
       Effect.sync(() => {
         hub.order.push(`recorded ${event.tool} ${event.operation}`);
@@ -141,7 +147,7 @@ const saveAndSearch = async (runtime: HubCallRuntime, records: boolean, threadId
     ],
   });
   expect(Exit.isSuccess(exit), String(exit)).toBe(true);
-  return { ...hub, exit };
+  return { ...hub, exit, answers };
 };
 
 describe("the Memory tools on every runtime", () => {
@@ -175,8 +181,8 @@ describe("the Memory tools on every runtime", () => {
       const hub = await saveAndSearch(runtime, true, camp);
       expect(hub.order, runtime.name).toEqual(["recorded memory_search search-memory", "search"]);
       expect(hub.saves.saves(), runtime.name).toEqual([]);
-      // The hob reads why: on a real runtime its model is sent the refusal.
-      const told = runtime.name === "fake" ? JSON.stringify(hub.exit) : runtime.modelText().join("\n");
+      // The hob reads why: the hub answers with the refusal, and a real runtime's model is sent it.
+      const told = runtime.name === "fake" ? hub.answers.join("\n") : runtime.modelText().join("\n");
       expect(told, runtime.name).toContain("This camp is private");
     }
   });

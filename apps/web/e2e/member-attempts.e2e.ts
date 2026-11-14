@@ -119,6 +119,8 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
     await tellFrodo(page, [
       `Pass Pip a note: ${text}`,
       hubCall("message_task", { key, task_id: "$review.task_id", text }),
+      // The reply repeats message_task's answer, so the test reads it in the turn that made the call (#1560).
+      "fake:say-answers",
     ]);
     await expect(page.getByText("Sent to hob").first()).toBeVisible({ timeout: 45_000 });
     if (key !== "third") await expect(pip).toContainText("Blocked", { timeout: 30_000 });

@@ -174,7 +174,8 @@ test("[TC-UX-1351-01] a hob reads another's card with its answers, and a change 
   const { url, pip, quill } = await hubWithTeam();
   const readQuill = async () => {
     await page.goto(`${url}/#/hobs/${pip.id}/chat`);
-    await send(page, ["What may Quill do?", 'fake:hub read_hob {"hob":"Quill"}']);
+    // The reply repeats read_hob's answer, so the test reads it in the turn that made the call (#1560).
+    await send(page, ["What may Quill do?", 'fake:hub read_hob {"hob":"Quill"}', "fake:say-answers"]);
     return page.getByRole("article").last();
   };
   const before = await readQuill();
