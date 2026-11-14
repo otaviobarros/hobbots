@@ -12,7 +12,9 @@ import {
   AgentId,
   ArtifactId,
   ancestorsOf,
+  COMMAND_OPERATIONS,
   CriterionId,
+  closesCommands,
   type DelegationAuthority,
   DelegationId,
   hobStanding,
@@ -21,8 +23,6 @@ import {
   MilestoneId,
   NoteId,
   openTools,
-  type PolicyDecision,
-  type PolicyOperation,
   type PolicyOverrides,
   type Quest,
   QuestId,
@@ -149,12 +149,6 @@ const timeoutFor = (scope: CallScope, task: Task, minutes: number | undefined) =
   }
   return Effect.succeed(asked ?? most);
 };
-
-const COMMAND_OPERATIONS: ReadonlyArray<PolicyOperation> = ["run-commands", "local-git"];
-
-/** The file answers that close commands (ADR 014): Read files other than Allow, or Edit files Ask. */
-const closesCommands = (operation: PolicyOperation, decision: PolicyDecision): boolean =>
-  operation === "read-files" ? decision !== "allow" : operation === "edit-files" && decision === "ask";
 
 /** What the lead is told of a member whose commands are read-only (#1344). */
 const readOnlyNote = (name: string) =>

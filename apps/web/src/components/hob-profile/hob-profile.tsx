@@ -291,7 +291,7 @@ function ProfileHero({
           </Badge>
           {good && <span className="truncate">{good}</span>}
         </span>
-        {hob.summonedBy !== null && <SummonedBy summoner={hob.summonedBy} />}
+        {hob.summonedBy !== null && <SummonedBy summoner={hob.summonedBy} unattended={hob.summonedUnattended} />}
       </span>
       <span className="flex flex-none items-center gap-2">
         <Button asChild>
@@ -305,14 +305,21 @@ function ProfileHero({
   );
 }
 
-/** "Summoned by Ada" under the name of a hob another hob summoned, with Ada linked to her profile (ADR 034). */
-function SummonedBy({ summoner }: { summoner: AgentId }) {
+/**
+ * "Summoned by Ada" under the name of a hob another hob summoned, with Ada linked to her profile, and
+ * "without asking you" when the summon ran without a card (ADR 034, #1352).
+ */
+function SummonedBy({ summoner, unattended }: { summoner: AgentId; unattended: boolean }) {
   const hobs = useHobsNamed([summoner]);
   // Until the summoner is read, the line under the profile says who summoned it as far as it knows.
   if (!hobs.has(summoner)) return null;
   return (
     <span className="text-meta text-text-secondary">
-      <NamingHob hobId={summoner} hobs={hobs} line={(name) => changesCopy.profile.summonedBy({ hob: name })} />
+      <NamingHob
+        hobId={summoner}
+        hobs={hobs}
+        line={(name) => changesCopy.profile.summonedBy({ hob: name, unattended })}
+      />
     </span>
   );
 }
