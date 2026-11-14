@@ -86,7 +86,11 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             const place = yield* git.placeOf(path);
             if (place === null) return undefined;
             const inside = name === "" ? place.path : place.path === "" ? name : `${place.path}/${name}`;
-            return (yield* takenAt(place.top)).find((claim) => touchesPath(claim, inside));
+            // Matched without regard to case, as a case-insensitive volume reads `DOCS` and `docs` as
+            // one folder; on a case-sensitive one this refuses at most a few writes too many.
+            return (yield* takenAt(place.top)).find((claim) =>
+              touchesPath({ ...claim, key: claim.key.toLowerCase() }, inside.toLowerCase()),
+            );
           });
         // A path is checked where it lands with its links followed, and as the entry it names in its
         // folder, so deleting a link inside a taken folder is refused though its target is not.

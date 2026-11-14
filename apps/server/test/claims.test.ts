@@ -515,6 +515,8 @@ describe("the claims register", () => {
       expect(await h.takenWrite({ paths: [`${checkout}${sep}decisions-link${sep}..${sep}a.md`] })).toContain(
         "took over",
       );
+      // A different spelling of the folder's case is the same folder on a case-insensitive volume.
+      expect(await h.takenWrite({ paths: [join(checkout, "DOCS", "plan.md")] })).toContain("took over");
       // Deleting a link inside the taken folder removes the link, whatever it points to.
       symlinkSync(join(checkout, "packages"), join(checkout, "docs", "packages-link"));
       expect(await h.takenWrite({ paths: [join(checkout, "docs", "packages-link")] })).toContain("took over");
