@@ -1,10 +1,16 @@
 import { appendFileSync, mkdtempSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RuntimeEvent } from "@hobbots/agents";
+import { NOT_OFFERED_LABEL_MAX, NOT_OFFERED_NAME_MAX, type RuntimeEvent } from "@hobbots/agents";
 import { Effect } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { ROLLOUT_CHUNK_BYTES, ROLLOUT_DRAIN_READS, ROLLOUT_READ_BYTES, rolloutRefusals } from "../src/codex/rollout.ts";
+import {
+  ROLLOUT_CHUNK_BYTES,
+  ROLLOUT_DRAIN_READS,
+  ROLLOUT_READ_BYTES,
+  ROLLOUT_REFUSALS_MAX,
+  rolloutRefusals,
+} from "../src/codex/rollout.ts";
 
 // What Codex 0.166.0 to 0.169.0 write to a thread's rollout for a call to a tool it has none of
 // (#1356): the model's call, then the output Codex answers it with, as response items.
@@ -176,6 +182,30 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
         }),
       ),
     );
+  });
+
+  // covers SEC-002, ADR 014 (#1356)
+  it("[TC-PE-1356-12] a rollout the hob filled with refused calls under long names reports a bounded number of them, each bounded", async () => {
+    const path = join(folder, "flood.jsonl");
+    writeFileSync(path, "");
+    const reported: Array<RuntimeEvent> = [];
+    const refusals = rolloutRefusals(path, (event) => reported.push(event));
+    await Effect.runPromise(refusals.start);
+    const name = "n".repeat(100_000);
+    const pairs = Array.from(
+      { length: ROLLOUT_REFUSALS_MAX * 2 },
+      (_, each) =>
+        `${call(`c-${each}`, name, { command: "x".repeat(100_000) })}${output(`c-${each}`, `unsupported call: ${name}`)}`,
+    );
+    appendFileSync(path, pairs.join(""));
+    await Effect.runPromise(refusals.drain);
+    expect(reported).toHaveLength(ROLLOUT_REFUSALS_MAX);
+    for (const event of reported) {
+      if (event._tag !== "ToolDenied") throw new Error(event._tag);
+      expect(event.tool.length).toBeLessThanOrEqual(NOT_OFFERED_NAME_MAX);
+      expect(event.label.length).toBeLessThanOrEqual(NOT_OFFERED_LABEL_MAX);
+      expect(event.reason.length).toBeLessThan(NOT_OFFERED_NAME_MAX + 100);
+    }
   });
 
   it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {

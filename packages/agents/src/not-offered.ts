@@ -1,4 +1,5 @@
 import type { AnyOperation } from "@hobbots/domain";
+import { clip } from "./briefing.ts";
 import type { RuntimeEvent } from "./runtime.ts";
 
 /**
@@ -12,6 +13,13 @@ const OPERATIONS: Record<RuntimeToolName, AnyOperation> = {
   file_edits: "edit-files",
   commands: "run-commands",
 };
+
+/**
+ * The longest name and label a refused call keeps. A name is the model's own, and Codex's comes from
+ * a rollout the hob can write, so what the reply, the Task and the journal keep of it is bounded.
+ */
+export const NOT_OFFERED_NAME_MAX = 128;
+export const NOT_OFFERED_LABEL_MAX = 200;
 
 /** What the hob and its reply are told of a call to a tool its session was not offered, until the hub says why. */
 export const notOfferedReason = (tool: string): string => `${tool} is not offered in this session, so it did not run.`;
@@ -27,14 +35,17 @@ export const notOfferedDenial = (call: {
   readonly tool: string;
   readonly label: string;
   readonly runtimeTool: RuntimeToolName | null;
-}): Extract<RuntimeEvent, { readonly _tag: "ToolDenied" }> => ({
-  _tag: "ToolDenied",
-  id: call.id,
-  tool: call.tool,
-  operation: call.runtimeTool === null ? "outside-folders" : OPERATIONS[call.runtimeTool],
-  targets: [],
-  label: call.label,
-  reason: notOfferedReason(call.tool),
-  decidedBy: "policy",
-  notOffered: { runtimeTool: call.runtimeTool },
-});
+}): Extract<RuntimeEvent, { readonly _tag: "ToolDenied" }> => {
+  const tool = clip(call.tool, NOT_OFFERED_NAME_MAX);
+  return {
+    _tag: "ToolDenied",
+    id: clip(call.id, NOT_OFFERED_NAME_MAX),
+    tool,
+    operation: call.runtimeTool === null ? "outside-folders" : OPERATIONS[call.runtimeTool],
+    targets: [],
+    label: clip(call.label, NOT_OFFERED_LABEL_MAX),
+    reason: notOfferedReason(tool),
+    decidedBy: "policy",
+    notOffered: { runtimeTool: call.runtimeTool },
+  };
+};

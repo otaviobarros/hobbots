@@ -19,6 +19,8 @@ export const ROLLOUT_CHUNK_BYTES = 1024 * 1024;
 export const ROLLOUT_READ_BYTES = 16 * ROLLOUT_CHUNK_BYTES;
 /** How many reads the end of a turn takes at most to catch up, so a rollout gained a lot is read to its end. */
 export const ROLLOUT_DRAIN_READS = 16;
+/** How many refused calls one turn's rollout reports at most; past it a rollout the hob wrote adds none. */
+export const ROLLOUT_REFUSALS_MAX = 64;
 /** How many calls still waiting for their output are kept; the oldest is dropped past it. */
 const PENDING_CALLS = 256;
 /** Opens the rollout only as itself, never through a symlink, nor waiting on a pipe put in its place. */
@@ -97,6 +99,7 @@ const labelOf = (tool: string, runtimeTool: RuntimeToolName | null, call: Respon
 export const rolloutRefusals = (path: string | null | undefined, report: (event: RuntimeEvent) => void) => {
   const calls = new Map<string, ResponseItem>();
   let offset: number | null = null;
+  let reported = 0;
   const turns = Semaphore.makeUnsafe(1);
   /** Keeps a call until its output is read, dropping the oldest past PENDING_CALLS. */
   const keep = (id: string, item: ResponseItem) => {
@@ -121,6 +124,8 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
       const tool = typeof call?.name === "string" ? call.name : output.slice(prefix.length).trim();
       // A name is the model's or the rollout's own text, so only a name in the map is a runtime tool.
       const runtimeTool = RUNTIME_TOOLS.get(tool) ?? null;
+      if (reported >= ROLLOUT_REFUSALS_MAX) continue;
+      reported += 1;
       report(notOfferedDenial({ id: item.call_id, tool, label: labelOf(tool, runtimeTool, call), runtimeTool }));
     }
   };
