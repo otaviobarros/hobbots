@@ -22,6 +22,7 @@ import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
 import {
   agentsQuery,
+  archivedAgentsQuery,
   messagesQuery,
   runtimesQuery,
   threadBrain,
@@ -190,7 +191,7 @@ export function ChatView({
   // it changes nothing.
   const latest = transcript?.findLast((m) => m.role !== "note");
   // The hob that wrote it continues it, so its own status decides (ADR 039).
-  const allHobs = useQuery(agentsQuery).data;
+  const allHobs = useEveryHob();
   const latestAuthor =
     latest !== undefined && hob.data !== undefined ? replyAuthor(latest, hob.data, allHobs) : undefined;
   const resumable =
@@ -523,7 +524,7 @@ function Transcript({
   const caughtAt = transcript.some((message) => message.id === unreadFrom) ? unreadFrom : null;
   const catchUpAt = <CatchUpAt hob={hob} view={catchUp} onJump={onJump} />;
   // In a camp a member answers as itself, so each reply shows the hob that wrote it (ADR 039).
-  const hobs = useQuery(agentsQuery).data;
+  const hobs = useEveryHob();
   const row = (message: Message, split: ReactNode) => {
     const author = replyAuthor(message, hob, hobs);
     return (
@@ -610,3 +611,10 @@ function useContinueOn(
       })),
   };
 }
+
+/** Every hob, retired ones too, so a reply keeps the hob that wrote it after that hob retires (ADR 039). */
+const useEveryHob = (): ReadonlyArray<Agent> | undefined => {
+  const active = useQuery(agentsQuery).data;
+  const retired = useQuery(archivedAgentsQuery).data;
+  return active === undefined ? undefined : [...active, ...(retired ?? [])];
+};

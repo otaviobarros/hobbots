@@ -181,8 +181,15 @@ describe("quest mentions", () => {
   it("[TC-OR-1446-07] reaches a member's open Task in an open Quest, never the lead's or one without a Task there", () => {
     const work = tree([task("top", LEAD, null, "waiting"), task("ada", ADA, "top", "active")], [quest]);
     const mentioned = mentionsIn("@Ada @Bob @Aldric stop", roster);
-    expect(mentionTargets([work], LEAD, mentioned).map((each) => each.id)).toEqual(["ada"]);
+    expect(mentionTargets([work], mentioned).map((each) => each.id)).toEqual(["ada"]);
     // Without a Quest, as for a request a hob works alone, nothing is mentioned.
-    expect(mentionTargets([tree(work.tasks)], LEAD, mentioned)).toEqual([]);
+    expect(mentionTargets([tree(work.tasks)], mentioned)).toEqual([]);
+  });
+
+  // covers ADR 039 (camps), #1446
+  it("[TC-CH-1461-26] reaches the camp's own hob when it works under a Quest another hob of the camp leads", () => {
+    const ledByBob = tree([task("top", BOB, null, "waiting"), task("aldric", LEAD, "top", "active")], [quest]);
+    const mentioned = mentionsIn("@Aldric @Bob stop", roster);
+    expect(mentionTargets([ledByBob], mentioned).map((each) => each.id)).toEqual(["aldric"]);
   });
 });

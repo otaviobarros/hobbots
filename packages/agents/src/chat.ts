@@ -591,7 +591,7 @@ export class ChatService extends Context.Service<
             yield* requireLive(thread);
             // A message that @mentions a member of a quest here goes to that member, and the lead
             // reads it in the chat on its next turn without being woken for it (#1446).
-            const mentioned = yield* mentions.targets(threadId, agent, content);
+            const mentioned = yield* mentions.targets(threadId, content);
             if (mentioned.length > 0) {
               const sent = yield* mentions.send(
                 yield* yourMessage(thread, agent, content, askedSkill, false),
