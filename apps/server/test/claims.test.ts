@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import {
@@ -666,13 +666,14 @@ describe("the claims register", () => {
       // A repository with nothing taken closes nothing.
       expect(await h.takenPlaces([outside])).toEqual([]);
 
-      // A branch only the packed refs hold gets its loose ref back, with its commit, so it can be closed.
+      // A branch only the packed refs hold has no loose ref: the folder Git would write one in is
+      // closed, with the packed refs, and the hub writes nothing in the repository.
       const camp = git(checkout, "rev-parse", "camp").toString().trim();
       git(checkout, "pack-refs", "--all");
       expect(await h.takenPlaces([checkout])).toEqual(
-        expect.arrayContaining([refs, join(checkout, ".git", "packed-refs")]),
+        expect.arrayContaining([join(checkout, ".git", "refs", "heads"), join(checkout, ".git", "packed-refs")]),
       );
-      expect(readFileSync(refs, "utf8").trim()).toBe(camp);
+      expect(existsSync(refs)).toBe(false);
       expect(git(checkout, "rev-parse", "camp").toString().trim()).toBe(camp);
 
       // Given back, nothing is closed; taken again, then the Task ends: nothing is closed either.
