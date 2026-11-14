@@ -134,6 +134,10 @@ describe("resumeNote", () => {
     expect(
       resumeRecipients([work.tasks[0] as Task, before, task("ada-2", ADA, "ada", "paused")]).map((each) => each.id),
     ).toEqual(["top", "ada"]);
+    // Two member Tasks of one hob run separate sessions, so Resume wakes each of them.
+    expect(
+      resumeRecipients([work.tasks[0] as Task, before, task("ada-b", ADA, "top", "paused")]).map((each) => each.id),
+    ).toEqual(["top", "ada", "ada-b"]);
     expect(resumeNote(before, tree([before]), later)).toContain("Nothing else in the work changed");
   });
 });

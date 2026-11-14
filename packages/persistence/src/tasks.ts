@@ -764,28 +764,6 @@ export const TaskRepositoryLive = Layer.effect(
         return [...events, ...(yield* ledger.retire(yield* ledger.questionItems(task), first + events.length))];
       });
 
-    const retryTask: TaskRepository["Service"]["retryTask"] = (taskId, expected, at, by) =>
-      change((revision) =>
-        Effect.gen(function* () {
-          const before = yield* current(taskId, expected);
-          if (before.parentId === null) {
-            return yield* refuse("top-task", `Task ${taskId} is the one you asked for; ask its hob again instead`);
-          }
-          const task = new Task({ ...(yield* orFail(TaskTransitions.retry(before, at))), revision });
-          yield* noUnresolvedAttempt(before);
-          yield* notUnderPause(before);
-          const quest = yield* reopen(before, revision);
-          yield* saveTask(task);
-          const [delegation] = yield* read.delegationsOf(task.id);
-          const control = { _tag: "Retried", delegation: delegation ?? null, ...controlledBy(by) } as const;
-          const late = yield* ledger.retire(yield* ledger.staleItems(before, null), revision + 1);
-          return {
-            value: task,
-            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest, wait: null, control }, ...late],
-          };
-        }),
-      );
-
     // The hob taking a Task, read in the write's transaction. On PostgreSQL its row stays locked until
     // the write commits, so retiring it waits; SQLite's one connection already runs writes one at a time.
     const lockTaker = (ownerId: AgentId) =>
@@ -797,6 +775,36 @@ export const TaskRepositoryLive = Layer.effect(
           sql<{ readonly status: string; readonly retiring: string | null }>`SELECT status, retiring FROM agents
             WHERE id = ${ownerId}`,
       });
+
+    const retryTask: TaskRepository["Service"]["retryTask"] = (taskId, expected, at, by) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          if (before.parentId === null) {
+            return yield* refuse("top-task", `Task ${taskId} is the one you asked for; ask its hob again instead`);
+          }
+          const task = new Task({ ...(yield* orFail(TaskTransitions.retry(before, at))), revision });
+          yield* noUnresolvedAttempt(before);
+          yield* notUnderPause(before);
+          // A retired hob runs nothing more, so its failed Task is reassigned instead (#1446).
+          const [owner] = yield* lockTaker(before.ownerId);
+          if (owner?.status === "retired") {
+            return yield* refuse(
+              "owner-unavailable",
+              `${before.ownerId} is retired, so give Task ${taskId} to another hob`,
+            );
+          }
+          const quest = yield* reopen(before, revision);
+          yield* saveTask(task);
+          const [delegation] = yield* read.delegationsOf(task.id);
+          const control = { _tag: "Retried", delegation: delegation ?? null, ...controlledBy(by) } as const;
+          const late = yield* ledger.retire(yield* ledger.staleItems(before, null), revision + 1);
+          return {
+            value: task,
+            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest, wait: null, control }, ...late],
+          };
+        }),
+      );
 
     /**
      * Who may take a member's Task: a hob that exists, is neither retired nor finishing its open Tasks

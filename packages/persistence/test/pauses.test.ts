@@ -284,6 +284,25 @@ describe("a lead's retry and reassign", () => {
     expect(result.refused).toMatchObject({ reason: "attempt-unresolved" });
   });
 
+  // covers OR-006, EX-001
+  it("[TC-OR-1446-27] refuses a retry of a retired hob's Task, which stays failed for another hob to take", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const repo = yield* HobbotsRepository;
+        const { copy } = yield* campaign;
+        const failed = yield* tasks.moveTask(copy.id, copy.revision, "failed", later);
+        const quill = Option.getOrThrow(yield* repo.findAgent(QUILL));
+        yield* repo.setAgentStatus(new Agent({ ...quill, status: "retired", retiredAt: later }), "active");
+        const by = { actor: hobActor(ALDRIC), reason: "Try again" };
+        const refused = yield* tasks.retryTask(copy.id, failed.value.revision, later, by).pipe(Effect.flip);
+        return { refused, after: yield* stateOf("copy") };
+      }),
+    );
+    expect(result.refused).toMatchObject({ reason: "owner-unavailable" });
+    expect(result.after.state).toBe("failed");
+  });
+
   // covers OR-006, STD-SEC-003
   it("[TC-OR-1446-13] gives the new hob the authority worked out for it, and journals the lead and its reason", async () => {
     const result = await run(
