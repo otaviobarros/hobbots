@@ -193,6 +193,9 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
     } else {
       if (c === " " || c === "\t") endWord();
       else {
+        // A redirection may follow a word without a space, as in `printf x>out`: the word ends there,
+        // unless what came before is the descriptor or operator it belongs to, as `2>` or `>>`.
+        if ((c === ">" || c === "<") && started && (quoted || !/^(\d*|&)[<>]*$/.test(word))) endWord();
         if (!quoted) plain += c;
         take(c);
       }

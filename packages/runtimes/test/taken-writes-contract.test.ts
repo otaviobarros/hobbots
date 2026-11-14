@@ -282,6 +282,9 @@ describe("what a call writes", () => {
     // A redirection opens its file in the shell's folder after a `cd`, and a bare one writes too.
     expect(writes("cd docs && printf changed > plan.md")).toEqual([`${project}/docs/plan.md`]);
     expect(writes("cd docs; >plan.md 2>&1")).toEqual([`${project}/docs/plan.md`]);
+    // A redirection written against the word before it still writes its file.
+    expect(writes("printf changed>docs/plan.md")).toEqual([`${project}/docs/plan.md`]);
+    expect(writes('echo "x">>docs/plan.md 2>&1')).toEqual([`${project}/docs/plan.md`]);
     // A Git command that rewrites the working tree is named by its folder, whichever files it reaches.
     const bash = (command: string) => callWrites({ id: "5", tool: "Bash", input: { command }, cwd: project }).trees;
     expect(bash("git reset --hard HEAD")).toEqual([project]);
