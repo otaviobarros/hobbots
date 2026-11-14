@@ -166,9 +166,7 @@ describe("the roster", () => {
     expect(text).not.toContain("full card");
     expect(READ_HOB_DESCRIPTION).toContain("or to check what a hob may do before you hand it work");
     expect(READ_HOB_DESCRIPTION).not.toContain("already holds the card of each hob");
-    expect(READ_HOB_DESCRIPTION).toContain(
-      "only when you are asked to read a card, for a hob the roster leaves out",
-    );
+    expect(READ_HOB_DESCRIPTION).toContain("only when you are asked to read a card, for a hob the roster leaves out");
     expect(READ_HOB_DESCRIPTION).not.toContain("answer a question about the team");
   });
 
