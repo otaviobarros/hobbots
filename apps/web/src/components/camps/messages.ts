@@ -1,6 +1,5 @@
 import { CAMP_GOAL_MAX, type CampSuggestionCode, type CarriedOverRef, THREAD_TITLE_MAX } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
-import type { ArchiveBlock } from "../archive/archive-rules.ts";
 import type { CampProblem, MakeCampError } from "./make-camp-flow.ts";
 import type { StartFreshError } from "./start-fresh-flow.ts";
 
@@ -70,12 +69,8 @@ export const messages = {
     chapterDetail: ({ from }: { readonly from: string }) => `From your chat: ${from}. It moves into the camp.`,
     chapterLink: "Your chat keeps a link to the camp. Other topics stay in the chat.",
     /** Why the chapter cannot move yet, while Make the camp waits; switching it off makes the camp now. */
-    held: {
-      "reply-running": ({ name }: Named) =>
-        `${name} is still replying here. The chapter can move once the reply ends, or switch it off to make the camp now.`,
-      "approval-pending": ({ name }: Named) =>
-        `${name} is waiting for your approval here. The chapter can move once you answer, or switch it off to make the camp now.`,
-    } satisfies Record<ArchiveBlock, (named: Named) => string>,
+    held: ({ name }: Named) =>
+      `${name} is still replying here. The chapter can move once the reply ends, or switch it off to make the camp now.`,
   },
   suggestion: {
     eyebrow: ({ name }: Named) => `${name} suggests`,
