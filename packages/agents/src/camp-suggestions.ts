@@ -64,10 +64,16 @@ export interface SuggestionOffer {
   readonly chapterRevision: number;
 }
 
+/** A pending suggestion the projector withdraws, judged from its chapter at `chapterRevision`. */
+export interface SuggestionWithdrawal {
+  readonly id: CampSuggestionId;
+  readonly chapterRevision: number;
+}
+
 /** What one page of the projector writes, with its cursor, in one transaction. */
 export interface SuggestionRound {
   /** Pending suggestions withdrawn, since their chapters hold several topics with nowhere to split. */
-  readonly withdrawn: ReadonlyArray<CampSuggestionId>;
+  readonly withdrawn: ReadonlyArray<SuggestionWithdrawal>;
   readonly offers: ReadonlyArray<SuggestionOffer>;
   readonly raises: ReadonlyArray<SuggestionRaise>;
 }
@@ -100,7 +106,7 @@ export class CampSuggestionRepository extends Context.Service<
      * `CampSuggestionExpired`; offers each of `round.offers`, journaled as `CampSuggestionOffered`;
      * raises each suggestion the rule still allows, journaled as `CampSuggested`; and moves the
      * projector's cursor to `sequence`. A suggestion settled meanwhile is left as it is, and an offer
-     * whose chapter's revision moved since it was named is left pending. Answers the entries it
+     * or withdrawal whose chapter's revision moved since it was judged is left pending. Answers the entries it
      * journaled.
      */
     readonly recordRound: (sequence: number, round: SuggestionRound) => Effect.Effect<ReadonlyArray<EventEnvelope>>;
@@ -340,7 +346,7 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
             return;
           }
           if (naming._tag === "Withdraw") {
-            round.withdrawn.push(suggestion.id);
+            round.withdrawn.push({ id: suggestion.id, chapterRevision: found.chapter.revision });
             return;
           }
           const split = { id: breakChapterId(naming.at.id), messageId: naming.at.id, title: naming.title };

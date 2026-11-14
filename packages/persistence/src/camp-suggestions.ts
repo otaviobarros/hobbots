@@ -64,8 +64,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
           const at = DateTime.formatIso(yield* DateTime.now);
           const events: Array<JournaledEvent> = [];
           // A pending suggestion settled meanwhile, as when its chapter moved, is left as it is.
-          // An offer named from a chapter whose boundaries changed since is stale, so it is left
-          // pending: the projector names it again when it reads the change.
+          // An offer or withdrawal judged from a chapter whose boundaries changed since is stale, so it
+          // is left pending: the projector names it again when it reads the change.
           const settle = (
             id: CampSuggestionId,
             event: CampSuggestionEvent,
@@ -85,7 +85,9 @@ export const CampSuggestionRepositoryLive = Layer.effect(
               yield* settleSuggestion(sql, written);
               events.push({ _tag: tag, threadId: written.threadId, suggestion: written });
             });
-          for (const id of round.withdrawn) yield* settle(id, { _tag: "Withdraw", at }, "CampSuggestionExpired");
+          for (const { id, chapterRevision } of round.withdrawn) {
+            yield* settle(id, { _tag: "Withdraw", at }, "CampSuggestionExpired", chapterRevision);
+          }
           for (const offer of round.offers) {
             const event: CampSuggestionEvent = { _tag: "Offer", title: offer.title, goal: offer.goal };
             yield* settle(offer.id, event, "CampSuggestionOffered", offer.chapterRevision);

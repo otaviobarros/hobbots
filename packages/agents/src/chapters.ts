@@ -41,9 +41,10 @@ export class ChapterRepository extends Context.Service<
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
      * Cuts the chapter `messageId` is in, so its messages from there on make chapter `id`, journaled
-     * as `ChapterSplit`. `id` is the idempotency key, as for `startChapter`. `withdraw` names the
-     * pending camp suggestion of the cut chapter the hub split it for (#1557): in the same transaction
-     * it is withdrawn, and chapter `id` is suggested if it reaches a threshold on its own.
+     * as `ChapterSplit`. `id` is the idempotency key, as for `startChapter`. In the same
+     * transaction (#1557), the cut chapter's pending camp suggestion is withdrawn when it is `withdraw`,
+     * the one the hub split it for, or when its thresholds no longer hold; and chapter `id` is
+     * suggested if it reaches a threshold on its own.
      */
     readonly splitChapter: (
       threadId: ThreadId,

@@ -18,7 +18,7 @@ import {
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
-import { withdrawForSplit } from "./camp-suggestion-rows.ts";
+import { reconcileSplit } from "./camp-suggestion-rows.ts";
 import { chapterRows } from "./chapter-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { keepReadersRead } from "./thread-member-rows.ts";
@@ -241,10 +241,9 @@ export const ChapterRepositoryLive = Layer.effect(
             messageId: input.messageId,
             chapters: plan.chapters,
           };
-          // A camp suggestion the split was made for is withdrawn with it, and the part split off is
-          // suggested if it reaches a threshold on its own, in this transaction (#1557).
-          const settled =
-            input.withdraw === undefined ? [] : yield* withdrawForSplit(sql, input.withdraw, from, input.id, first + 1);
+          // The cut chapter's pending camp suggestion is withdrawn when the split was made for it or
+          // its thresholds went with the part, which is suggested on its own counts, here (#1557).
+          const settled = yield* reconcileSplit(sql, from, input.id, first + 1, input.withdraw);
           return { value: plan, events: [event, ...settled] };
         }),
       );

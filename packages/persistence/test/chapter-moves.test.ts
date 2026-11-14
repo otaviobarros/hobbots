@@ -786,7 +786,7 @@ describe("camp suggestions", () => {
         });
         // Offered already, it is neither offered again nor withdrawn.
         const again = yield* suggestions.recordRound(0, {
-          withdrawn: [first.id],
+          withdrawn: [{ id: first.id, chapterRevision }],
           offers: [{ id: first.id, title: "Other", goal: null, chapterRevision }],
           raises: [],
         });
@@ -802,7 +802,7 @@ describe("camp suggestions", () => {
         const driftSuggestion = ((drift[0] as { payload: unknown }).payload as { suggestion: CampSuggestion })
           .suggestion;
         const withdrawn = yield* suggestions.recordRound(0, {
-          withdrawn: [driftSuggestion.id],
+          withdrawn: [{ id: driftSuggestion.id, chapterRevision: yield* revisionOf(driftSuggestion.chapterId) }],
           offers: [],
           raises: [],
         });
@@ -856,20 +856,27 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("[TC-CH-1557-15] leaves an offer pending when its chapter was split after it was named, and offers it named afresh", async () => {
+  it("[TC-CH-1557-15] leaves an offer or a withdrawal pending when its chapter was split after it was named, and offers it named afresh", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing, suggestion, named } = yield* pendingBilling;
         const suggestions = yield* CampSuggestionRepository;
+        // A message after the Quests splits off, so billing keeps what its suggestion counted.
+        yield* (yield* HobbotsRepository).upsertMessage(message(CHAT, "ask-later", "user"));
         yield* (yield* ChapterRepository).splitChapter(CHAT, {
-          id: ChapterId.make("billing-reply"),
-          messageId: MessageId.make("reply-2"),
-          title: "Reply",
+          id: ChapterId.make("billing-later"),
+          messageId: MessageId.make("ask-later"),
+          title: "Later",
         });
         const offer = { id: suggestion.id, title: "Billing", goal: null };
         const stale = yield* suggestions.recordRound(0, {
           withdrawn: [],
           offers: [{ ...offer, chapterRevision: named }],
+          raises: [],
+        });
+        const staleWithdrawal = yield* suggestions.recordRound(0, {
+          withdrawn: [{ id: suggestion.id, chapterRevision: named }],
+          offers: [],
           raises: [],
         });
         const pending = Option.getOrThrow(yield* suggestions.find(suggestion.id));
@@ -878,13 +885,48 @@ describe("camp suggestions", () => {
           offers: [{ ...offer, chapterRevision: yield* revisionOf(billing) }],
           raises: [],
         });
-        return { named, stale, pending, fresh, now: yield* revisionOf(billing) };
+        return { named, stale, staleWithdrawal, pending, fresh, now: yield* revisionOf(billing) };
       }),
     );
     expect(result.now).not.toBe(result.named);
     expect(result.stale).toEqual([]);
+    expect(result.staleWithdrawal).toEqual([]);
     expect(result.pending.state).toBe("pending");
     expect(result.fresh.map((entry) => entry.type)).toEqual(["CampSuggestionOffered"]);
+  });
+
+  // covers ADR 037 (Records: CampSuggestion), ADR 039 (Chapters run on their own), #1557
+  it("[TC-CH-1557-18] a split that takes what a pending suggestion counted withdraws it, and suggests the part instead", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { billing } = yield* chatWithTwoChapters;
+        const repo = yield* HobbotsRepository;
+        yield* repo.upsertMessage(message(CHAT, "ask-3", "user"));
+        const raised: Array<CampSuggestion> = [];
+        for (let n = 1; n <= CAMP_SUGGESTION_QUESTS; n++)
+          raised.push(...suggested((yield* quest(`topic-${n}`)).entries));
+        // The hub starts a chapter at ask-3 only now, after the Quests that followed it.
+        const split = yield* (yield* ChapterRepository).splitChapter(CHAT, {
+          id: ChapterId.make("topic"),
+          messageId: MessageId.make("ask-3"),
+          title: "Topic",
+        });
+        const suggestions = yield* CampSuggestionRepository;
+        return {
+          billing,
+          split,
+          first: Option.getOrThrow(yield* suggestions.find((raised[0] as CampSuggestion).id)),
+        };
+      }),
+    );
+    expect(result.first).toMatchObject({ chapterId: result.billing, state: "expired" });
+    expect(result.split.entries.map((entry) => entry.type)).toEqual([
+      "ChapterSplit",
+      "CampSuggestionExpired",
+      "CampSuggested",
+    ]);
+    const part = result.split.entries.at(-1) as { payload: { suggestion: CampSuggestion } };
+    expect(part.payload.suggestion).toMatchObject({ chapterId: "topic", state: "pending" });
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557

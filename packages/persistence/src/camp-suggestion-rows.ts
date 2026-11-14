@@ -143,25 +143,33 @@ export const raiseSuggestion = (
   });
 
 /**
- * In a split made for a pending suggestion (#1557): withdraws it, as its chapter `from` holds several
- * topics, and suggests the part split off, `part`, if it reaches a threshold on its own, at journal
- * sequences from `first` on. Answers their events. Only for use within the split's transaction.
+ * In any split of chapter `from` (#1557), at journal sequences from `first` on: its pending suggestion
+ * is withdrawn when the split was made for it (`withdraw`, as `from` holds several topics), or when
+ * the thresholds it was raised for no longer hold, since the part split off took what counted; and
+ * the part, `part`, is suggested if it reaches a threshold on its own. Answers their events. Only for
+ * use within the split's transaction.
  */
-export const withdrawForSplit = (
+export const reconcileSplit = (
   sql: SqlClient.SqlClient,
-  id: CampSuggestionId,
   from: ChapterId,
   part: ChapterId,
   first: number,
+  withdraw: CampSuggestionId | undefined,
 ): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
   Effect.gen(function* () {
     const at = DateTime.formatIso(yield* DateTime.now);
     const events: Array<JournaledEvent> = [];
-    const suggestion = yield* suggestionById(sql, id);
+    const suggestion = yield* suggestionOfChapter(sql, from);
+    const outgrown =
+      suggestion !== null &&
+      suggestion.id !== withdraw &&
+      CampSuggestions.isPending(suggestion) &&
+      !suggestion.reasons.some((reason) => reason.code === "drift") &&
+      campSuggestionReasons(yield* countsOf(sql, from)).length === 0;
     const withdrawn =
-      suggestion === null || suggestion.chapterId !== from
-        ? null
-        : CampSuggestions.transition(suggestion, { _tag: "Withdraw", at });
+      suggestion !== null && (suggestion.id === withdraw || outgrown)
+        ? CampSuggestions.transition(suggestion, { _tag: "Withdraw", at })
+        : null;
     if (withdrawn instanceof CampSuggestion) {
       const written = new CampSuggestion({ ...withdrawn, revision: first });
       yield* settleSuggestion(sql, written);
