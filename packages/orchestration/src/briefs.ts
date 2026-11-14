@@ -6,6 +6,7 @@ import {
   type BackpackItem,
   CHECKPOINT_WORDS,
   CONTINUATION_HEADER,
+  type Criterion,
   checkpointText,
   FINISH_RULE,
   handedFrom,
@@ -410,6 +411,7 @@ export const ownerBriefingParts = (
       `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
     ),
     rule("lead", ...leadGuidance(task, tree)),
+    criteriaPart(task, tree),
     { _tag: "Listed", group: "answer", heading: ["Answers to the questions you asked about it:"], entries: answers },
     ...(under.length === 0
       ? []
@@ -436,6 +438,26 @@ export const ownerBriefingParts = (
     rule("commits", COMMIT_RULE),
     rule("chat", LEAN_CHAT_RULE, FINISH_RULE),
   ];
+};
+
+/** A criterion as its lead's briefing lists it, by the id check_criterion takes. */
+const criterionLine = (criterion: Criterion) =>
+  `- criterion_id ${criterion.id}: "${cut(criterion.text, SUMMARY_LIMIT)}" (${criterion.required ? "required" : "optional"}, ${criterion.state})`;
+
+/**
+ * The acceptance criteria of the Quest on `task`, with the ids check_criterion and delegate_task
+ * take (#1555). They come from the records, so a lead in a new session, which never sees what
+ * start_quest returned in an earlier one, still holds them. A resumed session is told one again
+ * only once it changed.
+ */
+const criteriaPart = (task: Task, tree: TaskTree): BriefPart => {
+  const quest = tree.quests.find((each) => each.taskId === task.id);
+  return {
+    _tag: "Listed",
+    group: "criterion",
+    heading: ["The Quest's acceptance criteria, each checked with check_criterion by its criterion_id:"],
+    entries: (quest?.criteria ?? []).map((criterion) => ({ key: criterion.id, lines: [criterionLine(criterion)] })),
+  };
 };
 
 /** The whole of what the owner's chat turn is told of the open Task, as a new session hears it. */
