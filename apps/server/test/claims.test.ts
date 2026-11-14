@@ -283,7 +283,7 @@ const hub = () => {
         );
         const ask = session.steering?.takenByYou;
         if (ask === undefined) throw new Error("expected the session to check writes to what you took over");
-        return yield* ask({ paths: [], pushes: [], commits: [], ...writes });
+        return yield* ask({ paths: [], pushes: [], commits: [], trees: [], ...writes });
       }),
     );
   /** The claims-taken items in the backpack, by recipient and Task. */
@@ -517,6 +517,8 @@ describe("the claims register", () => {
       );
       // Deleting the repository's top folder deletes what you took over inside it.
       expect(await h.takenWrite({ paths: [checkout] })).toContain("took over");
+      // A Git command that rewrites the working tree, as `git reset --hard`, may reach the folder.
+      expect(await h.takenWrite({ trees: [worktree] })).toContain("took over path docs");
       // A push of the branch, and a commit where it is checked out, are refused; a commit on main is not.
       expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "refs/heads/camp" }] })).toContain("branch camp");
       expect(await h.takenWrite({ commits: [worktree] })).toContain("branch camp");

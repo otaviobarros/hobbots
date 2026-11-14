@@ -31,6 +31,7 @@ import {
   overridesCommitIdentity,
   toolLabel,
   toolRequests,
+  treeRewriteFolders,
 } from "./tool-calls.ts";
 
 export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
@@ -128,7 +129,8 @@ const unresolved = (folder: string, path: string) =>
 /**
  * What a call writes, read from the call alone (#1449): the files a file tool or a patch changes or
  * deletes, the absolute paths a command line writes by redirection or names to a program that
- * writes them, the branches it pushes and the folders it commits in. Relative paths resolve against
+ * writes them, the branches it pushes, the folders it commits in and the folders where a Git command
+ * rewrites the working tree. Relative paths resolve against
  * the folder each request is made from.
  */
 export const callWrites = (call: ToolCall): CallWrites => {
@@ -144,6 +146,7 @@ export const callWrites = (call: ToolCall): CallWrites => {
       request._tag === "Push" ? [{ cwd: request.cwd ?? call.cwd, branch: request.branch }] : [],
     ),
     commits: commitFolders(call.tool, call.input, call.cwd),
+    trees: treeRewriteFolders(call.tool, call.input, call.cwd),
   };
 };
 
@@ -151,7 +154,7 @@ export const callWrites = (call: ToolCall): CallWrites => {
 const takenWrites = (call: ToolCall, steers: CallSteers): Effect.Effect<string | null> => {
   if (steers.takenByYou === undefined) return Effect.succeed(null);
   const writes = callWrites(call);
-  return writes.paths.length + writes.pushes.length + writes.commits.length === 0
+  return writes.paths.length + writes.pushes.length + writes.commits.length + writes.trees.length === 0
     ? Effect.succeed(null)
     : steers.takenByYou(writes);
 };

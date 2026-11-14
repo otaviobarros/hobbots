@@ -73,29 +73,47 @@ export const makeTakenWrites = (separator: PathSeparator) =>
         const branchClaim = (claims: ReadonlyArray<Claim>, branch: string | null) =>
           branch === null ? undefined : claims.find((claim) => claim.scope === "branch" && claim.key === branch);
 
-        for (const path of writes.paths) {
-          const place = yield* git.placeOf(path);
-          if (place === null) continue;
-          const hit = (yield* takenAt(place.top)).find((claim) => touchesPath(claim, place.path));
-          if (hit !== undefined) return takenWriteText(hit);
-        }
-        for (const push of writes.pushes) {
-          const top = yield* git.repository(push.cwd);
-          if (top === null) continue;
-          const claims = yield* takenAt(top);
-          const target = pushTarget(push.branch);
-          // A push whose words do not name its branches, such as `git push --all`, may reach any
-          // branch, so any branch you took over in the repository refuses it.
-          const hit =
-            target._tag === "Unnamed"
-              ? claims.find((claim) => claim.scope === "branch")
-              : branchClaim(claims, target._tag === "Current" ? yield* git.currentBranch(top) : target.name);
-          if (hit !== undefined) return takenWriteText(hit);
-        }
-        for (const cwd of writes.commits) {
-          const top = yield* git.repository(cwd);
-          if (top === null) continue;
-          const hit = branchClaim(yield* takenAt(top), yield* git.currentBranch(top));
+        const atRepository = (
+          cwd: string,
+          pick: (top: string, claims: ReadonlyArray<Claim>) => Effect.Effect<Claim | undefined>,
+        ) =>
+          Effect.gen(function* () {
+            const top = yield* git.repository(cwd);
+            return top === null ? undefined : yield* pick(top, yield* takenAt(top));
+          });
+        const pathHit = (path: string) =>
+          Effect.gen(function* () {
+            const place = yield* git.placeOf(path);
+            return place === null
+              ? undefined
+              : (yield* takenAt(place.top)).find((claim) => touchesPath(claim, place.path));
+          });
+        // A push whose words do not name its branches, such as `git push --all`, may reach any
+        // branch, so any branch you took over in the repository refuses it.
+        const pushHit = (push: CallWrites["pushes"][number]) =>
+          atRepository(push.cwd, (top, claims) => {
+            const target = pushTarget(push.branch);
+            if (target._tag === "Unnamed") return Effect.succeed(claims.find((claim) => claim.scope === "branch"));
+            if (target._tag === "Branch") return Effect.succeed(branchClaim(claims, target.name));
+            return Effect.map(git.currentBranch(top), (branch) => branchClaim(claims, branch));
+          });
+        const commitHit = (cwd: string) =>
+          atRepository(cwd, (top, claims) =>
+            Effect.map(git.currentBranch(top), (branch) => branchClaim(claims, branch)),
+          );
+        // A command that rewrites the working tree, such as `git reset --hard`, may reach any file in
+        // it, so any path you took over in the repository refuses it.
+        const treeHit = (cwd: string) =>
+          atRepository(cwd, (_top, claims) => Effect.succeed(claims.find((claim) => claim.scope === "path")));
+
+        const checks = [
+          ...writes.paths.map(pathHit),
+          ...writes.pushes.map(pushHit),
+          ...writes.commits.map(commitHit),
+          ...writes.trees.map(treeHit),
+        ];
+        for (const check of checks) {
+          const hit = yield* check;
           if (hit !== undefined) return takenWriteText(hit);
         }
         return null;

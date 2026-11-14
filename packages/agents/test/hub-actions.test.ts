@@ -627,7 +627,9 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(refused.answer).toEqual({ text: TAKEN, refused: true });
     expect(refused.asked).toEqual([]);
     expect(yours.happened).toEqual(["planned feat/shop"]);
-    expect(yours.askedTaken).toEqual([{ paths: [], pushes: [{ cwd: "/work/app", branch: "feat/shop" }], commits: [] }]);
+    expect(yours.askedTaken).toEqual([
+      { paths: [], pushes: [{ cwd: "/work/app", branch: "feat/shop" }], commits: [], trees: [] },
+    ]);
 
     // Taken over while the card waited: approved, but nothing is sent.
     const answers = [null, TAKEN];

@@ -683,16 +683,17 @@ export const initsRepository = (
   );
 
 /**
- * The folders a tool call's command line runs `git commit` from, as the line spells them, after any
- * `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or `sh -c` (#742). Which repository
- * each is in is the hub's to find. Only what the line says is read: an alias or a script that
- * commits is not seen.
+ * The folders a tool call's command line runs a `git` subcommand from that `matches` picks, as the
+ * line spells them, after any `cd`, `git -C` or wrapper such as `env -C`, and inside `eval` or
+ * `sh -c` (#742). Which repository each is in is the hub's to find. Only what the line says is read:
+ * an alias or a script that runs Git is not seen.
  */
-export const commitFolders = (
+const gitFoldersWhere = (
   tool: string,
   input: Record<string, unknown>,
   cwd: string,
-  home: string = homedir(),
+  home: string,
+  matches: (sub: string, rest: ReadonlyArray<string>) => boolean,
 ): ReadonlyArray<string> => {
   const found = new Set<string>();
   const visit = (line: string, at: string) => {
@@ -710,7 +711,8 @@ export const commitFolders = (
       const program = basename(name ?? "");
       if (program === "git") {
         const git = gitFolders(args, folder, home);
-        if (args[git.sub] === "commit") found.add(git.folders[0] as string);
+        const sub = args[git.sub];
+        if (sub !== undefined && matches(sub, args.slice(git.sub + 1))) found.add(git.folders[0] as string);
       } else {
         const nested = nestedLine(program, args);
         if (nested !== undefined) visit(nested, folder);
@@ -721,6 +723,54 @@ export const commitFolders = (
   if (command !== undefined) visit(command, cwd);
   return [...found];
 };
+
+/** The folders a tool call's command line runs `git commit` from (#742); see `gitFoldersWhere`. */
+export const commitFolders = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> => gitFoldersWhere(tool, input, cwd, home, (sub) => sub === "commit");
+
+/** Git subcommands that rewrite files in the working tree whichever paths they name, or none. */
+const TREE_REWRITES = new Set([
+  "checkout",
+  "switch",
+  "restore",
+  "clean",
+  "merge",
+  "rebase",
+  "pull",
+  "cherry-pick",
+  "revert",
+  "am",
+  "apply",
+  "rm",
+  "mv",
+]);
+/** `git stash` forms that only read. */
+const STASH_READS = new Set(["list", "show", "create"]);
+/** `git reset` modes that rewrite the working tree, where the default mode leaves it. */
+const RESET_REWRITES = new Set(["--hard", "--merge", "--keep"]);
+
+const rewritesTree = (sub: string, rest: ReadonlyArray<string>) => {
+  if (TREE_REWRITES.has(sub)) return true;
+  if (sub === "reset") return rest.some((word) => RESET_REWRITES.has(word));
+  if (sub === "stash") return rest[0] === undefined || !STASH_READS.has(rest[0]);
+  return false;
+};
+
+/**
+ * The folders a tool call's command line runs a Git subcommand from that rewrites the working tree,
+ * such as `git reset --hard`, `git checkout` or `git clean` (#1449). Which files each reaches is not
+ * read from the line, so the hub treats the whole repository as written.
+ */
+export const treeRewriteFolders = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): ReadonlyArray<string> => gitFoldersWhere(tool, input, cwd, home, rewritesTree);
 
 /** The arguments of the first `gh` a command line runs, behind any wrapper, `eval` or `sh -c`, or null. */
 /** Shell words that start or join a compound command, before the command that runs. */

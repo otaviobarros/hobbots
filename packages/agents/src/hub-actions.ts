@@ -534,7 +534,7 @@ export const makeHubActions =
       const push = request as R & { readonly cwd?: unknown; readonly branch?: unknown };
       if (turn.takenByYou === undefined || request._tag !== "Push") return Effect.succeed(null);
       if (typeof push.cwd !== "string" || typeof push.branch !== "string") return Effect.succeed(null);
-      return turn.takenByYou({ paths: [], pushes: [{ cwd: push.cwd, branch: push.branch }], commits: [] });
+      return turn.takenByYou({ paths: [], pushes: [{ cwd: push.cwd, branch: push.branch }], commits: [], trees: [] });
     };
 
     /** A write that sends nothing when what it pushes was taken over while its card waited (#1449). */

@@ -272,6 +272,13 @@ describe("what a call writes", () => {
       paths: [],
       pushes: [],
       commits: [],
+      trees: [],
     });
+    // A Git command that rewrites the working tree is named by its folder, whichever files it reaches.
+    const bash = (command: string) => callWrites({ id: "5", tool: "Bash", input: { command }, cwd: project }).trees;
+    expect(bash("git reset --hard HEAD")).toEqual([project]);
+    expect(bash("git -C web checkout -- .")).toEqual([join(project, "web")]);
+    expect(bash("git clean -fd && git stash")).toEqual([project]);
+    expect(bash("git reset HEAD~1; git status; git stash list")).toEqual([]);
   });
 });
