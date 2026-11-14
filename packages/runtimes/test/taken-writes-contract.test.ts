@@ -279,6 +279,9 @@ describe("what a call writes", () => {
     expect(bash("git reset --hard HEAD")).toEqual([project]);
     expect(bash("git -C web checkout -- .")).toEqual([join(project, "web")]);
     expect(bash("git clean -fd && git stash")).toEqual([project]);
-    expect(bash("git reset HEAD~1; git status; git stash list")).toEqual([]);
+    expect(bash("git checkout-index -f -a")).toEqual([project]);
+    // A subcommand not known to leave the working tree alone is read as one that may rewrite it.
+    expect(bash("git frobnicate")).toEqual([project]);
+    expect(bash("git reset HEAD~1; git status; git stash list; git add . && git diff")).toEqual([]);
   });
 });

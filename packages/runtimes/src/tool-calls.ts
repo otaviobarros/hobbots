@@ -732,21 +732,40 @@ export const commitFolders = (
   home: string = homedir(),
 ): ReadonlyArray<string> => gitFoldersWhere(tool, input, cwd, home, (sub) => sub === "commit");
 
-/** Git subcommands that rewrite files in the working tree whichever paths they name, or none. */
-const TREE_REWRITES = new Set([
-  "checkout",
-  "switch",
-  "restore",
-  "clean",
-  "merge",
-  "rebase",
-  "pull",
-  "cherry-pick",
-  "revert",
-  "am",
-  "apply",
-  "rm",
-  "mv",
+/**
+ * Git subcommands known to leave the working tree's files alone. Every other subcommand, such as
+ * `reset --hard`, `checkout`, `checkout-index -f`, `clean` or one Git adds later, is read as one
+ * that may rewrite them, so a subcommand missing here is refused rather than let through.
+ */
+const TREE_KEEPS = new Set([
+  "add",
+  "blame",
+  "branch",
+  "cat-file",
+  "commit",
+  "config",
+  "describe",
+  "diff",
+  "fetch",
+  "for-each-ref",
+  "grep",
+  "help",
+  "log",
+  "ls-files",
+  "ls-remote",
+  "ls-tree",
+  "merge-base",
+  "push",
+  "reflog",
+  "remote",
+  "rev-list",
+  "rev-parse",
+  "shortlog",
+  "show",
+  "show-ref",
+  "status",
+  "tag",
+  "version",
 ]);
 /** `git stash` forms that only read. */
 const STASH_READS = new Set(["list", "show", "create"]);
@@ -754,16 +773,16 @@ const STASH_READS = new Set(["list", "show", "create"]);
 const RESET_REWRITES = new Set(["--hard", "--merge", "--keep"]);
 
 const rewritesTree = (sub: string, rest: ReadonlyArray<string>) => {
-  if (TREE_REWRITES.has(sub)) return true;
   if (sub === "reset") return rest.some((word) => RESET_REWRITES.has(word));
   if (sub === "stash") return rest[0] === undefined || !STASH_READS.has(rest[0]);
-  return false;
+  return !TREE_KEEPS.has(sub);
 };
 
 /**
  * The folders a tool call's command line runs a Git subcommand from that rewrites the working tree,
- * such as `git reset --hard`, `git checkout` or `git clean` (#1449). Which files each reaches is not
- * read from the line, so the hub treats the whole repository as written.
+ * such as `git reset --hard`, `git checkout` or `git clean`, or any subcommand not known to leave it
+ * alone (#1449). Which files each reaches is not read from the line, so the hub treats the whole
+ * repository as written.
  */
 export const treeRewriteFolders = (
   tool: string,
