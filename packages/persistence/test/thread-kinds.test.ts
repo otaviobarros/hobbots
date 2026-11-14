@@ -7,6 +7,7 @@ import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts
 import threadKinds from "../src/migrations/0095_thread_kinds.ts";
 import chapters from "../src/migrations/0099_chapters.ts";
 import projectorCursors from "../src/migrations/0100_projector_cursors.ts";
+import records from "../src/migrations/0101_records.ts";
 import campSuggestions from "../src/migrations/0104_camp_suggestions.ts";
 import threadMembers from "../src/migrations/0114_thread_members.ts";
 import { TestDatabaseAt } from "../src/testing.ts";
@@ -133,8 +134,10 @@ describe("0095_thread_kinds", () => {
       yield* storedThread({ id: "di-trial", agentId: "di", title: "Try", updatedAt: at(1), skillTrial: true });
 
       yield* threadKinds;
-      // The repository reads each thread's live chapter, which 0099 adds.
+      // The repository reads each thread's live chapter, which 0099 adds, and who wrote its last
+      // line, which 0101 adds.
       yield* chapters;
+      yield* records;
 
       const repo = yield* HobbotsRepository;
       const threads: Array<Thread> = [];
@@ -177,10 +180,12 @@ describe("0095_thread_kinds", () => {
       yield* storedHob("bo");
       yield* storedThread({ id: "ada-chat", agentId: "ada", title: "Lamps", updatedAt: at(1) });
       yield* threadKinds;
-      // The repository reads each thread's live chapter, which 0099 adds, and a closed thread's
-      // camp suggestions expire, which 0102 keeps (after 0100's projector cursors).
+      // The repository reads each thread's live chapter, which 0099 adds, and who wrote its last
+      // line, which 0101 adds; a closed thread's camp suggestions expire, which 0102 keeps (after
+      // 0100's projector cursors).
       yield* chapters;
       yield* projectorCursors;
+      yield* records;
       yield* campSuggestions;
       // A new thread starts with its members, which 0114 keeps.
       yield* threadMembers;

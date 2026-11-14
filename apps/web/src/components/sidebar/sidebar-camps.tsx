@@ -39,6 +39,7 @@ export function SidebarCamps({
     places: data.read?.sidebar.camps ?? [],
     threads: data.threads,
     hobs: data.hobs,
+    you: data.read?.you,
     people: data.read?.people ?? [],
     unread: useKnownUnreadThreads(),
   });
@@ -187,11 +188,15 @@ function CampFace({ row, wide }: { row: CampRow; wide: boolean }) {
   );
 }
 
-/** A shared camp's last line, in bold while it holds what you have not read. */
+/**
+ * A shared camp's last line after who wrote it, "Marina: one caption idea each?", in bold while it
+ * holds what you have not read.
+ */
 function CampLine({ row }: { row: CampRow }) {
+  const line = row.thread.lastLine ?? "";
   return (
     <span className={cn(row.unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary")}>
-      {row.thread.lastLine}
+      {row.lastAuthor === null ? line : copy.lastLine({ author: row.lastAuthor, line })}
     </span>
   );
 }

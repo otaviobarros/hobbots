@@ -1,6 +1,6 @@
 import { HobbotsRepository, type SentMessage, type SentTo, sessionActor } from "@hobbots/agents";
 import {
-  type Actor,
+  Actor,
   Agent,
   AgentConfiguration,
   type AgentId,
@@ -39,6 +39,8 @@ import { liveChapterColumn, memberUnread } from "./thread-columns.ts";
 import { markMemberRead, startMembersIn } from "./thread-member-rows.ts";
 import { insertRequest, requestsFor, selectOpenRequestsOf, stepRequests } from "./turn-request-rows.ts";
 import { makeTurnRequestWrites, speakFor } from "./turn-requests.ts";
+
+const decodeActor = Schema.decodeUnknownSync(Actor);
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -153,29 +155,42 @@ export const threadRows = (
     readonly brain?: unknown;
     readonly skillTrial?: unknown;
     readonly lastContent?: unknown;
+    readonly lastAuthorKind?: unknown;
+    readonly lastAuthorId?: unknown;
   }>,
 ) =>
-  rows.map(({ lastContent, originThreadId, originChapterId, ...row }) => ({
+  rows.map(({ lastContent, lastAuthorKind, lastAuthorId, originThreadId, originChapterId, ...row }) => ({
     ...row,
     private: Number(row.private ?? 0) === 1,
     origin: originThreadId == null ? null : { threadId: originThreadId, chapterId: originChapterId ?? null },
     liveChapterId: row.liveChapterId ?? null,
     liveChapterMerges: Number(row.liveChapterMerges ?? 0),
     lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
+    lastAuthor:
+      typeof lastContent === "string" && lastAuthorKind != null ? { kind: lastAuthorKind, id: lastAuthorId } : null,
     revision: Number(row.revision),
     sessions: JSON.parse(String(row.sessions ?? "[]")),
     brain: row.brain == null ? null : JSON.parse(String(row.brain)),
     skillTrial: row.skillTrial == null ? null : JSON.parse(String(row.skillTrial)),
   }));
 /**
- * The start of the last message a thread's transcript shows, as `last_content`: queued messages, a
- * lead's quiet progress (#1006) and ones with no text, such as a reply made only of tool calls, are skipped. `threadRows` makes it one line.
- * 600 characters leave room for the whitespace that line collapses before it cuts at `PREVIEW_LENGTH`.
+ * The last message a thread's transcript shows, joined as `last_message`: queued messages, a lead's
+ * quiet progress (#1006) and ones with no text, such as a reply made only of tool calls, are skipped.
+ * One correlated lookup per thread row, in the query that reads the thread, so a list of threads
+ * reads every last line and its author at once.
  */
-const lastContent = (sql: SqlClient.SqlClient) =>
-  sql`(SELECT substr(m.content, 1, 600) FROM messages m
+const lastMessageJoin = (sql: SqlClient.SqlClient) =>
+  sql`LEFT JOIN messages last_message ON last_message.id = (SELECT m.id FROM messages m
     WHERE m.thread_id = threads.id AND m.status <> 'queued' AND m.quiet = 0 AND trim(m.content) <> ''
-    ORDER BY m.seq DESC LIMIT 1) AS last_content`;
+    ORDER BY m.seq DESC LIMIT 1)`;
+/**
+ * That message's start, as `last_content`, and its author's two columns (migration 0101), as
+ * `last_author_kind` and `last_author_id`. `threadRows` makes them one line and an actor. 600
+ * characters leave room for the whitespace that line collapses before it cuts at `PREVIEW_LENGTH`.
+ */
+const lastMessageColumns = (sql: SqlClient.SqlClient) =>
+  sql`substr(last_message.content, 1, 600) AS last_content,
+    last_message.actor_kind AS last_author_kind, last_message.actor_id AS last_author_id`;
 /** The live chapter of `threadId`, which a new message joins. */
 const liveChapterOf = (sql: SqlClient.SqlClient, threadId: ThreadId) =>
   sql`(SELECT c.id FROM chapters c WHERE c.thread_id = ${threadId} AND c.state = 'live')`;
@@ -240,6 +255,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       });
     // Ties break on the id.
     const byId = bytewise("id");
+    const threadById = bytewise("threads.id");
 
     const listAgents = SqlSchema.findAll({
       Request: Schema.Void,
@@ -271,23 +287,24 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
-          ORDER BY updated_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
+        sql`SELECT threads.*, ${lastMessageColumns(sql)}, ${liveChapterColumn(sql)} FROM threads ${lastMessageJoin(sql)}
+          WHERE threads.agent_id = ${agentId} AND threads.archived_at IS NULL
+          ORDER BY threads.updated_at DESC, ${threadById}`.pipe(Effect.map(threadRows)),
     });
     const listArchivedThreads = SqlSchema.findAll({
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
-          ORDER BY archived_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
+        sql`SELECT threads.*, ${lastMessageColumns(sql)}, ${liveChapterColumn(sql)} FROM threads ${lastMessageJoin(sql)}
+          WHERE threads.agent_id = ${agentId} AND threads.archived_at IS NOT NULL
+          ORDER BY threads.archived_at DESC, ${threadById}`.pipe(Effect.map(threadRows)),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Thread,
       execute: (id) =>
-        sql`SELECT threads.*, ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${id}`.pipe(
-          Effect.map(threadRows),
-        ),
+        sql`SELECT threads.*, ${lastMessageColumns(sql)}, ${liveChapterColumn(sql)} FROM threads ${lastMessageJoin(sql)}
+          WHERE threads.id = ${id}`.pipe(Effect.map(threadRows)),
     });
     const findCheckpoint = SqlSchema.findOneOption({
       Request: Schema.String,
@@ -437,13 +454,17 @@ export const HobbotsRepositoryLive = Layer.effect(
         const [read] = threadRows(
           yield* sql<{
             readonly lastContent: unknown;
+            readonly lastAuthorKind: unknown;
+            readonly lastAuthorId: unknown;
             readonly liveChapterId: unknown;
             readonly liveChapterMerges: unknown;
-          }>`SELECT ${lastContent(sql)}, ${liveChapterColumn(sql)} FROM threads WHERE id = ${thread.id}`,
+          }>`SELECT ${lastMessageColumns(sql)}, ${liveChapterColumn(sql)} FROM threads ${lastMessageJoin(sql)}
+            WHERE threads.id = ${thread.id}`,
         );
         return new Thread({
           ...thread,
           lastLine: read?.lastLine ?? null,
+          lastAuthor: read?.lastAuthor == null ? null : decodeActor(read.lastAuthor),
           liveChapterId: read?.liveChapterId == null ? null : ChapterId.make(String(read.liveChapterId)),
           liveChapterMerges: read?.liveChapterMerges ?? 0,
         });

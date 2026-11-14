@@ -44,6 +44,10 @@ export const messages = {
     ]
       .filter((part) => part !== "")
       .join(", "),
+  /** A shared camp's last line, after the name of who wrote it: "Marina: one caption idea each?". */
+  lastLine: ({ author, line }: { author: string; line: string }) => `${author}: ${line}`,
+  /** You, as the author of a last line. */
+  you: "You",
   /** The mark on a camp with a mention of you you have not read. */
   mention: "@",
   /** Under the first camps, to list the rest. */

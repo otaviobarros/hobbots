@@ -4,6 +4,7 @@ import {
   type BackpackItem,
   deciderOf,
   hobActor,
+  type Sidebar,
   type SidebarThread,
   sameActor,
   sidebarOf,
@@ -48,6 +49,23 @@ export const unlistedUser = (actor: Actor) =>
 
 const counts = (rows: ReadonlyArray<{ readonly threadId: ThreadId; readonly count: number }>) =>
   new Map(rows.map((row) => [row.threadId, row.count]));
+
+/**
+ * The people the sidebar's rows name: every row's other members, and whoever wrote a camp's last
+ * line, who may have left it since (#1563).
+ */
+export const namedPeople = (
+  sidebar: Sidebar,
+  threads: ReadonlyArray<Pick<Thread, "id" | "lastAuthor">>,
+): ReadonlySet<UserId> => {
+  const lastAuthors = new Map(threads.map((thread) => [thread.id, thread.lastAuthor]));
+  return new Set(
+    [
+      ...[...sidebar.camps, ...sidebar.directMessages].flatMap((place) => place.others),
+      ...sidebar.camps.flatMap((place) => Option.toArray(Option.fromNullishOr(lastAuthors.get(place.threadId)))),
+    ].flatMap((actor) => Option.toArray(userIdOf(actor))),
+  );
+};
 
 export class SidebarList extends Context.Service<SidebarList, { readonly current: Effect.Effect<SidebarRead> }>()(
   "@hobbots/agents/SidebarList",
@@ -116,12 +134,10 @@ export class SidebarList extends Context.Service<SidebarList, { readonly current
             onSome: (repository) => repository.list,
           });
           const yours = Option.getOrUndefined(userIdOf(you));
-          const named = [...sidebar.camps, ...sidebar.directMessages].flatMap((place) =>
-            place.others.flatMap((actor) => Option.toArray(userIdOf(actor))),
-          );
+          const named = namedPeople(sidebar, threads);
           return {
             you: everyone.find((user) => user.id === yours) ?? unlistedUser(you),
-            people: everyone.filter((user) => named.includes(user.id)),
+            people: everyone.filter((user) => named.has(user.id)),
             sidebar,
           };
         }).pipe(Effect.withSpan("SidebarList.current")),

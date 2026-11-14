@@ -106,4 +106,23 @@ describe("showLastLine", () => {
     );
     expect(client.getQueryState(queryKeys.threads(agentId))?.isInvalidated).toBe(false);
   });
+
+  it("[TC-UX-1563-03] names who wrote the last line with it: the message's own actor, else the thread's hob", () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.threads(agentId), withLine("The plan"));
+    const author = () => client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastAuthor;
+
+    showLastLine(client, new Message({ ...reply("On it", false), actor: { kind: "hob", id: "ada" } }));
+    expect(author()).toEqual({ kind: "hob", id: "ada" });
+
+    // The same line from someone else still changes who wrote it.
+    showLastLine(
+      client,
+      new Message({ ...reply("On it", false), role: "user", actor: { kind: "user", id: "marina" } }),
+    );
+    expect(author()).toEqual({ kind: "user", id: "marina" });
+
+    showLastLine(client, reply("Done", false));
+    expect(author()).toEqual({ kind: "hob", id: agentId });
+  });
 });

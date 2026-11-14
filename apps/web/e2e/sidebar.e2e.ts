@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
-import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, signInAs, startHub, test, testPeople } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -264,4 +264,110 @@ test("[TC-UX-162] a browser tab shows no window title strip, which belongs to th
   await page.goto(url);
   await expect(sidebar(page)).toBeVisible();
   await expect(page.getByRole("banner")).toHaveCount(0);
+});
+
+/**
+ * Shows the camp `campId` as one you share with Aldric and Ada. The hub's members can't be added
+ * from the app yet, so only the sidebar's section is changed; its last line and author are the hub's.
+ */
+const shareCamp = async (page: Page, campId: string, members: ReadonlyArray<string>) => {
+  await page.route(/\/api\/sidebar(\?|$)/, async (route) => {
+    const response = await route.fetch();
+    const read = (await response.json()) as {
+      sidebar: { camps: Array<{ threadId: string; section: string; others: Array<unknown> }> };
+    };
+    for (const camp of read.sidebar.camps) {
+      if (camp.threadId !== campId) continue;
+      camp.section = "shared-camp";
+      camp.others = members.map((id) => ({ kind: "hob", id }));
+    }
+    await route.fulfill({ response, json: read });
+  });
+};
+
+// covers UX-001, ADR 039 (The sidebar)
+test("[TC-UX-1563-04] a shared camp's row names who wrote its last line as it lands, in the four themes, and the rail shows only its faces", async ({
+  page,
+  browser,
+}) => {
+  dataDir = emptyDataDir();
+  hub = await startHub(dataDir, { HOBBOTS_TEST_PEOPLE: "on" });
+  const current = hub;
+  const api = async (method: string, path: string, body: unknown = {}) => {
+    const response = await fetch(`${current.url}/api${path}`, {
+      method,
+      headers: { "content-type": "application/json", ...current.headers },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
+    return response.json() as Promise<{ readonly id: string }>;
+  };
+  await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+  const ids: Record<string, string> = {};
+  for (const [i, name] of ["Aldric", "Ada"].entries()) {
+    const made = await api("POST", "/agents", {
+      id: randomUUID(),
+      name,
+      role: "assistant",
+      roleTitle: "Assistant",
+      sigil: "assistant",
+      hat: "pointed",
+      tool: "none",
+      lookSeed: 1000 + i * 337,
+      lookColor: "violet",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+    });
+    ids[name] = made.id;
+  }
+  const camp = await campAt(current, ids.Aldric ?? "", "Shop team");
+  await shareCamp(page, camp.id, [ids.Aldric ?? "", ids.Ada ?? ""]);
+
+  // Bruna asks from her own device; Aldric answers, so his reply is the last line.
+  const [bruna] = testPeople(current);
+  if (bruna === undefined) throw new Error("The hub added no test people.");
+  const { context, watch } = await signInAs(browser, current, bruna);
+  // A change from a browser carries its own origin (ADR 021).
+  const asked = await context.request.post(`${current.url}/api/threads/${camp.id}/messages`, {
+    data: { content: "One caption idea each?" },
+    headers: { origin: current.url },
+  });
+  expect(asked.ok(), await asked.text()).toBe(true);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${current.url}/#/usage`);
+  const nav = sidebar(page);
+  const row = nav.getByRole("listitem").filter({ has: page.getByRole("link", { name: "Shop team" }) });
+  await expect(row).toContainText("Aldric: Echo: One caption idea each?", { timeout: 20_000 });
+
+  // A line you write names you, as it lands.
+  await page.goto(camp.url);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Keep the quiet one");
+  await composer.press("Enter");
+  await expect(page.getByRole("main").getByText("Echo: Keep the quiet one").first()).toBeVisible({ timeout: 20_000 });
+  await expect(row).toContainText("Aldric: Echo: Keep the quiet one");
+
+  for (const theme of THEMES) {
+    await pickTheme(page, theme);
+    await expect(row).toContainText("Aldric: Echo: Keep the quiet one");
+    await expectAccessible(page, sidebar(page));
+    await shot(page, `sidebar-last-author--${theme}`);
+  }
+
+  // The rail shows only the camp's faces: no last line.
+  await page.setViewportSize({ width: 1024, height: 760 });
+  expect(await widthOf(page)).toBe(76);
+  await expect(row.getByText(/Aldric: /)).toBeHidden();
+  for (const theme of THEMES) {
+    await pickTheme(page, theme);
+    await expectAccessible(page, sidebar(page));
+    await shot(page, `sidebar-last-author-narrow--${theme}`);
+  }
+
+  await watch.checkOpenPages();
+  expect(watch.breaks()).toEqual([]);
+  await context.close();
 });
