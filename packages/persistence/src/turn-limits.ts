@@ -12,7 +12,7 @@ interface Row {
 const decodeLimits = Schema.decodeUnknownEffect(TurnLimits);
 
 /**
- * The turn limits (#1448), one row on SQLite and PostgreSQL (migration 0115). Without a row the hub
+ * The turn limits (#1448), one row on SQLite and PostgreSQL (migration `20261114003142_turn_limits`). Without a row the hub
  * runs with the defaults. A runtime the stored row does not name, as one a later Hobbots added,
  * takes its default.
  */

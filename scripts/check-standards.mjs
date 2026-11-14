@@ -3,10 +3,14 @@
 // - docs/standards/README.md indexes every rule in the area files, and nothing else.
 // - Every ADR ends with a Validation section that lists scenarios (STD-DOCS-009).
 // - Every evidence record has its fields, and docs/STATUS.md links it (STD-DOCS-010).
+// - No record says who did something with a bare user or hob id (STD-ARCH-020), the rule
+//   scripts/owner-actor.mjs keeps beside the owner-actor check.
 // Usage: node scripts/check-standards.mjs
 
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { checkRecords } from "./owner-actor.mjs";
 
 const dir = fileURLToPath(new URL("../docs/standards/", import.meta.url));
 const heading = /^### (STD-([A-Z0-9]+)-\d{3}) (.+)$/;
@@ -80,6 +84,10 @@ for (const file of records) {
   if (!status.includes(`(evidence/${file}`))
     errors.push(`docs/STATUS.md does not link evidence record ${file} (STD-DOCS-010)`);
 }
+
+const root = fileURLToPath(new URL("../", import.meta.url));
+const sources = execFileSync("git", ["ls-files", "packages", "apps"], { cwd: root, encoding: "utf8" }).split("\n");
+errors.push(...checkRecords(sources, (file) => readFileSync(`${root}${file}`, "utf8")));
 
 if (errors.length > 0) {
   console.error(`Standards check failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);

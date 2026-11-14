@@ -20,7 +20,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 // that request arrives gives an unguarded implementation room to act on what it read.
 
 const HOB_ID = AgentId.make("wren");
-type Gated = "upsertMessage" | "setAgentStatus" | "updateAgentConfig";
+type Gated = "sendMessage" | "setAgentStatus" | "updateAgentConfig";
 
 /** Holds the next call to one repository method until the test releases it. */
 const makeGate = Effect.gen(function* () {
@@ -65,7 +65,8 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
         const base = yield* HobbotsRepository;
         return HobbotsRepository.of({
           ...base,
-          upsertMessage: (message) => gate.pass("upsertMessage").pipe(Effect.andThen(base.upsertMessage(message))),
+          sendMessage: ((message, to) =>
+            gate.pass("sendMessage").pipe(Effect.andThen(base.sendMessage(message, to)))) as typeof base.sendMessage,
           setAgentStatus: (next, from) =>
             gate.pass("setAgentStatus").pipe(Effect.andThen(base.setAgentStatus(next, from))),
           updateAgentConfig: (agent) =>
@@ -134,7 +135,7 @@ describe("lifecycle changes that overlap other requests", () => {
         const repo = yield* HobbotsRepository;
         const thread = yield* chat.createThread(HOB_ID);
 
-        gate.arm("upsertMessage");
+        gate.arm("sendMessage");
         const send = yield* Effect.forkChild(chat.sendPrompt(thread.id, "hello"));
         yield* gate.reached;
         const queued = yield* gate.nextAdmission;
