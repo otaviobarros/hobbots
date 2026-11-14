@@ -405,9 +405,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         if (Option.isNone(found)) return null;
         const agent = yield* repo.findAgent(found.value.agentId);
         if (Option.isNone(agent) || agent.value.status !== "active") return null;
-        // A message that carries work runs in its dispatch's slot; any other takes its own, or waits.
-        const ownSlot = start.carry == null && Option.isSome(yield* repo.nextQueuedMessage(threadId));
-        const slot = ownSlot ? yield* slotFor(found.value, agent.value) : undefined;
+        // A message that carries work runs in its dispatch's slot, and one handed a slot runs in it;
+        // any other takes its own, or waits.
+        const ownSlot =
+          start.slot === undefined && start.carry == null && Option.isSome(yield* repo.nextQueuedMessage(threadId));
+        const slot = ownSlot ? yield* slotFor(found.value, agent.value) : start.slot;
         if (slot === null) return null;
         const started = yield* nextQueued(threadId);
         if (started === null) {
@@ -463,8 +465,11 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     // Delivers the work waiting in the thread, then frees the thread and starts what waits next.
     // When no turn ran for it and nothing woke the thread meanwhile, only a queued message can be
     // waiting, so the wake ends there.
-    const carryWork = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId, slot: TurnSlot) =>
-      Effect.gen(function* () {
+    const carryWork = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId, slot: TurnSlot) => {
+      // When no turn ran, your queued message starts in the dispatch's slot: given up and asked for
+      // again, the slot would go to the threads that waited longer, which would do the same (#1448).
+      let handed = false;
+      return Effect.gen(function* () {
         const ran = yield* service
           .deliver(threadId, agentId, {
             // Routine progress alone starts no turn: it waits to ride along a message of yours.
@@ -484,16 +489,21 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             Effect.catchCause((cause) =>
               Effect.logWarning("Could not deliver a hob's backpack work", cause).pipe(Effect.as(false)),
             ),
-            Effect.ensuring(slot.release),
           );
         yield* admission.withHob(
           agentId,
           Effect.gen(function* () {
             const { before } = yield* must(threadId, { _tag: "Delivered" });
-            yield* ran || before.wakePending ? startNext(threadId) : Effect.asVoid(startQueued(threadId));
+            if (ran || before.wakePending) {
+              yield* slot.release;
+              yield* startNext(threadId);
+              return;
+            }
+            handed = (yield* startQueued(threadId, { slot })) !== null;
           }),
         );
-      });
+      }).pipe(Effect.ensuring(Effect.suspend(() => (handed ? Effect.void : slot.release))));
+    };
 
     // One turn that carries the work: your queued message with the work riding along, else a
     // continuation whose prompt is the work. Returns once the turn has ended, and how.
