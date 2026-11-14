@@ -418,6 +418,11 @@ export interface MemoryCaptureExclusions {
 /** Where capture stands: the last journal entry memory acknowledged, the sessions that are open, and its exclusions. */
 export interface MemoryCaptureState {
   readonly sequence: number;
+  /**
+   * When capture last started from the journal's head (ISO 8601). Capture never read a message
+   * written before it, so it cannot know whether its camp was private then, and keeps none of them.
+   */
+  readonly since: string;
   readonly sessions: ReadonlyArray<MemoryCaptureSession>;
   readonly exclusions: MemoryCaptureExclusions;
 }
@@ -450,8 +455,8 @@ export class MemoryCaptureLog extends Context.Service<
     /**
      * Takes the hold, so compaction keeps every entry after the cursor, and answers where capture
      * stands. A cursor that was not holding, because memory was off or never on, starts again at the
-     * journal's head with no open session and the camps private now, keeping the units it kept out:
-     * memory gets what happens from now on.
+     * journal's head with no open session and the camps private now, keeping the units it kept out,
+     * and `since` now: memory gets what happens from now on.
      */
     readonly hold: Effect.Effect<MemoryCaptureState>;
     /** Lets compaction go on as if there were no capture, for a hub whose memory is turned off. */

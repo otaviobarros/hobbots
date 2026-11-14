@@ -70,17 +70,26 @@ describe("MemoryCaptureLog", () => {
       return { first, kept, afterOne, held, ended, released, again };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    expect(result.first).toEqual({ sequence: 10_005, sessions: [], exclusions: { privateThreads: [], excluded: [] } });
+    expect(result.first).toEqual({
+      sequence: 10_005,
+      since: expect.any(String),
+      sessions: [],
+      exclusions: { privateThreads: [], excluded: [] },
+    });
+    // A holding cursor keeps when it started from the head; starting from the head again moves it.
+    const { since } = result.first;
     expect(result.kept).toBe(0);
     expect(result.afterOne).toBe(1);
     expect(result.held).toEqual({
       sequence: 1,
+      since,
       sessions: [{ sessionId: threadId, agentId, lastAt: now, lastKey: "message:m1" }],
       exclusions: { privateThreads: [], excluded: ["attempt:a1"] },
     });
     // A unit kept out again is kept once, and the ones kept before stay.
     expect(result.ended).toEqual({
       sequence: 2,
+      since,
       sessions: [],
       exclusions: { privateThreads: [], excluded: ["attempt:a1", "message:m2"] },
     });
@@ -90,6 +99,7 @@ describe("MemoryCaptureLog", () => {
     // Starting again at the head keeps what capture kept out.
     expect(result.again).toEqual({
       sequence: 10_005,
+      since: expect.any(String),
       sessions: [],
       exclusions: { privateThreads: [], excluded: ["attempt:a1", "message:m2"] },
     });

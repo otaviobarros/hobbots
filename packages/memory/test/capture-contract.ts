@@ -141,6 +141,8 @@ const makeJournal = (start: string) => {
   let privateAtCursor: ReadonlyArray<ThreadId> = [];
   let excluded: ReadonlyArray<string> = [];
   let crashNextSave = false;
+  // When capture last started from the journal's head; a test moves it to start capture later.
+  let since = start;
   let at = Date.parse(start);
   const append = (payload: JournaledEvent, threadId: ThreadId | null, agentId: AgentId | null = pip) => {
     at += 1_000;
@@ -181,6 +183,7 @@ const makeJournal = (start: string) => {
       }),
     hold: Effect.sync(() => ({
       sequence: cursor,
+      since,
       sessions,
       exclusions: { privateThreads: privateAtCursor, excluded },
     })),
@@ -221,6 +224,10 @@ const makeJournal = (start: string) => {
     sessions: () => sessions,
     crashNextSave: () => {
       crashNextSave = true;
+    },
+    /** Capture last started from the journal's head at `time`, as after memory was off. */
+    startedAt: (time: string) => {
+      since = time;
     },
     /** Moves the journal's own clock, so the next entries are committed `duration` later. */
     skip: (duration: Duration.Duration) => {
@@ -1550,6 +1557,24 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           // Quill's memory holds its own turn only: the start, the message it took and its reply.
           expect(yield* memory.observations(quill, camp)).toBe(3);
           expect(yield* memory.observations(pip, camp)).toBe(5);
+        }),
+      ));
+
+    // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
+    it("[TC-GEN-1466-06] never keeps a message written before capture started, whose camp may have been private then", () =>
+      run(({ memory, journal, capture }) =>
+        Effect.gen(function* () {
+          // Memory was off when the message was written, so capture never saw whether its camp was private.
+          journal.startedAt("2026-11-05T12:30:00.000Z");
+          const camp = ThreadId.make(crypto.randomUUID());
+          exchange(journal, camp, "Ada earns 9000.", "Noted.");
+          exchange(journal, camp, "Where are the docs?", "In docs/.");
+          yield* capture.runOnce;
+          const bodies = (yield* memory.observed(pip, camp)).map((observation) => observation.body);
+          // start and the two replies; neither message, both written before capture started
+          expect(bodies).toHaveLength(3);
+          expect(bodies.some((body) => body.includes("9000"))).toBe(false);
+          expect(bodies).toContain("Noted.");
         }),
       ));
   });

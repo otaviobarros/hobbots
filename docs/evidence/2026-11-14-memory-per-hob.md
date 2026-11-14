@@ -15,6 +15,7 @@
 | `[TC-GEN-1466-02]` | `npx vitest run test/capture-fake.test.ts test/capture-ai-memory.test.ts` in `packages/memory`, after `pnpm fetch-engine` | ✅ on both engines: Pip's memory held "what is our stall number?" and its reply, Quill's held "write the sign for it." and its Codex reply, the message body ending "(from user owner)"; neither held the other's turn nor "Lunch is at noon.", which no hob answered |
 | `[TC-GEN-1466-03]` | The same | ✅ a private camp reached neither hob's memory; a camp made private ended both sessions and kept what each had |
 | `[TC-GEN-1466-04]` | The same | ✅ every capture and session end went to the writing hob's own memory as that hob, with the journal naming the other hob as the thread's |
+| `[TC-GEN-1466-06]` | The same | ✅ a message written before capture started, whose camp's privacy then is unknown, was not kept; the reply to it was |
 | `[TC-GEN-1466-05]` | `npx vitest run test/several-hobs-pack.test.ts` in `apps/server`, on SQLite and with `HOBBOTS_TEST_DB=postgres`, with the fake runtime as Claude Code and as Codex | ✅ through the hub's own journal and capture worker: Wren's and Quill's memory each held their own message and reply only, and nothing written after the camp was made private |
 | Earlier capture cases | `[TC-GEN-300]` to `[TC-GEN-402]`, `[TC-GEN-1377-01]` to `[TC-GEN-1377-09]`, `[TC-OR-598]`, `[TC-OR-600]`, `[TC-GEN-1377-04]`, the store contract | ✅ on both engines, SQLite and PostgreSQL |
 

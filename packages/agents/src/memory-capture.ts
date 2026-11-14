@@ -842,7 +842,9 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
         Effect.gen(function* () {
           const entries = yield* log.readAfter(current.sequence, PAGE);
           if (entries.length === 0) return true;
-          const prompts = new Map((yield* log.messages(promptIdsOf(entries))).map((m) => [m.id, m] as const));
+          // A message written before capture started is never kept: whether its camp was private then is unknown.
+          const read = yield* log.messages(promptIdsOf(entries));
+          const prompts = new Map(read.filter((m) => m.createdAt >= current.since).map((m) => [m.id, m] as const));
           const page = capturePage(entries, redactor, prompts);
           const privacy = { atCursor: current.exclusions, now: yield* log.privacy(workOfPage(page)) };
           const round = planRound(page, current.sessions, yield* before(MEMORY_KEY_WINDOW), sent, privacy);
@@ -881,6 +883,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           );
           state = {
             sequence: round.sequence,
+            since: current.since,
             sessions: [...round.sessions.values()],
             exclusions: { privateThreads: round.exclusions.privateThreads, excluded: round.excluded },
           };

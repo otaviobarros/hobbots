@@ -6,7 +6,7 @@ import {
   PrivateCamps,
 } from "@hobbots/agents";
 import { AgentId, Message, TaskId, ThreadId } from "@hobbots/domain";
-import { Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { EventJournal } from "./journal.ts";
 import { messageRows } from "./repositories.ts";
@@ -61,12 +61,13 @@ export const MemoryCaptureLive = Layer.effect(
       });
 
     const hold = Effect.gen(function* () {
-      const [row] = yield* sql<{ readonly sequence: unknown; readonly holding: unknown }>`
-        SELECT sequence, holding FROM memory_capture WHERE id = 1`;
+      const [row] = yield* sql<{ readonly sequence: unknown; readonly holding: unknown; readonly sinceAt: unknown }>`
+        SELECT sequence, holding, since_at FROM memory_capture WHERE id = 1`;
       if (Number(row?.holding) === 1) {
         const sessions = yield* sql<SessionRow>`SELECT * FROM memory_capture_sessions ORDER BY session_id, agent_id`;
         return {
           sequence: Number(row?.sequence),
+          since: String(row?.sinceAt),
           sessions: sessions.map(sessionOf),
           exclusions: yield* exclusionsAtCursor,
         };
@@ -75,10 +76,11 @@ export const MemoryCaptureLive = Layer.effect(
       // Starting at the head, capture takes the camps private now, and keeps out what it kept out before.
       yield* sql`DELETE FROM memory_capture_private_threads`;
       yield* sql`INSERT INTO memory_capture_private_threads (thread_id) SELECT id FROM threads WHERE private = 1`;
+      const since = DateTime.formatIso(yield* DateTime.now);
       const [moved] = yield* sql<{ readonly sequence: unknown }>`UPDATE memory_capture
-        SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1), holding = 1
+        SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1), holding = 1, since_at = ${since}
         WHERE id = 1 RETURNING sequence`;
-      return { sequence: Number(moved?.sequence), sessions: [], exclusions: yield* exclusionsAtCursor };
+      return { sequence: Number(moved?.sequence), since, sessions: [], exclusions: yield* exclusionsAtCursor };
     }).pipe(sql.withTransaction, sqlOrDie);
 
     /** Of `work`, the camps private now, and the thread of each Task in one (ADR 037). */
