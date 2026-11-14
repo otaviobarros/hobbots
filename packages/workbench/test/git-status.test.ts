@@ -192,7 +192,7 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-07] closes the folder around a packed-only branch's loose ref while Git holds its lock, and around a link in its path", async () => {
+  it("[TC-PE-1537-07] closes the folder around a packed-only branch's loose ref while Git holds its lock, and the whole Git folder for a link in its path", async () => {
     const repo = join(work, "locked");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
@@ -209,35 +209,31 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([join(heads, "feat"), packed]);
     expect(existsSync(join(heads, "feat", "shop"))).toBe(false);
     expect(readFileSync(join(heads, "feat", "shop.lock"), "utf8")).toBe("moving\n");
-    // A link where a folder of the ref should be: the folder it stands in and the folder it leads to
-    // are closed.
+    // A link where a folder of the ref should be: the Git folder and the folder it leads to are closed.
     const outside = join(work, "outside");
     mkdirSync(outside);
     symlinkSync(outside, join(heads, "side"));
-    expect(await read((git) => git.branchFiles(repo, "side/shop"))).toEqual([heads, outside, packed]);
+    expect(await read((git) => git.branchFiles(repo, "side/shop"))).toEqual([join(repo, ".git"), outside, packed]);
     expect(readdirSync(outside)).toEqual([]);
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-09] closes the ref a symbolic branch names, since moving it moves the branch", async () => {
+  it("[TC-PE-1537-09] closes the whole Git folder for a branch that is a symbolic ref or a link, since it moves with what it names", async () => {
     const repo = join(work, "symbolic");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
     gitIn(repo, "add", ".");
     gitIn(repo, "commit", "-q", "-m", "one");
-    gitIn(repo, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
-    gitIn(repo, "symbolic-ref", "refs/heads/loop", "refs/heads/loop");
-    const heads = join(repo, ".git", "refs", "heads");
-    expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([join(heads, "alias"), join(heads, "main")]);
-    // A branch that names HEAD moves with the branch HEAD names.
-    gitIn(repo, "symbolic-ref", "refs/heads/current", "HEAD");
-    expect(await read((git) => git.branchFiles(repo, "current"))).toEqual([
-      join(heads, "current"),
-      join(repo, ".git", "HEAD"),
-      join(heads, "main"),
-    ]);
-    // A ref that names itself is followed only a few times.
-    expect(await read((git) => git.branchFiles(repo, "loop"))).toEqual([join(heads, "loop")]);
+    const dotGit = join(repo, ".git");
+    for (const target of ["refs/heads/main", "HEAD", "refs/heads/later"]) {
+      gitIn(repo, "symbolic-ref", "refs/heads/alias", target);
+      expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([dotGit]);
+    }
+    // A link as the ref, here to a file holding a symbolic ref, closes the Git folder and where it leads.
+    write(join(work, "pointer"), "ref: refs/heads/main\n");
+    rmSync(join(dotGit, "refs", "heads", "alias"));
+    symlinkSync(join(work, "pointer"), join(dotGit, "refs", "heads", "alias"));
+    expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([dotGit, join(work, "pointer")]);
   });
 
   // covers PE-005, STD-SEC-002, #1537
@@ -260,7 +256,7 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-11] closes a worktree's own ref that a symbolic branch names, in that worktree's Git folder", async () => {
+  it("[TC-PE-1537-11] closes the shared Git folder and the worktree's own for a symbolic branch in a linked worktree", async () => {
     const repo = join(work, "main-repo");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
@@ -270,17 +266,9 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     gitIn(repo, "worktree", "add", "-q", "-b", "camp", camp);
     gitIn(camp, "update-ref", "refs/worktree/target", "HEAD");
     gitIn(camp, "symbolic-ref", "refs/heads/alias", "refs/worktree/target");
-    gitIn(camp, "symbolic-ref", "refs/heads/later", "refs/worktree/later");
-    const own = join(repo, ".git", "worktrees", "camp-tree");
-    const heads = join(repo, ".git", "refs", "heads");
     expect(await read((git) => git.branchFiles(camp, "alias"))).toEqual([
-      join(heads, "alias"),
-      join(own, "refs", "worktree", "target"),
-    ]);
-    // A ref it names that is not made yet would move it once made: the folder it goes in is closed.
-    expect(await read((git) => git.branchFiles(camp, "later"))).toEqual([
-      join(heads, "later"),
-      join(own, "refs", "worktree"),
+      join(repo, ".git"),
+      join(repo, ".git", "worktrees", "camp-tree"),
     ]);
   });
 
