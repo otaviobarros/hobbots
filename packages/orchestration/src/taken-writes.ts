@@ -101,10 +101,13 @@ export const makeTakenWrites = (separator: PathSeparator) =>
           atRepository(cwd, (top, claims) =>
             Effect.map(git.currentBranch(top), (branch) => branchClaim(claims, branch)),
           );
-        // A command that rewrites the working tree, such as `git reset --hard`, may reach any file in
-        // it, so any path you took over in the repository refuses it.
+        // A command that may rewrite the working tree or move a branch, such as `git reset --hard` or
+        // `git switch` before a commit in the same call, may reach any file or branch in it, so
+        // anything you took over in the repository refuses it.
         const treeHit = (cwd: string) =>
-          atRepository(cwd, (_top, claims) => Effect.succeed(claims.find((claim) => claim.scope === "path")));
+          atRepository(cwd, (_top, claims) =>
+            Effect.succeed(claims.find((claim) => claim.scope === "path" || claim.scope === "branch")),
+          );
 
         const checks = [
           ...writes.paths.map(pathHit),

@@ -280,8 +280,12 @@ describe("what a call writes", () => {
     expect(bash("git -C web checkout -- .")).toEqual([join(project, "web")]);
     expect(bash("git clean -fd && git stash")).toEqual([project]);
     expect(bash("git checkout-index -f -a")).toEqual([project]);
+    // An explicit work tree is reached too, and a branch move counts as a rewrite.
+    expect(bash("git --work-tree=/other reset --hard")).toEqual(expect.arrayContaining(["/other", project]));
+    expect(bash("git switch taken && git commit -am x")).toEqual([project]);
+    expect(bash("git branch -f taken HEAD")).toEqual([project]);
     // A subcommand not known to leave the working tree alone is read as one that may rewrite it.
     expect(bash("git frobnicate")).toEqual([project]);
-    expect(bash("git reset HEAD~1; git status; git stash list; git add . && git diff")).toEqual([]);
+    expect(bash("git reset HEAD~1; git status; git stash list; git add . && git diff; git branch")).toEqual([]);
   });
 });

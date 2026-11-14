@@ -433,7 +433,8 @@ export interface Takeover {
 /**
  * What a tool call writes, as the hub reads it from the call itself (#1449): the files it changes or
  * deletes, by absolute path, the branches it pushes from which folders, the folders it commits
- * in, and the folders where a Git command such as `git reset --hard` rewrites the working tree. A write a command hides, such as a path held in a variable, is not known here.
+ * in, and the folders where a Git command such as `git reset --hard` or `git switch` may rewrite the
+ * working tree or move a branch. A write a command hides, such as a path held in a variable, is not known here.
  */
 export interface CallWrites {
   readonly paths: ReadonlyArray<string>;
