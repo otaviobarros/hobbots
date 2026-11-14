@@ -7,8 +7,8 @@ import {
   AgentId,
   EMPTY_HOB_POLICY,
   isInProgress,
-  type Message,
-  type MessageId,
+  Message,
+  MessageId,
   type ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -252,6 +252,29 @@ describe("a reply that ends early", () => {
       const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
       yield* replyTo(thread.id, "next");
       return yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+    expect(error._tag).toBe("ReplyNotResumable");
+  });
+
+  // covers CH-004, ADR 039 (A member hob works as itself)
+  it("[TC-CH-1461-18] refuses to continue a reply by a hob that is not in the camp, as one moved here from another camp", async () => {
+    const error = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const rook = AgentId.make("rook");
+      const aldric = Option.getOrThrow(yield* repo.findAgent(HOB_ID));
+      yield* repo.insertAgent(new Agent({ ...aldric, id: rook, name: "Rook", configVersion: 1 }));
+      const thread = yield* chat.createThread(HOB_ID);
+      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      // Rook wrote it in a camp of its own, and the chapter moved here, where Rook is no member.
+      const moved = new Message({
+        ...cut,
+        id: MessageId.make("moved-reply"),
+        actor: { kind: "hob", id: rook },
+        createdAt: new Date(Date.parse(cut.createdAt) + 1000).toISOString(),
+      });
+      yield* repo.upsertMessage(moved);
+      return yield* continueSoon(thread.id, moved.id).pipe(Effect.flip);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
     expect(error._tag).toBe("ReplyNotResumable");
   });

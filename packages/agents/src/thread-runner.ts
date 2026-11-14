@@ -847,6 +847,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       drainThreads,
       endTurn,
       workRidesAlong,
+      hobsOf,
       activeThreads,
       threadRuns,
       streamingReplies,

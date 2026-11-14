@@ -453,6 +453,7 @@ export class ChatService extends Context.Service<
         drainThreads,
         endTurn,
         workRidesAlong,
+        hobsOf,
         activeThreads,
         threadRuns,
         streamingReplies,
@@ -716,6 +717,9 @@ export class ChatService extends Context.Service<
                 : Option.some(own);
             if (Option.isNone(author)) return yield* new ReplyNotResumable({ messageId });
             const agent = author.value;
+            // Only a hob of the camp goes on: a reply moved here from another camp is not its to
+            // continue unless it joined this one too (ADR 039).
+            if (!(yield* hobsOf(thread)).includes(agent.id)) return yield* new ReplyNotResumable({ messageId });
             // Continuing a reply goes on with work the hob has; while it retires, only that of an open Task.
             yield* requireAwake(agent);
             yield* requireOpenTaskWhileRetiring(agent, threadId);
