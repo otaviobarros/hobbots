@@ -182,7 +182,8 @@ export const rolloutRefusals = (
   const readLine = (line: string) => {
     const item = itemOf(line);
     if (item === null || typeof item.call_id !== "string") return;
-    const id = clip(item.call_id, NOT_OFFERED_NAME_MAX);
+    // The id is the rollout's own text too, so it is kept as a name is: redacted whole, then bounded.
+    const id = nameOf(item.call_id);
     if (item.type === "function_call" || item.type === "custom_tool_call") keep(id, item);
     if (item.type !== "function_call_output" && item.type !== "custom_tool_call_output") return;
     const refusal = refusalOf(id, item.output);
