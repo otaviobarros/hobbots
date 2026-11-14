@@ -8,12 +8,13 @@ import { openQuest } from "./quest-sheet.ts";
 
 // Issue #1449 in the browser: you take over a Task's files and branches from its hob's ⋯ menu in the
 // quest's sheet. Aldric claims the docs folder of a repository for his quest and asks you a question;
-// you take it over, and the sheet says the folder is yours. Once you answer, his write to the folder
-// is refused while his write beside it goes through. The sheet also shows what the quest cost before
+// you take it over, and the sheet says the folder is yours. The turn waiting on your answer stops,
+// since its sandbox started without the folder closed (#1537); on his next turn his write to the
+// folder is refused while his write beside it goes through. The sheet also shows what the quest cost before
 // any outcome is accepted. The hub's side is apps/server/test/claims.test.ts and
 // packages/runtimes/test/taken-writes-contract.test.ts; the cost's division is
 // packages/domain/test/quest-cost.test.ts. Taking over a hob's live browser waits for #382. Give back
-// (#1538) returns them from the same menu, and the write inside the folder goes through again.
+// (#1538) returns them from the same menu, and his next turn's write inside the folder goes through.
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -56,7 +57,7 @@ const TITLE = "Write the launch notes";
 
 /**
  * Starts a hub with Aldric, who starts a quest, claims the docs folder and asks you whether to write
- * the notes; once you answer, he writes in the folder, then beside it. Returns his question's card.
+ * the notes. Returns his question's card.
  */
 const askAldric = async (page: Page) => {
   const current = await startHub(dataDir);
@@ -97,9 +98,6 @@ const askAldric = async (page: Page) => {
           { label: "Wait", consequence: "Nothing is written." },
         ],
       }),
-      // Your answer: Aldric writes in the folder you took over, then beside it.
-      'fake:then fake:write docs/plan.md "The plan"',
-      'fake:then fake:write notes.md "The notes"',
     ].join("\n"),
   );
   await composer.press("Enter");
@@ -107,6 +105,15 @@ const askAldric = async (page: Page) => {
   const asks = page.getByRole("region", { name: "Aldric asks you" }).last();
   await expect(asks).toContainText("Shall I write the notes?", { timeout: 30_000 });
   return asks;
+};
+
+/** Asks Aldric for his next turn, in which he writes in the docs folder, then beside it. */
+const askForTheNotes = async (page: Page) => {
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    ["Write the notes now.", 'fake:write docs/plan.md "The plan"', 'fake:write notes.md "The notes"'].join("\n"),
+  );
+  await composer.press("Enter");
 };
 
 // covers OR-004, OR-006, OP-002, UX-001
@@ -137,6 +144,7 @@ test("[TC-UX-1449-05] takes over a hob's files from the quest's sheet, so its wr
   await page.keyboard.press("Escape");
 
   await asks.getByRole("button", { name: /^Write them/ }).click();
+  await askForTheNotes(page);
   // The write beside the folder goes through; the one inside it was refused before it ran.
   await expect.poll(() => existsSync(join(shared, "notes.md")), { timeout: 30_000 }).toBe(true);
   expect(existsSync(join(shared, "docs", "plan.md"))).toBe(false);
@@ -173,6 +181,7 @@ test("[TC-UX-1538-05] gives back the files you took over from the quest's sheet,
   await page.keyboard.press("Escape");
 
   await asks.getByRole("button", { name: /^Write them/ }).click();
+  await askForTheNotes(page);
   // Both writes go through: the folder is Aldric's again.
   await expect.poll(() => existsSync(join(shared, "docs", "plan.md")), { timeout: 30_000 }).toBe(true);
   await expect.poll(() => existsSync(join(shared, "notes.md")), { timeout: 30_000 }).toBe(true);

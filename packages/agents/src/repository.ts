@@ -196,6 +196,23 @@ export class HobbotsRepository extends Context.Service<
     ) => Effect.Effect<Option.Option<Committed<Message>>>;
     /** The turn writing `replyId` ended: the requests it spoke for are answered. */
     readonly answerTurnRequests: (replyId: MessageId) => Effect.Effect<void>;
+    /** The requests still owed that the turn writing `replyId` speaks for. */
+    readonly turnRequestsOf: (replyId: MessageId) => Effect.Effect<ReadonlyArray<TurnRequest>>;
+    /**
+     * The hob of the turn writing `replyId` passed (ADR 039): its speaking requests keep `reason` at
+     * once, so a hub that stops before the turn ends passes them when it starts again.
+     */
+    readonly markPassing: (replyId: MessageId, reason: string) => Effect.Effect<void>;
+    /**
+     * The turn writing `replyId` ended with its hob's `pass` (ADR 039): its speaking requests end
+     * `passed` with `reason`, and the reply is removed, journaled `TurnPassed`, so it leaves no
+     * message. What it used stays counted (`passed_turns`), and a request its text caused is dropped.
+     * A reply an approval names stays, and its requests are answered. Returns the passed.
+     */
+    readonly passTurnRequests: (
+      replyId: MessageId,
+      reason: string,
+    ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
      * Let them go on (ADR 039, Hobs talking to hobs): the line's paused requests wait again, each at
      * `RESUMED_RELAY_DEPTH`, journaled as one `RelayBudgetReset` by `by`. Returns the requests it
@@ -211,8 +228,16 @@ export class HobbotsRepository extends Context.Service<
       ids: ReadonlyArray<TurnRequestId>,
       by: Actor | null,
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
-    /** At start: requests whose turn was speaking when the hub stopped are answered by its interrupted reply. */
-    readonly answerUnfinishedTurnRequests: Effect.Effect<void>;
+    /**
+     * The configuration versions of the turns `agentId` passed in `threadId`, whose replies were
+     * removed (#1462), so a resumed session still hears instructions changed since.
+     */
+    readonly passedConfigVersions: (threadId: ThreadId, agentId: AgentId) => Effect.Effect<ReadonlyArray<number>>;
+    /**
+     * At start: requests whose turn was speaking when the hub stopped are answered by its interrupted
+     * reply, or passed, with its reply removed, when its hob had passed.
+     */
+    readonly answerUnfinishedTurnRequests: Effect.Effect<Committed<void>>;
     /** Threads with a `TurnRequest` waiting, or paused past the relay budget, so a start shows each line as it was. */
     readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */

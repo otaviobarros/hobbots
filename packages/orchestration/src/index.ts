@@ -4,5 +4,6 @@ export { accessGiven, delegatedAccess } from "./member-access.ts";
 export { reconcileOverlaps, recordOverlaps } from "./overlaps.ts";
 export { TaskSignal } from "./signal.ts";
 export { DEFAULT_STEP_LIMITS, type StepLimits, StepRunnerLive } from "./step-runner.ts";
+export { makeTakenPlaces } from "./taken-writes.ts";
 export { TaskTools } from "./task-tools.ts";
 export { endTurn } from "./turn-end.ts";

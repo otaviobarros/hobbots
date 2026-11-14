@@ -5,6 +5,7 @@ import { join, sep } from "node:path";
 import {
   type CallWrites,
   ClaimRegister,
+  GitWorkspace,
   giveBackTask,
   HobbotsRepository,
   HobTools,
@@ -32,7 +33,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
-import { TaskTools } from "@hobbots/orchestration";
+import { makeTakenPlaces, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -357,6 +358,22 @@ const hub = () => {
           ORDER BY recipient_id, task_id, created_at`,
       ),
     );
+  /** What every hob turn's sandbox closes in `folders`, as the hub reads it when the turn starts (#1537). */
+  const takenPlaces = (folders: ReadonlyArray<string>) =>
+    run(Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)));
+  /** The same, when the scan of the folders stops at its limit before it sees them all. */
+  const takenPlacesPartly = (folders: ReadonlyArray<string>) =>
+    run(
+      Effect.flatMap(Effect.service(GitWorkspace), (git) =>
+        Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)).pipe(
+          Effect.provideService(GitWorkspace, {
+            ...git,
+            repositoriesIn: (folder) =>
+              Effect.map(git.repositoriesIn(folder), (reached) => ({ ...reached, complete: false })),
+          }),
+        ),
+      ),
+    );
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
       (tree) => Option.getOrThrow(tree).tasks[0],
@@ -379,6 +396,8 @@ const hub = () => {
     giveBack,
     takenWrite,
     takenItems,
+    takenPlaces,
+    takenPlacesPartly,
     dispose: () => runtime.dispose(),
   };
 };
@@ -624,6 +643,57 @@ describe("the claims register", () => {
       expect((await h.claimsOf(A)).map((claim) => claim.state)).toEqual(["released", "released", "released"]);
       expect((await h.claimsOf(B)).map((claim) => claim.state)).toEqual(["held"]);
       expect(await h.takenWrite({ paths: [join(checkout, "docs", "a.md")] })).toBeNull();
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers OR-006, PE-005, #1537
+  it("[TC-OR-1537-03] closes what you took over in every turn's sandbox, in each clone, until you give it back or the Task ends", async () => {
+    const h = hub();
+    try {
+      await h.seed;
+      await h.request(FRODO, A, false);
+      await h.request(SAM, B, false);
+      await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
+      // The worktree's branch, and a link that lands in a folder of its own.
+      await h.call(FRODO, A, { key: "b", scope: "branch", branch: "camp" });
+      symlinkSync(join(checkout, "web"), join(checkout, "web-link"));
+      mkdirSync(join(checkout, "web"), { recursive: true });
+      await h.call(FRODO, A, { key: "l", scope: "path", path: "web-link" });
+      // Nothing is yours yet, so nothing is closed, even where the scan stops short.
+      expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
+      expect(await h.takenPlacesPartly([outside])).toEqual([]);
+
+      await h.takeOver(A);
+      // Each clone closes its own `docs`, as claimed and where its link lands. The taken branch is
+      // left to the call-level check: the sandbox closes nothing of Git's for it.
+      const dotGit = join(checkout, ".git");
+      expect(await h.takenPlaces([checkout])).toEqual(
+        [join(checkout, "docs"), join(checkout, "web"), join(checkout, "web-link")].sort(),
+      );
+      expect(await h.takenPlaces([worktree])).toEqual(
+        expect.arrayContaining([join(worktree, "docs"), join(worktree, "web-link")]),
+      );
+      // A hob given only a folder inside the repository, or a folder holding it, gets the same.
+      expect(await h.takenPlaces([join(checkout, "docs", "decisions")])).toContain(join(checkout, "docs"));
+      expect(await h.takenPlaces([root])).toEqual(
+        expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs")]),
+      );
+      // A repository with nothing taken closes nothing, but a folder the scan could not see whole
+      // may hold one with something taken, so it is closed whole.
+      expect(await h.takenPlaces([outside])).toEqual([]);
+      expect(await h.takenPlacesPartly([outside])).toEqual([outside]);
+
+      expect((await h.takenPlaces([root])).some((path) => path.startsWith(dotGit))).toBe(false);
+
+      // Given back, nothing is closed; taken again, then the Task ends: nothing is closed either.
+      await h.giveBack(A);
+      expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
+      await h.takeOver(A);
+      expect(await h.takenPlaces([checkout])).not.toEqual([]);
+      await h.end(A);
+      expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
     } finally {
       await h.dispose();
     }

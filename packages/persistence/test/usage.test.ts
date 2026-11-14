@@ -304,6 +304,32 @@ describe("UsageLedger", () => {
     });
   });
 
+  // covers OP-002, ADR 039 (One hob speaks at a time)
+  it("[TC-OP-1462-01] counts a passed turn, whose reply was removed, under the hob that passed", async () => {
+    const { hobs } = await run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        // Pip passed in Bramble's chat: the hob is the one that passed, not the chat's.
+        yield* sql`INSERT INTO passed_turns ${sql.insert({
+          reply_id: "m-passed",
+          thread_id: "t-bramble",
+          agent_id: "pip",
+          runtime: "claude-code",
+          model: "haiku",
+          created_at: "2026-10-29T16:00:00.000Z",
+          input_tokens: 7,
+          output_tokens: 3,
+          cache_read_tokens: null,
+          cache_write_tokens: null,
+        })}`;
+        return yield* UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z"));
+      }).pipe(Effect.orDie),
+    );
+    expect(hobs.filter((row) => row.model === "haiku")).toMatchObject([
+      { hobId: "pip", replies: 1, unreported: 0, inputTokens: 7, outputTokens: 3 },
+    ]);
+  });
+
   // regression for #1011: a turn the hub stopped before it ended was never recorded
   // covers OP-002
   it("[TC-OP-109] counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it", async () => {

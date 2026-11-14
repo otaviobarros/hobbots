@@ -18,6 +18,7 @@ import {
   settleCommitsAs,
   withSummoningForEveryHob,
 } from "@hobbots/domain";
+import { makeTakenPlaces } from "@hobbots/orchestration";
 import { SetupRepository } from "@hobbots/persistence";
 import { userGitIdentity } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
@@ -47,6 +48,8 @@ export const HobToolsLive = Layer.effect(
     const identities = yield* Effect.serviceOption(CommitIdentityQuestions);
     // What the hub's Charms declare (ADR 031), which every turn's policy decides their calls on.
     const charmOperations = declaredOperations(yield* CharmDeclarations);
+    // What you took over from a Task, which every hob's sandbox closes to writes (#1537).
+    const takenPlaces = yield* makeTakenPlaces(sep === "\\" ? "\\" : "/");
     return HobTools.of({
       access: (agent, turn) =>
         Effect.gen(function* () {
@@ -84,9 +87,11 @@ export const HobToolsLive = Layer.effect(
                 : settleCommitsAs(null, userGitIdentity(homedir()), null);
           // A hob with its own app needs no coding setup card (#1241).
           if (app !== null && Option.isSome(identities)) yield* identities.value.settled(agent.id);
+          const taken = yield* takenPlaces(turnFolders);
           return {
             policy,
             folders: turnFolders,
+            ...(taken.length === 0 ? {} : { taken }),
             runtimeFolder: join(runtimeFolders(dataDir), agent.id),
             ...(app === null ? {} : { commitAs: hobAppCommitIdentity(app) }),
             commitsAs,

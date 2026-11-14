@@ -408,12 +408,8 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "MessageQueued":
       return;
     case "MessageDequeued":
-      if (event.reason === "removed") {
-        recordRemovedMessage(queryClient, event.messageId);
-        queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
-          old?.filter((message) => message.id !== event.messageId),
-        );
-      }
+    case "TurnPassed":
+      removeGone(queryClient, event);
       return;
     case "MessageDelta":
       applyDelta(queryClient, event);
@@ -426,6 +422,25 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       applyWorkEvent(queryClient, event);
       return;
   }
+};
+
+/**
+ * Takes a message that is gone out of its thread's transcript: a queued one you removed, or the
+ * reply of a hob that passed, whose turn leaves no message (ADR 039). A queued message that started
+ * moves with its own upsert, sent just before.
+ */
+const removeGone = (
+  queryClient: QueryClient,
+  event: Extract<HobbotsEvent, { readonly _tag: "MessageDequeued" | "TurnPassed" }>,
+) => {
+  if (event._tag === "MessageDequeued" && event.reason !== "removed") return;
+  recordRemovedMessage(queryClient, event.messageId);
+  queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
+    old?.filter((message) => message.id !== event.messageId),
+  );
+  // A passed reply that already ended may have left its camp unread: the hub works out again
+  // whether any reply there still is.
+  if (event._tag === "TurnPassed") void unreadChanged(queryClient);
 };
 
 type MemoryEvent = Extract<
