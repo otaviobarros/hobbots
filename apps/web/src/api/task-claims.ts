@@ -16,9 +16,17 @@ const taskClaimsQuery = (taskId: TaskId) =>
     ...followsEvents,
   });
 
-/** A Task's open claims while it can still be taken over; an ended Task holds none. */
-export const useTaskClaims = (task: Task) =>
-  useQuery({ ...taskClaimsQuery(task.id), enabled: !isTerminalTask(task.state) });
+const NO_CLAIMS: ReadonlyArray<Claim> = [];
+
+/**
+ * A Task's open claims, or undefined while they are read. An ended Task holds none: its claims were
+ * released when it ended, so a read cached while it ran is never shown as still holding them.
+ */
+export const useTaskClaims = (task: Task): ReadonlyArray<Claim> | undefined => {
+  const ended = isTerminalTask(task.state);
+  const { data } = useQuery({ ...taskClaimsQuery(task.id), enabled: !ended });
+  return ended ? NO_CLAIMS : data;
+};
 
 /** A claim was made, contested, cleared, taken over or released: every Task's claims are read again. */
 export const refreshTaskClaims = async (queryClient: QueryClient): Promise<void> => {

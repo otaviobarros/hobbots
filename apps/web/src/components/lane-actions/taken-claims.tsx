@@ -11,7 +11,7 @@ import type { LaneActions } from "./use-lane-actions.ts";
  * way, and why it did not go through.
  */
 export function TakenClaims({ task, actions }: { task: Task; actions: LaneActions }) {
-  const taken = (useTaskClaims(task).data ?? []).filter(Claims.isTaken);
+  const taken = (useTaskClaims(task) ?? []).filter(Claims.isTaken);
   const refusal = actions.takeOverRefusal(task.id);
   return (
     <>
@@ -32,7 +32,7 @@ export function TakenClaims({ task, actions }: { task: Task; actions: LaneAction
  * not taken over, with what it leaves the hob. The menu stays open until the hub moved them to you.
  */
 export function TakeOverItems({ task, owner, actions }: { task: Task; owner: string; actions: LaneActions }) {
-  const claims = useTaskClaims(task).data;
+  const claims = useTaskClaims(task);
   if (!canTakeOver(task, claims)) return null;
   return (
     <>

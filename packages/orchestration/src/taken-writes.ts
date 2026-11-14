@@ -24,6 +24,24 @@ export const makeRepositoryIdentity = (separator: PathSeparator) =>
           : Effect.succeed(memoryProjectIdentity(null, lastName(top, separator))),
   );
 
+/** Pushes whose words name the checked-out branch, as the runtimes' Push requests spell them. */
+const CURRENT_BRANCH = new Set(["(current branch)", "(HEAD)", "(@)", "(+HEAD)", "(+@)"]);
+
+type PushTarget =
+  | { readonly _tag: "Branch"; readonly name: string }
+  | { readonly _tag: "Current" }
+  | { readonly _tag: "Unnamed" };
+
+/**
+ * The branch a Push request names: a branch, the checked-out one, or none when the push does
+ * not say, as the runtimes write `(several branches)` for `git push --all` or `(refs/heads/*)`.
+ */
+const pushTarget = (branch: string): PushTarget => {
+  if (CURRENT_BRANCH.has(branch)) return { _tag: "Current" };
+  const name = branch.startsWith("(") ? null : claimBranch(branch);
+  return name === null ? { _tag: "Unnamed" } : { _tag: "Branch", name };
+};
+
 /**
  * Why a call's writes are refused (#1449): the first path or branch it writes that you took over
  * from a Task, which is yours until the Task ends. Every hob's call is checked, whatever Task it
@@ -64,7 +82,14 @@ export const makeTakenWrites = (separator: PathSeparator) =>
         for (const push of writes.pushes) {
           const top = yield* git.repository(push.cwd);
           if (top === null) continue;
-          const hit = branchClaim(yield* takenAt(top), claimBranch(push.branch));
+          const claims = yield* takenAt(top);
+          const target = pushTarget(push.branch);
+          // A push whose words do not name its branches, such as `git push --all`, may reach any
+          // branch, so any branch you took over in the repository refuses it.
+          const hit =
+            target._tag === "Unnamed"
+              ? claims.find((claim) => claim.scope === "branch")
+              : branchClaim(claims, target._tag === "Current" ? yield* git.currentBranch(top) : target.name);
           if (hit !== undefined) return takenWriteText(hit);
         }
         for (const cwd of writes.commits) {

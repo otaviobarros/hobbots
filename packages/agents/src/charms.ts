@@ -81,6 +81,11 @@ export interface CharmTurn {
   readonly redactor: Redactor;
   /** Asks the user about calls the policy answers Ask for; null, those calls are refused. */
   readonly approvals: TurnApprovals | null;
+  /**
+   * Why the hub refuses a write the user took over (#1449), or null; a Charm's push is asked before
+   * it is decided and again just before it is sent. Absent, no Task's claims were taken here.
+   */
+  readonly takenByYou?: CallSteering["takenByYou"];
 }
 
 /** The longest name a hub tool may have (ADR 031). A longer one is refused, never cut. */

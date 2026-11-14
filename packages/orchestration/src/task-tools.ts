@@ -223,6 +223,7 @@ export class TaskTools extends Context.Service<
                 attemptId: Effect.succeed(turn.attemptId),
               },
               scope: () => callScope.task(caller.taskId),
+              takenByYou,
             },
             { writes: false },
           );

@@ -493,6 +493,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                   currentAccess: currentAccess(agent.id),
                   redactor,
                   approvals: callApprovals,
+                  ...(taskTurn?.takenByYou === undefined ? {} : { takenByYou: taskTurn.takenByYou }),
                 };
                 // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                 const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);

@@ -514,6 +514,13 @@ describe("the claims register", () => {
       expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "refs/heads/camp" }] })).toContain("branch camp");
       expect(await h.takenWrite({ commits: [worktree] })).toContain("branch camp");
       expect(await h.takenWrite({ commits: [checkout] })).toBeNull();
+      // A push that does not name its branches, as `git push --all`, may reach the branch, so it is
+      // refused; one of the checked-out branch is the branch checked out there.
+      expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "(several branches)" }] })).toContain(
+        "branch camp",
+      );
+      expect(await h.takenWrite({ pushes: [{ cwd: worktree, branch: "(current branch)" }] })).toContain("branch camp");
+      expect(await h.takenWrite({ pushes: [{ cwd: checkout, branch: "(current branch)" }] })).toBeNull();
 
       // Sam's claim on a file inside it is contested; what you took over stays yours.
       expect((await h.call(SAM, B, { key: "p", scope: "path", path: "docs/a.md" })).details.state).toBe("contested");
