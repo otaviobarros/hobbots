@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  CampDrift,
   CampSuggestionService,
   CatchUps,
+  ChapterService,
   ChatService,
   ForYouList,
   GrantService,
@@ -42,6 +44,7 @@ import {
   BriefLogLive,
   CampSuggestionRepositoryLive,
   CatchUpRepositoryLive,
+  ChapterRepositoryLive,
   EventJournal,
   ForYouRepositoryLive,
   GrantRepositoryLive,
@@ -56,7 +59,7 @@ import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_HUB_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
@@ -80,11 +83,13 @@ let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeEach(() => {
-  const App = HobLifecycle.layer
+  // The camp suggestion projector offers each suggestion once it named it (#1557), as in the hub.
+  const App = CampDrift.layer
+    .pipe(Layer.provideMerge(HobLifecycle.layer))
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
-    .pipe(Layer.provideMerge(CampSuggestionService.layer))
+    .pipe(Layer.provideMerge(Layer.mergeAll(CampSuggestionService.layer, ChapterService.layer)))
     .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
@@ -100,6 +105,7 @@ beforeEach(() => {
             TaskRepositoryLive,
             RecordRepositoryLive,
             CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
+            ChapterRepositoryLive,
             BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
             PinRepositoryLive,
             CatchUpRepositoryLive,
@@ -251,8 +257,21 @@ describe("camp suggestions over the API", () => {
     }
     const suggestions = async () =>
       (await request<ReadonlyArray<CampSuggestion>>("GET", `/api/threads/${thread.id}/camp-suggestions`)).body;
-    const [open] = await suggestions();
-    expect(open).toMatchObject({ state: "open", reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }] });
+    // Offered once the projector checked its chapter holds one topic and named the camp (#1557).
+    const [open] = await vi.waitFor(
+      async () => {
+        const listed = await suggestions();
+        expect(listed).toHaveLength(1);
+        return listed;
+      },
+      { timeout: 15_000, interval: 200 },
+    );
+    expect(open).toMatchObject({
+      state: "open",
+      reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
+      title: null,
+      goal: null,
+    });
     const keep = `/api/threads/${thread.id}/camp-suggestions/${open?.id}/keep`;
     expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
     expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
@@ -282,7 +301,8 @@ describe("camp suggestions over the API", () => {
     expect(refused).toMatchObject({ status: 409, body: { _tag: "ChapterMoveRefused", reason: "not-a-camp" } });
     const unknown = await request("POST", `/api/threads/${thread.id}/chapters/nope/move`, into);
     expect(unknown).toMatchObject({ status: 404, body: { _tag: "ChapterMissing" } });
-  });
+    // The projector's rounds run every few seconds, so this waits for one.
+  }, 30_000);
 });
 
 describe("the camp sheet over the API", () => {
