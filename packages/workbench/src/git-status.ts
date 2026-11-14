@@ -313,18 +313,18 @@ const packedCommit = async (packed: string, ref: string): Promise<string | null>
 };
 
 /**
- * Writes back the loose ref of a branch only the packed refs hold, with the commit they give it, as
- * Git does to move it (#1537), and under Git's own lock on the ref (`<ref>.lock`, made only if no
- * one holds it): while it is held no Git command moves, deletes or repacks the branch, so the commit
- * is read again under the lock and the ref never comes back stale or deleted. Every folder on the way
- * from the Git folder's `refs/heads` is a folder itself, never a link, made where missing, so the
- * write stays in the repository's refs. Anything unexpected, a lock someone holds included, leaves
- * the ref as it is.
+ * Writes back the loose ref `names` (from the Git folder, `refs` first) of a branch only the packed
+ * refs hold, with the commit they give it, as Git does to move it (#1537), and under Git's own lock on
+ * the ref (`<ref>.lock`, made only if no one holds it): while it is held no Git command moves,
+ * deletes or repacks the branch, so the commit is read again under the lock and the ref never comes
+ * back stale or deleted. Every folder on the way is a folder itself, never a link, made where
+ * missing, so the write stays in the repository's refs. Anything unexpected, a lock someone holds
+ * included, leaves the ref as it is.
  */
 const restoreLooseRef = async (common: string, names: ReadonlyArray<string>) => {
-  let folder = join(common, "refs", "heads");
-  if (!(await plainFolder(join(common, "refs"))) || !(await plainFolder(folder))) return;
-  for (const name of names.slice(0, -1)) {
+  let folder = join(common, "refs");
+  if (!(await plainFolder(folder))) return;
+  for (const name of names.slice(1, -1)) {
     folder = join(folder, name);
     if ((await lstat(folder).catch(() => null)) === null) await mkdir(folder).catch(() => undefined);
     if (!(await plainFolder(folder))) return;
@@ -339,7 +339,7 @@ const restoreLooseRef = async (common: string, names: ReadonlyArray<string>) => 
     const commit =
       (await present(loose)) || (await realpath(folder)) !== folder
         ? null
-        : await packedCommit(join(common, "packed-refs"), `refs/heads/${names.join("/")}`);
+        : await packedCommit(join(common, "packed-refs"), names.join("/"));
     if (commit !== null) {
       await held.writeFile(`${commit}\n`);
       await held.sync();
@@ -354,13 +354,68 @@ const restoreLooseRef = async (common: string, names: ReadonlyArray<string>) => 
 };
 
 /**
+ * What to close when ref `names` exists but has no loose file to close, because Git held its lock or
+ * a link stands on its way: the deepest folder on its way that is a folder itself, so no ref can be
+ * written under it, and the folder a link there leads to.
+ */
+const closedAround = async (common: string, names: ReadonlyArray<string>): Promise<Array<string>> => {
+  let folder = common;
+  for (const name of names.slice(0, -1)) {
+    const next = join(folder, name);
+    if (!(await plainFolder(next))) {
+      const target = (await lstat(next).catch(() => null))?.isSymbolicLink()
+        ? await realpath(next).catch(() => null)
+        : null;
+      return [folder, ...(target === null ? [] : [target])];
+    }
+    folder = next;
+  }
+  return [folder];
+};
+
+/** The ref a symbolic ref at `loose` names (`ref: refs/...`), read from the file itself, if it is one. */
+const symbolicTarget = async (loose: string): Promise<string | null> => {
+  if ((await lstat(loose).catch(() => null))?.isFile() !== true) return null;
+  const text = await readFile(loose, { encoding: "utf8", flag: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW });
+  const target = /^ref: (refs\/\S+)\s*$/.exec(text)?.[1];
+  return target ?? null;
+};
+
+/** How many symbolic refs `refFiles` follows from one branch, as Git stops after a few. */
+const MAX_SYMBOLIC_DEPTH = 5;
+
+/** The files whose change moves ref `ref` (`refs/...`) in the Git folder `common` (see `branchFiles`). */
+const refFiles = async (common: string, ref: string, depth: number): Promise<Array<string>> => {
+  const names = ref.split("/");
+  // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
+  if (names.some((name) => name === "" || name === "." || name === ".." || name.endsWith(".lock"))) return [];
+  const loose = join(common, ...names);
+  const packed = join(common, "packed-refs");
+  if (!(await present(loose)) && (await present(packed))) await restoreLooseRef(common, names);
+  if (await present(loose)) {
+    const target = depth < MAX_SYMBOLIC_DEPTH ? await symbolicTarget(loose).catch(() => null) : null;
+    // A link as the ref itself is closed with its folder, since a write may go through it.
+    const link = (await lstat(loose).catch(() => null))?.isSymbolicLink() === true;
+    return [
+      ...(link ? await closedAround(common, [...names, ""]) : [loose]),
+      ...(target === null ? [] : await refFiles(common, target, depth + 1)),
+    ];
+  }
+  // The branch is in the packed refs, but its loose ref could not be written back: close around it.
+  const packedOnly = (await packedCommit(packed, ref).catch(() => null)) !== null;
+  return packedOnly ? await closedAround(common, names) : [];
+};
+
+/**
  * The files whose change moves branch `branch` of the repository whose top is `top` (#1537), in the
  * Git folder the repository's worktrees share: its loose ref, and the packed refs, which Git rewrites
  * to delete or repack a branch; or the whole ref table, in a repository that keeps its refs in one,
  * since each of its files may hold any branch. A branch that only the packed refs hold gets its loose
  * ref written back first (`restoreLooseRef`): a ref file the sandbox closes then stands where Git
- * would write. Only files that are there are named, since a sandbox cannot close a missing file
- * without hiding it from Git's reads; a branch not made yet is left to the call-level check (#1449).
+ * would write. When that cannot be done, the folder around it is closed instead, and a branch that is
+ * a symbolic ref has the ref it names closed too. Only files that are there are named, since a sandbox
+ * cannot close a missing file without hiding it from Git's reads; a branch not made yet is left to the
+ * call-level check (#1449).
  */
 const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<string>> => {
   const repository = await repositoryOf(top, new Map());
@@ -370,14 +425,8 @@ const branchFiles = async (top: string, branch: string): Promise<ReadonlyArray<s
   const table = join(common, "reftable");
   if ((await lstat(table).catch(() => null))?.isDirectory() === true) return [table];
   const packed = join(common, "packed-refs");
-  const names = branch.split("/");
-  // Git refuses such a name, so no loose ref can have it; it never names a file outside the refs.
-  if (names.some((name) => name === "" || name === "." || name === ".." || name.endsWith(".lock"))) {
-    return (await present(packed)) ? [packed] : [];
-  }
-  const loose = join(common, "refs", "heads", ...names);
-  if (!(await present(loose)) && (await present(packed))) await restoreLooseRef(common, names);
-  return [...((await present(loose)) ? [loose] : []), ...((await present(packed)) ? [packed] : [])];
+  const files = await refFiles(common, `refs/heads/${branch}`, 0);
+  return [...new Set([...files, ...((await present(packed)) ? [packed] : [])])];
 };
 
 /** The hub's reader of Git state. */

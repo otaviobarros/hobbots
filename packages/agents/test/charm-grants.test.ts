@@ -8,7 +8,7 @@ import {
   type HobPolicy,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { hobCharms, lostAuthority, narrows, policyLoss, type ToolAccess } from "../src/index.ts";
+import { hobCharms, lostAuthority, narrows, policyLoss, type ToolAccess, takesMore } from "../src/index.ts";
 
 // A hob's Charms are a set of Charm ids (ADR 031): taking one away stops its running turn and
 // revokes the grants that relied on it, and skills match their Charm hints against the set.
@@ -107,5 +107,19 @@ describe("a hob's Charms", () => {
     expect(hobCharms(policy(undefined))).toEqual(["github"]);
     expect(hobCharms(policy({ granted: ["github", "pip", "github"] }))).toEqual(["github", "pip"]);
     expect(hobCharms(policy({ granted: [] }))).toEqual([]);
+  });
+});
+
+describe("what you took over, for a running turn", () => {
+  // covers PE-005, OR-006, #1537
+  it("[TC-OR-1537-08] stops a turn only for a path its sandbox left open, not one inside a folder it already closed", () => {
+    const base = access(policy(undefined));
+    const closing = (...taken: Array<string>): ToolAccess => ({ ...base, taken });
+    expect(takesMore(closing(), closing("/work/repo/docs"))).toBe(true);
+    expect(takesMore(closing("/work/repo/docs"), closing("/work/repo/docs", "/work/repo/docs/plan.md"))).toBe(false);
+    expect(takesMore(closing("/work/repo/docs"), closing("/work/repo/docs-old"))).toBe(true);
+    expect(takesMore(closing("/work/repo/docs/plan.md"), closing("/work/repo/docs"))).toBe(true);
+    expect(takesMore(closing("C:\\work\\docs"), closing("C:\\work\\docs\\plan.md"))).toBe(false);
+    expect(takesMore(closing("/work/repo/docs"), closing())).toBe(false);
   });
 });

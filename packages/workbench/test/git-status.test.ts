@@ -185,7 +185,7 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
   });
 
   // covers PE-005, #1537
-  it("[TC-PE-1537-07] leaves a packed-only branch's loose ref unwritten while Git holds its lock or a link stands in its path", async () => {
+  it("[TC-PE-1537-07] leaves a packed-only branch's loose ref unwritten while Git holds its lock or a link stands in its path, and closes the folder around it instead", async () => {
     const repo = join(work, "locked");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q", "-b", "main");
@@ -196,17 +196,34 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     gitIn(repo, "pack-refs", "--all");
     const heads = join(repo, ".git", "refs", "heads");
     const packed = join(repo, ".git", "packed-refs");
-    // Git is moving the branch: its lock is held, so nothing is written over it.
+    // Git is moving the branch: its lock is held, so nothing is written over it, and the folder
+    // Git would publish the ref in is closed.
     mkdirSync(join(heads, "feat"), { recursive: true });
     write(join(heads, "feat", "shop.lock"), "moving\n");
-    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([packed]);
+    expect(await read((git) => git.branchFiles(repo, "feat/shop"))).toEqual([join(heads, "feat"), packed]);
     expect(existsSync(join(heads, "feat", "shop"))).toBe(false);
     expect(readFileSync(join(heads, "feat", "shop.lock"), "utf8")).toBe("moving\n");
-    // A link where a folder of the ref should be is never followed out of the repository.
+    // A link where a folder of the ref should be is never followed out of the repository: the folder
+    // it stands in and the folder it leads to are closed.
     const outside = join(work, "outside");
     mkdirSync(outside);
     symlinkSync(outside, join(heads, "side"));
-    expect(await read((git) => git.branchFiles(repo, "side/shop"))).toEqual([packed]);
+    expect(await read((git) => git.branchFiles(repo, "side/shop"))).toEqual([heads, outside, packed]);
     expect(readdirSync(outside)).toEqual([]);
+  });
+
+  // covers PE-005, #1537
+  it("[TC-PE-1537-09] closes the ref a symbolic branch names, since moving it moves the branch", async () => {
+    const repo = join(work, "symbolic");
+    write(join(repo, "a.md"), "a\n");
+    gitIn(repo, "init", "-q", "-b", "main");
+    gitIn(repo, "add", ".");
+    gitIn(repo, "commit", "-q", "-m", "one");
+    gitIn(repo, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
+    gitIn(repo, "symbolic-ref", "refs/heads/loop", "refs/heads/loop");
+    const heads = join(repo, ".git", "refs", "heads");
+    expect(await read((git) => git.branchFiles(repo, "alias"))).toEqual([join(heads, "alias"), join(heads, "main")]);
+    // A ref that names itself is followed only a few times.
+    expect(await read((git) => git.branchFiles(repo, "loop"))).toEqual([join(heads, "loop")]);
   });
 });

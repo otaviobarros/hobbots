@@ -76,8 +76,12 @@ const summoningScopeNarrows = (before: ToolPolicy["hob"], after: ToolPolicy["hob
  */
 export const takesMore = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
   if (before === null || after === null) return false;
-  const closed = new Set(before.taken ?? []);
-  return (after.taken ?? []).some((path) => !closed.has(path));
+  const closed = before.taken ?? [];
+  // A path already closed, or inside a folder already closed, was never open to the turn.
+  const within = (path: string, folder: string) =>
+    path === folder ||
+    ["/", "\\"].some((separator) => path.startsWith(folder.endsWith(separator) ? folder : folder + separator));
+  return (after.taken ?? []).some((path) => !closed.some((folder) => within(path, folder)));
 };
 
 /**
