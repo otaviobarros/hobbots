@@ -189,8 +189,12 @@ export function ChatView({
   // Only the thread's latest reply can be continued, and only while nothing else runs; a note after
   // it changes nothing.
   const latest = transcript?.findLast((m) => m.role !== "note");
+  // The hob that wrote it continues it, so its own status decides (ADR 039).
+  const allHobs = useQuery(agentsQuery).data;
+  const latestAuthor =
+    latest !== undefined && hob.data !== undefined ? replyAuthor(latest, hob.data, allHobs) : undefined;
   const resumable =
-    latest?.role === "assistant" && isResumable(latest.status) && !streaming && hob.data?.status === "active"
+    latest?.role === "assistant" && isResumable(latest.status) && !streaming && latestAuthor?.status === "active"
       ? latest
       : undefined;
 
