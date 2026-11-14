@@ -57,6 +57,7 @@ import {
   ToolLogNotFound,
 } from "./errors.ts";
 import { ExportsGroup } from "./export.ts";
+import { ForYouGroup } from "./for-you.ts";
 import { GitHubGroup } from "./github.ts";
 import { HobChangesGroup } from "./hob-changes.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
@@ -495,6 +496,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(RecordsGroup)
   .add(CampSuggestionsGroup)
   .add(NotesGroup)
+  .add(ForYouGroup)
   .add(ClaimsGroup)
   .add(SystemGroup)
   .add(SetupGroup)

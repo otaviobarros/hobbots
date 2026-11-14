@@ -32,7 +32,7 @@ import { sqlOrDie } from "./sql-errors.ts";
 // journal folds into the summaries of the Quests whose Tasks made it.
 
 /** A row of `decisions`, as the SQL client reads it. */
-interface DecisionRow {
+export interface DecisionRow {
   readonly id: string;
   readonly threadId: string;
   readonly chapterId: string;
@@ -51,7 +51,7 @@ interface DecisionRow {
 const decode = Schema.decodeUnknownEffect(Decision);
 
 /** A stored decision; a row that does not decode is a defect, since the hub wrote it. */
-const decisionFromRow = (row: DecisionRow) =>
+export const decisionFromRow = (row: DecisionRow) =>
   decode({
     id: row.id,
     threadId: row.threadId,

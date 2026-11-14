@@ -85,6 +85,16 @@ Each is written in the same transaction and journal as the message that made it,
 
 A note to self is a message role that never wakes the dispatcher.
 
+
+### For you
+
+One list per person of what is theirs to act on ([ADR 039](../decisions/039-shared-camps.md#cards-every-thread-shares)), topped by "While you were away". Built in [#1456](https://github.com/otaviobarros/hobbots/issues/1456); the screens that show it are [#1470](https://github.com/otaviobarros/hobbots/issues/1470).
+
+- `GET /api/for-you` answers `ForYouRead`: the stream cursor, then `ForYou` for the person whose device asks, read from the session's user, never a fixed owner. It is worked out by the pure `forYouOf` in `@hobbots/domain`, with no model call.
+- **Items.** Each `ForYouItem` names who it is `for` (an actor) and when it started waiting, and the list is oldest first: `Mention` (a message that mentions you past your read marker, by the same rule as the unread-mention count), `Question` (a Task's question that climbed every lead), `HubQuestion` (the hub's own, for its owner), `Approval` and `Review` (an artifact waiting for review). Questions, approvals and reviews go to their decider, `deciderOf`: the person who asked for the work, else the thread's owner member, else the hub's owner (`hubOwner` in `@hobbots/agents`). No record names a requester yet, so today it is the thread's owner.
+- **While you were away** lists, for each thread you are an active member of with news, `ThreadAway`: your marker and the changes since it, the latest change first. It is the same `awaySummaryOf` catch-up uses, so both list the same mentions, decisions and changed artifacts for the same records and read marker, and both leave out what you wrote yourself. Catch-up gained `Mentioned`, a message that mentions you.
+- Persistence reads it in a few queries across your memberships (`ForYouRepositoryLive`): the messages that mention you, the decisions and artifacts past your marker, and the Quests of threads whose summaries changed since; then every pending approval, waiting question and artifact waiting for review, with each thread's owner.
+- The tray, the Inbox page and catch-up still read their own sources until #1470 moves the screens onto this list.
 ### The camp sheet, notes, pins and catch-up
 
 Built in [#1387](https://github.com/otaviobarros/hobbots/issues/1387).

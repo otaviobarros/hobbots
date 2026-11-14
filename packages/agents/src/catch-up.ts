@@ -3,6 +3,7 @@ import { type CatchUp, type CatchUpQuest, catchUpOf, type ThreadId } from "@hobb
 import { Context, Effect, Layer, Option } from "effect";
 import { RecordRepository } from "./records.ts";
 import { HobbotsRepository } from "./repository.ts";
+import { sessionActor } from "./users.ts";
 
 /**
  * Catch-up (ADR 037): what changed in a chat or camp since you last read it, worked out on the hub
@@ -36,6 +37,7 @@ export class CatchUps extends Context.Service<
         of: Effect.fn("CatchUps.of")(function* (threadId: ThreadId) {
           if (Option.isNone(yield* repo.findThread(threadId))) return yield* new ThreadNotFound({ threadId });
           return catchUpOf({
+            you: yield* sessionActor,
             marker: yield* reads.marker(threadId),
             messages: yield* repo.listMessages(threadId),
             decisions: Option.isNone(records) ? [] : yield* records.value.listDecisions(threadId),

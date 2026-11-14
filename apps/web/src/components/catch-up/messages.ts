@@ -23,12 +23,14 @@ export const messages = {
     plural(count, { one: "And 1 more change", other: `And ${formatCount(count)} more changes` }),
   tag: {
     replies: "New",
+    mentioned: "Mentions you",
     needsYou: "Needs you",
     ended: "Ready",
     decided: "Decided",
     changed: "Changed",
     made: "Made",
   },
+  mentioned: ({ excerpt }: { readonly excerpt: string }) => excerpt,
   needsYou: ({ goal, count }: { readonly goal: string } & Counted) =>
     plural(count, { one: `${goal} waits on you`, other: `${goal}: ${formatCount(count)} things wait on you` }),
   ended: {
