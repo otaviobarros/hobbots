@@ -5,20 +5,52 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-/** Sends one message to Aldric and waits for his turn to end. */
+/** The chat's thread, from the page's address once the first message made it. */
+const threadOf = (page: Page) => /\/threads\/([^/?]+)/.exec(page.url())?.[1];
+
+/**
+ * Sends one message to Aldric and waits until his reply to it is complete. The hub may wake him
+ * first on its own, when his last turn left the Quest with nothing moving it (#1081): the message
+ * then waits for that turn, so the Stop button alone does not tell whose turn ended. The fake echoes
+ * the long brief of each turn word by word, so each takes seconds.
+ */
 const send = async (page: Page, lines: ReadonlyArray<string>) => {
+  const content = lines.join("\n");
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
-  await composer.fill(lines.join("\n"));
+  await composer.fill(content);
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+  await expect(composer).toHaveValue("");
+  await expect
+    .poll(
+      async () => {
+        const thread = threadOf(page);
+        if (thread === undefined) return false;
+        const messages = (await (
+          await page.request.get(`${new URL(page.url()).origin}/api/threads/${thread}/messages`)
+        ).json()) as ReadonlyArray<{
+          id: string;
+          role: string;
+          content: string;
+          status: string;
+          promptId: string | null;
+        }>;
+        const asked = messages.find((message) => message.role === "user" && message.content === content);
+        return messages.some(
+          (message) => message.role === "assistant" && message.promptId === asked?.id && message.status === "complete",
+        );
+      },
+      { timeout: 60_000 },
+    )
+    .toBe(true);
 };
 
 // covers EX-001, OR-003, UX-002
 test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its Workbench keeps what each turn changed", async ({
   page,
 }) => {
+  // Three sends, each of which may wait for one turn ahead of its own.
+  test.setTimeout(150_000);
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
 
@@ -41,19 +73,21 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
   const questTicket = ticket(page, "Tidy the notes");
   await expect(questTicket).toContainText("Finished in", { timeout: 30_000 });
 
-  // The hub kept one Attempt of the Task for all three turns.
-  const thread = /\/threads\/([^/?]+)/.exec(page.url())?.[1];
-  const read = await page.request.get(`${url}/api/threads/${thread}/tasks`);
-  const { trees } = (await read.json()) as {
-    trees: ReadonlyArray<{
-      tasks: ReadonlyArray<{ id: string }>;
-      attempts: ReadonlyArray<{ taskId: string; number: number; state: string }>;
-    }>;
+  // The hub kept one Attempt of the Task for all three turns, completed once the last turn ended.
+  const attempts = async () => {
+    const read = await page.request.get(`${url}/api/threads/${threadOf(page)}/tasks`);
+    const { trees } = (await read.json()) as {
+      trees: ReadonlyArray<{
+        tasks: ReadonlyArray<{ id: string }>;
+        attempts: ReadonlyArray<{ taskId: string; number: number; state: string }>;
+      }>;
+    };
+    const top = trees[0]?.tasks[0]?.id;
+    return trees[0]?.attempts
+      .filter((attempt) => attempt.taskId === top)
+      .map(({ number, state }) => ({ number, state }));
   };
-  const top = trees[0]?.tasks[0]?.id;
-  expect(trees[0]?.attempts.filter((attempt) => attempt.taskId === top)).toMatchObject([
-    { number: 1, state: "completed" },
-  ]);
+  await expect.poll(attempts).toEqual([{ number: 1, state: "completed" }]);
 
   // Its Workbench offers no Attempt to pick, and its lane's summary shows what both turns changed.
   await openWorkbench(page, questTicket);
