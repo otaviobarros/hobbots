@@ -24,6 +24,10 @@ export const makeRepositoryIdentity = (separator: PathSeparator) =>
           : Effect.succeed(memoryProjectIdentity(null, lastName(top, separator))),
   );
 
+/** Two paths inside a repository joined, where "" is its top folder. */
+const joinedInside = (folder: string, path: string) =>
+  folder === "" ? path : path === "" ? folder : `${folder}/${path}`;
+
 /** Pushes whose words name the checked-out branch, as the runtimes' Push requests spell them. */
 const CURRENT_BRANCH = new Set(["(current branch)", "(HEAD)", "(@)", "(+HEAD)", "(+@)"]);
 
@@ -101,14 +105,23 @@ export const makeTakenWrites = (separator: PathSeparator) =>
             const top = yield* git.repository(cwd);
             return top === null ? undefined : yield* pick(top, yield* takenAt(top));
           });
+        // A repository inside another, such as a submodule, is also a folder of the one around it, so
+        // a write there is checked against the claims of every repository it lies in.
         const placeHit = (path: string, name = "") =>
           Effect.gen(function* () {
-            const place = yield* git.placeOf(path);
-            if (place === null) return undefined;
-            const inside = name === "" ? place.path : place.path === "" ? name : `${place.path}/${name}`;
-            for (const claim of yield* takenAt(place.top)) {
-              const keys = claim.scope === "path" ? yield* keysOf(place.top, claim.key) : [];
-              if (keys.some((key) => touchesKey(key, inside))) return claim;
+            let place = yield* git.placeOf(path);
+            let inside = place === null ? "" : joinedInside(place.path, name);
+            while (place !== null) {
+              for (const claim of yield* takenAt(place.top)) {
+                const keys = claim.scope === "path" ? yield* keysOf(place.top, claim.key) : [];
+                if (keys.some((key) => touchesKey(key, inside))) return claim;
+              }
+              const at = place.top.lastIndexOf(separator);
+              if (at <= 0) return undefined;
+              const outer = yield* git.placeOf(place.top.slice(0, at));
+              if (outer === null || outer.top.length >= place.top.length) return undefined;
+              inside = joinedInside(joinedInside(outer.path, lastName(place.top, separator)), inside);
+              place = outer;
             }
             return undefined;
           });

@@ -82,7 +82,10 @@ const text = (input: Record<string, unknown>, key: string): string | undefined =
 type Separator = ";" | "&&" | "||" | "|" | "&" | "(" | ")";
 
 /** One piece of a command line: a simple command's words, or the separator between commands. */
-type CommandToken = { readonly words: ReadonlyArray<string> } | { readonly separator: Separator };
+/** A simple command's words, and the files its `>` redirections write, as written; or a separator. */
+type CommandToken =
+  | { readonly words: ReadonlyArray<string>; readonly writes: ReadonlyArray<string> }
+  | { readonly separator: Separator };
 
 /** The quoted text from `start` up to the closing `quote`, and where reading carries on. */
 const readQuoted = (command: string, start: number, quote: "'" | '"'): { text: string; next: number } => {
@@ -119,18 +122,25 @@ const REDIRECTION = /^(\d*|&)(>>|>\||>&|>|<<<|<<|<&|<>|<)/;
  * The words of one simple command as they are read, with redirections left out. `plain` is the part
  * of the word before its first quote or escape: only an operator there is a redirection, so
  * `rm '>' file` still names both files while `2>"log"` is a redirection with a quoted target. A bare
- * operator (`> out`) also takes the next word, its target.
+ * operator (`> out`) also takes the next word, its target. `writes` keeps the targets of the
+ * operators that write a file, such as `>`, `>>` or `&>`, but not a descriptor's copy (`2>&1`).
  */
 const commandWords = () => {
   const words: Array<string> = [];
-  let target = false;
+  const writes: Array<string> = [];
+  let target: "none" | "skip" | "write" = "none";
   return {
     words,
+    writes,
     add: (word: string, plain: string) => {
       const operator = REDIRECTION.exec(plain)?.[0];
-      if (target) target = false;
-      else if (operator === undefined) words.push(word);
-      else target = operator === word && plain === word;
+      const writing = operator?.includes(">") === true && !operator.endsWith("&");
+      if (target !== "none") {
+        if (target === "write") writes.push(word);
+        target = "none";
+      } else if (operator === undefined) words.push(word);
+      else if (operator === word && plain === word) target = writing ? "write" : "skip";
+      else if (writing) writes.push(word.slice(operator.length));
     },
   };
 };
@@ -155,7 +165,8 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
   };
   const endCommand = () => {
     endWord();
-    if (current.words.length > 0) tokens.push({ words: current.words });
+    if (current.words.length > 0 || current.writes.length > 0)
+      tokens.push({ words: current.words, writes: current.writes });
     current = commandWords();
   };
   const take = (text: string) => {
@@ -624,7 +635,7 @@ export const commandRequests = (
   const folders = folderFlow(cwd, home);
   // The reader splits a line it can read where this does, so its commands line up one to one.
   const read = readCommandLine(command);
-  const simple = tokens.filter((token) => "words" in token).length;
+  const simple = tokens.filter((token) => "words" in token && token.words.length > 0).length;
   const literal = read !== null && read.length === simple ? read : null;
   const plain = !/[<>]/.test(command);
   let position = 0;
@@ -633,6 +644,8 @@ export const commandRequests = (
       folders.separator(token.separator);
       return;
     }
+    // A bare redirection such as `> out` runs no program.
+    if (token.words.length === 0) return;
     const literalWords = literal?.[position++] ?? null;
     // A wrapper such as `command cd` still moves the shell, so the flow sees the unwrapped words.
     const preview = unwrap(token.words, cwd, home).words;
@@ -1134,17 +1147,6 @@ export const commandWritesTo = (
     const path = isAbsolute(word) ? word : relative && word !== "" ? joinedAsWritten(at, word) : null;
     if (path !== null && matches(path)) found.add(path);
   };
-  const raw = rawTokens(command);
-  raw.forEach((token, index) => {
-    if (!("word" in token)) return;
-    const operator = REDIRECTION.exec(token.word)?.[0];
-    if (operator === undefined || !operator.includes(">") || operator.endsWith("&")) return;
-    const rest = token.word.slice(operator.length);
-    const next = raw[index + 1];
-    const target = rest !== "" ? rest : next !== undefined && "word" in next ? next.word : "";
-    // A redirection's folder after a `cd` is not followed here; it is read from the call's folder.
-    add(unquoted(target), cwd);
-  });
   const tokens = commandLine(command);
   const folders = folderFlow(cwd, home);
   tokens.forEach((token, index) => {
@@ -1153,6 +1155,8 @@ export const commandWritesTo = (
       return;
     }
     const shell = folders.command(unwrap(token.words, cwd, home).words, separatorOf(tokens[index + 1]));
+    // The shell opens a redirection's file in its own folder, after any `cd` before it on the line.
+    for (const write of token.writes) add(write, shell);
     const { words, folder } = unwrap(token.words, shell, home);
     const [name, ...args] = words;
     if (name !== undefined && PATH_WRITERS.has(basename(name))) {
