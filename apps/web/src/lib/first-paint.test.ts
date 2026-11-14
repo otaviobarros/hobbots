@@ -44,9 +44,8 @@ describe("first paint", () => {
     expect(firstPaint({ stored: { "hobbots.theme": "not json" } }).theme).toBe("workshop-night");
   });
 
-  it("opens the sidebar only when this device keeps it open", () => {
-    expect(firstPaint({ stored: { "sidebar.open": "true" } }).sidebar).toBe("open");
-    expect(firstPaint({ stored: { "sidebar.open": "false" } }).sidebar).toBeUndefined();
+  it("keeps no sidebar choice: the window's width sets the sidebar's (#1469)", () => {
+    expect(firstPaint({ stored: { "sidebar.open": "true" } }).sidebar).toBeUndefined();
     expect(firstPaint({}).sidebar).toBeUndefined();
   });
 

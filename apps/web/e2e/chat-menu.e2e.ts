@@ -1,4 +1,4 @@
-import { campAt, expandSidebar, expect, sidebarThread, test } from "./hub.ts";
+import { campAt, expect, sidebarThread, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #510: the chat header's ⋯ menu renames the chat in place, pins it to the top, searches it,
@@ -9,9 +9,7 @@ test.afterEach(stopAldricHub);
 // covers CH-001, UX-001
 test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searches it, opens the hob's page and archives it with Undo", async ({
   page,
-  context,
 }) => {
-  await expandSidebar(context);
   const { url, aldric, hub } = await aldricHub();
   // The hob's chat and a camp, so archiving the camp moves to the chat. Only a camp is renamed and pinned.
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -24,7 +22,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
     await composer.fill(prompt);
     await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");
-    await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }
   const chat = page.url();
   const header = page.getByRole("main", { name: "Chat" }).locator("header").first();

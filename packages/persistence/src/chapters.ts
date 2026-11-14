@@ -1,15 +1,14 @@
-import { ChapterRepository } from "@hobbots/agents";
+import { ChapterRepository, type SplitInput } from "@hobbots/agents";
 import {
   Chapter,
   ChapterId,
   type ChapterNotFound,
   type ChapterPlan,
-  type ChapterRefused,
+  ChapterRefused,
   ChapterStates,
   firstChapter,
   type IllegalChapterTransition,
   type JournaledEvent,
-  type MessageId,
   planMerge,
   planSplit,
   planStart,
@@ -17,8 +16,10 @@ import {
   type Thread,
   type ThreadId,
 } from "@hobbots/domain";
-import { DateTime, Effect, Layer, Schema } from "effect";
+import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
+import { reconcileSplit } from "./camp-suggestion-rows.ts";
+import { chapterRows, messagesRevisionOf } from "./chapter-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { keepReadersRead } from "./thread-member-rows.ts";
 
@@ -77,11 +78,6 @@ export const writeChapters = (sql: SqlClient.SqlClient, plan: ChapterPlan) =>
         revision = excluded.revision`,
     { discard: true },
   );
-
-// PostgreSQL reads BIGINT as a bigint and SQLite as a number; every number and revision fits a number.
-const decodeChapters = Schema.decodeUnknownSync(Schema.Array(Chapter));
-export const chapterRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
-  decodeChapters(rows.map((row) => ({ ...row, number: Number(row.number), revision: Number(row.revision) })));
 
 /** What a command writes: its plan, and the events that journal it. */
 type Written = { readonly value: ChapterPlan; readonly events: ReadonlyArray<JournaledEvent> };
@@ -210,7 +206,7 @@ export const ChapterRepositoryLive = Layer.effect(
         }),
       );
 
-    const splitChapter = (threadId: ThreadId, input: { id: ChapterId; messageId: MessageId; title: string }) =>
+    const splitChapter = (threadId: ThreadId, input: SplitInput) =>
       making(threadId, input.id, (first, chapters) =>
         Effect.gen(function* () {
           const [at] = yield* sql<{
@@ -231,6 +227,18 @@ export const ChapterRepositoryLive = Layer.effect(
                   createdAt: at.createdAt,
                   first: Number(at.first) === 1,
                 };
+          // A split the hub judged lands only on the chapter it judged, as it read it (#1557).
+          const cut = chapters.find((chapter) => chapter.id === point?.chapterId);
+          const { judged } = input;
+          const messagesMoved =
+            judged?.messagesRevision !== undefined &&
+            (yield* messagesRevisionOf(sql, judged.chapterId)) !== judged.messagesRevision;
+          if (
+            judged !== undefined &&
+            (cut?.id !== judged.chapterId || cut.revision !== judged.revision || messagesMoved)
+          ) {
+            return yield* Effect.fail(new ChapterRefused({ threadId, reason: "chapter-changed" }));
+          }
           const plan = yield* planOrFail(planSplit(threadId, chapters, point, input), first);
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;
@@ -245,7 +253,10 @@ export const ChapterRepositoryLive = Layer.effect(
             messageId: input.messageId,
             chapters: plan.chapters,
           };
-          return { value: plan, events: [event] };
+          // The cut chapter's pending camp suggestion is withdrawn when the split was made for it or
+          // its thresholds went with the part, which is suggested on its own counts, here (#1557).
+          const settled = yield* reconcileSplit(sql, from, input.id, first + 1, input.withdraw);
+          return { value: plan, events: [event, ...settled] };
         }),
       );
 

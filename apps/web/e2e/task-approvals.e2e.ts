@@ -135,7 +135,7 @@ test("[TC-IN-153] a party member's request in the Inbox offers This quest, and i
     ].join("\n"),
   );
   await composer.press("Enter");
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click({ timeout: 20_000 });
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click({ timeout: 20_000 });
   await page
     .getByRole("list", { name: "Requests" })
     .getByRole("link", { name: /Push your work/ })

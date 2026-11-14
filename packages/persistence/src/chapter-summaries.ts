@@ -2,7 +2,7 @@ import { ChapterSummaryLog, type ChapterSummaryWrite } from "@hobbots/agents";
 import { Chapter, ChapterStateMachine, IllegalChapterTransition, type JournaledEvent } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
-import { chapterRows } from "./chapters.ts";
+import { chapterRows } from "./chapter-rows.ts";
 import { EventJournal, makeJournaledChange } from "./journal.ts";
 import { moveProjectorCursor, projectorCursor } from "./projector-cursors.ts";
 import { sqlOrDie } from "./sql-errors.ts";

@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  CampDrift,
   CampSuggestionService,
   CatchUps,
+  ChapterService,
   ChatService,
   ForYouList,
   GrantService,
@@ -17,8 +19,9 @@ import {
   Records,
   RecordToolsLive,
   SecretRedaction,
+  SidebarList,
 } from "@hobbots/agents";
-import type { ForYouRead } from "@hobbots/api";
+import type { ForYouRead, SidebarRead } from "@hobbots/api";
 import {
   type Agent,
   CAMP_SUGGESTION_DECISIONS,
@@ -26,6 +29,7 @@ import {
   type CatchUp,
   type ChapterMove,
   type Decision,
+  hobActor,
   isInProgress,
   type Message,
   type MessagePin,
@@ -42,6 +46,7 @@ import {
   BriefLogLive,
   CampSuggestionRepositoryLive,
   CatchUpRepositoryLive,
+  ChapterRepositoryLive,
   EventJournal,
   ForYouRepositoryLive,
   GrantRepositoryLive,
@@ -51,16 +56,19 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
+  ThreadMemberRepositoryLive,
+  UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_HUB_DIRECTIVE, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { BlockedWorkLive } from "../src/sidebar.ts";
 import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
@@ -80,12 +88,23 @@ let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeEach(() => {
-  const App = HobLifecycle.layer
+  // The camp suggestion projector offers each suggestion once it named it (#1557), as in the hub.
+  const App = CampDrift.layer
+    .pipe(Layer.provideMerge(HobLifecycle.layer))
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(RecordToolsLive.pipe(Layer.provideMerge(Records.layer))))
-    .pipe(Layer.provideMerge(CampSuggestionService.layer))
-    .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer, ForYouList.layer)))
+    .pipe(Layer.provideMerge(Layer.mergeAll(CampSuggestionService.layer, ChapterService.layer)))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Notes.layer,
+          CatchUps.layer,
+          ForYouList.layer,
+          SidebarList.layer.pipe(Layer.provide(BlockedWorkLive)),
+        ),
+      ),
+    )
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
@@ -100,10 +119,13 @@ beforeEach(() => {
             TaskRepositoryLive,
             RecordRepositoryLive,
             CampSuggestionRepositoryLive.pipe(Layer.provide(EventJournal.layer)),
+            ChapterRepositoryLive,
             BriefLogLive.pipe(Layer.provide(EventJournal.layer)),
             PinRepositoryLive,
             CatchUpRepositoryLive,
             ForYouRepositoryLive,
+            ThreadMemberRepositoryLive,
+            UserRepositoryLive,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -251,8 +273,21 @@ describe("camp suggestions over the API", () => {
     }
     const suggestions = async () =>
       (await request<ReadonlyArray<CampSuggestion>>("GET", `/api/threads/${thread.id}/camp-suggestions`)).body;
-    const [open] = await suggestions();
-    expect(open).toMatchObject({ state: "open", reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }] });
+    // Offered once the projector checked its chapter holds one topic and named the camp (#1557).
+    const [open] = await vi.waitFor(
+      async () => {
+        const listed = await suggestions();
+        expect(listed).toHaveLength(1);
+        return listed;
+      },
+      { timeout: 15_000, interval: 200 },
+    );
+    expect(open).toMatchObject({
+      state: "open",
+      reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
+      title: null,
+      goal: null,
+    });
     const keep = `/api/threads/${thread.id}/camp-suggestions/${open?.id}/keep`;
     expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
     expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
@@ -282,7 +317,8 @@ describe("camp suggestions over the API", () => {
     expect(refused).toMatchObject({ status: 409, body: { _tag: "ChapterMoveRefused", reason: "not-a-camp" } });
     const unknown = await request("POST", `/api/threads/${thread.id}/chapters/nope/move`, into);
     expect(unknown).toMatchObject({ status: 404, body: { _tag: "ChapterMissing" } });
-  });
+    // The projector's rounds run every few seconds, so this waits for one.
+  }, 30_000);
 });
 
 describe("the camp sheet over the API", () => {
@@ -373,5 +409,50 @@ describe("the camp sheet over the API", () => {
     await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
     const made = await request<Thread>("PUT", "/api/threads/camp-private/private", { private: true });
     expect(made).toMatchObject({ status: 200, body: { id: "camp-private", private: true } });
+  });
+});
+
+describe("the sidebar over the API", () => {
+  // covers ADR 039 (The sidebar), #1469
+  it("[TC-UX-1469-01] lists a hob's chat in Direct messages and its camps in Camps, with your unread replies, sorted on every read", async () => {
+    const { pip, thread } = await pipWithThread();
+    await exchange(thread, "Hello.");
+    const camp = await request<Thread>("POST", `/api/agents/${pip.id}/camps`, {
+      key: "launch",
+      title: "Launch",
+      goal: null,
+      private: false,
+    });
+    expect(camp.status).toBe(200);
+    const read = (await request<SidebarRead>("GET", "/api/sidebar")).body;
+    expect(read.you).toMatchObject({ id: "owner" });
+    expect(read.people).toEqual([]);
+    expect(read.sidebar.directMessages).toEqual([
+      {
+        threadId: thread.id,
+        agentId: pip.id,
+        section: "direct-message",
+        others: [hobActor(pip.id)],
+        unread: 1,
+        mentions: 0,
+        needsYou: false,
+      },
+    ]);
+    expect(read.sidebar.camps).toEqual([
+      {
+        threadId: "launch",
+        agentId: pip.id,
+        section: "hob-camp",
+        others: [hobActor(pip.id)],
+        unread: 0,
+        mentions: 0,
+        needsYou: false,
+      },
+    ]);
+    // Reading the chat clears its count on the next read: nothing about the sidebar was stored.
+    const last = (await messages(thread)).at(-1);
+    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
+    const again = (await request<SidebarRead>("GET", "/api/sidebar")).body;
+    expect(again.sidebar.directMessages[0]?.unread).toBe(0);
   });
 });

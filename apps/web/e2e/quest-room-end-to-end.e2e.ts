@@ -116,7 +116,7 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
   await expect(ticket(page, quest)).not.toContainText("need you", { timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox/ }),
+    page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^For you/ }),
   ).not.toHaveAccessibleName(/waiting on you/);
   await scan();
 });
@@ -130,7 +130,8 @@ test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its
   scan,
 }) => {
   test.setTimeout(240_000);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  // Wide enough that the Workbench lists its changed files beside the open sidebar.
+  await page.setViewportSize({ width: 1440, height: 900 });
   stop = stopAldricHub;
   const { url, aldric, members, api, hub, folder } = await aldricHub(undefined, ["Quill", "Ada"]);
   for (const member of members) await api("PATCH", `/agents/${member}/permissions`, { ownFolders: [folder] });

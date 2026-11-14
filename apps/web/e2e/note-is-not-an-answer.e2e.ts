@@ -82,7 +82,7 @@ const escalatedToYou = async (page: Page) => {
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
   await composer.press("Enter");
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
   const waiting = await request<{
     readonly questions: ReadonlyArray<{
       readonly question: { readonly id: string };
@@ -110,7 +110,7 @@ test("[TC-OR-254] after your note on a Task whose question waits for you, the qu
   await expect(page.getByText("Questions only the user can answer, waiting in the user's Inbox:").last()).toBeVisible();
 
   // The Inbox still has the question, once, never answered by the note.
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click();
   await expect(page.getByRole("tablist", { name: "Inbox filters" })).toContainText("Needs you1");
   await expect(page.getByRole("list", { name: "Requests" }).getByText("Light or dark theme?")).toHaveCount(1);
 });
@@ -123,7 +123,7 @@ test("[TC-OR-471] after you answer a question the lead passed up, the lead's nex
   const { current, questionId } = await escalatedToYou(page);
 
   await request(current, "POST", `/api/questions/${questionId}/answer`, { answer: "Dark" });
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toHaveCount(0);
 
   // Frodo's next turn lists the answer, so Frodo never tells you it is still waiting.
   const composer = page.getByRole("textbox", { name: /^Message Frodo/ });

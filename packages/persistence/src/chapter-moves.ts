@@ -27,7 +27,8 @@ import { type ArtifactRow, artifactFromRow, renumberVersions, saveReview } from 
 import { makeItemReads } from "./backpack-rows.ts";
 import { settleSuggestion, suggestionOfChapter } from "./camp-suggestion-rows.ts";
 import type { makeCampWrites } from "./camps.ts";
-import { chapterRows, writeChapters } from "./chapters.ts";
+import { chapterRows } from "./chapter-rows.ts";
+import { writeChapters } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { keepReadersRead } from "./thread-member-rows.ts";
@@ -224,11 +225,11 @@ export const makeChapterMoves = (
       yield* sql`UPDATE threads SET sessions = ${"[]"} WHERE ${sql.in("id", both)}`;
     });
 
-  // The chapter's open suggestion is accepted, journaled after the move at `revision`.
+  // The chapter's suggestion, offered or still pending, is accepted, journaled after the move at `revision`.
   const acceptSuggestion = (chapterId: ChapterId, campId: ThreadId, at: string, revision: number) =>
     Effect.gen(function* () {
       const suggestion = yield* suggestionOfChapter(sql, chapterId);
-      if (suggestion === null || !CampSuggestions.isOpen(suggestion)) return [];
+      if (suggestion === null || !CampSuggestions.isUnsettled(suggestion)) return [];
       const next = CampSuggestions.transition(suggestion, { _tag: "Accept", at, campId });
       if (!(next instanceof CampSuggestion)) return [];
       const accepted = new CampSuggestion({ ...next, revision });

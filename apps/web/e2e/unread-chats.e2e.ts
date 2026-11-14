@@ -63,7 +63,7 @@ test("[TC-UX-193] a reply that lands while you are elsewhere leaves a dot on the
 
   // Reading the chat here clears the dot here and on the other device.
   await page.goto(`${current.url}/#/hobs/${pip.id}/threads/${thread.id}`);
-  await expect(page.getByText("Echo: Plan the launch")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Echo: Plan the launch")).toBeVisible();
   await expect(tile).toHaveAccessibleName("Pip, resting");
   await expect(chats.getByRole("img", { name: "New messages" })).toHaveCount(0);
 

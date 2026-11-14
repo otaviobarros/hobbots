@@ -5,7 +5,7 @@ import type { BackpackItem } from "./backpack.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { isInProgress, type Message, waitedSteps } from "./message.ts";
 import type { Question } from "./quest.ts";
-import type { FailedTask } from "./task.ts";
+import type { FailedTask, Task } from "./task.ts";
 
 /**
  * What the hub publishes about a thread's run and a hob's presence (ADR 037, the hub decides
@@ -105,6 +105,38 @@ export const leadsNeedingYou = ({
     ...failed.map(({ task, leadId }) => leadId ?? lead(task.threadId, task.ownerId)),
   ]);
 };
+
+/**
+ * The threads where something waits on you: a pending approval asked there, a blocker sent there, a
+ * question for a person from a Task started there, or a member's failed Task under one (ADR 039, The
+ * sidebar). Only the threads where you are the decider count (`decides`, from `deciderOf`): the
+ * other members of a shared camp wait on that person, and are not asked themselves. The sidebar
+ * marks each of them Needs you.
+ */
+export const threadsNeedingYou = ({
+  approvals,
+  blockers,
+  questions,
+  failed,
+  decides,
+}: {
+  readonly approvals: ReadonlyArray<Pick<ApprovalRequest, "threadId" | "state">>;
+  readonly blockers: ReadonlyArray<Pick<BackpackItem, "threadId">>;
+  readonly questions: ReadonlyArray<{
+    readonly question: Pick<Question, "recipientId">;
+    readonly task: Pick<Task, "threadId">;
+  }>;
+  readonly failed: ReadonlyArray<{ readonly task: Pick<Task, "threadId"> }>;
+  readonly decides: (threadId: ThreadId) => boolean;
+}): ReadonlySet<ThreadId> =>
+  new Set(
+    [
+      ...approvals.flatMap((request) => (request.state === "pending" ? [request.threadId] : [])),
+      ...blockers.map((item) => item.threadId),
+      ...questions.flatMap(({ question, task }) => (question.recipientId === null ? [task.threadId] : [])),
+      ...failed.map(({ task }) => task.threadId),
+    ].flatMap((threadId) => (threadId === null || !decides(threadId) ? [] : [threadId])),
+  );
 
 /**
  * The status a client holds, as the hub published it: each busy thread's run and each live hob's

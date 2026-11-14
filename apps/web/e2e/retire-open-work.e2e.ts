@@ -103,7 +103,7 @@ test("[TC-AG-1248] Retire lists a hob's open work, hands its Task to another hob
   await composer.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
   const thread = page.url();
-  await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "For you, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
 
   // Rook hands its waiting Task to Pip. Aldric leads the work above it, so he cannot take it.
   await page.goto(`${current.url}/#/hobs/${rook.id}/profile`);
@@ -143,7 +143,7 @@ test("[TC-AG-1248] Retire lists a hob's open work, hands its Task to another hob
   });
 
   // You allow the push: Quill's Task completes, Pip's runs to Done, and Quill retires.
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
+  await page.getByRole("link", { name: "For you, 1 waiting on you" }).click();
   await page
     .getByRole("list", { name: "Requests" })
     .getByRole("link", { name: /Push your work/ })

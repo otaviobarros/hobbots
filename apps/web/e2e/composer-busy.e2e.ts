@@ -90,7 +90,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   // The first message opens the thread; the rest of the test stays in it.
   await composer.fill("hello");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: hello", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("main").getByText("Echo: hello", { exact: true })).toBeVisible({ timeout: 15_000 });
 
   // Replying with an empty box: the dot and who is replying, Stop beside Send, and Send dims.
   await composer.fill(LONG);
@@ -144,7 +144,9 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   await scan(composerArea(page));
 
   // The waiting message then joins the transcript as usual, and the draft is still there.
-  await expect(page.getByText("Echo: Also check the hero image on phones", { exact: true })).toBeVisible({
+  await expect(
+    page.getByRole("main").getByText("Echo: Also check the hero image on phones", { exact: true }),
+  ).toBeVisible({
     timeout: 15_000,
   });
   await expect(waiting(page)).toHaveCount(0);
@@ -166,7 +168,7 @@ test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new
   await page.goto(threadUrl);
   await composer.fill("first");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("main").getByText("Echo: first", { exact: true })).toBeVisible({ timeout: 15_000 });
 
   // The empty chat: a paused hob starts none, and the draft typed before stays.
   await page.goto(`${current.url}/#/hobs/${mossId}/chat`);

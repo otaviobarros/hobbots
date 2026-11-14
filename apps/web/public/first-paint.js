@@ -22,7 +22,6 @@
     themeOf.workshop = { dark: "workshop-night", light: "workshop-daylight" };
     root.dataset.theme = themeOf[choice.slice(0, choice.indexOf("-"))][mode];
   }
-  if (read("sidebar.open") === true) root.dataset.sidebar = "open";
   // The desktop app's preload has run by now; only its window draws the title strip.
   if (page.hobbots !== undefined) root.dataset.window = "desktop";
   // Setup, Welcome and pairing fill the window without the sidebar.

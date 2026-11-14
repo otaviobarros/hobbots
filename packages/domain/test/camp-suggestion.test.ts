@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -18,12 +19,15 @@ import {
   planCampSuggestion,
   planKeep,
   type SuggestionState,
+  suggestedCampGoal,
+  suggestedCampTitle,
   ThreadId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
 // Issue #1385 (ADR 037, Records: CampSuggestion): a suggestion is open, kept, accepted or expired,
 // changes only once, and is raised by a pure rule at most once per chapter, from named thresholds.
+// Issue #1557: it is raised pending, then offered with a name and goal, or withdrawn.
 
 const CHAT = ThreadId.make("chat-1");
 const CAMP = ThreadId.make("camp-1");
@@ -36,9 +40,11 @@ const suggestion = (state: SuggestionState = "open") =>
     threadId: CHAT,
     chapterId: CHAPTER,
     reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
+    title: state === "pending" ? null : "Launch",
+    goal: null,
     state,
     raisedAt: at(0),
-    settledAt: state === "open" ? null : at(1),
+    settledAt: state === "open" || state === "pending" ? null : at(1),
     campId: state === "accepted" ? CAMP : null,
   });
 
@@ -47,36 +53,56 @@ interface SuggestionView {
   readonly state: SuggestionState;
   readonly settledAt: string | null;
   readonly campId: string | null;
+  readonly title: string | null;
+  readonly goal: string | null;
 }
 
-const view = (s: CampSuggestion): SuggestionView => ({ state: s.state, settledAt: s.settledAt, campId: s.campId });
+const view = (s: CampSuggestion): SuggestionView => ({
+  state: s.state,
+  settledAt: s.settledAt,
+  campId: s.campId,
+  title: s.title,
+  goal: s.goal,
+});
 
-// ADR 037's rule, kept apart from the machine: only an open suggestion changes, once, and it is
-// never accepted into the chat it was offered in.
+// ADR 037's rule, kept apart from the machine: a pending suggestion is offered with its name and goal
+// or withdrawn; an open one is kept; either one is accepted or expired, once, and never accepted into
+// the chat it was raised in.
 const step = (m: SuggestionView, e: CampSuggestionEvent): SuggestionView | "refused" => {
-  if (m.state !== "open") return "refused";
+  const unsettled = m.state === "pending" || m.state === "open";
   switch (e._tag) {
+    case "Offer":
+      return m.state === "pending" ? { ...m, state: "open", title: e.title, goal: e.goal } : "refused";
+    case "Withdraw":
+      return m.state === "pending" ? { ...m, state: "expired", settledAt: e.at } : "refused";
     case "Keep":
-      return { state: "kept", settledAt: e.at, campId: null };
+      return m.state === "open" ? { ...m, state: "kept", settledAt: e.at } : "refused";
     case "Accept":
-      return e.campId === CHAT ? "refused" : { state: "accepted", settledAt: e.at, campId: e.campId };
+      return !unsettled || e.campId === CHAT
+        ? "refused"
+        : { ...m, state: "accepted", settledAt: e.at, campId: e.campId };
     case "Expire":
-      return { state: "expired", settledAt: e.at, campId: null };
+      return unsettled ? { ...m, state: "expired", settledAt: e.at } : "refused";
+    default:
+      return "refused";
   }
 };
 
 const times = fc.integer({ min: 0, max: 10_000 }).map(at);
+const words = fc.option(fc.constantFrom("Launch", "The garden"), { nil: null });
 const events: fc.Arbitrary<CampSuggestionEvent> = fc.oneof(
+  fc.record({ _tag: fc.constant("Offer" as const), title: words, goal: words }),
+  fc.record({ _tag: fc.constant("Withdraw" as const), at: times }),
   fc.record({ _tag: fc.constant("Keep" as const), at: times }),
   fc.record({ _tag: fc.constant("Expire" as const), at: times }),
   fc.record({ _tag: fc.constant("Accept" as const), at: times, campId: fc.constantFrom(CHAT, CAMP) }),
 );
 
 describe("CampSuggestionStateMachine", () => {
-  it("[TC-CH-1385-07] agrees with a model of keeping, accepting and expiring over random runs of events", () => {
+  it("[TC-CH-1385-07] agrees with a model of offering, keeping, accepting and expiring over random runs of events", () => {
     agreesWithModel({
       machine: CampSuggestionStateMachine,
-      records: fc.constantFrom<SuggestionState>("open", "kept", "accepted", "expired").map(suggestion),
+      records: fc.constantFrom<SuggestionState>("pending", "open", "kept", "accepted", "expired").map(suggestion),
       events,
       model: { init: view, step, view },
       isError: (result): result is IllegalSuggestionTransition => result instanceof IllegalSuggestionTransition,
@@ -85,9 +111,11 @@ describe("CampSuggestionStateMachine", () => {
 
   it("exports one row per event", () => {
     expect(CampSuggestionStateMachine.table.map((row) => [row.event, row.from, row.to, row.guarded])).toEqual([
+      ["Offer", ["pending"], "open", false],
+      ["Withdraw", ["pending"], "expired", false],
       ["Keep", ["open"], "kept", false],
-      ["Accept", ["open"], "accepted", true],
-      ["Expire", ["open"], "expired", false],
+      ["Accept", ["pending", "open"], "accepted", true],
+      ["Expire", ["pending", "open"], "expired", false],
     ]);
   });
 
@@ -100,6 +128,10 @@ describe("CampSuggestionStateMachine", () => {
     );
     expect(planKeep(CampSuggestionId.make("s2"), null, at(3))).toEqual(
       new CampSuggestionRefused({ suggestionId: CampSuggestionId.make("s2"), reason: "not-found" }),
+    );
+    // One not offered yet is not there to keep (#1557).
+    expect(planKeep(CampSuggestionId.make("s1"), suggestion("pending"), at(3))).toEqual(
+      new CampSuggestionRefused({ suggestionId: CampSuggestionId.make("s1"), reason: "not-found" }),
     );
     expect(CampSuggestions.isOpen(suggestion())).toBe(true);
     expect(CampSuggestions.isOpen(suggestion("kept"))).toBe(false);
@@ -154,12 +186,36 @@ describe("the suggestion rule", () => {
       id: CampSuggestionId.make("s9"),
       at: at(4),
     };
-    expect(planCampSuggestion(facts)).toMatchObject({ id: "s9", state: "open", chapterId: CHAPTER, raisedAt: at(4) });
+    expect(planCampSuggestion(facts)).toMatchObject({
+      id: "s9",
+      state: "pending",
+      chapterId: CHAPTER,
+      raisedAt: at(4),
+      title: null,
+      goal: null,
+    });
     expect(planCampSuggestion({ ...facts, suggested: true })).toBeNull();
     expect(planCampSuggestion({ ...facts, reasons: [] })).toBeNull();
     expect(planCampSuggestion({ ...facts, thread: { id: CHAT, openChat: false } })).toBeNull();
     expect(
       planCampSuggestion({ ...facts, chapter: new Chapter({ ...chapter, state: "moved", movedTo: CAMP }) }),
     ).toBeNull();
+  });
+});
+
+describe("a suggested camp's name and goal", () => {
+  // covers ADR 037 (Records: CampSuggestion), #1557
+  it("[TC-CH-1557-01] keeps them to one line, within a thread title's and a camp goal's length, and none without text", () => {
+    expect(suggestedCampTitle("  The\n launch  ")).toBe("The launch");
+    expect(suggestedCampTitle("x".repeat(80))).toHaveLength(60);
+    expect(suggestedCampTitle(" \n ")).toBeNull();
+    expect(suggestedCampGoal("Ship the launch\nby Friday")).toBe("Ship the launch by Friday");
+    expect(suggestedCampGoal("y".repeat(600))).toHaveLength(500);
+    expect(suggestedCampGoal("")).toBeNull();
+  });
+
+  it("decodes a suggestion stored before them with neither", () => {
+    const { title: _title, goal: _goal, ...stored } = Schema.encodeSync(CampSuggestion)(suggestion("open"));
+    expect(Schema.decodeUnknownSync(CampSuggestion)(stored)).toMatchObject({ title: null, goal: null });
   });
 });

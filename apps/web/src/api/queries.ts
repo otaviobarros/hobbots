@@ -17,7 +17,7 @@ import type {
   ThreadId,
   UsagePeriod,
 } from "@hobbots/domain";
-import { messagePreview, Thread } from "@hobbots/domain";
+import { authorOf, messagePreview, sameActor, Thread } from "@hobbots/domain";
 import {
   keepPreviousData,
   type QueryClient,
@@ -349,10 +349,19 @@ export const showLastLine = (queryClient: QueryClient, message: Message) => {
   }
   const lastLine = messagePreview(message);
   if (lastLine === null) return;
+  // Who wrote it, as the hub reads it with the line: the message's own actor (STD-ARCH-021).
+  const shown = (thread: Thread) => {
+    const lastAuthor = authorOf(message, thread);
+    const sameAuthor =
+      thread.lastAuthor === null || lastAuthor === null
+        ? thread.lastAuthor === lastAuthor
+        : sameActor(thread.lastAuthor, lastAuthor);
+    return thread.lastLine === lastLine && sameAuthor ? thread : new Thread({ ...thread, lastLine, lastAuthor });
+  };
   for (const [key, threads] of lists) {
-    if (!threads?.some((thread) => thread.id === message.threadId && thread.lastLine !== lastLine)) continue;
+    if (!threads?.some((thread) => thread.id === message.threadId && shown(thread) !== thread)) continue;
     queryClient.setQueryData<ReadonlyArray<Thread>>(key, (old) =>
-      old?.map((thread) => (thread.id === message.threadId ? new Thread({ ...thread, lastLine }) : thread)),
+      old?.map((thread) => (thread.id === message.threadId ? shown(thread) : thread)),
     );
   }
 };

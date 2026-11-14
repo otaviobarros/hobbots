@@ -158,6 +158,58 @@ describe("HobbotsRepository", () => {
     expect(result.touched).toBe(result.long);
   });
 
+  // covers ADR 039, The sidebar (#1563)
+  it("[TC-DP-1563-01] reads who wrote each thread's last line with it, in a list and alone", async () => {
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      const other = ThreadId.make("t2");
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      yield* repo.upsertThread(new Thread({ id: other, agentId, title: "Shop", createdAt: now, updatedAt: now }));
+      yield* repo.upsertMessage(new Message({ ...message("m1"), content: "On it." }));
+      yield* repo.upsertMessage(
+        new Message({ ...message("m2"), role: "user", actor: OWNER_ACTOR, configVersion: null, content: "Thanks!" }),
+      );
+      // A reply with no text is not the last line, so neither is its author.
+      yield* repo.upsertMessage(new Message({ ...message("m3"), content: " " }));
+      yield* repo.upsertMessage(new Message({ ...message("m4"), threadId: other, content: "Shop is up." }));
+      const listed = new Map((yield* repo.listThreads(agentId)).map((each) => [each.id, each.lastAuthor]));
+      const found = Option.getOrThrow(yield* repo.findThread(threadId)).lastAuthor;
+      const touched = yield* repo.upsertThread(
+        new Thread({ id: other, agentId, title: "Shop", createdAt: now, updatedAt: now }),
+      );
+      const empty = yield* repo.upsertThread(
+        new Thread({ id: ThreadId.make("t3"), agentId, title: "New", createdAt: now, updatedAt: now }),
+      );
+      return {
+        listed: Object.fromEntries(listed),
+        found,
+        touched: touched.value.lastAuthor,
+        empty: empty.value.lastAuthor,
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.listed).toEqual({ t1: OWNER_ACTOR, t2: { kind: "hob", id: "aldric" } });
+    expect(result.found).toEqual(OWNER_ACTOR);
+    // A thread written again carries the author a read shows, so its event does not blank it.
+    expect(result.touched).toEqual({ kind: "hob", id: "aldric" });
+    expect(result.empty).toBeNull();
+  });
+
   // covers UX-006, DP-003
   it("[TC-DP-250] keeps how far you read a thread, unread once the hob writes past it, and moves it only forward", async () => {
     const result = await Effect.gen(function* () {

@@ -36,7 +36,7 @@ test("[TC-CH-1457-01] Bruna and Leo sign in on two devices, see each other's mes
     await composer.fill(prompt);
     await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();
     await composer.press("Enter");
-    await expect(page.getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("main").getByText(`Echo: ${prompt}`).first()).toBeVisible({ timeout: 20_000 });
   }
 
   // Both devices see both people's messages, on one hub, in a camp each can use (STD-TEST-007).

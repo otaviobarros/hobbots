@@ -114,7 +114,6 @@ test("[TC-UX-183] the window paints its frame in this device's theme before the 
   hub = current;
   await page.addInitScript(() => {
     localStorage.setItem("hobbots.theme", JSON.stringify("lamplight-paper"));
-    localStorage.setItem("sidebar.open", "true");
   });
   // The app's code waits, as on a slow first load.
   const release = await holdReads(page, "**/assets/main-*.js");
@@ -125,7 +124,7 @@ test("[TC-UX-183] the window paints its frame in this device's theme before the 
   await expect(frame).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-paper");
   const framed = await box(frame.locator("> div > div").first());
-  expect(framed.width).toBe(256);
+  expect(framed.width).toBe(276);
 
   release();
   const sidebar = page.getByRole("navigation", { name: "Sections" });

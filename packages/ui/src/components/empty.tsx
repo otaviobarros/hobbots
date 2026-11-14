@@ -5,7 +5,8 @@ import { cn } from "../lib/utils.ts";
 
 // An empty state: art, one line that says what will appear here, and an optional action.
 // `page` fills a screen, such as an Inbox with nothing waiting. `section` sits in a list or a tab,
-// such as an empty Archive or a hob with no chats yet. `card` puts it on the card surface.
+// such as an empty Archive or a hob with no chats yet. `row` is one quiet line in place of a short
+// list, such as a sidebar section with nothing in it. `card` puts it on the card surface.
 const emptyVariants = cva(
   "group/empty flex w-full min-w-0 flex-col items-center justify-center text-center text-balance",
   {
@@ -13,6 +14,7 @@ const emptyVariants = cva(
       size: {
         section: "gap-2.5 px-6 py-11",
         page: "flex-1 gap-3 p-8",
+        row: "gap-0 px-2.5 py-2",
       },
       surface: {
         plain: "",
@@ -108,7 +110,7 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="empty-description"
       className={cn(
-        "m-0 text-body text-text-secondary [&>a]:text-link [&>a]:underline [&>a]:underline-offset-[3px] [&>a:hover]:decoration-lantern",
+        "m-0 text-body text-text-secondary group-data-[size=row]/empty:text-detail [&>a]:text-link [&>a]:underline [&>a]:underline-offset-[3px] [&>a:hover]:decoration-lantern",
         className,
       )}
       {...props}

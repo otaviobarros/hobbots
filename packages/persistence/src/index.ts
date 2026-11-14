@@ -4,6 +4,7 @@ export * from "./backpack.ts";
 export * from "./backup.ts";
 export * from "./briefs.ts";
 export { CampSuggestionRepositoryLive } from "./camp-suggestions.ts";
+export { ChapterBreakRepositoryLive } from "./chapter-breaks.ts";
 export * from "./chapter-summaries.ts";
 export * from "./chapters.ts";
 export * from "./charm-calls.ts";

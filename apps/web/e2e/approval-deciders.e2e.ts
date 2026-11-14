@@ -79,7 +79,7 @@ test("[TC-IN-209] History shows who decided each request: Allowed once from the 
   await askToPush(page, current, pip.id);
   await page
     .getByRole("navigation", { name: "Sections" })
-    .getByRole("link", { name: /^Inbox/ })
+    .getByRole("link", { name: /^For you/ })
     .click();
   const detail = page.getByRole("article", { name: "Request from Pip: Push your work" });
   const inInbox = detail.getByRole("region", { name: "Pip asks permission" });
