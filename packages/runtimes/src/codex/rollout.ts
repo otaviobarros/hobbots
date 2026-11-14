@@ -1,4 +1,5 @@
-import { open, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open } from "node:fs/promises";
 import { notOfferedDenial, type RuntimeEvent, type RuntimeToolName } from "@hobbots/agents";
 import { Effect, Semaphore } from "effect";
 import { toolLabel } from "../tool-calls.ts";
@@ -11,6 +12,15 @@ import { toolLabel } from "../tool-calls.ts";
  * reads them from there: before it answers Codex's next request, and once each Codex turn completes.
  * An ephemeral thread keeps no rollout, so its calls are not read; no hob's turn runs on one.
  */
+
+/** How much of the rollout one chunk reads; a line longer than this is not one Codex refuses a call with. */
+export const ROLLOUT_CHUNK_BYTES = 1024 * 1024;
+/** How much of the rollout one read takes at most; the rest waits for the next read. */
+export const ROLLOUT_READ_BYTES = 16 * ROLLOUT_CHUNK_BYTES;
+/** How many calls still waiting for their output are kept; the oldest is dropped past it. */
+const PENDING_CALLS = 256;
+/** Opens the rollout only as itself, never through a symlink, nor waiting on a pipe put in its place. */
+const OPEN_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 /** The outputs Codex answers a call to a tool it has none of with. */
 const UNSUPPORTED = ["unsupported call: ", "unsupported custom tool call: "];
@@ -76,17 +86,28 @@ const labelOf = (tool: string, runtimeTool: RuntimeToolName | null, call: Respon
  * a call it makes last once the turn has completed. Each read takes the whole lines appended since
  * the last; a call and its output may be read apart. Codex's requests are answered concurrently, so
  * reads take turns: each one starts where the last ended and reports what it read before the next.
+ *
+ * The rollout lives in the session's Codex home, which the hob's commands can write, so it is read
+ * as untrusted input (STD-SEC-002): never through a symlink or from anything but a regular file, a
+ * bounded chunk at a time, at most a bounded amount per read, a line longer than a chunk skipped,
+ * and a rollout that shrank read on from its new end.
  */
 export const rolloutRefusals = (path: string | null | undefined, report: (event: RuntimeEvent) => void) => {
   const calls = new Map<string, ResponseItem>();
   let offset: number | null = null;
   const turns = Semaphore.makeUnsafe(1);
+  /** Keeps a call until its output is read, dropping the oldest past PENDING_CALLS. */
+  const keep = (id: string, item: ResponseItem) => {
+    calls.set(id, item);
+    const oldest = calls.size > PENDING_CALLS ? calls.keys().next() : null;
+    if (oldest !== null && oldest.done !== true) calls.delete(oldest.value);
+  };
   const refusedIn = (lines: ReadonlyArray<string>) => {
     for (const line of lines) {
       const item = itemOf(line);
       if (item === null || typeof item.call_id !== "string") continue;
       if (item.type === "function_call" || item.type === "custom_tool_call") {
-        calls.set(item.call_id, item);
+        keep(item.call_id, item);
         continue;
       }
       if (item.type !== "function_call_output" && item.type !== "custom_tool_call_output") continue;
@@ -100,23 +121,29 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
       report(notOfferedDenial({ id: item.call_id, tool, label: labelOf(tool, runtimeTool, call), runtimeTool }));
     }
   };
-  /** The whole lines appended past `from`, and where the last of them ends. */
+  /**
+   * The whole lines appended past `from`, a chunk at a time and at most ROLLOUT_READ_BYTES of them,
+   * and where the last of them ends. A rollout that shrank is read on from its new end.
+   */
   const appended = async (file: string, from: number) => {
-    const handle = await open(file, "r");
+    const handle = await open(file, OPEN_FLAGS);
     try {
-      const { size } = await handle.stat();
-      if (size <= from) return { lines: [], end: from };
-      const buffer = Buffer.alloc(size - from);
-      await handle.read(buffer, 0, buffer.length, from);
-      const whole = buffer.lastIndexOf(0x0a) + 1;
-      return {
-        lines: buffer
-          .subarray(0, whole)
-          .toString("utf8")
-          .split("\n")
-          .filter((line) => line.trim() !== ""),
-        end: from + whole,
-      };
+      const info = await handle.stat();
+      if (!info.isFile()) return { lines: [], end: from };
+      if (info.size < from) return { lines: [], end: info.size };
+      const lines: Array<string> = [];
+      const buffer = Buffer.alloc(Math.min(ROLLOUT_CHUNK_BYTES, info.size - from));
+      let end = from;
+      while (end < info.size && end - from < ROLLOUT_READ_BYTES) {
+        const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, info.size - end), end);
+        if (bytesRead === 0) break;
+        const whole = buffer.subarray(0, bytesRead).lastIndexOf(0x0a) + 1;
+        // A line Codex is still writing waits for the next read; one longer than a chunk is skipped.
+        if (whole === 0 && bytesRead < ROLLOUT_CHUNK_BYTES) break;
+        if (whole > 0) lines.push(...buffer.subarray(0, whole).toString("utf8").split("\n"));
+        end += whole === 0 ? bytesRead : whole;
+      }
+      return { lines: lines.filter((line) => line.trim() !== ""), end };
     } finally {
       await handle.close();
     }
@@ -128,8 +155,8 @@ export const rolloutRefusals = (path: string | null | undefined, report: (event:
       Effect.suspend(() =>
         path == null || offset !== null
           ? Effect.void
-          : Effect.tryPromise(() => stat(path)).pipe(
-              Effect.map((info) => info.size),
+          : Effect.tryPromise(() => lstat(path)).pipe(
+              Effect.map((info) => (info.isFile() ? info.size : 0)),
               Effect.orElseSucceed(() => 0),
               Effect.flatMap((end) =>
                 Effect.sync(() => {
