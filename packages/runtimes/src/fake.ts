@@ -750,10 +750,6 @@ export const scriptedHubEvents = (
   );
 };
 
-/** What fake Codex answers a call to a hub tool its resumed session did not start with, as Codex's own refusal reads. */
-export const fakeNotHeld = (tool: string) =>
-  `${tool} is not offered in this session, so it did not run. Use the tools you were given.`;
-
 /**
  * The hub tools a turn's session holds on fake Codex, which keeps those a session started with
  * (#1543): a new session, or one the fake does not know, as after a restart, holds what the turn
@@ -781,19 +777,14 @@ const sessionTools = (
 
 /**
  * The hub tools a resumed session of a runtime that keeps the tools it started with can call, as a
- * Codex thread can (ADR 024, #1543): only those among `held`, whatever the turn offers. Nothing
- * changes on a runtime offered each turn's tools.
+ * Codex thread can (ADR 024, #1543): only those among `held`, whatever the turn offers. A call to
+ * any other is refused as not offered, before the hub, as Codex refuses it (#1356). Nothing changes
+ * on a runtime offered each turn's tools.
  */
 const heldOnly = (hub: HubTools | null | undefined, held: ReadonlySet<string> | null): { hubTools?: HubTools } =>
   hub == null || held === null
     ? {}
-    : {
-        hubTools: {
-          tools: hub.tools.filter((tool) => held.has(tool.name)),
-          call: (name, input, step) =>
-            held.has(name) ? hub.call(name, input, step) : Effect.succeed({ text: fakeNotHeld(name), refused: true }),
-        },
-      };
+    : { hubTools: { tools: hub.tools.filter((tool) => held.has(tool.name)), call: hub.call } };
 
 /**
  * A prompt line `fake:then <line>` keeps `<line>` for the session's next turn, which runs it as if
