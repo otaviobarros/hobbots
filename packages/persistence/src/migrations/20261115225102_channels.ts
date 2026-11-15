@@ -99,6 +99,88 @@ const renamedText = (text: unknown): string | null => {
 
 const TABLES = ["threads", "thread_members", "thread_checkpoints", "memory_capture_private_threads"];
 
+/**
+ * Each event type whose payload names a channel, with its version before and after this migration:
+ * a rewritten event takes the next version, so a later migration does not skip it. Fixed here, so
+ * this migration never changes after it runs.
+ */
+const VERSIONS: Record<string, readonly [number, number]> = {
+  ChannelUpserted: [7, 8],
+  CampMade: [4, 5],
+  ChatStartedFresh: [4, 5],
+  MessageUpserted: [6, 7],
+  MessageQueued: [3, 4],
+  MessageDequeued: [1, 2],
+  ChapterStarted: [1, 2],
+  ChapterSplit: [1, 2],
+  ChapterMerged: [1, 2],
+  ChapterSummarized: [1, 2],
+  ChapterMoved: [2, 3],
+  CampSuggested: [1, 2],
+  CampSuggestionOffered: [1, 2],
+  CampSuggestionKept: [1, 2],
+  CampSuggestionAccepted: [1, 2],
+  CampSuggestionExpired: [1, 2],
+  TurnStopRequested: [1, 2],
+  TurnStopped: [1, 2],
+  RelayBudgetReset: [1, 2],
+  TurnPassed: [1, 2],
+  ApprovalRequested: [1, 2],
+  ApprovalResolved: [1, 2],
+  ApprovalMoved: [1, 2],
+  TaskCreated: [1, 2],
+  TaskStateChanged: [1, 2],
+  QuestStarted: [1, 2],
+  HubQuestionRaised: [2, 3],
+  HubQuestionAnswered: [2, 3],
+  HubQuestionWithdrawn: [2, 3],
+  TaskCompleted: [1, 2],
+  QuestCompleted: [1, 2],
+  QuestStopRequested: [1, 2],
+  QuestSummaryChanged: [1, 2],
+  DecisionRecorded: [1, 2],
+  DecisionSuperseded: [1, 2],
+  ArtifactRegistered: [1, 2],
+  ArtifactReviewSettled: [1, 2],
+  BriefWritten: [1, 2],
+  MessagePinned: [1, 2],
+  MessageUnpinned: [1, 2],
+  BackpackItemRecorded: [1, 2],
+  BackpackItemChanged: [1, 2],
+  ChannelMemberAdded: [1, 2],
+  ChannelMemberChanged: [1, 2],
+  MemorySaveRecorded: [1, 2],
+  MemorySaveChanged: [1, 2],
+  MemoryShareRequested: [1, 2],
+  MemoryShareChanged: [1, 2],
+  SkillProposalRequested: [1, 2],
+  SkillProposalChanged: [1, 2],
+  HobProposalRequested: [1, 2],
+  HobProposalChanged: [1, 2],
+  SkillFeedbackLeft: [1, 2],
+  SkillUsed: [1, 2],
+  WebSearched: [1, 2],
+  WebFetched: [1, 2],
+};
+
+/** Each journal entry's type by its new name. */
+const renameJournalTypes = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    const types = yield* sql<{ type: string }>`SELECT DISTINCT type FROM event_journal WHERE type LIKE '%Thread%'`;
+    for (const { type } of types) {
+      yield* sql`UPDATE event_journal SET type = ${channelWord(type)} WHERE type = ${type}`;
+    }
+  });
+
+/** Each rewritten entry at its type's next version. */
+const nextVersions = (sql: SqlClient.SqlClient) =>
+  Effect.forEach(
+    Object.entries(VERSIONS),
+    ([type, [before, after]]) =>
+      sql`UPDATE event_journal SET schema_version = ${after} WHERE type = ${type} AND schema_version = ${before}`,
+    { discard: true },
+  );
+
 export default Effect.gen(function* () {
   const sql = (yield* SqlClient.SqlClient).withoutTransforms();
   // Every table and column there is before the rename. A hub has them all; a test of an older
@@ -190,10 +272,7 @@ export default Effect.gen(function* () {
     }
   }
 
-  const types = yield* sql<{ type: string }>`SELECT DISTINCT type FROM event_journal WHERE type LIKE '%Thread%'`;
-  for (const { type } of types) {
-    yield* sql`UPDATE event_journal SET type = ${channelWord(type)} WHERE type = ${type}`;
-  }
+  yield* renameJournalTypes(sql);
 
   for (const { table, key, columns: all } of JSON_COLUMNS) {
     const columns = all.filter((column) => has(table, column));
@@ -215,4 +294,6 @@ export default Effect.gen(function* () {
       after = rows[rows.length - 1]?.row_key ?? null;
     }
   }
+
+  if (has("event_journal")) yield* nextVersions(sql);
 });

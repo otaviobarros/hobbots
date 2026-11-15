@@ -8,6 +8,7 @@ import {
   ChapterId,
   type ChapterRefusal,
   ChapterRefused,
+  EVENT_SCHEMA_VERSIONS,
   IllegalChapterTransition,
   liveSession,
   Message,
@@ -225,11 +226,11 @@ describe("0099_chapters", () => {
     ]);
     // Every old entry decodes, with the chapter its channel now has, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ChannelUpserted", 7],
-      ["MessageUpserted", 6],
-      ["MessageUpserted", 6],
-      ["MessageQueued", 3],
-      ["ChannelUpserted", 7],
+      ["ChannelUpserted", EVENT_SCHEMA_VERSIONS.ChannelUpserted],
+      ["MessageUpserted", EVENT_SCHEMA_VERSIONS.MessageUpserted],
+      ["MessageUpserted", EVENT_SCHEMA_VERSIONS.MessageUpserted],
+      ["MessageQueued", EVENT_SCHEMA_VERSIONS.MessageQueued],
+      ["ChannelUpserted", EVENT_SCHEMA_VERSIONS.ChannelUpserted],
     ]);
     const payloads = result.entries.map((e) => e.payload);
     expect(payloads.flatMap((p) => ("message" in p ? [p.message.chapterId] : []))).toEqual([

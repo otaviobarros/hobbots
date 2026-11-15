@@ -1,5 +1,5 @@
 import { HubQuestionRepository } from "@hobbots/agents";
-import { DeviceId, HubQuestionId } from "@hobbots/domain";
+import { DeviceId, EVENT_SCHEMA_VERSIONS, HubQuestionId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -212,9 +212,11 @@ describe("0078_hub_question_codes", () => {
     expect(result.columns).not.toContain("text");
     expect(result.columns).not.toContain("subjectTitle");
 
-    // Every journaled entry reads back in the new shape, at version 2.
+    // Every journaled entry reads back in the new shape, at today's version.
     const raised = result.events.filter((event) => event.type === "HubQuestionRaised");
-    expect(raised.map((event) => event.schemaVersion)).toEqual([2, 2, 2, 2, 2]);
+    expect(raised.map((event) => event.schemaVersion)).toEqual(
+      raised.map(() => EVENT_SCHEMA_VERSIONS.HubQuestionRaised),
+    );
     expect(raised[4]?.payload).toMatchObject({
       hubQuestion: { id: "prototype", ask: { applied: { picked: null, answer: "constructor" } } },
     });

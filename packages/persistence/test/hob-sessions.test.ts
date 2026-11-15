@@ -1,5 +1,5 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { AgentId, ChannelId, liveSession } from "@hobbots/domain";
+import { AgentId, ChannelId, EVENT_SCHEMA_VERSIONS, liveSession } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -157,9 +157,9 @@ describe("20261114005209_hob_sessions", () => {
 
     // Every old entry decodes, its sessions with their channel's hob, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ChannelUpserted", 7],
-      ["CampMade", 4],
-      ["ChatStartedFresh", 4],
+      ["ChannelUpserted", EVENT_SCHEMA_VERSIONS.ChannelUpserted],
+      ["CampMade", EVENT_SCHEMA_VERSIONS.CampMade],
+      ["ChatStartedFresh", EVENT_SCHEMA_VERSIONS.ChatStartedFresh],
     ]);
     const hobsOf = result.entries.flatMap((e) => {
       const p = e.payload;

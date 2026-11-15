@@ -656,53 +656,79 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // 5: each session's `chapterId`, and the channel's `liveChapterId` (ADR 037, migration 0099).
   // 6: no `unread`, which is each person's own now (ADR 039, migration 20261114004500).
   // 7: each session's `agentId` (ADR 039, migration 20261114005209_hob_sessions).
-  ChannelUpserted: 7,
+  // 8: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChannelUpserted: 8,
   // 2: its channels' sessions' `chapterId` and `liveChapterId`, as `ChannelUpserted` 5 (migration 0099).
   // 3: its channels carry no `unread`, as `ChannelUpserted` 6 (migration 20261114004500).
   // 4: its channels' sessions' `agentId`, as `ChannelUpserted` 7 (migration 20261114005209_hob_sessions).
-  CampMade: 4,
-  ChatStartedFresh: 4,
+  // 5: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  CampMade: 5,
+  // 5: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChatStartedFresh: 5,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
   // A reply's `usage`, and later its `promptId`, were added with defaults, compatibly. 5: its
   // `chapterId` (ADR 037, migration 0099). 6: its `actor` (ADR 037, migration 0101). A message's
   // `note` role (ADR 037) was added compatibly: no stored entry holds one from before.
-  MessageUpserted: 6,
+  // 7: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MessageUpserted: 7,
   // 2: its message's `chapterId` (migration 0099). 3: its message's `actor` (migration 0101).
-  MessageQueued: 3,
-  MessageDequeued: 1,
-  ChapterStarted: 1,
-  ChapterSplit: 1,
-  ChapterMerged: 1,
-  ChapterSummarized: 1,
+  // 4: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MessageQueued: 4,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MessageDequeued: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChapterStarted: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChapterSplit: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChapterMerged: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChapterSummarized: 2,
   // 2: its channels carry no `unread`, as `ChannelUpserted` 6 (migration 20261114004500).
-  ChapterMoved: 2,
+  // 3: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChapterMoved: 3,
   // A suggestion's `title`, `goal` and `pending` state (#1557) were added with defaults, compatibly:
   // every entry from before holds an open suggestion or a settled one.
-  CampSuggested: 1,
-  CampSuggestionOffered: 1,
-  CampSuggestionKept: 1,
-  CampSuggestionAccepted: 1,
-  CampSuggestionExpired: 1,
-  TurnStopRequested: 1,
-  TurnStopped: 1,
-  RelayBudgetReset: 1,
-  TurnPassed: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  CampSuggested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  CampSuggestionOffered: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  CampSuggestionKept: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  CampSuggestionAccepted: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  CampSuggestionExpired: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  TurnStopRequested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  TurnStopped: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  RelayBudgetReset: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  TurnPassed: 2,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
-  ApprovalRequested: 1,
-  ApprovalResolved: 1,
-  ApprovalMoved: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ApprovalRequested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ApprovalResolved: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ApprovalMoved: 2,
   // A grant's `taskId` replaced its unused `questId`, read as null when absent, compatibly.
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
   GrantCreated: 1,
   GrantRevoked: 1,
   // A Delegation's authority names the GitHub operations by their Charm ids, read from the old names, compatibly.
-  TaskCreated: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  TaskCreated: 2,
   // A change's `wait` was added with a default, and its optional `control` and `reply` later, compatibly.
-  TaskStateChanged: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  TaskStateChanged: 2,
   // A Quest's `stop`, and its `stopping` and `stopped` states (#1346), were added with a default, compatibly.
   // A Quest's `criteria` (#1445) were added with a default, then removed (#1588): stored ones are ignored.
-  QuestStarted: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  QuestStarted: 2,
   CheckpointRecorded: 1,
   QuestionAsked: 1,
   QuestionAnswered: 1,
@@ -710,50 +736,72 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionWithdrawn: 1,
   // 2: a hub question carries an `ask` and its choices' keys, not text and labels (#1045); migration
   // 0078 rewrote the stored entries.
-  HubQuestionRaised: 2,
-  HubQuestionAnswered: 2,
-  HubQuestionWithdrawn: 2,
+  // 3: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  HubQuestionRaised: 3,
+  // 3: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  HubQuestionAnswered: 3,
+  // 3: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  HubQuestionWithdrawn: 3,
   // A note's `messageId`, `fromNoteId`, `pickedUpBy`, `pickedUpAt` and `delivery` were added with defaults, compatibly.
   NoteLeft: 1,
   NotePickedUp: 1,
   HandedOff: 1,
-  TaskCompleted: 1,
-  QuestCompleted: 1,
-  QuestStopRequested: 1,
-  QuestSummaryChanged: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  TaskCompleted: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  QuestCompleted: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  QuestStopRequested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  QuestSummaryChanged: 2,
   ClaimMade: 1,
   ClaimContested: 1,
   ClaimCleared: 1,
   ClaimTakenOver: 1,
   ClaimGivenBack: 1,
   ClaimReleased: 1,
-  DecisionRecorded: 1,
-  DecisionSuperseded: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  DecisionRecorded: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  DecisionSuperseded: 2,
   // An artifact's `review`, `reviewedAt` and `reviewedBy` were added with defaults, compatibly.
-  ArtifactRegistered: 1,
-  ArtifactReviewSettled: 1,
-  BriefWritten: 1,
-  MessagePinned: 1,
-  MessageUnpinned: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ArtifactRegistered: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ArtifactReviewSettled: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  BriefWritten: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MessagePinned: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MessageUnpinned: 2,
   // An item's `blockers` was added with a default, compatibly.
-  BackpackItemRecorded: 1,
-  BackpackItemChanged: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  BackpackItemRecorded: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  BackpackItemChanged: 2,
   PairingRequested: 1,
   PairingChanged: 1,
   // 2: its device's `userId` (ADR 039, migration 0112).
   DeviceRevoked: 2,
-  ChannelMemberAdded: 1,
-  ChannelMemberChanged: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChannelMemberAdded: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  ChannelMemberChanged: 2,
   CommandRecorded: 1,
   FileChangesRecorded: 1,
   FolderScanned: 1,
   ToolCallRefused: 1,
   AttemptStepsRecorded: 1,
   AttemptReadWeb: 1,
-  MemorySaveRecorded: 1,
-  MemorySaveChanged: 1,
-  MemoryShareRequested: 1,
-  MemoryShareChanged: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MemorySaveRecorded: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MemorySaveChanged: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MemoryShareRequested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  MemoryShareChanged: 2,
   SkillRevisionAdded: 1,
   SkillAssigned: 1,
   SkillUnassigned: 1,
@@ -761,18 +809,26 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   SkillHeld: 1,
   SkillOptOutChanged: 1,
   SkillRemoved: 1,
-  SkillProposalRequested: 1,
-  SkillProposalChanged: 1,
-  HobProposalRequested: 1,
-  HobProposalChanged: 1,
-  SkillFeedbackLeft: 1,
-  SkillUsed: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  SkillProposalRequested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  SkillProposalChanged: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  HobProposalRequested: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  HobProposalChanged: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  SkillFeedbackLeft: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  SkillUsed: 2,
   SkillUpdateFound: 1,
   SkillUpdateDismissed: 1,
   SkillUpdateCleared: 1,
   SkillAutoUpdateChanged: 1,
-  WebSearched: 1,
-  WebFetched: 1,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  WebSearched: 2,
+  // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
+  WebFetched: 2,
   WebSettingsChanged: 1,
   HobWebLimitsChanged: 1,
   SettingChanged: 1,
