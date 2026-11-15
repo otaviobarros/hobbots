@@ -28,7 +28,7 @@ export const useOpenReads = (threadId: ThreadId | null) => {
     approvals: approvals.data ?? [],
     items: backpack.items,
     blockers: blockers.data ?? [],
-    // Nothing is said to be open, or not, until every read it rests on has answered (STD-UI-008).
+    // Nothing is said to be open, or not, until every read it rests on has answered (STD-REACT-028).
     status: bothRead(bothRead(approvalStatus, backpack.status), blockers.status),
     retry: () => {
       if (approvals.isError) void approvals.refetch();

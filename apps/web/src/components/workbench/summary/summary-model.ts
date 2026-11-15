@@ -24,7 +24,7 @@ import { questionForYou } from "../../quest/work-model.ts";
 /**
  * What the Summary tab says about one Task (ADR 023): what it was asked, what happened, what it
  * made, what is still open and its result. Everything comes from the hub's records, never from a
- * model call or from what a hob wrote about itself (STD-UI-008).
+ * model call or from what a hob wrote about itself (STD-REACT-028).
  */
 
 /** Where a line of What happened stands. */

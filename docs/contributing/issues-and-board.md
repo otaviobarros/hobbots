@@ -15,14 +15,12 @@ A **vertical slice** is an outcome a user can try end to end, cutting through ev
 
 ## Opening an issue
 
-Open a new issue and pick a form. Blank issues are turned off so every issue starts with the details triage needs.
+Open a new issue and pick a form. Blank issues are turned off so every issue starts with the details triage needs. Maintainers file slices and their tasks themselves.
 
 | Form | Use it for | Labels it adds |
 |---|---|---|
 | Bug report | Something does not work as documented. | `type: bug`, `status: triage` |
 | Feature request | New behavior you would like to see. | `type: feature`, `status: triage` |
-| Vertical slice | Maintainers planning a milestone. | `type: slice`, `status: triage` |
-| Task | One step of a slice, or a small standalone change. | `type: task`, `status: triage` |
 | Role request | A hob role missing from the starter set. See [Role requests](#role-requests). | `type: feature`, `area: design`, `status: triage` |
 
 Search existing issues first, write one problem per issue, and never paste API keys, device tokens or private files. Report security vulnerabilities privately through the repository's Security tab, not in a public issue.
@@ -54,7 +52,7 @@ A maintainer triages new issues at least once a week. For each issue labeled `st
 1. Close it with `duplicate`, `invalid` or `wontfix` and a short comment if it will not be worked on as filed.
 2. Ask for details with `status: needs info` if it cannot be understood yet. Issues waiting for information for 30 days may be closed.
 3. Otherwise confirm the `type:` label, add `area:` and `priority:` labels, and set the milestone if it belongs to a release.
-4. Attach tasks to their slice as sub-issues. A slice's last task proves it end to end ("Prove …"), with the checks the slice's ADRs name.
+4. Attach tasks to their slice as sub-issues.
 5. Add `good first issue` or `help wanted` where it fits, then remove `status: triage`.
 
 ## Role requests

@@ -22,7 +22,7 @@ import { memberFolders } from "./member-folders.ts";
 /**
  * How the chat shows a request's work (ADR 018, ADR 027, screen 17): the ticket under the request,
  * the quest buttons in the header, and the few moments that reach the chat. Everything here comes from
- * the Task records, never from what a hob wrote (STD-UI-008).
+ * the Task records, never from what a hob wrote (STD-REACT-028).
  */
 
 /** Where a Task stands for you, from what needs you to what is done. */

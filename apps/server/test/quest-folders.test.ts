@@ -88,7 +88,7 @@ describe("a lead's turns on its Quest", () => {
     ]);
   }, 30_000);
 
-  // covers ADR 023, STD-UI-008
+  // covers ADR 023, STD-REACT-028
   it("keep the lead's folder's stopped scan when it holds a small Quest folder, never a scan taken after the edit (#670)", async () => {
     const many = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`notes/${i}.md`, `${i}\n`]));
     const { run, folder } = setUp({ ...many, "full-run/README.md": "# Full run\n" }, [], { maxFiles: 5 });
