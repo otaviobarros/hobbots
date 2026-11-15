@@ -4,7 +4,7 @@ Status: **Accepted.** Amended by [#1584](https://github.com/otaviobarros/hobbots
 
 ## Decision
 
-The [design specification](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/design/ui-ux.md) records its style, layout and components, and the [screen inventory](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/design/screens-and-flows.md) lists every screen. They are the visual and interaction reference for the MVP:
+The design specification records its style, layout and components, and the screen inventory lists every screen. They are the visual and interaction reference for the MVP:
 
 - **Home is the landing page.** It is an animated dashboard: what each hob is doing, what needs you, Quests in progress and usage. Chat stays one click away and opens on the last thread.
 - **The chat workspace keeps its layout** (rail, hob and thread list, chat, right panel). The right panel has three tabs: **Quest**, **Inbox** and a live **Workshop** scene that links to the full Workbench.

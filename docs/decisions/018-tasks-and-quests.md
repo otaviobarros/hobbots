@@ -1,6 +1,6 @@
 # ADR 018 — Tasks and Quests
 
-Status: **Accepted.** Its screens are amended by [ADR 027](027-quest-room.md): the card, the strip's drawer, the quest and task sheets and the Quest tab give way to the Quest room. Refines [orchestration](../architecture/orchestration.md), the [agent model](../architecture/agent-model.md), the [screen inventory](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/design/screens-and-flows.md) and the This Quest lifetime of [ADR 015](015-approval-lifetimes-and-grants.md) for Slice 9 ([#10](https://github.com/otaviobarros/hobbots/issues/10)).
+Status: **Accepted.** Its screens are amended by [ADR 027](027-quest-room.md): the card, the strip's drawer, the quest and task sheets and the Quest tab give way to the Quest room. Refines [orchestration](../architecture/orchestration.md), the [agent model](../architecture/agent-model.md), the screen inventory and the This Quest lifetime of [ADR 015](015-approval-lifetimes-and-grants.md) for Slice 9 ([#10](https://github.com/otaviobarros/hobbots/issues/10)).
 
 ## Context
 

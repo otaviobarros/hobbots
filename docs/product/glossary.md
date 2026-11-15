@@ -58,7 +58,7 @@ What the UI calls a thing, and the name the code gives it. `pnpm lint:glossary` 
 
 - a code name that no package or the server exports any more,
 - a UI word that no message module of the web or desktop app uses any more,
-- a word the UI never shows in a message module's copy, or a word the docs no longer use in a doc. ADRs and evidence records stay as written, and the phrases after "except" in a cell may still use it.
+- a word the UI never shows in a message module's copy, or a word the docs no longer use in a doc. ADRs stay as written, and the phrases after "except" in a cell may still use it.
 
 Change a row here in the same pull request that renames the word or the code.
 

@@ -9,6 +9,4 @@ The hub's HTTP client for `web_fetch` ([ADR 036](../../docs/decisions/036-web-se
 - **Limits.** 10 MB a page, declared or sent, and 20 seconds from connecting to the last byte.
 - **Cache.** A page read, and each site's robots.txt, stay in the hub's memory for 15 minutes, shared by every hob since no cookie is sent. A refusal or a timeout is asked again next time. Nothing is written to disk.
 
-Why Readability rather than Defuddle is in the [evidence record](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-08-web-fetch.md).
-
 The tests read pages from a local test site whose names resolve, through a static resolver, to addresses from TEST-NET-3, so the policy decides what it would in use. Only the test-only `dialAs` option maps a checked address to the loopback server.

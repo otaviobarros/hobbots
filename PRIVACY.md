@@ -13,7 +13,7 @@ A hob searches with its runtime's own search, never with a provider of Hobbots' 
 - **Claude Code** runs the search on Anthropic's servers, which search with their partners. The query goes to Anthropic.
 - **Codex** is held to cached search: OpenAI answers from its own index, never live. The query goes to OpenAI. Its search can also open a page it names, served by OpenAI, which Hobbots' site rules cannot see, so Hobbots offers Codex's search only where Use the web answers Allow, no site is blocked and pages are allowed each turn. Under Careful, a Codex hob is offered no search and reads pages with `web_fetch`.
 
-Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting did not hold ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-09-v0-0-4-mac-smoke.md)); they were reported under the [security policy](SECURITY.md). Hobbots has since been changed to offer Codex's search only as above, which is not yet checked with real models.
+Search the web can be set to Never for a hob in its Permissions, and then its runtime is meant to be offered no search. A run with real models found cases on Codex where this setting did not hold; they were reported under the [security policy](SECURITY.md). Hobbots has since been changed to offer Codex's search only as above, which is not yet checked with real models.
 
 ## Pages a hob reads
 
