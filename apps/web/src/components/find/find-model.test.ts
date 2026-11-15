@@ -16,7 +16,7 @@ import { findGroups, foundNothing, rowOf } from "./find-model.ts";
 const place = {
   channelId: ChannelId.make("t1"),
   channelTitle: "Spring sale",
-  channelKind: "chat",
+  channelKind: "direct",
   hobId: AgentId.make("aldric"),
   at: "2026-11-04T09:00:00.000Z",
 } as const;

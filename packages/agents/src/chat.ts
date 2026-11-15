@@ -450,7 +450,7 @@ export class ChatService extends Context.Service<
               id: ChannelId.make(crypto.randomUUID()),
               agentId,
               title: options.title ?? DEFAULT_CHANNEL_TITLE,
-              kind: hasChat || options.skillTrial !== undefined ? "camp" : "chat",
+              kind: hasChat || options.skillTrial !== undefined ? "camp" : "direct",
               skillTrial: options.skillTrial ?? null,
               createdAt: now,
               updatedAt: now,

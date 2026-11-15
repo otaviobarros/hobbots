@@ -58,7 +58,7 @@ const Party = Layer.effectDiscard(
         id: channelId,
         agentId: ALDRIC,
         title: "Black Friday",
-        kind: "chat",
+        kind: "direct",
         createdAt: now,
         updatedAt: now,
       }),

@@ -295,7 +295,7 @@ describe("find", () => {
       "chapter 1: Planned the launch emails.",
     ]);
     const [thursday, file, wednesday, chapter] = found.records;
-    expect(thursday).toMatchObject({ channelId: id, channelKind: "chat", hobId: WREN, messageId: later.id });
+    expect(thursday).toMatchObject({ channelId: id, channelKind: "direct", hobId: WREN, messageId: later.id });
     expect(wednesday).toMatchObject({ messageId: reply.id });
     expect(file).toMatchObject({ kind: "doc", messageId: MessageId.make("wrote-launch.md") });
     // A chapter's citation opens its first message.

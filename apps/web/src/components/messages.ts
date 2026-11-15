@@ -454,9 +454,9 @@ export const messages = {
      * A message refused for mentioning hobs that are not in the channel (ADR 039, Who answers). A
      * direct message takes no one else, so it only says so.
      */
-    mentionRefused: ({ names, kind }: { names: ReadonlyArray<string>; kind: "chat" | "camp" }) => {
+    mentionRefused: ({ names, kind }: { names: ReadonlyArray<string>; kind: "direct" | "camp" }) => {
       const who = formatList(names);
-      if (kind === "chat") {
+      if (kind === "direct") {
         return pluralForm(names.length, {
           one: `${who} isn't in this direct message.`,
           other: `${who} aren't in this direct message.`,

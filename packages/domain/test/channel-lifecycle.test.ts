@@ -16,7 +16,7 @@ import { agreesWithModel } from "../testing/machine-model.ts";
 
 const at = "2026-01-01T00:00:00.000Z";
 
-const channel = (state: ChannelState, kind: ChannelKind = "chat") =>
+const channel = (state: ChannelState, kind: ChannelKind = "direct") =>
   new Channel({
     id: "channel-1" as ChannelId,
     agentId: "hob-1" as AgentId,
@@ -60,7 +60,7 @@ const stepModel = (m: ChannelView, e: ChannelLifecycleEvent): ChannelView | "ref
       if (m.state !== "archived" || e.hobRetired) return "refused";
       return { ...m, state: "open", archivedAt: null, kind: e.chatOpen ? "camp" : m.kind };
     case "Supersede":
-      return m.state !== "open" || m.kind !== "chat" || blocked(e)
+      return m.state !== "open" || m.kind !== "direct" || blocked(e)
         ? "refused"
         : { ...m, state: "superseded", archivedAt: e.at, updatedAt: e.at };
   }
@@ -84,7 +84,7 @@ describe("ChannelLifecycleMachine", () => {
     agreesWithModel({
       machine: ChannelLifecycleMachine,
       records: fc
-        .tuple(fc.constantFrom(...ChannelStates.literals), fc.constantFrom<ChannelKind>("chat", "camp"))
+        .tuple(fc.constantFrom(...ChannelStates.literals), fc.constantFrom<ChannelKind>("direct", "camp"))
         .map(([state, kind]) => channel(state, kind)),
       events,
       model: { init: view, step: stepModel, view },
@@ -160,7 +160,7 @@ describe("ChannelLifecycleMachine", () => {
       chatOpen: false,
     });
     expect(back).toMatchObject({ state: "open", kind: "camp", archivedAt: null });
-    expect(alone).toMatchObject({ state: "open", kind: "chat", archivedAt: null });
+    expect(alone).toMatchObject({ state: "open", kind: "direct", archivedAt: null });
     expect(ChannelLifecycle.isOpenChat(alone as Channel)).toBe(true);
   });
 

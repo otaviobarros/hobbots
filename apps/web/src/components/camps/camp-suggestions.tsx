@@ -50,7 +50,7 @@ export function CampSuggestions({
   busy: boolean;
   onMake: (from: CampFrom) => void;
 }) {
-  const suggestions = useQuery({ ...campSuggestionsQuery(channel.id), enabled: channel.kind === "chat" });
+  const suggestions = useQuery({ ...campSuggestionsQuery(channel.id), enabled: channel.kind === "direct" });
   const keep = useKeepInChat(channel.id);
   const kept = keep.data === undefined ? undefined : chapters.find((each) => each.id === keep.data.chapterId);
   return (

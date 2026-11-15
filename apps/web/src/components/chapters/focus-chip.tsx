@@ -80,7 +80,7 @@ function FocusRows({ hob, channel, read }: { hob: Agent; channel: Channel; read:
   const { report } = read;
   const used = { used: report.tokens, budget: report.budget };
   // A chat started fresh from an earlier one shows that chat as Archived: nothing reads it.
-  const rows = focusRows(report, channel.kind === "chat" && channel.origin !== null);
+  const rows = focusRows(report, channel.kind === "direct" && channel.origin !== null);
   return (
     <>
       <span className="text-meta text-label">

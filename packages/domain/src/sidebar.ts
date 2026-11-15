@@ -44,7 +44,7 @@ export const sidebarSectionOf = (
   members: ReadonlyArray<Pick<ChannelMember, "actor" | "state">>,
   you: Actor,
 ): SidebarSection => {
-  if (channel.kind === "chat") return "direct-message";
+  if (channel.kind === "direct") return "direct-message";
   const others = members.filter((member) => member.state === "active" && !sameActor(member.actor, you));
   return others.length > 1 || others.some((member) => member.actor.kind === "user") ? "shared-camp" : "hob-camp";
 };

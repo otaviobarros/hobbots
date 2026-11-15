@@ -64,7 +64,7 @@ const hobWithChat = Effect.gen(function* () {
     }),
   );
   const chat = yield* repo.upsertChannel(
-    new Channel({ id: CHAT, agentId: ALDRIC, title: "Lamps", kind: "chat", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CHAT, agentId: ALDRIC, title: "Lamps", kind: "direct", createdAt: NOW, updatedAt: NOW }),
   );
   return chat.value;
 });
@@ -113,7 +113,7 @@ const freshChat = new Channel({
   id: FRESH,
   agentId: ALDRIC,
   title: "New channel",
-  kind: "chat",
+  kind: "direct",
   origin: { channelId: CHAT, chapterId: null },
   createdAt: LATER,
   updatedAt: LATER,
@@ -231,7 +231,7 @@ describe("Start fresh", () => {
 
     const { started } = result;
     expect(started.value.superseded).toMatchObject({ id: CHAT, state: "superseded", archivedAt: LATER });
-    expect(started.value.chat).toMatchObject({ id: FRESH, kind: "chat", state: "open", origin: { channelId: CHAT } });
+    expect(started.value.chat).toMatchObject({ id: FRESH, kind: "direct", state: "open", origin: { channelId: CHAT } });
     expect(started.value.carried.map((item) => [item.ref._tag, item.label])).toEqual([
       ["task", "Brief for launch"],
       ["question", "Which lamps first?"],

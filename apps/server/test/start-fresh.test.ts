@@ -93,7 +93,7 @@ const Frodo = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(frodo);
     yield* repo.upsertChannel(
-      new Channel({ id: SHIRE, agentId: FRODO, title: "The quest", kind: "chat", createdAt: now, updatedAt: now }),
+      new Channel({ id: SHIRE, agentId: FRODO, title: "The quest", kind: "direct", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -213,7 +213,7 @@ describe("Start fresh", () => {
       }),
     );
 
-    expect(result.started.chat).toMatchObject({ id: FRESH, kind: "chat", origin: { channelId: SHIRE } });
+    expect(result.started.chat).toMatchObject({ id: FRESH, kind: "direct", origin: { channelId: SHIRE } });
     expect(result.started.carried.map((item) => item.ref._tag)).toEqual(["task", "backpack-item"]);
     // The same request sent again returns what it did and changes nothing.
     expect(result.again).toEqual(result.started);

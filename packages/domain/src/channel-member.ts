@@ -145,7 +145,7 @@ export const planMemberAdd = (
   if (member !== undefined) {
     return member.state === "active" ? { _tag: "active", member } : { _tag: "return", member };
   }
-  return channel.kind === "chat" ? { _tag: "refused", reason: "direct-message" } : { _tag: "add" };
+  return channel.kind === "direct" ? { _tag: "refused", reason: "direct-message" } : { _tag: "add" };
 };
 
 /**
@@ -161,7 +161,7 @@ export const planMemberRemove = (
   | { readonly _tag: "remove"; readonly member: ChannelMember }
   | { readonly _tag: "gone"; readonly member: ChannelMember }
   | { readonly _tag: "refused"; readonly reason: MemberRefusal } => {
-  if (channel.kind === "chat") return { _tag: "refused", reason: "direct-message" };
+  if (channel.kind === "direct") return { _tag: "refused", reason: "direct-message" };
   const member = members.find((each) => sameActor(each.actor, actor));
   if (member === undefined) return { _tag: "refused", reason: "not-member" };
   if (member.role === "owner") return { _tag: "refused", reason: "owner" };

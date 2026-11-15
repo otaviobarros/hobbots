@@ -123,7 +123,7 @@ export function ChapterTranscript({
               : undefined
           }
           makeCamp={
-            open && channel.kind === "chat" && section.chapter !== null && section.messages.length > 0
+            open && channel.kind === "direct" && section.chapter !== null && section.messages.length > 0
               ? () =>
                   section.chapter &&
                   setCampFrom({

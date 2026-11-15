@@ -101,7 +101,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
       Effect.gen(function* () {
         const stored = yield* repo.findChannel(key);
         if (Option.isNone(stored)) return Option.none<StartedFresh>();
-        if (stored.value.origin?.channelId !== channelId || stored.value.kind !== "chat") {
+        if (stored.value.origin?.channelId !== channelId || stored.value.kind !== "direct") {
           return yield* new ChannelKeyReused({ channelId: key });
         }
         const superseded = yield* repo.findChannel(channelId).pipe(Effect.map(Option.getOrThrow));
@@ -129,7 +129,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
           // standards-allow STD-ARCH-021: the new chat belongs to the same hob
           agentId: channel.agentId,
           title: DEFAULT_CHANNEL_TITLE,
-          kind: "chat",
+          kind: "direct",
           origin: { channelId: channel.id, chapterId: null },
           createdAt: at,
           updatedAt: at,

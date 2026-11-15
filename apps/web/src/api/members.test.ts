@@ -3,7 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applyMembersEvent } from "./members.ts";
 
-const channel = (id: string, kind: "chat" | "camp") =>
+const channel = (id: string, kind: "direct" | "camp") =>
   new Channel({
     id: ChannelId.make(id),
     agentId: AgentId.make("aldric"),
@@ -32,7 +32,7 @@ const reread = async (event: HobbotsEvent) => {
 describe("applyMembersEvent", () => {
   // covers ADR 039 (Cards every channel shares: Status and cost), #1467
   it("reads both channels' members again when a chapter moves between them, and a camp's after a turn passed there, cancelling first (#1467)", async () => {
-    const chat = channel("chat", "chat");
+    const chat = channel("chat", "direct");
     const camp = channel("camp", "camp");
     const moved = { _tag: "ChapterMoved", channelId: chat.id, channel: chat, camp } as unknown as HobbotsEvent;
     expect(await reread(moved)).toEqual(["cancel:chat", "cancel:camp", "invalidate:chat", "invalidate:camp"]);

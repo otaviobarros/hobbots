@@ -168,7 +168,7 @@ describe("a chapter moved into a camp", () => {
         movedTo: state === "moved" ? campId : null,
         revision,
       });
-    const channel = (id: ChannelId, kind: "chat" | "camp") =>
+    const channel = (id: ChannelId, kind: "direct" | "camp") =>
       new Channel({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
     const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
     // The reply arrived live, so the overlay holds it, in the chat.
@@ -176,7 +176,7 @@ describe("a chapter moved into a camp", () => {
     applyEvent(client, {
       _tag: "ChapterMoved",
       channelId,
-      channel: channel(channelId, "chat"),
+      channel: channel(channelId, "direct"),
       camp: channel(campId, "camp"),
       stub: chapter("c1", channelId, "moved", 9),
       chapter: chapter("k1", campId, "live", 9),
@@ -212,7 +212,7 @@ describe("a chapter moved into a camp", () => {
         movedTo: state === "moved" ? campId : null,
         revision: 9,
       });
-    const channel = (id: ChannelId, kind: "chat" | "camp") =>
+    const channel = (id: ChannelId, kind: "direct" | "camp") =>
       new Channel({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
     const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
     // The chat opens and reads its transcript; the read is slow, and nothing is cached yet.
@@ -228,7 +228,7 @@ describe("a chapter moved into a camp", () => {
     applyEvent(client, {
       _tag: "ChapterMoved",
       channelId,
-      channel: channel(channelId, "chat"),
+      channel: channel(channelId, "direct"),
       camp: channel(campId, "camp"),
       stub: chapter("c1", channelId, "moved"),
       chapter: chapter("k1", campId, "live"),

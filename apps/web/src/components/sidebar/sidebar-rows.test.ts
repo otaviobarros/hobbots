@@ -19,7 +19,7 @@ const hob = (id: string) =>
     configVersion: 1,
     createdAt: NOW,
   });
-const channel = (id: string, agentId: string, kind: "chat" | "camp") =>
+const channel = (id: string, agentId: string, kind: "direct" | "camp") =>
   new Channel({
     id: ChannelId.make(id),
     agentId: AgentId.make(agentId),
@@ -112,7 +112,7 @@ describe("sidebar rows", () => {
   });
 
   it("lists every hob in its order, each with its direct message once the hub lists one (#1469)", () => {
-    const chat = channel("chat-quill", "quill", "chat");
+    const chat = channel("chat-quill", "quill", "direct");
     const rows = directRows({
       hobs: [hob("aldric"), hob("quill")],
       places: [place("chat-quill", "quill", "direct-message", [{ kind: "hob", id: "quill" }])],

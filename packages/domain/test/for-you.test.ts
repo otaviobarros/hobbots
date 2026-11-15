@@ -218,7 +218,7 @@ describe("forYouOf", () => {
   // covers ADR 039 (Cards every channel shares › For you; Validation)
   it("lists the same mentions, decisions and changed artifacts as catch-up, for the same records and read marker (#1456)", () => {
     fc.assert(
-      fc.property(fc.constantFrom<Actor>(...PEOPLE), fc.tuple(channelArb("camp"), channelArb("chat")), (you, channels) => {
+      fc.property(fc.constantFrom<Actor>(...PEOPLE), fc.tuple(channelArb("camp"), channelArb("direct")), (you, channels) => {
         const forYou = forYouOf({ you, channels, ...empty });
         expect(forYou.for).toEqual(you);
         for (const each of channels) {

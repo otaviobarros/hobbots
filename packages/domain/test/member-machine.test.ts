@@ -90,10 +90,10 @@ describe("planMemberAdd", () => {
 
   // covers ADR 039 (Members)
   it("refuses a third member in a direct message, and lets its own two come back (#1453)", () => {
-    expect(planMemberAdd({ kind: "chat" }, [owner, hob], rook)).toEqual({ _tag: "refused", reason: "direct-message" });
-    expect(planMemberAdd({ kind: "chat" }, [owner, hob], hob.actor)).toEqual({ _tag: "active", member: hob });
+    expect(planMemberAdd({ kind: "direct" }, [owner, hob], rook)).toEqual({ _tag: "refused", reason: "direct-message" });
+    expect(planMemberAdd({ kind: "direct" }, [owner, hob], hob.actor)).toEqual({ _tag: "active", member: hob });
     const away = member("left");
-    expect(planMemberAdd({ kind: "chat" }, [owner, away], away.actor)).toEqual({ _tag: "return", member: away });
+    expect(planMemberAdd({ kind: "direct" }, [owner, away], away.actor)).toEqual({ _tag: "return", member: away });
   });
 
   // covers ADR 039 (Members)
@@ -113,7 +113,7 @@ describe("planMemberRemove", () => {
   // covers ADR 039 (Members), #1467
   it("takes an active hob out of a camp, and keeps a direct message's two, the owner and the lead (#1467)", () => {
     expect(planMemberRemove(camp, [owner, lead, rook], rook.actor)).toEqual({ _tag: "remove", member: rook });
-    expect(planMemberRemove({ ...camp, kind: "chat" }, [owner, lead], lead.actor)).toEqual({
+    expect(planMemberRemove({ ...camp, kind: "direct" }, [owner, lead], lead.actor)).toEqual({
       _tag: "refused",
       reason: "direct-message",
     });

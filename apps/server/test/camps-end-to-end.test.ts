@@ -171,7 +171,7 @@ describe("camps and Start fresh over the API", () => {
     const fresh = await request<StartedFresh>("POST", `/api/channels/${channel.id}/start-fresh`, { key: "fresh-1" });
     expect(fresh.status).toBe(200);
     expect(fresh.body.superseded).toMatchObject({ id: channel.id, state: "superseded" });
-    expect(fresh.body.chat).toMatchObject({ id: "fresh-1", kind: "chat", origin: { channelId: channel.id } });
+    expect(fresh.body.chat).toMatchObject({ id: "fresh-1", kind: "direct", origin: { channelId: channel.id } });
     const replayed = await request<StartedFresh>("POST", `/api/channels/${channel.id}/start-fresh`, { key: "fresh-1" });
     expect(replayed.body).toEqual(fresh.body);
     expect(await listed(pip.id)).toEqual(["fresh-1", "camp-launch"]);

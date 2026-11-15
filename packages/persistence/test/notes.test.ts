@@ -86,7 +86,7 @@ const chat = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "chat", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "direct", createdAt: NOW, updatedAt: NOW }),
   );
   yield* repo.upsertMessage(message("ask", "user"));
   const reply = yield* repo.upsertMessage(message("reply", "assistant"));

@@ -222,7 +222,7 @@ describe("a camp's hobs", () => {
         const repo = yield* HobbotsRepository;
         const repository = yield* ChannelMemberRepository;
         yield* campOfThree;
-        yield* repo.upsertChannel(camp(CHAT, "chat"));
+        yield* repo.upsertChannel(camp(CHAT, "direct"));
         const reason = (channelId: ChannelId, actor: Actor) =>
           Effect.flip(repo.removeMember(channelId, actor, OWNER_ACTOR)).pipe(Effect.map(refusal));
         const refusals = [

@@ -402,14 +402,14 @@ describe("read channels", () => {
         const next = yield* chat.createChannel(HOB_ID);
         const restored = yield* chat.restore(first.id);
         const open = yield* repo.listChannels(HOB_ID);
-        return { first, second, trial, next, restored, chats: open.filter((t) => t.kind === "chat").map((t) => t.id) };
+        return { first, second, trial, next, restored, chats: open.filter((t) => t.kind === "direct").map((t) => t.id) };
       }),
     );
 
-    expect(result.first).toMatchObject({ kind: "chat", state: "open" });
+    expect(result.first).toMatchObject({ kind: "direct", state: "open" });
     expect(result.second).toMatchObject({ kind: "camp", state: "open" });
     expect(result.trial).toMatchObject({ kind: "camp", state: "open" });
-    expect(result.next).toMatchObject({ kind: "chat", state: "open" });
+    expect(result.next).toMatchObject({ kind: "direct", state: "open" });
     expect(result.restored).toMatchObject({ id: result.first.id, kind: "camp", state: "open", archivedAt: null });
     expect(result.chats).toEqual([result.next.id]);
   });

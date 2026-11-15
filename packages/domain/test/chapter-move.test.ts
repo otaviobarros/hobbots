@@ -40,7 +40,7 @@ const channel = (id: ChannelId, fields: Partial<Channel> = {}) =>
 const chatChapters = [chapter(CHAT, "c1", 1, "resting", "Lamps"), chapter(CHAT, "c2", 2, "live", "Billing")];
 
 const input = (fields: Partial<ChapterMoveInput> = {}): ChapterMoveInput => ({
-  from: channel(CHAT, { kind: "chat" }),
+  from: channel(CHAT, { kind: "direct" }),
   chapters: chatChapters,
   chapterId: ChapterId.make("c1"),
   chapterEmpty: false,
@@ -99,11 +99,11 @@ describe("planMove", () => {
 
   it("refuses a closed channel, itself, anything but an open camp of the hob's, a moved chapter and an empty one (#1385)", () => {
     const reason = (fields: Partial<ChapterMoveInput>) => (planMove(input(fields)) as ChapterRefused).reason;
-    expect(reason({ from: channel(CHAT, { kind: "chat", state: "archived", archivedAt: at(1) }) })).toBe(
+    expect(reason({ from: channel(CHAT, { kind: "direct", state: "archived", archivedAt: at(1) }) })).toBe(
       "channel-closed",
     );
-    expect(reason({ to: channel(CHAT, { kind: "chat" }) })).toBe("same-channel");
-    expect(reason({ to: channel(ChannelId.make("chat-2"), { kind: "chat" }) })).toBe("not-a-camp");
+    expect(reason({ to: channel(CHAT, { kind: "direct" }) })).toBe("same-channel");
+    expect(reason({ to: channel(ChannelId.make("chat-2"), { kind: "direct" }) })).toBe("not-a-camp");
     expect(reason({ to: channel(CAMP, { agentId: AgentId.make("bo") }) })).toBe("not-a-camp");
     expect(reason({ to: channel(CAMP, { state: "archived", archivedAt: at(1) }) })).toBe("not-a-camp");
     expect(

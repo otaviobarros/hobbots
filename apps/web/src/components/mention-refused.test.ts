@@ -11,6 +11,6 @@ describe("the words for a refused mention", () => {
     expect(say({ names: ["Rook", "Pip", "Leo"], kind: "camp" })).toBe(
       "Rook, Pip, and Leo aren't in this camp. Add them?",
     );
-    expect(say({ names: ["Rook"], kind: "chat" })).toBe("Rook isn't in this direct message.");
+    expect(say({ names: ["Rook"], kind: "direct" })).toBe("Rook isn't in this direct message.");
   });
 });

@@ -8,7 +8,7 @@ import { Revision } from "./revision.ts";
 import { SkillTrial } from "./skills.ts";
 
 /** What a channel is (ADR 037): a hob's one open `chat`, or a `camp` with a goal of its own. */
-export const ChannelKind = Schema.Literals(["chat", "camp"]);
+export const ChannelKind = Schema.Literals(["direct", "camp"]);
 export type ChannelKind = typeof ChannelKind.Type;
 
 /** Where a channel stands (ADR 037), held by `ChannelLifecycleMachine`. */
@@ -176,7 +176,7 @@ const archiveRefusal = (blockers: ArchiveBlockers): ChannelArchiveRefusal | null
 /** Why an event the channel's state allows was refused, or null when its state refused it. */
 const refusalOf = (channel: Channel, event: ChannelLifecycleEvent): ChannelArchiveRefusal | null => {
   if (event._tag === "Archive" && channel.state === "open") return archiveRefusal(event);
-  if (event._tag === "Supersede" && channel.state === "open" && channel.kind === "chat") return archiveRefusal(event);
+  if (event._tag === "Supersede" && channel.state === "open" && channel.kind === "direct") return archiveRefusal(event);
   if (event._tag === "Restore" && channel.state === "archived" && event.hobRetired) return "hob-retired";
   return null;
 };
@@ -212,14 +212,14 @@ export const ChannelLifecycleMachine = defineMachine<ChannelState, ChannelLifecy
             ...channel,
             state: "open",
             archivedAt: null,
-            kind: channel.kind === "chat" && e.chatOpen ? "camp" : channel.kind,
+            kind: channel.kind === "direct" && e.chatOpen ? "camp" : channel.kind,
           }),
       },
       // Only a chat is superseded, and only when nothing would stop its archive.
       Supersede: {
         from: ["open"],
         to: "superseded",
-        guard: (channel, e) => channel.kind === "chat" && archiveRefusal(e) === null,
+        guard: (channel, e) => channel.kind === "direct" && archiveRefusal(e) === null,
         apply: (channel, e) => new Channel({ ...channel, state: "superseded", archivedAt: e.at, updatedAt: e.at }),
       },
     },
@@ -234,7 +234,7 @@ export const ChannelLifecycle = {
   isOpen: (channel: Channel): boolean => channel.state === "open",
   isArchived: (channel: Channel): boolean => channel.state === "archived",
   /** The hob's one open chat, which a new channel does not replace. */
-  isOpenChat: (channel: Channel): boolean => channel.kind === "chat" && channel.state === "open",
+  isOpenChat: (channel: Channel): boolean => channel.kind === "direct" && channel.state === "open",
 };
 
 /** Whether `session` is `agentId`'s session on `runtime` (ADR 039), whichever chapter it belongs to. */

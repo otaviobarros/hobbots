@@ -23,7 +23,7 @@ const hob = (id: string): Actor => ({ kind: "hob", id });
 
 const channel = (
   id: string,
-  kind: "chat" | "camp",
+  kind: "direct" | "camp",
   more: { agentId?: string; pinnedAt?: string | null; updatedAt?: string; state?: "open" | "archived" } = {},
 ): SidebarChannel["channel"] => ({
   id: ChannelId.make(id),
@@ -44,7 +44,7 @@ const entry = (
 
 describe("sidebarSectionOf", () => {
   it("puts a chat in Direct messages, a camp with one hob in its hob's camps, and a camp with more in shared camps (#1469)", () => {
-    expect(sidebarSectionOf({ kind: "chat" }, [member(you), member(hob("aldric"))], you)).toBe("direct-message");
+    expect(sidebarSectionOf({ kind: "direct" }, [member(you), member(hob("aldric"))], you)).toBe("direct-message");
     expect(sidebarSectionOf({ kind: "camp" }, [member(you), member(hob("aldric"))], you)).toBe("hob-camp");
     expect(sidebarSectionOf({ kind: "camp" }, [member(you), member(hob("aldric")), member(hob("quill"))], you)).toBe(
       "shared-camp",
@@ -62,7 +62,7 @@ describe("sidebarOf", () => {
     const sidebar = sidebarOf({
       you,
       channels: [
-        entry(channel("chat-aldric", "chat"), [member(you), member(hob("aldric"))]),
+        entry(channel("chat-aldric", "direct"), [member(you), member(hob("aldric"))]),
         entry(channel("old", "camp", { updatedAt: "2026-11-14T08:00:00.000Z" }), [member(you), member(hob("aldric"))]),
         entry(channel("new", "camp", { updatedAt: "2026-11-14T09:00:00.000Z" }), [member(you), member(hob("aldric"))]),
         entry(
@@ -74,7 +74,7 @@ describe("sidebarOf", () => {
           member(hob("aldric")),
           member(hob("quill")),
         ]),
-        entry(channel("chat-quill", "chat", { agentId: "quill" }), [member(you), member(hob("quill"))]),
+        entry(channel("chat-quill", "direct", { agentId: "quill" }), [member(you), member(hob("quill"))]),
         entry(channel("archived", "camp", { state: "archived" }), [member(you), member(hob("aldric"))]),
         entry(channel("left", "camp"), [member(you, "left"), member(hob("aldric"))]),
       ],
@@ -108,7 +108,7 @@ describe("sidebarOf", () => {
   it("lists every open channel you are active in exactly once, in the section its members decide (#1469)", () => {
     const actor = fc.constantFrom(you, marina, hob("aldric"), hob("quill"), hob("pip"));
     const anEntry = fc.record({
-      kind: fc.constantFrom("chat" as const, "camp" as const),
+      kind: fc.constantFrom("direct" as const, "camp" as const),
       state: fc.constantFrom("open" as const, "archived" as const),
       pinned: fc.boolean(),
       minute: fc.integer({ min: 0, max: 59 }),

@@ -73,7 +73,7 @@ const quests: fc.Arbitrary<RunningQuest | null> = fc.option(
 );
 const places: fc.Arbitrary<AnswerPlace> = fc.record({
   id: fc.constant(ChannelId.make("camp")),
-  kind: fc.constantFrom("chat", "camp"),
+  kind: fc.constantFrom("direct", "camp"),
   quest: quests,
 });
 

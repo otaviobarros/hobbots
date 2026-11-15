@@ -131,7 +131,7 @@ describe("channel members", () => {
           ...fields,
         })}`;
         const old = { sessions: "[]", createdAt: NOW, updatedAt: NOW, revision: 4 };
-        yield* sql`INSERT INTO channels ${sql.insert({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "chat", readRevision: 3, ...old })}`;
+        yield* sql`INSERT INTO channels ${sql.insert({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "direct", readRevision: 3, ...old })}`;
         yield* sql`INSERT INTO channels ${sql.insert({ id: CAMP, agentId: ROOK, title: "Camp", kind: "camp", ...old })}`;
         yield* channelMembers;
         const all = yield* Effect.flatMap(ChannelMemberRepository, (repository) => repository.list(CHAT));
@@ -157,14 +157,14 @@ describe("channel members", () => {
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(hob(ALDRIC));
-        const made = yield* repo.upsertChannel(channel(CHAT, "chat"));
+        const made = yield* repo.upsertChannel(channel(CHAT, "direct"));
         // Bruna makes the camp from her phone.
         const camped = yield* repo
           .makeCamp(channel(CAMP, "camp"))
           .pipe(Effect.provideService(UserSession, brunaSession));
         const chat = Option.getOrThrow(yield* repo.findChannel(CHAT));
         const fresh = new Channel({
-          ...channel(ChannelId.make("fresh"), "chat"),
+          ...channel(ChannelId.make("fresh"), "direct"),
           origin: { channelId: CHAT, chapterId: null },
         });
         const started = yield* repo.startFresh({
@@ -214,7 +214,7 @@ describe("channel members", () => {
         const repository = yield* ChannelMemberRepository;
         yield* repo.insertAgent(hob(ALDRIC));
         yield* repo.insertAgent(hob(ROOK));
-        yield* repo.upsertChannel(channel(CHAT, "chat"));
+        yield* repo.upsertChannel(channel(CHAT, "direct"));
         yield* repo.makeCamp(channel(CAMP, "camp"));
         const refused = yield* Effect.exit(repository.add(CHAT, hobActor(ROOK), OWNER_ACTOR));
         const again = yield* repository.add(CHAT, hobActor(ALDRIC), OWNER_ACTOR);
@@ -254,7 +254,7 @@ describe("channel members", () => {
         const repository = yield* ChannelMemberRepository;
         yield* repo.insertAgent(hob(ALDRIC));
         yield* repo.insertAgent(hob(ROOK));
-        yield* repo.upsertChannel(channel(CHAT, "chat"));
+        yield* repo.upsertChannel(channel(CHAT, "direct"));
         yield* repo.makeCamp(channel(CAMP, "camp"));
         yield* repository.add(CAMP, hobActor(ROOK), OWNER_ACTOR);
         const retired = Option.getOrThrow(yield* retire(ROOK));
@@ -280,7 +280,7 @@ describe("channel members", () => {
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(hob(ALDRIC));
-        yield* repo.upsertChannel(channel(CHAT, "chat"));
+        yield* repo.upsertChannel(channel(CHAT, "direct"));
         const reply = new Message({
           id: MessageId.make("reply"),
           channelId: CHAT,

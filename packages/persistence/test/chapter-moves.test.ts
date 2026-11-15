@@ -187,7 +187,7 @@ const chatWithTwoChapters = Effect.gen(function* () {
   const chapters = yield* ChapterRepository;
   const tasks = yield* TaskRepository;
   yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
-  yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "chat" }));
+  yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "direct" }));
   yield* repo.upsertMessage(message(CHAT, "ask-1", "user"));
   yield* repo.upsertMessage(writing(CHAT, "reply-1", "/work/app/launch.md"));
   yield* decide(CHAT, "d1");
@@ -661,7 +661,7 @@ describe("camp suggestions", () => {
         const repo = yield* HobbotsRepository;
         const suggestions = yield* CampSuggestionRepository;
         yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
-        yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "chat" }));
+        yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "direct" }));
         const raised: Array<ReadonlyArray<CampSuggestion>> = [];
         for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS + 1; n++) {
           raised.push(suggested((yield* decide(CHAT, `d${n}`)).entries));
@@ -1035,7 +1035,7 @@ describe("camp suggestions", () => {
       const tasks = yield* TaskRepository;
       const chapters = yield* ChapterRepository;
       yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
-      yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "chat" }));
+      yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "direct" }));
       yield* repo.upsertMessage(message(CHAT, "ask-1", "user"));
       yield* quest("ship");
       const step = yield* tasks.createTask({ task: newTask("copy", "ship"), delegation: null, milestones: [] });

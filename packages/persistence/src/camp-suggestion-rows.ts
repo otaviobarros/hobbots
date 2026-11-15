@@ -121,7 +121,7 @@ export const raiseSuggestion = (
     const [chapter] = chapterRows(yield* sql`SELECT * FROM chapters WHERE id = ${chapterId}`);
     if (chapter === undefined) return null;
     const [channel] = yield* sql<{ readonly openChat: unknown }>`SELECT
-        (CASE WHEN kind = 'chat' AND state = 'open' THEN 1 ELSE 0 END) AS open_chat
+        (CASE WHEN kind = 'direct' AND state = 'open' THEN 1 ELSE 0 END) AS open_chat
       FROM channels WHERE id = ${chapter.channelId}`;
     const openChat = Number(channel?.openChat ?? 0) === 1;
     const suggested = openChat && (yield* suggestionOfChapter(sql, chapterId)) !== null;

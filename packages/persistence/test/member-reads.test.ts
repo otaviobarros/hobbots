@@ -135,7 +135,7 @@ describe("read markers per member", () => {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(aldric);
         for (const [id, kind] of [
-          [CHAT, "chat"],
+          [CHAT, "direct"],
           [CAMP, "camp"],
           [QUIET, "camp"],
         ] as const) {
@@ -193,7 +193,7 @@ describe("read markers per member", () => {
         const repo = yield* HobbotsRepository;
         const journal = yield* EventJournal;
         yield* repo.insertAgent(aldric);
-        const made = yield* repo.upsertChannel(channel(CHAT, "chat"));
+        const made = yield* repo.upsertChannel(channel(CHAT, "direct"));
         // Each kind of entry that carries a channel, as the hub wrote it before: with its `unread`.
         const stored = { ...JSON.parse(JSON.stringify(made.value)), unread: true };
         const payloads = {
