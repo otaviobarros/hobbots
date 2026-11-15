@@ -28,6 +28,8 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   page,
   scan,
 }) => {
+  // The Quest's own lead wake can run before the second message (see below).
+  test.setTimeout(120_000);
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   // A Quest gives the commands a Workbench, whose Terminal shows how each one ended.
@@ -35,10 +37,12 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   await expect(ticket(page, "Start the dev server")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // The dev server never ends on its own, so once Aldric has answered the reply waits on it.
+  // The dev server never ends on its own, so once Aldric has answered the reply waits on it. The hub
+  // may first wake the Quest's lead on its own (#1081), a turn of ~17 s with the fake, and this
+  // message waits behind it, so its reply can start late.
   await send(page, ["Run it", run({ command: "pnpm dev", background: true, outlives: true })]);
   const stopWaiting = page.getByRole("button", { name: "■ Stop waiting" });
-  await expect(stopWaiting).toBeVisible({ timeout: 20_000 });
+  await expect(stopWaiting).toBeVisible({ timeout: 45_000 });
   await expect(page.getByRole("button", { name: "■ Stop", exact: true })).toBeHidden();
   await expect(page.getByText("Aldric is waiting on pnpm dev · under a minute")).toBeVisible();
   await expect(page.getByText(/Your chat with Aldric · waiting on pnpm dev · under a minute/)).toBeVisible();
