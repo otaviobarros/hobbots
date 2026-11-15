@@ -304,7 +304,7 @@ describe("backup and restore", () => {
       storage: "sqlite",
       database: "included",
       schemaVersion: knownSchemaVersion(),
-      counts: { hobs: 1, channels: 1, quests: 1, tasks: 1 },
+      counts: { hobs: 1, threads: 1, quests: 1, tasks: 1 },
     });
     const setAside = await Effect.runPromise(performRestore(dataDir, folder));
     expect(setAside).toBeNull();
@@ -760,7 +760,7 @@ describe("backup and restore", () => {
       expect(made).not.toBeNull();
       const manifest = await readBackup(made as string, 41);
       expect(manifest.schemaVersion).toBe(Number(before) - 1);
-      expect(manifest.counts).toEqual({ hobs: 0, channels: 0, quests: 0, tasks: 0, skills: 0 });
+      expect(manifest.counts).toEqual({ hobs: 0, threads: 0, quests: 0, tasks: 0, skills: 0 });
       // The next start migrates it.
       await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir))));
     }
