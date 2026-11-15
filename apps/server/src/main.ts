@@ -9,6 +9,7 @@ import {
   ArtifactContents,
   CampBriefs,
   CampDrift,
+  CampMembers,
   CampSuggestionService,
   CatchUps,
   ChapterBreaks,
@@ -606,6 +607,9 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Adding hobs to a camp and taking them out (ADR 039, Members), above the chat service, whose
+      // floor a hob taken out leaves.
+      .pipe(Layer.provideMerge(CampMembers.layer))
       .pipe(Layer.provideMerge(ChatService.layer))
       // Before the chat service: the report of the context pack each thread's last new session read (ADR 037).
       .pipe(Layer.provideMerge(PackReports.layer))

@@ -10,7 +10,7 @@ import {
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { MakeCampPayload } from "./camp-payloads.ts";
-import { HobUnavailable, ThreadKeyReused, ThreadNotFound } from "./errors.ts";
+import { AgentNotFound, HobUnavailable, ThreadKeyReused, ThreadNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -67,7 +67,7 @@ export class CampSuggestionsGroup extends HttpApiGroup.make("campSuggestions")
       params: { threadId: ThreadId, chapterId: ChapterId },
       payload: MoveChapterPayload,
       success: ChapterMove,
-      error: [ThreadNotFound, ChapterMissing, ChapterMoveRefused, HobUnavailable, ThreadKeyReused],
+      error: [ThreadNotFound, ChapterMissing, ChapterMoveRefused, AgentNotFound, HobUnavailable, ThreadKeyReused],
     }),
   )
   .middleware(DeviceSession)

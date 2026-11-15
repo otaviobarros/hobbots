@@ -43,6 +43,7 @@ describe("a camp made from a suggestion", () => {
       goal: "Ship it by Friday.",
       private: false,
       chapter: true,
+      hobs: [],
     });
     expect(suggestedFrom(suggestion(null, null), chapter("Garden plans"))).toMatchObject({
       name: "Garden plans",

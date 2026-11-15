@@ -2,6 +2,7 @@ import type { InvalidFolder } from "@hobbots/api";
 import type {
   AgentId,
   CommitIdentity,
+  Committed,
   EventEnvelope,
   GitHubAccount,
   HobGitHubApp,
@@ -34,6 +35,15 @@ export const announcer =
       : publisher.value
           .publish(entries)
           .pipe(Effect.catchCause((cause) => Effect.logWarning(`Could not announce ${what}`, cause)));
+
+/**
+ * Runs a committed command, announces its entries with `announce` (from `announcer`), and gives
+ * back what it made.
+ */
+export const announcing =
+  (announce: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>) =>
+  <A, E, R>(command: Effect.Effect<Committed<A>, E, R>): Effect.Effect<A, E, R> =>
+    Effect.flatMap(command, (committed) => Effect.as(announce(committed.entries), committed.value));
 
 /** The installation's setup as the user last saved it: its safety preset and the folders shared with every hob. */
 export class InstallationSettings extends Context.Service<

@@ -7,6 +7,7 @@ import { messages as campCopy } from "../camps/messages.ts";
 import { FocusChip } from "../chapters/focus-chip.tsx";
 import { FindButton } from "../find/find-box.tsx";
 import { HobSprite, type HobState } from "../hob-sprite/hob-sprite.tsx";
+import { MembersButton } from "../members/members-sheet.tsx";
 import { messages } from "../messages.ts";
 import { BrainPicker } from "../providers/brain-picker.tsx";
 import { ThreadQuestButton } from "../quest/thread-work.tsx";
@@ -100,6 +101,8 @@ export function ChatHeader({
             />
           )}
           <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} camp={camp !== undefined} />
+          {/* Who is in the camp and what they spent today (ADR 039, Members). */}
+          {camp && <MembersButton camp={camp} open={sheet === "members"} onOpen={() => setSheet("members")} />}
         </>
       )}
       {thread && <FindButton open={finding} onToggle={() => onFinding(!finding)} />}

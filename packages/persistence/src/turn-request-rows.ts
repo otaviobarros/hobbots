@@ -73,6 +73,12 @@ export const selectOpenRequests = (sql: SqlClient.SqlClient, line: Line) =>
       AND ${sql.in("state", OPEN)}
     ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
 
+/** The requests `hobId` waits to answer in the thread, on any line, paused ones included. */
+export const selectWaitingOf = (sql: SqlClient.SqlClient, threadId: ThreadId, hobId: string) =>
+  sql<TurnRequestRow>`SELECT * FROM turn_requests
+    WHERE thread_id = ${threadId} AND hob_id = ${hobId} AND ${sql.in("state", ["waiting", "paused"])}
+    ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
+
 /** Every request in `state`, across threads, in floor order. */
 export const selectRequestsIn = (sql: SqlClient.SqlClient, state: TurnRequest["state"]) =>
   sql<TurnRequestRow>`SELECT * FROM turn_requests WHERE state = ${state}

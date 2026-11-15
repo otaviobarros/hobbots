@@ -1,4 +1,5 @@
-import { THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
+import { CAMP_HOBS_MAX } from "@hobbots/api";
+import { AgentId, THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
@@ -10,20 +11,28 @@ import {
   type MakeCampEvent,
   makeCampError,
   makeCampStep,
+  refusedHob,
   startMakeCamp,
+  toggleHob,
+  withChapterHob,
 } from "./make-camp-flow.ts";
+
+const ALDRIC = AgentId.make("aldric");
+const QUILL = AgentId.make("quill");
+const PIP = AgentId.make("pip");
 
 const draft = (change: Partial<CampDraft> = {}): CampDraft => ({
   title: "2027 taxes",
   goal: "",
   private: false,
   chapter: false,
+  hobs: [ALDRIC],
   ...change,
 });
 const K1 = ThreadId.make("k1");
 const K2 = ThreadId.make("k2");
 
-const run = (events: ReadonlyArray<MakeCampEvent>, from: MakeCamp = startMakeCamp()) =>
+const run = (events: ReadonlyArray<MakeCampEvent>, from: MakeCamp = startMakeCamp("", false, "", [ALDRIC])) =>
   events.reduce(makeCampStep, from);
 
 describe("Make a camp", () => {
@@ -33,6 +42,27 @@ describe("Make a camp", () => {
     expect(campProblems(draft({ title: "x".repeat(THREAD_TITLE_MAX + 1) }))).toEqual({ title: "title-long" });
     expect(campProblems(draft({ title: ` ${"x".repeat(THREAD_TITLE_MAX)} ` }))).toEqual({});
     expect(campProblems(draft({ goal: "g".repeat(501) }))).toEqual({ goal: "goal-long" });
+    expect(campProblems(draft({ hobs: [] }))).toEqual({ hobs: "hobs-missing" });
+  });
+
+  // covers ADR 039 (Members), #1467
+  it("[TC-CH-1467-01] keeps the hobs in the order picked, the first leading, and sends the others", () => {
+    expect(toggleHob([ALDRIC], QUILL)).toEqual([ALDRIC, QUILL]);
+    expect(toggleHob([ALDRIC, QUILL], PIP)).toEqual([ALDRIC, QUILL, PIP]);
+    // Unticking the lead makes the next hob picked lead.
+    expect(toggleHob([ALDRIC, QUILL, PIP], ALDRIC)).toEqual([QUILL, PIP]);
+    // The hob whose chapter moves into the camp stays picked and first.
+    expect(toggleHob([ALDRIC, QUILL], ALDRIC, ALDRIC)).toEqual([ALDRIC, QUILL]);
+    expect(campPayload(draft({ hobs: [QUILL, ALDRIC, PIP] }), K1).hobs).toEqual([ALDRIC, PIP]);
+    expect(refusedHob(new ApiError("", "HobUnavailable", { agentId: "pip", status: "paused" }))).toBe(PIP);
+    expect(refusedHob(new TypeError("Failed to fetch"))).toBeNull();
+    // A camp takes its lead and up to CAMP_HOBS_MAX others, as the hub does.
+    const many = (n: number) => Array.from({ length: n }, (_, i) => AgentId.make(`hob-${i}`));
+    expect(campProblems(draft({ hobs: many(CAMP_HOBS_MAX + 1) }))).toEqual({});
+    expect(campProblems(draft({ hobs: many(CAMP_HOBS_MAX + 2) }))).toEqual({ hobs: "hobs-many" });
+    // The chapter's hob, brought back with its chapter, is picked again and leads.
+    expect(withChapterHob([QUILL, PIP], ALDRIC)).toEqual([ALDRIC, QUILL, PIP]);
+    expect(withChapterHob([QUILL, ALDRIC], ALDRIC)).toEqual([ALDRIC, QUILL]);
   });
 
   it("sends a trimmed camp, with no goal when the goal is blank", () => {
@@ -41,6 +71,7 @@ describe("Make a camp", () => {
       title: "Taxes",
       goal: null,
       private: false,
+      hobs: [],
     });
     expect(campPayload(draft({ goal: " File on time ", private: true }), K1)).toMatchObject({
       goal: "File on time",
@@ -54,7 +85,7 @@ describe("Make a camp", () => {
     expect(run([{ _tag: "Leave", field: "title" }], empty)).toMatchObject({ shown: new Set(["title"]) });
     expect(run([{ _tag: "Send", key: K1 }], empty)).toMatchObject({
       step: "editing",
-      shown: new Set(["title", "goal", "private", "chapter"]),
+      shown: new Set(["title", "goal", "private", "chapter", "hobs"]),
     });
   });
 
@@ -64,7 +95,7 @@ describe("Make a camp", () => {
       { _tag: "Send", key: K1 },
       { _tag: "Failed", error: "unreachable" },
     ]);
-    expect(failed).toEqual({ step: "failed", draft: draft(), key: K1, error: "unreachable" });
+    expect(failed).toEqual({ step: "failed", draft: draft(), key: K1, error: "unreachable", hob: null });
     expect(run([{ _tag: "Send", key: K2 }], failed)).toEqual({ step: "saving", draft: draft(), key: K1 });
     const edited = run([{ _tag: "Edit", draft: draft({ title: "Taxes" }) }], failed);
     expect(run([{ _tag: "Send", key: K2 }], edited)).toEqual({
@@ -94,6 +125,7 @@ describe("Make a camp", () => {
 
   it("tells a paused or retired hob from a request that got no answer", () => {
     expect(makeCampError(new ApiError("", "HobUnavailable"))).toBe("hob-unavailable");
+    expect(makeCampError(new ApiError("", "AgentNotFound"))).toBe("hob-unavailable");
     expect(makeCampError(new ApiError("", "ThreadKeyReused"))).toBe("unreachable");
     expect(makeCampError(new ApiError("", "ChapterMoveRefused"))).toBe("chapter-refused");
     expect(makeCampError(new ApiError("", "ChapterMissing"))).toBe("chapter-refused");
@@ -111,10 +143,11 @@ describe("Make a camp", () => {
       goal: fc.constantFrom("", "File on time", "g".repeat(501)),
       private: fc.boolean(),
       chapter: fc.boolean(),
+      hobs: fc.constantFrom([], [ALDRIC], [QUILL, ALDRIC]),
     });
     const anyEvent: fc.Arbitrary<MakeCampEvent> = fc.oneof(
       anyDraft.map((each) => ({ _tag: "Edit" as const, draft: each })),
-      fc.constantFrom("title", "goal", "private").map((field) => ({ _tag: "Leave" as const, field })),
+      fc.constantFrom("title", "goal", "private", "hobs").map((field) => ({ _tag: "Leave" as const, field })),
       fc
         .tuple(fc.integer({ min: 1, max: 99 }), fc.boolean())
         .map(([n, held]) => ({ _tag: "Send" as const, key: ThreadId.make(`k${n}`), held })),
@@ -124,7 +157,7 @@ describe("Make a camp", () => {
     );
     fc.assert(
       fc.property(fc.array(anyEvent, { maxLength: 30 }), (events) => {
-        let state = startMakeCamp();
+        let state = startMakeCamp("", false, "", [ALDRIC]);
         // The model: what is typed, the key in flight or last failed, and whether a request is out.
         let typed = state.draft;
         let key: ThreadId | null = null;

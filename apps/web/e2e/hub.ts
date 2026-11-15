@@ -248,15 +248,38 @@ export { expect } from "@playwright/test";
  * A camp for the hob, made as Make a camp makes one (ADR 037), titled `title`: a thread of its own
  * beside the hob's one chat. Gives back its address in the web client.
  */
-export const campAt = async (current: Pick<Hub, "url" | "headers">, hobId: string, title: string) => {
+export const campAt = async (
+  current: Pick<Hub, "url" | "headers">,
+  hobId: string,
+  title: string,
+  /** The other hobs the camp is made with (ADR 039, Members); `hobId` leads it. */
+  hobs: ReadonlyArray<string> = [],
+) => {
   const response = await fetch(`${current.url}/api/agents/${hobId}/camps`, {
     method: "POST",
     headers: { ...current.headers, "content-type": "application/json" },
-    body: JSON.stringify({ key: crypto.randomUUID(), title, goal: null, private: false }),
+    body: JSON.stringify({ key: crypto.randomUUID(), title, goal: null, private: false, hobs }),
   });
   if (!response.ok) throw new Error(`Make a camp answered ${response.status}: ${await response.text()}`);
   const camp = (await response.json()) as { readonly id: string };
   return { id: camp.id, url: `${current.url}/#/hobs/${hobId}/threads/${camp.id}` };
+};
+
+/**
+ * Adds a member to a camp as its owner, through the hub's own API (ADR 039, Members): a hob, or one
+ * of the people the test seam plays (`testPeople`), as `{ kind: "user", id: person.userId }`.
+ */
+export const addCampMember = async (
+  current: Pick<Hub, "url" | "headers">,
+  campId: string,
+  actor: { readonly kind: "user" | "hob"; readonly id: string },
+) => {
+  const response = await fetch(`${current.url}/api/threads/${campId}/members`, {
+    method: "POST",
+    headers: { ...current.headers, "content-type": "application/json" },
+    body: JSON.stringify({ actor }),
+  });
+  if (!response.ok) throw new Error(`Adding a member answered ${response.status}: ${await response.text()}`);
 };
 
 /** A camp in the sidebar's Camps, a link named by its title (ADR 039, The sidebar). */

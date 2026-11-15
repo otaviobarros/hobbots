@@ -50,7 +50,7 @@ test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archive
   await sheet.getByRole("textbox", { name: "Name" }).fill("2027 taxes");
   await sheet.getByRole("textbox", { name: "Goal" }).fill("File my taxes on time");
   await sheet.getByRole("switch", { name: "Private camp" }).click();
-  await expect(sheet).toContainText("Nothing said here goes into Aldric's memory.");
+  await expect(sheet).toContainText("Nothing said here goes into any hob's memory.");
   await sheet.getByRole("button", { name: "Make the camp" }).click();
   await expect(sheet).toBeHidden();
   await expect(page).not.toHaveURL(chatAddress);

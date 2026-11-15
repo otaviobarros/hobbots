@@ -2,12 +2,14 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   type Actor,
+  AgentId,
   IllegalMemberTransition,
   type MemberEvent,
   MemberMachine,
   type MemberState,
   MemberState as MemberStates,
   planMemberAdd,
+  planMemberRemove,
   ThreadId,
   ThreadMember,
   ThreadMembers,
@@ -99,5 +101,32 @@ describe("planMemberAdd", () => {
     expect(planMemberAdd({ kind: "camp" }, [owner, hob], rook)).toEqual({ _tag: "add" });
     const removed = member("removed", rook);
     expect(planMemberAdd({ kind: "camp" }, [owner, hob, removed], rook)).toEqual({ _tag: "return", member: removed });
+  });
+});
+
+describe("planMemberRemove", () => {
+  const owner = member("active", { kind: "user", id: "owner" });
+  const lead = member("active");
+  const rook = member("active", { kind: "hob", id: "rook" });
+  const camp = { kind: "camp" as const, agentId: AgentId.make("aldric") };
+
+  // covers ADR 039 (Members), #1467
+  it("[TC-DM-1467-01] takes an active hob out of a camp, and keeps a direct message's two, the owner and the lead", () => {
+    expect(planMemberRemove(camp, [owner, lead, rook], rook.actor)).toEqual({ _tag: "remove", member: rook });
+    expect(planMemberRemove({ ...camp, kind: "chat" }, [owner, lead], lead.actor)).toEqual({
+      _tag: "refused",
+      reason: "direct-message",
+    });
+    expect(planMemberRemove(camp, [owner, lead], owner.actor)).toEqual({ _tag: "refused", reason: "owner" });
+    expect(planMemberRemove(camp, [owner, lead], lead.actor)).toEqual({ _tag: "refused", reason: "lead" });
+    expect(planMemberRemove(camp, [owner, lead], rook.actor)).toEqual({ _tag: "refused", reason: "not-member" });
+  });
+
+  // covers ADR 039 (Members), #1467
+  it("[TC-DM-1467-02] leaves a member who already left or was removed as it is", () => {
+    for (const state of ["left", "removed"] as const) {
+      const away = member(state, rook.actor);
+      expect(planMemberRemove(camp, [owner, lead, away], away.actor)).toEqual({ _tag: "gone", member: away });
+    }
   });
 });
