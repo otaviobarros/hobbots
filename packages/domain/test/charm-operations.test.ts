@@ -15,8 +15,7 @@ import {
 // Names and shapes stored or journaled before ADR 031 read as the Charm operations they became.
 
 describe("Charm operations", () => {
-  // covers DP-051
-  it("[TC-DP-287] reads the GitHub operations, rules and overrides stored before ADR 031 under their new names", () => {
+  it("reads the GitHub operations, rules and overrides stored before ADR 031 under their new names", () => {
     const operation = Schema.decodeUnknownSync(StoredOperation);
     expect(operation("read-github")).toBe("github.read");
     expect(operation("open-pull-request")).toBe("github.open-pull-request");
@@ -63,8 +62,8 @@ describe("Charm operations", () => {
     expect(hobAnswers(policy)).toEqual({ push: "ask", "github.comment": "deny" });
   });
 
-  // covers DP-051, ADR 031
-  it("[TC-PE-510] reads the GitHub Charm flag stored or journaled before the Charm-id grant as the set it meant", () => {
+  // covers ADR 031
+  it("reads the GitHub Charm flag stored or journaled before the Charm-id grant as the set it meant", () => {
     const decode = Schema.decodeUnknownSync(HobPolicy);
     const base = { ownFolders: [], hiddenSharedFolders: [], overrides: {} };
     const off = decode({ ...base, githubCharm: false, overrides: { "comment-github": "deny" } });

@@ -45,8 +45,7 @@ const deviceFor = (request: PairingRequest, id: string) =>
   });
 
 describe("DeviceRepository", () => {
-  // covers DP-004
-  it("[TC-DP-080] keeps one window device for the installation, however often the hub starts", async () => {
+  it("keeps one window device for the installation, however often the hub starts", async () => {
     const devices = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
@@ -58,8 +57,7 @@ describe("DeviceRepository", () => {
     expect(devices).toMatchObject([{ id: WINDOW_DEVICE_ID, kind: "window", approvedAt: NOW, revokedAt: null }]);
   });
 
-  // covers DP-004
-  it("[TC-DP-081] allows a pending request once, creates its device and hands its token's hash over once", async () => {
+  it("allows a pending request once, creates its device and hands its token's hash over once", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
@@ -104,8 +102,7 @@ describe("DeviceRepository", () => {
     expect(result.deviceIds).toEqual(["d1"]);
   });
 
-  // covers DP-004
-  it("[TC-DP-082] refuses to allow, deny or claim a request that expired or was decided", async () => {
+  it("refuses to allow, deny or claim a request that expired or was decided", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
@@ -140,8 +137,7 @@ describe("DeviceRepository", () => {
     expect(result.open).toEqual([]);
   });
 
-  // covers DP-004, PE-006
-  it("[TC-DP-083] runs a write only while its device is approved, and a revoked device's write is rolled back", async () => {
+  it("runs a write only while its device is approved, and a revoked device's write is rolled back", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
@@ -199,8 +195,7 @@ describe("DeviceRepository", () => {
     expect(result.marks).toEqual(["while-approved"]);
   });
 
-  // covers DP-004
-  it("[TC-DP-090] journals every pairing change with the request's code and details, never its secret", async () => {
+  it("journals every pairing change with the request's code and details, never its secret", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
@@ -234,8 +229,7 @@ describe("DeviceRepository", () => {
     expect(payloads).not.toContain("token-hash");
   });
 
-  // covers DP-004
-  it("[TC-DP-101] lets a Revoke wait for a decision its device already started, without a deadlock", async () => {
+  it("lets a Revoke wait for a decision its device already started, without a deadlock", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;

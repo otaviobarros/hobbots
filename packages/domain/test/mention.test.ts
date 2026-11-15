@@ -18,24 +18,24 @@ const roster: ReadonlyArray<Mentionable> = [
 ];
 
 describe("mentionsIn", () => {
-  it("finds hobs and people in the order first mentioned, each once", () => {
+  it("finds hobs and people in the order first mentioned, each once (#1455)", () => {
     expect(mentionsIn("@Rook can you and @ana check, then @rook again and @Pip?", roster)).toEqual([ROOK, ANA, PIP]);
   });
 
-  it("prefers the longer of two names that both fit", () => {
+  it("prefers the longer of two names that both fit (#1455)", () => {
     expect(mentionsIn("@Pip Two and @Pip", roster)).toEqual([PIP_TWO, PIP]);
   });
 
-  it("needs the name to stand whole after the @, followed by punctuation or the end", () => {
+  it("needs the name to stand whole after the @, followed by punctuation or the end (#1455)", () => {
     expect(mentionsIn("@Pipe @Rooky @Pip, @Rook.", roster)).toEqual([PIP, ROOK]);
     expect(mentionsIn("Thanks @Ana", roster)).toEqual([ANA]);
   });
 
-  it("reads an @ inside a word, such as an email address, as text", () => {
+  it("reads an @ inside a word, such as an email address, as text (#1455)", () => {
     expect(mentionsIn("write to ana@pip.dev or rook@ROOK", roster)).toEqual([]);
   });
 
-  it("skips the ranges it is given, such as Markdown code a parser found", () => {
+  it("skips the ranges it is given, such as Markdown code a parser found (#1455)", () => {
     const text = "Run `@Pip build`, then ask @Ana";
     const code = { from: text.indexOf("`"), to: text.lastIndexOf("`") + 1 };
     expect(mentionsIn(text, roster, { skip: [code] })).toEqual([ANA]);
@@ -52,7 +52,7 @@ describe("mentionsIn", () => {
     ).toEqual([PIP]);
   });
 
-  it("reads only the mentions that end past `after`, for text that grew after its start was parsed", () => {
+  it("reads only the mentions that end past `after`, for text that grew after its start was parsed (#1455)", () => {
     const kept = "Asking @Rook";
     // Rook was renamed since: the start is not read again, so a new hob called Rook is not added.
     const renamed: ReadonlyArray<Mentionable> = [{ actor: PIP, name: "Rook" }, ...roster.slice(3)];
@@ -61,18 +61,18 @@ describe("mentionsIn", () => {
     expect(mentionsIn("Asking @Ro" + "ok", roster, { after: "Asking @Ro".length })).toEqual([ROOK]);
   });
 
-  it("finds no one with no @, an unknown name or a blank roster name", () => {
+  it("finds no one with no @, an unknown name or a blank roster name (#1455)", () => {
     expect(mentionsIn("Pip and Rook", roster)).toEqual([]);
     expect(mentionsIn("@Quill there?", roster)).toEqual([]);
     expect(mentionsIn("@ hello", [{ actor: PIP, name: "  " }])).toEqual([]);
   });
 
-  it("cuts each name at its own length when folding case changes a string's length", () => {
+  it("cuts each name at its own length when folding case changes a string's length (#1455)", () => {
     const istanbul: Actor = { kind: "user", id: "istanbul" };
     expect(mentionsIn("@İz said hi", [{ actor: istanbul, name: "İz" }])).toEqual([istanbul]);
   });
 
-  it("returns each mentioned actor once, in the order of its first mention", () => {
+  it("returns each mentioned actor once, in the order of its first mention (#1455)", () => {
     const names = fc.constantFrom(...roster);
     fc.assert(
       fc.property(fc.array(names, { maxLength: 12 }), (picked) => {
@@ -86,7 +86,7 @@ describe("mentionsIn", () => {
 });
 
 describe("mentions", () => {
-  it("says whether a message mentions the actor", () => {
+  it("says whether a message mentions the actor (#1455)", () => {
     expect(mentions({ mentions: [ROOK, ANA] }, { kind: "user", id: "ana" })).toBe(true);
     expect(mentions({ mentions: [ROOK] }, ANA)).toBe(false);
   });

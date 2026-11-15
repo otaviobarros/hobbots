@@ -95,8 +95,7 @@ const tree = (parts: Partial<Pick<TaskTree, "tasks" | "quests" | "checkpoints" |
   });
 
 describe("a member's empty Quest", () => {
-  // covers OR-002, OR-003
-  it("[TC-OR-256] reports one finding for an active Quest under a member's Task with nobody brought in, naming the Quest and its goal", () => {
+  it("reports one finding for an active Quest under a member's Task with nobody brought in, naming the Quest and its goal", () => {
     const found = emptyQuestFinding(REVIEW, tree({}), at);
     expect(found).toMatchObject({
       taskId: REVIEW.id,
@@ -114,7 +113,6 @@ describe("a member's empty Quest", () => {
     ).not.toBeNull();
   });
 
-  // covers OR-002, OR-003
   it.each([
     ["the Task is the one you asked for", RELEASE, tree({ quests: [quest(RELEASE.id, FRODO)] })],
     ["the Task leads no Quest", REVIEW, tree({ quests: [] })],
@@ -136,12 +134,11 @@ describe("a member's empty Quest", () => {
       REVIEW,
       tree({ checkpoints: [finding("Started a Quest but has not brought anyone in (Quest q-review: …).")] }),
     ],
-  ])("[TC-OR-257] reports nothing when %s", (_, subject, current) => {
+  ])("reports nothing when %s", (_, subject, current) => {
     expect(emptyQuestFinding(subject, current, at)).toBeNull();
   });
 
-  // covers OR-002
-  it("[TC-OR-258] still reports when the Task's only other finding is about something else", () => {
+  it("still reports when the Task's only other finding is about something else", () => {
     expect(
       emptyQuestFinding(REVIEW, tree({ checkpoints: [finding("The docs folder is read-only")] }), at),
     ).not.toBeNull();
@@ -179,8 +176,7 @@ describe("the Quest you asked for with nothing moving it", () => {
     }),
   };
 
-  // covers OR-004, IN-004
-  it("[TC-OR-641] wakes its lead once with a finding that says what is missing, even with its own milestones open", () => {
+  it("wakes its lead once with a finding that says what is missing, even with its own milestones open", () => {
     const found = idleQuestOf(RELEASE, idleTree(), [milestone], new Set(), at);
     expect(found).toMatchObject({
       _tag: "Wake",
@@ -195,8 +191,7 @@ describe("the Quest you asked for with nothing moving it", () => {
     expect(idleQuestOf(RELEASE, idleTree({ tasks: [RELEASE, step] }), [], new Set(), at)?._tag).toBe("Wake");
   });
 
-  // covers OR-004, EX-002
-  it("[TC-OR-642] stalls the Quest when its lead was woken and its next turn still left nothing moving it", () => {
+  it("stalls the Quest when its lead was woken and its next turn still left nothing moving it", () => {
     const stalled = idleQuestOf(RELEASE, idleTree({ checkpoints: [woken(at)] }), [], new Set(), later);
     expect(stalled).toMatchObject({ _tag: "Stalled", reason: expect.stringContaining("The Quest stalled") });
     // A wake from before its lead last brought work in is about work since done: it wakes again.
@@ -211,7 +206,6 @@ describe("the Quest you asked for with nothing moving it", () => {
     _tag: "Item",
     item: { id: BackpackItemId.make(id) } as BackpackItem,
   });
-  // covers OR-004
   it.each([
     ["a Task under it is open", RELEASE, [{ _tag: "Child", task: open } as LedgerEntry], new Set<string>()],
     [
@@ -224,12 +218,11 @@ describe("the Quest you asked for with nothing moving it", () => {
     ["the Task is a member's", REVIEW, [], new Set<string>()],
     ["the Task is already blocked", new Task({ ...RELEASE, state: "blocked" }), [], new Set<string>()],
     ["the Task is being cancelled", new Task({ ...RELEASE, state: "cancelling" }), [], new Set<string>()],
-  ] as const)("[TC-OR-643] does nothing when %s", (_, subject, ledger, carried) => {
+  ] as const)("does nothing when %s", (_, subject, ledger, carried) => {
     expect(idleQuestOf(subject, idleTree(), ledger, carried, at)).toBeNull();
   });
 
-  // covers OR-004
-  it("[TC-OR-644] does nothing for a Task you asked for that leads no active Quest, and counts carried work as settled", () => {
+  it("does nothing for a Task you asked for that leads no active Quest, and counts carried work as settled", () => {
     expect(idleQuestOf(RELEASE, tree({ tasks: [RELEASE], quests: [] }), [], new Set(), at)).toBeNull();
     expect(
       idleQuestOf(

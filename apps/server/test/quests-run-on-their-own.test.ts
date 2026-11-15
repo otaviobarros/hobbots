@@ -64,8 +64,7 @@ import {
 // approval card, as his app's bot, against a fake GitHub on a local port. Then you ask Aldric to stop,
 // and the Quest ends stopped, never delivered. The one approval and your stop are all that reached
 // you. Every hob runs on the fake runtime, as Claude Code and as Codex; CI runs it on SQLite and on
-// PostgreSQL (TestDatabase). The real runtimes run the same scenario by hand, in
-// docs/evidence/checklists/quests-run-on-their-own.md.
+// PostgreSQL (TestDatabase).
 
 const TOKEN = "github_pat_quests_on_their_own";
 const SLUG = "otaviobarros/workshop";
@@ -90,7 +89,7 @@ const git = (...args: Array<string>) =>
 
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
-/** Stands in for the hob's sandbox, which CI cannot start: the Charm's fence is proven in TC-PE-152. */
+/** Stands in for the hob's sandbox, which CI cannot start: the Charm's fence is proven in @hobbots/charms git-push.test.ts. */
 const PlainSandbox = Layer.succeed(
   FolderSandbox,
   FolderSandbox.of({
@@ -378,9 +377,9 @@ const scenario = async (runtime: RuntimeKind) => {
 };
 
 describe("a Quest runs on its own, end to end (#1342)", () => {
-  // covers OR-002, OR-003, OR-004, OR-007, PE-003, PE-005, ADR 014, ADR 018, ADR 019, ADR 020, ADR 022, ADR 038
+  // covers ADR 014, ADR 018, ADR 019, ADR 020, ADR 022, ADR 038
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-OR-1353-01] on the fake %s, a reviewer with its own app reviews after one approval, is steered mid-turn, and the Quest you stop ends stopped",
+    "on the fake %s, a reviewer with its own app reviews after one approval, is steered mid-turn, and the Quest you stop ends stopped (#1353)",
     async (runtime) => {
       await scenario(runtime);
     },

@@ -10,7 +10,6 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { TEST_PEOPLE_FILE, type TestPersonSeat, TestPersonSeats } from "@hobbots/api";
 import { type Browser, type BrowserContext, test as base, expect, type Locator, type Page } from "@playwright/test";
@@ -248,11 +247,17 @@ export { expect } from "@playwright/test";
  * A camp for the hob, made as Make a camp makes one (ADR 037), titled `title`: a thread of its own
  * beside the hob's one chat. Gives back its address in the web client.
  */
-export const campAt = async (current: Pick<Hub, "url" | "headers">, hobId: string, title: string) => {
+export const campAt = async (
+  current: Pick<Hub, "url" | "headers">,
+  hobId: string,
+  title: string,
+  /** The other hobs the camp is made with (ADR 039, Members); `hobId` leads it. */
+  hobs: ReadonlyArray<string> = [],
+) => {
   const response = await fetch(`${current.url}/api/agents/${hobId}/camps`, {
     method: "POST",
     headers: { ...current.headers, "content-type": "application/json" },
-    body: JSON.stringify({ key: crypto.randomUUID(), title, goal: null, private: false }),
+    body: JSON.stringify({ key: crypto.randomUUID(), title, goal: null, private: false, hobs }),
   });
   if (!response.ok) throw new Error(`Make a camp answered ${response.status}: ${await response.text()}`);
   const camp = (await response.json()) as { readonly id: string };
@@ -273,62 +278,12 @@ const stopProcess = (child: ChildProcess, signal: NodeJS.Signals = "SIGTERM") =>
     child.kill(signal);
   });
 
-/** A network path between a page and the hub that a test can cut and restore, as a dropped Wi-Fi would. */
-export interface Relay {
-  /** Where the page opens the hub through this relay. */
-  readonly url: string;
-  /** Drops every open connection and refuses new ones until `restore`. */
-  readonly cut: () => void;
-  readonly restore: () => void;
-  readonly close: () => Promise<void>;
-}
-
-/** Relays TCP connections to the hub's port, 2000 above it: clear of every hub and serve port. */
-export const startRelay = async (): Promise<Relay> => {
-  const relayPort = port + 2000;
-  const open = new Set<Socket>();
-  let accepting = true;
-  const server = createServer((client) => {
-    if (!accepting) return client.destroy();
-    const upstream = createConnection({ host: "127.0.0.1", port });
-    for (const socket of [client, upstream]) {
-      open.add(socket);
-      socket.on("close", () => open.delete(socket));
-      socket.on("error", () => {
-        client.destroy();
-        upstream.destroy();
-      });
-    }
-    client.pipe(upstream).pipe(client);
-  });
-  await new Promise<void>((done) => server.listen(relayPort, "127.0.0.1", done));
-  return {
-    url: `http://127.0.0.1:${relayPort}`,
-    cut: () => {
-      accepting = false;
-      for (const socket of open) socket.destroy();
-    },
-    restore: () => {
-      accepting = true;
-    },
-    close: () =>
-      new Promise<void>((done) => {
-        for (const socket of open) socket.destroy();
-        server.close(() => done());
-      }),
-  };
-};
-
 /**
  * A stand-in Claude Code that is installed but signed out: it prints a version and answers the
  * Agent SDK's initialize request with an empty account, as a binary with no login does. The real
  * Claude Code adapter starts it, so the check goes through the same path as on a user's Mac.
  */
 export const signedOutClaudeCode = (dataDir: string): string => claudeCodeAt(dataDir, {});
-
-/** A stand-in Claude Code signed in to a claude.ai plan, which the real adapter reports as ready. */
-export const signedInClaudeCode = (dataDir: string): string =>
-  claudeCodeAt(dataDir, { email: "player@example.com", subscriptionType: "pro" });
 
 /** Writes a stand-in Claude Code where the hub is told to look, answering with `account`. */
 const claudeCodeAt = (dataDir: string, account: Record<string, string>): string => {
@@ -351,65 +306,6 @@ process.stdin.on("data", (chunk) => {
     const response = message.request.subtype === "initialize" ? { commands: [], models: [], account: ${JSON.stringify(account)} } : {};
     const reply = { type: "control_response", response: { subtype: "success", request_id: message.request_id, response } };
     process.stdout.write(JSON.stringify(reply) + "\\n");
-  }
-});
-`,
-  );
-  chmodSync(path, 0o755);
-  return path;
-};
-
-/** What the stand-in Codex reports: its version and how it is signed in. */
-export type FakeCodexState = "outdated" | "signedOut" | "apiKey" | "ready";
-
-const CODEX_ACCOUNTS: Record<FakeCodexState, unknown> = {
-  outdated: null,
-  signedOut: null,
-  apiKey: { type: "apiKey" },
-  ready: { type: "chatgpt", email: "player@example.com", planType: "plus", workspaceName: null },
-};
-
-/** The one model the stand-in Codex lists, in the App Server's shape. */
-const CODEX_MODEL = {
-  id: "gpt-5.5",
-  model: "gpt-5.5",
-  displayName: "GPT-5.5",
-  description: "Frontier model for complex coding",
-  hidden: false,
-  supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }, { reasoningEffort: "high" }],
-  defaultReasoningEffort: "medium",
-  inputModalities: ["text"],
-  isDefault: true,
-};
-
-/**
- * Writes a stand-in for Codex where the hub looks for it (`<dataDir>/bin/codex`), answering
- * `--version`, `account/read` and `model/list` (one model) over the App Server's JSON-RPC.
- */
-export const fakeCodexAt = (dataDir: string, state: FakeCodexState): string => {
-  const path = join(dataDir, "bin", "codex");
-  mkdirSync(join(dataDir, "bin"), { recursive: true });
-  const version = state === "outdated" ? "0.100.0" : "0.166.0";
-  writeFileSync(
-    path,
-    `#!/usr/bin/env node
-if (process.argv.includes("--version")) {
-  process.stdout.write("codex-cli ${version}\\n");
-  process.exit(0);
-}
-const results = {
-  initialize: { userAgent: "fake", codexHome: "/fake", platformFamily: "unix", platformOs: "linux" },
-  "account/read": { account: ${JSON.stringify(CODEX_ACCOUNTS[state])}, requiresOpenaiAuth: true, workspaceRouting: null },
-  "model/list": { data: [${JSON.stringify(CODEX_MODEL)}], nextCursor: null },
-};
-let buffered = "";
-process.stdin.on("data", (chunk) => {
-  buffered += chunk;
-  for (let end = buffered.indexOf("\\n"); end >= 0; end = buffered.indexOf("\\n")) {
-    const message = JSON.parse(buffered.slice(0, end));
-    buffered = buffered.slice(end + 1);
-    if (message.id === undefined) continue;
-    process.stdout.write(JSON.stringify({ id: message.id, result: results[message.method] ?? {} }) + "\\n");
   }
 });
 `,

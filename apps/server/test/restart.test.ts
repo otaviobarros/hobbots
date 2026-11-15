@@ -257,8 +257,7 @@ const continuations = (all: ReadonlyArray<Message>) =>
   all.filter((m, index) => m.role === "assistant" && all[index - 1]?.role !== "user");
 
 describe("recovering after a restart", () => {
-  // covers EX-004, IN-004
-  it("[TC-OR-110] a step's result that has not reached its lead when Hobbots stops reaches it once it starts again", async () => {
+  it("a step's result that has not reached its lead when Hobbots stops reaches it once it starts again", async () => {
     const database = await sharedDatabase();
     const first = await start(database);
     await first.run(frodoAndThread);
@@ -281,8 +280,7 @@ describe("recovering after a restart", () => {
     expect(done.disposition).toEqual({ _tag: "consumed", by: all[2]?.id });
   });
 
-  // covers EX-004, IN-004
-  it("[TC-OR-111] a continuation cut off by a restart runs again under a new claim, and its earlier claim is refused", async () => {
+  it("a continuation cut off by a restart runs again under a new claim, and its earlier claim is refused", async () => {
     const database = await sharedDatabase();
     const first = await start(database, { holdContinuations: true });
     await first.run(frodoAndThread);
@@ -319,8 +317,7 @@ describe("recovering after a restart", () => {
     expect(second.requests.filter((r) => r.prompt.startsWith(CONTINUATION))).toHaveLength(1);
   });
 
-  // covers EX-004, IN-004
-  it("[TC-OR-112] a step cut off by a restart fails, and its lead hears of it without anyone writing", async () => {
+  it("a step cut off by a restart fails, and its lead hears of it without anyone writing", async () => {
     const database = await sharedDatabase();
     const first = await start(database);
     await first.run(frodoAndThread);
@@ -349,8 +346,7 @@ describe("recovering after a restart", () => {
     expect(await second.run(until(live, (attempts) => attempts.length === 0))).toEqual([]);
   });
 
-  // covers EX-004, IN-004
-  it("[TC-OR-113] a step whose session ended just before Hobbots stopped fails at the next start, and its lead hears of it", async () => {
+  it("a step whose session ended just before Hobbots stopped fails at the next start, and its lead hears of it", async () => {
     const database = await sharedDatabase();
     const stepId = await leftBehind(database, stepWhoseSessionEnded("failed"));
 
@@ -363,8 +359,7 @@ describe("recovering after a restart", () => {
     expect(await second.run(TaskRepository.use((tasks) => tasks.listStrandedSteps))).toEqual([]);
   });
 
-  // covers EX-004
-  it("[TC-OR-114] a step being cancelled when Hobbots stopped is cancelled at the next start, and so is the Task above it", async () => {
+  it("a step being cancelled when Hobbots stopped is cancelled at the next start, and so is the Task above it", async () => {
     const database = await sharedDatabase();
     const stepId = await leftBehind(
       database,
@@ -388,8 +383,7 @@ describe("recovering after a restart", () => {
     expect(tree?.tasks.find((task) => task.id === TaskId.make("quest"))?.state).toBe("cancelled");
   });
 
-  // covers EX-004, IN-004
-  it("[TC-OR-115] a step that completed just before Hobbots stopped keeps its result, and its lead hears of it", async () => {
+  it("a step that completed just before Hobbots stopped keeps its result, and its lead hears of it", async () => {
     const database = await sharedDatabase();
     // The step completed from its final reply; its session had not ended yet.
     const stepId = await leftBehind(
@@ -419,8 +413,7 @@ describe("recovering after a restart", () => {
     expect(continuations(all)).toHaveLength(1);
   });
 
-  // covers EX-004
-  it("[TC-OR-116] a step and the step under it, both cut off by a restart, both end at the next start", async () => {
+  it("a step and the step under it, both cut off by a restart, both end at the next start", async () => {
     const database = await sharedDatabase();
     await leftBehind(
       database,
@@ -443,8 +436,7 @@ describe("recovering after a restart", () => {
     expect(await second.run(TaskRepository.use((tasks) => tasks.listStrandedSteps))).toEqual([]);
   });
 
-  // covers EX-004, OR-006
-  it("[TC-OR-1446-20] a Quest paused while its step ran starts no turn at the next start, and its step runs again on Resume", async () => {
+  it("a Quest paused while its step ran starts no turn at the next start, and its step runs again on Resume (#1446)", async () => {
     const database = await sharedDatabase();
     const you = { kind: "user" as const, id: "owner" };
     await leftBehind(

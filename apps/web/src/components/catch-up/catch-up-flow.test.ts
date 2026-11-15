@@ -16,7 +16,7 @@ const run = (events: ReadonlyArray<CatchUpEvent>, from: CatchUpFlow = CATCH_UP_S
   events.reduce(catchUpStep, from);
 
 describe("catch-up visits", () => {
-  it("[TC-CH-1387-27] starts a visit on arriving at an unread chat in view, and none while you watch it", () => {
+  it("starts a visit on arriving at an unread chat in view, and none while you watch it (#1387)", () => {
     const visit = run([see(undefined, true, false), see(A, true, true)]);
     expect(visit).toMatchObject({ step: "open", threadId: A, visits: 1 });
     // The chat marks itself read and replies land while you watch: still the same visit.
@@ -24,7 +24,7 @@ describe("catch-up visits", () => {
     expect(run([{ _tag: "Fold" }], visit)).toMatchObject({ step: "folded", visits: 1 });
   });
 
-  it("[TC-CH-1387-28] starts a new visit when you come back to it unread, and none in a chat that is read", () => {
+  it("starts a new visit when you come back to it unread, and none in a chat that is read (#1387)", () => {
     const first = run([see(A, true, true), { _tag: "Fold" }]);
     const away = run([see(A, false, false)], first);
     expect(away).toMatchObject({ step: "folded", visits: 1 });
@@ -36,7 +36,7 @@ describe("catch-up visits", () => {
   });
 
   // covers ADR 039 (Members: the unread line is per person)
-  it("[TC-CH-1454-01] waits for your unread threads before a visit, so a chat that loads first still gets its catch-up", () => {
+  it("waits for your unread threads before a visit, so a chat that loads first still gets its catch-up (#1454)", () => {
     // You open the unread chat by its address: the chat loads before your unread threads do.
     const early = run([seeing(A, true, undefined)]);
     expect(early).toMatchObject({ step: "idle", threadId: undefined, visits: 0 });

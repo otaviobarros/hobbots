@@ -464,8 +464,7 @@ const play = async (script: ReadonlyArray<Op>) => {
 };
 
 describe("a thread's run through the chat", () => {
-  // covers CH-002, CH-007, CH-008, IN-004
-  it("[TC-CH-293] starts the turns its model predicts, carrying work or not, whatever sends, Send now, stops, arrivals and restarts do", async () => {
+  it("starts the turns its model predicts, carrying work or not, whatever sends, Send now, stops, arrivals and restarts do", async () => {
     await fc.assert(
       fc.asyncProperty(fc.array(ops, { minLength: 1, maxLength: 14 }), async (script) => {
         const model = await play(script);

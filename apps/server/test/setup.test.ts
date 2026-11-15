@@ -111,8 +111,7 @@ const connectedProviders = async (response: Response) =>
   ((await response.json()) as { connectedProviders: unknown }).connectedProviders;
 
 describe("the setup API", () => {
-  // covers OP-001, PE-001
-  it("[TC-OP-004] reports a new installation's setup as not done, with no hobs", async () => {
+  it("reports a new installation's setup as not done, with no hobs", async () => {
     const setup = await request("GET", "/api/setup");
     expect(setup.status).toBe(200);
     expect(await setup.json()).toEqual({
@@ -127,8 +126,7 @@ describe("the setup API", () => {
     expect(await hobs.json()).toEqual([]);
   });
 
-  // covers OP-001, PE-001
-  it("[TC-OP-005] stores the preset and folders, completes setup and keeps the result", async () => {
+  it("stores the preset and folders, completes setup and keeps the result", async () => {
     const chosen = await request("PATCH", "/api/setup", {
       safetyPreset: "trusting",
       approvedFolders: [code, `${notes}/`, join(code, "..", "code")],
@@ -154,8 +152,7 @@ describe("the setup API", () => {
     expect(await (await request("GET", "/api/setup")).json()).toEqual(finished);
   });
 
-  // covers OP-001
-  it("[TC-OP-006] rejects an unknown preset, an empty folder and reopening setup", async () => {
+  it("rejects an unknown preset, an empty folder and reopening setup", async () => {
     for (const body of [{ safetyPreset: "reckless" }, { approvedFolders: [""] }, { completed: false }]) {
       const response = await request("PATCH", "/api/setup", body);
       expect(response.status).toBe(400);
@@ -169,8 +166,7 @@ describe("the setup API", () => {
     });
   });
 
-  // covers OP-001, PE-001
-  it("[TC-OP-014] refuses a folder that is not a full path to a folder on the hub, and stores none", async () => {
+  it("refuses a folder that is not a full path to a folder on the hub, and stores none", async () => {
     for (const folder of ["code", join(temp, "missing"), join(temp, "todo.txt")]) {
       const response = await request("PATCH", "/api/setup", { approvedFolders: [code, folder] });
       expect(response.status).toBe(400);
@@ -182,26 +178,22 @@ describe("the setup API", () => {
 
   // covers #1225: a new shared folder is opened once, so macOS asks about Documents then. Root opens
   // any folder, so the refusal shows only for an ordinary user.
-  it.skipIf(process.getuid?.() === 0)(
-    "[TC-RT-1225-03] refuses a new folder the hub can't open, and stores none",
-    async () => {
-      const closed = join(temp, "closed");
-      mkdirSync(closed);
-      chmodSync(closed, 0o000);
-      try {
-        const response = await request("PATCH", "/api/setup", { approvedFolders: [code, closed] });
-        expect(response.status).toBe(400);
-        expect(await response.json()).toMatchObject({ _tag: "InvalidFolder", folder: closed });
-      } finally {
-        chmodSync(closed, 0o755);
-      }
-      const stored = (await (await request("GET", "/api/setup")).json()) as { approvedFolders: unknown };
-      expect(stored.approvedFolders).toEqual([]);
-    },
-  );
+  it.skipIf(process.getuid?.() === 0)("refuses a new folder the hub can't open, and stores none (#1225)", async () => {
+    const closed = join(temp, "closed");
+    mkdirSync(closed);
+    chmodSync(closed, 0o000);
+    try {
+      const response = await request("PATCH", "/api/setup", { approvedFolders: [code, closed] });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ _tag: "InvalidFolder", folder: closed });
+    } finally {
+      chmodSync(closed, 0o755);
+    }
+    const stored = (await (await request("GET", "/api/setup")).json()) as { approvedFolders: unknown };
+    expect(stored.approvedFolders).toEqual([]);
+  });
 
-  // covers OP-001, DP-001
-  it("[TC-OP-010] connects and disconnects a provider and keeps the choice", async () => {
+  it("connects and disconnects a provider and keeps the choice", async () => {
     const connected = await request("PATCH", "/api/setup", { connectedProviders: ["claude-code", "claude-code"] });
     expect(connected.status).toBe(200);
     expect(await connectedProviders(connected)).toEqual(["claude-code"]);
@@ -212,15 +204,14 @@ describe("the setup API", () => {
     expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual([]);
   });
 
-  // covers OP-001
-  it("[TC-OP-011] rejects a provider Hobbots does not know", async () => {
+  it("rejects a provider Hobbots does not know", async () => {
     const response = await request("PATCH", "/api/setup", { connectedProviders: ["gemini"] });
     expect(response.status).toBe(400);
     expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual([]);
   });
 
-  // covers PE-001, AG-002, #1357
-  it("[TC-OP-1357-03] keeps who turned Summoning for every hob on, changed its answers and turned it off, in Settings and in the History of the hob it reached", async () => {
+  // Issue #1357
+  it("keeps who turned Summoning for every hob on, changed its answers and turned it off, in Settings and in the History of the hob it reached (#1357)", async () => {
     const hob = (await (
       await request("POST", "/api/agents", {
         name: "Pip",

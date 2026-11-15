@@ -3,7 +3,7 @@ import { Toast as ToastPrimitive } from "radix-ui";
 import type * as React from "react";
 import { cn } from "../lib/utils.ts";
 
-// Hobbots toasts (docs/design/ui-ux.md): a card with a line-2 border above the composer, with one
+// Hobbots toasts: a card with a line-2 border above the composer, with one
 // action as a secondary button. Radix announces it politely, keeps it while it is hovered or
 // focused, and lets F8 move focus to it. A refusal uses a lantern border and a failure rose.
 

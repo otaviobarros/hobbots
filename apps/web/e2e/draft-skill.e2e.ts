@@ -88,7 +88,7 @@ const draftWith = async (page: Page, url: string, name: string, skill: string) =
 };
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
-test("[TC-UX-1144-01] Draft it with a hob offers only the hobs that may suggest skills, and passes the scan", async ({
+test("Draft it with a hob offers only the hobs that may suggest skills, and passes the scan (#1144)", async ({
   page,
 }) => {
   const { url } = await draftHub();
@@ -109,9 +109,7 @@ test("[TC-UX-1144-01] Draft it with a hob offers only the hobs that may suggest 
 });
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
-test("[TC-UX-1144-04] hobs that could not be read never read as none allowed, and Try again lists them", async ({
-  page,
-}) => {
+test("hobs that could not be read never read as none allowed, and Try again lists them (#1144)", async ({ page }) => {
   const { url } = await draftHub();
   // The hobs fail to read until the hub answers again; every other read answers.
   let down = true;
@@ -139,7 +137,7 @@ test("[TC-UX-1144-04] hobs that could not be read never read as none allowed, an
 });
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
-test("[TC-UX-1144-05] with no hob that may suggest skills, it says so and where to allow it", async ({ page }) => {
+test("with no hob that may suggest skills, it says so and where to allow it (#1144)", async ({ page }) => {
   const { url, api, ada, cody } = await draftHub();
   for (const hob of [ada, cody]) {
     await api("PATCH", `/agents/${hob.id}/permissions`, { overrides: { "propose-skill": "deny" } });
@@ -158,7 +156,7 @@ for (const [name, runtime] of [
   ["Cody", "Codex"],
 ] as const) {
   // covers ADR 029 (Proactive hobs, The Skills page), #1144
-  test(`[TC-UX-1144-0${name === "Ada" ? 2 : 3}] a ${runtime} hob drafts the skill in a new chat, and it waits in To review from that chat`, async ({
+  test(`a ${runtime} hob drafts the skill in a new chat, and it waits in To review from that chat (#1144)`, async ({
     page,
   }) => {
     const started = await draftHub();

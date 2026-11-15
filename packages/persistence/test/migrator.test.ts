@@ -45,8 +45,7 @@ const effectMigratorTable = Effect.gen(function* () {
 });
 
 describe("migrator", () => {
-  // covers DP-003
-  it("[TC-DP-040-01] names every migration 0001 to 0114, or by the UTC second it was made", () => {
+  it("names every migration 0001 to 0114, or by the UTC second it was made (#040)", () => {
     const ids = Object.keys(migrations).map((key) => key.split("_")[0] ?? "");
     const numbered = ids.filter((id) => id.length === 4);
     expect(numbered.map(Number)).toEqual(numbered.map((_, index) => index + 1));
@@ -62,8 +61,7 @@ describe("migrator", () => {
     expect(ids).toEqual([...ids].sort((a, b) => Number(a) - Number(b)));
   });
 
-  // covers DP-003
-  it("[TC-DP-040-02] applies a migration whose id is below one already applied, and only once", async () => {
+  it("applies a migration whose id is below one already applied, and only once (#040)", async () => {
     const result = await Effect.gen(function* () {
       const first = yield* runMigrations({ "20261114090000_later": makes("later_one") });
       // A pull request opened earlier merges after it: its id is lower, and it still runs.
@@ -86,8 +84,7 @@ describe("migrator", () => {
     ]);
   });
 
-  // covers DP-003
-  it("[TC-DP-040-03] upgrades a database Effect's migrator made, keeping what it applied", async () => {
+  it("upgrades a database Effect's migrator made, keeping what it applied (#040)", async () => {
     const result = await Effect.gen(function* () {
       yield* effectMigratorTable;
       const ran = yield* runMigrations({
@@ -123,8 +120,7 @@ describe("migrator", () => {
     if (process.env.HOBBOTS_TEST_DB === "postgres") expect(result.type).toBe("bigint");
   });
 
-  // covers DP-003
-  it("[TC-DP-040-04] refuses two migrations with one id, as two branches made in one second would have, and applies none of a failed run", async () => {
+  it("refuses two migrations with one id, as two branches made in one second would have, and applies none of a failed run (#040)", async () => {
     const result = await Effect.gen(function* () {
       const duplicate = yield* runMigrations({ "0001_one": makes("a_one"), "1_two": makes("a_two") }).pipe(Effect.flip);
       const failing = yield* runMigrations({

@@ -79,8 +79,7 @@ const seed = Effect.gen(function* () {
 });
 
 describe("ApprovalRepository", () => {
-  // covers PE-003, PE-007
-  it("[TC-PE-070] stores a request with its exact action and moves it out of pending only once", async () => {
+  it("stores a request with its exact action and moves it out of pending only once", async () => {
     const result = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
       yield* seed;
@@ -121,8 +120,7 @@ describe("ApprovalRepository", () => {
 });
 
 describe("ApprovalRepository.listRecent", () => {
-  // covers PE-003, UX-005
-  it("[TC-IN-001] lists every pending request and only the most recently closed ones, oldest first", async () => {
+  it("lists every pending request and only the most recently closed ones, oldest first", async () => {
     const at = (minute: number) => `2026-10-31T00:${String(minute).padStart(2, "0")}:00.000Z`;
     const listed = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
@@ -177,8 +175,7 @@ const grantFor = (approvalId: string, id: string) =>
   });
 
 describe("GrantRepository", () => {
-  // covers PE-007, PE-008
-  it("[TC-PE-096] saves a decision's grants in its transaction, once, and revokes each only once", async () => {
+  it("saves a decision's grants in its transaction, once, and revokes each only once", async () => {
     const result = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
       const grants = yield* GrantRepository;

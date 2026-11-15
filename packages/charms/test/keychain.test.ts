@@ -96,7 +96,7 @@ const hubOn = (dataDir: string) => {
 };
 
 describe("The keychain on the hub", () => {
-  it("[TC-PE-147] hands the GitHub sign-in to the keychain tool on its input, never on a command line", async () => {
+  it("hands the GitHub sign-in to the keychain tool on its input, never on a command line", async () => {
     writeFileSync(log, "");
     const read = await withKeychain("darwin", (keychain) =>
       Effect.gen(function* () {
@@ -135,7 +135,7 @@ describe("The keychain on the hub", () => {
     expect(quoted).toMatchObject({ _tag: "Failure" });
   });
 
-  it("[TC-GEN-033] reads the gh and Git sign-ins on the hub, Git with the request on its input", async () => {
+  it("reads the gh and Git sign-ins on the hub, Git with the request on its input", async () => {
     writeFileSync(log, "");
     const tokens = await Effect.gen(function* () {
       const local = yield* LocalGitHubSignIns;
@@ -156,7 +156,7 @@ describe("Hubs sharing one computer's keychain (#1214)", () => {
   const signIn = Effect.flatMap(Keychain, (keychain) => keychain.read).pipe(Effect.map(Option.map(Redacted.value)));
 
   // covers ADR 020, ADR 022
-  it("[TC-PE-1214-01] keeps each hub's sign-in and app keys apart, so one hub's delete leaves the other's", async () => {
+  it("keeps each hub's sign-in and app keys apart, so one hub's delete leaves the other's (#1214)", async () => {
     const hubA = hubOn("/Users/someone/Library/Application Support/Hobbots");
     const hubB = hubOn("/Users/someone/hobbots-qa/hub-b");
     expect(hubKeychainScope("/a")).not.toBe(hubKeychainScope("/b"));

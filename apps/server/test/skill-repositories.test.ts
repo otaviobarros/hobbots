@@ -184,7 +184,7 @@ const repositoryWithSkills = async () => {
 
 describe("a repository's own skills", () => {
   // covers ADR 029 (Scopes), #1098
-  it("[TC-AG-1098-01] offers a repository's skills once, and imports them from its default branch into the project", async () => {
+  it("offers a repository's skills once, and imports them from its default branch into the project (#1098)", async () => {
     const { site, agentId } = await repositoryWithSkills();
     const listed = await request("GET", "/api/skill-repositories");
     expect(listed.status).toBe(200);
@@ -266,7 +266,7 @@ describe("a repository's own skills", () => {
   });
 
   // covers ADR 029 (Scopes, Updates from a source), #1098
-  it("[TC-AG-1098-02] keeps what a hob loads when a branch changes a skill, and shows a default-branch change as an update", async () => {
+  it("keeps what a hob loads when a branch changes a skill, and shows a default-branch change as an update (#1098)", async () => {
     const { site, agentId } = await repositoryWithSkills();
     const [repository] = (await request("GET", "/api/skill-repositories")).body.repositories;
     const { candidates } = (await request("POST", "/api/skill-repositories/scan", { project: repository.project })).body
@@ -319,7 +319,7 @@ describe("a repository's own skills", () => {
     expect(await loaded()).toEqual([update.hash]);
   });
   // covers ADR 029 (Scopes, Updates from a source), #1098
-  it("[TC-AG-1098-03] follows the repository's default branch even for a skill its skills-lock.json says came from elsewhere", async () => {
+  it("follows the repository's default branch even for a skill its skills-lock.json says came from elsewhere (#1098)", async () => {
     const { site } = await repositoryWithSkills();
     // The skills CLI installed refunds from another repository, and the lock says so.
     const lock = {
@@ -359,7 +359,7 @@ describe("a repository's own skills", () => {
     ]);
   });
   // covers ADR 029 (Scopes, Updates from a source), #1098
-  it("[TC-AG-1098-05] refuses content the library already follows at another source, before and after the scan", async () => {
+  it("refuses content the library already follows at another source, before and after the scan (#1098)", async () => {
     const { agentId } = await repositoryWithSkills();
     const [repository] = (await request("GET", "/api/skill-repositories")).body.repositories;
     const { candidates } = (await request("POST", "/api/skill-repositories/scan", { project: repository.project })).body
@@ -386,7 +386,7 @@ describe("a repository's own skills", () => {
     expect((await request("GET", "/api/skill-repositories")).body.repositories[0].offered).toBe(true);
   });
   // covers ADR 029 (Scopes, Updates from a source), STD-UI-009, #1098
-  it("[TC-AG-1098-06] gives the project the rest of an import when another source brings in one of its skills mid-way", async () => {
+  it("gives the project the rest of an import when another source brings in one of its skills mid-way (#1098)", async () => {
     const { agentId } = await repositoryWithSkills();
     const [repository] = (await request("GET", "/api/skill-repositories")).body.repositories;
     const { candidates } = (await request("POST", "/api/skill-repositories/scan", { project: repository.project })).body

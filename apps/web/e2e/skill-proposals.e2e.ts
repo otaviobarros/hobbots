@@ -61,9 +61,7 @@ const proposalHub = async () => {
 };
 
 // covers ADR 029 (Proactive hobs), #1063
-test("[TC-UX-1063-01] a proposal arrives in the open Inbox as a Skill, and Add puts it in Ada's skills", async ({
-  page,
-}) => {
+test("a proposal arrives in the open Inbox as a Skill, and Add puts it in Ada's skills (#1063)", async ({ page }) => {
   const { url, propose } = await proposalHub();
   await page.goto(`${url}/#/inbox`);
   const needsYou = page.getByRole("link", { name: "Hobbots inbox, something needs you" });
@@ -94,7 +92,7 @@ test("[TC-UX-1063-01] a proposal arrives in the open Inbox as a Skill, and Add p
 });
 
 // covers ADR 029 (Proactive hobs), #1063
-test("[TC-UX-1063-02] Edit then add keeps your draft through a refusal and adds your edit, and Not now turns one down", async ({
+test("Edit then add keeps your draft through a refusal and adds your edit, and Not now turns one down (#1063)", async ({
   page,
 }) => {
   const { url, propose } = await proposalHub();
@@ -137,7 +135,7 @@ test("[TC-UX-1063-02] Edit then add keeps your draft through a refusal and adds 
 });
 
 // covers ADR 029 (Proactive hobs), #1063
-test("[TC-UX-1063-04] what the checks flag shows before you add it, a hidden character is marked where it is, and an edit is checked first", async ({
+test("what the checks flag shows before you add it, a hidden character is marked where it is, and an edit is checked first (#1063)", async ({
   page,
 }) => {
   const { url, propose } = await proposalHub();
@@ -166,7 +164,7 @@ test("[TC-UX-1063-04] what the checks flag shows before you add it, a hidden cha
 });
 
 // covers ADR 029 (Proactive hobs), #1063
-test("[TC-UX-1063-03] a proposals list that fails to load never reads as all clear, and Try again shows what waits", async ({
+test("a proposals list that fails to load never reads as all clear, and Try again shows what waits (#1063)", async ({
   page,
 }) => {
   const { url, propose } = await proposalHub();

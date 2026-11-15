@@ -2,20 +2,11 @@
 
 Rules for tests and verification. The [project workflow guide](../agent-engineering.md#checks) lists the test commands and tools.
 
-### STD-TEST-001 Integration and end-to-end tests carry a case ID
+### STD-TEST-002 Tests use fakes; the real runtimes are checked at each milestone
 
-Start the title of every integration, end-to-end and regression test with a case ID shaped `[TC-<AREA>-NNN]`. The area is a requirement area from the [MVP requirements](../product/mvp-requirements.md) (`CH`, `OR`, `IN` and so on), or `GEN` when none fits. A comment names the requirements the case covers. Case IDs are never reused or renumbered. A removed case is retired. Pure unit tests need no ID. An existing test gets an ID when it next changes.
+Test state transitions, duplicate delivery, restart recovery, permission enforcement and proactive closure with the deterministic fake runtime. The real runtimes are covered by the clean-runtime contract tests, and run by hand in each milestone's dogfood check. A pull request says what it could not verify.
 
-- ✅ `it("[TC-CH-001] streams a turn and resumes the session", …) // covers CH-001, CH-004`
-- **Why:** a requirement, a bug report and a review can point to the exact case that proves it.
-- **Enforced by:** review.
-- **Applies to:** integration, end-to-end and regression tests.
-
-### STD-TEST-002 Fakes first, then the real runtime
-
-Verify state transitions, duplicate delivery, restart recovery, permission enforcement and proactive closure with deterministic fake adapters first. Then verify the relevant cases against a real runtime. Report what you could not verify.
-
-- **Why:** fakes make failures repeatable, and the real runtime catches what fakes assume.
+- **Why:** fakes make failures repeatable and cheap, and one check on the real runtimes per milestone catches what fakes assume without a manual run per change.
 - **Enforced by:** review.
 - **Applies to:** runtime, orchestration, persistence and permissions work.
 
@@ -27,19 +18,19 @@ Test pure functions with Vitest unit tests, beside the source as `*.test.ts` or 
 - **Enforced by:** review.
 - **Applies to:** all packages.
 
-### STD-TEST-004 Each user flow has an end-to-end test
+### STD-TEST-004 Main flows have a smoke test; rules have unit tests
 
-Cover each user flow with a Playwright test in `apps/web/e2e`, with a case ID (STD-TEST-001), against the fake runtime. A UI change to a flow adds or updates its end-to-end test in the same pull request. Select elements by role and accessible name.
+Each main flow has one Playwright test in `apps/web/e2e`, tagged `@smoke`, against the fake runtime. A new flow adds one happy-path browser test. The rules behind a flow, its edge cases and its errors are proven by unit tests (STD-TEST-003), not by more browser tests. A UI change updates the browser tests it breaks. Select elements by role and accessible name.
 
-- **Why:** an end-to-end test proves the flow the user sees, across the server and the client.
+- **Why:** a few browser tests prove the flows a user sees, and unit tests prove the rules faster and with less upkeep.
 - **Enforced by:** the end-to-end CI job and review.
 - **Applies to:** `apps/web`.
 
-### STD-TEST-005 Component tests only where end-to-end cannot reach
+### STD-TEST-005 Component tests cover interaction logic
 
-Write a component render test only for interaction logic that an end-to-end test cannot reach at a reasonable cost. Test everything else through STD-TEST-003 and STD-TEST-004.
+A component render test is fine for interaction logic, such as keyboard handling, a form's states or a reducer behind a control. It checks behavior through roles and names, never markup or class names.
 
-- **Why:** component tests cost upkeep and often test the framework instead of behavior.
+- **Why:** with fewer browser tests, a component test is the cheaper proof of how a control behaves.
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
@@ -69,12 +60,12 @@ Onboarding, summoning a hob, chatting and deciding an approval each have an end-
 
 ### STD-TEST-009 Tests wait on state, and a flaky test is a bug
 
-A test waits for the state it needs, with a time limit, never for a fixed time or a number of tries: a web-first assertion or `expect.poll` in a browser test, a wait on the hub's state in a server test. On CI a failed test runs once more. One that then passes leaves the run green, but it is listed as flaky in the job summary, and it gets an issue within a day or is fixed. The nightly flake hunt runs every suite several times over and keeps one issue listing the tests that failed on any run.
+A test waits for the state it needs, with a time limit, never for a fixed time or a number of tries: a web-first assertion or `expect.poll` in a browser test, a wait on the hub's state in a server test. On CI a failed test runs once more. One that then passes leaves the run green, but it is listed as flaky in the job summary, and it gets an issue within a day or is fixed.
 
 - ✅ `await expect(page.getByRole("status")).toHaveText("Saved")`
 - ❌ `await page.waitForTimeout(300)`, or a loop of 1,500 tries 10 ms apart
 - **Why:** a fixed wait passes on a quiet laptop and fails on a busy runner, and a flaky test on `main` turns every pull request rebased on it red (#985).
-- **Enforced by:** review, the retry and flaky list in each CI job, the burn-in of changed browser tests on pull requests, and the nightly flake hunt.
+- **Enforced by:** review, the retry and flaky list in each CI job, and the burn-in of changed browser tests on pull requests.
 - **Applies to:** every test.
 
 ### STD-TEST-010 The window never scrolls
@@ -84,5 +75,15 @@ Each panel scrolls inside the window; the window itself never does. A shared fix
 - ✅ A scroll panel is the box its absolutely placed contents, such as an `sr-only` label, are placed in, so they scroll with it.
 - ❌ An `sr-only` label inside a transcript whose panel has no position of its own: the label escapes the panel and stretches the window to the transcript's height (#1026).
 - **Why:** a window that scrolls moves the whole frame, sidebar and composer included, and leaves an empty screen under them.
-- **Enforced by:** the shared Playwright fixture, its own checks `[TC-GEN-1026-02]` and `[TC-GEN-1026-03]`, `[TC-UX-1026-01]`, which tries to scroll the window on every screen, and the end-to-end CI job.
+- **Enforced by:** the shared Playwright fixture and its own checks, a test that tries to scroll the window on every screen, and the end-to-end CI job.
 - **Applies to:** `apps/web`.
+
+### STD-TEST-011 A regression test names its issue, and tags group browser tests
+
+A test that guards against a reported bug ends its title with the issue it fixes, such as `(#1026)`, and so does a test written for an issue's change. Test titles carry no other ID. To mark a group of browser tests, such as the smoke set, give each a Playwright tag in its details, never in its title: `test("chat streams a reply", { tag: "@smoke" }, …)`, run with `--grep @smoke`.
+
+- ✅ `it("never serves a log for a step that has none (#153)", …)`
+- ❌ `it("[TC-CH-001] streams a turn", …)`
+- **Why:** a test is found by its file and its name; the issue says why it exists, and a tag is how Playwright selects a group.
+- **Enforced by:** review.
+- **Applies to:** every test.

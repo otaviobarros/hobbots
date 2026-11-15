@@ -160,10 +160,10 @@ describe("fake runtime's scripted hub calls", () => {
 
   // A real model's reply rarely repeats a tool result, so the fake's leaves the hub's answers out
   // unless the prompt asks for them (#1560).
-  it("[TC-RT-1560-01] leaves the hub's answers out of its reply unless the prompt says fake:say-answers", async () => {
+  it("leaves the hub's answers out of its reply unless the prompt says fake:say-answers (#1560)", async () => {
     const hubTools = {
       tools: [{ name: "start_quest", description: "Start", inputSchema: {}, label: "Starting" }],
-      call: () => Effect.succeed({ text: `Started.\n${JSON.stringify({ criterion_id: "crit-7" })}`, refused: false }),
+      call: () => Effect.succeed({ text: `Started.\n${JSON.stringify({ quest_id: "quest-7" })}`, refused: false }),
     };
     const reply = async (prompt: string) => {
       const events = await makeFakeRuntime()
@@ -173,14 +173,14 @@ describe("fake runtime's scripted hub calls", () => {
       return completed?._tag === "Completed" ? completed.text : "";
     };
     const call = `fake:hub start_quest {"key":"q"}`;
-    expect(await reply(call)).not.toContain("crit-7");
+    expect(await reply(call)).not.toContain("quest-7");
     expect(await reply(`${call}\n${FAKE_SAY_ANSWERS_DIRECTIVE}`)).toContain(
-      `start_quest: Started.\n${JSON.stringify({ criterion_id: "crit-7" })}`,
+      `start_quest: Started.\n${JSON.stringify({ quest_id: "quest-7" })}`,
     );
   });
 
-  // covers PE-001 (#1356)
-  it("[TC-PE-1356-04] refuses a call to a hub tool the turn was not offered, as a runtime does, without the hub", async () => {
+  // Issue #1356
+  it("refuses a call to a hub tool the turn was not offered, as a runtime does, without the hub (#1356)", async () => {
     const calls: Array<string> = [];
     const hubTools = {
       tools: [{ name: "read_tasks", description: "Read", inputSchema: {}, label: "Reading" }],
@@ -223,7 +223,7 @@ describe("fake runtime's hub tools on a resumed session", () => {
   ) => {
     const events = await fake
       .sendPrompt({
-        ...request(`fake:hub check_criterion {"key":"accept"}`),
+        ...request(`fake:hub stop_quest {"key":"stop"}`),
         sessionId,
         hubTools: offering(names, calls),
       })
@@ -233,7 +233,7 @@ describe("fake runtime's hub tools on a resumed session", () => {
     return { started, text: completed?._tag === "Completed" ? completed.text : "" };
   };
 
-  it("[TC-RT-1543-01] fake Codex holds the hub tools its session started with, and refuses a newer one", async () => {
+  it("fake Codex holds the hub tools its session started with, and refuses a newer one (#1543)", async () => {
     const fake = makeFakeRuntime({ runtime: "codex" });
     expect(fake.resumeKeepsHubTools).toBe(true);
     const calls: Array<string> = [];
@@ -241,17 +241,17 @@ describe("fake runtime's hub tools on a resumed session", () => {
     // A new session says which hub tools it holds, so the hub can record them.
     expect(first.started).toMatchObject({ _tag: "SessionStarted", hubTools: ["start_quest"] });
     const sessionId = first.started?._tag === "SessionStarted" ? first.started.sessionId : null;
-    const resumed = await turn(fake, sessionId, ["start_quest", "check_criterion"], calls);
+    const resumed = await turn(fake, sessionId, ["start_quest", "stop_quest"], calls);
     expect(resumed.started).not.toHaveProperty("hubTools");
     // A call to a tool it does not hold is refused as not offered, before the hub, as Codex refuses it (#1356).
-    expect(resumed.text).toContain(`check_criterion: ${notOfferedReason("check_criterion")}`);
+    expect(resumed.text).toContain(`stop_quest: ${notOfferedReason("stop_quest")}`);
     expect(calls).toEqual([]);
     // A new session holds what its turn offers.
-    await turn(fake, null, ["start_quest", "check_criterion"], calls);
-    expect(calls).toEqual(["check_criterion"]);
+    await turn(fake, null, ["start_quest", "stop_quest"], calls);
+    expect(calls).toEqual(["stop_quest"]);
   });
 
-  it("[TC-RT-1543-02] fake Claude Code is offered each turn's hub tools, resumed or not", async () => {
+  it("fake Claude Code is offered each turn's hub tools, resumed or not (#1543)", async () => {
     const fake = makeFakeRuntime();
     expect(fake.resumeKeepsHubTools).toBeUndefined();
     const calls: Array<string> = [];
@@ -259,9 +259,9 @@ describe("fake runtime's hub tools on a resumed session", () => {
     expect(first.started).not.toHaveProperty("hubTools");
     const sessionId = first.started?._tag === "SessionStarted" ? first.started.sessionId : null;
     // A call to a tool the turn does not list is refused as not offered, before the hub, as Claude Code refuses it (#1356).
-    expect(first.text).toContain(`check_criterion: ${notOfferedReason("check_criterion")}`);
+    expect(first.text).toContain(`stop_quest: ${notOfferedReason("stop_quest")}`);
     expect(calls).toEqual([]);
-    await turn(fake, sessionId, ["start_quest", "check_criterion"], calls);
-    expect(calls).toEqual(["check_criterion"]);
+    await turn(fake, sessionId, ["start_quest", "stop_quest"], calls);
+    expect(calls).toEqual(["stop_quest"]);
   });
 });

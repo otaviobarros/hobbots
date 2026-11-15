@@ -110,7 +110,7 @@ const stored = Effect.flatMap(SqlClient.SqlClient, (sql) =>
 
 describe("passing", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1462-01] ends the request passed with its reason and removes the reply and what it asked, journaled TurnPassed", async () => {
+  it("ends the request passed with its reason and removes the reply and what it asked, journaled TurnPassed (#1462)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -182,7 +182,7 @@ describe("passing", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time, Stop all)
-  it("[TC-PE-1462-02] passes nothing and keeps the reply once Stop dropped the request it spoke for", async () => {
+  it("passes nothing and keeps the reply once Stop dropped the request it spoke for (#1462)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -205,7 +205,7 @@ describe("passing", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time), PE-003
-  it("[TC-PE-1462-03] keeps a reply an approval names, and answers its request instead of passing it", async () => {
+  it("keeps a reply an approval names, and answers its request instead of passing it (#1462)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -243,7 +243,7 @@ describe("passing", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time), STD-DATA-001
-  it("[TC-PE-1462-04] passes, when the hub starts again, a turn whose hob passed before the hub stopped", async () => {
+  it("passes, when the hub starts again, a turn whose hob passed before the hub stopped (#1462)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -263,7 +263,7 @@ describe("passing", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time), STD-DATA-001
-  it("[TC-PE-1462-05] keeps, when the hub starts again, the reply of a hob that passed and then changed something", async () => {
+  it("keeps, when the hub starts again, the reply of a hob that passed and then changed something (#1462)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;

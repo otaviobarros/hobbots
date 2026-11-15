@@ -126,7 +126,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(old.id).toBe(CheckpointId.make("c"));
   });
 
-  it("[TC-GEN-158] takes a question with no choices or 2 to 4, and a recommended one among them (#740)", () => {
+  it("takes a question with no choices or 2 to 4, and a recommended one among them (#740)", () => {
     const decode = Schema.decodeUnknownSync(TaskToolInputs.ask);
     const choice = (label: string) => ({ label, consequence: `${label} it is.` });
     expect(decode({ key: "k", question: "Which theme?" })).not.toHaveProperty("options");
@@ -155,7 +155,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(collidingLabel([{ label: "Light" }, { label: "Dark" }])).toBeUndefined();
   });
 
-  it("[TC-GEN-159] reads a question's choices and how it was answered, and an old question as one without (#740)", () => {
+  it("reads a question's choices and how it was answered, and an old question as one without (#740)", () => {
     const old = Schema.decodeUnknownSync(Question)({
       id: "q",
       taskId: "t",
@@ -240,11 +240,11 @@ describe("hob tools for Tasks and Quests", () => {
 describe("holdsEveryTaskTool", () => {
   const all = TASK_TOOLS.map((tool) => tool.name);
   // covers ADR 024, RT-001 (#1543)
-  it("[TC-RT-1543-03] holds only a session whose recorded tools include every Task tool, in any order", () => {
+  it("holds only a session whose recorded tools include every Task tool, in any order (#1543)", () => {
     // Not known, as for every session recorded before #1543: not held, so the session is replaced.
     expect(holdsEveryTaskTool(undefined)).toBe(false);
     expect(holdsEveryTaskTool([])).toBe(false);
-    expect(holdsEveryTaskTool(all.filter((name) => name !== "check_criterion"))).toBe(false);
+    expect(holdsEveryTaskTool(all.filter((name) => name !== "stop_quest"))).toBe(false);
     expect(holdsEveryTaskTool(all)).toBe(true);
     expect(holdsEveryTaskTool([...all].reverse())).toBe(true);
     // Other hub tools beside them, such as a Charm's, change nothing.
@@ -256,14 +256,13 @@ describe("the ids a Task tool takes", () => {
   /**
    * Where a lead reads each id it passes to a Task tool again, from the records, in any session
    * (#1555). A session never sees an earlier session's tool results, so an id known only from a
-   * call's result is lost to a new session, as the Quest's criterion ids were.
+   * call's result is lost to a new session.
    */
   const REREAD: Record<string, string> = {
     "plan_steps.task_id": "the briefing names the Task it works on; read_tasks",
     "start_quest.task_id": "the briefing names the Task it works on",
     "delegate_task.task_id": "the briefing names the Task it works on",
     "delegate_task.depends_on": "the briefing lists the work under it; read_tasks",
-    "delegate_task.criteria": "the briefing lists the Quest's criteria; read_tasks",
     "report_checkpoint.task_id": "the brief names the Task it works on",
     "report_checkpoint.milestone_id": "the brief lists the milestones to report",
     "ask.task_id": "the briefing names the Task it works on",
@@ -280,15 +279,13 @@ describe("the ids a Task tool takes", () => {
     "reassign_task.task_id": "the briefing lists the work under it; read_tasks",
     "reassign_task.expected_revision": "read_tasks",
     "complete_task.task_id": "the briefing names the Task it works on",
-    "check_criterion.criterion_id": "the briefing lists the Quest's criteria; read_tasks",
-    "check_criterion.evidence": "the briefing lists each artifact; read_tasks",
     "cancel_task.task_id": "the briefing lists the work under it; read_tasks",
     "claim.task_id": "the briefing names the Task it works on",
   };
-  const ID_LISTS = new Set(["tasks", "depends_on", "criteria", "evidence", "expected_revision"]);
+  const ID_LISTS = new Set(["tasks", "depends_on", "expected_revision"]);
 
-  // covers OR-006 (#1555)
-  it("[TC-OR-1555-02] each have a place a lead reads them again from the records", () => {
+  // Issue #1555
+  it("each have a place a lead reads them again from the records (#1555)", () => {
     const taken = Object.entries(TaskToolInputs).flatMap(([tool, schema]) =>
       Object.keys(schema.fields)
         .filter((field) => field.endsWith("_id") || ID_LISTS.has(field))

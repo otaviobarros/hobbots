@@ -242,7 +242,7 @@ const commit = (folder: string, file: string, subject: string) => {
 
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
-/** Runs the Charm's sandboxed reads as they are, since this hub's CI cannot start the sandbox (as in TC-PE-247). */
+/** Runs the Charm's sandboxed reads as they are, since this hub's CI cannot start the sandbox (as github-charm-end-to-end.test.ts does). */
 const PlainSandbox = Layer.succeed(
   FolderSandbox,
   FolderSandbox.of({
@@ -559,8 +559,8 @@ const onEachRuntime = async (check: (runtime: string) => Promise<void>) => {
 const TIMEOUT = 300_000;
 
 describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
-  // covers PE-002, PE-003, PE-007, PE-008, EX-004, ADR 015, ADR 031
-  it("[TC-PE-514] asks for a Charm read whose preset asks, records its step before it is sent, and lets the grant answer the next read", {
+  // covers ADR 015, ADR 031
+  it("asks for a Charm read whose preset asks, records its step before it is sent, and lets the grant answer the next read", {
     timeout: TIMEOUT,
   }, async () => {
     await onEachRuntime(async (runtime) => {
@@ -613,8 +613,8 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
-  // covers PE-003, PE-007, EX-004, ADR 020, ADR 031
-  it("[TC-PE-515] records a Charm write before it is sent, sends it once for a repeated key, reads it back after an uncertain end, and redacts it", {
+  // covers ADR 020, ADR 031
+  it("records a Charm write before it is sent, sends it once for a repeated key, reads it back after an uncertain end, and redacts it", {
     timeout: TIMEOUT,
   }, async () => {
     await onEachRuntime(async (runtime) => {
@@ -669,8 +669,8 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
-  // covers PE-008, ADR 031
-  it("[TC-PE-516] stops the hob's turn when the Charm is taken away, and sends nothing", {
+  // covers ADR 031
+  it("stops the hob's turn when the Charm is taken away, and sends nothing", {
     timeout: TIMEOUT,
   }, async () => {
     await onEachRuntime(async (runtime) => {
@@ -699,8 +699,8 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
-  // covers EX-004, ADR 014, ADR 028, ADR 029, ADR 031
-  it("[TC-PE-517] records each Local Git, Memory and Skill call's step before the hub runs it", {
+  // covers ADR 014, ADR 028, ADR 029, ADR 031
+  it("records each Local Git, Memory and Skill call's step before the hub runs it", {
     timeout: TIMEOUT,
   }, async () => {
     await onEachRuntime(async (runtime) => {
@@ -756,8 +756,8 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
-  // covers PE-002, PE-003, PE-007, ADR 020, ADR 031
-  it("[TC-PE-518] reads, pushes, opens a pull request, comments and opens issues through the GitHub Charm, beside the Shelf Charm", {
+  // covers ADR 020, ADR 031
+  it("reads, pushes, opens a pull request, comments and opens issues through the GitHub Charm, beside the Shelf Charm", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();
@@ -842,7 +842,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
 
 describe("a GitHub comment after the session read the web (#1272)", () => {
   // covers ADR 036 (The read-the-web mark), ADR 031
-  it("[TC-PE-1272-04] a comment a saved grant answers waits for you once the session searched, and another chat still posts it", {
+  it("a comment a saved grant answers waits for you once the session searched, and another chat still posts it (#1272)", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();
@@ -873,8 +873,8 @@ describe("a GitHub comment after the session read the web (#1272)", () => {
 });
 
 describe("when a Charm granted applies", () => {
-  // covers PE-005, ADR 031, ADR 038
-  it("[TC-PE-1347-03] granting a Charm whose writes stay in chats says a Task session is still not offered them", {
+  // covers ADR 031, ADR 038
+  it("granting a Charm whose writes stay in chats says a Task session is still not offered them (#1347)", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();
@@ -908,8 +908,8 @@ const toolList = (request: PromptRequest) =>
   (request.hubTools?.tools ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 
 describe("the tools the model sees", () => {
-  // covers PE-002, ADR 020, ADR 028, ADR 029, ADR 031
-  it("[TC-PE-519] offers a GitHub-granted hob the same tools as before the slice, word for word", {
+  // covers ADR 020, ADR 028, ADR 029, ADR 031
+  it("offers a GitHub-granted hob the same tools as before the slice, word for word", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();

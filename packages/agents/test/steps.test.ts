@@ -7,8 +7,7 @@ const started = { _tag: "ToolStarted", id: "t1", ...call, label: "Running pnpm t
 const states = (steps: ReadonlyArray<ReplyStep> | null) => steps?.map((step) => `${step.id}:${step.state}`);
 
 describe("nextSteps", () => {
-  // covers CH-004, PE-002
-  it("[TC-CH-112] follows a tool call from Ask through its start to its outcome, and leaves ended steps alone", () => {
+  it("follows a tool call from Ask through its start to its outcome, and leaves ended steps alone", () => {
     const awaiting = nextSteps([], 0, {
       _tag: "ToolAwaitingApproval",
       id: "t1",

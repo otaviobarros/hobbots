@@ -25,8 +25,7 @@ const fakeMac = (options: { status?: string; wasOpenedAtLogin?: boolean; refuse?
 };
 
 describe("the login item", () => {
-  // covers EX-005
-  it("[TC-GEN-004] registers on the first start, because opening at login is on by default", () => {
+  it("registers on the first start, because opening at login is on by default", () => {
     const mac = fakeMac();
     const settings = freshSettings();
     const item = makeLoginItem({ supported: true, items: mac.items, settings });
@@ -37,8 +36,7 @@ describe("the login item", () => {
     expect(mac.writes).toEqual([true]);
   });
 
-  // covers EX-005
-  it("[TC-GEN-005] removes the login item when the switch is turned off, and remembers it", async () => {
+  it("removes the login item when the switch is turned off, and remembers it", async () => {
     const mac = fakeMac();
     const settings = freshSettings();
     const item = makeLoginItem({ supported: true, items: mac.items, settings });
@@ -50,8 +48,7 @@ describe("the login item", () => {
     expect((await item.setOpenAtLogin(true)).status).toBe("enabled");
   });
 
-  // covers EX-005, OP-002
-  it("[TC-GEN-006] reports what macOS made of the registration instead of assuming it worked", async () => {
+  it("reports what macOS made of the registration instead of assuming it worked", async () => {
     const refused = fakeMac({ refuse: true });
     const item = makeLoginItem({ supported: true, items: refused.items, settings: freshSettings() });
     expect(await item.setOpenAtLogin(true)).toEqual({ openAtLogin: true, status: "not-registered" });
@@ -63,8 +60,7 @@ describe("the login item", () => {
     expect(approval.state()).toEqual({ openAtLogin: true, status: "requires-approval" });
   });
 
-  // covers EX-005
-  it("[TC-GEN-007] starts without a window only when macOS opened the app at login", () => {
+  it("starts without a window only when macOS opened the app at login", () => {
     const atLogin = makeLoginItem({
       supported: true,
       items: fakeMac({ status: "enabled", wasOpenedAtLogin: true }).items,

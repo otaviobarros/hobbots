@@ -13,7 +13,7 @@ const sidewaysScroll = (page: Page) =>
     return max;
   });
 
-test("[TC-GEN-016] keeps a space before the email link in the wait-list note", async ({ page }) => {
+test("keeps a space before the email link in the wait-list note (#246)", async ({ page }) => {
   // covers #246
   await page.goto("/");
   await expect(page.locator(".help").first()).toContainText(/write to \S+@hobbots\.app\./);
@@ -24,7 +24,7 @@ for (const { width, height } of [
   { width: 390, height: 844 },
   { width: 1440, height: 900 },
 ]) {
-  test(`[TC-GEN-017] never scrolls sideways at ${width} pixels wide`, async ({ page }) => {
+  test(`never scrolls sideways at ${width} pixels wide`, async ({ page }) => {
     // covers #246 and #1224: the hobs walk in from off screen, and the screenshots lift in from the side
     await page.setViewportSize({ width, height });
     await page.goto("/");
@@ -32,7 +32,7 @@ for (const { width, height } of [
   });
 }
 
-test("[TC-GEN-1224-01] plays the hero's Quest: answer Ada, and the work is done by morning", async ({ page }) => {
+test("plays the hero's Quest: answer Ada, and the work is done by morning (#1224)", async ({ page }) => {
   // covers #1224
   await page.goto("/");
   const stage = page.getByRole("region", { name: /Try it/ });
@@ -46,7 +46,7 @@ test("[TC-GEN-1224-01] plays the hero's Quest: answer Ada, and the work is done 
   await expect(stage.getByRole("button", { name: /Dec 12 for international/ })).toBeFocused();
 });
 
-test("[TC-GEN-1224-02] plays the tour by itself, and stops when a screen is picked", async ({ page }) => {
+test("plays the tour by itself, and stops when a screen is picked (#1224)", async ({ page }) => {
   // covers #1224
   await page.goto("/");
   const tour = page.locator("#tour");
@@ -67,7 +67,7 @@ test("[TC-GEN-1224-02] plays the tour by itself, and stops when a screen is pick
   });
 });
 
-test("[TC-GEN-1224-03] opens the video over the page and closes it with Escape, the button or a click outside", async ({
+test("opens the video over the page and closes it with Escape, the button or a click outside (#1224)", async ({
   page,
 }) => {
   // covers #1224. The video itself is on media.hobbots.app; the test never fetches it.
@@ -93,7 +93,7 @@ test("[TC-GEN-1224-03] opens the video over the page and closes it with Escape, 
   await expect(dialog).toBeHidden();
 });
 
-test("[TC-GEN-1224-04] offers the release's installers, with Linux marked experimental", async ({ page }) => {
+test("offers the release's installers, with Linux marked experimental (#1224)", async ({ page }) => {
   // covers #1224
   await page.goto("/");
   const download = page.locator("#download");
@@ -123,7 +123,7 @@ test("[TC-GEN-1224-04] offers the release's installers, with Linux marked experi
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test("[TC-GEN-1224-05] opens the menu, and copies the link to send to a computer", async ({ page, context }) => {
+  test("opens the menu, and copies the link to send to a computer (#1224)", async ({ page, context }) => {
     // covers #1224
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/");
@@ -145,7 +145,7 @@ test.describe("on a phone", () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("https://hobbots.app");
   });
 
-  test("[TC-GEN-1224-07] opens and closes the video with taps", async ({ page }) => {
+  test("opens and closes the video with taps (#1224)", async ({ page }) => {
     // covers #1224: the video works with touch
     await page.route("https://media.hobbots.app/**", (route) => route.abort());
     await page.goto("/");
@@ -160,7 +160,7 @@ test.describe("on a phone", () => {
 test.describe("with Reduce motion", () => {
   test.use({ reducedMotion: "reduce" });
 
-  test("[TC-GEN-1224-06] stops every animation, the tour included", async ({ page }) => {
+  test("stops every animation, the tour included (#1224)", async ({ page }) => {
     // covers #1224: nothing moves by itself with Reduce motion
     await page.goto("/");
     await expect(page.getByRole("button", { name: /Pause the tour|Play the tour/ })).toBeHidden();

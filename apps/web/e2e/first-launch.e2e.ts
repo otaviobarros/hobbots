@@ -22,8 +22,7 @@ const openApp = async (page: Page, current: Hub) => {
   await page.goto(current.url);
 };
 
-// covers OP-001, AG-001
-test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home after a restart", async ({
+test("a new installation goes from Welcome to Home and opens on Home after a restart", { tag: "@smoke" }, async ({
   page,
   browser,
 }) => {
@@ -100,8 +99,7 @@ const expectBlocked = async (page: Page) => {
   await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
-// covers AG-005, OP-001
-test("[TC-AG-009] a missing Claude Code blocks onboarding and shows how to install it", async ({ page }) => {
+test("a missing Claude Code blocks onboarding and shows how to install it", async ({ page }) => {
   hub = await startHub(dataDir, {
     HOBBOTS_RUNTIME: "claude",
     HOBBOTS_CLAUDE_EXECUTABLE: `${dataDir}/bin/claude`,
@@ -119,8 +117,7 @@ test("[TC-AG-009] a missing Claude Code blocks onboarding and shows how to insta
   await expectBlocked(page);
 });
 
-// covers AG-005, OP-001
-test("[TC-AG-010] a signed-out Claude Code blocks onboarding and shows how to sign in", async ({ page }) => {
+test("a signed-out Claude Code blocks onboarding and shows how to sign in", async ({ page }) => {
   hub = await startHub(dataDir, {
     HOBBOTS_RUNTIME: "claude",
     HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir),
@@ -141,8 +138,7 @@ test("[TC-AG-010] a signed-out Claude Code blocks onboarding and shows how to si
   await expectBlocked(page);
 });
 
-// covers OP-001
-test("[TC-OP-076] first run shows Workshop Night whatever theme is saved, and the saved theme comes back after it", async ({
+test("first run shows Workshop Night whatever theme is saved, and the saved theme comes back after it", async ({
   page,
 }) => {
   hub = await startHub(dataDir);

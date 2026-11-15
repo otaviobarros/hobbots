@@ -111,8 +111,7 @@ const call = async (
 };
 
 describe("Claude Code tool calls under the policy hook", () => {
-  // covers PE-001, PE-002
-  it("[TC-PE-012] lets a hob under Balanced edit and run tests in its folder without asking", async () => {
+  it("lets a hob under Balanced edit and run tests in its folder without asking", async () => {
     const edit = await call("Edit", { file_path: join(project, "a.ts") });
     expect(edit.decision).toBe("allow");
     expect(edit.events).toEqual([
@@ -132,8 +131,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(tests.events.at(-1)).toEqual({ _tag: "ToolFinished", id: "t1", failed: true, output: "x" });
   });
 
-  // covers PE-002
-  it("[TC-PE-120] names the folder a Git command works in, and keeps in the label any folder the step does not show", async () => {
+  it("names the folder a Git command works in, and keeps in the label any folder the step does not show", async () => {
     const sub = join(project, "tree");
     mkdirSync(sub, { recursive: true });
     const log = await call("Bash", { command: `GIT_CONFIG_GLOBAL=/dev/null git -C ${project} log --oneline -3` });
@@ -150,8 +148,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect((tree.events[0] as { label: string }).label).toMatch(/^Running git --work-tree=\S*tree status$/);
   });
 
-  // covers EX-004
-  it("[TC-EX-011] lets an allowed call run only once Hobbots has recorded it, and refuses one it could not record", async () => {
+  it("lets an allowed call run only once Hobbots has recorded it, and refuses one it could not record", async () => {
     const recorded: Array<RuntimeEvent> = [];
     const saved = await call("Edit", { file_path: join(project, "a.ts") }, "success", "on", (event) =>
       Effect.sync(() => {
@@ -173,8 +170,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-013] refuses a call outside the hob's folders or in Hobbots' data, whatever the prompt says", async () => {
+  it("refuses a call outside the hob's folders or in Hobbots' data, whatever the prompt says", async () => {
     for (const [tool, input] of [
       ["Write", { file_path: join(outside, "x.txt") }],
       ["Read", { file_path: "../outside/x.txt" }],
@@ -187,8 +183,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     }
   });
 
-  // covers PE-002, PE-005
-  it("[TC-PE-463] lets a hob read the output Claude Code saved for its session, and nothing else in its runtime folder", async () => {
+  it("lets a hob read the output Claude Code saved for its session, and nothing else in its runtime folder", async () => {
     const turn = toolTurn(access(), "on");
     if (turn === null) throw new Error("expected a tool turn");
     const sessions = join(turn.runtimeFolder, "projects", "-project");
@@ -248,16 +243,14 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(foreign).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
   });
 
-  // covers PE-003
-  it("[TC-PE-014] does not run a call that needs approval on a turn that cannot ask", async () => {
+  it("does not run a call that needs approval on a turn that cannot ask", async () => {
     const result = await call("Bash", { command: "pnpm test && git push origin main" });
     expect(result.decision).toBe("deny");
     expect(result.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "push" });
     expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("cannot ask you");
   });
 
-  // covers PE-003, PE-005
-  it("[TC-PE-158] points a git push in a folder the GitHub Charm pushes from to github_push, in any preset", async () => {
+  it("points a git push in a folder the GitHub Charm pushes from to github_push, in any preset", async () => {
     const steered: Array<string> = [];
     const push = { operation: "push", charm: "GitHub", tool: "github_push" } as const;
     const hubTools = {
@@ -320,7 +313,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(plain.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "push" });
   });
 
-  it("[#209] decides a push behind a wrapper as a push, and a delete after cd in the folder moved to", async () => {
+  it("decides a push behind a wrapper as a push, and a delete after cd in the folder moved to (#209)", async () => {
     for (const command of [
       "env -i git push origin main",
       "timeout 30 git push origin main",
@@ -393,8 +386,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     return { hook, result, events };
   };
 
-  // covers PE-003
-  it("[TC-PE-067] asks the user about a call that needs approval and runs it only once approved", async () => {
+  it("asks the user about a call that needs approval and runs it only once approved", async () => {
     const { asked, approvals } = approvalsAnswering(approve);
     const { hook, result, events } = await askedCall(approvals);
     expect(hook).toBe("ask");
@@ -412,7 +404,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-RT-1268-01] asks before a push once the session has read the web, and the sandbox proxy refuses a new host", async () => {
+  it("asks before a push once the session has read the web, and the sandbox proxy refuses a new host (#1268)", async () => {
     const READ_MARK = {
       current: Effect.succeed({ since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" }),
       read: () => Effect.void,
@@ -454,8 +446,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     );
   });
 
-  // covers PE-003
-  it("[TC-PE-068] gives the hob the user's reason when they deny the call", async () => {
+  it("gives the hob the user's reason when they deny the call", async () => {
     const { approvals } = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
     const { result, events } = await askedCall(approvals);
     expect(result).toMatchObject({ behavior: "deny", message: expect.stringContaining("Not today") });
@@ -463,8 +454,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(events[1]).toMatchObject({ decidedBy: "user" });
   });
 
-  // covers PE-008
-  it("[TC-PE-069] decides an approved call again under the policy as it is now", async () => {
+  it("decides an approved call again under the policy as it is now", async () => {
     // Pushing became Never while the user decided.
     const narrower = approvalsAnswering(approve, access({ ...EMPTY_HOB_POLICY, overrides: { push: "deny" } }));
     const refused = await askedCall(narrower.approvals);
@@ -487,8 +477,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(again.result).toMatchObject({ behavior: "allow" });
   });
 
-  // covers PE-003, PE-008
-  it("[TC-PE-071] asks about the call in the folder the hook saw, and refuses one whose arguments changed", async () => {
+  it("asks about the call in the folder the hook saw, and refuses one whose arguments changed", async () => {
     const turn = toolTurn(access(), "on");
     if (turn === null) throw new Error("expected a tool turn");
     const { asked, approvals } = approvalsAnswering(approve);
@@ -568,8 +557,8 @@ describe("Claude Code tool calls under the policy hook", () => {
     return { result, note };
   };
 
-  // covers PE-003; regression for #282
-  it("[TC-PE-121] tells the hob, with the result, that the user approved the call and for how long", async () => {
+  // Regression for #282
+  it("tells the hob, with the result, that the user approved the call and for how long (#282)", async () => {
     const once = await deleteCall(approvalsAnswering(approve).approvals);
     expect(once.result).toMatchObject({ behavior: "allow" });
     expect(once.note).toContain("approval request for this call");
@@ -592,8 +581,8 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(first.note).toContain("approved calls like it always");
   });
 
-  // covers PE-003; regression for #282
-  it("[TC-PE-122] tells the hob when an approval the user saved earlier let the call run without asking", async () => {
+  // Regression for #282
+  it("tells the hob when an approval the user saved earlier let the call run without asking (#282)", async () => {
     const { asked, approvals } = approvalsAnswering(approve);
     await deleteCall(approvals);
     const action = asked[0];
@@ -622,8 +611,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(post).toEqual({});
   });
 
-  // covers PE-005
-  it("[TC-PE-040] blocks shell commands where the sandbox cannot start, and says why", async () => {
+  it("blocks shell commands where the sandbox cannot start, and says why", async () => {
     // Bash is not offered at all, while file tools still work through the hook.
     const turn = toolTurn(access(), "unavailable");
     expect(turn?.tools).not.toContain("Bash");
@@ -670,7 +658,6 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   it("keeps a turn chat-only when the hob may not read its folders", () => {
-    // covers PE-005
     // Claude Code cannot start in a folder it cannot read, and no tool works without reading it.
     expect(toolTurn(access({ ...EMPTY_HOB_POLICY, overrides: { "read-files": "deny" } }), "on")).toBeNull();
   });
@@ -691,8 +678,7 @@ describe("scripted tool calls in the fake runtime", () => {
       .pipe(Stream.runCollect, Effect.runPromise)
       .then((events) => Array.from(events).filter((e) => e._tag.startsWith("Tool")));
 
-  // covers PE-002
-  it("[TC-PE-015] reports allowed calls as started and finished and refused ones as denied", async () => {
+  it("reports allowed calls as started and finished and refused ones as denied", async () => {
     const events = await turn(
       `fake:tool Edit ${join(project, "a.ts")}\nfake:tool Write ${join(outside, "b.txt")}`,
       access(),
@@ -706,8 +692,7 @@ describe("scripted tool calls in the fake runtime", () => {
     expect(events).toEqual([expect.objectContaining({ _tag: "ToolDenied", tool: "WebFetch", decidedBy: "policy" })]);
   });
 
-  // covers PE-002
-  it("[TC-PE-281] never writes through a link in a scripted run, at the file's name or on the way to it", async () => {
+  it("never writes through a link in a scripted run, at the file's name or on the way to it", async () => {
     const away = join(root, "away");
     mkdirSync(away, { recursive: true });
     writeFileSync(join(away, "keep.txt"), "untouched\n");
@@ -722,8 +707,7 @@ describe("scripted tool calls in the fake runtime", () => {
     expect(readdirSync(away)).toEqual(["keep.txt"]);
   });
 
-  // covers PE-002
-  it("[TC-PE-285] never writes outside while another process swaps a folder on the way for a link and back", async () => {
+  it("never writes outside while another process swaps a folder on the way for a link and back", async () => {
     const away = join(root, "away-race");
     mkdirSync(away, { recursive: true });
     writeFileSync(join(away, "f.txt"), "untouched\n");
@@ -748,8 +732,7 @@ describe("scripted tool calls in the fake runtime", () => {
     expect(readdirSync(away).sort()).toEqual(["f.txt", "gone.txt"]);
   }, 30_000);
 
-  // covers PE-002
-  it("[TC-PE-287] makes writes from inside the folder, as on macOS, never outside while folders on the way or the folder itself are swapped", async () => {
+  it("makes writes from inside the folder, as on macOS, never outside while folders on the way or the folder itself are swapped", async () => {
     const away = join(root, "away-inside");
     mkdirSync(away, { recursive: true });
     writeFileSync(join(away, "f.txt"), "untouched\n");
@@ -841,8 +824,7 @@ describe("sessions across configuration folders", () => {
     expect(existsSync(join(user, "projects", "-work", "s3", "agent.jsonl"))).toBe(false);
   });
 
-  it("[TC-PE-023] writes nowhere outside while a command swaps the hob's folders for links", async () => {
-    // covers PE-005
+  it("writes nowhere outside while a command swaps the hob's folders for links", async () => {
     // A command of another thread of the same hob keeps swapping its project folder for a link outside.
     const user = join(root, "user-claude-6");
     const hob = join(runtimes, "hob-swapping");
@@ -884,8 +866,7 @@ describe("sessions across configuration folders", () => {
     expect(readdirSync(elsewhere)).toEqual([]);
   }, 60_000);
 
-  it("[TC-PE-018] never follows a linked folder on the way to a session", async () => {
-    // covers PE-005
+  it("never follows a linked folder on the way to a session", async () => {
     const elsewhere = join(outside, "elsewhere");
     mkdirSync(join(elsewhere, "-work"), { recursive: true });
     writeFileSync(join(elsewhere, "-work", "s4.jsonl"), "outside\n");
@@ -968,8 +949,8 @@ describe("the process sandbox", () => {
     expect(rules.denyWrite).toEqual(expect.arrayContaining(["/Users/me/Library/Hobbots"]));
   });
 
-  // covers PE-005, #1219
-  it("[TC-RT-1219-01] opens Apple's xcrun cache for reading only, so the developer tool shims stay quiet", () => {
+  // Issue #1219
+  it("opens Apple's xcrun cache for reading only, so the developer tool shims stay quiet (#1219)", () => {
     const cache = ["/var/folders/xy/T/xcrun_db", "/private/var/folders/xy/T/xcrun_db"];
     const rules = sandboxFilesystem({
       folders: ["/Volumes/Work/app"],
@@ -1052,9 +1033,8 @@ describe("the process sandbox", () => {
     expect(await decideForLiveTurns([], "example.com")).toMatchObject({ allow: false });
   });
 
-  // covers PE-005
   it.runIf(process.platform === "darwin")(
-    "[TC-PE-016] lets a command write in the hob's folder and fails one that writes outside it or to Git's hooks",
+    "lets a command write in the hob's folder and fails one that writes outside it or to Git's hooks",
     async () => {
       await Effect.gen(function* () {
         const sandbox = yield* ProcessSandbox;
@@ -1124,9 +1104,8 @@ describe("the process sandbox", () => {
     30_000,
   );
 
-  // covers PE-005
   it.runIf(process.platform === "darwin")(
-    "[TC-PE-084] lets Git read the user's config and the files it includes, unless one holds a secret",
+    "lets Git read the user's config and the files it includes, unless one holds a secret",
     async () => {
       await Effect.gen(function* () {
         const sandbox = yield* ProcessSandbox;
@@ -1194,9 +1173,8 @@ describe("the process sandbox", () => {
     30_000,
   );
 
-  // covers PE-005
   it.runIf(process.platform === "darwin")(
-    "[TC-PE-085] opens the user's signing agent and keeps signing on only for a hob that signs commits",
+    "opens the user's signing agent and keeps signing on only for a hob that signs commits",
     async () => {
       // A stand-in for 1Password's SSH agent: a Unix socket that answers each connection.
       const socket = join(root, "agent.sock");
@@ -1244,9 +1222,8 @@ describe("the process sandbox", () => {
     30_000,
   );
 
-  // covers PE-005
   it.runIf(process.platform === "darwin")(
-    "[TC-PE-020] fails a command that writes or reads a folder the policy closes to it",
+    "fails a command that writes or reads a folder the policy closes to it",
     async () => {
       await Effect.gen(function* () {
         const sandbox = yield* ProcessSandbox;

@@ -1,4 +1,4 @@
-import type { ThreadKeyReused } from "@hobbots/api";
+import type { HobUnavailable, ThreadArchived, ThreadKeyReused } from "@hobbots/api";
 import type {
   Actor,
   Agent,
@@ -17,6 +17,7 @@ import type {
   Committed,
   IllegalChapterTransition,
   Line,
+  MemberRefused,
   MentionRefused,
   Message,
   MessageId,
@@ -36,7 +37,12 @@ import { Context, type Effect, type Option } from "effect";
 /** The camp a chapter moves into: an open camp of the hob's, or `camp`, made in the same transaction under its id as key. */
 export type ChapterMoveTarget =
   | { readonly _tag: "camp"; readonly campId: ThreadId }
-  | { readonly _tag: "new"; readonly camp: Thread };
+  | {
+      readonly _tag: "new";
+      readonly camp: Thread;
+      /** The other hobs the new camp is made with (ADR 039); the chapter's hob leads it. */
+      readonly hobs?: ReadonlyArray<AgentId>;
+    };
 
 /**
  * Whom a message you send mentions and replies to; see `SaidMessage`. The hub parses the mentions in
@@ -144,6 +150,10 @@ export class HobbotsRepository extends Context.Service<
      * Saves the message with the events it produces (`messageEvents`), and in the same transaction
      * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line). A new
      * message joins its thread's live chapter; the message returned carries the chapter it is in.
+     * A hob's reply saved complete that @mentions other hobs of the camp owes each one a relay
+     * request (ADR 039, Hobs talking to hobs), at one more than its turn's relay depth and `paused`
+     * past `HOB_RELAY_BUDGET`, written with it; a reply whose turn was stopped relays nothing, and a
+     * reply relays once, however often it is saved.
      */
     readonly upsertMessage: (message: Message, uses?: ReadonlyArray<SkillUse>) => Effect.Effect<Committed<Message>>;
     /**
@@ -190,7 +200,7 @@ export class HobbotsRepository extends Context.Service<
       reply: Message,
       speaking: ReadonlyArray<TurnRequestId>,
     ) => Effect.Effect<Option.Option<Committed<Message>>>;
-    /** The turn writing `replyId` ended: its speaking requests are answered. */
+    /** The turn writing `replyId` ended: the requests it spoke for are answered. */
     readonly answerTurnRequests: (replyId: MessageId) => Effect.Effect<void>;
     /** The requests still owed that the turn writing `replyId` speaks for. */
     readonly turnRequestsOf: (replyId: MessageId) => Effect.Effect<ReadonlyArray<TurnRequest>>;
@@ -210,6 +220,12 @@ export class HobbotsRepository extends Context.Service<
       reason: string,
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
+     * Let them go on (ADR 039, Hobs talking to hobs): the line's paused requests wait again, each at
+     * `RESUMED_RELAY_DEPTH`, journaled as one `RelayBudgetReset` by `by`. Returns the requests it
+     * woke; none, and nothing journaled, when none was paused.
+     */
+    readonly letHobsGoOn: (line: Line, by: Actor) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
+    /**
      * Drops the requests that are still owed, recording who stopped them (Stop and Stop all). A
      * queued message left with nothing owed leaves the queue said, journaled `MessageDequeued`
      * `dropped`. Returns the requests it dropped.
@@ -228,8 +244,25 @@ export class HobbotsRepository extends Context.Service<
      * reply, or passed, with its reply removed, when its hob had passed.
      */
     readonly answerUnfinishedTurnRequests: Effect.Effect<Committed<void>>;
-    /** Threads with a `TurnRequest` waiting. */
+    /** Threads with a `TurnRequest` waiting, or paused past the relay budget, so a start shows each line as it was. */
     readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /**
+     * Takes `actor` out of a camp, by `by` (ADR 039, Members), in one transaction: the member moves to
+     * `removed`, journaled `ThreadMemberChanged`, and a hob's answers still waiting there are dropped,
+     * recording who removed it, so it never takes the floor again. A queued message left with nothing
+     * owed leaves the queue said. The answer it is speaking stays for Stop to end. One already gone is
+     * returned as it is, with nothing journaled. A direct message, its owner, the hob a camp leads
+     * with and someone not in it are refused, and so is `by` when it is no longer an active member
+     * as the change is written, and the change itself when the camp was archived meanwhile.
+     */
+    readonly removeMember: (
+      threadId: ThreadId,
+      actor: Actor,
+      by: Actor,
+    ) => Effect.Effect<
+      Committed<{ readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> }>,
+      MemberRefused | ThreadArchived
+    >;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
     readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
     /** The thread's stored summary of older messages, if a handoff made one (ADR 017). */
@@ -239,9 +272,14 @@ export class HobbotsRepository extends Context.Service<
     /**
      * Writes a new camp and journals `CampMade`, in one transaction (ADR 037). The camp's id is the
      * command's key: the same camp stored under it already is returned as it is, with nothing
-     * journaled, and a different thread under it is refused.
+     * journaled, and a different thread under it is refused. A hob it is made with that no longer
+     * takes new work as it is written is refused `HobUnavailable`, and no camp is made.
      */
-    readonly makeCamp: (camp: Thread) => Effect.Effect<Committed<Thread>, ThreadKeyReused>;
+    readonly makeCamp: (
+      camp: Thread,
+      /** The other hobs it is made with, each journaled `ThreadMemberAdded` after its first two members. */
+      hobs?: ReadonlyArray<AgentId>,
+    ) => Effect.Effect<Committed<Thread>, ThreadKeyReused | HobUnavailable>;
     /**
      * Moves a chapter into a camp, in one transaction (ADR 037, #1385): re-parents its messages,
      * decisions, artifacts and the quests started in it with their open questions and backpack
@@ -256,7 +294,7 @@ export class HobbotsRepository extends Context.Service<
       readonly at: string;
     }) => Effect.Effect<
       Committed<ChapterMove>,
-      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused
+      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused | HobUnavailable
     >;
     /**
      * Start fresh, in one transaction (ADR 037): writes `superseded`, the chat after its Supersede,

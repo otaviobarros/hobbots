@@ -274,8 +274,7 @@ const taskWithPush = (steps: ReadonlyArray<string>) =>
   });
 
 describe("an approval for This Task", () => {
-  // covers PE-007, OR-001
-  it("[TC-PE-248] binds to the top Task and the hob that asked, and covers every step of the Task without asking", async () => {
+  it("binds to the top Task and the hob that asked, and covers every step of the Task without asking", async () => {
     const { run, release } = setUp();
     const { request, top } = await run(taskWithPush([`Push the copy\n${push}`, `Push the images\n${push}`]));
 
@@ -302,8 +301,7 @@ describe("an approval for This Task", () => {
     expect(used?.lastUsedAt).not.toBeNull();
   }, 30_000);
 
-  // covers PE-007, OR-001
-  it("[TC-OR-484] asked from the chat turn on the Task, names that Task, and the Task's ledger still holds it open", async () => {
+  it("asked from the chat turn on the Task, names that Task, and the Task's ledger still holds it open", async () => {
     const { run } = setUp();
     const { request, top } = await run(taskWithPush(["Wait for the go-ahead"]));
     if (top === undefined) throw new Error("no Task");
@@ -317,8 +315,7 @@ describe("an approval for This Task", () => {
     );
   }, 30_000);
 
-  // covers PE-004, PE-007, OR-002
-  it("[TC-PE-249] still applies once a party joins and the Task becomes a Quest, and Quill never uses Aldric's grant", async () => {
+  it("still applies once a party joins and the Task becomes a Quest, and Quill never uses Aldric's grant", async () => {
     const { run } = setUp();
     const { request, top } = await run(taskWithPush(["Wait for the go-ahead"]));
     await run(approve(request, "task"));
@@ -355,8 +352,7 @@ describe("an approval for This Task", () => {
     ]);
   }, 30_000);
 
-  // covers PE-004, PE-007
-  it("[TC-PE-260] a member's call the delegation narrows to Ask offers no This Task or Always", async () => {
+  it("a member's call the delegation narrows to Ask offers no This Task or Always", async () => {
     const { run } = setUp();
     const file = join(project, "copy.md");
     await run(
@@ -380,8 +376,7 @@ describe("an approval for This Task", () => {
     expect(refused._tag).toBe("ApprovalNotGrantable");
   }, 30_000);
 
-  // covers PE-004, PE-007
-  it("[TC-PE-261] an Ask the lead set on purpose stays one no grant answers, even where the member's preset asks too", async () => {
+  it("an Ask the lead set on purpose stays one no grant answers, even where the member's preset asks too", async () => {
     const { run } = setUp();
     const delegatePush = (key: string) =>
       say(
@@ -424,8 +419,7 @@ describe("an approval for This Task", () => {
     expect(tree?.delegations.map((each) => each.authority.overrides)).toEqual([{}, { push: "ask" }]);
   }, 30_000);
 
-  // covers PE-007, PE-008
-  it("[TC-PE-259] ends with the top Task: its grants are revoked as it ends, and the next request asks again", async () => {
+  it("ends with the top Task: its grants are revoked as it ends, and the next request asks again", async () => {
     const { run } = setUp();
     const { request, top } = await run(taskWithPush(["Wait for the go-ahead"]));
     await run(approve(request, "task"));

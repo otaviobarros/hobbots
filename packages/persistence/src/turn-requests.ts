@@ -1,10 +1,18 @@
 import { type HobbotsRepository, passStands } from "@hobbots/agents";
+import { ThreadArchived } from "@hobbots/api";
 import {
   type Actor,
+  isActiveMember,
   type JournaledEvent,
+  type Line,
+  MemberRefused,
   Message,
   type MessageId,
+  planMemberRemove,
   QueuedMessageTransitions,
+  type Thread,
+  type ThreadId,
+  type ThreadMember,
   type TurnRequest,
   type TurnRequestId,
   TurnRequests,
@@ -12,24 +20,30 @@ import {
 import { Effect, Option } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import type { makeJournaled, makeJournaledChange } from "./journal.ts";
+import { movedMember, saveState, selectMembers } from "./thread-member-rows.ts";
 import {
   selectOpenRequests,
   selectOpenRequestsOf,
   selectRequestsById,
   selectRequestsIn,
+  selectRequestsOfReply,
   selectThreadsWaiting,
+  selectWaitingOf,
   stepRequests,
 } from "./turn-request-rows.ts";
 
 // The floor's writes (ADR 039, One hob speaks at a time): a request speaks in the transaction that
-// saves its turn's reply, is answered when the turn ends, and is dropped by Stop and Stop all. A
-// queued message left with nothing owed leaves the queue as it is, said but answered by no one.
+// saves its turn's reply, is answered when the turn ends (its reply's relays are written as it is
+// saved complete), and is dropped by Stop and Stop all. A queued message left with nothing owed leaves the
+// queue as it is, said but answered by no one. Let them go on wakes the requests the relay budget
+// paused.
 
 type Writes = Pick<
   HobbotsRepository["Service"],
   | "openTurnRequests"
   | "startReply"
   | "answerTurnRequests"
+  | "letHobsGoOn"
   | "turnRequestsOf"
   | "passTurnRequests"
   | "markPassing"
@@ -37,6 +51,7 @@ type Writes = Pick<
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
   | "threadsWithWaitingRequests"
+  | "removeMember"
 >;
 
 /**
@@ -82,6 +97,17 @@ export const makeTurnRequestWrites = (
       return events;
     });
 
+  // Whether `hobId` leads a top-level Quest in the thread that has not ended.
+  const leadsOpenQuest = (threadId: ThreadId, hobId: string) =>
+    sql`SELECT 1 FROM tasks WHERE thread_id = ${threadId} AND owner_id = ${hobId} AND parent_id IS NULL
+      AND state NOT IN ('completed', 'failed', 'cancelled') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
+
+  // Drops every request `hobId` still waits to answer in the thread, on any of its lines.
+  const dropWaitingOf = (threadId: ThreadId, hobId: string, by: Actor) =>
+    selectWaitingOf(sql, threadId, hobId).pipe(
+      Effect.flatMap((waiting) => stepRequests(sql, waiting, { _tag: "Drop", by })),
+    );
+
   // Passes `speaking`, the requests the turn writing `replyId` spoke for, and removes the reply, so a
   // pass leaves no message (ADR 039). What the turn used stays in `passed_turns` (OP-002), and a
   // request the reply's own text caused goes with it. A reply an approval names stays, since that
@@ -120,11 +146,32 @@ export const makeTurnRequestWrites = (
         }),
       ),
     answerTurnRequests: (replyId) =>
-      selectOpenRequestsOf(sql, "reply_id", [replyId]).pipe(
-        Effect.flatMap((speaking) => stepRequests(sql, speaking.filter(TurnRequests.isSpeaking), { _tag: "Answer" })),
+      selectRequestsOfReply(sql, replyId).pipe(
+        Effect.flatMap((own) => stepRequests(sql, own.filter(TurnRequests.isSpeaking), { _tag: "Answer" })),
         sql.withTransaction,
         Effect.asVoid,
         Effect.orDie,
+      ),
+    letHobsGoOn: (line: Line, by: Actor) =>
+      journaledChange<ReadonlyArray<TurnRequest>, never>(() =>
+        Effect.gen(function* () {
+          const woken = yield* stepRequests(sql, TurnRequests.paused(yield* selectOpenRequests(sql, line)), {
+            _tag: "GoOn",
+          });
+          const events: ReadonlyArray<JournaledEvent> =
+            woken.length === 0
+              ? []
+              : [
+                  {
+                    _tag: "RelayBudgetReset",
+                    threadId: line.threadId,
+                    rootMessageId: line.rootMessageId,
+                    by,
+                    requests: woken.map((request) => request.id),
+                  },
+                ];
+          return { value: woken, events };
+        }),
       ),
     turnRequestsOf: (replyId) => selectOpenRequestsOf(sql, "reply_id", [replyId]).pipe(Effect.orDie),
     markPassing: (replyId, reason) =>
@@ -140,7 +187,14 @@ export const makeTurnRequestWrites = (
     dropTurnRequests: (ids: ReadonlyArray<TurnRequestId>, by: Actor | null) =>
       journaledChange<ReadonlyArray<TurnRequest>, never>((revision) =>
         Effect.gen(function* () {
-          const dropped = yield* stepRequests(sql, yield* selectRequestsById(sql, ids), { _tag: "Drop", by });
+          const asked = yield* selectRequestsById(sql, ids);
+          // A turn that ended after the requests were picked answered its own and relayed: what its
+          // reply now owes is dropped with them, so a stop misses nothing owed since (ADR 039).
+          const replies = asked.flatMap((request) => (request.replyId === null ? [] : [request.replyId]));
+          const relayed = yield* selectOpenRequestsOf(sql, "message_id", replies);
+          const picked = new Set(asked.map((request) => request.id));
+          const owed = [...asked, ...relayed.filter((request) => !picked.has(request.id))];
+          const dropped = yield* stepRequests(sql, owed, { _tag: "Drop", by });
           const events = yield* dequeueUnowed(
             dropped.map((request) => request.messageId),
             revision,
@@ -173,6 +227,44 @@ export const makeTurnRequestWrites = (
       }),
     ),
     threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),
+    removeMember: (threadId, actor, by) =>
+      journaledChange<
+        { readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> },
+        MemberRefused | ThreadArchived
+      >((revision) =>
+        Effect.gen(function* () {
+          const [thread] = yield* sql<Pick<Thread, "kind" | "agentId" | "archivedAt">>`SELECT kind, agent_id,
+            archived_at FROM threads WHERE id = ${threadId}`;
+          if (thread === undefined) return yield* Effect.die(new Error(`No thread ${threadId}`));
+          // A camp archived since it was read is read-only by the time this is written.
+          if (thread.archivedAt !== null) {
+            return yield* new ThreadArchived({ threadId, archivedAt: thread.archivedAt });
+          }
+          const members = yield* selectMembers(sql, threadId);
+          // A person must still be in the camp as the change is written, not only when it was asked.
+          if (by.kind === "user" && !isActiveMember(members, by)) {
+            return yield* new MemberRefused({ threadId, actor: by, reason: "not-member" });
+          }
+          const plan = planMemberRemove(thread, members, actor);
+          if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
+          if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
+          // A Quest the hob leads here still comes back to the camp for its results and answers.
+          if (actor.kind === "hob" && (yield* leadsOpenQuest(threadId, actor.id))) {
+            return yield* new MemberRefused({ threadId, actor, reason: "leads-quest" });
+          }
+          const member = movedMember(plan.member, { _tag: "Remove" }, revision);
+          yield* saveState(sql, member);
+          // The hob owes nothing here any more: what it was waiting to answer, on any line, is dropped
+          // with it. The answer it is speaking now ends with its turn.
+          const dropped = actor.kind === "hob" ? yield* dropWaitingOf(threadId, actor.id, by) : [];
+          const dequeued = yield* dequeueUnowed(
+            dropped.map((request) => request.messageId),
+            revision + 1,
+          );
+          const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ThreadMemberChanged", member }, ...dequeued];
+          return { value: { member, dropped }, events };
+        }),
+      ),
     passedConfigVersions: (threadId, agentId) =>
       sql<{ readonly configVersion: number }>`SELECT DISTINCT config_version FROM passed_turns
         WHERE thread_id = ${threadId} AND agent_id = ${agentId} AND config_version IS NOT NULL`.pipe(

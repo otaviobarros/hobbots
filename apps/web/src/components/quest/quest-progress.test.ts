@@ -15,7 +15,7 @@ const summary = (
   }) as never;
 
 describe("questProgress", () => {
-  it("[TC-UX-1374-04] shows a Quest as the hub summed it, never from its Task states", () => {
+  it("shows a Quest as the hub summed it, never from its Task states (#1374)", () => {
     // The tree says nothing is done and nothing needs you; the summary the hub published wins.
     const progress = questProgress(blackFriday(), summary({ done: 2, problem: 1, working: 1 }, 3, 2));
     expect(progress).toEqual({
@@ -56,8 +56,8 @@ describe("questProgress", () => {
     });
   });
 
-  it("[TC-UX-1374-07] counts a failed step of a Task working alone as needing you while it runs", () => {
-    // A failed step waits for a retry or another hob (ADR 027), as [TC-OR-033] leaves one.
+  it("counts a failed step of a Task working alone as needing you while it runs (#1374)", () => {
+    // A failed step waits for a retry or another hob (ADR 027), as apps/server/test/task-steps.test.ts leaves one.
     const steps = ["outline", "draft"].map((id, index) =>
       task(TaskId.make(id), { state: index === 0 ? "failed" : "active", second: index + 1 }),
     );

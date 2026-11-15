@@ -35,7 +35,7 @@ const reply = (role: "user" | "assistant", actor: Actor | null) =>
 
 describe("who wrote a reply", () => {
   // covers ADR 039 (A member hob works as itself)
-  it("[TC-CH-1461-21] shows a member's reply in a camp as the member's, and an older reply as the camp's hob's", () => {
+  it("shows a member's reply in a camp as the member's, and an older reply as the camp's hob's (#1461)", () => {
     expect(replyAuthor(reply("assistant", { kind: "hob", id: "frodo" }), sam, [sam, frodo])).toBe(frodo);
     expect(replyAuthor(reply("assistant", { kind: "hob", id: "sam" }), sam, [sam, frodo])).toBe(sam);
     expect(replyAuthor(reply("assistant", null), sam, [sam, frodo])).toBe(sam);

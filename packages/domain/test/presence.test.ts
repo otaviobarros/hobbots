@@ -66,6 +66,7 @@ describe("the status a client holds", () => {
     reply: run === "running" ? "working" : null,
     speaking: run === "running" ? hob : null,
     next: [],
+    paused: [],
     revision,
   });
   const presence = (state: HobPresence["state"], revision: number): HobPresence => ({ agentId: hob, state, revision });
@@ -107,6 +108,14 @@ describe("the status a client holds", () => {
     expect(withStatusEvent(held, { _tag: "ThreadRunChanged", run: run("idle", 6) })).toBe(held);
   });
 
+  // covers ADR 039 (Hobs talking to hobs)
+  it("shows an idle run whose hobs wait for a person, from the snapshot as from an event (#1463)", () => {
+    const waiting: ThreadRunStatus = { ...run("idle", 4), paused: [hob] };
+    expect(shownStatus(withSnapshot(noStatus, snapshot({ runsRevision: 4, runs: [waiting] }))).runs).toEqual([waiting]);
+    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: waiting })).runs).toEqual([waiting]);
+    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: run("idle", 5) })).runs).toEqual([]);
+  });
+
   it("shows a hob brought back after its removal, even when a snapshot from before both arrives last", () => {
     // The snapshot is read at revision 3; the hob retires at 4 and comes back at 5 before it arrives.
     const events: ReadonlyArray<StatusEvent> = [
@@ -145,8 +154,7 @@ describe("leadsNeedingYou", () => {
   const thread = ThreadId.make("t1");
   const leadOf = (id: ThreadId) => (id === thread ? aldric : undefined);
 
-  // covers UX-002, OR-005
-  it("[TC-UX-191] marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
+  it("marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
     const needs = leadsNeedingYou({
       approvals: [
         { agentId: ada, threadId: thread, state: "pending" },

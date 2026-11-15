@@ -84,7 +84,7 @@ const SAYS_ANSWERS =
 // making the scripted calls, and the records on SQLite or PostgreSQL (TestDatabase). A `git init`
 // command is pointed to `git_init`, the hub creates the repository, and the Workbench shows the
 // commit command as succeeded. The fake runs no command, so the commit inside the real sandbox is
-// TC-PE-320's.
+// sandbox-git-init.test.ts's in @hobbots/runtimes.
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-local-git-e2e-")));
 const project = join(temp, "nettle-project");
@@ -233,8 +233,8 @@ const endedAttempts = (thread: Thread, count: number) =>
   });
 
 describe("creating a Git repository from the sandbox, end to end", () => {
-  // covers OR-004, PE-005, IN-004 (#742). First, so no turn of an earlier test asks who hobs commit as.
-  it("[TC-OR-742-03] with no identity to commit with, the user is asked in the Quest's chat, and the lead cannot commit its member's open work", async () => {
+  // covers (#742). First, so no turn of an earlier test asks who hobs commit as.
+  it("with no identity to commit with, the user is asked in the Quest's chat, and the lead cannot commit its member's open work (#742)", async () => {
     gitIdentity = { name: null, email: null };
     try {
       await request("PATCH", "/api/setup", {
@@ -365,8 +365,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     }
   }, 30_000);
 
-  // covers PE-005, UX-006
-  it("[TC-PE-327] a hob initializes a repository in its empty folder and commits, and the Workbench shows the commit as succeeded", async () => {
+  it("a hob initializes a repository in its empty folder and commits, and the Workbench shows the commit as succeeded", async () => {
     await request("PATCH", "/api/setup", {
       completed: true,
       safetyPreset: "balanced",
@@ -424,8 +423,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     ]);
   });
 
-  // covers PE-005, PE-003
-  it("[TC-PE-442] a hob clears a folder holding an earlier repository and starts a new one, with no step for the user beyond approving the delete", async () => {
+  it("a hob clears a folder holding an earlier repository and starts a new one, with no step for the user beyond approving the delete", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [earlier] });
     const git = (...args: Array<string>) =>
       execFileSync("git", ["-C", earlier, ...args], {
@@ -496,7 +494,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       const last = (await messages(thread)).at(-1);
       return last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
     });
-    // The fake runs no command, so the test leaves what the real sandbox does (TC-PE-440): only the
+    // The fake runs no command, so the test leaves what the real sandbox does (local-git.test.ts in @hobbots/charms): only the
     // repository's config and hooks.
     for (const name of readdirSync(join(earlier, ".git"))) {
       if (name !== "config" && name !== "hooks") rmSync(join(earlier, ".git", name), { recursive: true });
@@ -513,8 +511,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(await approvals(thread)).toHaveLength(1);
   });
 
-  // covers PE-005, OR-007
-  it("[TC-PE-424] a refused git_init is recorded with its reason and fails its step, and one that created a repository is on the Task", async () => {
+  it("a refused git_init is recorded with its reason and fails its step, and one that created a repository is on the Task", async () => {
     await request("PATCH", "/api/setup", {
       completed: true,
       safetyPreset: "balanced",
@@ -566,8 +563,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       `git_init: Created an empty Git repository in ${inner}.`,
     );
   });
-  // covers PE-005, OR-002
-  it("[TC-PE-450] a party member creates a repository with git_init and commits, and its lead never steps in", async () => {
+  it("a party member creates a repository with git_init and commits, and its lead never steps in", async () => {
     await request("PATCH", "/api/setup", {
       completed: true,
       safetyPreset: "balanced",
@@ -632,8 +628,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect((await messages(thread)).flatMap((m) => m.steps).some((step) => step.label === GIT_INIT_LABEL)).toBe(false);
   });
 
-  // covers PE-005, PE-006
-  it("[TC-PE-445] a member's commit as another hob is refused with the identity it commits as, and its plain commit runs", async () => {
+  it("a member's commit as another hob is refused with the identity it commits as, and its plain commit runs", async () => {
     await request("PATCH", "/api/setup", {
       completed: true,
       safetyPreset: "balanced",

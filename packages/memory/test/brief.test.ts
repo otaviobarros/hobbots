@@ -28,8 +28,7 @@ const save = (store: MemoryStoreShape, scope: MemoryScope, path: string, markdow
 const brief = (store: MemoryStoreShape) => Effect.runPromise(buildMemoryBrief(store, asPip));
 
 describe("the memory brief", () => {
-  // covers CH-001
-  it("[TC-CH-282] lists everyone's rules, then the hob's own pages, then its projects', pinned first, each quoted as data", async () => {
+  it("lists everyone's rules, then the hob's own pages, then its projects', pinned first, each quoted as data", async () => {
     const { store } = makeMemoryStoreFake();
     await save(store, theApp, "facts/stack.md", "# Stack\n\nThe app uses pnpm.");
     await save(store, pipsOwn, "notes/tests.md", "# Tests\n\nRun the fast suite first.");
@@ -50,8 +49,7 @@ describe("the memory brief", () => {
     expect(text).not.toContain("Only for Quill");
   });
 
-  // covers CH-001
-  it("[TC-CH-283] stays within its budget and drops the lowest-priority pages first", async () => {
+  it("stays within its budget and drops the lowest-priority pages first", async () => {
     const { store } = makeMemoryStoreFake();
     await save(store, everyone, "rules/one.md", `# Rule\n\n${"r".repeat(5_000)}`);
     await save(store, pipsOwn, "notes/own.md", `# Own\n\n${"o".repeat(3_000)}`);
@@ -71,8 +69,7 @@ describe("the memory brief", () => {
     expect(text).toMatch(/\(1 more page did not fit and is left out\.\)$/);
   });
 
-  // covers CH-001
-  it("[TC-CH-284] is nothing for an empty memory, and says memory is unavailable during an outage", async () => {
+  it("is nothing for an empty memory, and says memory is unavailable during an outage", async () => {
     const { store, controls } = makeMemoryStoreFake();
     // Another hob's pages do not make Pip's memory any less empty.
     await save(store, quillsOwn, "notes/secret.md", "# Quill's note");

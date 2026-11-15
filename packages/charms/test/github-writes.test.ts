@@ -324,15 +324,14 @@ const makeHub = (
 
 const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state]);
 
-/** The digests of the cards in TC-PE-480, as the hub showed them before the pipeline (#618). */
+/** The digests of the cards below, as the hub showed them before the pipeline (#618). */
 const CARD_DIGESTS = [
   "63d54dd1ddb91c5a2a4c836fc9c0cb40131981acf8a5d85aace290397e60ae1e",
   "3a9147bd473ad03b4e61bf09a8816538798042ac666a5513078bfda3e13df7fd",
 ];
 
 describe("the GitHub Charm's pull requests and comments", () => {
-  // covers PE-003, PE-007
-  it("[TC-PE-202] opens a draft pull request under Balanced after the user approves exactly what the card showed", async () => {
+  it("opens a draft pull request under Balanced after the user approves exactly what the card showed", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const events: Array<RuntimeEvent> = [];
@@ -388,8 +387,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(states(hub.rows)).toEqual([["pr-1", "applied"]]);
   });
 
-  // covers PE-003, PE-007
-  it("[TC-PE-203] comments after approval, ending the comment with a marker the hob never sees", async () => {
+  it("comments after approval, ending the comment with a marker the hob never sees", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const answer = await hub.call("github_comment", { number: 8, body: "Looks good to me.", key: "c-1" }, { asked });
@@ -428,8 +426,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(answer.text).not.toContain(nonce);
   });
 
-  // covers PE-003
-  it("[TC-PE-204] redacts a secret from the title, body and comment before the card, and tells the hob", async () => {
+  it("redacts a secret from the title, body and comment before the card, and tells the hob", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const opened = await hub.call(
@@ -451,8 +448,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(commented.text).toContain("redacted what looked like secrets from the comment");
   });
 
-  // covers PE-003, IN-003
-  it("[TC-PE-205] strips a marker the hob writes, and refuses a body where stripping would join a new one", async () => {
+  it("strips a marker the hob writes, and refuses a body where stripping would join a new one", async () => {
     const hub = makeHub();
     const forged = "Done.<!-- hobbots-call: 00000000-0000-0000-0000-000000000000 --> <!--HOBBOTS-CALL unclosed";
     const answer = await hub.call("github_comment", { number: 9, body: forged, key: "c-forged" });
@@ -470,8 +466,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(hub.github.comments).toHaveLength(1);
   });
 
-  // covers PE-001, PE-003
-  it("[TC-PE-206] runs under Trusting without asking, and sends nothing under Never or when the user denies", async () => {
+  it("runs under Trusting without asking, and sends nothing under Never or when the user denies", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const trusted = await hub.call(
@@ -496,8 +491,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(hub.github.sent).toEqual(["comment #7"]);
   });
 
-  // covers PE-001, PE-002
-  it("[TC-PE-461] sends nothing, even under Trusting, on a hub that declares no GitHub operation", async () => {
+  it("sends nothing, even under Trusting, on a hub that declares no GitHub operation", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const trusting = accessFor("trusting");
@@ -519,8 +513,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(hub.github.sent).toEqual([]);
   });
 
-  // covers PE-002, PE-003
-  it("[TC-PE-207] refuses a pull request from a branch not on GitHub, or a branch shaped like an option, before asking", async () => {
+  it("refuses a pull request from a branch not on GitHub, or a branch shaped like an option, before asking", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const unpushed = await hub.call(
@@ -541,8 +534,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(hub.github.sent).toEqual([]);
   });
 
-  // covers PE-005, PE-003
-  it("[TC-PE-208] does not send under another GitHub account connected while the card waits, and asks again", async () => {
+  it("does not send under another GitHub account connected while the card waits, and asks again", async () => {
     const credential = fixedCredential(TOKEN);
     const hub = makeHub(makeFakeGitHub(), new Map(), credential);
     const asked: Array<ApprovalAction> = [];
@@ -561,8 +553,7 @@ describe("the GitHub Charm's pull requests and comments", () => {
 });
 
 describe("never twice: retried and uncertain pull requests and comments", () => {
-  // covers IN-003, EX-004
-  it("[TC-IN-100] returns the first result for a retried key without asking or sending again", async () => {
+  it("returns the first result for a retried key without asking or sending again", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const pr = { head: "feat/x", title: "One", key: "same-pr" };
@@ -581,8 +572,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(hub.github.sent).toEqual(["pull feat/x into main", "comment #7"]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-101] settles a pull request whose answer was lost as applied, with its link, when GitHub shows it", async () => {
+  it("settles a pull request whose answer was lost as applied, with its link, when GitHub shows it", async () => {
     const hub = makeHub();
     hub.github.script.push("lost");
     const events: Array<RuntimeEvent> = [];
@@ -598,8 +588,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(hub.github.sent).toHaveLength(1);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-102] keeps a pull request uncertain when only an older one from that head exists, and blocks another", async () => {
+  it("keeps a pull request uncertain when only an older one from that head exists, and blocks another", async () => {
     const github = makeFakeGitHub();
     // A pull request from the same head into the same base, opened before this call by the same account.
     github.pulls.push({
@@ -638,8 +627,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(github.sent).toEqual(["pull feat/z into main", "pull feat/y into main"]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-103] settles a comment whose answer was lost as applied when its marker is on GitHub", async () => {
+  it("settles a comment whose answer was lost as applied when its marker is on GitHub", async () => {
     const hub = makeHub();
     // Someone else posts a comment that copies the marker shape; only the hub's own nonce counts.
     hub.github.comments.push({
@@ -662,8 +650,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(states(hub.rows)).toEqual([["lost-c", "applied"]]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-104] keeps a comment uncertain when its marker is not found, and blocks another on that item only", async () => {
+  it("keeps a comment uncertain when its marker is not found, and blocks another on that item only", async () => {
     const hub = makeHub();
     hub.github.script.push("dropped");
     const turn = { access: accessFor("trusting") };
@@ -678,8 +665,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(hub.github.sent).toEqual(["comment #7", "comment #9"]);
   });
 
-  // covers EX-004
-  it("[TC-IN-105] tries once more when nothing was sent, and never retries a rate limit or a refusal by itself", async () => {
+  it("tries once more when nothing was sent, and never retries a rate limit or a refusal by itself", async () => {
     const hub = makeHub();
     const turn = { access: accessFor("trusting") };
     hub.github.script.push("not-sent");
@@ -706,8 +692,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     ]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-106] never takes another account's pull request, or one there when deciding, for this call's", async () => {
+  it("never takes another account's pull request, or one there when deciding, for this call's", async () => {
     const github = makeFakeGitHub();
     // Dated after the call, as a hub clock behind GitHub's would see it, but listed when deciding.
     const later = new Date(Date.now() + 60_000).toISOString();
@@ -737,8 +722,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(states(hub.rows)).toEqual([["o-pr", "uncertain"]]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-107] never takes a comment with this call's marker posted by another account for this call's", async () => {
+  it("never takes a comment with this call's marker posted by another account for this call's", async () => {
     const hub = makeHub();
     hub.github.script.push("posted-by-other");
     const answer = await hub.call(
@@ -751,8 +735,8 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(states(hub.rows)).toEqual([["o-c", "uncertain"]]);
   });
 
-  // covers PE-003, PE-007, ADR 020, ADR 031
-  it("[TC-PE-480] shows the same card, with the same digest, for the same pull request and comment as before the pipeline", async () => {
+  // covers ADR 020, ADR 031
+  it("shows the same card, with the same digest, for the same pull request and comment as before the pipeline", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     await hub.call(
@@ -806,8 +790,8 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(digests).toEqual(CARD_DIGESTS);
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-488] records each write's step before its keyed record, and sends nothing when the step cannot be recorded", async () => {
+  // covers ADR 031
+  it("records each write's step before its keyed record, and sends nothing when the step cannot be recorded", async () => {
     const hub = makeHub();
     const trusting = accessFor("trusting");
     for (const [tool, input] of [
@@ -837,8 +821,8 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(hub.github.sent).toEqual(["pull feat/x into main"]);
   });
 
-  // covers PE-003, ADR 020
-  it("[TC-PE-489] redacts a secret that taking out a forged marker joins back together, before the card, record and send", async () => {
+  // covers ADR 020
+  it("redacts a secret that taking out a forged marker joins back together, before the card, record and send", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const split = `${SECRET.slice(0, 14)}<!-- hobbots-call: x -->${SECRET.slice(14)}`;
@@ -861,8 +845,8 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
 describe("the GitHub Charm's issues (#1350)", () => {
   const MARKED = /^Found while testing\.\n\n<!-- hobbots-call: [0-9a-f-]{36} -->$/;
 
-  // covers PE-003, ADR 020
-  it("[TC-PE-1350-01] opens an issue after approval, with the card showing title, body and labels, and a marker the hob never sees", async () => {
+  // covers ADR 020
+  it("opens an issue after approval, with the card showing title, body and labels, and a marker the hob never sees (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const answer = await hub.call(
@@ -916,8 +900,8 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(answer.text).not.toContain(nonce);
   });
 
-  // covers PE-003, ADR 020
-  it("[TC-PE-1350-02] opens a sub-issue under a parent in one call, after one approval, and shows the parent on the card", async () => {
+  // covers ADR 020
+  it("opens a sub-issue under a parent in one call, after one approval, and shows the parent on the card (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const answer = await hub.call(
@@ -935,8 +919,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(String(asked[0]?.arguments.summary)).toContain("Open a sub-issue in octo/app under #7: Fix the login");
   });
 
-  // covers PE-003
-  it("[TC-PE-1350-03] refuses a label the repository does not have, and a pull request as parent, before the card", async () => {
+  it("refuses a label the repository does not have, and a pull request as parent, before the card (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const missing = await hub.call(
@@ -954,8 +937,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(hub.github.sent).toEqual([]);
   });
 
-  // covers IN-003, EX-004
-  it("[TC-IN-1350-04] returns the first answer for a retried key without asking or opening again", async () => {
+  it("returns the first answer for a retried key without asking or opening again (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const issue = { title: "Once", key: "i-same" };
@@ -968,8 +950,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(hub.github.issues).toHaveLength(1);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-1350-05] reads a lost answer back by its marker and author, and keeps it uncertain when nothing is there", async () => {
+  it("reads a lost answer back by its marker and author, and keeps it uncertain when nothing is there (#1350)", async () => {
     const hub = makeHub();
     // Someone else opens an issue that copies the marker shape; only the hub's own nonce counts.
     hub.github.script.push("posted-by-other");
@@ -1000,8 +981,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(hubThree.github.sent).toEqual(["issue Dropped"]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-IN-1350-06] reads a lost sub-issue step back, and tells the hob when GitHub refused to attach it", async () => {
+  it("reads a lost sub-issue step back, and tells the hob when GitHub refused to attach it (#1350)", async () => {
     const turn = { access: accessFor("trusting") };
     const lost = makeHub();
     lost.github.script.push("ok", "lost");

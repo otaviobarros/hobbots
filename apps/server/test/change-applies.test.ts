@@ -41,8 +41,7 @@ const commands = (request: PromptRequest | undefined) =>
   request?.tools == null ? undefined : operationDecision(request.tools.policy, "run-commands");
 
 describe("a change to a member's answers", () => {
-  // covers PE-005, PE-008, OR-004
-  it("[TC-PE-1347-01] Run commands widened between two turns of one Task reaches the second turn", async () => {
+  it("Run commands widened between two turns of one Task reaches the second turn (#1347)", async () => {
     const { run, requests } = await startHub(await sharedDatabase(), [
       {
         on: "was answered by hob aldric",
@@ -74,8 +73,7 @@ describe("a change to a member's answers", () => {
     expect(commands(second)).not.toBe("deny");
   }, 30_000);
 
-  // covers PE-005, PE-008
-  it("[TC-PE-1347-02] a turn running when Run commands is widened keeps what it started with and is not stopped", async () => {
+  it("a turn running when Run commands is widened keeps what it started with and is not stopped (#1347)", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase());
     await run(giveRook(NO_COMMANDS));
     await run(

@@ -152,7 +152,7 @@ const fixed = (): PackRecords => {
 
 describe("buildPack", () => {
   // covers ADR 037 (The context pack), STD-ARCH-018
-  it("[TC-CH-1380-01] is the same for the same records, part by part", () => {
+  it("is the same for the same records, part by part (#1380)", () => {
     const pack = buildPack(fixed());
     expect(buildPack(fixed())).toEqual(pack);
     expect(pack.text).toMatchSnapshot();
@@ -169,7 +169,7 @@ describe("buildPack", () => {
   });
 
   // covers ADR 037 (The context pack)
-  it("[TC-CH-1380-02] says nothing when there is nothing to say", () => {
+  it("says nothing when there is nothing to say (#1380)", () => {
     const pack = buildPack(empty);
     expect(pack.text).toBeNull();
     expect(pack.report).toEqual({
@@ -180,7 +180,7 @@ describe("buildPack", () => {
   });
 
   // covers ADR 037 (The context pack), STD-ARCH-018
-  it("[TC-CH-1380-03] stays within its budget when the briefs and decisions alone would not, listing every decision", () => {
+  it("stays within its budget when the briefs and decisions alone would not, listing every decision (#1380)", () => {
     const decisions = (count: number) =>
       Array.from({ length: count }, (_, n) => decision(count - n, `Decision ${count - n}: ${"why ".repeat(110)}`));
     const over = (count: number): PackRecords => ({
@@ -214,7 +214,7 @@ describe("buildPack", () => {
   });
 
   // covers ADR 037 (The context pack)
-  it("[TC-CH-1380-04] trims resting chapters first, then the oldest artifacts, then the live chapter's oldest turns", () => {
+  it("trims resting chapters first, then the oldest artifacts, then the live chapter's oldest turns (#1380)", () => {
     const budget: PackBudget = {
       total: 1_500,
       shares: {
@@ -271,7 +271,7 @@ describe("buildPack", () => {
   });
 
   // covers ADR 037 (The context pack)
-  it("[TC-CH-1380-05] cuts a last turn larger than the whole budget to its start and end, naming it for read_message", () => {
+  it("cuts a last turn larger than the whole budget to its start and end, naming it for read_message (#1380)", () => {
     const huge = `START ${"a".repeat(30_000)}${"z".repeat(30_000)} END`;
     const records: PackRecords = {
       ...empty,
@@ -291,7 +291,7 @@ describe("buildPack", () => {
   });
 
   // covers ADR 037 (The context pack), STD-ARCH-018
-  it("[TC-CH-1380-06] never goes over its budget, and accounts for every decision and open item, on random records", () => {
+  it("never goes over its budget, and accounts for every decision and open item, on random records (#1380)", () => {
     const text = (max: number) => fc.string({ maxLength: max });
     const records = fc.record({
       memoryBrief: fc.option(text(8_000), { nil: null }),
@@ -331,7 +331,7 @@ describe("buildPack", () => {
   });
 
   // covers ADR 037 (The context pack), STD-ARCH-018
-  it("[TC-CH-1380-09] a part with a share of zero says nothing, and any split of the budget is never exceeded", () => {
+  it("a part with a share of zero says nothing, and any split of the budget is never exceeded (#1380)", () => {
     // The camp brief's share moved to the live chapter: a long brief keeps none of its text.
     const shares = { ...PACK_BUDGET.shares, "camp-brief": 0, "live-chapter": PACK_BUDGET.shares["live-chapter"] + 500 };
     const zero = buildPack({ ...empty, campBrief: "Plan the party. ".repeat(4_000) }, { ...PACK_BUDGET, shares });
@@ -385,7 +385,7 @@ describe("the pack with several hobs", () => {
   ];
 
   // covers ADR 039 (The context pack with several hobs)
-  it("[TC-CH-1465-01] names every speaker in the live chapter: people, other hobs and the hob itself", () => {
+  it("names every speaker in the live chapter: people, other hobs and the hob itself (#1465)", () => {
     const pack = buildPack({ ...empty, live: camp });
     expect(pack.text).toContain("**Marina (person):**\n> Quill, draft the invitation.");
     expect(pack.text).toContain("**Quill (hob):**\n> Here is a draft.");
@@ -395,7 +395,7 @@ describe("the pack with several hobs", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs)
-  it("[TC-CH-1465-02] says who is here and why the turn runs, keeping the reason when the members do not fit", () => {
+  it("says who is here and why the turn runs, keeping the reason when the members do not fit (#1465)", () => {
     const members = {
       members: [
         { name: "Marina", kind: "person", you: false, owner: true },
@@ -426,7 +426,7 @@ describe("the pack with several hobs", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), ADR 037 (The context pack)
-  it("[TC-CH-1465-03] lists the Quests under way here with the open work, before the Tasks", () => {
+  it("lists the Quests under way here with the open work, before the Tasks (#1465)", () => {
     const pack = buildPack({
       ...empty,
       work: { ...NO_WORK, tasks: [task("t1", "Book the hall")], trees: [task("t1", "Book the hall")] },
@@ -446,7 +446,7 @@ describe("the pack with several hobs", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs)
-  it("[TC-CH-1465-04] tells a resumed hob only what others said since it spoke, within the live chapter's share", () => {
+  it("tells a resumed hob only what others said since it spoke, within the live chapter's share (#1465)", () => {
     expect(sinceYouSpoke([], named)).toBeNull();
     const since = sinceYouSpoke(camp.slice(2, 3), named);
     expect(since).toContain("## Since you last spoke");
@@ -480,7 +480,7 @@ describe("chapter summaries in the pack", () => {
     });
 
   // covers ADR 037 (The context pack), #1380
-  it("[TC-CH-1380-07] lists each resting chapter with its summary, or the plain one until the projector writes it", () => {
+  it("lists each resting chapter with its summary, or the plain one until the projector writes it (#1380)", () => {
     const messages = [
       message(1, "user", "My cat is called   Miso.", "c1"),
       message(2, "assistant", "Hello Miso!", "c1"),

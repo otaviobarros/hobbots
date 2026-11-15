@@ -15,8 +15,7 @@ afterEach(async () => {
 const STALLED = "The Quest stalled";
 
 describe("a Quest its lead leaves idle", () => {
-  // covers OR-004, IN-004, EX-002
-  it("[TC-OR-645] wakes its lead once, then blocks the Task you asked for, and a later delegation unblocks it", async () => {
+  it("wakes its lead once, then blocks the Task you asked for, and a later delegation unblocks it (#1081)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests } = party;

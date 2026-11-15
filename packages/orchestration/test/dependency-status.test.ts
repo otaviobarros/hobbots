@@ -69,8 +69,7 @@ const tree = (tasks: ReadonlyArray<Task>, handed: ReadonlyArray<{ from: string; 
   });
 
 describe("a member's later turn", () => {
-  // covers OR-003
-  it("[TC-OR-210] states the current state and result of each Task its Task comes after", () => {
+  it("states the current state and result of each Task its Task comes after", () => {
     const running = tree([task("backend", QUILL, "active"), task("review", PIP, "waiting", ["backend"])]);
     const before = memberReminder(running.tasks[2] as Task, running, "Frodo");
     expect(before.startsWith("You work on Task review for Frodo.")).toBe(true);
@@ -88,8 +87,7 @@ describe("a member's later turn", () => {
     expect(after).toContain("When it is done, call complete_task with its result");
   });
 
-  // covers OR-003, OR-005
-  it("[TC-OR-211] also states the result of a Task whose artifact was handed to it, once, and nothing when its work builds on none", () => {
+  it("also states the result of a Task whose artifact was handed to it, once, and nothing when its work builds on none", () => {
     const read = tree(
       [
         task("backend", QUILL, "completed", [], "Backend ready."),
@@ -109,8 +107,7 @@ describe("a member's later turn", () => {
     expect(memberReminder(alone.tasks[1] as Task, alone, "Frodo")).not.toContain("stand now");
   });
 
-  // covers OR-003
-  it("[TC-OR-225] keeps every Task its work builds on within the step input limit together, and still ends with how to finish", () => {
+  it("keeps every Task its work builds on within the step input limit together, and still ends with how to finish", () => {
     const long = "x".repeat(5_000);
     const many = Array.from({ length: 60 }, (_, index) => task(`dep${index}`, QUILL, "completed", [], long));
     const read = tree([

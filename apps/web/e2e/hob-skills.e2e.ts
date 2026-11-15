@@ -74,7 +74,7 @@ const hubWithSkills = async () => {
 };
 
 // covers ADR 029 (A hob's Skills tab, Scopes), #1062
-test("[TC-UX-1062-05] a hob's Skills tab gives it a skill from the library, and its profile turns a shared one off for it alone", async ({
+test("a hob's Skills tab gives it a skill from the library, and its profile turns a shared one off for it alone (#1062)", async ({
   page,
 }) => {
   const { url, api, pip, skill } = await hubWithSkills();
@@ -122,7 +122,7 @@ test("[TC-UX-1062-05] a hob's Skills tab gives it a skill from the library, and 
 });
 
 // covers ADR 029 (The Skills page, Pins and rollout), #1062
-test("[TC-UX-1062-06] What changed lists a save with its rollout and rolls it back, and a skill's Activity shows a hob's note", async ({
+test("What changed lists a save with its rollout and rolls it back, and a skill's Activity shows a hob's note (#1062)", async ({
   page,
 }) => {
   const { url, api, pip, skill } = await hubWithSkills();
@@ -173,7 +173,7 @@ test("[TC-UX-1062-06] What changed lists a save with its rollout and rolls it ba
 });
 
 // covers ADR 029 (A hob's Skills tab), #1062
-test("[TC-UX-1062-07] Summon gives the hob the skills picked before it arrives", async ({ page }) => {
+test("Summon gives the hob the skills picked before it arrives (#1062)", async ({ page }) => {
   const { url, api, skill } = await hubWithSkills();
   await api("POST", `/skills/${skill("review-checklist").id}/assignments`, { scope: { _tag: "Everyone" } });
   await page.goto(`${url}/#/summon?step=look`);
@@ -203,9 +203,7 @@ test("[TC-UX-1062-07] Summon gives the hob the skills picked before it arrives",
 });
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1062
-test("[TC-UX-1062-08] To review lists what a hob drafted, counted beside it, and Add decides it there", async ({
-  page,
-}) => {
+test("To review lists what a hob drafted, counted beside it, and Add decides it there (#1062)", async ({ page }) => {
   const { url, api, pip } = await hubWithSkills();
   const thread = await api("POST", `/agents/${pip.id}/threads`);
   const call = {

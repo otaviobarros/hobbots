@@ -29,7 +29,7 @@ const draft = (fields: Partial<BriefDraft> = {}): BriefDraft => ({
 });
 
 describe("a brief's rewrite rule", () => {
-  it("writes the first brief, whoever wrote its text", () => {
+  it("writes the first brief, whoever wrote its text (#1384)", () => {
     expect(briefChange(null, draft())).toBe("write");
     expect(briefChange(null, draft({ source: "rule" }))).toBe("write");
     // With no brief yet, the rule's text stands in for a brain that failed, so a brief still appears.
@@ -39,19 +39,19 @@ describe("a brief's rewrite rule", () => {
     expect(briefChange(null, draft({ text: "" }))).toBe("unchanged");
   });
 
-  it("writes nothing from as far along the journal as the stored brief, or less", () => {
+  it("writes nothing from as far along the journal as the stored brief, or less (#1384)", () => {
     expect(briefChange(brief(), draft({ basis: 10 }))).toBe("stale");
     expect(briefChange(brief(), draft({ basis: 3 }))).toBe("stale");
   });
 
-  it("keeps the last brief when the brain failed, and writes nothing that says the same", () => {
+  it("keeps the last brief when the brain failed, and writes nothing that says the same (#1384)", () => {
     expect(briefChange(brief(), draft({ source: "fallback" }))).toBe("kept");
     expect(briefChange(brief(), draft({ text: brief().text }))).toBe("unchanged");
     // The same words from the rule replace the brain's, so the brief says who wrote it.
     expect(briefChange(brief(), draft({ text: brief().text, source: "rule" }))).toBe("write");
   });
 
-  it("replaces a brief the rule wrote with the rule's new text, an empty one included, even on a fallback", () => {
+  it("replaces a brief the rule wrote with the rule's new text, an empty one included, even on a fallback (#1384)", () => {
     const plain = brief({ source: "rule" });
     expect(briefChange(plain, draft({ source: "fallback", text: "Made:\n- launch.md (doc, version 1)" }))).toBe(
       "write",
@@ -64,7 +64,7 @@ describe("a brief's rewrite rule", () => {
 
   // A store of one brief, rewritten only through the rule, by drafts in journal order, as the
   // projector reads pages.
-  it("on random drafts, a brief only moves forward along the journal, and a replay writes nothing", () => {
+  it("on random drafts, a brief only moves forward along the journal, and a replay writes nothing (#1384)", () => {
     const drafts = fc
       .array(
         fc.record({

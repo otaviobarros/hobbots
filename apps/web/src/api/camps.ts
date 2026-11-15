@@ -106,11 +106,15 @@ export const chapterMoved = async (
   void recordsMoved(queryClient, [thread.id, camp.id]);
 };
 
-/** Makes a camp for the hob; it joins the hob's list at once, before its event arrives. */
-export const useMakeCamp = (agentId: AgentId) => {
+/**
+ * Makes a camp for the hob that leads it, with the other hobs picked; it joins the hob's list at once,
+ * before its event arrives.
+ */
+export const useMakeCamp = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: MakeCampPayload) => call((c) => c.agents.makeCamp({ params: { agentId }, payload })),
+    mutationFn: ({ agentId, payload }: { readonly agentId: AgentId; readonly payload: MakeCampPayload }) =>
+      call((c) => c.agents.makeCamp({ params: { agentId }, payload })),
     onSuccess: (camp) => {
       // A new thread has no messages yet, so its transcript shows at once instead of loading.
       queryClient.setQueryData(queryKeys.messages(camp.id), (old: ReadonlyArray<unknown> | undefined) => old ?? []);

@@ -59,7 +59,6 @@ import { AS_WINDOW, TEST_WINDOW_KEY } from "./window-device.ts";
 // own routes and event stream behind its device check, on its real loopback, tailnet and serve
 // listeners, over a fake Tailscale that serves the tailnet on 127.0.0.2. Devices are plain HTTP
 // clients that keep their cookies as a browser does. CI runs these on SQLite and on PostgreSQL.
-// The browser side of interaction check 10 is in apps/web/e2e/remote-access-end-to-end.e2e.ts.
 
 // The fake tailnet serves on 127.0.0.2 and its peers come from 127.0.0.5 and 127.0.0.6, so these
 // need a host that routes all of 127.0.0.0/8 to loopback, as Linux does. macOS skips them.
@@ -457,10 +456,7 @@ const endedSoon = (stream: Stream) => vi.waitFor(() => expect(stream.ended()).to
 const listDevices = async (hub: Hub) => (await asWindow(hub, "GET", "/api/devices")).body as ReadonlyArray<Device>;
 
 describe("remote access end to end over a fake Tailscale", () => {
-  // covers DP-004, PE-006
-  it("[TC-DP-145] refuses a tailnet device that was never approved on every route and the event stream", async ({
-    skip,
-  }) => {
+  it("refuses a tailnet device that was never approved on every route and the event stream", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await remoteHub();
     const stranger = browserAt(hubNow, PHONE);
@@ -500,8 +496,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await listDevices(hub)).map((device) => device.kind)).toEqual(["window"]);
   });
 
-  // covers DP-004, PE-006
-  it("[TC-DP-146] pairs a tailnet browser whose code matches the hub's prompt, and its token alone carries the right to decide", async ({
+  it("pairs a tailnet browser whose code matches the hub's prompt, and its token alone carries the right to decide", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -557,10 +552,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect(window.text()).not.toMatch(/hb[dp]_/);
   });
 
-  // covers DP-004
-  it("[TC-DP-147] a denied browser is told so, may not ask again within a minute, and may after it", async ({
-    skip,
-  }) => {
+  it("a denied browser is told so, may not ask again within a minute, and may after it", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await remoteHub();
     const laptop = browserAt(hubNow, LAPTOP);
@@ -589,10 +581,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await asWindow(hub, "GET", "/api/pairing/requests")).body).toMatchObject([{ request: { id: again.id } }]);
   });
 
-  // covers DP-004
-  it("[TC-DP-148] an expired request cannot be allowed, while one left for later is still allowed", async ({
-    skip,
-  }) => {
+  it("an expired request cannot be allowed, while one left for later is still allowed", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await remoteHub();
     const phone = browserAt(hubNow, PHONE);
@@ -620,10 +609,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await laptop.send("GET", "/api/agents")).status).toBe(200);
   });
 
-  // covers DP-004
-  it("[TC-DP-149] an approved browser keeps working without asking again, after the hub restarts too", async ({
-    skip,
-  }) => {
+  it("an approved browser keeps working without asking again, after the hub restarts too", async ({ skip }) => {
     if (!spareLoopback) skip();
     const tailnet = Ref.makeUnsafe(TAILNET);
     const hub = await remoteHub(tailnet);
@@ -645,8 +631,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await asWindow(restarted, "GET", "/api/pairing/requests")).body).toEqual([]);
   });
 
-  // covers DP-004, PE-006
-  it("[TC-DP-150] Revoke closes the device's open stream at once and refuses its next request, and it may ask again", async ({
+  it("Revoke closes the device's open stream at once and refuses its next request, and it may ask again", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -679,8 +664,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await asWindow(hub, "GET", "/api/pairing/requests")).body).toMatchObject([{ request: { id: again.id } }]);
   });
 
-  // covers DP-004
-  it("[TC-DP-151] Pause closes the tailnet and serve listeners with their streams while this computer keeps working, and Resume lets the same devices back", async ({
+  it("Pause closes the tailnet and serve listeners with their streams while this computer keeps working, and Resume lets the same devices back", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -717,8 +701,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await laptop.send("GET", "/api/agents", { via: "https" })).status).toBe(200);
   });
 
-  // covers DP-004
-  it("[TC-DP-152] Tailscale turning off closes the tailnet listener and its streams, says why, and the hub listens again once it is back", async ({
+  it("Tailscale turning off closes the tailnet listener and its streams, says why, and the hub listens again once it is back", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -749,8 +732,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     await vi.waitFor(() => expect(window.remoteAccess().at(-1)).toMatchObject({ problem: null }));
   });
 
-  // covers DP-004
-  it("[TC-DP-153] a changed port reaches every open client, which then finds the hub there, and is kept across a restart", async ({
+  it("a changed port reaches every open client, which then finds the hub there, and is kept across a restart", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -783,8 +765,7 @@ describe("remote access end to end over a fake Tailscale", () => {
     expect((await phone.send("GET", "/api/agents")).status).toBe(200);
   });
 
-  // covers DP-004
-  it("[TC-DP-154] HTTPS through tailscale serve: an HTTP-approved device keeps working, only serve's forwarded identity counts, funnel is refused, and serve left forwarding is reported", async ({
+  it("HTTPS through tailscale serve: an HTTP-approved device keeps working, only serve's forwarded identity counts, funnel is refused, and serve left forwarding is reported", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();

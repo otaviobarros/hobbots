@@ -8,7 +8,7 @@ import { folderOf, skillMd } from "./fixtures.ts";
 
 describe("the watches on ~/.agents/skills", () => {
   // covers ADR 029 (The clean-runtime rule: ~/.agents/skills stays, through Hobbots), #1060
-  it("[TC-AG-147] asks for one more read whenever a watch is new, the first ones included", async () => {
+  it("asks for one more read whenever a watch is new, the first ones included (#1060)", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
     let reads = 0;
     const watches = folderWatches(folder, () => {

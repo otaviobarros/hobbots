@@ -22,7 +22,7 @@ const labels = (groups: ReturnType<typeof brainGroups>) =>
   groups.map((group) => [group.label, group.options.map((option) => option.label)]);
 
 describe("the hub's brain as one list", () => {
-  it("[TC-GEN-1367-09] lists every connected runtime's models, grouped, its smallest first and recommended", () => {
+  it("lists every connected runtime's models, grouped, its smallest first and recommended (#1367)", () => {
     expect(labels(brainGroups(DEFAULT_MEMORY_SETTINGS, ["claude", "chatgpt"], models))).toEqual([
       ["Claude", ["Quick (recommended)", "Careful"]],
       ["ChatGPT", ["Small (recommended)", "Big"]],
@@ -45,7 +45,7 @@ describe("the hub's brain as one list", () => {
     ]);
   });
 
-  it("[TC-GEN-1367-10] names the choice, with a runtime's smallest as its own, and saves a pick at low effort", () => {
+  it("names the choice, with a runtime's smallest as its own, and saves a pick at low effort (#1367)", () => {
     expect(brainValue(DEFAULT_MEMORY_SETTINGS, models)).toBe("claude:");
     expect(brainValue({ ...DEFAULT_MEMORY_SETTINGS, model: "quick" }, models)).toBe("claude:");
     expect(brainValue({ ...DEFAULT_MEMORY_SETTINGS, model: "careful" }, models)).toBe("claude:careful");

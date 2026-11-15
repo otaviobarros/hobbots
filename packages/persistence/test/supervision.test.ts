@@ -19,8 +19,7 @@ const page = { id: TaskId.make("page"), rootId: root };
 const tests = { id: TaskId.make("tests"), rootId: root };
 
 describe("supervision records", () => {
-  // covers EX-004
-  it("[TC-PE-1447-01] keeps each Task's record by its tree, the latest change replacing the one before", async () => {
+  it("keeps each Task's record by its tree, the latest change replacing the one before (#1447)", async () => {
     const failed = SupervisionMachine.transition(watching(page, at), {
       _tag: "Failed",
       at: later,
@@ -43,8 +42,7 @@ describe("supervision records", () => {
     expect(result[0]).toMatchObject({ state: "retrying", retries: 1, rule: "retry", attemptId: "a1" });
   });
 
-  // covers EX-004
-  it("[TC-PE-1447-02] skips a row this Hobbots cannot read, so the supervisor looks at that Task afresh", async () => {
+  it("skips a row this Hobbots cannot read, so the supervisor looks at that Task afresh (#1447)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

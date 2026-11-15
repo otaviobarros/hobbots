@@ -61,7 +61,7 @@ import {
 // request under Allow, each once, against a fake GitHub on a local port. A write whose answer is lost
 // is read back, and one that stays uncertain waits on its Task until you settle it there. A write the
 // member's authority answers Never for is not offered and never reaches GitHub. On SQLite and
-// PostgreSQL (TestDatabase). The member's session runs on the fake runtime, and in TC-OR-1343-01 also
+// PostgreSQL (TestDatabase). The member's session runs on the fake runtime, and in the first test also
 // on an installed Claude Code and Codex where HOBBOTS_CLAUDE_CODE and HOBBOTS_CODEX name them, each
 // with a stand-in model that makes the calls, so no account or real model is used.
 
@@ -86,7 +86,7 @@ const git = (...args: Array<string>) =>
 
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
-/** Stands in for the hob's sandbox, which CI cannot start: the Charm's fence is proven in TC-PE-152. */
+/** Stands in for the hob's sandbox, which CI cannot start: the Charm's fence is proven in @hobbots/charms git-push.test.ts. */
 const PlainSandbox = Layer.succeed(
   FolderSandbox,
   FolderSandbox.of({
@@ -317,8 +317,8 @@ const writesOn = async (runtime: HubCallRuntime) => {
 };
 
 describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
-  // covers PE-003, PE-005, OR-002, ADR 038 (every runtime: Claude Code, Codex, fake)
-  it("[TC-OR-1343-01] on each runtime, a member comments after one approval card, pushes, opens a pull request and a sub-issue under Allow, each once, and a git push is steered to github_push", async () => {
+  // covers ADR 038 (every runtime: Claude Code, Codex, fake)
+  it("on each runtime, a member comments after one approval card, pushes, opens a pull request and a sub-issue under Allow, each once, and a git push is steered to github_push (#1343)", async () => {
     const runtimes = await hubCallRuntimes();
     try {
       expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
@@ -329,8 +329,7 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
     }
   }, 300_000);
 
-  // covers EX-003, EX-004, PE-006
-  it("[TC-OR-1343-02] a member's write whose answer is lost is read back as applied, and one still uncertain waits on its Task until you settle it there", async () => {
+  it("a member's write whose answer is lost is read back as applied, and one still uncertain waits on its Task until you settle it there (#1343)", async () => {
     git("checkout", "--quiet", "-B", "feat/lost");
     git("commit", "--quiet", "--allow-empty", "--no-gpg-sign", "-m", "Lost answer");
     const pushed = git("rev-parse", "HEAD");
@@ -396,8 +395,7 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
     }
   }, 60_000);
 
-  // covers PE-005, SEC-003
-  it("[TC-OR-1343-03] a member whose authority answers Never for commenting is not offered it, and its call is refused on its Task without reaching GitHub", async () => {
+  it("a member whose authority answers Never for commenting is not offered it, and its call is refused on its Task without reaching GitHub (#1343)", async () => {
     const { run, requests } = await startGitHubHub();
     const before = github.requests.length;
     await run(
@@ -476,8 +474,8 @@ const notOfferedOn = async (runtime: HubCallRuntime) => {
 };
 
 describe("A call to a tool a member's session was not offered (#1356)", () => {
-  // covers PE-001, OR-002, ADR 014 (Enforcement)
-  it("[TC-OR-1356-01] on each runtime, a member's call to github_comment it holds no Charm for is refused on its Task with why, and read_tasks shows it", async () => {
+  // covers ADR 014 (Enforcement)
+  it("on each runtime, a member's call to github_comment it holds no Charm for is refused on its Task with why, and read_tasks shows it (#1356)", async () => {
     const runtimes = await hubCallRuntimes();
     try {
       expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
@@ -487,8 +485,8 @@ describe("A call to a tool a member's session was not offered (#1356)", () => {
     }
   }, 300_000);
 
-  // covers PE-001, PE-005, ADR 014 (Enforcement)
-  it("[TC-OR-1356-03] a member's command, where its runtime cannot start its sandbox, is refused on its Task naming that, as its lead's delegation does", async () => {
+  // covers ADR 014 (Enforcement)
+  it("a member's command, where its runtime cannot start its sandbox, is refused on its Task naming that, as its lead's delegation does (#1356)", async () => {
     const { run } = await startGitHubHub(null, "unavailable");
     await run(
       delegate("Rook", [
@@ -509,8 +507,8 @@ describe("A call to a tool a member's session was not offered (#1356)", () => {
     ]);
   }, 60_000);
 
-  // covers PE-001, ADR 014 (Enforcement)
-  it("[TC-OR-1356-02] a lead's call in chat to a tool its turn was not offered shows as a refused step, recorded on the Task it works on", async () => {
+  // covers ADR 014 (Enforcement)
+  it("a lead's call in chat to a tool its turn was not offered shows as a refused step, recorded on the Task it works on (#1356)", async () => {
     const { run } = await startGitHubHub();
     await run(
       send([
@@ -539,8 +537,8 @@ describe("A call to a tool a member's session was not offered (#1356)", () => {
 });
 
 describe("gh in a member's commands (#1349)", () => {
-  // covers PE-005, SEC-002, ADR 020
-  it("[TC-OR-1349-01] a member's gh pr comment is refused at once with a pointer to github_comment, reaches nothing, and its turn goes on", async () => {
+  // covers ADR 020
+  it("a member's gh pr comment is refused at once with a pointer to github_comment, reaches nothing, and its turn goes on (#1349)", async () => {
     const { run, answers, denied } = await startGitHubHub();
     const before = github.requests.length;
     await run(
@@ -579,8 +577,8 @@ const listedAndOffered = async (
 };
 
 describe("What a delegated member will be able to do, before it starts (#1348)", () => {
-  // covers OR-002, PE-005, ADR 014 (Amendment: what a delegation tells its lead)
-  it("[TC-OR-1348-01] a check lists the member's tools and answers, Charm tools included, and makes no Task and no records", async () => {
+  // covers ADR 014 (Amendment: what a delegation tells its lead)
+  it("a check lists the member's tools and answers, Charm tools included, and makes no Task and no records (#1348)", async () => {
     const started = await startGitHubHub();
     const { run, answers } = started;
     const journal = await run(Effect.flatMap(Effect.service(EventJournal), (each) => each.head));
@@ -627,8 +625,8 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     expect(listed.tools).toEqual(listedIn(checked).tools);
   }, 60_000);
 
-  // covers PE-005, SEC-003, ADR 038
-  it("[TC-OR-1348-02] Never answers and a narrowing Delegation show as the session gets them, and a brief that needs a dropped tool warns", async () => {
+  // covers ADR 038
+  it("Never answers and a narrowing Delegation show as the session gets them, and a brief that needs a dropped tool warns (#1348)", async () => {
     const started = await startGitHubHub();
     await started.run(
       delegate("Pip", [hub("complete_task", { delivered: true, key: "pip-done", summary: "Could not comment" })], {
@@ -647,8 +645,8 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     );
   }, 60_000);
 
-  // covers PE-005, ADR 031
-  it("[TC-OR-1348-03] a member that does not hold the GitHub Charm is told so before it starts, and its session is offered none of its tools", async () => {
+  // covers ADR 031
+  it("a member that does not hold the GitHub Charm is told so before it starts, and its session is offered none of its tools (#1348)", async () => {
     const started = await startGitHubHub();
     await started.run(givePolicy({ ...POLICY, charms: { granted: [], overrides: {} } }));
     await started.run(
@@ -675,8 +673,8 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     expect(answer).toContain("opening an issue, but github_open_issue will not be offered");
   }, 60_000);
 
-  // covers OR-004, ADR 014 (Amendment: what a delegation tells its lead)
-  it("[TC-OR-1348-04] a check is refused as the delegation would be, past the depth limit or on a Task that is not a sibling, and keeps nothing", async () => {
+  // covers ADR 014 (Amendment: what a delegation tells its lead)
+  it("a check is refused as the delegation would be, past the depth limit or on a Task that is not a sibling, and keeps nothing (#1348)", async () => {
     const started = await startGitHubHub();
     const { run, answers } = started;
     const check = { hob: "Rook", brief: "Review the parser", check: true };
@@ -707,8 +705,8 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     expect(tree.tasks.map((task) => task.ownerId)).not.toContain(QUILL);
   }, 60_000);
 
-  // covers PE-005, ADR 014
-  it("[TC-OR-1348-05] where the member's runtime cannot start its sandbox, its commands are listed as dropped, as its session gets none, and a brief to run tests warns", async () => {
+  // covers ADR 014
+  it("where the member's runtime cannot start its sandbox, its commands are listed as dropped, as its session gets none, and a brief to run tests warns (#1348)", async () => {
     const started = await startGitHubHub(null, "unavailable");
     const { run, answers } = started;
     const authority = { decisions: { "read-files": "allow", "edit-files": "allow" }, folders: "all" };

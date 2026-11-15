@@ -17,7 +17,7 @@ const roster: ReadonlyArray<Mentionable> = [
 const mentioned = (text: string) => mentionsIn(text, roster, { skip: markdownCode(text) });
 
 describe("mentions outside Markdown code", () => {
-  it("skips code spans of any number of backticks, across lines", () => {
+  it("skips code spans of any number of backticks, across lines (#1455)", () => {
     expect(mentioned("Run `@Pip build` and ask @Ana")).toEqual([ANA]);
     expect(mentioned("``@Ana and ` @Rook`` then @Pip")).toEqual([PIP]);
     expect(mentioned("`spans\n@Rook two lines` and @Ana")).toEqual([ANA]);
@@ -26,7 +26,7 @@ describe("mentions outside Markdown code", () => {
     expect(mentioned("😀 `@Pip` @Rook")).toEqual([ROOK]);
   });
 
-  it("skips fenced blocks, closed only by a fence of the same kind, as long, indented at most three spaces", () => {
+  it("skips fenced blocks, closed only by a fence of the same kind, as long, indented at most three spaces (#1455)", () => {
     expect(mentioned("~~~\n@Rook\n~~~\n@Ana")).toEqual([ANA]);
     expect(mentioned("````md\n```\n@Rook\n```\n````\n@Pip")).toEqual([PIP]);
     expect(mentioned("   ```\n@Rook\n~~~\n@Ana")).toEqual([]);
@@ -35,7 +35,7 @@ describe("mentions outside Markdown code", () => {
     expect(mentioned("```\n> ```\n@Ana\n```\n@Rook")).toEqual([ROOK]);
   });
 
-  it("skips fences in block quotes and list items at any depth, and indented code blocks", () => {
+  it("skips fences in block quotes and list items at any depth, and indented code blocks (#1455)", () => {
     expect(mentioned("> ~~~\n> @Ana\n> ~~~\n@Rook")).toEqual([ROOK]);
     expect(mentioned(">> ```\n>> @Ana\n>> ```\n> @Pip")).toEqual([PIP]);
     expect(mentioned("- item\n  - ```\n    @Ana\n    ```\n- @Pip")).toEqual([PIP]);

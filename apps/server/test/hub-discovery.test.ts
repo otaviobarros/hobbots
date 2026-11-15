@@ -41,8 +41,7 @@ describe("findHubs", () => {
     ...(connect === undefined ? {} : { connect }),
   });
 
-  // covers DP-002, DP-004
-  it("[TC-DP-163] lists both hubs on a fake tailnet by their Tailscale names, asks only the user's own online computers, and changes nothing in Tailscale", async () => {
+  it("lists both hubs on a fake tailnet by their Tailscale names, asks only the user's own online computers, and changes nothing in Tailscale", async () => {
     const studio = await listen(hub("Studio", 1));
     const attic = await listen(hub("Attic", 1));
     const older = await listen(hub("Old desk"));
@@ -178,8 +177,7 @@ describe("findHubs", () => {
       ),
     );
 
-  // covers DP-002, DP-004
-  it("[TC-DP-190] asks at most eight computers at once", async () => {
+  it("asks at most eight computers at once", async () => {
     let inFlight = 0;
     let most = 0;
     const slow: typeof fetch = async () => {
@@ -194,8 +192,7 @@ describe("findHubs", () => {
     expect(most).toBe(8);
   });
 
-  // covers DP-002
-  it("[TC-DP-191] gives up on a computer that does not answer within two seconds", async () => {
+  it("gives up on a computer that does not answer within two seconds", async () => {
     const started = Date.now();
     const silent: typeof fetch = (_input, init) =>
       new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
@@ -204,8 +201,7 @@ describe("findHubs", () => {
     expect(Date.now() - started).toBeLessThan(3500);
   });
 
-  // covers DP-002, DP-004
-  it("[TC-DP-192] says why it cannot look when Tailscale is not running here", async () => {
+  it("says why it cannot look when Tailscale is not running here", async () => {
     const tailnet = Ref.makeUnsafe<FakeTailnet>({
       state: "signedOut",
       dnsName: null,
@@ -245,8 +241,7 @@ describe("findHubs with redirects", () => {
     response.end();
   };
 
-  // covers DP-004
-  it("[TC-DP-193] never follows a redirect, so a peer cannot send the scan to loopback, the local network, the internet or another user's computer", async () => {
+  it("never follows a redirect, so a peer cannot send the scan to loopback, the local network, the internet or another user's computer", async () => {
     // Hubs that would answer if a redirect were followed: one on loopback, one on another user's node.
     const loopbackTrap = await serve(hubAnswer);
     const theirs = await serve(hubAnswer);
@@ -375,8 +370,7 @@ describe("resolveHubAddress", () => {
   };
   const studio = (origin: string) => ({ origin, nodeId: "nSTUDIO" });
 
-  // covers DP-002, DP-004
-  it("[TC-DP-164] resolves a short or full name, a port, an HTTPS address or a tailnet address, and refuses anything off the user's tailnet before a request", () => {
+  it("resolves a short or full name, a port, an HTTPS address or a tailnet address, and refuses anything off the user's tailnet before a request", () => {
     expect(resolve("studio")).toEqual(studio("http://studio.example.ts.net:4317"));
     expect(resolve("  Studio.example.ts.net.  ")).toEqual(studio("http://studio.example.ts.net:4317"));
     expect(resolve("studio:5000")).toEqual(studio("http://studio.example.ts.net:5000"));

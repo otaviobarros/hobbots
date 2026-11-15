@@ -21,7 +21,7 @@ const question = (fields: Pick<HubQuestion, "key" | "ask" | "options" | "recomme
 const github = { login: "ada", identity: { name: "Ada", email: "1+ada@users.noreply.github.com" } };
 
 describe("shownHubQuestion", () => {
-  it("words who hobs commit as, with the GitHub account it offers recommended", () => {
+  it("words who hobs commit as, with the GitHub account it offers recommended (#1045)", () => {
     const shown = shownHubQuestion(
       question({
         key: "user",
@@ -44,7 +44,7 @@ describe("shownHubQuestion", () => {
     expect(shown).toMatchObject({ recommended: 0, picked: 1 });
   });
 
-  it("says which answer it could not read, and asks to type one when no GitHub account is offered", () => {
+  it("says which answer it could not read, and asks to type one when no GitHub account is offered (#1045)", () => {
     const shown = shownHubQuestion(
       question({
         key: "user",
@@ -60,7 +60,7 @@ describe("shownHubQuestion", () => {
     expect(shown).toMatchObject({ options: [], recommended: null, picked: null });
   });
 
-  it("words the made-up questions, and what the hub applied from a choice or from words", () => {
+  it("words the made-up questions, and what the hub applied from a choice or from words (#1045)", () => {
     const backups = shownHubQuestion(
       question({
         key: "backups",

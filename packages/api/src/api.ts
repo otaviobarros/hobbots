@@ -64,6 +64,7 @@ import { HobChangesGroup } from "./hob-changes.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
 import { HobMemoryGroup } from "./hob-memory.ts";
 import { HobProposalsGroup } from "./hob-proposals.ts";
+import { MembersGroup } from "./members.ts";
 import { MemoryGroup } from "./memory.ts";
 import { MemoryPagesGroup } from "./memory-pages.ts";
 import { MemorySharesGroup } from "./memory-shares.ts";
@@ -370,6 +371,11 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       error: ThreadNotFound,
     }),
+    // Let them go on (ADR 039): the hobs the relay budget paused in the thread go on for its turns again.
+    HttpApiEndpoint.post("letHobsGoOn", "/threads/:threadId/go-on", {
+      params: { threadId: ThreadId },
+      error: ThreadNotFound,
+    }),
     // Stop waiting: ends a reply that only waits on commands its hob started, keeping its text (#1056).
     HttpApiEndpoint.post("stopWaiting", "/threads/:threadId/stop-waiting", {
       params: { threadId: ThreadId },
@@ -505,6 +511,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(NotesGroup)
   .add(ForYouGroup)
   .add(SidebarGroup)
+  .add(MembersGroup)
   .add(ClaimsGroup)
   .add(SystemGroup)
   .add(SetupGroup)

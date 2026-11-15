@@ -35,8 +35,7 @@ const reply = (role: string, status = "streaming") => ({
 });
 
 describe("following the hub's event stream", () => {
-  // covers DP-002, UX-001
-  it("[TC-DP-042] reads again only on a change it shows, and reconnects after the hub drops it", async () => {
+  it("reads again only on a change it shows, and reconnects after the hub drops it", async () => {
     const { hub, heard } = follow();
     await expect.poll(() => hub.connections.length).toBe(1);
     hub.last().write(readyFrame);
@@ -60,16 +59,14 @@ describe("following the hub's event stream", () => {
     await expect.poll(() => heard.slice(5)).toEqual(["lost", "connected"]);
   });
 
-  // covers DP-002
-  it("[TC-DP-043] counts a silent stream as lost, so a hub that stopped answering shows", async () => {
+  it("counts a silent stream as lost, so a hub that stopped answering shows", async () => {
     const { hub, heard } = follow({ silenceMs: 30, maxRetryMs: 60_000, firstRetryMs: 60_000 }, readyFrame);
     await expect.poll(() => heard).toEqual(["connected", "lost"]);
     expect(hub.connections).toHaveLength(1);
     expect(hub.connections[0]?.aborted).toBe(true);
   });
 
-  // covers DP-004
-  it("[TC-DP-071] follows the hub to the port it moved to", async () => {
+  it("follows the hub to the port it moved to", async () => {
     const address = hubAddress(4317);
     const moves: Array<number> = [];
     const following = follow({
@@ -124,8 +121,7 @@ describe("following the hub's event stream", () => {
     expect(heard).toEqual(["connected"]);
   });
 
-  // covers DP-002
-  it("[TC-DP-045] checks the hub again after every failed try, so a hub that goes away while reconnecting shows", async () => {
+  it("checks the hub again after every failed try, so a hub that goes away while reconnecting shows", async () => {
     const { hub, heard } = follow();
     await expect.poll(() => hub.connections.length).toBe(1);
     hub.last().write(readyFrame);
@@ -140,8 +136,7 @@ describe("following the hub's event stream", () => {
   });
 });
 
-// covers DP-002, UX-001
-it("[TC-DP-049] resumes after the last entry it received, so the hub replays what it missed", async () => {
+it("resumes after the last entry it received, so the hub replays what it missed", async () => {
   const { hub, heard } = follow();
   await expect.poll(() => hub.connections.length).toBe(1);
   expect(hub.connections[0]?.lastEventId).toBeNull();

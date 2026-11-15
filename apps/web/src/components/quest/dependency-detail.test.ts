@@ -28,8 +28,7 @@ const artifact = (id: string, taskId: TaskId, label: string) =>
   });
 
 describe("a dependent Task in the Quest views", () => {
-  // covers UX-002, OR-003
-  it("[TC-OR-213] reads Waiting while queued on an unfinished Task, and Running once that one completed", () => {
+  it("reads Waiting while queued on an unfinished Task, and Running once that one completed", () => {
     const queued = task(BUILD, { ownerId: ADA, state: "queued", dependsOn: [COPY] });
     const running = tree({ tasks: [task(CAMPAIGN), task(COPY, { ownerId: QUILL }), queued] });
     expect(rowStatus(running, queued)).toBe("waiting");
@@ -37,8 +36,7 @@ describe("a dependent Task in the Quest views", () => {
     expect(rowStatus(after, queued)).toBe("running");
   });
 
-  // covers UX-002, OR-002
-  it("[TC-OR-404] reads Blocked while a Task it comes after is blocked or failed, and still names its hob", () => {
+  it("reads Blocked while a Task it comes after is blocked or failed, and still names its hob", () => {
     const queued = task(BUILD, { ownerId: ADA, state: "queued", dependsOn: [COPY] });
     for (const state of ["blocked", "failed"] as const) {
       const held = tree({ tasks: [task(CAMPAIGN), task(COPY, { ownerId: QUILL, state }), queued] });
@@ -47,8 +45,7 @@ describe("a dependent Task in the Quest views", () => {
     }
   });
 
-  // covers UX-002, OR-003
-  it("[TC-OR-214] shows what the Tasks it comes after returned under Handed to it, beside what was handed to it", () => {
+  it("shows what the Tasks it comes after returned under Handed to it, beside what was handed to it", () => {
     const build = task(BUILD, { ownerId: ADA, state: "active", dependsOn: [COPY] });
     const read = tree({
       tasks: [task(CAMPAIGN), done(COPY, "Playful copy"), build],
@@ -67,8 +64,7 @@ describe("a dependent Task in the Quest views", () => {
 });
 
 describe("a Task given another Task's artifact by hand-off", () => {
-  // covers UX-002, OR-005
-  it("[TC-OR-224] shows that Task's result once under Handed to it, with only the artifact handed on", () => {
+  it("shows that Task's result once under Handed to it, with only the artifact handed on", () => {
     const build = task(BUILD, { ownerId: ADA, state: "active" });
     const read = tree({
       tasks: [task(CAMPAIGN), done(COPY, "Playful copy"), build],

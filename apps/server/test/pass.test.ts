@@ -60,24 +60,29 @@ const replies = (all: ReadonlyArray<Message>) =>
 describe("pass", () => {
   // covers ADR 039 (One hob speaks at a time), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1462-01] on %s, a hob that passes leaves no message, and the next hob asked answers",
+    "on %s, a hob that passes leaves no message, and the next hob asked answers (#1462)",
     async (runtime) => {
       const { run, requests, answers, reactions } = await campOn(runtime);
       // Pip, asked first, has nothing to add; Frodo answers after it.
       reactions.push({ on: "plant", lines: [hub(PASS_TOOL, { key: "pass", reason: "Frodo knows the garden" })] });
       await run(send(["@Pip @Frodo what should we plant?"]));
+      // The fake echoes its prompt, so Frodo's answer mentions Pip and wakes it (#1463): the hobs
+      // relay to each other until the relay budget leaves the next relay paused for you.
       const stored = await run(
         waitUntil(
           Effect.promise(requests),
-          (rows) => rows.length === 2 && rows.every((row) => row.state !== "waiting" && row.state !== "speaking"),
-          { what: "every request ended" },
+          (rows) =>
+            rows.some((row) => row.state === "paused") &&
+            rows.every((row) => row.state !== "waiting" && row.state !== "speaking"),
+          { what: "every request ended", within: "20 seconds" },
         ),
       );
       const all = await run(messagesWhen(() => true));
 
       expect(answers.get("pass")).toBe(PASS_TAKEN);
-      expect(replies(all)).toEqual([[FRODO, "complete"]]);
-      expect(stored).toEqual([
+      // Pip's pass left no message: the first reply is Frodo's.
+      expect(replies(all)[0]).toEqual([FRODO, "complete"]);
+      expect(stored.slice(0, 2)).toEqual([
         { hobId: PIP, state: "passed", passReason: "Frodo knows the garden" },
         { hobId: FRODO, state: "answered", passReason: null },
       ]);
@@ -86,7 +91,7 @@ describe("pass", () => {
   );
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1462-02] every chat turn is offered pass, and a turn only it was asked for, or with no reason, is refused", async () => {
+  it("every chat turn is offered pass, and a turn only it was asked for, or with no reason, is refused (#1462)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers } = party;
@@ -105,7 +110,7 @@ describe("pass", () => {
   }, 30_000);
 
   // covers ADR 039 (One hob speaks at a time), ADR 024, RT-001
-  it("[TC-CH-1462-03] on codex, a session that started without pass is not resumed, so the next turn holds it", async () => {
+  it("on codex, a session that started without pass is not resumed, so the next turn holds it (#1462)", async () => {
     let first = true;
     const party = partyHub({
       lead: "codex",

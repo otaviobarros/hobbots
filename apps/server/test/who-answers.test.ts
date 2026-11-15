@@ -53,7 +53,7 @@ const TestLayer = ChatService.layer
 
 describe("who answers a message you send", () => {
   // covers ADR 039 (Who answers, rule 4)
-  it("[TC-OR-1460-10] starts the only hob's turn, and none in a camp with several hobs", async () => {
+  it("starts the only hob's turn, and none in a camp with several hobs (#1460)", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -94,7 +94,7 @@ describe("who answers a message you send", () => {
   }, 30_000);
 
   // covers ADR 039 (Who answers, rule 2)
-  it("[TC-OR-1455-05] reads the mentions in what you write: its hob's starts its turn, another hob's is refused unstored", async () => {
+  it("reads the mentions in what you write: its hob's starts its turn, another hob's is refused unstored (#1455)", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;

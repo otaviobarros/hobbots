@@ -163,7 +163,7 @@ const makeHub = (options: { readonly shares?: boolean; readonly store?: MemorySt
       Layer.mergeAll(
         Layer.succeed(MemoryStore, store),
         Layer.succeed(MemorySaves, saves.service),
-        // A folder's project is its origin remote, read by the hub (TC-GEN-253); here, by name.
+        // A folder's project is its origin remote, read by the hub (projects.test.ts); here, by name.
         Layer.succeed(
           MemoryProjects,
           MemoryProjects.of({
@@ -260,7 +260,7 @@ const page = (key: string, more: Record<string, unknown> = {}) => ({
 
 describe("the memory tools", () => {
   // covers ADR 028 (The memory tools), ADR 014 (the Memory group)
-  it("[TC-GEN-243] are offered under every preset, and a save to the hob's own memory is found by its next search", async () => {
+  it("are offered under every preset, and a save to the hob's own memory is found by its next search", async () => {
     for (const preset of SafetyPreset.literals) {
       const hub = makeHub();
       const saved = await callOn(hub, MEMORY_SAVE_TOOL, page(`save-${preset}`), { access: accessFor([app], preset) });
@@ -281,7 +281,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools)
-  it("[TC-GEN-244] records and journals a save before it is sent, redacted, as the hob that made it", async () => {
+  it("records and journals a save before it is sent, redacted, as the hob that made it", async () => {
     const hub = makeHub();
     const secretly = { markdown: `# Tests\n\nThe token is ${SECRET}.`, tags: [`token-${SECRET}`] };
     await callOn(hub, MEMORY_SAVE_TOOL, page(`tests-${SECRET}`, secretly));
@@ -308,7 +308,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools): a retried key returns the first answer.
-  it("[TC-GEN-245] answers a retried key with its first answer and writes once, and refuses the key for another save", async () => {
+  it("answers a retried key with its first answer and writes once, and refuses the key for another save", async () => {
     const hub = makeHub();
     const first = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));
     const again = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));
@@ -326,7 +326,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools): a key is the hob's, whatever redaction makes of it.
-  it("[TC-GEN-256] keeps two keys apart that redact alike, and names a refused key redacted", async () => {
+  it("keeps two keys apart that redact alike, and names a refused key redacted", async () => {
     const hub = makeHub();
     const secret = `k-${SECRET}`;
     // The secret key's redacted spelling, sent as a key of its own.
@@ -345,7 +345,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (When memory is down)
-  it("[TC-GEN-246] keeps a save while memory is down for the capture worker, and searches answer that memory is unavailable", async () => {
+  it("keeps a save while memory is down for the capture worker, and searches answer that memory is unavailable", async () => {
     const hub = makeHub();
     hub.memory.controls.setDown(true);
     const kept = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));
@@ -369,7 +369,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (When memory is down), #1049
-  it("[TC-GEN-403] records the Attempt a save outside any chat was made in, so it settles in that Attempt's session", async () => {
+  it("records the Attempt a save outside any chat was made in, so it settles in that Attempt's session (#1049)", async () => {
     const hub = makeHub();
     hub.memory.controls.setDown(true);
     const attemptId = AttemptId.make(crypto.randomUUID());
@@ -382,7 +382,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
-  it("[TC-GEN-1377-07] refuses a save or a share from a private camp, or a Task in one, before anything is asked or written", async () => {
+  it("refuses a save or a share from a private camp, or a Task in one, before anything is asked or written (#1377)", async () => {
     const hub = makeHub({ shares: true });
     const asked: Array<ApprovalAction> = [];
     const user = { asked, answer: "approve" } as const;
@@ -404,8 +404,8 @@ describe("the memory tools", () => {
     expect(hub.saves.saves().map((save) => save.key)).toHaveLength(1);
   });
 
-  // covers EX-004, ADR 028 (The memory tools), ADR 031
-  it("[TC-PE-492] records each call's step before memory is reached, and reaches nothing when it cannot", async () => {
+  // covers ADR 028 (The memory tools), ADR 031
+  it("records each call's step before memory is reached, and reaches nothing when it cannot", async () => {
     const hub = makeHub();
     await callOn(hub, MEMORY_SAVE_TOOL, page("recorded"), { records: true });
     await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { records: true });
@@ -426,7 +426,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools), ADR 014 (the Memory group), PE-008
-  it("[TC-GEN-247] refuses a tool the Memory group answers Never for before memory is called", async () => {
+  it("refuses a tool the Memory group answers Never for before memory is called", async () => {
     const hub = makeHub();
     const never = accessFor([app], "trusting", { "search-memory": "deny", "save-memory": "deny" });
     // Not offered at all...
@@ -447,7 +447,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools), PE-003
-  it("[TC-GEN-248] asks you first where the Memory group answers Ask, and a denied call never reaches memory", async () => {
+  it("asks you first where the Memory group answers Ask, and a denied call never reaches memory", async () => {
     const hub = makeHub();
     const asking = accessFor([app], "balanced", { "save-memory": "ask" });
     const asked: Array<ApprovalAction> = [];
@@ -479,7 +479,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-GEN-1268-01] while the session has read the web, a save names the page as its source and a share asks you first", async () => {
+  it("while the session has read the web, a save names the page as its source and a share asks you first (#1268)", async () => {
     const READ = { since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" };
     const webMark: WebMark = { current: Effect.succeed(READ), read: () => Effect.void };
     const hub = makeHub({ shares: true });
@@ -511,7 +511,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools): search covers the hob's own scope, its projects and everyone's.
-  it("[TC-GEN-249] searches only the hob's own memory, its folders' projects and everyone's, never another hob's", async () => {
+  it("searches only the hob's own memory, its folders' projects and everyone's, never another hob's", async () => {
     const hub = makeHub();
     const you = { _tag: "You" } as const;
     const write = (scope: Parameters<MemoryStoreShape["write"]>[1], file: string, title: string) =>
@@ -553,7 +553,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools): no call reaches another hob's memory.
-  it("[TC-GEN-250] saves only to the calling hob's own memory, whatever the call names", async () => {
+  it("saves only to the calling hob's own memory, whatever the call names", async () => {
     const hub = makeHub();
     await callOn(hub, MEMORY_SAVE_TOOL, page("tests", { agentId: quill, scope: "mine" }));
     for (const input of [page("x", { scope: "quill" }), page("y", { path: "../quill/notes.md" })]) {
@@ -567,7 +567,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (The memory tools, Sharing)
-  it("[TC-GEN-251] hands a share to the hub's share rules, for the project of the folder it names, or refuses it without them", async () => {
+  it("hands a share to the hub's share rules, for the project of the folder it names, or refuses it without them", async () => {
     const without = makeHub();
     const refused = await callOn(without, MEMORY_SAVE_TOOL, page("share", { scope: "project" }));
     expect(refused.answer).toEqual({
@@ -610,7 +610,7 @@ describe("the memory tools", () => {
 // and answers as on the in-memory store.
 describe.runIf(engineEnabled)("the memory tools on the bundled ai-memory", () => {
   // covers ADR 028 (The memory tools)
-  it("[TC-GEN-255] save to the hob's own memory, find it in its next thread, write once for a retried key, and keep it from another hob", async () => {
+  it("save to the hob's own memory, find it in its next thread, write once for a retried key, and keep it from another hob", async () => {
     const { dataDir, keys } = engineDataDir();
     const { store } = await Effect.runPromise(startEngineStore(dataDir, keys));
     const hub = makeHub({ store });

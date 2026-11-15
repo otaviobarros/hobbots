@@ -9,6 +9,7 @@ import {
   ArtifactContents,
   CampBriefs,
   CampDrift,
+  CampMembers,
   CampSuggestionService,
   CatchUps,
   ChapterBreaks,
@@ -134,7 +135,6 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
   ThreadMemberRepositoryLive,
-  TurnLimitsRepositoryLive,
   UserRepositoryLive,
   WebFoundUrlsLive,
   WebRecordsLive,
@@ -401,8 +401,6 @@ const ServerLive = Layer.unwrap(
       UserRepositoryLive,
       // Who is in each direct message and camp (ADR 039).
       ThreadMemberRepositoryLive,
-      // How many turns run at once, per hob, Quest and runtime (#1448).
-      TurnLimitsRepositoryLive,
       // The supervisor's record of each Task it acted on (#1447).
       SupervisionRecordsLive,
       HubQuestionRepositoryLive,
@@ -606,6 +604,9 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       )
+      // Adding hobs to a camp and taking them out (ADR 039, Members), above the chat service, whose
+      // floor a hob taken out leaves.
+      .pipe(Layer.provideMerge(CampMembers.layer))
       .pipe(Layer.provideMerge(ChatService.layer))
       // Before the chat service: the report of the context pack each thread's last new session read (ADR 037).
       .pipe(Layer.provideMerge(PackReports.layer))
@@ -732,8 +733,8 @@ const ServerLive = Layer.unwrap(
             WorkHoldLive.pipe(Layer.provideMerge(Persistence)),
             EventBus.layer,
             HobAdmission.layer,
-            // Every turn takes a slot under the limits you set, or waits queued for one (#1448).
-            TurnSlots.layer.pipe(Layer.provide(Persistence)),
+            // Every turn takes a slot under the hub's cap, or waits queued for one (#1590).
+            TurnSlots.layer,
             SummoningHub.layer,
             // The caps on summons that run without asking you (ADR 034).
             Layer.succeed(UnattendedSummonLimits, config.summonLimits),

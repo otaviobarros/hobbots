@@ -19,7 +19,7 @@ describe("unsupported enforcement", () => {
 
 describe("a runtime without its own web search", () => {
   // covers ADR 036
-  it("[TC-PE-1266-03] shows Search the web as not offered unless the runtime's search is verified", () => {
+  it("shows Search the web as not offered unless the runtime's search is verified (#1266)", () => {
     const verified = enforcementFixture("verified");
     expect(notOffered("search-web", verified)).toBe(false);
     for (const status of ["unsupported", "unverified"] as const) {

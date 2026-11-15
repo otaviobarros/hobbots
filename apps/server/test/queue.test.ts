@@ -154,8 +154,7 @@ const recordQueueEvents = Effect.gen(function* () {
 });
 
 describe("message queue", () => {
-  // covers CH-008
-  it("[TC-CH-006] queues messages sent during a reply and starts them one at a time, in order", async () => {
+  it("queues messages sent during a reply and starts them one at a time, in order", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const events = yield* recordQueueEvents;
@@ -191,8 +190,7 @@ describe("message queue", () => {
     ]);
   });
 
-  // covers OP-003
-  it("[TC-OP-032] starts no queued message while work is held after a restore, and runs them once it resumes", async () => {
+  it("starts no queued message while work is held after a restore, and runs them once it resumes", async () => {
     const held = Ref.makeUnsafe(true);
     const hold = Layer.succeed(WorkHold, WorkHold.of({ held: Ref.get(held), release: Ref.set(held, false) }));
     const result = await Effect.gen(function* () {
@@ -221,8 +219,7 @@ describe("message queue", () => {
     ]);
   });
 
-  // covers CH-001, CH-008
-  it("[TC-CH-007] starts messages queued before a restart, in order", async () => {
+  it("starts messages queued before a restart, in order", async () => {
     const result = await Effect.gen(function* () {
       yield* settled(THREAD_ID);
       return yield* transcript(THREAD_ID);
@@ -238,8 +235,7 @@ describe("message queue", () => {
     ]);
   });
 
-  // covers CH-004, CH-008
-  it("[TC-CH-013] recovers a message that started just before a crash and then runs the rest of the queue", async () => {
+  it("recovers a message that started just before a crash and then runs the rest of the queue", async () => {
     const result = await Effect.gen(function* () {
       yield* settled(THREAD_ID);
       return yield* transcript(THREAD_ID);
@@ -255,8 +251,7 @@ describe("message queue", () => {
     ]);
   });
 
-  // covers CH-007, CH-008
-  it("[TC-CH-008] Send now stops the running reply and starts the chosen message before older ones", async () => {
+  it("Send now stops the running reply and starts the chosen message before older ones", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -279,8 +274,7 @@ describe("message queue", () => {
     ]);
   });
 
-  // covers CH-008
-  it("[TC-CH-009] removes a queued message before it starts and refuses to remove one that started", async () => {
+  it("removes a queued message before it starts and refuses to remove one that started", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const events = yield* recordQueueEvents;
@@ -309,8 +303,7 @@ describe("message queue", () => {
     expect(result.events).toEqual([["MessageQueued"], ["MessageDequeued", "removed"]]);
   });
 
-  // covers AG-006, CH-008
-  it("[TC-CH-010] queues messages for a paused hob, also ones sent while paused, and runs them in order once it wakes", async () => {
+  it("queues messages for a paused hob, also ones sent while paused, and runs them in order once it wakes", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const lifecycle = yield* HobLifecycle;

@@ -133,8 +133,7 @@ const connect = async (
 };
 
 describe("setup's first screen", () => {
-  // covers DP-001
-  it("[TC-DP-156] a new installation starts setup with no server; an installation ID or Run here makes it the hub; Disconnect returns to Where", () => {
+  it("a new installation starts setup with no server; an installation ID or Run here makes it the hub; Disconnect returns to Where", () => {
     const dataDir = mkdtempSync(join(temp, "start-"));
     const fresh = fileSettingsStore(join(dataDir, "desktop-settings.json"));
     // Nothing chosen and no installation: setup's local pages, and nothing is written yet.
@@ -160,8 +159,7 @@ describe("setup's first screen", () => {
     expect(startMode(scripted, { installationId: "id" })).toEqual({ start: "hub" });
   });
 
-  // covers DP-001
-  it("[TC-DP-200] serves the local pages only from the web client's build, and trusts only them", () => {
+  it("serves the local pages only from the web client's build, and trusts only them", () => {
     const root = "/app/web";
     expect(localFile(root, `${LOCAL_ORIGIN}/`)).toBe("/app/web/local.html");
     expect(localFile(root, `${LOCAL_ORIGIN}/connect`)).toBe("/app/web/local.html");
@@ -180,8 +178,7 @@ describe("setup's first screen", () => {
     expect(isLocalPage("http://studio.example.ts.net:4317/", null)).toBe(false);
   });
 
-  // covers DP-001, DP-002
-  it("[TC-DP-165] finds the user's hubs by Tailscale name, waits with the hub's code and keeps the connection after Allow", async () => {
+  it("finds the user's hubs by Tailscale name, waits with the hub's code and keeps the connection after Allow", async () => {
     const network = fakeNetwork();
     const made = computer(network);
     // Only the user's own computers are asked, and only a Hobbots answer is listed.
@@ -223,8 +220,7 @@ describe("setup's first screen", () => {
     expect(await token.read()).toBe("hbd_token");
   });
 
-  // covers DP-001, DP-002
-  it("[TC-DP-166] Deny, an expired or throttled request, an unreachable hub and something that is not Hobbots each say why", async () => {
+  it("Deny, an expired or throttled request, an unreachable hub and something that is not Hobbots each say why", async () => {
     const ended = async (typed: string, network: ReturnType<typeof fakeNetwork>) => {
       const { end, kept, token } = await connect(typed, network);
       // Nothing is kept unless the hub allowed this computer.
@@ -259,8 +255,7 @@ describe("setup's first screen", () => {
     expect(await ended("attic", fakeNetwork())).toMatchObject({ kind: "ended", outcome: { kind: "notHobbots" } });
   });
 
-  // covers DP-002
-  it("[TC-DP-201] refuses an address that is not one of the user's own computers before sending anything, and Cancel stops waiting", async () => {
+  it("refuses an address that is not one of the user's own computers before sending anything, and Cancel stops waiting", async () => {
     const refused = async (typed: string) => {
       const network = fakeNetwork();
       const { end } = await connect(typed, network);
@@ -299,8 +294,7 @@ describe("setup's first screen", () => {
     expect(cancelled.kept).toEqual([]);
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-206] Cancel wins over an answer already on its way: nothing is kept and nothing connects", async () => {
+  it("Cancel wins over an answer already on its way: nothing is kept and nothing connects", async () => {
     // Cancel while the hub's Allow is in flight: the answer arrives after Cancel and is dropped.
     const allowedLate = fakeNetwork({ decide: "allowed" });
     const late = new AbortController();
@@ -362,8 +356,7 @@ describe("setup's first screen", () => {
     expect(stopped.kept).toEqual([]);
   });
 
-  // covers DP-001
-  it("[TC-DP-202] answers setup's calls only from the local pages, and takes nothing from them but the typed address", async () => {
+  it("answers setup's calls only from the local pages, and takes nothing from them but the typed address", async () => {
     const handlers = new Map<string, (event: unknown, arg: unknown) => unknown>();
     const ipcMain = {
       handle: (channel: string, handler: (event: unknown, arg: unknown) => unknown) =>

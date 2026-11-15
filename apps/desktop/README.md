@@ -47,7 +47,7 @@ On Linux, pass the install folder, and run it under `xvfb-run -a` where there is
 apps/desktop/scripts/smoke-test.sh /opt/Hobbots --user-data-dir="$(mktemp -d)"
 ```
 
-After the smoke test, the release workflow runs [`scripts/background-service.e2e.ts`](scripts/background-service.e2e.ts) on Node's test runner against the same app. It starts the app with the fake runtime in a new, empty data folder, starts a reply, closes the window through the DevTools port while the reply streams and checks that the app, the same server and the reply carry on to completion (`TC-EX-008`); launches the app a second time and checks that it quits at once, the first instance opens its window and there is still one app and one server process (`TC-DP-010`); reads back the login-item status macOS reports (`TC-EX-009`); and quits, checking that the server stops (`TC-EX-010`). Run it against a local build, with no Hobbots server on the port, with:
+After the smoke test, the release workflow runs [`scripts/background-service.e2e.ts`](scripts/background-service.e2e.ts) on Node's test runner against the same app. It starts the app with the fake runtime in a new, empty data folder, starts a reply, closes the window through the DevTools port while the reply streams and checks that the app, the same server and the reply carry on to completion; launches the app a second time and checks that it quits at once, the first instance opens its window and there is still one app and one server process; reads back the login-item status macOS reports; and quits, checking that the server stops. Run it against a local build, with no Hobbots server on the port, with:
 
 ```sh
 HOBBOTS_E2E_APP=apps/desktop/release/mac-arm64/Hobbots.app node --test apps/desktop/scripts/background-service.e2e.ts

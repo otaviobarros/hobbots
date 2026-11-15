@@ -92,8 +92,7 @@ const connection = (hub: ReturnType<typeof switchableHub>, here: ReturnType<type
 };
 
 describe("a hub that is off or cannot be reached", () => {
-  // covers DP-001, DP-002
-  it("[TC-DP-170] says the hub is off, and reconnects with the same token once it starts again", async () => {
+  it("says the hub is off, and reconnects with the same token once it starts again", async () => {
     const hub = switchableHub();
     const here = thisTailnet();
     const { state, token } = connection(hub, here);
@@ -118,8 +117,7 @@ describe("a hub that is off or cannot be reached", () => {
     expect(hub.paths.filter((path) => path.startsWith("/api/pairing"))).toEqual([]);
   });
 
-  // covers DP-001
-  it("[TC-DP-169] tells Tailscale off here from the hub's computer offline, and finds each one back at once", async () => {
+  it("tells Tailscale off here from the hub's computer offline, and finds each one back at once", async () => {
     const hub = switchableHub();
     const here = thisTailnet();
     const { state } = connection(hub, here);
@@ -156,8 +154,7 @@ describe("a hub that is off or cannot be reached", () => {
     expect(hubNodeState({ status: { state: "running" }, nodes: [] }, STUDIO.nodeId)).toBe("offline");
   });
 
-  // covers DP-001
-  it("[TC-DP-169] keeps a device the hub refused waiting for the user, and stops trying", async () => {
+  it("keeps a device the hub refused waiting for the user, and stops trying", async () => {
     const hub = switchableHub();
     const here = thisTailnet();
     const revoking = {
@@ -193,8 +190,7 @@ const remoteAccess = (port: number, servesHttps: boolean | null = false) =>
   ({ _tag: "RemoteAccess", port, enabled: true, paused: false, servesHttps }) as const;
 
 describe("a hub that moved to another address", () => {
-  // covers DP-001
-  it("[TC-DP-171] follows a port changed while connected, and an HTTPS address that stops answering", () => {
+  it("follows a port changed while connected, and an HTTPS address that stops answering", () => {
     expect(followedAddress(ORIGINS.origin, remoteAccess(4400))).toBe("http://studio.example.ts.net:4400");
     expect(followedAddress(ORIGINS.origin, remoteAccess(4317))).toBeNull();
     // An HTTPS address does not change with the port, and falls back to HTTP when HTTPS turns off.
@@ -205,8 +201,7 @@ describe("a hub that moved to another address", () => {
     );
   });
 
-  // covers DP-001
-  it("[TC-DP-171] moves a page the hub redirected to HTTPS back to HTTP when HTTPS turns off, at the same path", () => {
+  it("moves a page the hub redirected to HTTPS back to HTTP when HTTPS turns off, at the same path", () => {
     // The stored address is HTTP and its port is unchanged, so the address itself does not move.
     expect(followedAddress(ORIGINS.origin, remoteAccess(4317, false))).toBeNull();
     const page = "https://studio.example.ts.net/#/hobs/h1/threads/t1?draft=1";
@@ -224,8 +219,7 @@ describe("a hub that moved to another address", () => {
     expect(windowAfterRemoteAccess("https://example.com/", ORIGINS.origin, remoteAccess(4317, false))).toBeNull();
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-171] takes a typed address on the same computer, and refuses another computer or a port nothing answers on", async () => {
+  it("takes a typed address on the same computer, and refuses another computer or a port nothing answers on", async () => {
     const hub = switchableHub([4400]);
     const check = (typed: string, tailnet = snapshot()) =>
       checkNewAddress({ typed, nodeId: STUDIO.nodeId, nodeName: STUDIO.nodeName, snapshot: tailnet, fetch: hub.fetch });

@@ -52,7 +52,7 @@ import { Supervision } from "./supervision.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 import { ThreadMember } from "./thread-member.ts";
-import { TurnRequest } from "./turn-request.ts";
+import { TurnRequest, TurnRequestId } from "./turn-request.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
 /**
@@ -171,6 +171,17 @@ const CampSuggestionExpired = Schema.TaggedStruct("CampSuggestionExpired", {
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
 const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, messageId: MessageId });
+/**
+ * A person let the hobs go on past the relay budget (ADR 039, Hobs talking to hobs; #1463): the
+ * line's paused `requests` wait again, counting the budget from their own turn. Its line is
+ * `rootMessageId`, null for the thread's main line.
+ */
+const RelayBudgetReset = Schema.TaggedStruct("RelayBudgetReset", {
+  threadId: ThreadId,
+  rootMessageId: Schema.NullOr(MessageId),
+  by: Actor,
+  requests: Schema.Array(TurnRequestId),
+});
 /**
  * A hob passed (ADR 039, One hob speaks at a time): `request` ended `passed`, with its hob's reason,
  * and the turn's reply `messageId` is gone, so the conversation shows the pass and no message.
@@ -330,11 +341,6 @@ const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
  * stopping while the work under it is cancelled, and ends stopped once its Task's cancel is confirmed.
  */
 const QuestStopRequested = Schema.TaggedStruct("QuestStopRequested", { quest: Quest });
-/**
- * A Quest's acceptance criteria changed (#1445): its lead checked one, linked a Task to some, or a
- * newer artifact version voided the evidence one was accepted on. The Quest carries them all.
- */
-const QuestCriteriaChanged = Schema.TaggedStruct("QuestCriteriaChanged", { quest: Quest });
 /**
  * How a Quest is going changed (ADR 037): a change to a Task, a question or an approval under it
  * gave it another summary, journaled in the same transaction, after the change's own events.
@@ -545,6 +551,7 @@ export const JournaledEvent = Schema.Union([
   CampSuggestionExpired,
   TurnStopRequested,
   TurnStopped,
+  RelayBudgetReset,
   TurnPassed,
   ApprovalRequested,
   ApprovalResolved,
@@ -568,7 +575,6 @@ export const JournaledEvent = Schema.Union([
   TaskCompleted,
   QuestCompleted,
   QuestStopRequested,
-  QuestCriteriaChanged,
   QuestSummaryChanged,
   ClaimMade,
   ClaimContested,
@@ -679,6 +685,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   CampSuggestionExpired: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
+  RelayBudgetReset: 1,
   TurnPassed: 1,
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
   // The GitHub operations and rules were renamed to Charm ids and `CharmSite`, read from the old ones, compatibly.
@@ -694,7 +701,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // A change's `wait` was added with a default, and its optional `control` and `reply` later, compatibly.
   TaskStateChanged: 1,
   // A Quest's `stop`, and its `stopping` and `stopped` states (#1346), were added with a default, compatibly.
-  // A Quest's `criteria` (#1445) were added with a default, compatibly.
+  // A Quest's `criteria` (#1445) were added with a default, then removed (#1588): stored ones are ignored.
   QuestStarted: 1,
   CheckpointRecorded: 1,
   QuestionAsked: 1,
@@ -713,7 +720,6 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   TaskCompleted: 1,
   QuestCompleted: 1,
   QuestStopRequested: 1,
-  QuestCriteriaChanged: 1,
   QuestSummaryChanged: 1,
   ClaimMade: 1,
   ClaimContested: 1,

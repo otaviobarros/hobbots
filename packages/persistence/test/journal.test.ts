@@ -62,8 +62,7 @@ const seed = Effect.gen(function* () {
 });
 
 describe("EventJournal", () => {
-  // covers DP-003
-  it("[TC-DP-027] journals each change with its events in commit order, sets revisions, and leaves no gap when nothing changes", async () => {
+  it("journals each change with its events in commit order, sets revisions, and leaves no gap when nothing changes", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const journal = yield* EventJournal;
@@ -158,8 +157,7 @@ describe("EventJournal", () => {
     expect(new Set(result.entries.map((e) => e.id)).size).toBe(result.entries.length);
   });
 
-  // covers DP-003
-  it("[TC-DP-028] keeps a committed change's events when the process dies before publishing them", async () => {
+  it("keeps a committed change's events when the process dies before publishing them", async () => {
     const result = await Effect.gen(function* () {
       // The first process commits a change and stops before anything is published.
       const before = yield* Effect.gen(function* () {
@@ -180,8 +178,7 @@ describe("EventJournal", () => {
     expect(result.after.map((e) => e.type)).toEqual(["MessageUpserted"]);
   });
 
-  // covers DP-003
-  it("[TC-DP-029] hands out unique, gap-free sequences to concurrent writers", async () => {
+  it("hands out unique, gap-free sequences to concurrent writers", async () => {
     const sequences = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const journal = yield* EventJournal;
@@ -199,8 +196,7 @@ describe("EventJournal", () => {
     expect(sequences).toEqual(Array.from({ length: 5 + 20 + 40 }, (_, i) => i + 1));
   });
 
-  // covers DP-003
-  it("[TC-DP-030] compacts entries older than seven days outside the latest 10,000", async () => {
+  it("compacts entries older than seven days outside the latest 10,000", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const journal = yield* EventJournal;

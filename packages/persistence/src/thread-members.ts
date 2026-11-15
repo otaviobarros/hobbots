@@ -1,5 +1,14 @@
 import { ThreadMemberRepository } from "@hobbots/agents";
-import { type Actor, MemberRefused, planMemberAdd, type Thread, type ThreadId, ThreadMember } from "@hobbots/domain";
+import { ThreadArchived } from "@hobbots/api";
+import {
+  type Actor,
+  isActiveMember,
+  MemberRefused,
+  planMemberAdd,
+  type Thread,
+  type ThreadId,
+  ThreadMember,
+} from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
@@ -27,14 +36,26 @@ export const ThreadMemberRepositoryLive = Layer.effect(
         Effect.map((rows) => Option.fromNullishOr(rows[0])),
       );
     const readThread = (threadId: ThreadId) =>
-      sql<{ readonly kind: Thread["kind"] }>`SELECT kind FROM threads WHERE id = ${threadId}`.pipe(
+      sql<{
+        readonly kind: Thread["kind"];
+        readonly archivedAt: string | null;
+      }>`SELECT kind, archived_at FROM threads WHERE id = ${threadId}`.pipe(
         Effect.flatMap(([row]) => (row === undefined ? Effect.die(`No thread ${threadId}`) : Effect.succeed(row))),
       );
-    const add = (threadId: ThreadId, actor: Actor, addedBy: Actor) =>
-      change<ThreadMember, MemberRefused>((first) =>
+    const add = (threadId: ThreadId, actor: Actor, addedBy: Actor, asMember = false) =>
+      change<ThreadMember, MemberRefused | ThreadArchived>((first) =>
         Effect.gen(function* () {
           const thread = yield* readThread(threadId);
-          const plan = planMemberAdd(thread, yield* selectMembers(sql, threadId), actor);
+          const members = yield* selectMembers(sql, threadId);
+          // Checked in the write's own transaction, so one taken out meanwhile adds no one, and a camp
+          // archived meanwhile takes no one.
+          if (asMember && thread.archivedAt !== null) {
+            return yield* new ThreadArchived({ threadId, archivedAt: thread.archivedAt });
+          }
+          if (asMember && !isActiveMember(members, addedBy)) {
+            return yield* new MemberRefused({ threadId, actor: addedBy, reason: "not-member" });
+          }
+          const plan = planMemberAdd(thread, members, actor);
           switch (plan._tag) {
             case "refused":
               return yield* new MemberRefused({ threadId, actor, reason: plan.reason });

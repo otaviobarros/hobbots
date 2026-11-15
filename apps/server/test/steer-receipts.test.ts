@@ -107,8 +107,7 @@ const noteEvents = EventJournal.use((journal) => journal.readAfter(0, 10_000)).p
 const attemptIn = (tree: TaskTree, turnId: string) => tree.attempts.some((attempt) => attempt.id === turnId);
 
 describe("a steer receipt for a message you send the lead", () => {
-  // covers OR-002, IN-001, UX-006
-  it("[TC-OR-540] a note passed to one member names your message, the turn that read it and the member's turn that picked it up", async () => {
+  it("a note passed to one member names your message, the turn that read it and the member's turn that picked it up", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
@@ -160,8 +159,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(events.at(-1)?.revision).toBe(passed.note.revision);
   }, 30_000);
 
-  // covers OR-002, IN-001, UX-006
-  it("[TC-OR-541] a note passed to two members gives the message two lines, each picked up by its own member", async () => {
+  it("a note passed to two members gives the message two lines, each picked up by its own member", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
@@ -198,8 +196,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(turns.every((turnId) => attemptIn(tree, turnId))).toBe(true);
   }, 30_000);
 
-  // covers OR-002, UX-006
-  it("[TC-OR-542] a lead that answers without passing anything on leaves the receipt at the turn that read it", async () => {
+  it("a lead that answers without passing anything on leaves the receipt at the turn that read it", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
@@ -223,8 +220,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(tree.notes).toEqual([]);
   }, 30_000);
 
-  // covers OR-002, IN-001, UX-006
-  it("[TC-OR-543] a note passed through a nested lead traces back to your message at each level", async () => {
+  it("a note passed through a nested lead traces back to your message at each level", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run, reactions } = hubbed;
@@ -276,8 +272,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(toNettle?.passedOn).toEqual([]);
   }, 30_000);
 
-  // covers OR-002, IN-001, PE-003, UX-006
-  it("[TC-OR-544] a note held while the member's turn waits on your approval shows as held, with the request, until a turn picks it up", async () => {
+  it("a note held while the member's turn waits on your approval shows as held, with the request, until a turn picks it up", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run, reactions } = hubbed;
@@ -320,8 +315,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(steerReceipt([tree], message.id).map((each) => each.receipt._tag)).toEqual(["PickedUp"]);
   }, 30_000);
 
-  // covers OR-002, OR-006, IN-001, UX-004
-  it("[TC-OR-545] a note whose member's Task is reassigned before any turn picked it up shows as unread, even once the new owner works", async () => {
+  it("a note whose member's Task is reassigned before any turn picked it up shows as unread, even once the new owner works", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
@@ -359,8 +353,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(passed?.note).toMatchObject({ recipientId: PIP, pickedUpBy: null });
     expect(passed?.receipt).toEqual({ _tag: "Unread" });
   }, 30_000);
-  // covers OR-002, UX-006
-  it("[TC-OR-546] a Task the lead delegates on your message carries it on, so the receipt names the member that picked it up (#1005)", async () => {
+  it("a Task the lead delegates on your message carries it on, so the receipt names the member that picked it up (#1005)", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
@@ -399,8 +392,7 @@ describe("a steer receipt for a message you send the lead", () => {
     // The request that started the work is no note: Pip's Task carries nothing of it.
     expect(steerReceipt([tree], yours(all, "Build the site").message.id)).toEqual([]);
   }, 30_000);
-  // covers OR-002, UX-006, CH-009
-  it("[TC-OR-547] a steer whose reply you continue carries your words, not the Continue prompt, to the Task it delegates (#1005)", async () => {
+  it("a steer whose reply you continue carries your words, not the Continue prompt, to the Task it delegates (#1005)", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;
@@ -436,8 +428,7 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(passed?.note.text).not.toContain("cut off");
   }, 30_000);
 
-  // covers OR-002, UX-006, CH-009
-  it("[TC-OR-548] the request that started the work carries nothing, even when the turn you continue on it delegates (#1005)", async () => {
+  it("the request that started the work carries nothing, even when the turn you continue on it delegates (#1005)", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run } = hubbed;

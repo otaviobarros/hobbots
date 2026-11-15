@@ -65,9 +65,8 @@ const exec = (
   });
 
 describe("the process sandbox and the hub", () => {
-  // covers PE-006, PE-005
   it.runIf(enabled)(
-    "[TC-PE-114] a sandboxed command never reaches the hub's API, even with a forged Origin and every host allowed",
+    "a sandboxed command never reaches the hub's API, even with a forged Origin and every host allowed",
     async () => {
       await Effect.gen(function* () {
         const sandbox = yield* ProcessSandbox;

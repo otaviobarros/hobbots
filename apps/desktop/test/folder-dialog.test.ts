@@ -30,8 +30,7 @@ const setup = (answer: { canceled: boolean; filePaths: ReadonlyArray<string> }) 
 };
 
 describe("the folder dialog bridge", () => {
-  // covers OP-001, DP-001
-  it("[TC-DP-024] opens a folder-only dialog and ignores anything the page sends", async () => {
+  it("opens a folder-only dialog and ignores anything the page sends", async () => {
     const { handlers, shown, choose } = setup({ canceled: false, filePaths: ["/Users/me/code"] });
     expect([...handlers.keys()]).toEqual([
       folderDialogChannel,
@@ -44,21 +43,18 @@ describe("the folder dialog bridge", () => {
     expect(folderDialogOptions.properties).not.toContain("multiSelections");
   });
 
-  // covers OP-001
-  it("[TC-DP-025] answers null when the user cancels", async () => {
+  it("answers null when the user cancels", async () => {
     const { choose } = setup({ canceled: true, filePaths: [] });
     await expect(choose(trusted)).resolves.toBeNull();
   });
 
-  // covers DP-001
-  it("[TC-DP-026] refuses pages the window is not allowed to show", async () => {
+  it("refuses pages the window is not allowed to show", async () => {
     const { shown, choose } = setup({ canceled: false, filePaths: ["/"] });
     await expect(choose(stranger)).resolves.toEqual({ refused: "notAllowed" });
     expect(shown).toEqual([]);
   });
 
-  // covers OP-003
-  it("[TC-OP-038] picks a backup's folder with its own fixed dialogs, never a file", async () => {
+  it("picks a backup's folder with its own fixed dialogs, never a file", async () => {
     const { shown, chooseOn } = setup({ canceled: false, filePaths: ["/Users/me/Backups"] });
     await expect(chooseOn(backupDialogChannels.save, trusted)).resolves.toBe("/Users/me/Backups");
     await expect(chooseOn(backupDialogChannels.restore, trusted)).resolves.toBe("/Users/me/Backups");

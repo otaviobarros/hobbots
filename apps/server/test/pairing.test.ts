@@ -79,8 +79,7 @@ const failureTag = (exit: Exit.Exit<unknown, { readonly _tag: string }>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit))?._tag : "Success";
 
 describe("pairing a device", () => {
-  // covers DP-004
-  it("[TC-DP-091] a denied device sees it was not allowed, and its node can ask again only after a minute", async () => {
+  it("a denied device sees it was not allowed, and its node can ask again only after a minute", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
@@ -109,8 +108,7 @@ describe("pairing a device", () => {
     ]);
   });
 
-  // covers DP-004
-  it("[TC-DP-092] an expired request cannot be allowed, and Decide later keeps one open for 24 hours from when it was opened", async () => {
+  it("an expired request cannot be allowed, and Decide later keeps one open for 24 hours from when it was opened", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
@@ -136,8 +134,7 @@ describe("pairing a device", () => {
     expect(result.allowed).toMatchObject({ state: "allowed" });
   });
 
-  // covers DP-004
-  it("[TC-DP-093] only the hub owner's own devices may ask, and a request from the hub itself says so", async () => {
+  it("only the hub owner's own devices may ask, and a request from the hub itself says so", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
@@ -170,8 +167,7 @@ describe("pairing a device", () => {
     expect(published.map((entry) => entry.type)).toEqual(["PairingRequested", "PairingRequested", "PairingRequested"]);
   });
 
-  // covers DP-004
-  it("[TC-DP-094] holds each node to its pairing limits, and asking again with the same secret returns the same request", async () => {
+  it("holds each node to its pairing limits, and asking again with the same secret returns the same request", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
@@ -209,8 +205,7 @@ describe("pairing a device", () => {
     expect(failureTag(result.anonymous)).toBe("PairingThrottled");
     expect(failureTag(result.local)).toBe("Success");
   });
-  // covers DP-001, DP-004
-  it("[TC-DP-175] the desktop app's claim carries its device ID with the token, so it can revoke itself", async () => {
+  it("the desktop app's claim carries its device ID with the token, so it can revoke itself", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
@@ -231,8 +226,7 @@ describe("pairing a device", () => {
     expect(device).toMatchObject({ kind: "desktop", name: "Hobbots on MacBook Air" });
   });
 
-  // covers DP-004
-  it("[TC-DP-117] a secret that names no request waiting here, a claimed one included, counts against the node's limit like no secret at all", async () => {
+  it("a secret that names no request waiting here, a claimed one included, counts against the node's limit like no secret at all", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
@@ -259,8 +253,7 @@ describe("pairing a device", () => {
     expect(failureTag(result.own)).toBe("Success");
   });
 
-  // covers DP-004
-  it("[TC-DP-118] devices asking at the same moment cannot pass a node's three open requests together", async () => {
+  it("devices asking at the same moment cannot pass a node's three open requests together", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;

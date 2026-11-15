@@ -9,8 +9,7 @@ const temp = mkdtempSync(join(tmpdir(), "hobbots-client-cache-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 describe("the cached web client after an update", () => {
-  // covers DP-001
-  it("[TC-DP-275] is dropped once when the app version changes, before a window loads", async () => {
+  it("is dropped once when the app version changes, before a window loads", async () => {
     // Settings written by a version that did not record its own, such as 0.0.1.
     const file = join(temp, "settings.json");
     writeFileSync(file, JSON.stringify({ mode: "hub" }));

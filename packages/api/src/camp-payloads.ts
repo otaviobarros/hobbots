@@ -1,4 +1,4 @@
-import { CAMP_GOAL_MAX, THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
+import { AgentId, CAMP_GOAL_MAX, THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 
 /**
@@ -7,11 +7,18 @@ import { Schema } from "effect";
  */
 export const ThreadKey = ThreadId.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(100));
 
-/** A camp to make for a hob (ADR 037): its title, its goal, if any, and whether it is private. */
+/** The most hobs a camp is made with beside the one that leads it. */
+export const CAMP_HOBS_MAX = 24;
+
+/**
+ * A camp to make for a hob (ADR 037): its title, its goal, if any, and whether it is private. `hobs`
+ * are the other hobs it is made with (ADR 039, Members); the hob it is made for leads its quests.
+ */
 export const MakeCampPayload = Schema.Struct({
   key: ThreadKey,
   title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
   goal: Schema.NullOr(Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(CAMP_GOAL_MAX))),
   private: Schema.Boolean,
+  hobs: Schema.optionalKey(Schema.Array(AgentId).check(Schema.isMaxLength(CAMP_HOBS_MAX))),
 });
 export type MakeCampPayload = typeof MakeCampPayload.Type;

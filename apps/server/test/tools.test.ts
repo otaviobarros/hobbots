@@ -56,8 +56,7 @@ describe("a hob's tools", () => {
     expect(access?.runtimeFolder).toBe(join(runtimeFolders(dataDir), "hob-1"));
   });
 
-  it("[TC-PE-017] gives no tools when a folder holds every hob's runtime state", async () => {
-    // covers PE-005
+  it("gives no tools when a folder holds every hob's runtime state", async () => {
     // Chat-only, with the runtime folder kept so the thread's session still moves back.
     for (const folders of [[join(temp, "hub")], [temp, project]]) {
       const access = await accessWith(folders);
@@ -67,7 +66,7 @@ describe("a hob's tools", () => {
   });
 
   // covers ADR 022
-  it("[TC-CH-198] commits as the hob's bot when it has its own GitHub App, and as the user otherwise", async () => {
+  it("commits as the hob's bot when it has its own GitHub App, and as the user otherwise", async () => {
     const app: HobGitHubApp = {
       appId: 1000,
       clientId: "Iv23test",
@@ -88,8 +87,8 @@ describe("a hob's tools", () => {
     expect((await accessWith([project]))?.commitAs).toBeUndefined();
   });
 
-  // covers PE-006, #1578
-  it("[TC-PE-1578-01] asks Git nothing while nothing is taken, nor for a read that needs only the folders", async () => {
+  // Issue #1578
+  it("asks Git nothing while nothing is taken, nor for a read that needs only the folders (#1578)", async () => {
     // The hob's folder is a checkout whose `docs` you took over.
     execFileSync("git", ["init", "-q"], { cwd: project });
     mkdirSync(join(project, "docs"), { recursive: true });

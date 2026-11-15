@@ -71,8 +71,7 @@ const call = (key: string, overrides: Partial<CharmCall> = {}) =>
   });
 
 describe("Charm call records", () => {
-  // covers IN-003, EX-003
-  it("[TC-IN-050] records a call once per key, returns it for the same key, and settles it once", async () => {
+  it("records a call once per key, returns it for the same key, and settles it once", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -95,8 +94,7 @@ describe("Charm call records", () => {
     expect(Option.getOrThrow(result.byStep).key).toBe("k1");
   });
 
-  // covers IN-003, EX-004
-  it("[TC-IN-051] blocks another call on a site while one is sending or uncertain, and frees it once settled", async () => {
+  it("blocks another call on a site while one is sending or uncertain, and frees it once settled", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -120,8 +118,7 @@ describe("Charm call records", () => {
     expect(result.freed._tag).toBe("Started");
   });
 
-  // covers IN-003
-  it("[TC-IN-052] lets a key that was not sent be used again for the same call, never for another", async () => {
+  it("lets a key that was not sent be used again for the same call, never for another", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -138,8 +135,7 @@ describe("Charm call records", () => {
     expect(Option.getOrThrow(result.stored).state).toBe("sending");
   });
 
-  // covers IN-003, EX-003
-  it("[TC-IN-056] settles a sending once when outcomes race, and never from an earlier sending of a reused key", async () => {
+  it("settles a sending once when outcomes race, and never from an earlier sending of a reused key", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -171,8 +167,7 @@ describe("Charm call records", () => {
     expect(Option.getOrThrow(result.current)).toMatchObject({ attempt: "k2-2", state: "sending", result: null });
   });
 
-  // covers EX-003, PE-006
-  it("[TC-IN-054] lets the user settle an uncertain call from its step, once, and nothing else", async () => {
+  it("lets the user settle an uncertain call from its step, once, and nothing else", async () => {
     const user = Layer.succeed(UserSession, {
       deviceId: WINDOW_DEVICE_ID,
       name: "This computer's Hobbots window",
@@ -207,8 +202,8 @@ describe("Charm call records", () => {
     expect(result.listed.map((c) => c.key)).toEqual(["k1"]);
   });
 
-  // covers EX-003, PE-006, ADR 038
-  it("[TC-PE-1343-02] lists the uncertain calls Tasks' sessions made, and settles one from its Task once, racing a read-back", async () => {
+  // covers ADR 038
+  it("lists the uncertain calls Tasks' sessions made, and settles one from its Task once, racing a read-back (#1343)", async () => {
     const user = Layer.succeed(UserSession, {
       deviceId: WINDOW_DEVICE_ID,
       name: "This computer's Hobbots window",
@@ -273,8 +268,8 @@ describe("Charm call records", () => {
     expect(result.listed).toEqual([]);
   });
 
-  // covers DP-003, ADR 031
-  it("[TC-DP-289] 0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
+  // covers ADR 031
+  it("0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
     // Keeps 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its Charms, whether
     // other hobs see it, its good at and who made and summoned it, and its Summoning scope;
     // 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.

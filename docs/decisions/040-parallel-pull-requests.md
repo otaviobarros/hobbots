@@ -38,7 +38,7 @@ Naming by time is what Rails migrations and Flyway's out-of-order mode do: two b
 
 Two branches can still pick one id only if each makes a migration in the same second. Nothing short of a shared counter rules that out, and a counter is the hand numbering this replaces. The clash is loud, never silent: the migrator refuses two migrations with one id and names both files, a pull request's CI runs on it merged into `main`, so it fails there once the other has merged, and a merge queue tests each pull request on the latest `main` before it lands. Running `pnpm migration:new` again on one branch fixes it.
 
-A migration that depends on another one is rare, and when it happens the dependency was written first, so it has the lower id. If a branch starts to depend on a migration merged after it was named, `[TC-DP-003]` fails on an empty database, and the fix is to rename it with `pnpm migration:new`.
+A migration that depends on another one is rare, and when it happens the dependency was written first, so it has the lower id. If a branch starts to depend on a migration merged after it was named, `packages/persistence/test/migrations.test.ts` fails on an empty database, and the fix is to rename it with `pnpm migration:new`.
 
 Effect's migrator was kept until it no longer fit: it has no option to run ids below the highest applied one. The replacement is one small file that reuses Effect's `SqlClient`, its transactions and its table.
 
@@ -50,15 +50,3 @@ Skipping suites by path keeps the queue short for the common pull request, while
 - On an existing database, a migration from a branch that merged late runs after ones with higher ids. Migrations must not assume that every lower id ran before them unless they were written after it.
 - A pull request that changes server behavior the browser tests cover, without touching the web client, finds out from `main`'s run instead of its own. The burn-in still runs every browser test the pull request changes.
 - Tests that run an older subset of migrations and seed through the current repository still list the later migrations they need. That list is the remaining shared spot.
-
-## Validation
-
-The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
-
-- Every migration is named `0001` to `0114` or by a valid UTC second, and sorted by id: `[TC-DP-040-01]`.
-- A migration whose id is below one already applied still runs, once: `[TC-DP-040-02]`, on SQLite and PostgreSQL.
-- A database Effect's migrator made keeps what it applied and gets only the missing migrations, with PostgreSQL's id column widened to `bigint`: `[TC-DP-040-03]`, on SQLite and PostgreSQL.
-- Two migrations with one id, as two branches made in one second would have, are refused with both names, and a failed run applies nothing: `[TC-DP-040-04]`.
-- A backup with a migration id this Hobbots does not know is refused, even with the same highest id: `[TC-OP-023]`.
-- Every migration applies in order on an empty database: `[TC-DP-003]`, on both databases.
-- The new migration script names files by second, gives migrations made seconds apart different ids and avoids a taken second, and CI picks the suites a change reaches: `scripts/new-migration.test.mjs` and `scripts/ci-changes.test.mjs`.

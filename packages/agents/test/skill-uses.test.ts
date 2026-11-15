@@ -14,7 +14,7 @@ const RELEASE = {
 
 describe("a turn's skill uses (ADR 029, The use line)", () => {
   // covers ADR 029 (Admin policy still applies, The use line)
-  it("[TC-AG-146] keeps a library skill and an organization skill of the same name apart", async () => {
+  it("keeps a library skill and an organization skill of the same name apart", async () => {
     const recorded = await Effect.runPromise(
       Effect.gen(function* () {
         const uses = yield* skillUseRecorder({ agentId: AgentId.make("pip"), threadId: null, messageId: null });
@@ -45,7 +45,7 @@ describe("a turn's skill uses (ADR 029, The use line)", () => {
     ]);
   });
 
-  it("[TC-AG-147] records nothing for a source the turn did not have the skill from", async () => {
+  it("records nothing for a source the turn did not have the skill from", async () => {
     const recorded = await Effect.runPromise(
       Effect.gen(function* () {
         const uses = yield* skillUseRecorder({ agentId: AgentId.make("pip"), threadId: null, messageId: null });

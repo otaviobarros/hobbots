@@ -325,7 +325,7 @@ describe("hobs see each other, end to end", () => {
   }, 60_000);
 
   // covers ADR 032 (The public card, The roster, Every runtime)
-  it("[TC-AG-1235-01] a hob is told who holds the GitHub Charm in its roster alone, with no tool call, on every runtime", {
+  it("a hob is told who holds the GitHub Charm in its roster alone, with no tool call, on every runtime (#1235)", {
     timeout: 240_000,
   }, async () => {
     await onEachRuntime(async (run, thread) => {
@@ -352,7 +352,7 @@ describe("hobs see each other, end to end", () => {
   });
 
   // covers ADR 032 (read_hob, Every runtime), EX-004
-  it("[TC-AG-1235-02] a hob reads another's card with read_hob, its model reads the card, and the step shows in the reply", {
+  it("a hob reads another's card with read_hob, its model reads the card, and the step shows in the reply (#1235)", {
     timeout: 240_000,
   }, async () => {
     await onEachRuntime(async (run, thread) => {
@@ -370,7 +370,7 @@ describe("hobs see each other, end to end", () => {
   });
 
   // covers ADR 032 (Good at, It applies at once)
-  it("[TC-AG-1235-03] you edit a hob's good at, and another hob's next turn is told the new text", {
+  it("you edit a hob's good at, and another hob's next turn is told the new text (#1235)", {
     timeout: 240_000,
   }, async () => {
     let edits = 0;
@@ -390,7 +390,7 @@ describe("hobs see each other, end to end", () => {
   });
 
   // covers ADR 032 (Visible to other hobs, It applies at once)
-  it("[TC-AG-1235-04] a hidden hob is in no roster and unknown to read_hob, and turning it visible brings it back", {
+  it("a hidden hob is in no roster and unknown to read_hob, and turning it visible brings it back (#1235)", {
     timeout: 240_000,
   }, async () => {
     await onEachRuntime(async (run, thread) => {
@@ -423,7 +423,7 @@ describe("hobs see each other, end to end", () => {
   });
 
   // covers ADR 032 (The public card, Never on the card)
-  it("[TC-AG-1235-05] no roster or read_hob answer gives another hob's instructions or threads, by name or by id", {
+  it("no roster or read_hob answer gives another hob's instructions or threads, by name or by id (#1235)", {
     timeout: 240_000,
   }, async () => {
     await onEachRuntime(async (run, thread) => {
@@ -442,7 +442,7 @@ describe("hobs see each other, end to end", () => {
   });
 
   // covers ADR 032 (Outside data)
-  it("[TC-AG-1235-06] a good at that says to ignore your instructions reaches another hob's model quoted on one line under the data label, and redacted", {
+  it("a good at that says to ignore your instructions reaches another hob's model quoted on one line under the data label, and redacted (#1235)", {
     timeout: 240_000,
   }, async () => {
     await onEachRuntime(async (run, thread) => {

@@ -20,7 +20,7 @@ const device = {
   device: { deviceId: "d1", name: "Phone", code: "1234", requestedAt: new Date(0) },
 } as const;
 
-// covers IN-002: the Inbox opened from a camp's tray lists that camp's entries, or all of them (#1423).
+// The Inbox opened from a camp's tray lists that camp's entries, or all of them (#1423).
 describe("inScope", () => {
   const entries = [inChat, inCamp, device as never];
 

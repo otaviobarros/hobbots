@@ -18,8 +18,8 @@ const OFFER: SessionToolOffer = {
 const SAID = (tool: string) => `${tool} is not offered in this session, so it did not run.`;
 
 describe("why a call to a tool the session was not offered did not run (#1356)", () => {
-  // covers PE-001, ADR 014 (#1356, #1348)
-  it("[TC-PE-1356-07] names the reason the session's offer gives, by the tool or the runtime tool it belongs to", () => {
+  // covers ADR 014 (#1356, #1348)
+  it("names the reason the session's offer gives, by the tool or the runtime tool it belongs to (#1356)", () => {
     const why = (tool: string, runtimeTool: "file_reads" | "file_edits" | "commands" | null = null) =>
       notOfferedWords({ tool, runtimeTool }, OFFER, "Rook");
     expect(why("github_comment")).toBe(`${SAID("github_comment")} It is not offered because its answer is Never.`);

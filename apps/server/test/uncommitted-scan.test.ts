@@ -219,8 +219,7 @@ const editThenComplete = Effect.scoped(
 );
 
 describe("Completing a Task right after an edit", () => {
-  // covers OR-004
-  it("[TC-OR-291] sees the edit its turn made, before the edit's own scan has run", async () => {
+  it("sees the edit its turn made, before the edit's own scan has run", async () => {
     const result = await runtime.runPromise(
       Effect.gen(function* () {
         yield* seed;

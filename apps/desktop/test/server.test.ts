@@ -70,8 +70,7 @@ describe("the server state machine", () => {
 });
 
 describe("ServerSupervisor", () => {
-  // covers EX-005, DP-001
-  it("[TC-EX-002] attaches to a server already running and leaves it running on stop", async () => {
+  it("attaches to a server already running and leaves it running on stop", async () => {
     const { supervisor, child, launches } = supervisorWith({ up: () => true });
     await supervisor.start();
     expect(supervisor.status).toMatchObject({ state: "running", owned: false });
@@ -80,8 +79,7 @@ describe("ServerSupervisor", () => {
     expect(child.killed).toBe(0);
   });
 
-  // covers EX-005
-  it("[TC-EX-003] launches its own server, stops it gracefully on Quit and reports a crash as an error", async () => {
+  it("launches its own server, stops it gracefully on Quit and reports a crash as an error", async () => {
     let up = false;
     const { supervisor, child, states } = supervisorWith({ up: () => up });
     const started = supervisor.start();
@@ -106,8 +104,7 @@ describe("ServerSupervisor", () => {
     });
   });
 
-  // covers EX-005
-  it("[TC-EX-004] kills a server that ignores the stop request after the timeout", async () => {
+  it("kills a server that ignores the stop request after the timeout", async () => {
     let up = false;
     const { supervisor, child, forceKilled } = supervisorWith({
       up: () => up,
@@ -123,8 +120,7 @@ describe("ServerSupervisor", () => {
     expect(supervisor.status.state).toBe("stopped");
   });
 
-  // covers EX-005
-  it("[TC-EX-005] launches one server when starts overlap", async () => {
+  it("launches one server when starts overlap", async () => {
     let up = false;
     const { supervisor, launches } = supervisorWith({ up: () => up });
     const first = supervisor.start();
@@ -135,8 +131,7 @@ describe("ServerSupervisor", () => {
     expect(supervisor.status).toMatchObject({ state: "running", owned: true });
   });
 
-  // covers EX-005
-  it("[TC-EX-006] shows a stuck server as an error, replaces it on restart and ignores its late exit", async () => {
+  it("shows a stuck server as an error, replaces it on restart and ignores its late exit", async () => {
     let up = false;
     const stuck = new FakeProcess(true);
     const next = new FakeProcess();
@@ -171,8 +166,7 @@ describe("ServerSupervisor", () => {
     expect(supervisor.status.state).toBe("stopped");
   }, 10_000);
 
-  // covers EX-005
-  it("[TC-EX-007] quits during a restart without launching another server", async () => {
+  it("quits during a restart without launching another server", async () => {
     let up = false;
     let launches = 0;
     const stuck = new FakeProcess(true);

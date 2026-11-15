@@ -58,7 +58,7 @@ const shape = (chapters: ReadonlyArray<Chapter>) =>
 const planned = (fields: Partial<ChapterMoveInput> = {}) => planMove(input(fields)) as ChapterMovePlan;
 
 describe("planMove", () => {
-  it("[TC-CH-1385-10] leaves a stub of a resting chapter, and fills a new camp's empty live chapter with it", () => {
+  it("leaves a stub of a resting chapter, and fills a new camp's empty live chapter with it (#1385)", () => {
     const plan = planned();
     expect(plan.stub).toMatchObject({ id: "c1", state: "moved", movedTo: CAMP, threadId: CHAT });
     expect(shape(plan.from.chapters)).toEqual([
@@ -71,7 +71,7 @@ describe("planMove", () => {
     expect(shape(plan.camp.chapters)).toEqual([["k1", 1, "live", "Lamps", null]]);
   });
 
-  it("[TC-CH-1385-11] moves the live chapter after a camp's own topic, and gives each thread one live chapter", () => {
+  it("moves the live chapter after a camp's own topic, and gives each thread one live chapter (#1385)", () => {
     const plan = planned({
       chapterId: ChapterId.make("c2"),
       campChapters: [chapter(CAMP, "k1", 1, "live", "Plan")],
@@ -97,7 +97,7 @@ describe("planMove", () => {
     }
   });
 
-  it("[TC-CH-1385-12] refuses a closed thread, itself, anything but an open camp of the hob's, a moved chapter and an empty one", () => {
+  it("refuses a closed thread, itself, anything but an open camp of the hob's, a moved chapter and an empty one (#1385)", () => {
     const reason = (fields: Partial<ChapterMoveInput>) => (planMove(input(fields)) as ChapterRefused).reason;
     expect(reason({ from: thread(CHAT, { kind: "chat", state: "archived", archivedAt: at(1) }) })).toBe(
       "thread-closed",

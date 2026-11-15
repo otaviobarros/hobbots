@@ -445,8 +445,7 @@ const pendingFrom = (agentId: AgentId) =>
   );
 
 describe("the Black Friday Quest end to end", () => {
-  // covers OR-001, OR-002, OR-003, OR-004, OR-005, IN-002, IN-004
-  it("[TC-OR-170] steps, a party with a hand-off, both kinds of question and a nested Quest whose loop is stopped all play out from one request", async () => {
+  it("steps, a party with a hand-off, both kinds of question and a nested Quest whose loop is stopped all play out from one request", async () => {
     const database = await sharedDatabase();
     const { run, script, release } = await start(database, [
       // Quill goes on with Aldric's answer, held until Ada has heard yours, so Ada still waits on him.
@@ -642,8 +641,7 @@ describe("the Black Friday Quest end to end", () => {
     await run(nothingOpen);
   }, 60_000);
 
-  // covers OR-002, OR-004, OR-006, EX-001
-  it("[TC-OR-171] in one Quest, Retry and Reassign finish what failed, Cancel Task stops a nested lead and its member, and Cancel Quest confirms the rest", async () => {
+  it("in one Quest, Retry and Reassign finish what failed, Cancel Task stops a nested lead and its member, and Cancel Quest confirms the rest", async () => {
     const database = await sharedDatabase();
     const { run, script, release } = await start(database);
     await run(
@@ -781,8 +779,7 @@ describe("the Black Friday Quest end to end", () => {
 });
 
 describe("a hub that stops mid-Quest", () => {
-  // covers EX-004, OR-002, IN-002, IN-004
-  it("[TC-OR-172] starts again with nothing lost or duplicated: the cut-off member works again, your answer and the hand-off arrive once, and the Quest completes", async () => {
+  it("starts again with nothing lost or duplicated: the cut-off member works again, your answer and the hand-off arrive once, and the Quest completes", async () => {
     const database = await sharedDatabase();
     // Ada's turn that carries Quill's copy is still running when Hobbots stops.
     const first = await start(database, [{ on: '"Landing copy" was handed to Task', lines: [HOLD_STARTED] }]);
@@ -923,8 +920,7 @@ describe("a hub that stops mid-Quest", () => {
     await second.run(nothingOpen);
   }, 60_000);
 
-  // covers PE-007, EX-004, OR-001
-  it("[TC-PE-263] a This Task grant still covers Aldric's push after the restart, never Quill's, and ends with the Quest", async () => {
+  it("a This Task grant still covers Aldric's push after the restart, never Quill's, and ends with the Quest", async () => {
     const database = await sharedDatabase();
     const first = await start(database);
     // Aldric brings in Quill, whose turn is still running when Hobbots stops; then he pushes.

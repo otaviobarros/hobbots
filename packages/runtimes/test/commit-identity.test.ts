@@ -79,7 +79,7 @@ const access = (folder: string, commitAs?: typeof BOT): ToolAccess => ({
 
 describe("a hob's commit identity", () => {
   // covers ADR 022
-  it("[TC-CH-194] commits as the hob's bot over the user's and the repository's config and the hub's identity variables", () => {
+  it("commits as the hob's bot over the user's and the repository's config and the hub's identity variables", () => {
     expect(BOT).toEqual({
       name: "frodo-hobbots[bot]",
       email: "90001000+frodo-hobbots[bot]@users.noreply.github.com",
@@ -105,7 +105,7 @@ describe("a hob's commit identity", () => {
   });
 
   // covers ADR 022
-  it("[TC-CH-199] never reaches the user's SSH signer, even when the hob asks for a signature with -S", () => {
+  it("never reaches the user's SSH signer, even when the hob asks for a signature with -S", () => {
     const home = userSetup();
     // The user signs with SSH through a signer of their own, such as 1Password's op-ssh-sign.
     const signer = join(root, "signer.sh");
@@ -135,7 +135,7 @@ describe("a hob's commit identity", () => {
   });
 
   // covers ADR 022
-  it("[TC-CH-195] keeps the user's own identity for a hob on the user's account", () => {
+  it("keeps the user's own identity for a hob on the user's account", () => {
     const home = userSetup();
     const folder = repository("as-you");
     const env = hubEnv(home);
@@ -151,7 +151,7 @@ describe("a hob's commit identity", () => {
   });
 
   // covers ADR 022
-  it("[TC-CH-196] never opens the user's signing agent to a hob with its own app, even with signing on", () => {
+  it("never opens the user's signing agent to a hob with its own app, even with signing on", () => {
     const folder = repository("signing");
     const agent = () => "/Users/me/agent.sock";
     const asYou = toolTurn(access(folder), "on");
@@ -166,7 +166,7 @@ describe("a hob's commit identity", () => {
 
   // covers ADR 022
   it.runIf(process.platform === "darwin")(
-    "[TC-CH-197] commits as the bot inside the sandbox, whatever the user's config says",
+    "commits as the bot inside the sandbox, whatever the user's config says",
     async () => {
       const folder = repository("sandboxed");
       await Effect.gen(function* () {

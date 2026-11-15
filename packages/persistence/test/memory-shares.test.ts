@@ -75,7 +75,7 @@ const share = (key: string, overrides: Partial<MemoryShare> = {}) =>
 
 describe("memory share records", () => {
   // covers ADR 028 (Sharing), #960
-  it("[TC-DP-270] records and journals a share once per key, as the hob that asked", () =>
+  it("records and journals a share once per key, as the hob that asked (#960)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -99,7 +99,7 @@ describe("memory share records", () => {
     ));
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-DP-271] moves a share only from the state it expects, so the first of two decisions lands", () =>
+  it("moves a share only from the state it expects, so the first of two decisions lands (#960)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -128,7 +128,7 @@ describe("memory share records", () => {
     ));
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-DP-272] lists what waits oldest first, then the latest decided, and refuses a state it does not know", () =>
+  it("lists what waits oldest first, then the latest decided, and refuses a state it does not know (#960)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;

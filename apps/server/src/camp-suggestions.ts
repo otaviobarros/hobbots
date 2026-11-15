@@ -14,7 +14,14 @@ import { HttpApiBuilder } from "effect/http-api";
 const moveRequest = (payload: MoveChapterPayload) =>
   payload._tag === "camp"
     ? ({ _tag: "camp", campId: payload.campId } as const)
-    : ({ _tag: "new", key: payload.key, title: payload.title, goal: payload.goal, private: payload.private } as const);
+    : ({
+        _tag: "new",
+        key: payload.key,
+        title: payload.title,
+        goal: payload.goal,
+        private: payload.private,
+        hobs: payload.hobs ?? [],
+      } as const);
 
 /** A refused move, as the API answers it. */
 const moveRefused = (refused: ChapterRefused) =>

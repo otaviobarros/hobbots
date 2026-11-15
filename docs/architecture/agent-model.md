@@ -8,7 +8,7 @@
 | Thread | Durable user conversation and linked work | Belongs to one agent; may start several Tasks, and so several Quests. |
 | Session | Binding to an underlying runtime conversation/connection | May change during recovery; never replaces domain identity. |
 | Task | One hob's piece of work: owner, parent, root, brief, state, dependencies, result and version | May have child Tasks: steps when they share its owner, members' work in a Quest. Has one or more attempts. |
-| Quest | Goal, acceptance criteria, limits, lead, party and aggregate outcome | Added to a Task when it first brings in another hob; the Task keeps its id. Its owner is the lead. A nested Quest sits inside its parent Quest. |
+| Quest | Goal, "Done when" lines, limits, lead, party and aggregate outcome | Added to a Task when it first brings in another hob; the Task keeps its id. Its owner is the lead. A nested Quest sits inside its parent Quest. |
 | Delegation | Explicit request/result relationship from a lead to a member | Lead, member, parent Task, child Task, the brief, narrowed authority and timeout. |
 | Attempt | One attempt to perform task work | Runtime, executor, session, configuration/policy version and outcome. A retry is a new attempt. |
 | Milestone | A point the lead plans in a brief | Task; title, order and when it was reached. |

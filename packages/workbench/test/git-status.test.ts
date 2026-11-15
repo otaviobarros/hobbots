@@ -39,7 +39,7 @@ const write = (path: string, text: string) => {
 };
 
 describe("Uncommitted files", () => {
-  it("counts staged, unstaged, new and deleted files, and leaves out committed and ignored ones", async () => {
+  it("counts staged, unstaged, new and deleted files, and leaves out committed and ignored ones (#586)", async () => {
     const repo = join(work, "repo");
     write(join(repo, "a.md"), "a\n");
     write(join(repo, "b.md"), "b\n");
@@ -61,7 +61,7 @@ describe("Uncommitted files", () => {
     expect(found).toEqual([{ repository: repo, paths: ["a.md", "b.md", "gone.md", "new.md"] }]);
   });
 
-  it("finds the repository above a hob's folder and a nested one inside it, and nothing outside any", async () => {
+  it("finds the repository above a hob's folder and a nested one inside it, and nothing outside any (#586)", async () => {
     const outer = join(work, "outer");
     write(join(outer, "app", "x.md"), "x\n");
     gitIn(outer, "init", "-q");
@@ -86,7 +86,7 @@ describe("Uncommitted files", () => {
     ]);
   });
 
-  it("treats every file of a repository with no commit yet as uncommitted", async () => {
+  it("treats every file of a repository with no commit yet as uncommitted (#586)", async () => {
     const repo = join(work, "fresh");
     write(join(repo, "a.md"), "a\n");
     gitIn(repo, "init", "-q");
@@ -102,8 +102,7 @@ describe("The repository Git finds from a folder (#742)", () => {
       ),
     );
 
-  // covers OR-004, PE-005
-  it("[TC-OR-742-04] names one repository however its folder is spelled, a nested one as its own, and none outside any", async () => {
+  it("names one repository however its folder is spelled, a nested one as its own, and none outside any (#742)", async () => {
     const ledger = join(work, "ledger");
     const notes = join(work, "notes");
     const vendor = join(ledger, "vendor");
@@ -131,8 +130,8 @@ describe("What the sandbox closes for what you took over (#1537, #1578)", () => 
   const read = <A>(use: (git: GitWorkspace["Service"]) => Effect.Effect<A>) =>
     Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
 
-  // covers PE-005, #1578
-  it("[TC-PE-1578-03] lists every checkout of a repository from the Git folder they share, and keeps the rest when one is removed", async () => {
+  // Issue #1578
+  it("lists every checkout of a repository from the Git folder they share, and keeps the rest when one is removed (#1578)", async () => {
     const ledger = join(work, "checkouts", "ledger");
     const camp = join(work, "checkouts", "camp");
     const other = join(work, "checkouts", "other");

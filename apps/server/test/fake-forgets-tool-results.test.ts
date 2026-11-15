@@ -28,29 +28,20 @@ const carriedOver = (request: PromptRequest | undefined) => {
   return `${at === -1 ? briefing : briefing.slice(0, at)}\n\n${request?.prompt ?? ""}`;
 };
 
-/** Runs a Quest whose lead's wake starts a new session, and gives back that wake and the Quest's criterion ids. */
+/** Runs a Quest whose lead's wake starts a new session, and gives back that wake and the Quest's id. */
 const questWithNewSession = async (firstLines: ReadonlyArray<string>) => {
-  // Frodo's first turn runs without check_criterion, so on Codex his wake starts a new thread (#1543).
+  // Frodo's first turn runs without stop_quest, so on Codex his wake starts a new thread (#1543).
   const party = partyHub({
     lead: "codex",
     members: "codex",
     files: true,
-    withholds: (request) => (isLeadsFirst(request) ? ["check_criterion"] : []),
+    withholds: (request) => (isLeadsFirst(request) ? ["stop_quest"] : []),
   });
   dispose = party.dispose;
   writeFileSync(join(party.project, "index.html"), "<h1>Launch on Friday 6 December</h1>\n");
   party.reactions.push({
     on: CONTINUATION_HEADER,
-    lines: [
-      hub("check_criterion", {
-        key: "accept",
-        criterion_id: "$quest.criteria.0.criterion_id",
-        verdict: "accepted",
-        reason: "It says Friday 6 December",
-        evidence: ["$pip-done.artifacts.0"],
-      }),
-      hub("complete_task", { key: "whole", delivered: true, summary: "The page is written" }),
-    ],
+    lines: [hub("complete_task", { key: "whole", delivered: true, summary: "The page is written" })],
   });
   await party.run(
     send([
@@ -73,14 +64,14 @@ const questWithNewSession = async (firstLines: ReadonlyArray<string>) => {
     ]),
   );
   const finished = await party.run(treeWhen(done));
-  const ids = (finished.quests[0]?.criteria ?? []).map((criterion) => criterion.id as string);
-  if (ids.length === 0) throw new Error("the Quest has no criteria");
+  const ids = finished.quests.map((quest) => quest.id as string);
+  if (ids.length === 0) throw new Error("no Quest started");
   return { wake: party.requests.find(isWake), ids, answer: party.answers.get("quest") ?? "" };
 };
 
 describe("a new fake session", () => {
-  // covers RT-001 (#1560)
-  it("[TC-OR-1560-01] can't read an id that only an earlier session's tool result held", async () => {
+  // Issue #1560
+  it("can't read an id that only an earlier session's tool result held (#1560)", async () => {
     const { wake, ids, answer } = await questWithNewSession([]);
     expect(wake?.sessionId).toBeNull();
     // The hub did answer the id; the new session just isn't told it again by the pack.
@@ -90,8 +81,8 @@ describe("a new fake session", () => {
     }
   }, 30_000);
 
-  // covers RT-001 (#1560)
-  it("[TC-OR-1560-02] reads it once the earlier turn asks the fake to repeat the hub's answers", async () => {
+  // Issue #1560
+  it("reads it once the earlier turn asks the fake to repeat the hub's answers (#1560)", async () => {
     // The guard above holds only because the fake stays quiet: repeating the answers leaks the id.
     const { wake, ids } = await questWithNewSession([FAKE_SAY_ANSWERS_DIRECTIVE]);
     expect(wake?.sessionId).toBeNull();

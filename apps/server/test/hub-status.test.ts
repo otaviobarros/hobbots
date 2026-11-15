@@ -212,8 +212,7 @@ const offer = (...events: ReadonlyArray<RuntimeEvent>) => Effect.runSync(Queue.o
 
 // Each wait has its own 10-second limit, so a test may take longer than the default 5 seconds.
 describe("hub status", { timeout: 30_000 }, () => {
-  // covers CH-001, UX-001
-  it("[TC-CH-294] a client that connects mid-turn shows the same thread run and hob presence as one connected throughout", async () => {
+  it("a client that connects mid-turn shows the same thread run and hob presence as one connected throughout", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const throughout = await followStatus();
@@ -245,8 +244,7 @@ describe("hub status", { timeout: 30_000 }, () => {
     expect(throughout.published.length).toBeGreaterThanOrEqual(4);
   });
 
-  // covers UX-001
-  it("[TC-CH-295] a retired hob's presence leaves every client, connected or connecting, and comes back with the hob", async () => {
+  it("a retired hob's presence leaves every client, connected or connecting, and comes back with the hob", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const connected = await followStatus();
     await allShow([connected], { threads: {}, hobs: { [agent.id]: "idle" } });
@@ -261,8 +259,7 @@ describe("hub status", { timeout: 30_000 }, () => {
     await Promise.all([connected.stop(), connecting.stop()]);
   });
 
-  // covers UX-001
-  it("[TC-CH-296] a presence the hub could not read is read again until it can, with no later change", async () => {
+  it("a presence the hub could not read is read again until it can, with no later change", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const follower = await followStatus();
     await allShow([follower], { threads: {}, hobs: { [agent.id]: "idle" } });

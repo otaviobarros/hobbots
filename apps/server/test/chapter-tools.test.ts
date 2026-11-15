@@ -52,7 +52,7 @@ const chapterHub = (lead: RuntimeKind = "claude-code") => {
 describe("start_chapter", () => {
   // covers ADR 037 (Chapters), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1381-01] on %s, the hob starts a chapter and its next turn runs in a new session",
+    "on %s, the hob starts a chapter and its next turn runs in a new session (#1381)",
     async (runtime) => {
       const { say, chapters, thread, requests, answers } = chapterHub(runtime);
       await say(["My cat is called Miso."], 2);
@@ -82,7 +82,7 @@ describe("start_chapter", () => {
 
   // covers ADR 037 (Chapters, The context pack)
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1381-08] on %s, the turn after the hob's start_chapter starts from the pack, never the old transcript",
+    "on %s, the turn after the hob's start_chapter starts from the pack, never the old transcript (#1381)",
     async (runtime) => {
       const { say, requests } = chapterHub(runtime);
       await say(["My cat is called Miso."], 2);
@@ -99,7 +99,7 @@ describe("start_chapter", () => {
   );
 
   // covers ADR 037 (Chapters)
-  it("[TC-CH-1381-02] a turn starts at most one chapter, and a retried call starts none", async () => {
+  it("a turn starts at most one chapter, and a retried call starts none (#1381)", async () => {
     const { say, chapters, answers } = chapterHub();
     await say(
       [
@@ -115,7 +115,7 @@ describe("start_chapter", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("[TC-CH-1381-03] a call the chapter commands refuse is answered with the reason", async () => {
+  it("a call the chapter commands refuse is answered with the reason (#1381)", async () => {
     const { say, answers } = chapterHub();
     await say([hub("start_chapter", { key: "blank", title: "   " }), hub("start_chapter", { key: "none" })], 2);
     expect(answers.get("blank")).toBe("Give the new chapter a title with some text.");
@@ -123,7 +123,7 @@ describe("start_chapter", () => {
   });
 
   // covers ADR 037 (Chapters, The context pack), ADR 018
-  it("[TC-CH-1381-04] start_chapter in a Task step's session is refused with a reason the hob can read", async () => {
+  it("start_chapter in a Task step's session is refused with a reason the hob can read (#1381)", async () => {
     const { run, chapters, answers } = chapterHub();
     await run(
       send([
@@ -150,7 +150,7 @@ describe("start_chapter", () => {
 
 describe("read_message", () => {
   // covers ADR 037 (The context pack), ADR 036 (paging)
-  it("[TC-CH-1381-05] pages a long message of the hob's own thread, redacted", async () => {
+  it("pages a long message of the hob's own thread, redacted (#1381)", async () => {
     const { say, answers } = chapterHub();
     const long = `The plan starts here, with ${SECRET}.\n${"line of the plan\n".repeat(2_000)}The plan ends here.`;
     const [prompt] = await say([long], 2);
@@ -175,7 +175,7 @@ describe("read_message", () => {
   });
 
   // covers ADR 037 (The context pack), STD-SEC
-  it("[TC-CH-1381-07] a secret across a part boundary is redacted whole, in neither part", async () => {
+  it("a secret across a part boundary is redacted whole, in neither part (#1381)", async () => {
     const { say, answers } = chapterHub();
     // No line break, so the parts are cut at exactly MESSAGE_PART_CHARS, through the secret.
     const long = `${"a".repeat(MESSAGE_PART_CHARS - 11)} ${SECRET} ${"b".repeat(1_000)}`;
@@ -195,7 +195,7 @@ describe("read_message", () => {
   });
 
   // covers ADR 037 (The context pack), PE-001
-  it("[TC-CH-1381-06] never reads a message of another hob's thread", async () => {
+  it("never reads a message of another hob's thread (#1381)", async () => {
     const { run, say, answers } = chapterHub();
     const pips = await run(ChatService.use((chat) => chat.createThread(PIP)));
     await run(ChatService.use((chat) => chat.sendPrompt(pips.id, "Pip's own plan")));
@@ -217,7 +217,7 @@ describe("read_message", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time, The context pack with several hobs)
-  it("[TC-CH-1461-06] reads a message of a camp the hob joined", async () => {
+  it("reads a message of a camp the hob joined (#1461)", async () => {
     const { run, say, answers } = chapterHub();
     // Pip's first thread is the direct chat; a second one is a camp, which Frodo joins.
     await run(ChatService.use((chat) => chat.createThread(PIP)));

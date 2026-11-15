@@ -435,6 +435,19 @@ export const messages = {
     },
     fixInSettings: "Fix it in Settings",
     placeholder: ({ name, title }: { name: string; title: string }) => `Message ${name} in “${title}”…`,
+    /** Hobs that mention each other stop after the relay budget and wait for a person (ADR 039). */
+    hobsPaused: {
+      /** The pause mark ahead of the title, drawn as text and hidden from screen readers. */
+      glyph: "❙❙",
+      title: "Hobs paused, waiting for a person",
+      detail: ({ names, count }: { names: string; count: number }) =>
+        `${names} answered each other ${pluralForm(count, { one: "once", other: `${formatCount(count)} times` })} in a row. That's the limit, so a turn never costs you a surprise.`,
+      /** A hob the window does not know by name. */
+      someHobs: "The hobs",
+      goOn: "Let them go on",
+      goingOn: "Letting them go on…",
+      goOnFailed: "Hobbots could not let them go on. Try again.",
+    },
   },
   composer: {
     /**

@@ -9,7 +9,7 @@ import { isHubDataFolder } from "../src/command-line.ts";
 
 describe("the hub's own data folder", () => {
   // covers ADR 039 (Members: migration with a dry run)
-  it("[TC-OP-1454-01] is the configured folder or the default, by any spelling of its path, and a copy is not", () => {
+  it("is the configured folder or the default, by any spelling of its path, and a copy is not (#1454)", () => {
     const root = mkdtempSync(join(tmpdir(), "hub-folders-"));
     const configured = join(root, "configured");
     const fallback = join(root, "default");

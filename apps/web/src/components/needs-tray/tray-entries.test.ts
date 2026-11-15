@@ -114,8 +114,8 @@ describe("trayEntries with the hub's own questions", () => {
 });
 
 describe("scopedTray", () => {
-  // covers IN-002: a camp's tray holds that camp's asks, and Everywhere holds every chat's and camp's (#1423).
-  it("keeps only what is about the chat or camp in here, and everything, in the tray's order, everywhere", () => {
+  // A camp's tray holds that camp's asks, and Everywhere holds every chat's and camp's (#1423).
+  it("keeps only what is about the chat or camp in here, and everything, in the tray's order, everywhere (#1423)", () => {
     const camp = ThreadId.make("camp-launch");
     const inCamp = new ApprovalRequest({
       ...memberApproval(COPY, QUILL),

@@ -57,7 +57,7 @@ const refusal = async (file: string, withKeys: MemoryKeys | undefined = keys) =>
 
 describe("memory archives", () => {
   // covers ADR 028 (Backups), OP-003
-  it("[TC-OP-095] packs a stopped engine's memory without its logs, and restores it owner-only", async () => {
+  it("packs a stopped engine's memory without its logs, and restores it owner-only", async () => {
     const memory = memoryFolder();
     const target = join(tempFolder("hobbots-backup-"), "ai-memory.tar.gz");
     expect(await Effect.runPromise(packStoppedMemory(memory, target, keys))).toBe(true);
@@ -83,7 +83,7 @@ describe("memory archives", () => {
   });
 
   // covers ADR 028 (Backups), OP-003
-  it("[TC-OP-096] refuses an archive with a memory bearer, a credential in its config, a link or anything else", async () => {
+  it("refuses an archive with a memory bearer, a credential in its config, a link or anything else", async () => {
     const clean = memoryFolder();
     expect(
       await Effect.runPromise(checkMemoryArchive(await archiveOf(clean, ["wiki", "db", "config.toml"]), keys)),

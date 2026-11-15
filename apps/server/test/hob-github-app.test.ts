@@ -256,7 +256,7 @@ interface Started {
 
 describe("A hob's own GitHub App on a hub", () => {
   // covers ADR 022
-  it("[TC-GEN-053] is made from the hub's page and GitHub's redirect, and the Charms tab sees it and its installations", async () => {
+  it("is made from the hub's page and GitHub's redirect, and the Charms tab sees it and its installations", async () => {
     const before = await api("GET", `/api/agents/${FRODO}/github-app`);
     expect(before).toEqual({ status: 200, body: { _tag: "None", cannotCreate: null, cannotLink: null } });
 
@@ -315,7 +315,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-254] starts only from the hub's own computer, and its pages answer nothing for a remote or unknown request", async () => {
+  it("starts only from the hub's own computer, and its pages answer nothing for a remote or unknown request", async () => {
     const remote = { ...AS_WINDOW, [NODE_HEADER]: "nPHONE" };
     // The window key is bound to the hub, so a remote request is refused before it asks.
     expect((await api("POST", `/api/agents/${MERRY}/github-app/start`, remote)).status).toBe(401);
@@ -344,7 +344,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-054] disconnecting and retiring remove the app's installations and key, and link to delete it", async () => {
+  it("disconnecting and retiring remove the app's installations and key, and link to delete it", async () => {
     github.installApp("frodo-hobbots", "all");
     const disconnected = await api("POST", `/api/agents/${FRODO}/github-app/disconnect`);
     expect(disconnected.body).toEqual({
@@ -377,7 +377,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-055] a retired hob's app that GitHub would not remove stays shown, with where to delete it", async () => {
+  it("a retired hob's app that GitHub would not remove stays shown, with where to delete it", async () => {
     const started = await api<Started>("POST", `/api/agents/${PIPPIN}/github-app/start`);
     const flow = await throughGitHub((await send("GET", started.body.url, {})).text);
     expect((await send("GET", flow.back, {})).status).toBe(200);
@@ -416,7 +416,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers ADR 022, PE-007
-  it("[TC-GEN-068] saves no grant from a request the hob asked as its bot while its app was being disconnected", async () => {
+  it("saves no grant from a request the hob asked as its bot while its app was being disconnected", async () => {
     const folder = join(temp, "sam-work");
     mkdirSync(folder, { recursive: true });
     github.createRepository({ owner: "otaviobarros", name: "sam-shed" });
@@ -524,7 +524,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers #1321, ADR 022
-  it("[TC-PE-521] links an app the user already has only from the hub's own computer, and unlinking leaves it installed", async () => {
+  it("links an app the user already has only from the hub's own computer, and unlinking leaves it installed (#1321)", async () => {
     const mine = github.makeAppByHand("Rosie by hand");
     github.installApp(mine.app.slug, "all");
     const path = `/api/agents/${ROSIE}/github-app/link`;
@@ -571,7 +571,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-255] never answers a client with the app's key, its JWTs or GitHub's other secrets", () => {
+  it("never answers a client with the app's key, its JWTs or GitHub's other secrets", () => {
     const everything = answered.join("\n");
     expect(github.secrets().length).toBeGreaterThan(0);
     for (const secret of github.secrets()) expect(everything).not.toContain(secret);

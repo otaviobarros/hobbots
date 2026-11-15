@@ -8,8 +8,7 @@ import { TestDatabase } from "../src/testing.ts";
 // as the user told the hub, on SQLite and PostgreSQL alike.
 
 describe("The commit identity the user gave the hub", () => {
-  // covers OR-004
-  it("[TC-OR-631] is none until given, round-trips, and a new answer replaces the old one", async () => {
+  it("is none until given, round-trips, and a new answer replaces the old one (#741)", async () => {
     const found = await Effect.gen(function* () {
       const identities = yield* HubCommitIdentities;
       const before = yield* identities.get;
@@ -27,8 +26,7 @@ describe("The commit identity the user gave the hub", () => {
 
 // Issue #1241: where the user said not to ask whether a hob will write code.
 describe("Where the user said not to ask about coding setup", () => {
-  // covers OR-004
-  it("[TC-OR-1241-06] keeps each choice once, in the order made, and clears them all", async () => {
+  it("keeps each choice once, in the order made, and clears them all (#1241)", async () => {
     const found = await Effect.gen(function* () {
       const dismissals = yield* CodingSetupDismissals;
       const before = yield* dismissals.list;

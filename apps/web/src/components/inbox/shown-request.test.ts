@@ -46,7 +46,7 @@ describe("withShown", () => {
     expect(needs[0]).toBe(oldest);
   });
 
-  it("[TC-IN-009] shows the request as the hub has it now when a fresh snapshot leaves it out", () => {
+  it("shows the request as the hub has it now when a fresh snapshot leaves it out", () => {
     const closed = Array.from({ length: INBOX_HISTORY }, (_, n) => request(n + 1000, "denied"));
     const selected = request(500, "pending");
     // The user had the pending request open; it was decided while the client was away, and the
@@ -73,7 +73,7 @@ describe("withShown", () => {
 });
 
 describe("shownHold", () => {
-  it("[TC-IN-010] holds the open request's place while its own read is under way or failed", () => {
+  it("holds the open request's place while its own read is under way or failed", () => {
     expect(shownHold(true, "pending")).toBe("loading");
     // A failed read keeps the place too, so no other request is shown or put in the address.
     expect(shownHold(true, "error")).toBe("failed");

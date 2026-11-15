@@ -82,8 +82,7 @@ const seed = Effect.gen(function* () {
 });
 
 describe("ApprovalRepository deciders", () => {
-  // covers PE-003
-  it("[TC-IN-200] stores the device and the surface a request was decided from, and reads them back", async () => {
+  it("stores the device and the surface a request was decided from, and reads them back", async () => {
     const result = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
       yield* seed;
@@ -111,8 +110,7 @@ describe("ApprovalRepository deciders", () => {
     expect(result.recent.map((a) => [a.decidedByDeviceId, a.decidedVia])).toEqual([[PHONE, "inbox"]]);
   });
 
-  // covers PE-003
-  it("[TC-IN-201] keeps the first decider when a request is decided twice, and records an expiry with no decider", async () => {
+  it("keeps the first decider when a request is decided twice, and records an expiry with no decider", async () => {
     const result = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
       yield* seed;
@@ -148,8 +146,7 @@ describe("ApprovalRepository deciders", () => {
 });
 
 describe("0040_approval_deciders", () => {
-  // covers DP-003, PE-003
-  it("[TC-IN-202] keeps every request closed before it, with no decider recorded", async () => {
+  it("keeps every request closed before it, with no decider recorded", async () => {
     // Keeps 0047, 0049, 0051, 0053, 0062, 0067, 0068, 0076, 0079, 0080, 0082, 0083, 0084, 0095 and 0099 too: the repository that
     // seeds the hob writes its name with each version, its Charms, whether other hobs see it, its good at
     // and who made and summoned it, and its Summoning scope,
@@ -176,6 +173,7 @@ describe("0040_approval_deciders", () => {
       "0103_quest_summaries",
       "0114_thread_members",
       "20261114003022_message_mentions",
+      "20261115002636_message_read_web",
     ]);
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(([key]) => key < "0040" || kept.has(key)),

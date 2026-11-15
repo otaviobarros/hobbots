@@ -47,7 +47,7 @@ describe("hub tools on Claude Code's control channel", () => {
   });
 
   // covers ADR 028 (The memory tools): both runtimes serve memory as any hub tools, with no change.
-  it("[TC-GEN-252] advertises the memory tools on Claude Code's and Codex's channels as the hub describes them", () => {
+  it("advertises the memory tools on Claude Code's and Codex's channels as the hub describes them", () => {
     for (const name of MemoryToolName.literals) {
       const wanted = memoryToolJsonSchema(name) as { required?: ReadonlyArray<string> };
       const advertised = z.toJSONSchema(z.object(inputShape(memoryToolJsonSchema(name)))) as {
@@ -76,8 +76,7 @@ describe("hub tools on Claude Code's control channel", () => {
     );
   });
 
-  // covers PE-003
-  it("[TC-OR-073] gives each hub tool call the step Claude Code announced it as", () => {
+  it("gives each hub tool call the step Claude Code announced it as", () => {
     const announced = new AnnouncedCalls();
     announced.announce("toolu_a", "github_push", { branch: "a", key: "1" });
     announced.announce("toolu_b", "github_push", { key: "2", branch: "b" });
@@ -95,8 +94,8 @@ describe("hub tools on Claude Code's control channel", () => {
     expect(hubToolOf("Bash")).toBeNull();
   });
 
-  // covers PE-006: the hub's own tools run only through the hub, which decides each call.
-  it("[TC-PE-135] serves the tools, approves their calls in the hook and shows each call as a step", async () => {
+  // The hub's own tools run only through the hub, which decides each call.
+  it("serves the tools, approves their calls in the hook and shows each call as a step", async () => {
     const chatOnly: Options = { tools: [], disallowedTools: ["*"], permissionMode: "dontAsk" };
     expect(withHubTools(chatOnly, null, () => {})).toBe(chatOnly);
     const events: Array<RuntimeEvent> = [];
@@ -135,8 +134,8 @@ describe("hub tools on Claude Code's control channel", () => {
     ]);
   });
 
-  // covers PE-005, PE-006: no tool is approved before the policy's permission callback is consulted.
-  it("[TC-PE-136] leaves a tool turn's permission callback unshadowed", async () => {
+  // No tool is approved before the policy's permission callback is consulted.
+  it("leaves a tool turn's permission callback unshadowed", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hub-")));
     const project = join(root, "project");
     mkdirSync(project);

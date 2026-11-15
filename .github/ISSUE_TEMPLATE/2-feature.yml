@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check the [MVP requirements](https://github.com/otaviobarros/hobbots/blob/main/docs/product/mvp-requirements.md) and [open questions](https://github.com/otaviobarros/hobbots/blob/main/docs/product/open-questions.md) first. Some ideas are already planned or decided.
+        Check the [open issues](https://github.com/otaviobarros/hobbots/issues) and [open questions](https://github.com/otaviobarros/hobbots/blob/main/docs/product/open-questions.md) first. Some ideas are already planned or decided.
   - type: textarea
     id: problem
     attributes:

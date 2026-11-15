@@ -214,8 +214,8 @@ const followTurns = async () => {
 };
 
 describe("turn events", () => {
-  // covers DP-002, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-27] names the member hob speaking in a camp as the one working", async () => {
+  // covers ADR 039 (One hob speaks at a time)
+  it("names the member hob speaking in a camp as the one working (#1461)", async () => {
     await request("POST", `/api/threads/${CAMP}/messages`, { content: "@pip what do you think?" });
     await waitUntil(async () => (await activity()).length > 0);
     const { working } = (await request("GET", "/api/activity")).body;
@@ -224,8 +224,7 @@ describe("turn events", () => {
     await waitUntil(async () => (await activity()).length === 0);
   });
 
-  // covers DP-002, UX-001
-  it("[TC-DP-054] a read of /api/activity made on each turn event already agrees with it, even while the runtime is slow to exit", async () => {
+  it("a read of /api/activity made on each turn event already agrees with it, even while the runtime is slow to exit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const follower = await followTurns();
@@ -330,8 +329,7 @@ const until = (check: () => boolean) =>
   );
 
 describe("turn events at the moment they are published", () => {
-  // covers DP-002, UX-001
-  it("[TC-DP-055] a stopped turn is announced ended only once its runtime has finished shutting down", async () => {
+  it("a stopped turn is announced ended only once its runtime has finished shutting down", async () => {
     const result = await atPublish((seen, exit) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;

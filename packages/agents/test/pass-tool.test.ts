@@ -62,7 +62,7 @@ const step = (over: Partial<ReplyStep>): ReplyStep => ({
 
 describe("passRefusal", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-AG-1462-01] lets a hob that was asked pass after it only thought, read or called a hub tool", () => {
+  it("lets a hob that was asked pass after it only thought, read or called a hub tool (#1462)", () => {
     const steps = [
       step({ kind: "thinking", label: "Thinking" }),
       step({ id: "s-2", call: { tool: "Read", operation: "read-files", targets: ["/notes.md"] } }),
@@ -73,7 +73,7 @@ describe("passRefusal", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-AG-1462-02] refuses a pass once the turn wrote, changed something or asked, or when nobody else would answer", () => {
+  it("refuses a pass once the turn wrote, changed something or asked, or when nobody else would answer (#1462)", () => {
     const edit = step({ call: { tool: "Edit", operation: "edit-files", targets: ["/notes.md"] } });
     const asked = step({ state: "awaiting", approvalId: "approval-1" });
     expect(passRefusal(reply("Quill is right."), 0, [owed("mention")])).toBe(PASS_AFTER_TEXT);

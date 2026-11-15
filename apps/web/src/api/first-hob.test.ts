@@ -90,8 +90,7 @@ describe("first hob draft", () => {
     expect(restoreDraft(draft({ lookSeed: 77, lookBase: 12 }))).toMatchObject({ id, lookSeed: 77, lookBase: 12 });
   });
 
-  // covers AG-001
-  it("[TC-AG-074] moves a request sent before roles to the role the hub gave its hob, so a retry still sends", () => {
+  it("moves a request sent before roles to the role the hub gave its hob, so a retry still sends", () => {
     const legacy = (craft: string) => {
       const { role: _, roleTitle: __, sigil: ___, hat: ____, tool: _____, ...rest } = firstHobPayload(draft());
       return draft({ submitted: { ...rest, craft } as unknown as FirstHobDraft["submitted"] });
@@ -130,8 +129,7 @@ describe("first hob draft", () => {
     expect(restoreDraft(older)).toMatchObject({ chores: sampleChores("writer"), choresEdited: false });
   });
 
-  // covers AG-001
-  it("[TC-AG-080] moves a draft saved with a craft to the matching role, or to a title of the user's own", () => {
+  it("moves a draft saved with a craft to the matching role, or to a title of the user's own", () => {
     const { role: _, ownTitle: __, ownSigil: ___, hat: ____, tool: _____, ...rest } = draft();
     const saved = (kind: string, craft = "") => ({ ...rest, kind, craft }) as unknown as Partial<FirstHobDraft>;
     expect(restoreDraft(saved("scribe"))).toMatchObject({ role: "writer", hat: "pointed", tool: "quill" });
@@ -253,8 +251,7 @@ describe("first hob draft", () => {
     expect(roleTitleOf(pickRole(draft(), "bookkeeper"))).toBe("Bookkeeper");
   });
 
-  // covers AG-001
-  it("[TC-AG-081] sends a custom title with its borrowed sigil, and the hat and tool as changed next to the look", () => {
+  it("sends a custom title with its borrowed sigil, and the hat and tool as changed next to the look", () => {
     const own = { ...pickRole(draft(), null), ownTitle: "Frontend wizard", ownSigil: "frontend" as const };
     expect(firstHobPayload({ ...own, hat: "crown", tool: "wand" })).toMatchObject({
       role: null,

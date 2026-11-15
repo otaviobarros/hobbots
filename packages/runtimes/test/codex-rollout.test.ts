@@ -25,8 +25,8 @@ const call = (id: string, name: string, args: object) =>
 const output = (id: string, text: string) => line({ type: "function_call_output", call_id: id, output: text });
 
 describe("calls a Codex thread was not offered, from its rollout (#1356)", () => {
-  // covers PE-001, ADR 014 (#1356)
-  it("[TC-PE-1356-05] reads each call Codex answered as unsupported once, from what the rollout gained since it started", async () => {
+  // covers ADR 014 (#1356)
+  it("reads each call Codex answered as unsupported once, from what the rollout gained since it started (#1356)", async () => {
     const path = join(folder, "rollout.jsonl");
     // What an earlier turn left is not this turn's.
     writeFileSync(
@@ -64,7 +64,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     ]);
   });
 
-  it("[TC-PE-1356-08] reports each call once when reads overlap, and never reads back past where the last one ended", async () => {
+  it("reports each call once when reads overlap, and never reads back past where the last one ended (#1356)", async () => {
     const path = join(folder, "overlapping.jsonl");
     writeFileSync(path, line({ type: "session_meta" }));
     const reported: Array<RuntimeEvent> = [];
@@ -89,8 +89,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     ]);
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-09] reads a rollout the hob's commands can write as untrusted: no symlink, a bounded amount per read, a shrunk file read on from its end", async () => {
+  // covers ADR 014 (#1356)
+  it("reads a rollout the hob's commands can write as untrusted: no symlink, a bounded amount per read, a shrunk file read on from its end (#1356)", async () => {
     // Each call is named after its id, so which refusals were read shows in their tools.
     const refused = (id: string) => `${call(id, id, {})}${output(id, `unsupported call: ${id}`)}`;
     const idsOf = (events: ReadonlyArray<RuntimeEvent>) =>
@@ -134,8 +134,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(idsOf(reported)).toEqual(["after-long", "far", "after-cut"]);
   });
 
-  // covers PE-001, ADR 014 (#1356)
-  it("[TC-PE-1356-10] the end of a turn reads its rollout to the end, though it gained more than one read takes", async () => {
+  // covers ADR 014 (#1356)
+  it("the end of a turn reads its rollout to the end, though it gained more than one read takes (#1356)", async () => {
     const path = join(folder, "drained.jsonl");
     writeFileSync(path, "");
     const reported: Array<RuntimeEvent> = [];
@@ -160,8 +160,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(past).toHaveLength(1);
   });
 
-  // covers PE-001, SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-11] a refused call named as an Object property is no runtime tool, and is decided as an unknown one", async () => {
+  // covers ADR 014 (#1356)
+  it("a refused call named as an Object property is no runtime tool, and is decided as an unknown one (#1356)", async () => {
     const path = join(folder, "names.jsonl");
     writeFileSync(path, "");
     const reported: Array<RuntimeEvent> = [];
@@ -184,8 +184,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     );
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-12] a rollout the hob filled with refused calls under long names reports a bounded number of them, each bounded", async () => {
+  // covers ADR 014 (#1356)
+  it("a rollout the hob filled with refused calls under long names reports a bounded number of them, each bounded (#1356)", async () => {
     const path = join(folder, "flood.jsonl");
     writeFileSync(path, "");
     const reported: Array<RuntimeEvent> = [];
@@ -208,8 +208,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     }
   });
 
-  // covers SEC-001, SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-13] a refused call's label is redacted with the turn's redactor before it is shortened, and input it cannot read gives a plain label", async () => {
+  // covers ADR 014 (#1356)
+  it("a refused call's label is redacted with the turn's redactor before it is shortened, and input it cannot read gives a plain label (#1356)", async () => {
     const path = join(folder, "labels.jsonl");
     writeFileSync(path, "");
     const secret = "plain-known-value-7f3a9c";
@@ -238,8 +238,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(labels[1]).toBe("Using apply_patch");
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-15] a rollout the hob filled with empty lines is read past them, and the refusal after them is reported", async () => {
+  // covers ADR 014 (#1356)
+  it("a rollout the hob filled with empty lines is read past them, and the refusal after them is reported (#1356)", async () => {
     const path = join(folder, "blank.jsonl");
     writeFileSync(path, "");
     const reported: Array<RuntimeEvent> = [];
@@ -253,8 +253,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag))).toEqual(["after"]);
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-16] a call waiting for its output keeps only its bounded name and label, whatever its arguments hold", async () => {
+  // covers ADR 014 (#1356)
+  it("a call waiting for its output keeps only its bounded name and label, whatever its arguments hold (#1356)", async () => {
     const path = join(folder, "pending.jsonl");
     writeFileSync(path, "");
     const reported: Array<RuntimeEvent> = [];
@@ -274,8 +274,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(denied?._tag === "ToolDenied" ? denied.label : "").toMatch(/^Running git x+/);
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-17] a refused call's name is redacted whole before it is shortened, from its call or only its output", async () => {
+  // covers ADR 014 (#1356)
+  it("a refused call's name is redacted whole before it is shortened, from its call or only its output (#1356)", async () => {
     const path = join(folder, "secret-names.jsonl");
     writeFileSync(path, "");
     const secret = "plain-known-value-7f3a9c";
@@ -304,8 +304,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     }
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-19] a read parses only lines that may be a call, a bounded number of them, so a flooded rollout costs little", async () => {
+  // covers ADR 014 (#1356)
+  it("a read parses only lines that may be a call, a bounded number of them, so a flooded rollout costs little (#1356)", async () => {
     const path = join(folder, "flood.jsonl");
     writeFileSync(path, "");
     const reported: Array<RuntimeEvent> = [];
@@ -327,8 +327,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(reported.map((event) => (event._tag === "ToolDenied" ? event.tool : event._tag))).toEqual(["late"]);
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-22] a refused call's id is redacted whole before it is shortened, and still pairs the call with its output", async () => {
+  // covers ADR 014 (#1356)
+  it("a refused call's id is redacted whole before it is shortened, and still pairs the call with its output (#1356)", async () => {
     const path = join(folder, "ids.jsonl");
     writeFileSync(path, "");
     const secret = "plain-known-value-7f3a9c";
@@ -351,8 +351,8 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(denied?._tag === "ToolDenied" ? denied.id : "").not.toContain(secret.slice(0, 8));
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-23] a refused call's step is named by Hobbots, so a rollout's id can never stand for a step of a call that ran", async () => {
+  // covers ADR 014 (#1356)
+  it("a refused call's step is named by Hobbots, so a rollout's id can never stand for a step of a call that ran (#1356)", async () => {
     const path = join(folder, "step-ids.jsonl");
     writeFileSync(path, "");
     const read = async () => {
@@ -381,7 +381,7 @@ describe("calls a Codex thread was not offered, from its rollout (#1356)", () =>
     expect(new Set([...first, ...second]).size).toBe(6);
   });
 
-  it("[TC-PE-1356-06] reads nothing for a thread with no rollout, or one it cannot read", async () => {
+  it("reads nothing for a thread with no rollout, or one it cannot read (#1356)", async () => {
     const reported: Array<RuntimeEvent> = [];
     for (const path of [null, join(folder, "missing.jsonl")]) {
       const refusals = rolloutRefusals(path, (event) => reported.push(event));

@@ -33,29 +33,10 @@ export const messages = {
       total === 0 ? `${name} leads` : `${formatCount(done)} of ${formatCount(total)} done · ${name} leads`,
     needYou: ({ count }: { count: number }) =>
       plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
-    /** The quest's acceptance criteria and where each stands (#1445). */
-    criteria: "Done when",
-    optional: "optional",
-    criterion: {
-      open: "Not checked",
-      accepted: "Accepted",
-      "needs-rework": "Needs rework",
-      waived: "Waived",
-    },
-    /** The artifact version a criterion was accepted on, and whether a newer one voided it. */
-    evidence: ({ label, version }: { label: string; version: number }) => `${label}, version ${formatCount(version)}`,
-    voided: "a newer version replaced it",
-    /** Who last decided a criterion, and why. */
-    decidedBy: ({ who, reason }: { who: string; reason: string }) => `${who}: ${reason}`,
-    byYou: "You",
-    byHub: "Hobbots",
-    /** A lead asked you to waive a required criterion, and your answer decides it. */
-    waiverAsked: "Waiting on your answer to waive it",
-    /** What the quest cost per criterion accepted on evidence (#1449), from the usage its party reported. */
+    /** What has to hold for the quest to be done, as its lead wrote it. */
+    doneWhen: "Done when",
+    /** What the quest cost (#1449), from the usage its party reported. */
     cost: "Cost",
-    costPerOutcome: ({ tokens, accepted, criteria }: { tokens: number; accepted: number; criteria: number }) =>
-      `${formatCompact(tokens)} tokens per accepted outcome · ${formatCount(accepted)} of ${formatCount(criteria)} accepted`,
-    costNoneAccepted: "No outcome accepted yet, so there is no cost per outcome.",
     costSpent: ({ tokens, turns }: { tokens: number; turns: number }) =>
       plural(turns, {
         one: `${formatCompact(tokens)} tokens spent in 1 reply or turn`,

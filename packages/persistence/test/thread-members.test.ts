@@ -116,7 +116,7 @@ const types = (entries: ReadonlyArray<{ readonly type: string }>) => entries.map
 
 describe("thread members", () => {
   // covers ADR 039 (Members)
-  it("[TC-PE-1453-01] gives every thread its owner and its hob in one pass, with the owner's read marker", async () => {
+  it("gives every thread its owner and its hob in one pass, with the owner's read marker (#1453)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -152,7 +152,7 @@ describe("thread members", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1453-02] starts a new thread with the person whose session made it and its hob, and Start fresh keeps them", async () => {
+  it("starts a new thread with the person whose session made it and its hob, and Start fresh keeps them (#1453)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -207,7 +207,7 @@ describe("thread members", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1453-03] refuses a third member in a direct message, and adds one to a camp once", async () => {
+  it("refuses a third member in a direct message, and adds one to a camp once (#1453)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -247,7 +247,7 @@ describe("thread members", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1453-04] takes a retired hob out of every thread it is in, and brings it back when it returns", async () => {
+  it("takes a retired hob out of every thread it is in, and brings it back when it returns (#1453)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -275,7 +275,7 @@ describe("thread members", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1453-05] moves the reader's own marker with the thread's when they read it", async () => {
+  it("moves the reader's own marker with the thread's when they read it (#1453)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -302,7 +302,7 @@ describe("thread members", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1453-06] refuses a member role or state outside the domain's, on insert and on update", async () => {
+  it("refuses a member role or state outside the domain's, on insert and on update (#1453)", async () => {
     // A new state or role needs a migration of its own.
     expect(MEMBER_STATES).toEqual(MemberState.literals);
     expect(MEMBER_ROLES).toEqual(["owner", "member"]);
@@ -338,7 +338,7 @@ describe("thread members", () => {
     expect(result.members.map((member) => member.state)).toEqual(["active", "active"]);
   });
   // covers ADR 039 (The sidebar, read markers per member)
-  it("[TC-PE-1469-01] counts each person's unread replies per thread for them alone, and clears them as they read", async () => {
+  it("counts each person's unread replies per thread for them alone, and clears them as they read (#1469)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;

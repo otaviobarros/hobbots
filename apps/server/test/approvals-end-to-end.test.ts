@@ -50,7 +50,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // Slice 8's done-when checks (ADR 015), at hub level and over the HTTP API, with the hub's own
 // composition: the setup's preset and folders read at every turn, one policy engine, grants, and
 // the fake runtime making the scripted tool calls. CI runs them on SQLite and on PostgreSQL. The
-// browser side of the same checks is in apps/web/e2e/approvals.e2e.ts and inbox.e2e.ts.
+// browser side is in apps/web/e2e/approvals.e2e.ts.
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-approvals-e2e-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
@@ -186,8 +186,7 @@ const settled = (thread: Thread) =>
   });
 
 describe("approvals, end to end", () => {
-  // covers PE-007, PE-008
-  it("[TC-PE-126] an Always rule shows in History, runs the next matching action without asking, and once removed the next one asks", async () => {
+  it("an Always rule shows in History, runs the next matching action without asking, and once removed the next one asks", async () => {
     const hob = await hobInProject();
     const first = await runCommand(hob, "rm build");
     const asked = first.pending as ApprovalRequest;
@@ -224,8 +223,7 @@ describe("approvals, end to end", () => {
     expect(afterRemoval.pending).toMatchObject({ state: "pending", operation: "delete-files" });
   });
 
-  // covers PE-003, PE-007
-  it("[TC-PE-127] double-clicking Approve runs the action once and saves one rule", async () => {
+  it("double-clicking Approve runs the action once and saves one rule", async () => {
     const hob = await hobInProject();
     // Allow once, sent twice at the same moment as a double click does.
     const once = await runCommand(hob, "git push origin feature");
@@ -255,8 +253,7 @@ describe("approvals, end to end", () => {
     expect(await history()).toHaveLength(1);
   });
 
-  // covers PE-007
-  it("[TC-PE-128] a request nobody decides for 24 hours expires, its action never runs, and approving it is refused", async () => {
+  it("a request nobody decides for 24 hours expires, its action never runs, and approving it is refused", async () => {
     const hob = await hobInProject();
     const asked = await runCommand(hob, "git push origin feature");
     const pending = asked.pending as ApprovalRequest;
@@ -287,8 +284,7 @@ describe("approvals, end to end", () => {
     expect((await request<ApprovalRequest>("GET", `/api/approvals/${pending.id}`)).body.state).toBe("expired");
   });
 
-  // covers PE-003, UX-004
-  it("[TC-IN-017] the Inbox and the chat show the same request, and a decision through either reads the same in both", async () => {
+  it("the Inbox and the chat show the same request, and a decision through either reads the same in both", async () => {
     const hob = await hobInProject();
     const fromChat = await runCommand(hob, "rm build");
     const fromInbox = await runCommand(hob, "rm dist");

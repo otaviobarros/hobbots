@@ -18,6 +18,7 @@ export * from "./hob-changes.ts";
 export * from "./hob-github-app.ts";
 export * from "./hob-memory.ts";
 export * from "./hob-proposals.ts";
+export * from "./members.ts";
 export * from "./memory.ts";
 export * from "./memory-pages.ts";
 export * from "./memory-shares.ts";

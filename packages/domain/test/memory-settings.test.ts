@@ -7,7 +7,7 @@ import { DEFAULT_MEMORY_SETTINGS, hubTaskModel, MemorySettings } from "../src/me
 const decode = Schema.decodeUnknownSync(MemorySettings);
 
 describe("the hub's brain settings", () => {
-  it("reads a memory model chosen before the hub's tasks existed, with each of them on the same model", () => {
+  it("reads a memory model chosen before the hub's tasks existed, with each of them on the same model (#1367)", () => {
     const saved = {
       provider: "chatgpt",
       model: "big",
@@ -21,7 +21,7 @@ describe("the hub's brain settings", () => {
     });
   });
 
-  it("asks a hub task's own model, else the brain's, and no model with No AI for the brain or the task", () => {
+  it("asks a hub task's own model, else the brain's, and no model with No AI for the brain or the task (#1367)", () => {
     const chosen = {
       ...DEFAULT_MEMORY_SETTINGS,
       model: "careful",

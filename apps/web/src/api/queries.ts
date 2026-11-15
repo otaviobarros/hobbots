@@ -262,7 +262,7 @@ export const storeSavedPermissions = async (
  * shows at once unless a later one already does; the hob list hears of the new version from its
  * event, which reads them again.
  */
-/** The key of a hob's permissions changes, so any view can tell one is still saving (STD-REACT-027). */
+/** The key of a hob's permissions changes, so any view can tell one is still saving (STD-REACT-001). */
 const updatePermissionsKey = (agentId: AgentId) => ["permissions", "update", agentId] as const;
 
 /** Whether a change to the hob's permissions is still saving, from any view. */
@@ -422,6 +422,15 @@ export const useInterrupt = (threadId: ThreadId) =>
 export const useStopWaiting = (threadId: ThreadId) =>
   useMutation({
     mutationFn: () => call((c) => c.threads.stopWaiting({ params: { threadId } })),
+  });
+
+/**
+ * Let them go on (ADR 039): the hobs the relay budget paused in the thread go on. The card goes
+ * away when the hub publishes the thread's run without them.
+ */
+export const useLetHobsGoOn = (threadId: ThreadId) =>
+  useMutation({
+    mutationFn: () => call((c) => c.threads.letHobsGoOn({ params: { threadId } })),
   });
 
 /** Creates a thread and sends its first prompt, so a new thread only appears once it has a message. */

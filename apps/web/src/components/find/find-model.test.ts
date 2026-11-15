@@ -68,7 +68,7 @@ const message: FoundMessage = {
 
 describe("what Find shows (ADR 037, Find)", () => {
   // covers ADR 037 (Find), #1386
-  it("[TC-UI-1386-01] groups decisions, artifacts, chapters and messages in that order, leaving out empty groups", () => {
+  it("groups decisions, artifacts, chapters and messages in that order, leaving out empty groups (#1386)", () => {
     const found: FindResult = { records: [chapter, decision("d1", "active"), artifact("doc")], messages: [message] };
     expect(findGroups(found, false).map((group) => [group.kind, group.rows.length])).toEqual([
       ["decision", 1],
@@ -82,7 +82,7 @@ describe("what Find shows (ADR 037, Find)", () => {
   });
 
   // covers ADR 037 (Find), #1386
-  it("[TC-UI-1386-02] crosses out a decision that no longer holds and opens each row at its message", () => {
+  it("crosses out a decision that no longer holds and opens each row at its message (#1386)", () => {
     const holds = rowOf(decision("d1", "active"), false);
     const out = rowOf(decision("d2", "superseded"), false);
     expect([holds.crossedOut, out.crossedOut]).toEqual([false, true]);
@@ -92,7 +92,7 @@ describe("what Find shows (ADR 037, Find)", () => {
   });
 
   // covers ADR 037 (Find), #1386
-  it("[TC-UI-1386-03] tiles code apart from other artifacts and names the chat only when looking everywhere", () => {
+  it("tiles code apart from other artifacts and names the chat only when looking everywhere (#1386)", () => {
     expect(rowOf(artifact("code"), false)).toMatchObject({ glyph: "code", artifact: { kind: "code", version: 3 } });
     expect(rowOf(artifact("doc"), false).glyph).toBe("file");
     expect(rowOf(message, false).where).toBeNull();

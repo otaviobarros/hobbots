@@ -64,8 +64,7 @@ const setup = () => {
 };
 
 describe("request notifications", () => {
-  // covers UX-001, UX-005
-  it("[TC-IN-012] announces a new request with no window open, and clicking it opens the request", async () => {
+  it("announces a new request with no window open, and clicking it opens the request", async () => {
     const { hub, notices, opened, check } = setup();
     await check();
     hub.inbox = [approval("a", "pending")];
@@ -79,8 +78,7 @@ describe("request notifications", () => {
     expect(notices).toHaveLength(1);
   });
 
-  // covers UX-001, UX-005
-  it("[TC-IN-013] closes a notification once its request no longer waits, however the change was missed", async () => {
+  it("closes a notification once its request no longer waits, however the change was missed", async () => {
     const { hub, notices, check } = setup();
     hub.inbox = [];
     await check();
@@ -92,8 +90,7 @@ describe("request notifications", () => {
     expect(notices.map((notice) => notice.closed)).toEqual([true, true]);
   });
 
-  // covers UX-001
-  it("[TC-IN-015] keeps what is shown while the hub does not answer", async () => {
+  it("keeps what is shown while the hub does not answer", async () => {
     const { hub, notices, check } = setup();
     hub.inbox = [];
     await check();
@@ -108,8 +105,7 @@ describe("request notifications", () => {
     expect(notices[0]?.closed).toBe(false);
   });
 
-  // covers UX-001
-  it("[TC-IN-016] learns what waits once the event stream connects, then announces what a request event brings", async () => {
+  it("learns what waits once the event stream connects, then announces what a request event brings", async () => {
     const { hub, notices, check } = setup();
     const stream = fakeEventStream();
     hub.inbox = [approval("a", "pending")];
@@ -133,8 +129,7 @@ describe("request notifications", () => {
     }
   });
 
-  // covers UX-001
-  it("[TC-IN-019] reads the Inbox again until a read answers, however long that takes, since no later event may come", async () => {
+  it("reads the Inbox again until a read answers, however long that takes, since no later event may come", async () => {
     const { hub, notices, check } = setup();
     hub.inbox = [];
     await check();
@@ -208,8 +203,7 @@ const asking = (id: string, state = "pending", minutes = 10) => ({
 });
 
 describe("device notifications", () => {
-  // covers DP-004
-  it("[TC-DP-111] announces a device asking to pair with its code, and closes it once the device was answered", async () => {
+  it("announces a device asking to pair with its code, and closes it once the device was answered", async () => {
     let waiting: Array<unknown> = [];
     const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
     const opened: Array<string> = [];
@@ -262,8 +256,7 @@ describe("device notifications", () => {
     vi.useRealTimers();
   });
 
-  // covers DP-004
-  it("[TC-DP-119] closes a device's notification once its request runs out, with no event to say so", async () => {
+  it("closes a device's notification once its request runs out, with no event to say so", async () => {
     vi.useFakeTimers({ now: Date.parse("2026-11-02T10:00:00.000Z") });
     const all = [asking("p1")];
     // The hub lists only requests that have not run out.
@@ -336,8 +329,7 @@ const failedTask = (id: string) => ({
 });
 
 describe("Quest notifications", () => {
-  // covers IN-007, UX-001
-  it("[TC-IN-540] announces a question that reached you, opens the asking hob's lane in the lead's chat, and closes once answered", async () => {
+  it("announces a question that reached you, opens the asking hob's lane in the lead's chat, and closes once answered", async () => {
     const { hub, notices, tasks, options } = questSetup();
     const { check } = questionNotices(options);
     hub.lists["/api/questions"] = { cursor: "e.1", questions: [] };
@@ -354,8 +346,7 @@ describe("Quest notifications", () => {
     expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "build" }]);
   });
 
-  // covers IN-007, OR-006
-  it("[TC-IN-541] announces a member's failed Task with its brief, and closes it once retried, reassigned or its work ended", async () => {
+  it("announces a member's failed Task with its brief, and closes it once retried, reassigned or its work ended", async () => {
     const { hub, notices, tasks, options } = questSetup();
     const { check } = failedTaskNotices(options);
     hub.lists["/api/failed-tasks"] = { cursor: "e.1", tasks: [] };
@@ -370,8 +361,7 @@ describe("Quest notifications", () => {
     expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "build" }]);
   });
 
-  // covers IN-005, UX-001
-  it("[TC-IN-542] announces a top Quest that finished once, and nothing for a nested one, one that failed, or while a window is focused", async () => {
+  it("announces a top Quest that finished once, and nothing for a nested one, one that failed, or while a window is focused", async () => {
     const { hub, notices, tasks, options } = questSetup();
     const stream = fakeEventStream();
     const { finished } = finishedNotices(options);
@@ -445,7 +435,7 @@ const sharing = (id: string, state: string, scope: unknown = { _tag: "Project", 
 
 describe("memory share notifications", () => {
   // covers ADR 028 (Sharing), #960
-  it("[TC-IN-560] announces a hob asking to share what it learned, opens it in the Inbox, and closes once decided", async () => {
+  it("announces a hob asking to share what it learned, opens it in the Inbox, and closes once decided (#960)", async () => {
     const { hub, notices, options } = questSetup();
     const opened: Array<string> = [];
     const { check } = shareNotices({ ...options, open: (id) => void opened.push(id) });

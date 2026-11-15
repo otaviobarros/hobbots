@@ -181,7 +181,7 @@ describe("answers a Summoning change dropped (#1352)", () => {
     charms: { granted: ["github"], overrides: { "github.comment": "ask" } },
   } as const;
 
-  it("[TC-UX-1352-01] offers to restore what a Summoning change dropped and the hob still lacks, as your change", () => {
+  it("offers to restore what a Summoning change dropped and the hob still lacks, as your change (#1352)", () => {
     const change = version(3, { policy: dropped }, byChief, config(2, { policy: held }));
     const restore = restoreOf(change, { policy: { ...dropped, overrides: { push: "ask" } } });
     expect(restore?.words).toBe("Delete files: Never, Open pull requests: Never");
@@ -191,7 +191,7 @@ describe("answers a Summoning change dropped (#1352)", () => {
     });
   });
 
-  it("[TC-UX-1352-02] offers nothing for your own change, or once the hob holds the answers again", () => {
+  it("offers nothing for your own change, or once the hob holds the answers again (#1352)", () => {
     expect(
       restoreOf(version(3, { policy: dropped }, YOU, config(2, { policy: held })), { policy: dropped }),
     ).toBeNull();

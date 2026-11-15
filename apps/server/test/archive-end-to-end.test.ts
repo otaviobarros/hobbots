@@ -48,7 +48,6 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // The archive slice's done-when checks over the HTTP API, with the hub's own composition: the
 // setup's preset and folders, one policy engine, approvals, search and the fake runtime, which
 // writes one event every few milliseconds so a reply is still running when the archive is asked.
-// The browser side of the same checks is in apps/web/e2e/archive-end-to-end.e2e.ts.
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-archive-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
@@ -168,8 +167,7 @@ const exchange = async (thread: Thread, content: string) => {
 const LONG_PROMPT = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
 
 describe("archiving threads, end to end", () => {
-  // covers CH-006, CH-009
-  it("[TC-CH-165] an archived thread leaves the hob's list, is found in the archived list and by search, is read-only, and comes back whole on restore", async () => {
+  it("an archived thread leaves the hob's list, is found in the archived list and by search, is read-only, and comes back whole on restore", async () => {
     const { pip, thread } = await pipWithThread();
     await exchange(thread, "Rename the kettle newsletter");
     const other = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
@@ -205,8 +203,7 @@ describe("archiving threads, end to end", () => {
     expect((await messages(thread)).slice(0, before.length)).toEqual(before);
   });
 
-  // covers CH-008, CH-009
-  it("[TC-CH-166] refuses to archive while a reply runs, keeps the thread listed, and archives once the reply ends", async () => {
+  it("refuses to archive while a reply runs, keeps the thread listed, and archives once the reply ends", async () => {
     const { pip, thread } = await pipWithThread();
     await request("POST", `/api/threads/${thread.id}/messages`, { content: LONG_PROMPT });
     await eventually(async () => ((await messages(thread)).at(-1)?.status === "streaming" ? true : undefined));
@@ -224,8 +221,7 @@ describe("archiving threads, end to end", () => {
     expect(await listed(pip.id)).toEqual([]);
   });
 
-  // covers CH-009, PE-003
-  it("[TC-CH-167] refuses to archive while an approval waits, and archives once the user decides and the reply ends", async () => {
+  it("refuses to archive while an approval waits, and archives once the user decides and the reply ends", async () => {
     const { pip, thread } = await pipWithThread("balanced");
     // Balanced asks before a push; the fake runtime makes the scripted call.
     await request("POST", `/api/threads/${thread.id}/messages`, {

@@ -114,8 +114,7 @@ const lastCursor = (frames: ReadonlyArray<StreamFrame>) =>
   frames.flatMap((frame) => (frame._tag === "Ready" || frame._tag === "Entry" ? [frame.cursor] : [])).at(-1);
 
 describe("event stream", () => {
-  // covers CH-004
-  it("[TC-CH-071] resumes after a cursor: replays exactly the missed entries, the streaming text, then continues live", async () => {
+  it("resumes after a cursor: replays exactly the missed entries, the streaming text, then continues live", async () => {
     const result = await run((turn) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -169,8 +168,7 @@ describe("event stream", () => {
     }
   });
 
-  // covers CH-004, PE-002
-  it("[TC-CH-110] replays a reply's tool steps to a client that reconnects after they ran", async () => {
+  it("replays a reply's tool steps to a client that reconnects after they ran", async () => {
     const result = await run((turn) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -224,8 +222,7 @@ describe("event stream", () => {
     ]);
   });
 
-  // covers CH-004, CH-007, EX-004
-  it("[TC-CH-114] keeps a tool step cut off by an interruption uncertain when Continue resumes the reply", async () => {
+  it("keeps a tool step cut off by an interruption uncertain when Continue resumes the reply", async () => {
     const steps = await run((turn) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -275,8 +272,7 @@ describe("event stream", () => {
     ]);
   });
 
-  // covers CH-004
-  it("[TC-CH-072] starts fresh at the head for a missing, malformed, foreign or future cursor", async () => {
+  it("starts fresh at the head for a missing, malformed, foreign or future cursor", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -307,8 +303,7 @@ describe("event stream", () => {
     }
   });
 
-  // covers CH-004, DP-003
-  it("[TC-CH-073] reads entries the bus never announced from the journal, in order", async () => {
+  it("reads entries the bus never announced from the journal, in order", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -343,8 +338,7 @@ describe("event stream", () => {
     ]);
   });
 
-  // covers CH-004
-  it("[TC-CH-074] ends a connection whose client falls more than the buffer behind, while the client still is not reading", async () => {
+  it("ends a connection whose client falls more than the buffer behind, while the client still is not reading", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const events = yield* EventStream;
@@ -380,8 +374,7 @@ describe("event stream", () => {
 });
 
 describe("reliable chat (#118)", () => {
-  // covers CH-004, DP-003
-  it("[TC-CH-124] starts fresh for a cursor whose entries compaction removed, and still replays one right before the oldest kept", async () => {
+  it("starts fresh for a cursor whose entries compaction removed, and still replays one right before the oldest kept", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -416,8 +409,7 @@ describe("reliable chat (#118)", () => {
     expect(replayed[1]).toEqual(Array.from({ length: head.sequence - oldest + 1 }, (_, i) => oldest + i));
   });
 
-  // covers CH-004, DP-003
-  it("[TC-CH-125] after a crash mid-reply, a client resuming from before the crash gets each missed entry once, ending with the reply interrupted", async () => {
+  it("after a crash mid-reply, a client resuming from before the crash gets each missed entry once, ending with the reply interrupted", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;

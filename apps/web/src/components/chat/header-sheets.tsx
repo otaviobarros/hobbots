@@ -6,12 +6,13 @@ import { CampSheet } from "../camp-sheet/camp-sheet.tsx";
 import { messages as sheetCopy } from "../camp-sheet/messages.ts";
 import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { StartFreshSheet } from "../camps/start-fresh-sheet.tsx";
+import { MembersSheet } from "../members/members-sheet.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { QuestPane } from "../quest-sheet/quest-pane.tsx";
 import { useOpenQuest } from "../quest-sheet/quest-search.ts";
 
-/** Which sheet the header opened: from its menu, or a camp's own sheet. */
-export type Sheet = "make-camp" | "start-fresh" | "camp" | null;
+/** Which sheet the header opened: from its menu, a camp's own sheet, or a camp's members. */
+export type Sheet = "make-camp" | "start-fresh" | "camp" | "members" | null;
 
 /**
  * The quest the address opens in the thread's sheet (ADR 037), and how to leave it: none while its
@@ -119,5 +120,6 @@ export function HeaderSheet({
   if (sheet === "make-camp") return <MakeCampSheet hob={hob} onClose={onClose} />;
   if (thread === undefined) return null;
   if (sheet === "start-fresh") return <StartFreshSheet hob={hob} chat={thread} onClose={onClose} />;
+  if (sheet === "members" && thread.kind === "camp") return <MembersSheet camp={thread} onClose={onClose} />;
   return null;
 }

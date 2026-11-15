@@ -46,8 +46,7 @@ const checkpoint = (scope: string, summary: string) => ({
 });
 
 describe("tool call keys per Task", () => {
-  // covers OR-001, EX-001
-  it("[TC-OR-420] the same key is a new call on another Task, a retry on the same one, and refused for another call there", async () => {
+  it("the same key is a new call on another Task, a retry on the same one, and refused for another call there", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -86,8 +85,7 @@ describe("tool call keys per Task", () => {
     );
   });
 
-  // covers OR-007
-  it("[TC-OR-421] a refusal is recorded per Task and key, so a refused key on one Task never merges with another's", async () => {
+  it("a refusal is recorded per Task and key, so a refused key on one Task never merges with another's", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -113,8 +111,7 @@ describe("tool call keys per Task", () => {
     );
   });
 
-  // covers OR-007, EX-003
-  it("[TC-OR-424] a refused Charm call is stored with its code, and a retry with its key is the same record", async () => {
+  it("a refused Charm call is stored with its code, and a retry with its key is the same record", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -139,8 +136,7 @@ describe("tool call keys per Task", () => {
     );
   });
 
-  // covers IN-003, EX-003
-  it("[TC-OR-422] a Charm call's key is a new call in other work, and returns the first call in its own", async () => {
+  it("a Charm call's key is a new call in other work, and returns the first call in its own", async () => {
     const write = (messageId: string, attempt: string) =>
       new CharmCall({
         agentId: FRODO,
@@ -178,8 +174,7 @@ describe("tool call keys per Task", () => {
     );
   });
 
-  // covers EX-004, OR-001
-  it("[TC-OR-427] an uncertain Charm call moved to the Task its reply started is still found and settled by its sending", async () => {
+  it("an uncertain Charm call moved to the Task its reply started is still found and settled by its sending", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -219,8 +214,7 @@ describe("tool call keys per Task", () => {
     );
   });
 
-  // covers DP-003
-  it("[TC-OR-423] 0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
+  it("0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
     // Keeps 0047, 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its name with
     // each version, its Charms, whether other hobs see it, its good at and who made and summoned it, and its Summoning scope;
     // 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.

@@ -10,7 +10,6 @@ import {
   pauseTargets,
   Quest,
   QuestId,
-  QuestStates,
   resumedAs,
   resumeNote,
   resumeRecipients,
@@ -79,7 +78,7 @@ const quest = new Quest({
 });
 
 describe("pause targets", () => {
-  it("[TC-OR-1446-03] pauses a Task and everything under it still under way, and resumes only what was paused", () => {
+  it("pauses a Task and everything under it still under way, and resumes only what was paused (#1446)", () => {
     const work = tree([
       task("top", LEAD, null, "waiting"),
       task("ada", ADA, "top", "active"),
@@ -98,7 +97,7 @@ describe("pause targets", () => {
     expect(pausedHolder(paused.tasks[1] as Task, paused.tasks)?.id).toBe("ada");
   });
 
-  it("[TC-OR-1446-19] moves each parent before its children, whatever order the tree lists them in", () => {
+  it("moves each parent before its children, whatever order the tree lists them in (#1446)", () => {
     // A nested lead's step listed before the nested lead's own Task, as one id order can put them.
     const nested = tree([
       task("top", LEAD, null, "paused"),
@@ -111,7 +110,7 @@ describe("pause targets", () => {
     expect(pauseTargets(running.tasks[0] as Task, running).map((each) => each.id)).toEqual(["top", "z-ada", "a-step"]);
   });
 
-  it("[TC-OR-1446-04] sends a Task whose paused turn ended without its runner back where a restart would", () => {
+  it("sends a Task whose paused turn ended without its runner back where a restart would (#1446)", () => {
     const tasks = [
       task("top", LEAD, null, "paused"),
       task("step", LEAD, "top", "paused"),
@@ -121,18 +120,8 @@ describe("pause targets", () => {
   });
 });
 
-describe("a paused Quest's criteria", () => {
-  it("[TC-OR-1446-30] still change, so a turn that ran as you paused finishes its checks, and never once the Quest ended", () => {
-    expect(QuestStates.checksCriteria({ state: "paused" })).toBe(true);
-    expect(QuestStates.checksCriteria({ state: "active" })).toBe(true);
-    for (const state of ["stopping", "stopped", "completed", "failed", "cancelled"] as const) {
-      expect(QuestStates.checksCriteria({ state })).toBe(false);
-    }
-  });
-});
-
 describe("cancelling while a pause settles", () => {
-  it("[TC-OR-1446-28] confirms the cancel of a pausing Task whose turn has ended, on a move its machine allows", () => {
+  it("confirms the cancel of a pausing Task whose turn has ended, on a move its machine allows (#1446)", () => {
     const pausing = task("ada", ADA, null, "pausing");
     const [move] = cancelMoves(pausing, tree([pausing]));
     expect(move?.to).toBe("cancelled");
@@ -142,7 +131,7 @@ describe("cancelling while a pause settles", () => {
 });
 
 describe("resumeNote", () => {
-  it("[TC-OR-1446-05] tells each hob once what changed while the work was paused", () => {
+  it("tells each hob once what changed while the work was paused (#1446)", () => {
     const before = task("ada", ADA, "top", "paused");
     const work = tree([
       task("top", LEAD, null, "paused"),
@@ -178,7 +167,7 @@ describe("quest mentions", () => {
     { actor: hobActor(LEAD), name: "Aldric" },
   ];
 
-  it("[TC-OR-1446-07] reaches a member's open Task in an open Quest, never the lead's or one without a Task there", () => {
+  it("reaches a member's open Task in an open Quest, never the lead's or one without a Task there (#1446)", () => {
     const work = tree([task("top", LEAD, null, "waiting"), task("ada", ADA, "top", "active")], [quest]);
     const mentioned = mentionsIn("@Ada @Bob @Aldric stop", roster);
     expect(mentionTargets([work], mentioned).map((each) => each.id)).toEqual(["ada"]);
@@ -187,7 +176,7 @@ describe("quest mentions", () => {
   });
 
   // covers ADR 039 (camps), #1446
-  it("[TC-CH-1461-26] reaches the camp's own hob when it works under a Quest another hob of the camp leads", () => {
+  it("reaches the camp's own hob when it works under a Quest another hob of the camp leads (#1461)", () => {
     const ledByBob = tree([task("top", BOB, null, "waiting"), task("aldric", LEAD, "top", "active")], [quest]);
     const mentioned = mentionsIn("@Aldric @Bob stop", roster);
     expect(mentionTargets([ledByBob], mentioned).map((each) => each.id)).toEqual(["aldric"]);

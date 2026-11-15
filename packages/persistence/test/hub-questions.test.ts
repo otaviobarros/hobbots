@@ -66,8 +66,7 @@ const raise = (id: string, chat = true) =>
   );
 
 describe("HubQuestionRepository", () => {
-  // covers OR-004, DP-003
-  it("[TC-DP-260] keeps what a hub question asks, its chat and choices, and journals it once per thing it asks about", async () => {
+  it("keeps what a hub question asks, its chat and choices, and journals it once per thing it asks about", async () => {
     const { raised, again, read, open, events } = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -99,8 +98,7 @@ describe("HubQuestionRepository", () => {
     expect(journaled[0]?.correlation).toMatchObject({ agentId: FRODO, threadId: CHAT });
   });
 
-  // covers OR-004, DP-003
-  it("[TC-DP-261] records a picked choice by its key, a typed answer as typed, and what the hub applied", async () => {
+  it("records a picked choice by its key, a typed answer as typed, and what the hub applied", async () => {
     const result = await run(
       Effect.gen(function* () {
         const questions = yield* HubQuestionRepository;
@@ -156,8 +154,7 @@ describe("HubQuestionRepository", () => {
     expect(result.open).toEqual([]);
   });
 
-  // covers OR-004
-  it("[TC-DP-262] withdraws an open question once, and a new one about the same thing can be raised after", async () => {
+  it("withdraws an open question once, and a new one about the same thing can be raised after", async () => {
     const result = await run(
       Effect.gen(function* () {
         const questions = yield* HubQuestionRepository;

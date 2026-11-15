@@ -1,5 +1,5 @@
 import type { ChapterMoveTarget } from "@hobbots/agents";
-import type { ThreadKeyReused } from "@hobbots/api";
+import type { HobUnavailable, ThreadKeyReused } from "@hobbots/api";
 import {
   Artifact,
   type BackpackItem,
@@ -54,10 +54,11 @@ const BY_MESSAGE = [
   "web_fetches",
 ] as const;
 
-type Refusal = ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused;
+type Refusal = ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused | HobUnavailable;
 
-const isPlan = (planned: ChapterMovePlan | Exclude<Refusal, ThreadKeyReused>): planned is ChapterMovePlan =>
-  "stub" in planned;
+const isPlan = (
+  planned: ChapterMovePlan | Exclude<Refusal, ThreadKeyReused | HobUnavailable>,
+): planned is ChapterMovePlan => "stub" in planned;
 
 export const makeChapterMoves = (
   sql: SqlClient.SqlClient,
@@ -111,7 +112,9 @@ export const makeChapterMoves = (
   const campFor = (target: ChapterMoveTarget, first: number) =>
     target._tag === "camp"
       ? readThread(target.campId).pipe(Effect.map((camp) => ({ camp, events: [] as ReadonlyArray<JournaledEvent> })))
-      : camps.insertCamp(target.camp, first).pipe(Effect.map(({ value, events }) => ({ camp: value, events })));
+      : camps
+          .insertCamp(target.camp, first, target.hobs)
+          .pipe(Effect.map(({ value, events }) => ({ camp: value, events })));
 
   // Moves the messages to the camp's chapter in their order, after the camp's own, at `revision`. A
   // thread you had read stays read, and a camp just made starts read.

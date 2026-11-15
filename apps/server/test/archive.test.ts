@@ -110,8 +110,7 @@ const refusal = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) && exit.cause.reasons[0]?._tag === "Fail" ? exit.cause.reasons[0].error : undefined;
 
 describe("archived threads", () => {
-  // covers CH-001, CH-009
-  it("[TC-CH-140] archives and restores a thread once each, durably and live, without moving it", async () => {
+  it("archives and restores a thread once each, durably and live, without moving it", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -156,8 +155,7 @@ describe("archived threads", () => {
     expect(result.events).toEqual([true, false]);
   });
 
-  // covers CH-009
-  it("[TC-CH-141] lists a hob's archived threads newest-archived first", async () => {
+  it("lists a hob's archived threads newest-archived first", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -173,8 +171,7 @@ describe("archived threads", () => {
     expect(result.order).toEqual(result.expected);
   });
 
-  // covers CH-008, CH-009
-  it("[TC-CH-142] refuses to archive while a reply runs or a message waits, then archives once it ends", async () => {
+  it("refuses to archive while a reply runs or a message waits, then archives once it ends", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -201,8 +198,7 @@ describe("archived threads", () => {
     expect(result.archived.archivedAt).not.toBeNull();
   });
 
-  // covers CH-009
-  it("[TC-CH-143] takes no new message, Continue or brain switch in an archived thread until it is restored", async () => {
+  it("takes no new message, Continue or brain switch in an archived thread until it is restored", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -233,8 +229,7 @@ describe("archived threads", () => {
     expect(result.after).toBe(4);
   });
 
-  // covers AG-006, CH-009
-  it("[TC-CH-144] keeps a retired hob's archived threads as they are, and refuses to archive or restore them", async () => {
+  it("keeps a retired hob's archived threads as they are, and refuses to archive or restore them", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -261,8 +256,7 @@ describe("archived threads", () => {
     expect(result.archivedAgain).toEqual(result.archived);
   });
 
-  // covers CH-006, CH-009
-  it("[TC-CH-145] still finds an archived thread by search, marked archived", async () => {
+  it("still finds an archived thread by search, marked archived", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -276,8 +270,7 @@ describe("archived threads", () => {
 });
 
 describe("renamed and pinned threads", () => {
-  // covers CH-001, CH-002
-  it("[TC-CH-230] renames and pins a thread durably and live, without moving it by last activity", async () => {
+  it("renames and pins a thread durably and live, without moving it by last activity", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -324,8 +317,7 @@ describe("renamed and pinned threads", () => {
     ]);
   });
 
-  // covers CH-009
-  it("[TC-CH-231] refuses to rename or pin an archived thread", async () => {
+  it("refuses to rename or pin an archived thread", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -344,8 +336,7 @@ describe("renamed and pinned threads", () => {
 });
 
 describe("read threads", () => {
-  // covers UX-006, CH-002
-  it("[TC-UX-190] marks a thread read for every device once you read the hob's reply, and unread again when it writes", async () => {
+  it("marks a thread read for every device once you read the hob's reply, and unread again when it writes", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -388,8 +379,7 @@ describe("read threads", () => {
     expect(result.events).toEqual([result.read]);
   });
 
-  // covers CH-009
-  it("[TC-CH-294] gives a hob one open chat, and brings an archived chat back as a camp once another opened", async () => {
+  it("gives a hob one open chat, and brings an archived chat back as a camp once another opened", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;

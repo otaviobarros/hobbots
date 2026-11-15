@@ -262,8 +262,7 @@ const FOREIGN = { _tag: "ForeignOrigin" };
 const devices = () => runtime.runPromise(Effect.flatMap(DeviceRepository, (repo) => repo.list));
 
 describe("only approved devices reach the hub", () => {
-  // covers DP-004, PE-006
-  it("[TC-PE-210] refuses a request without an approved device's token on every route and the event stream, before any handler runs", async () => {
+  it("refuses a request without an approved device's token on every route and the event stream, before any handler runs", async () => {
     const outside = new Set(["health", "pairing"]);
     let checked = 0;
     for (const group of Object.values(HobbotsApi.groups)) {
@@ -313,8 +312,7 @@ describe("only approved devices reach the hub", () => {
     expect(refusals.length).toBeGreaterThan(checked);
   });
 
-  // covers DP-004
-  it("[TC-PE-211] a browser that pairs gets its device as an HttpOnly cookie once, and the pairing secret stops working", async () => {
+  it("a browser that pairs gets its device as an HttpOnly cookie once, and the pairing secret stops working", async () => {
     const opened = await request<{ status: { id: string; code: string; state: string }; secret?: string }>(
       { origin: OWN_ORIGIN },
       "POST",
@@ -375,8 +373,7 @@ describe("only approved devices reach the hub", () => {
     ]);
   });
 
-  // covers DP-004
-  it("[TC-DP-110] Deny turns a browser away with Retry-After on its next ask, and Decide later keeps it waiting", async () => {
+  it("Deny turns a browser away with Retry-After on its next ask, and Decide later keeps it waiting", async () => {
     const ask = (caller: Caller) =>
       send({ origin: OWN_ORIGIN, ...caller }, "POST", "/api/pairing", {
         name: "Firefox",
@@ -408,8 +405,7 @@ describe("only approved devices reach the hub", () => {
     expect(waiting.body).toMatchObject([{ request: { id: phoneBody.status.id, state: "pending" }, fromHub: false }]);
   });
 
-  // covers DP-004
-  it("[TC-PE-212] the desktop app pairs with a bearer secret and takes its token in the body", async () => {
+  it("the desktop app pairs with a bearer secret and takes its token in the body", async () => {
     const opened = await request<{ status: { id: string }; secret: string }>({}, "POST", "/api/pairing", {
       name: "MacBook Air",
       platform: "macOS",
@@ -427,8 +423,7 @@ describe("only approved devices reach the hub", () => {
     expect(await request(pairing, "GET", "/api/pairing")).toMatchObject({ status: 404 });
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-216] a connected desktop revokes itself with its own token on Disconnect, and the hub lists it as revoked", async () => {
+  it("a connected desktop revokes itself with its own token on Disconnect, and the hub lists it as revoked", async () => {
     const opened = await request<{ status: { id: string }; secret: string }>({}, "POST", "/api/pairing", {
       name: "Hobbots on MacBook Air",
       platform: "macOS",
@@ -452,8 +447,7 @@ describe("only approved devices reach the hub", () => {
     expect(again).toMatchObject({ status: 401, body: { _tag: "DeviceRevoked" } });
   });
 
-  // covers DP-004
-  it("[TC-PE-213] refuses a cookie request another page could have sent, and two device cookies of one name", async () => {
+  it("refuses a cookie request another page could have sent, and two device cookies of one name", async () => {
     const { cookie } = await pairedBrowser();
     const attempts = [
       // A change without its own Origin, or from another one, even on localhost.
@@ -479,8 +473,7 @@ describe("only approved devices reach the hub", () => {
     ).toMatchObject({ status: 403, body: FOREIGN });
   });
 
-  // covers DP-004
-  it("[TC-PE-214] accepts a token only from where it was approved, and the window key only in local requests", async () => {
+  it("accepts a token only from where it was approved, and the window key only in local requests", async () => {
     const phone = { [NODE_HEADER]: "nPHONE" };
     const { cookie } = await pairedBrowser(phone);
     const local = await pairedBrowser();
@@ -501,8 +494,7 @@ describe("only approved devices reach the hub", () => {
     });
   });
 
-  // covers DP-004, PE-006
-  it("[TC-PE-215] a revoked device is refused as revoked, decides nothing, and no secret is ever stored or logged", async () => {
+  it("a revoked device is refused as revoked, decides nothing, and no secret is ever stored or logged", async () => {
     await setupDone();
     const { pending } = await pendingPush();
     const { cookie } = await pairedBrowser();
@@ -543,7 +535,7 @@ describe("only approved devices reach the hub", () => {
 
 describe("a device acts for its user", () => {
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1452-04] names the device's user as the author of a message, a note and a decision it sends", async () => {
+  it("names the device's user as the author of a message, a note and a decision it sends (#1452)", async () => {
     await setupDone();
     const thread = await hobThread("Pip");
     const { cookie } = await pairedBrowser();
@@ -617,8 +609,7 @@ describe("revoking a device", () => {
     return result;
   };
 
-  // covers DP-004, PE-006
-  it("[TC-DP-097] revoking a device mid-stream cuts its stream at once, refuses its next request and clears its cookie, and it can ask again", async () => {
+  it("revoking a device mid-stream cuts its stream at once, refuses its next request and clears its cookie, and it can ask again", async () => {
     const { cookie } = await pairedBrowser();
     const [, phone] = await devices();
     const stream = await openStream(browser(cookie));
@@ -661,8 +652,7 @@ describe("revoking a device", () => {
     expect((await request(browser(again.cookie), "GET", "/api/agents")).status).toBe(200);
   });
 
-  // covers DP-004, PE-006
-  it("[TC-DP-098] only an approved device revokes, the device in use included, and never the hub's window", async () => {
+  it("only an approved device revokes, the device in use included, and never the hub's window", async () => {
     const first = await pairedBrowser();
     const second = await pairedBrowser();
     const [, firstDevice, secondDevice] = await devices();
@@ -697,8 +687,7 @@ describe("revoking a device", () => {
 });
 
 describe("only the user decides approvals and manages grants", () => {
-  // covers PE-006
-  it("[TC-PE-110] refuses and records every decision or grant request that is not from an approved device", async () => {
+  it("refuses and records every decision or grant request that is not from an approved device", async () => {
     await setupDone();
     const { thread, pending } = await pendingPush();
     const always = { decision: "approve", actionDigest: pending.actionDigest, lifetime: "always" };
@@ -736,8 +725,7 @@ describe("only the user decides approvals and manages grants", () => {
     expect((await request<Grant>(APP, "POST", revoke)).body).toMatchObject({ revokedBy: "user" });
   });
 
-  // covers PE-006
-  it("[TC-PE-113] refuses and records a change to what hobs may do that is not from an approved device", async () => {
+  it("refuses and records a change to what hobs may do that is not from an approved device", async () => {
     await setupDone();
     const thread = await hobThread("Pip");
     const hob = thread.agentId;
@@ -760,9 +748,9 @@ describe("only the user decides approvals and manages grants", () => {
     });
   });
 
-  // covers PE-006. A regression check: these refusals come from the runtime adapter (an unknown tool)
+  // covers . A regression check: these refusals come from the runtime adapter (an unknown tool)
   // and the policy engine (loopback is never reachable, ADR 014), not from the device check.
-  it("[TC-PE-111] a hob's tool calls aimed at the hub's controls are refused and recorded, and the request stays pending", async () => {
+  it("a hob's tool calls aimed at the hub's controls are refused and recorded, and the request stays pending", async () => {
     await setupDone();
     const { thread, pending } = await pendingPush();
     // Another hob tries the ways a runtime offers to approve that request for it.
@@ -787,8 +775,7 @@ describe("only the user decides approvals and manages grants", () => {
     expect(await grants()).toEqual([]);
   });
 
-  // covers PE-006, OR-006
-  it("[TC-PE-230] [TC-OR-1446-24] refuses and records a Cancel, Pause, Resume, Retry or Reassign that is not from an approved device", async () => {
+  it("refuses and records a Cancel, Pause, Resume, Retry or Reassign that is not from an approved device", async () => {
     await setupDone();
     const thread = await hobThread("Pip");
     const task = "00000000-0000-4000-8000-000000000000";
@@ -812,8 +799,7 @@ describe("only the user decides approvals and manages grants", () => {
     });
   });
 
-  // covers PE-006
-  it("[TC-PE-112] only the hub's device middleware provides a user session, and every route but health and pairing carries it", () => {
+  it("only the hub's device middleware provides a user session, and every route but health and pairing carries it", () => {
     // Every route, including any added later, sits behind the middleware, except the two a device
     // without a token needs.
     for (const group of Object.values(HobbotsApi.groups)) {

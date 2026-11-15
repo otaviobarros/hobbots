@@ -23,8 +23,7 @@ const watchedList = () => {
 };
 
 describe("failedTaskChanged", () => {
-  // covers IN-004, OR-006
-  it("[TC-UX-194] drops a first read taken before the failed Task was retried, so no mark is left", async () => {
+  it("drops a first read taken before the failed Task was retried, so no mark is left", async () => {
     const list = watchedList();
     await list.settled();
     const changed = failedTaskChanged(list.client, task("copy", "queued"));

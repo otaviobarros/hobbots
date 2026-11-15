@@ -97,7 +97,6 @@ const HELD_WHILE_PAUSED: ReadonlySet<TaskToolName> = new Set([
   ...NEEDS_ATTEMPT,
   "wait_for",
   "hand_off",
-  "check_criterion",
   "retry_task",
   "reassign_task",
 ]);

@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { cn } from "../lib/utils.ts";
 
-// A stepper (docs/design/ui-ux.md): the steps of a short flow in a row, each with a bar under it.
+// A stepper: the steps of a short flow in a row, each with a bar under it.
 // The current step's dot and bar are lantern, done steps show a check, and steps still to come are
 // quiet. A done step is a button that goes back to it; the current and later steps are plain text,
 // so the flow decides when the user moves forward.

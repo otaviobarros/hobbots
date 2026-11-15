@@ -206,8 +206,7 @@ const escalatedQuestion = async () => {
 };
 
 describe("refused Task tool calls", () => {
-  // covers OR-003, OR-007
-  it("[TC-OR-303] a lead's answer to a question the user owns is refused, recorded once, and announced", async () => {
+  it("a lead's answer to a question the user owns is refused, recorded once, and announced", async () => {
     await run(seed);
     const { questionId } = await escalatedQuestion();
     const answer = { key: "answer-1", question_id: questionId, answer: "Blue" };
@@ -251,8 +250,7 @@ describe("refused Task tool calls", () => {
     ]);
   });
 
-  // covers OR-004, OR-005, OR-007
-  it("[TC-OR-304] every way a call can be refused produces a record with its code and message", async () => {
+  it("every way a call can be refused produces a record with its code and message", async () => {
     await run(seed);
     const rook = await delegate(FRODO, TOP, "Rook", "rook");
     const pip = await delegate(ROOK, rook, "Pip", "pip");
@@ -335,8 +333,7 @@ describe("refused Task tool calls", () => {
     expect(rows).toContainEqual(expect.objectContaining({ agentId: FRODO, taskId: "nowhere", reason: "task-missing" }));
   });
 
-  // covers OR-007
-  it("[TC-OR-305] a refused call's reply step ends as failed, with what the hob was told", async () => {
+  it("a refused call's reply step ends as failed, with what the hob was told", async () => {
     await run(seed);
     const { questionId } = await escalatedQuestion();
     const prompt = [
@@ -372,8 +369,7 @@ describe("refused Task tool calls", () => {
     // The call that went through ends as done, with no failure reported for it.
     expect(events).toContainEqual({ _tag: "StepEnded", id: "fake-hub-2" });
   });
-  // covers OR-007, PE-001
-  it("[TC-OR-307] a refusal is redacted before it is stored, journaled or announced", async () => {
+  it("a refusal is redacted before it is stored, journaled or announced", async () => {
     await run(seed);
     const bearer = "Bearer abcdefghijklmnopqrstuvwxyz0123456789";
     const announced: Array<EventEnvelope> = [];
@@ -407,8 +403,7 @@ describe("refused Task tool calls", () => {
     expect(announced.map((entry) => entry.type)).toEqual(["ToolCallRefused"]);
   });
 
-  // covers OR-007
-  it("[TC-OR-308] a chat turn's refusal before its call is decided is recorded on the Task it was briefed on", async () => {
+  it("a chat turn's refusal before its call is decided is recorded on the Task it was briefed on", async () => {
     await run(seed);
     const chatTurn = (thread: ThreadId, message: string) =>
       run(

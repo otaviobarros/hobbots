@@ -29,8 +29,7 @@ const lesson = (
   );
 
 describe("the memory brief outside chats", () => {
-  // covers OR-004, CH-001
-  it("[TC-OR-561] a member's and a step's fresh sessions start with their own hob's memory brief", async () => {
+  it("a member's and a step's fresh sessions start with their own hob's memory brief", async () => {
     const memory = makeMemoryStoreFake();
     await lesson(memory.store, { _tag: "Hob", agentId: PIP }, "Pip runs the fast suite first.");
     await lesson(memory.store, { _tag: "Hob", agentId: FRODO }, "Frodo plans before he delegates.");
@@ -77,8 +76,7 @@ describe("the memory brief outside chats", () => {
     expect(step?.briefing).toContain("Frodo plans before he delegates.");
     expect(step?.briefing).not.toContain("Pip runs");
   });
-  // covers OR-004, CH-001, EX-005
-  it("[TC-OR-562] a member's resumed session hears the brief again only when it changed, or after an outage", async () => {
+  it("a member's resumed session hears the brief again only when it changed, or after an outage", async () => {
     const memory = makeMemoryStoreFake();
     await lesson(memory.store, { _tag: "Hob", agentId: PIP }, "Pip runs the fast suite first.");
     // Memory is down when Pip's session starts, so it is told only that.

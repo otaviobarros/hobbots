@@ -29,7 +29,7 @@ const closed = (fields: Partial<ConstructorParameters<typeof ApprovalRequest>[0]
   });
 
 describe("deciderText", () => {
-  it("[TC-IN-207] names the decision, the device and where it was made", () => {
+  it("names the decision, the device and where it was made", () => {
     expect(deciderText(closed({ lifetime: "once", decidedByDeviceId: PHONE, decidedVia: "inbox" }), names)).toBe(
       "Allowed once from Safari on iPhone in the Inbox",
     );
@@ -44,7 +44,7 @@ describe("deciderText", () => {
     );
   });
 
-  it("[TC-IN-208] says nobody decided an expired request, and nothing for one closed before deciders were recorded", () => {
+  it("says nobody decided an expired request, and nothing for one closed before deciders were recorded", () => {
     expect(deciderText(closed({ state: "expired", decidedVia: "expired" }), names)).toBe(
       "Expired before anyone decided",
     );

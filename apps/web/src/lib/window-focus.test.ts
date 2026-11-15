@@ -5,7 +5,7 @@ import { followWindowFocus } from "./window-focus.ts";
 describe("followWindowFocus", () => {
   afterEach(() => focusManager.setFocused(undefined));
 
-  it("[TC-GEN-038] counts the window coming back into focus, not only becoming visible", () => {
+  it("counts the window coming back into focus, not only becoming visible", () => {
     const window = new EventTarget();
     let visible = true;
     followWindowFocus(window, () => visible);

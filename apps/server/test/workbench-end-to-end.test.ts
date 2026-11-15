@@ -63,8 +63,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // Issue #391: the Workbench's done-when checks (ADR 023), played over the HTTP API and the event
 // stream as the Workbench reads them, with the hub's own composition of the recorder, the folder
 // scanner, the store and the Task's files, the fake runtime changing a real folder, and the records
-// on SQLite or PostgreSQL (TestDatabase). The browser side of the same checks is in
-// apps/web/e2e/workbench-end-to-end.e2e.ts.
+// on SQLite or PostgreSQL (TestDatabase).
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-workbench-e2e-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -302,8 +301,7 @@ const streamed = (entries: ReadonlyArray<EventEnvelope>, attemptId: string) => {
 };
 
 describe("the Workbench, end to end", () => {
-  // covers UX-002, UX-006, PE-005
-  it("[TC-UX-060] a Task that edits files and runs commands reads Live while its turn runs, from the records and the event stream, and as History once it ends", async () => {
+  it("a Task that edits files and runs commands reads Live while its turn runs, from the records and the event stream, and as History once it ends", async () => {
     const thread = await aldricWithThread();
     // The first turn starts the Task, so the next turn's work belongs to its Attempt.
     await exchange(
@@ -445,8 +443,7 @@ describe("the Workbench, end to end", () => {
     expect(await served.text()).toBe("## 1.2.0\n\n- Faster search.\n");
   }, 60_000);
 
-  // covers UX-002, UX-006
-  it("[TC-UX-061] a Task that runs no command records none, so its Terminal is not used, while its changes and files are kept", async () => {
+  it("a Task that runs no command records none, so its Terminal is not used, while its changes and files are kept", async () => {
     const thread = await aldricWithThread();
     await exchange(
       thread,

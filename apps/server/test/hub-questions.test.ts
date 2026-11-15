@@ -153,8 +153,7 @@ const until = async (check: () => boolean) => {
 };
 
 describe("a question the hub asks you itself", () => {
-  // covers OR-004, IN-004
-  it("[TC-OR-590] reaches you with its choices, you pick one in the Inbox, and the hub applies it", async () => {
+  it("reaches you with its choices, you pick one in the Inbox, and the hub applies it", async () => {
     applied = [];
     hub = await startHub();
     const current = hub;
@@ -208,8 +207,7 @@ describe("a question the hub asks you itself", () => {
     expect(applied).toHaveLength(1);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-591] applies an answer in your own words, even one given before its handler was there", async () => {
+  it("applies an answer in your own words, even one given before its handler was there", async () => {
     applied = [];
     hub = await startHub();
     const current = hub;
@@ -228,8 +226,7 @@ describe("a question the hub asks you itself", () => {
     expect(applied).toEqual([{ answer: "Ada <ada@example.com>", picked: null }]);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-592] keeps an answer its handler failed to apply, and applies it once when the handler next registers", async () => {
+  it("keeps an answer its handler failed to apply, and applies it once when the handler next registers", async () => {
     applied = [];
     hub = await startHub();
     const current = hub;

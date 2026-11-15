@@ -284,8 +284,7 @@ const keys = async (current: Hub) => (await cards(current)).map((question) => qu
 const choices = async (current: Hub) => (await current.request("GET", "/api/charms/github/coding-setup")).body;
 
 describe("who a hob on your account commits as when your Git config sets no one", () => {
-  // covers OR-004, IN-004
-  it("[TC-OR-1241-01] with your GitHub account connected, a hob commits as it and nothing is asked", async () => {
+  it("with your GitHub account connected, a hob commits as it and nothing is asked (#1241)", async () => {
     hub = await startHub();
     const current = hub;
 
@@ -305,8 +304,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(githubReads).toBe(1);
   }, 30_000);
 
-  // covers OR-004, IN-004, UX-001
-  it("[TC-OR-1241-02] without one, each hob gets one coding setup card with two choices and no typed answer", async () => {
+  it("without one, each hob gets one coding setup card with two choices and no typed answer (#1241)", async () => {
     hub = await startHub(false);
     const current = hub;
 
@@ -342,8 +340,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect((await current.access())?.commitsAs._tag).toBe("UserConfig");
   }, 30_000);
 
-  // covers OR-004, IN-004
-  it("[TC-OR-1241-03] not for this hob stops its card only, not for any hob stops every card, and Settings clears both", async () => {
+  it("not for this hob stops its card only, not for any hob stops every card, and Settings clears both (#1241)", async () => {
     hub = await startHub(false);
     const current = hub;
     await current.access();
@@ -376,8 +373,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(await keys(current)).toEqual(["nettle", "fern"]);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-1241-04] two turns that start at once ask once, and a hob's own GitHub app withdraws its card", async () => {
+  it("two turns that start at once ask once, and a hob's own GitHub app withdraws its card (#1241)", async () => {
     hub = await startHub(false);
     const current = hub;
     await Promise.all([current.access(), current.access()]);
@@ -388,8 +384,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(await cards(current)).toEqual([]);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-1241-07] a GitHub account connected after a card was raised is used by the very next turn", async () => {
+  it("a GitHub account connected after a card was raised is used by the very next turn (#1241)", async () => {
     hub = await startHub(false);
     const current = hub;
     await current.access();
@@ -402,8 +397,7 @@ describe("who a hob on your account commits as when your Git config sets no one"
     expect(await cards(current)).toEqual([]);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-1241-08] a turn still reading GitHub when the hob gets its own app raises no card", async () => {
+  it("a turn still reading GitHub when the hob gets its own app raises no card (#1241)", async () => {
     hub = await startHub(false);
     const current = hub;
     // The turn waits on GitHub, which finds no account.

@@ -132,8 +132,7 @@ describe("readServeStatus", () => {
     Web: { "studio-desk.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:4318" } } } },
   });
 
-  // covers DP-004
-  it("[TC-DP-136] reads where serve forwards, and whether it forwards HTTPS at its root to the serve port", () => {
+  it("reads where serve forwards, and whether it forwards HTTPS at its root to the serve port", () => {
     const routes = Option.getOrThrow(readServeStatus(serving));
     expect(routes).toEqual([
       { host: "studio-desk.example.ts.net:443", path: "/", proxy: "http://127.0.0.1:4318", funnel: false },

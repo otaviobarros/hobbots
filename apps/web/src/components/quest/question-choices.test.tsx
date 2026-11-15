@@ -41,7 +41,7 @@ const form = (question: Question, look?: "rows" | "chips") =>
 const textOf = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
 
 describe("a question's choices", () => {
-  it("[TC-UX-906] shows each choice as a button with its number and what it does, marks the recommended one, and keeps the box", () => {
+  it("shows each choice as a button with its number and what it does, marks the recommended one, and keeps the box (#740)", () => {
     const html = form(asked());
     expect(html.match(/<button[^>]*type="button"/g)).toHaveLength(3);
     expect(html).toContain('aria-label="Ada&#x27;s choices"');
@@ -56,7 +56,7 @@ describe("a question's choices", () => {
     expect(html).toMatch(/data-variant="outline"[^>]*type="submit"|type="submit"[^>]*data-variant="outline"/);
   });
 
-  it("[TC-UX-906] shows the choices as chips in a lane, saying what each does to a screen reader", () => {
+  it("shows the choices as chips in a lane, saying what each does to a screen reader (#740)", () => {
     const html = form(asked(), "chips");
     expect(html.match(/data-variant="chip"/g)).toHaveLength(3);
     expect(html).toContain('title="Matches the brand guide."');
@@ -69,7 +69,7 @@ describe("a question's choices", () => {
     expect(html).toMatch(/<span>Both, with a switch<\/span><\/button>/);
   });
 
-  it("[TC-UX-906] keeps today's box and primary Send answer for a question without choices", () => {
+  it("keeps today's box and primary Send answer for a question without choices (#740)", () => {
     const html = form(asked({ options: [], recommended: null }));
     expect(html).not.toContain('type="button"');
     expect(html).not.toContain("or answer in your own words");
@@ -77,7 +77,7 @@ describe("a question's choices", () => {
     expect(html).toMatch(/data-variant="default"[^>]*type="submit"|type="submit"[^>]*data-variant="default"/);
   });
 
-  it("[TC-UX-907] says which choice you picked and what else was offered, or that you answered in your own words", () => {
+  it("says which choice you picked and what else was offered, or that you answered in your own words (#740)", () => {
     const picked = asked({
       state: "answered",
       answer: "Dark",
@@ -105,7 +105,7 @@ describe("a question's choices", () => {
 });
 
 describe("a question the hub itself asks (#976)", () => {
-  it("[TC-UX-910] offers its choices on the same card, the recommended one marked, and keeps the box", () => {
+  it("offers its choices on the same card, the recommended one marked, and keeps the box (#740)", () => {
     const question = new HubQuestion({
       id: HubQuestionId.make("h1"),
       key: "default",

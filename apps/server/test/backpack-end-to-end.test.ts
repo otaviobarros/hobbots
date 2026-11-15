@@ -350,8 +350,7 @@ const continuations = (all: ReadonlyArray<Message>) =>
 const launched = treeWhen((tree) => tree.tasks[0]?.state === "completed");
 
 describe("the backpack end to end", () => {
-  // covers IN-001, IN-004, EX-006
-  it("[TC-IN-160] Quill's result that arrives after Aldric's turn ended starts one continuation, which completes the launch", async () => {
+  it("Quill's result that arrives after Aldric's turn ended starts one continuation, which completes the launch", async () => {
     const database = await sharedDatabase();
     const { run, requests, faults, releaseCall } = await start(database, makeFaults([{ lines: [wrapUp()] }]));
     await run(party);
@@ -393,8 +392,7 @@ describe("the backpack end to end", () => {
     await run(nothingOpen);
   }, 20_000);
 
-  // covers IN-005
-  it("[TC-IN-161] thirty progress updates from Quill start no turn, and reach Aldric as one digest in the one continuation her result starts", async () => {
+  it("thirty progress updates from Quill start no turn, and reach Aldric as one digest in the one continuation her result starts", async () => {
     const database = await sharedDatabase();
     const { run, requests, faults, releaseCall } = await start(database, makeFaults([{ lines: [wrapUp()] }]));
     await run(party);
@@ -433,8 +431,7 @@ describe("the backpack end to end", () => {
     await run(nothingOpen);
   }, 20_000);
 
-  // covers EX-006, IN-001, EX-003
-  it("[TC-IN-162] Hobbots stopping between Quill finishing and Aldric hearing of it loses nothing: the next start continues him once", async () => {
+  it("Hobbots stopping between Quill finishing and Aldric hearing of it loses nothing: the next start continues him once", async () => {
     const database = await sharedDatabase();
     const first = await start(database);
     await first.run(party);
@@ -469,8 +466,7 @@ describe("the backpack end to end", () => {
     await second.run(nothingOpen);
   }, 20_000);
 
-  // covers IN-003
-  it("[TC-IN-163] a continuation cut off after it brought Ada in is delivered again, and the redelivery makes no second Task or effect", async () => {
+  it("a continuation cut off after it brought Ada in is delivered again, and the redelivery makes no second Task or effect", async () => {
     const database = await sharedDatabase();
     const bringInAda = hub("delegate_task", {
       key: "review",
@@ -529,8 +525,7 @@ describe("the backpack end to end", () => {
     await run(nothingOpen);
   }, 20_000);
 
-  // covers IN-002, IN-003
-  it("[TC-IN-164] a claim whose lease runs out while Aldric's turn stalls is expired with a new fencing token, and the item is reclaimed and consumed once", async () => {
+  it("a claim whose lease runs out while Aldric's turn stalls is expired with a new fencing token, and the item is reclaimed and consumed once", async () => {
     const database = await sharedDatabase();
     const faults = makeFaults([
       // The first continuation stalls before the runtime starts it, and its claim stops renewing.
@@ -586,8 +581,7 @@ describe("the backpack end to end", () => {
     await run(nothingOpen);
   }, 20_000);
 
-  // covers IN-002, IN-003, OR-001
-  it("[TC-IN-167] a claim that runs out while Aldric's accepted turn is mid-call fences the call: his late delegation brings nobody in", async () => {
+  it("a claim that runs out while Aldric's accepted turn is mid-call fences the call: his late delegation brings nobody in", async () => {
     const database = await sharedDatabase();
     const lateReview = hub("delegate_task", { key: "late-review", hob: "Ada", brief: "Review the launch copy" });
     const faults = makeFaults([
@@ -634,8 +628,7 @@ describe("the backpack end to end", () => {
     await run(nothingOpen);
   }, 20_000);
 
-  // covers IN-007, EX-004
-  it("[TC-IN-165] Quill's result whose every continuation is cut off becomes a blocker with a next action, and Retry completes the launch", async () => {
+  it("Quill's result whose every continuation is cut off becomes a blocker with a next action, and Retry completes the launch", async () => {
     const database = await sharedDatabase();
     const faults = makeFaults([{ cut: true }, { cut: true }, { cut: true }]);
     const { run, requests } = await start(database, faults);

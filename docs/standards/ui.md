@@ -1,6 +1,6 @@
 # UI standards
 
-Rules for how UI code is written and how it must look. The [design specification](../design/ui-ux.md) and the [screen inventory](../design/screens-and-flows.md) define the design. These rules point to them and do not copy them.
+Rules for how UI code is written and how it must look. The [themes](../design/themes.md) and [themes.json](../design/themes.json) hold the design's values. These rules point to them and do not copy them.
 
 ### STD-UI-001 Styles use theme tokens only
 
@@ -34,11 +34,11 @@ Animate only with the stepped `--animate-hb-*` tokens. Every animation stops wit
 - **Enforced by:** the token guard, `apps/web/tokens.test.ts`, in `pnpm check`, which fails on a literal duration or an animation that is not an `--animate-hb-*` token, and review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
-### STD-UI-005 Screens match the design specification
+### STD-UI-005 Screens follow the themes and the shared components
 
-Every screen matches the [design specification](../design/ui-ux.md). It defines the Home landing page and the chat workspace with Quest, Inbox and Workshop tabs. It also sets the night palette, Atkinson Hyperlegible Next for reading text and Pixelify Sans for headings. A UI change also updates the design specification when it changes the design.
+A screen is built from the theme tokens ([themes](../design/themes.md)) and the shared components in `packages/ui`. Atkinson Hyperlegible Next sets reading text and Pixelify Sans sets headings. A change to how a screen looks or flows is agreed on its issue, with a picture or a short description, before it is built.
 
-- **Why:** the specification is the single description of the product's look and behavior. See [ADR 008](../decisions/008-design.md).
+- **Why:** the themes and the components keep every screen consistent, and agreeing a design on its issue keeps one place to look without a separate spec to keep in step. See [ADR 008](../decisions/008-design.md).
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
@@ -50,28 +50,12 @@ Show selection with a fill. No element gets a decorative colored border on its l
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
-### STD-UI-007 The UI calls agents hobs
-
-User-facing text calls an agent a "hob". Code may use `agent` where it names the domain entity.
-
-- **Why:** "hob" is the product's word, and the [glossary](../product/glossary.md) defines it.
-- **Enforced by:** review.
-- **Applies to:** user-facing copy.
-
-### STD-UI-008 Durable records drive every status
-
-Every status shown to the user comes from a durable server record. Text from a model never sets a status.
-
-- **Why:** a model can claim success that did not happen.
-- **Enforced by:** review.
-- **Applies to:** `apps/web`, `apps/server`.
-
 ### STD-UI-009 Every failure says what went wrong and how to recover
 
 When something fails, tell the user in plain words what went wrong and what they can do next: retry, fix an input, reconnect, or go somewhere else. Never show a dead end, a raw error code or a stack trace. Keep what the user typed. Map each failure the client knows to its own message (STD-I18N-005), and give unknown failures a general message that still offers a way out.
 
 - **Why:** UX is a first-class goal, and a user who knows the next step can recover without help.
-- **Enforced by:** review, and end-to-end tests of each flow's failure paths (STD-TEST-004).
+- **Enforced by:** review, and unit tests of each failure's message.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-010 Only primitives take a className, and only for layout

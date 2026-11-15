@@ -28,7 +28,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 // covers STD-TEST-010, #1026
-test("[TC-GEN-1026-02] a label that escaped its panel, and the window it stretched, stay found after the test moves to a still screen", async ({
+test("a label that escaped its panel, and the window it stretched, stay found after the test moves to a still screen (#1026)", async ({
   page: tab,
   windowStill,
 }) => {
@@ -44,7 +44,7 @@ test("[TC-GEN-1026-02] a label that escaped its panel, and the window it stretch
 });
 
 // covers STD-TEST-010, #1026
-test("[TC-GEN-1026-03] a window scrolled before a reload stays found after it", async ({ page: tab, windowStill }) => {
+test("a window scrolled before a reload stays found after it (#1026)", async ({ page: tab, windowStill }) => {
   await tab.goto(`${ORIGIN}/tall`);
   await tab.evaluate(() => window.scrollTo(0, 500));
   await tab.reload();

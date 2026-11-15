@@ -55,8 +55,8 @@ const expectStill = async (
   await test.step(`scan ${where}`, () => scan(undefined, SET_ASIDE[where]));
 };
 
-// covers UX-001, UX-006, #1026
-test("[TC-UX-1026-01] a long chat, its Quest room and Workbench, and every other screen never scroll the window", async ({
+// Issue #1026
+test("a long chat, its Quest room and Workbench, and every other screen never scroll the window (#1026)", async ({
   page,
   windowStill,
   scan,

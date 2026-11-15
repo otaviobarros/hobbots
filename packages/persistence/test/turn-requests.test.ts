@@ -47,9 +47,12 @@ const run = <A, E>(effect: Effect.Effect<A, E, Services>, database: typeof TestD
     Effect.runPromise,
   );
 
-/** The migrations that ran before turn requests were recorded. */
+/**
+ * The migrations that ran before turn requests were recorded, and the one that keeps a reply's
+ * read-the-web mark, which the repository writes each message with.
+ */
 const earlier = Object.fromEntries(
-  Object.entries(migrations).filter(([id]) => id < "20261114003401"),
+  Object.entries(migrations).filter(([id]) => id < "20261114003401" || id === "20261115002636_message_read_web"),
 ) as typeof migrations;
 
 const hob = (id: AgentId) =>
@@ -129,7 +132,7 @@ const speak = (next: TurnRequest, replyId: string) =>
 
 describe("turn requests as records", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1461-01] writes one waiting request per hob owed, in mention order, with the message", async () => {
+  it("writes one waiting request per hob owed, in mention order, with the message (#1461)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -161,7 +164,7 @@ describe("turn requests as records", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1461-02] takes the floor with the turn's reply, or neither, and drops what a removed message was owed", async () => {
+  it("takes the floor with the turn's reply, or neither, and drops what a removed message was owed (#1461)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -193,9 +196,99 @@ describe("turn requests as records", () => {
   });
 });
 
+/** Pip's reply in the camp, saved as its turn left it. */
+const pipSaid = (threadId: ThreadId, id: string, content: string, status: MessageStatus) =>
+  new Message({ ...replyTo(threadId, id, PIP), content, status });
+
+describe("relays owed while a turn ends", () => {
+  // covers ADR 039 (Hobs talking to hobs)
+  it("Stop all picked before the turn ended still drops the relay its reply wrote (#1463)", async () => {
+    const camp = ThreadId.make("camp");
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* summonAll;
+        yield* campOfThree(camp);
+        yield* repo.sendMessage(said(camp, "m-1", "complete"), mentioning([PIP]));
+        const [pip] = yield* open(camp);
+        if (pip === undefined) throw new Error("one request");
+        yield* speak(pip, "reply-pip");
+        // Stop all picks what is owed, then the turn ends and relays before the drop runs.
+        const picked = yield* open(camp);
+        yield* repo.upsertMessage(pipSaid(camp, "reply-pip", "@rook check the list", "complete"));
+        yield* repo.answerTurnRequests(MessageId.make("reply-pip"));
+        const relayed = yield* open(camp);
+        const dropped = yield* repo.dropTurnRequests(
+          picked.map((request) => request.id),
+          MARINA,
+        );
+        return { relayed, dropped: dropped.value, open: yield* open(camp) };
+      }),
+    );
+    expect(result.relayed.map((r) => [r.hobId, r.cause, r.relayDepth])).toEqual([[ROOK, "relay", 1]]);
+    expect(result.dropped.map((r) => [r.hobId, r.state, r.droppedBy])).toEqual([[ROOK, "dropped", MARINA]]);
+    expect(result.open).toEqual([]);
+  });
+
+  // covers ADR 039 (Hobs talking to hobs)
+  it("writes a reply's relays as it is saved complete, so a restart before its turn ends keeps them, once (#1463)", async () => {
+    const camp = ThreadId.make("camp");
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* summonAll;
+        yield* campOfThree(camp);
+        yield* repo.sendMessage(said(camp, "m-1", "complete"), mentioning([PIP]));
+        const [first] = yield* open(camp);
+        if (first === undefined) throw new Error("one request");
+        yield* speak(first, "reply-done");
+        // The reply is saved complete; the hub stops before its turn's end is recorded.
+        yield* repo.upsertMessage(pipSaid(camp, "reply-done", "@rook check the list", "complete"));
+        const saved = yield* open(camp);
+        yield* repo.answerUnfinishedTurnRequests;
+        yield* repo.upsertMessage(pipSaid(camp, "reply-done", "@rook check the list", "complete"));
+        const again = yield* open(camp);
+        // A reply the stop interrupted relays nothing.
+        yield* repo.sendMessage(said(camp, "m-2", "complete"), mentioning([PIP]));
+        const second = (yield* open(camp)).find((request) => request.hobId === PIP);
+        if (second === undefined) throw new Error("Pip owes m-2");
+        yield* speak(second, "reply-cut");
+        yield* repo.upsertMessage(pipSaid(camp, "reply-cut", "@quill half a", "interrupted"));
+        yield* repo.answerUnfinishedTurnRequests;
+        return { saved, again, open: yield* open(camp) };
+      }),
+    );
+    expect(result.saved.map((r) => [r.hobId, r.messageId, r.state, r.relayDepth])).toEqual([
+      [PIP, "m-1", "speaking", 0],
+      [ROOK, "reply-done", "waiting", 1],
+    ]);
+    expect(result.again.map((r) => [r.hobId, r.messageId])).toEqual([[ROOK, "reply-done"]]);
+    expect(result.open.map((r) => [r.hobId, r.messageId])).toEqual([[ROOK, "reply-done"]]);
+  });
+
+  // covers ADR 039 (Hobs talking to hobs)
+  it("a reply you asked to stop relays nothing when it completes, even with no request to drop (#1463)", async () => {
+    const camp = ThreadId.make("camp");
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* summonAll;
+        yield* campOfThree(camp);
+        // Two turns nobody asked for, as a carried backpack's: one you stop, one you let finish.
+        for (const id of ["reply-stopped", "reply-done"]) yield* repo.upsertMessage(pipSaid(camp, id, "", "streaming"));
+        yield* repo.upsertMessage(pipSaid(camp, "reply-stopped", "", "stopping"));
+        yield* repo.upsertMessage(pipSaid(camp, "reply-stopped", "@rook check the list", "complete"));
+        yield* repo.upsertMessage(pipSaid(camp, "reply-done", "@rook check the list", "complete"));
+        return yield* open(camp);
+      }),
+    );
+    expect(result.map((r) => [r.hobId, r.messageId, r.relayDepth])).toEqual([[ROOK, "reply-done", 1]]);
+  });
+});
+
 describe("recording the answers already owed", () => {
   // covers ADR 039 (One hob speaks at a time, Restart)
-  it("[TC-PE-1461-04] gives each message still queued a waiting request for its thread's hob, in queue order", async () => {
+  it("gives each message still queued a waiting request for its thread's hob, in queue order (#1461)", async () => {
     const chat = ThreadId.make("chat");
     const result = await run(
       Effect.gen(function* () {
@@ -219,7 +312,7 @@ describe("recording the answers already owed", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1461-05] refuses a request state or cause outside the domain's, on insert and on update", async () => {
+  it("refuses a request state or cause outside the domain's, on insert and on update (#1461)", async () => {
     // A new state or cause needs a migration of its own.
     expect(TURN_REQUEST_STATES).toEqual(TurnRequestState.literals);
     expect(TURN_CAUSES).toEqual(TurnCause.literals);
@@ -394,7 +487,7 @@ const recordStep = (camp: ThreadId, op: Op, n: number) =>
 
 describe("the floor's queue on the records", () => {
   // covers ADR 039 (One hob speaks at a time, Restart)
-  it("[TC-PE-1461-03] agrees with a model of the floor across three hobs, whatever sends, stops, removals and restarts do", async () => {
+  it("agrees with a model of the floor across three hobs, whatever sends, stops, removals and restarts do (#1461)", async () => {
     let camps = 0;
     await run(
       Effect.gen(function* () {

@@ -6,6 +6,7 @@ import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";
 import { ToolOutput } from "./tool-output.ts";
+import { WebReadMark } from "./web-mark.ts";
 
 /**
  * - `user`: a message you sent the hob.
@@ -51,6 +52,9 @@ export type MessageStatus = typeof MessageStatus.Type;
 
 /** A reply whose turn has not ended yet, so its thread is busy. */
 export const isInProgress = (status: MessageStatus): boolean => status === "streaming" || status === "stopping";
+
+/** Whether you asked to stop the reply, and the runtime has not yet confirmed it stopped. */
+export const isStopAsked = (status: MessageStatus): boolean => status === "stopping";
 
 /** A reply that ended early and that Continue can resume in place. */
 export const isResumable = (status: MessageStatus): boolean => status === "interrupted" || status === "limited";
@@ -263,6 +267,16 @@ export class Message extends Schema.Class<Message>("Message")({
   mentions: Schema.Array(Actor).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([])),
     Schema.withConstructorDefault(Effect.succeed([])),
+  ),
+  /**
+   * On a hob's reply, the read-the-web mark its session held while it wrote it (ADR 036, ADR 039, A
+   * relay carries the read-the-web mark): what it wrote may carry what a page said, so any turn whose
+   * context holds it starts marked too, in any chapter and on any session. Null for your messages,
+   * for a reply whose session read nothing, and for replies from before this was kept.
+   */
+  readWeb: Schema.NullOr(WebReadMark).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   createdAt: Schema.String,
   revision: Revision,

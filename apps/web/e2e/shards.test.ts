@@ -1,22 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { durationsOf } from "./record-durations.ts";
-import { parseShard, planShards, shardFilter, tagOf, tagsInSource } from "./shards.ts";
+import { parseShard, planShards, shardFilter } from "./shards.ts";
 
-const durations = { "[TC-A-001]": 90, "[TC-A-002]": 60, "[TC-A-003]": 50, "[TC-A-004]": 40, "[#12]": 30, plain: 10 };
-
-describe("tagOf", () => {
-  it("names a test by the tag its title starts with, else by its whole title", () => {
-    expect(tagOf("[TC-CH-001] streams a turn")).toBe("[TC-CH-001]");
-    expect(tagOf("[#153] a tool step shows short output")).toBe("[#153]");
-    expect(tagOf("no tag here [TC-CH-001]")).toBe("no tag here [TC-CH-001]");
-  });
-});
+const durations = { "a.e2e.ts": 90, "b.e2e.ts": 60, "c.e2e.ts": 50, "d.e2e.ts": 40, "e.e2e.ts": 30, "f.e2e.ts": 10 };
 
 describe("planShards", () => {
   it("deals the longest tests first to the shard with the least time", () => {
     expect(planShards(durations, 2)).toEqual([
-      ["[TC-A-001]", "[TC-A-004]", "plain"],
-      ["[TC-A-002]", "[TC-A-003]", "[#12]"],
+      ["a.e2e.ts", "d.e2e.ts", "f.e2e.ts"],
+      ["b.e2e.ts", "c.e2e.ts", "e.e2e.ts"],
     ]);
   });
 
@@ -41,67 +33,53 @@ describe("planShards", () => {
   });
 
   it("spreads the tests with no recorded time over every shard, not only the last", () => {
-    const unrecorded = Array.from({ length: 40 }, (_, index) => `[TC-NEW-${String(index).padStart(3, "0")}]`);
+    const unrecorded = Array.from({ length: 40 }, (_, index) => `new-${String(index).padStart(3, "0")}.e2e.ts`);
     const shards = planShards(durations, 4, [...Object.keys(durations), ...unrecorded]);
     expect(shards.flat().sort()).toEqual([...Object.keys(durations), ...unrecorded].sort());
-    for (const shard of shards) expect(shard.some((tag) => tag.startsWith("[TC-NEW-"))).toBe(true);
+    for (const shard of shards) expect(shard.some((file) => file.startsWith("new-"))).toBe(true);
   });
 
   it("keeps a test with no recorded time in its shard when other tests are added", () => {
-    const shardOf = (tags: ReadonlyArray<string>, tag: string) =>
-      planShards(durations, 4, tags).findIndex((shard) => shard.includes(tag));
-    const before = shardOf(["[TC-NEW-001]"], "[TC-NEW-001]");
-    expect(shardOf(["[TC-NEW-000]", "[TC-NEW-001]", "[TC-NEW-002]"], "[TC-NEW-001]")).toBe(before);
-  });
-});
-
-describe("tagsInSource", () => {
-  it("reads the tag of each test with a literal title, across lines and modifiers", () => {
-    const source = [
-      'test("[TC-A-001] one", async () => {});',
-      "test(\n  '[TC-A-002] two',\n  async () => {},\n);",
-      "test.skip(`[#12] three`, async () => {});",
-      'test.describe("[TC-A-009] a group", () => {});',
-      "test(`[TC-A-$" + "{id}] built from a template`, async () => {});",
-      'test("no tag", async () => {});',
-    ].join("\n");
-    expect(tagsInSource(source)).toEqual(["[TC-A-001]", "[TC-A-002]", "[#12]"]);
+    const shardOf = (files: ReadonlyArray<string>, file: string) =>
+      planShards(durations, 4, files).findIndex((shard) => shard.includes(file));
+    const before = shardOf(["new-001.e2e.ts"], "new-001.e2e.ts");
+    expect(shardOf(["new-000.e2e.ts", "new-001.e2e.ts", "new-002.e2e.ts"], "new-001.e2e.ts")).toBe(before);
   });
 });
 
 describe("shardFilter", () => {
-  const titles = ["[TC-A-001] one", "[TC-A-002] two", "[TC-A-003] three", "[TC-A-004] four", "[#12] five"];
-  const run = (current: number, total: number, all: ReadonlyArray<string>) => {
-    const { grep, grepInvert } = shardFilter(durations, current, total);
-    return all.filter((title) => (grep?.test(title) ?? true) && !(grepInvert?.test(title) ?? false));
+  const paths = ["a", "b", "c", "d", "e"].map((name) => `/repo/apps/web/e2e/${name}.e2e.ts`);
+  const runs = (filter: { testMatch?: RegExp; testIgnore?: RegExp }, path: string) =>
+    (filter.testMatch?.test(path) ?? true) && !(filter.testIgnore?.test(path) ?? false);
+  const run = (current: number, total: number, all: ReadonlyArray<string>, files?: ReadonlyArray<string>) => {
+    const filter = shardFilter(durations, current, total, files);
+    return all.filter((path) => runs(filter, path));
   };
 
-  it("runs every test in exactly one shard, a new one in the last", () => {
-    const all = [...titles, "[TC-A-999] new, with no recorded time"];
+  it("runs every spec file in exactly one shard, a new one in the last", () => {
+    const all = [...paths, "/repo/apps/web/e2e/new.e2e.ts"];
     const shards = [1, 2, 3].map((current) => run(current, 3, all));
     expect(shards.flat().sort()).toEqual([...all].sort());
-    expect(shards.at(-1)).toContain("[TC-A-999] new, with no recorded time");
+    expect(shards.at(-1)).toContain("/repo/apps/web/e2e/new.e2e.ts");
   });
 
-  it("matches a tag literally, not as a pattern or a prefix", () => {
-    expect(run(1, 2, ["[TC-A-0010] longer id", "TC-A-001 without brackets"])).toEqual([]);
+  it("matches a whole file name literally, not as a pattern or a suffix", () => {
+    expect(run(1, 2, ["/repo/e2e/xa.e2e.ts", "/repo/e2e/aXe2e.ts"])).toEqual([]);
   });
 
-  it("runs a test with no recorded time in the shard its tag hashes to, and in no other", () => {
-    const all = [...titles, "[TC-A-999] new, with no recorded time"];
-    const tags = all.map(tagOf);
-    const shards = [1, 2, 3].map((current) => {
-      const { grep, grepInvert } = shardFilter(durations, current, 3, tags);
-      return all.filter((title) => (grep?.test(title) ?? true) && !(grepInvert?.test(title) ?? false));
-    });
+  it("runs a file with no recorded time in the shard its name hashes to, and in no other", () => {
+    const all = [...paths, "/repo/apps/web/e2e/new.e2e.ts"];
+    const files = all.map((path) => path.split("/").at(-1) ?? "");
+    const shards = [1, 2, 3].map((current) => run(current, 3, all, files));
     expect(shards.flat().sort()).toEqual([...all].sort());
-    expect(shards.filter((shard) => shard.includes("[TC-A-999] new, with no recorded time"))).toHaveLength(1);
+    expect(shards.filter((shard) => shard.includes("/repo/apps/web/e2e/new.e2e.ts"))).toHaveLength(1);
   });
 
-  it("runs no test in a shard that got none", () => {
-    expect(shardFilter({ "[TC-A-001]": 10 }, 1, 2)).toEqual({ grep: /\[TC-A-001\]/ });
-    expect(shardFilter({ "[TC-A-001]": 10 }, 2, 2).grep).toBeUndefined();
-    expect(shardFilter({ "[TC-A-001]": 10, "[TC-A-002]": 5 }, 3, 3).grepInvert?.test("[TC-A-003] new")).toBe(false);
+  it("runs no file in a shard that got none", () => {
+    expect(shardFilter({ "a.e2e.ts": 10 }, 1, 2).testMatch?.test("/e2e/a.e2e.ts")).toBe(true);
+    expect(shardFilter({ "a.e2e.ts": 10 }, 2, 2).testMatch).toBeUndefined();
+    expect(shardFilter({ "a.e2e.ts": 10, "b.e2e.ts": 5 }, 3, 3).testIgnore?.test("/e2e/c.e2e.ts")).toBe(false);
+    expect(shardFilter({ "a.e2e.ts": 10, "b.e2e.ts": 5 }, 1, 3).testMatch?.test("/e2e/b.e2e.ts")).toBe(false);
   });
 
   it("falls back to Playwright's sharding by count when no times are recorded", () => {
@@ -123,12 +101,17 @@ describe("parseShard", () => {
 });
 
 describe("durationsOf", () => {
-  it("adds up each tag's time across reports and nested suites, to a tenth of a second", () => {
+  it("adds up each spec file's time across reports and nested suites, to a tenth of a second", () => {
     const spec = (title: string, duration: number) => ({ title, tests: [{ results: [{ duration }] }] });
     const reports = [
-      { suites: [{ specs: [spec("[TC-A-001] one", 1234)], suites: [{ specs: [spec("[TC-A-002] two", 500)] }] }] },
-      { suites: [{ specs: [spec("[TC-A-001] again", 1000)] }] },
+      { suites: [{ file: "a.e2e.ts", specs: [spec("one", 1234)], suites: [{ specs: [spec("two", 500)] }] }] },
+      {
+        suites: [
+          { file: "a.e2e.ts", specs: [spec("again", 1000)] },
+          { file: "b.e2e.ts", specs: [spec("b", 500)] },
+        ],
+      },
     ];
-    expect(durationsOf(reports)).toEqual({ "[TC-A-001]": 2200, "[TC-A-002]": 500 });
+    expect(durationsOf(reports)).toEqual({ "a.e2e.ts": 2700, "b.e2e.ts": 500 });
   });
 });

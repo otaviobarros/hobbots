@@ -36,10 +36,10 @@ const messageId = MessageId.make("m1");
 const project = "/work/project";
 const repository = "otaviobarros/hobbots";
 
-// Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095, 0099, 0100 to 0102, 0113, 0114, 20261114003022, 20261114004439 and 20261114193617 too: the repository that seeds the hobs writes their Charms, whether
+// Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095, 0099, 0100 to 0102, 0114, 20261114003022, 20261114004439, 20261114193617 and 20261115002636 too: the repository that seeds the hobs writes their Charms, whether
 // other hobs see them, their good at and who made and summoned them, and their Summoning scope, and seeds each thread
 // with the draft it tries, its kind and state and its first chapter; the journal registers artifacts
-// and weighs camp suggestions, each Quest keeps its acceptance criteria, each message its mentions, and each Task its pause.
+// and weighs camp suggestions, each message its mentions and read-the-web mark, and each Task its pause.
 const before = Object.fromEntries(
   Object.entries(migrations).filter(
     ([key]) =>
@@ -58,11 +58,11 @@ const before = Object.fromEntries(
         "0103_quest_summaries",
         "0104_camp_suggestions",
         "0105_artifact_reviews",
-        "0113_quest_criteria",
         "0114_thread_members",
         "20261114003022_message_mentions",
         "20261114004439_pauses",
         "20261114193617_camp_suggestion_names",
+        "20261115002636_message_read_web",
       ].includes(key),
   ),
 ) as typeof migrations;
@@ -223,8 +223,7 @@ const commentSite = {
 };
 
 describe("0071_charm_operations", () => {
-  // covers DP-003, PE-007
-  it("[TC-DP-285] renames stored overrides, approvals and grants to the Charm's operations and rules, once", async () => {
+  it("renames stored overrides, approvals and grants to the Charm's operations and rules, once", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;
@@ -317,8 +316,7 @@ describe("0071_charm_operations", () => {
     ]);
   });
 
-  // covers DP-003, DP-051
-  it("[TC-DP-286] still reads hob, approval and grant events journaled before it, under the new names", async () => {
+  it("still reads hob, approval and grant events journaled before it, under the new names", async () => {
     const agent = {
       id: "nettle",
       name: "Nettle",
@@ -434,8 +432,7 @@ describe("0071_charm_operations", () => {
     ]);
   });
 
-  // covers DP-003, DP-051
-  it("[TC-DP-288] still reads a Delegation journaled before it, its authority under the new names", async () => {
+  it("still reads a Delegation journaled before it, its authority under the new names", async () => {
     const created = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;

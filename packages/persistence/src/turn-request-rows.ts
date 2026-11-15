@@ -4,6 +4,7 @@ import {
   type Line,
   type Message,
   type MessageId,
+  relayStateFor,
   type ThreadId,
   TurnRequest,
   type TurnRequestEvent,
@@ -72,6 +73,12 @@ export const selectOpenRequests = (sql: SqlClient.SqlClient, line: Line) =>
       AND ${sql.in("state", OPEN)}
     ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
 
+/** The requests `hobId` waits to answer in the thread, on any line, paused ones included. */
+export const selectWaitingOf = (sql: SqlClient.SqlClient, threadId: ThreadId, hobId: string) =>
+  sql<TurnRequestRow>`SELECT * FROM turn_requests
+    WHERE thread_id = ${threadId} AND hob_id = ${hobId} AND ${sql.in("state", ["waiting", "paused"])}
+    ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
+
 /** Every request in `state`, across threads, in floor order. */
 export const selectRequestsIn = (sql: SqlClient.SqlClient, state: TurnRequest["state"]) =>
   sql<TurnRequestRow>`SELECT * FROM turn_requests WHERE state = ${state}
@@ -99,7 +106,8 @@ export const selectRequestsById = (
 
 /**
  * The requests `message` causes, one per hob that owes it an answer, in the order given. A person's
- * message starts the relay count; a hob's mention adds one to its own turn's depth (`relayDepth`).
+ * message starts the relay count; a hob's mention adds one to its own turn's depth (`relayDepth`),
+ * and one past the relay budget is written `paused` (ADR 039, Hobs talking to hobs).
  */
 export const requestsFor = (
   message: Message,
@@ -118,7 +126,7 @@ export const requestsFor = (
         causedBy,
         cause: answerer.cause,
         relayDepth,
-        state: "waiting",
+        state: relayStateFor(relayDepth),
         replyId: null,
         droppedBy: null,
         queuedAt: message.revision,
@@ -156,14 +164,18 @@ export const stepRequests = (sql: SqlClient.SqlClient, requests: ReadonlyArray<T
   Effect.forEach(requests, (request) => {
     const next = TurnRequests.transition(request, event);
     if (!(next instanceof TurnRequest)) return Effect.succeed<ReadonlyArray<TurnRequest>>([]);
-    return sql`UPDATE turn_requests SET state = ${next.state}, reply_id = ${next.replyId},
+    return sql`UPDATE turn_requests SET state = ${next.state}, reply_id = ${next.replyId}, relay_depth = ${next.relayDepth},
         dropped_by_kind = ${next.droppedBy?.kind ?? null}, dropped_by_id = ${next.droppedBy?.id ?? null},
         pass_reason = ${next.passReason}
       WHERE id = ${next.id} AND state = ${request.state}`.pipe(Effect.as([next]));
   }).pipe(Effect.map((changed) => changed.flat()));
 
-/** The threads with a request waiting there. */
+/** Every request the turn writing `replyId` spoke for, or that its reply caused, in any state. */
+export const selectRequestsOfReply = (sql: SqlClient.SqlClient, replyId: MessageId) =>
+  sql<TurnRequestRow>`SELECT * FROM turn_requests WHERE reply_id = ${replyId} OR message_id = ${replyId}
+    ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
+
+/** The threads with a request waiting there, or paused past the relay budget. */
 export const selectThreadsWaiting = (sql: SqlClient.SqlClient) =>
-  sql<{ readonly threadId: string }>`SELECT DISTINCT thread_id FROM turn_requests WHERE state = 'waiting'`.pipe(
-    Effect.map((rows) => rows.map((row) => row.threadId as ThreadId)),
-  );
+  sql<{ readonly threadId: string }>`SELECT DISTINCT thread_id FROM turn_requests
+    WHERE state IN ('waiting', 'paused')`.pipe(Effect.map((rows) => rows.map((row) => row.threadId as ThreadId)));

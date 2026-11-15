@@ -86,7 +86,7 @@ describe("Claude Code tool calls as policy requests", () => {
     ]);
   });
 
-  it("[#209] sees through assignments and wrappers in any order, by basename and with their options", () => {
+  it("sees through assignments and wrappers in any order, by basename and with their options (#209)", () => {
     const decided = (command: string) =>
       commandRequests(command, "/work", "/home/me").map((r) => (r._tag === "Command" ? r.operation : r._tag));
     for (const command of [
@@ -117,12 +117,12 @@ describe("Claude Code tool calls as policy requests", () => {
     ]);
   });
 
-  it("[#209] ignores redirections, so they are not read as a remote or a file", () => {
+  it("ignores redirections, so they are not read as a remote or a file (#209)", () => {
     expect(commandRequests("git push 2>&1 | tail -5", "/work")[0]).toMatchObject({ remote: "origin" });
     expect(commandRequests("rm -f a > /dev/null 2> err.log &> all.log", "/work")[0]).toMatchObject({ paths: ["a"] });
   });
 
-  it("[#209] resolves later paths against the folder cd and pushd move to", () => {
+  it("resolves later paths against the folder cd and pushd move to (#209)", () => {
     const deletes = (command: string) =>
       commandRequests(command, "/work", "/home/me").filter((r) => r._tag === "Files");
     expect(deletes("pwd; cd ~/project && touch x; rm -rf .git/zz-probe")).toEqual([
@@ -145,7 +145,7 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(deletes("cd sub; make & rm file")[0]).toMatchObject({ cwd: "/work/sub" });
   });
 
-  it("[#209] takes `..` off the spelling after cd, as the shell does, but not after git -C", () => {
+  it("takes `..` off the spelling after cd, as the shell does, but not after git -C (#209)", () => {
     // With /work/link pointing at /work/real/deep, `cd link && cd ..` is back in /work.
     expect(commandRequests("cd link && cd .. && rm file", "/work").find((r) => r._tag === "Files")).toMatchObject({
       cwd: "/work",
@@ -156,7 +156,7 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(physical?._tag === "Files" && isAbsolute(physical.cwd)).toBe(false);
   });
 
-  it("[#209] does not guess the folder when a cd may have been skipped", () => {
+  it("does not guess the folder when a cd may have been skipped (#209)", () => {
     const cwdOf = (command: string) => {
       const remove = commandRequests(command, "/work").find((r) => r._tag === "Files");
       return remove?._tag === "Files" ? remove.cwd : undefined;
@@ -173,7 +173,7 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(cwdOf("(false && cd sub); rm file")).toBe("/work");
   });
 
-  it("[#209] keeps quoted operators as arguments, dropping only real redirections", () => {
+  it("keeps quoted operators as arguments, dropping only real redirections (#209)", () => {
     expect(commandRequests("rm -f '>' .git/config safe", "/work")[0]).toMatchObject({
       paths: [">", ".git/config", "safe"],
     });
@@ -188,7 +188,7 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(commandRequests(`rm a >'out' 2>>"err" <in b`, "/work")[0]).toMatchObject({ paths: ["a", "b"] });
   });
 
-  it("[#209] moves git -C, make -C and env -C only for their own command", () => {
+  it("moves git -C, make -C and env -C only for their own command (#209)", () => {
     expect(commandRequests("git -C a -C b status; git status", "/work")).toEqual([
       { _tag: "Command", operation: "local-git", cwd: "/work/a/b", words: ["git", "-C", "a", "-C", "b", "status"] },
       { _tag: "Command", operation: "local-git", cwd: "/work", words: ["git", "status"] },
@@ -200,7 +200,7 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(commandRequests("env -C /elsewhere rm x", "/work")[0]).toMatchObject({ cwd: "/elsewhere" });
   });
 
-  it("[#209] leaves a folder it cannot work out unresolved, never as an absolute path", () => {
+  it("leaves a folder it cannot work out unresolved, never as an absolute path (#209)", () => {
     for (const command of [
       `cd "$DIR" && rm x`,
       "cd - && rm x",
@@ -297,7 +297,7 @@ describe("Claude Code tool calls as policy requests", () => {
     ]);
   });
 
-  it("[TC-RT-486] decides a command after cd only in the folder cd moved to, not the one the line started in", () => {
+  it("decides a command after cd only in the folder cd moved to, not the one the line started in", () => {
     const folders = (command: string) =>
       commandRequests(command, "/work/hobbots", "/home/me").map((r) => (r._tag === "Web" ? r.host : r.cwd));
     expect(folders("cd /work/test && ls")).toEqual(["/work/test"]);
@@ -337,7 +337,7 @@ describe("Claude Code tool calls as policy requests", () => {
   });
 });
 
-describe("[#210] command step labels", () => {
+describe("command step labels (#210)", () => {
   const label = (command: string) => toolLabel("Bash", { command });
 
   it("leaves out leading assignments and the folder a lone Git command names, which On shows", () => {
@@ -405,7 +405,7 @@ describe("[#210] command step labels", () => {
   });
 });
 
-describe("[#210] the folder a Git command works in", () => {
+describe("the folder a Git command works in (#210)", () => {
   const folders = (command: string) =>
     commandRequests(command, "/work").map((r) => (r._tag === "Web" ? r.host : r.cwd));
 
@@ -484,8 +484,7 @@ describe("tools offered for a turn", () => {
     expect(offeredTools(context({ restrictions: [{ "edit-files": "ask" }] }))).toContain("Edit");
   });
 
-  it("[TC-PE-019] leaves out commands unless the hob may read its folders without asking and edit them without asking or not at all", () => {
-    // covers PE-005
+  it("leaves out commands unless the hob may read its folders without asking and edit them without asking or not at all", () => {
     // A command reads and writes files without a call per file, so it would get past an Ask.
     for (const restriction of [{ "edit-files": "ask" }, { "read-files": "ask" }, { "read-files": "deny" }] as const)
       expect(offeredTools(context({ restrictions: [restriction] }))).not.toContain("Bash");
@@ -495,8 +494,7 @@ describe("tools offered for a turn", () => {
     expect(readOnlyCommands(context({}))).toBe(false);
   });
 
-  it("[TC-PE-430] offers each combination of file and command answers the tools it opens, with read-only commands under Edit files Never", () => {
-    // covers PE-005
+  it("offers each combination of file and command answers the tools it opens, with read-only commands under Edit files Never", () => {
     // Issue #661: Local Git Allow with Edit files Never left a member with nothing to commit with.
     // Issue #1344: it now gets read-only commands, which the sandbox keeps from writing the folders.
     const decisions = ["allow", "ask", "deny"] as const;
@@ -557,8 +555,7 @@ describe("grants from command lines", () => {
       return yield* engine.decide(context, request);
     }).pipe(Effect.provide(PolicyEngine.node), Effect.runPromise);
 
-  // covers PE-007
-  it("[TC-PE-099] saves a quoted ~ path as written, so its grant never answers the home folder's path", async () => {
+  it("saves a quoted ~ path as written, so its grant never answers the home folder's path", async () => {
     const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "hobbots-tilde-")));
     const home = path.join(root, "home");
     const work = path.join(root, "work");

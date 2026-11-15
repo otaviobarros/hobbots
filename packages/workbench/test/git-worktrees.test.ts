@@ -40,7 +40,7 @@ const uncommitted = (folder: string, paths: ReadonlyArray<string>) =>
   );
 
 describe("Uncommitted files in a linked worktree", () => {
-  it("are none when the worktree's branch has every file committed, even one the main branch lacks", async () => {
+  it("are none when the worktree's branch has every file committed, even one the main branch lacks (#586)", async () => {
     const tree = join(work, "feature");
     gitIn(main, "worktree", "add", "-q", "-b", "feature", tree);
     writeFileSync(join(tree, "NOTES.md"), "Notes\n");
@@ -49,7 +49,7 @@ describe("Uncommitted files in a linked worktree", () => {
     expect(await uncommitted(tree, ["docs/SPEC.md", "README.md", "NOTES.md"])).toEqual([]);
   });
 
-  it("are the files changed, staged or new since the worktree's own last commit", async () => {
+  it("are the files changed, staged or new since the worktree's own last commit (#586)", async () => {
     const tree = join(work, "feature");
     gitIn(main, "worktree", "add", "-q", "-b", "feature", tree);
     writeFileSync(join(tree, "docs", "SPEC.md"), "# Spec\n\nChanged.\n");
@@ -63,7 +63,7 @@ describe("Uncommitted files in a linked worktree", () => {
     ]);
   });
 
-  it("are read from a detached worktree's own commit", async () => {
+  it("are read from a detached worktree's own commit (#586)", async () => {
     writeFileSync(join(main, "README.md"), "# Site\n\nSecond.\n");
     gitIn(main, "commit", "-q", "-am", "Second");
     const tree = join(work, "detached");

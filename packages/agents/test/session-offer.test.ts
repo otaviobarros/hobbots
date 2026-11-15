@@ -48,8 +48,8 @@ const describeFor = (given: ToolAccess | null, offered: ReadonlyArray<string>, c
   }).pipe(Effect.provide(Charms.layer(charms).pipe(Layer.provide(memoryCharmCalls()))), Effect.runPromise);
 
 describe("a member's session offer, described for its lead (#1348)", () => {
-  // covers PE-005, OR-002, ADR 014 (Amendment: what a delegation tells its lead)
-  it("[TC-PE-1348-01] gives each offered tool its answer, and each tool it lacks a reason", async () => {
+  // covers ADR 014 (Amendment: what a delegation tells its lead)
+  it("gives each offered tool its answer, and each tool it lacks a reason (#1348)", async () => {
     const { tools, dropped } = await describeFor(access(["/work"], { "edit-files": "ask" }, { "rook.write": "ask" }), [
       "pip_read",
       "rook_read",
@@ -75,8 +75,8 @@ describe("a member's session offer, described for its lead (#1348)", () => {
     ]);
   });
 
-  // covers PE-005, ADR 031, ADR 038
-  it("[TC-PE-1348-02] names Never answers, Charms the hob does not hold, and a session with no folder", async () => {
+  // covers ADR 031, ADR 038
+  it("names Never answers, Charms the hob does not hold, and a session with no folder (#1348)", async () => {
     const never = await describeFor(access(["/work"], { "use-web": "deny" }, { "rook.write": "deny" }), [
       "rook_read",
       "pip_read",

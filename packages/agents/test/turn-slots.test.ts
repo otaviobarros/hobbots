@@ -1,33 +1,16 @@
-import {
-  AgentId,
-  DEFAULT_TURN_LIMITS,
-  limitReached,
-  type RuntimeKind,
-  type TurnHolder,
-  type TurnLimits,
-} from "@hobbots/domain";
+import { AgentId, MAX_ACTIVE_TURNS, type SlotTurn } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
-import { Effect, Layer, Ref } from "effect";
+import { Deferred, Effect, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { TurnLimitsStore, type TurnSlot, TurnSlots } from "../src/index.ts";
+import { type TurnSlot, TurnSlots } from "../src/index.ts";
 
-// Issue #1448 (OR-005): the hub's turn slots. A turn past a limit waits, is woken once a slot may
-// be its, and slots go to Quests in a fair order.
+// Issue #1590 (OR-005): the hub's turn slots. At most a cap of turns run at once; a turn past it
+// waits, is woken once a slot may be its, and waiting turns start in the order they asked.
 
 const isSet = <A>(value: A | null): value is A => value !== null;
 
-/** Something that wants turns, as a thread, a step or a member's Task does. */
-interface Work extends TurnHolder {
-  readonly id: string;
-}
-
-const work = (id: string, agentId: string, runtime: RuntimeKind, quest: string | null): Work => ({
-  id,
-  agentId: AgentId.make(agentId),
-  runtime,
-  quest,
-});
+const work = (id: string, agentId = "aldric"): SlotTurn => ({ id, agentId: AgentId.make(agentId) });
 
 /** What each piece of work is doing: nothing, waiting for a slot, or running in one. */
 type Phase = { readonly _tag: "idle" } | { readonly _tag: "waiting" } | { readonly _tag: "running"; slot: TurnSlot };
@@ -36,11 +19,11 @@ type Phase = { readonly _tag: "idle" } | { readonly _tag: "waiting" } | { readon
  * The work as the runners keep it: a turn asks for a slot, and waits queued when it gets none; its
  * wake asks again, as a runner's wake starts what waits. `started` keeps the order slots went in.
  */
-const harness = (slots: TurnSlots["Service"], all: ReadonlyArray<Work>) =>
+const harness = (slots: TurnSlots["Service"], all: ReadonlyArray<SlotTurn>) =>
   Effect.gen(function* () {
     const phases = yield* Ref.make(new Map<string, Phase>(all.map((each) => [each.id, { _tag: "idle" }])));
     const started: Array<string> = [];
-    const ask = (each: Work): Effect.Effect<void> =>
+    const ask = (each: SlotTurn): Effect.Effect<void> =>
       Effect.gen(function* () {
         const slot = yield* slots.take(
           each,
@@ -54,94 +37,87 @@ const harness = (slots: TurnSlots["Service"], all: ReadonlyArray<Work>) =>
         yield* Ref.update(phases, (map) => new Map(map).set(each.id, { _tag: "running", slot }));
       });
     // A wake starts the work only when it still waits, as a runner finds a queued message.
-    const wake = (each: Work) =>
+    const wake = (each: SlotTurn) =>
       Effect.flatMap(Ref.get(phases), (map) => (map.get(each.id)?._tag === "waiting" ? ask(each) : Effect.void));
-    const finish = (each: Work) =>
+    const finish = (each: SlotTurn) =>
       Effect.gen(function* () {
         const phase = (yield* Ref.get(phases)).get(each.id);
         if (phase?._tag !== "running") return;
         yield* Ref.update(phases, (map) => new Map(map).set(each.id, { _tag: "idle" }));
         yield* phase.slot.release;
       });
-    const running = Effect.map(Ref.get(phases), (map) => all.filter((each) => map.get(each.id)?._tag === "running"));
-    const waiting = Effect.map(Ref.get(phases), (map) => all.filter((each) => map.get(each.id)?._tag === "waiting"));
+    const ids = (pick: Phase["_tag"]) =>
+      Effect.map(Ref.get(phases), (map) => all.filter((each) => map.get(each.id)?._tag === pick).map(({ id }) => id));
     /**
-     * Waits until the slots agree with the work and no waiting turn would fit: every wake the
-     * last change started has run. Read again and again, never after a fixed delay.
+     * Waits until the slots agree with the work and no waiting turn would fit: every wake the last
+     * change started has run. Read again and again, never after a fixed delay.
      */
-    const settled = (limits: TurnLimits) =>
+    const settled = (cap: number) =>
       Effect.gen(function* () {
-        const runs = yield* running;
-        const waits = yield* waiting;
+        const runs = yield* ids("running");
+        const waits = yield* ids("waiting");
         const report = yield* slots.report;
+        const same = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
+          [...a].sort().join() === [...b].sort().join();
         const agrees =
-          report.active
-            .map((each) => each.id)
-            .sort()
-            .join() ===
-            runs
-              .map((each) => each.id)
-              .sort()
-              .join() &&
-          report.waiting
-            .map((each) => each.id)
-            .sort()
-            .join() ===
-            waits
-              .map((each) => each.id)
-              .sort()
-              .join() &&
-          waits.every((each) => limitReached(limits, runs, each) !== null);
+          same(
+            report.active.map((each) => each.id),
+            runs,
+          ) &&
+          same(
+            report.waiting.map((each) => each.id),
+            waits,
+          ) &&
+          (waits.length === 0 || runs.length === cap);
         return agrees ? { runs, waits, report } : null;
       }).pipe((read) => waitUntil(read, isSet, { what: "the slots to agree with the work", every: "1 millis" }));
-    return { ask, finish, running, waiting, settled, started, phases };
+    return { ask, finish, settled, started, phases };
   });
 
-const slotsWith = (limits: TurnLimits) =>
-  TurnSlots.layer.pipe(
-    Layer.provide(Layer.succeed(TurnLimitsStore, { get: Effect.succeed(limits), set: () => Effect.void })),
-  );
+const run = <A, E>(cap: number, effect: (slots: TurnSlots["Service"]) => Effect.Effect<A, E>) =>
+  Effect.runPromise(TurnSlots.use(effect).pipe(Effect.provide(TurnSlots.layerWith(cap))));
 
-const run = <A, E>(limits: TurnLimits, effect: (slots: TurnSlots["Service"]) => Effect.Effect<A, E>) =>
-  Effect.runPromise(TurnSlots.use(effect).pipe(Effect.provide(slotsWith(limits))));
-
-const ALL: ReadonlyArray<Work> = [
-  work("thread:a1", "aldric", "claude-code", null),
-  work("thread:a2", "aldric", "claude-code", "q1"),
-  work("step:b1", "bram", "claude-code", "q1"),
-  work("step:b2", "bram", "codex", "q2"),
-  work("member:c1", "cora", "codex", "q2"),
-  work("member:c2", "cora", "claude-code", "q3"),
-  work("thread:d1", "dain", "codex", null),
+const ALL: ReadonlyArray<SlotTurn> = [
+  work("thread:a1"),
+  work("thread:a2"),
+  work("step:b1", "bram"),
+  work("step:b2", "bram"),
+  work("member:c1", "cora"),
+  work("member:c2", "cora"),
+  work("thread:d1", "dain"),
 ];
 
 describe("TurnSlots", () => {
-  // covers OR-005
-  it("[TC-AG-1448-01] keeps every limit and leaves no turn waiting that fits, over random asks and ends", async () => {
+  it("caps the hub's turns at four (#1590)", async () => {
+    expect(MAX_ACTIVE_TURNS).toBe(4);
+    const report = await Effect.runPromise(
+      TurnSlots.use((slots) => slots.report).pipe(Effect.provide(TurnSlots.layer)),
+    );
+    expect(report).toEqual({ cap: 4, active: [], waiting: [], usage: "after-turn" });
+  });
+
+  it("keeps the cap, leaves no turn waiting while a slot is free, and starts waiting turns in order (#1590)", async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.record({
-          perHob: fc.integer({ min: 1, max: 2 }),
-          perQuest: fc.integer({ min: 1, max: 2 }),
-          perRuntime: fc.record({
-            "claude-code": fc.integer({ min: 1, max: 3 }),
-            codex: fc.integer({ min: 1, max: 3 }),
-          }),
-        }),
+        fc.integer({ min: 1, max: 3 }),
         fc.array(fc.record({ finish: fc.boolean(), at: fc.nat(ALL.length - 1) }), { maxLength: 30 }),
-        (limits, ops) =>
-          run(limits, (slots) =>
+        (cap, ops) =>
+          run(cap, (slots) =>
             Effect.gen(function* () {
               const h = yield* harness(slots, ALL);
               for (const op of ops) {
-                const each = ALL[op.at] as Work;
+                const each = ALL[op.at] as SlotTurn;
                 const phase = (yield* Ref.get(h.phases)).get(each.id);
+                const waitingBefore = (yield* slots.report).waiting.map(({ id }) => id);
+                const startedBefore = h.started.length;
                 if (op.finish) yield* h.finish(each);
                 else if (phase?._tag === "idle") yield* h.ask(each);
-                const { runs } = yield* h.settled(limits);
-                for (const one of runs) {
-                  const others = runs.filter((other) => other !== one);
-                  expect(limitReached(limits, others, one)).toBe(null);
+                const { runs } = yield* h.settled(cap);
+                expect(runs.length).toBeLessThanOrEqual(cap);
+                // What a finished turn freed goes to the turns that waited longest, in order.
+                if (op.finish) {
+                  const woken = h.started.slice(startedBefore);
+                  expect(woken).toEqual(waitingBefore.slice(0, woken.length));
                 }
               }
             }),
@@ -151,50 +127,19 @@ describe("TurnSlots", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-02] gives a freed slot to the Quest that has had none, though a busy Quest asked first", async () => {
-    const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
-    const busy = [1, 2, 3].map((n) => work(`step:busy-${n}`, `hob-${n}`, "claude-code", "busy"));
-    const quiet = work("step:quiet", "hob-9", "claude-code", "quiet");
-    await run(limits, (slots) =>
-      Effect.gen(function* () {
-        const h = yield* harness(slots, [...busy, quiet]);
-        for (const each of [...busy, quiet]) yield* h.ask(each);
-        const first = yield* h.settled(limits);
-        expect(first.runs.map((each) => each.id)).toEqual(["step:busy-1"]);
-        expect(first.report.waiting.map((each) => [each.id, each.waitingOn])).toEqual([
-          ["step:quiet", "runtime"],
-          ["step:busy-2", "runtime"],
-          ["step:busy-3", "runtime"],
-        ]);
-        expect(first.report.usage).toBe("after-turn");
-        // The busy Quest's turn ends: the quiet one goes next, then the busy one takes turns again.
-        yield* h.finish(busy[0] as Work);
-        yield* h.settled(limits);
-        yield* h.finish(quiet);
-        yield* h.settled(limits);
-        yield* h.finish(busy[1] as Work);
-        yield* h.settled(limits);
-        expect(h.started).toEqual(["step:busy-1", "step:quiet", "step:busy-2", "step:busy-3"]);
-      }),
-    );
-  });
-
-  // covers OR-005
-  it("[TC-AG-1448-03] passes a slot on when a woken turn no longer needs it, and frees a slot once", async () => {
-    const limits = { ...DEFAULT_TURN_LIMITS, perHob: 1 };
-    await run(limits, (slots) =>
+  it("passes a slot on when a woken turn no longer needs it, and frees a slot once (#1590)", async () => {
+    await run(1, (slots) =>
       Effect.gen(function* () {
         const woken: Array<string> = [];
-        const first = yield* slots.take(work("thread:one", "aldric", "claude-code", null), Effect.void);
+        const first = yield* slots.take(work("thread:one"), Effect.void);
         // This one's work goes away before its wake: the wake does not ask again.
         expect(
           yield* slots.take(
-            work("thread:gone", "aldric", "claude-code", null),
+            work("thread:gone", "bram"),
             Effect.sync(() => woken.push("gone")),
           ),
         ).toBe(null);
-        const late = work("thread:late", "aldric", "claude-code", null);
+        const late = work("thread:late", "cora");
         const lateSlot = yield* Ref.make<TurnSlot | null>(null);
         const wakeLate: Effect.Effect<void> = Effect.gen(function* () {
           woken.push("late");
@@ -216,65 +161,45 @@ describe("TurnSlots", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-04] keeps new limits and starts the turns that fit under them", async () => {
-    const kept: Array<TurnLimits> = [];
-    const store = Layer.succeed(TurnLimitsStore, {
-      get: Effect.succeed({ ...DEFAULT_TURN_LIMITS, perHob: 1 }),
-      set: (limits) => Effect.sync(() => void kept.push(limits)),
-    });
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const slots = yield* TurnSlots;
-          const h = yield* harness(slots, [
-            work("thread:one", "aldric", "claude-code", null),
-            work("thread:two", "aldric", "claude-code", null),
-          ]);
-          yield* h.ask(work("thread:one", "aldric", "claude-code", null));
-          yield* h.ask(work("thread:two", "aldric", "claude-code", null));
-          expect((yield* slots.report).waiting.map((each) => each.waitingOn)).toEqual(["hob"]);
-          const wider = { ...DEFAULT_TURN_LIMITS, perHob: 2 };
-          yield* slots.setLimits(wider);
-          const { runs } = yield* h.settled(wider);
-          expect(runs.map((each) => each.id)).toEqual(["thread:one", "thread:two"]);
-          expect(kept).toEqual([wider]);
-          expect(yield* slots.limits).toEqual(wider);
-        }).pipe(Effect.provide(TurnSlots.layer.pipe(Layer.provide(store)))),
-      ),
+  it("keeps a waiting turn's place when it asks again, and drops it once withdrawn (#1590)", async () => {
+    await run(1, (slots) =>
+      Effect.gen(function* () {
+        const held = yield* slots.take(work("thread:held"), Effect.void);
+        expect(held).not.toBe(null);
+        expect(yield* slots.take(work("thread:first", "bram"), Effect.void)).toBe(null);
+        expect(yield* slots.take(work("thread:second", "cora"), Effect.void)).toBe(null);
+        expect(yield* slots.take(work("thread:third", "dain"), Effect.void)).toBe(null);
+        // The first asks again while it waits: it stays ahead of the others.
+        expect(yield* slots.take(work("thread:first", "bram"), Effect.void)).toBe(null);
+        yield* slots.withdraw("thread:second");
+        expect((yield* slots.report).waiting.map((each) => each.id)).toEqual(["thread:first", "thread:third"]);
+      }),
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-05] weighs a waiting turn as it asks now, when its chat moved to another runtime", async () => {
-    const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
-    await run(limits, (slots) =>
+  it("keeps the queue's order when several slots free at once (#1590)", async () => {
+    await run(2, (slots) =>
       Effect.gen(function* () {
-        const claude = yield* slots.take(work("thread:claude", "aldric", "claude-code", null), Effect.void);
-        const codex = yield* slots.take(work("thread:codex", "bram", "codex", null), Effect.void);
-        expect([claude, codex].every((each) => each !== null)).toBe(true);
-        // A chat waits for Claude Code, then moves to Codex while it waits: once woken, it asks on Codex.
-        const moved = work("thread:moved", "cora", "claude-code", null);
-        const wake: Effect.Effect<void> = Effect.suspend(() =>
-          Effect.asVoid(slots.take({ ...moved, runtime: "codex" }, wake)),
-        );
-        expect(yield* slots.take(moved, wake)).toBe(null);
-        // Claude Code's slot frees and wakes the chat, which, now on Codex, still waits for Codex's.
-        yield* (claude as TurnSlot).release;
-        const report = yield* waitUntil(
-          slots.report,
-          (now) => now.active.length === 1 && now.waiting.length === 1 && now.waiting[0]?.runtime === "codex",
-          { what: "the moved chat to wait for Codex", every: "1 millis" },
-        );
-        expect(report.active.map((each) => each.id)).toEqual(["thread:codex"]);
-        expect(report.waiting).toMatchObject([{ id: "thread:moved", runtime: "codex", waitingOn: "runtime" }]);
-        // Codex's slot frees: now it starts.
-        yield* (codex as TurnSlot).release;
-        const after = yield* waitUntil(slots.report, (now) => now.active.length === 1 && now.waiting.length === 0, {
-          what: "the moved chat to start on Codex",
-          every: "1 millis",
+        const one = yield* slots.take(work("thread:one"), Effect.void);
+        const two = yield* slots.take(work("thread:two", "bram"), Effect.void);
+        const first = work("thread:first", "cora");
+        const second = work("thread:second", "dain");
+        const go = yield* Deferred.make<void>();
+        const firstSlot = yield* Ref.make<TurnSlot | null>(null);
+        // The first waiter's wake holds until the test lets it ask, so the second can ask before it.
+        const wakeFirst: Effect.Effect<void> = Effect.gen(function* () {
+          yield* Deferred.await(go);
+          yield* Ref.set(firstSlot, yield* slots.take(first, wakeFirst));
         });
-        expect(after.active).toMatchObject([{ id: "thread:moved", runtime: "codex" }]);
+        expect(yield* slots.take(first, wakeFirst)).toBe(null);
+        expect(yield* slots.take(second, Effect.void)).toBe(null);
+        yield* (one as TurnSlot).release;
+        yield* (two as TurnSlot).release;
+        // Both slots are free, but the second asked after the first: it waits until the first starts.
+        expect(yield* slots.take(second, Effect.void)).toBe(null);
+        yield* Deferred.succeed(go, undefined);
+        yield* waitUntil(Ref.get(firstSlot), isSet, { what: "the first waiter to start", every: "1 millis" });
+        expect(yield* slots.take(second, Effect.void)).not.toBe(null);
       }),
     );
   });

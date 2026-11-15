@@ -113,8 +113,7 @@ const hob = {
 const search = (q: string) => request("GET", `/api/search?q=${encodeURIComponent(q)}`);
 
 describe("the search API", () => {
-  // covers CH-006
-  it("[TC-CH-064] finds a thread by a word from its messages once the reply finishes", async () => {
+  it("finds a thread by a word from its messages once the reply finishes", async () => {
     const agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "Where did I put the lanterns?" });
@@ -141,8 +140,7 @@ describe("the search API", () => {
 });
 
 describe("the archive API", () => {
-  // covers CH-009
-  it("[TC-CH-147] archives and restores over HTTP: archived threads listed apart, sends refused", async () => {
+  it("archives and restores over HTTP: archived threads listed apart, sends refused", async () => {
     const agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
 
@@ -167,8 +165,7 @@ describe("the archive API", () => {
     expect(refused.body).toMatchObject({ _tag: "ThreadArchiveRefused", reason: "hob-retired" });
   });
 
-  // covers CH-009
-  it("[TC-CH-148] never changes the hob's default brain for a thread archived while the switch waits", async () => {
+  it("never changes the hob's default brain for a thread archived while the switch waits", async () => {
     const agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const brain = { brain: { runtime: "claude-code", model: "fake-quick", effort: null }, makeDefault: true };

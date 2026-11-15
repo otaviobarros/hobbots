@@ -22,13 +22,13 @@ const line = (id: string, minute: number, person = true): TopicLine => ({
 
 describe("the idle rule", () => {
   // covers ADR 039 (Chapters run on their own), #1557
-  it("[TC-CH-1557-02] breaks at the idle time and not a minute before", () => {
+  it("breaks at the idle time and not a minute before (#1557)", () => {
     expect(idleBreak(at(0), at(CHAPTER_BREAK_IDLE_MINUTES))).toBe(true);
     expect(idleBreak(at(0), at(CHAPTER_BREAK_IDLE_MINUTES - 1))).toBe(false);
   });
 
   // covers ADR 039 (Chapters run on their own), #1557
-  it("[TC-CH-1557-03] finds where a chapter's last topic starts: a person's message after its last idle gap", () => {
+  it("finds where a chapter's last topic starts: a person's message after its last idle gap (#1557)", () => {
     const gap = CHAPTER_BREAK_IDLE_MINUTES;
     expect(lastIdleBreak([])).toBeNull();
     expect(lastIdleBreak([line("a", 0), line("b", 1, false), line("c", 2)])).toBeNull();

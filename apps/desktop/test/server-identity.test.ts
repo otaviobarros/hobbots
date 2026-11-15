@@ -52,15 +52,13 @@ describe("judging a health response", () => {
 });
 
 describe("checking the port", () => {
-  // covers DP-001
-  it("[TC-DP-020] connects only to this installation's server", async () => {
+  it("connects only to this installation's server", async () => {
     const check = await checkServer(await answering(200, JSON.stringify(identity)), dataDir);
     expect(check.kind).toBe("ours");
     expect(() => requireOurs(check, 4317)).not.toThrow();
   });
 
-  // covers DP-001
-  it("[TC-DP-021] reports another program on the port instead of connecting to it", async () => {
+  it("reports another program on the port instead of connecting to it", async () => {
     for (const [status, body] of [
       [200, ""],
       [200, "<html>not hobbots</html>"],
@@ -75,8 +73,7 @@ describe("checking the port", () => {
     }
   });
 
-  // covers DP-001
-  it("[TC-DP-022] reports a server of another installation instead of connecting to it", async () => {
+  it("reports a server of another installation instead of connecting to it", async () => {
     const check = await checkServer(
       await answering(200, JSON.stringify({ ...identity, installationId: "x" })),
       dataDir,
@@ -85,8 +82,7 @@ describe("checking the port", () => {
     expect(() => requireOurs(check, 4317)).toThrow("Another Hobbots is using the port");
   });
 
-  // covers DP-001
-  it("[TC-DP-023] finds nothing on a free port, so the app starts its own server", async () => {
+  it("finds nothing on a free port, so the app starts its own server", async () => {
     expect((await checkServer(await freePort(), dataDir)).kind).toBe("none");
   });
 });

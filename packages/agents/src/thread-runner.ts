@@ -36,6 +36,7 @@ import {
   TurnRequestId,
   TurnRequests,
   titleFromPrompt,
+  type WebReadMark,
 } from "@hobbots/domain";
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
 import { HobAdmission, withThreadLock } from "./admission.ts";
@@ -64,7 +65,7 @@ import {
 import type { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
-import { FREE_SLOT, type TurnSlot, takeSlot, turnSlots } from "./turn-slots.ts";
+import { type TurnSlot, takeSlot, turnSlots } from "./turn-slots.ts";
 import { workHeld } from "./work-hold.ts";
 
 // Every thread's run (#1397): when its turns start and end, what queued behind them, and the work
@@ -145,6 +146,20 @@ export interface ThreadRunnerDeps
   readonly saveSpeaking: (reply: Message, speaking: ReadonlyArray<TurnRequestId>) => Effect.Effect<Message | null>;
 }
 
+/**
+ * The read-the-web mark a hob's reply in a turn's context carries, if one does (ADR 039, A relay
+ * carries the read-the-web mark): the reply it answers, in any chapter, the live chapter its session
+ * hears, and the reply Continue resumes. What it wrote may carry what a page said.
+ */
+const contextReadWeb = (
+  yours: Message | undefined,
+  told: ReadonlyArray<Message>,
+  continued: Message | null,
+): WebReadMark | null =>
+  [...(yours === undefined ? [] : [yours]), ...told, ...(continued === null ? [] : [continued])].find(
+    (m) => m.readWeb !== null,
+  )?.readWeb ?? null;
+
 export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
   Effect.gen(function* () {
     const { redactor, grants, inputs, saveMessage, announce, changeThread, saveStarted, saveSpeaking } = deps;
@@ -170,8 +185,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     /**
      * `thread` as a turn of `agent` on `runtime` sees it (#1543). A runtime that keeps the hub tools a
      * session started with, as Codex does (ADR 024), never gets a Task tool its session lacks, so a
-     * Quest lead in a thread that started before `check_criterion` existed could never accept a
-     * criterion. Such a session, or one without `pass` (ADR 039), or one whose tools are not known, is
+     * hob in a thread that started before that tool existed could never call it. Such a session, or
+     * one without `pass` (ADR 039), or one whose tools are not known, is
      * left out: the turn starts a new session from the context pack in its place, as in a new chapter,
      * and the new one is recorded over it.
      */
@@ -298,26 +313,14 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       turnEnded: (threadId, reply) => step(threadId, { _tag: "TurnEnded", reply }),
     });
 
-    // A slot for a turn in the thread (#1448), counted against its hob, the runtime of its brain and
-    // the Quest of the Task its hob works on there; null when the turn must wait, and then the
-    // thread is woken once a slot may be its. Runs under the hob's lock.
+    // A slot for a turn in the thread, under the hub's cap on turns (#1590); null when the turn must
+    // wait, and then the thread is woken once a slot may be its. Runs under the hob's lock.
     const slotFor = (thread: Thread, agent: Agent): Effect.Effect<TurnSlot | null> =>
-      Effect.gen(function* () {
-        if (slots === null) return FREE_SLOT;
-        const config = yield* repo.findAgentConfig(agent.id, agent.configVersion);
-        if (Option.isNone(config)) return FREE_SLOT;
-        const trees = Option.isSome(taskRecords) ? yield* taskRecords.value.readThreadTrees(thread.id) : [];
-        return yield* takeSlot(
-          slots,
-          {
-            id: `thread:${thread.id}`,
-            agentId: agent.id,
-            runtime: brainFor(thread, config.value).runtime,
-            quest: openThreadTask(trees, agent.id)?.top.rootId ?? null,
-          },
-          Effect.suspend(() => drainThreads([thread.id])),
-        );
-      });
+      takeSlot(
+        slots,
+        { id: `thread:${thread.id}`, agentId: agent.id },
+        Effect.suspend(() => drainThreads([thread.id])),
+      );
 
     // Starts a turn for a prompt that is already stored, or for a continuation's prompt, which
     // Hobbots wrote from the work that arrived (ADR 019): a continuation has no message of yours, so
@@ -422,6 +425,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         const briefing =
           [briefed, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
         const changed = yield* instructionsChanged(speaker, brain.runtime, systemInstructions(config.name, config));
+        const yours = saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId);
         // Registered before the turn starts, so a stop sent right away still reaches it.
         const reply: Reply = {
           current: yield* Ref.make(saved),
@@ -447,12 +451,12 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             config,
             brain,
             prompt,
-            { text: briefing, pack },
+            { text: briefing, pack, readWeb: contextReadWeb(yours, told, continued) },
             reply,
             changed,
             start.carry ?? NOTHING_CARRIED,
             // The message of yours the reply answers, as you wrote it, which Continue keeps (#1005).
-            saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId),
+            yours,
           ).pipe(
             // However the turn ended, the requests it spoke for are answered, or passed with no
             // message when its hob passed (ADR 039), before the floor frees.
@@ -546,11 +550,13 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
           : null,
       ).pipe(Effect.asVoid);
 
-    // Publishes who waits for the line's floor, from its requests as stored now.
+    // Publishes who waits for the line's floor, and whose relay waits for a person, from its
+    // requests as stored now.
     const lineUp = (threadId: ThreadId) =>
       Effect.gen(function* () {
-        const waiting = TurnRequests.waiting(yield* repo.openTurnRequests(mainLine(threadId)));
-        yield* step(threadId, { _tag: "Lined", next: [...new Set(waiting.map((request) => request.hobId))] });
+        const open = yield* repo.openTurnRequests(mainLine(threadId));
+        const next = [...new Set(TurnRequests.waiting(open).map((request) => request.hobId))];
+        yield* step(threadId, { _tag: "Lined", next, paused: TurnRequests.pausedHobs(open) });
       });
 
     // The hobs among `hobIds` that take work now in `thread`, by id. A member hob that is retiring
@@ -935,8 +941,9 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       Effect.map(({ all, revision }) => ({
         revision,
         runs: Array.from(HashMap.values(all)).flatMap(({ line, run }) =>
-          // An idle line still says who waits for the floor, so a client that reconnects sees it.
-          isBusy(run) || run.next.length > 0 ? [runStatus(line, run, revision)] : [],
+          // An idle line still says who waits for the floor, or for a person, so a client that
+          // reconnects sees it.
+          isBusy(run) || run.next.length > 0 || run.paused.length > 0 ? [runStatus(line, run, revision)] : [],
         ),
       })),
     );

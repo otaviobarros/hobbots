@@ -144,7 +144,7 @@ const eventually = (check: () => boolean) =>
 
 describe("the Memory page's API", () => {
   // covers ADR 028 (Browse), #958
-  it("[TC-GEN-235] lists every scope with its count, a scope's pages, and a page with its history", async () => {
+  it("lists every scope with its count, a scope's pages, and a page with its history (#958)", async () => {
     await write(asPip, pipsOwn, "howtos/preview.md", "# Publishing a preview link\n\nAsk Ada.");
     await write(asPip, theSite, "facts/plan.md", "# The annual plan costs $10 a month");
     await write(you, everyone, "rules/ask.md", "# Ask before emailing");
@@ -173,7 +173,7 @@ describe("the Memory page's API", () => {
   });
 
   // covers ADR 028 (Browse), #958
-  it("[TC-GEN-236] reads what a version of a page changed, and searches one scope or all of them", async () => {
+  it("reads what a version of a page changed, and searches one scope or all of them (#958)", async () => {
     const first = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Preview\n\nAsk Ada."), fresh),
     );
@@ -212,7 +212,7 @@ describe("the Memory page's API", () => {
   });
 
   // covers ADR 028 (When memory is down), #958
-  it("[TC-GEN-237] answers 503, never an empty memory, while memory does not answer", async () => {
+  it("answers 503, never an empty memory, while memory does not answer (#958)", async () => {
     await write(asPip, pipsOwn, "howtos/preview.md", "# Preview");
     controls.setDown(true);
     for (const path of ["/api/memory/scopes", "/api/memory/changes", `/api/memory/search?${query({ q: "preview" })}`]) {
@@ -225,7 +225,7 @@ describe("the Memory page's API", () => {
   });
 
   // covers ADR 028 (What changed), #958
-  it("[TC-GEN-238] streams a hob's save to What changed once the hub looks", async () => {
+  it("streams a hob's save to What changed once the hub looks (#958)", async () => {
     // The hub starts with its first request; its watch looks from then on.
     expect((await get("/api/memory/changes")).body).toEqual([]);
     await write(asPip, pipsOwn, "howtos/preview.md", "# Publishing a preview link");
@@ -277,7 +277,7 @@ const readPage = (scope: MemoryScope, path: string) =>
 
 describe("changing memory from the Memory page", () => {
   // covers ADR 028 (Writes), #959
-  it("[TC-GEN-334] saves an edit as a new version by you, and restores the hob's version as another", async () => {
+  it("saves an edit as a new version by you, and restores the hob's version as another (#959)", async () => {
     const learned = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Preview\n\nAsk Ada."), fresh),
     );
@@ -308,7 +308,7 @@ describe("changing memory from the Memory page", () => {
   });
 
   // covers ADR 028 (Writes), #959
-  it("[TC-GEN-335] pins a page and sets the day it is forgotten, each as a version History can restore", async () => {
+  it("pins a page and sets the day it is forgotten, each as a version History can restore (#959)", async () => {
     const learned = await Effect.runPromise(store.write(asPip, theSite, draft("facts/plan.md", "# Plan"), fresh));
     const pinned = await post(
       "/api/memory/page",
@@ -338,7 +338,7 @@ describe("changing memory from the Memory page", () => {
   });
 
   // covers ADR 028 (Writes), #959
-  it("[TC-GEN-336] deletes a page with its history, streams the delete to every client, and Undo brings it back as a version by you", async () => {
+  it("deletes a page with its history, streams the delete to every client, and Undo brings it back as a version by you (#959)", async () => {
     const learned = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("gotchas/link.md", "# Link first"), fresh),
     );
@@ -367,7 +367,7 @@ describe("changing memory from the Memory page", () => {
   });
 
   // covers ADR 028 (MemoryConflict), #959
-  it("[TC-GEN-337] refuses an edit, a pin or a delete that races a hob's save, and writes nothing", async () => {
+  it("refuses an edit, a pin or a delete that races a hob's save, and writes nothing (#959)", async () => {
     const opened = await Effect.runPromise(
       store.write(asPip, pipsOwn, draft("howtos/tests.md", "# Tests\n\nRun pnpm check."), fresh),
     );
@@ -406,7 +406,7 @@ describe("changing memory from the Memory page", () => {
   });
 
   // covers ADR 028 (Sharing: About you), #959
-  it("[TC-GEN-338] writes About you, which every hob reads, as your own pages", async () => {
+  it("writes About you, which every hob reads, as your own pages (#959)", async () => {
     const added = await post(
       "/api/memory/page",
       saved(everyone, "rules/short-emails.md", "# Keep customer emails short"),

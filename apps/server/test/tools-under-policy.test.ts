@@ -47,8 +47,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Slice 7's done-when checks, at hub level and over the HTTP API, with the hub's own composition:
 // the setup's preset and folders read at every turn, one policy engine, and the fake runtime making
-// the scripted tool calls. The fake decides calls but runs nothing; real Claude Code on macOS is the
-// manual checklist in docs/evidence/2026-10-31-tools-under-policy.md.
+// the scripted tool calls. The fake decides calls but runs nothing.
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-tools-policy-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
@@ -165,8 +164,7 @@ const exchange = async (thread: Thread, lines: ReadonlyArray<string>) => {
 const toolSteps = (reply: Message): ReadonlyArray<ReplyStep> => reply.steps.filter((step) => step.kind === "tool");
 
 describe("tools under policy, end to end", () => {
-  // covers PE-001, PE-002, AG-004
-  it("[TC-PE-079] under Balanced a hob edits a file and runs tests in its folder without asking", async () => {
+  it("under Balanced a hob edits a file and runs tests in its folder without asking", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, [
       "Fix the sum and run the tests",
@@ -186,8 +184,7 @@ describe("tools under policy, end to end", () => {
     expect(await approvals(thread)).toEqual([]);
   });
 
-  // covers PE-001, PE-002
-  it("[TC-PE-080] under Careful the same edit asks and no command is offered, so the preset decides, not the hob", async () => {
+  it("under Careful the same edit asks and no command is offered, so the preset decides, not the hob", async () => {
     const thread = await hobInProject("careful");
     await request("POST", `/api/threads/${thread.id}/messages`, {
       // Commands are closed while editing asks, so under Careful the turn has none to call.
@@ -211,8 +208,7 @@ describe("tools under policy, end to end", () => {
     expect(toolSteps(reply)).toMatchObject([{ state: "denied", decidedBy: "user" }]);
   });
 
-  // covers PE-002, PE-005
-  it("[TC-PE-081] refuses reading a file outside the hob's folders, whatever the prompt says, and asks nobody", async () => {
+  it("refuses reading a file outside the hob's folders, whatever the prompt says, and asks nobody", async () => {
     const thread = await hobInProject("balanced");
     const escapes = [
       join(outside, "diary.txt"),
@@ -235,8 +231,7 @@ describe("tools under policy, end to end", () => {
     expect(await approvals(thread)).toEqual([]);
   });
 
-  // covers PE-003
-  it("[TC-PE-082] an Ask action pauses the turn until the user decides in chat, then runs once", async () => {
+  it("an Ask action pauses the turn until the user decides in chat, then runs once", async () => {
     const thread = await hobInProject("balanced");
     await request("POST", `/api/threads/${thread.id}/messages`, {
       content: ["Ship it", "fake:tool Bash git push origin feature"].join("\n"),
@@ -281,7 +276,7 @@ describe("long tool output", () => {
     return { status: response.status, text: await response.text() };
   };
 
-  it("[#153] shows short output whole and keeps no log for it", async () => {
+  it("shows short output whole and keeps no log for it (#153)", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, ["Say hi", "fake:tool Bash echo hello"]);
     const [step] = toolSteps(reply);
@@ -289,7 +284,7 @@ describe("long tool output", () => {
     expect((await logOf(thread, reply, step as ReplyStep)).status).toBe(404);
   });
 
-  it("[#153] shows the start and end of long output and serves the full log", async () => {
+  it("shows the start and end of long output and serves the full log (#153)", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
     const [step] = toolSteps(reply);
@@ -304,7 +299,7 @@ describe("long tool output", () => {
   });
 
   // covers ADR 037 (Moving a chapter into a camp moves it)
-  it("[TC-CH-1385-20] serves a long output's full log from the camp its chapter moved to, and no longer from the chat", async () => {
+  it("serves a long output's full log from the camp its chapter moved to, and no longer from the chat (#1385)", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
     const [step] = toolSteps(reply);
@@ -326,7 +321,7 @@ describe("long tool output", () => {
     expect((await logOf(thread, reply, step as ReplyStep)).status).toBe(404);
   });
 
-  it("[#168] redacts output in the step and in the full log", async () => {
+  it("redacts output in the step and in the full log (#168)", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, [
       "Print",
@@ -340,7 +335,7 @@ describe("long tool output", () => {
     expect(JSON.stringify(reply.steps)).not.toContain(HUB_TOKEN);
   });
 
-  it("[#153] never serves a log for a step that has none, or a file that is not the hub's", async () => {
+  it("never serves a log for a step that has none, or a file that is not the hub's (#153)", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
     const missing = { id: "not-a-step" } as ReplyStep;

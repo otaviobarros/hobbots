@@ -65,8 +65,7 @@ const expectReplies = (page: Page, expected: ReadonlyArray<string>) =>
     timeout: 15_000,
   });
 
-// covers CH-001, CH-008
-test("[TC-CH-011] messages sent during a reply queue and run in order, also after a restart", async ({ page }) => {
+test("messages sent during a reply queue and run in order, also after a restart", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
@@ -85,47 +84,4 @@ test("[TC-CH-011] messages sent during a reply queue and run in order, also afte
   await expect(page.getByRole("main").getByText("Echo: three", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("region", { name: "Queued message" })).toHaveCount(0);
   await expectReplies(page, ["Echo: two", "Echo: three"]);
-});
-
-// covers CH-007, CH-008
-test("[TC-CH-012] a queued message can be removed, and Send now stops the reply and runs it next", async ({ page }) => {
-  const { current, pipId } = await hubWithPip();
-  hub = current;
-  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
-
-  await type(page, LONG);
-  // The first message opens its thread; text typed before the thread is open stays on the fresh page.
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
-  await type(page, "later");
-  await type(page, "urgent");
-  await type(page, "three");
-  await queued(page, "three").getByRole("button", { name: "Remove" }).click();
-  await expect(queued(page, "three")).toHaveCount(0);
-
-  await queued(page, "urgent").getByRole("button", { name: "Send now and interrupt" }).click();
-  await expect(page.getByText(/You stopped this reply\./)).toBeVisible();
-  await expect(page.getByRole("main").getByText("Echo: later", { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expectReplies(page, ["Echo: urgent", "Echo: later"]);
-  await expect(page.getByRole("main").getByText("Echo: three")).toHaveCount(0);
-});
-
-// covers AG-006, CH-008
-test("[TC-CH-014] messages sent to a paused hob queue and run once it wakes", async ({ page }) => {
-  const { current, pipId } = await hubWithPip();
-  hub = current;
-  await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
-  await type(page, "two");
-  await expectReplies(page, ["Echo: two"]);
-
-  await api(current, "POST", `/api/agents/${pipId}/pause`);
-  await expect(page.getByRole("button", { name: "Wake Pip" })).toBeVisible();
-  await composer(page).fill("three");
-  await page.getByRole("button", { name: "Queue" }).click();
-  await expect(composer(page)).toHaveValue("");
-  await expect(queued(page, "three")).toContainText("Waits until you wake Pip");
-  await expect(queued(page, "three").getByRole("button", { name: /Send now/ })).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Wake Pip" }).click();
-  await expectReplies(page, ["Echo: two", "Echo: three"]);
-  await expect(page.getByRole("region", { name: "Queued message" })).toHaveCount(0);
 });

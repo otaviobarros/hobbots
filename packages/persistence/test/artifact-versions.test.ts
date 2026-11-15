@@ -164,7 +164,7 @@ const keptChange = (attemptId: AttemptId, contentId: string, at: string) =>
 
 describe("artifact versions", () => {
   // covers ADR 037 (Records: Artifact), #1434
-  it("[TC-CH-1434-01] keeps a file a Task returned by a relative path and its Attempt wrote as one artifact, one version for the Attempt", async () => {
+  it("keeps a file a Task returned by a relative path and its Attempt wrote as one artifact, one version for the Attempt (#1434)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seedWork;
@@ -209,7 +209,7 @@ describe("artifact versions", () => {
   });
 
   // covers ADR 037 (Records: Artifact), DP-003, #1434
-  it("[TC-CH-1434-02] merges a file stored twice, by its relative path and in its folder, when the hub migrates", async () => {
+  it("merges a file stored twice, by its relative path and in its folder, when the hub migrates (#1434)", async () => {
     const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0108")) as typeof migrations;
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();

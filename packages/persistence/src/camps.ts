@@ -1,5 +1,6 @@
-import { ThreadKeyReused } from "@hobbots/api";
+import { type HobUnavailable, ThreadKeyReused } from "@hobbots/api";
 import {
+  type AgentId,
   ApprovalRequest,
   type BackpackItem,
   CarriedOver,
@@ -20,7 +21,7 @@ import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { decodeRows, type Row } from "./task-rows.ts";
-import { copyMembersIn, startMembersIn } from "./thread-member-rows.ts";
+import { addHobsIn, copyMembersIn, startMembersIn } from "./thread-member-rows.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376): each one transaction that writes the threads, moves
 // what Start fresh carries, and journals the change, so a crash between the writes leaves neither half.
@@ -46,21 +47,30 @@ export const threadColumns = (thread: Thread) => ({
   revision: thread.revision,
 });
 
+/** The hobs a camp is made with besides its lead, each once and sorted, as its request keeps them. */
+const otherHobs = (camp: Thread, hobs: ReadonlyArray<AgentId>) =>
+  JSON.stringify([...new Set(hobs)].filter((hobId) => hobId !== camp.agentId).sort());
+
 /** What Make a camp was asked under a key, as it was asked: a later rename does not change it. */
-const campRequestColumns = (camp: Thread) => ({
+const campRequestColumns = (camp: Thread, hobs: ReadonlyArray<AgentId>) => ({
   key: camp.id,
   agent_id: camp.agentId,
   title: camp.title,
   goal: camp.goal,
   private: camp.private ? 1 : 0,
+  hobs: otherHobs(camp, hobs),
 });
 
-/** Whether the request stored under a key is the one asked again: same hob, title, goal and privacy. */
-const sameRequest = (stored: Row, asked: Thread) =>
+/**
+ * Whether the request stored under a key is the one asked again: same hob, title, goal, privacy and
+ * other hobs. A request stored before camps kept their hobs was made with none.
+ */
+const sameRequest = (stored: Row, asked: Thread, hobs: ReadonlyArray<AgentId>) =>
   stored.agentId === asked.agentId &&
   stored.title === asked.title &&
   (stored.goal ?? null) === asked.goal &&
-  Boolean(Number(stored.private)) === asked.private;
+  Boolean(Number(stored.private)) === asked.private &&
+  (stored.hobs ?? "[]") === otherHobs(asked, hobs);
 
 // The chat changed between the read and the write: the change rolls back, and the caller reads again.
 class StaleChat extends Data.TaggedError("StaleChat") {}
@@ -106,6 +116,7 @@ export const makeCampWrites = (
   const startFirstChapter = startFirstChapterIn(sql);
   const startMembers = startMembersIn(sql);
   const copyMembers = copyMembersIn(sql);
+  const addHobs = addHobsIn(sql);
   // A new thread's first chapter, journaled as `ChapterStarted` at `revision`, after the change's other events.
   const firstChapterOf = (thread: Thread, revision: number) =>
     startFirstChapter(thread, revision).pipe(
@@ -119,29 +130,33 @@ export const makeCampWrites = (
   const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
 
   /**
-   * Makes `camp` at `first`, journaled as `CampMade`, its first chapter's `ChapterStarted` and its first
-   * two members' `ThreadMemberAdded`; the
-   * camp stored under its key already, with no events, when the same camp was asked for before.
+   * Makes `camp` at `first`, journaled as `CampMade`, its first chapter's `ChapterStarted`, its first
+   * two members' `ThreadMemberAdded` and one for each of the other `hobs` it is made with; the camp
+   * stored under its key already, with no events, when the same camp was asked for before.
    */
-  const insertCamp = (camp: Thread, first: number) =>
+  const insertCamp = (camp: Thread, first: number, hobs: ReadonlyArray<AgentId> = []) =>
     Effect.gen(function* () {
       const stored = yield* readThread(camp.id);
       if (stored !== undefined) {
         const [request] = yield* sql<Row>`SELECT * FROM camp_requests WHERE key = ${camp.id}`;
-        if (request !== undefined && sameRequest(request, camp)) return { value: stored, events: [] };
+        if (request !== undefined && sameRequest(request, camp, hobs)) return { value: stored, events: [] };
         return yield* new ThreadKeyReused({ threadId: camp.id });
       }
       yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
-      yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp))}`;
+      yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp, hobs))}`;
       const started = yield* firstChapterOf(camp, first + 1);
       // Its person and its hob are its first members (ADR 039).
       const members = yield* startMembers(camp, first + 1 + started.length);
+      // The hob it is made for leads it; each other hob joins once.
+      const others = [...new Set(hobs)].filter((hobId) => hobId !== camp.agentId);
+      const joined = yield* addHobs(camp, others, first + 1 + started.length + members.length);
       const thread = yield* shown(camp.id);
-      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started, ...members];
+      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started, ...members, ...joined];
       return { value: thread, events };
     });
 
-  const makeCamp = (camp: Thread) => change<Thread, ThreadKeyReused>((first) => insertCamp(camp, first));
+  const makeCamp = (camp: Thread, hobs: ReadonlyArray<AgentId> = []) =>
+    change<Thread, ThreadKeyReused | HobUnavailable>((first) => insertCamp(camp, first, hobs));
 
   // The open work in a chat, as it stands before it moves: the Tasks you asked for there that are not
   // over, with their trees, the questions in them still open, and the backpack items held for the

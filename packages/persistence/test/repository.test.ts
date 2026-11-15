@@ -36,8 +36,7 @@ const message = (id: string, status: Message["status"] = "complete") =>
   });
 
 describe("HobbotsRepository", () => {
-  // covers DP-003, CH-002
-  it("[TC-DP-004] round-trips agents, threads and ordered messages", async () => {
+  it("round-trips agents, threads and ordered messages", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -112,8 +111,7 @@ describe("HobbotsRepository", () => {
     expect(result.unfinished.map((m) => m.id)).toEqual(["a", "c"]);
   });
 
-  // covers CH-002, UX-001
-  it("[TC-DP-241] reads each thread's last shown message as one line, skipping queued and empty ones", async () => {
+  it("reads each thread's last shown message as one line, skipping queued and empty ones", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -159,7 +157,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers ADR 039, The sidebar (#1563)
-  it("[TC-DP-1563-01] reads who wrote each thread's last line with it, in a list and alone", async () => {
+  it("reads who wrote each thread's last line with it, in a list and alone (#1563)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -210,8 +208,7 @@ describe("HobbotsRepository", () => {
     expect(result.empty).toBeNull();
   });
 
-  // covers UX-006, DP-003
-  it("[TC-DP-250] keeps how far you read a thread, unread once the hob writes past it, and moves it only forward", async () => {
+  it("keeps how far you read a thread, unread once the hob writes past it, and moves it only forward", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -286,8 +283,7 @@ describe("HobbotsRepository", () => {
     });
   });
 
-  // covers UX-006, DP-003
-  it("[TC-DP-273] keeps a lead's quiet reply with its text, out of the thread's last line and its unread dot (#1006)", async () => {
+  it("keeps a lead's quiet reply with its text, out of the thread's last line and its unread dot (#1006)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -337,8 +333,7 @@ describe("HobbotsRepository", () => {
     ]);
   });
 
-  // covers UX-006, CH-009, DP-003
-  it("[TC-DP-252] a reply you read that is continued in place is unread again once it ends, even after a late read of the cut-off reply", async () => {
+  it("a reply you read that is continued in place is unread again once it ends, even after a late read of the cut-off reply", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -397,8 +392,7 @@ describe("HobbotsRepository", () => {
     });
   });
 
-  // covers CH-009, DP-003
-  it("[TC-DP-041] stores when a thread was archived and lists live and archived threads apart", async () => {
+  it("stores when a thread was archived and lists live and archived threads apart", async () => {
     const thread = (id: string, archivedAt: string | null) =>
       new Thread({ id: ThreadId.make(id), agentId, title: id, archivedAt, createdAt: now, updatedAt: now });
     const result = await Effect.gen(function* () {
@@ -437,8 +431,7 @@ describe("HobbotsRepository", () => {
     ]);
   });
 
-  // covers DP-003, AG-001
-  it("[TC-DP-002] stores the full look seed range and orders ties the same on every database", async () => {
+  it("stores the full look seed range and orders ties the same on every database", async () => {
     const agent = (id: string, lookSeed: number) =>
       new Agent({
         id: AgentId.make(id),
@@ -490,8 +483,7 @@ describe("HobbotsRepository", () => {
     expect(result.threads.map((t) => t.id)).toEqual(["T-a", "t-a", "t-b", "ta"]);
   });
 
-  // covers AG-002, DP-003
-  it("[TC-AG-021] keeps every configuration version and stores an edit only on top of the current one", async () => {
+  it("keeps every configuration version and stores an edit only on top of the current one", async () => {
     const first = new Agent({
       id: agentId,
       name: "Aldric",
@@ -556,7 +548,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers ADR 034 (Scope, The Charm), DP-003
-  it("[TC-DP-406-02] keeps a hob's Summoning scope and its withheld Charms with each configuration version", async () => {
+  it("keeps a hob's Summoning scope and its withheld Charms with each configuration version (#406)", async () => {
     const first = new Agent({
       id: agentId,
       name: "Aldric",
@@ -601,8 +593,7 @@ describe("HobbotsRepository", () => {
     expect(Option.getOrThrow(result.agent).policy.charms).toEqual({ granted: ["github"], withheld: ["summoning"] });
   });
 
-  // covers AG-002, AG-006, DP-003
-  it("[TC-AG-405-01] stores who made each version and who summoned the hob, and journals each change with its actor", async () => {
+  it("stores who made each version and who summoned the hob, and journals each change with its actor (#405)", async () => {
     const chief = AgentId.make("chief");
     const call = { scope: "task:t-hire", key: "hire-1" };
     const byHob: ChangeActor = { _tag: "Hob", hobId: chief, call };
@@ -654,8 +645,7 @@ describe("HobbotsRepository", () => {
     ]);
   });
 
-  // covers AG-006, DP-003
-  it("[TC-AG-035] stores a hob's lifecycle status and retirement time, refuses a change from a stale status and lists hobs by status", async () => {
+  it("stores a hob's lifecycle status and retirement time, refuses a change from a stale status and lists hobs by status", async () => {
     const agent = (id: string, status?: "active" | "paused" | "retired") =>
       new Agent({
         id: AgentId.make(id),
@@ -706,8 +696,7 @@ describe("HobbotsRepository", () => {
     expect(result.none).toEqual([]);
   });
 
-  // covers AG-006, DP-003
-  it("[TC-AG-1246] stores a hob's wait to retire, keeps it through a pause and ends it when the hob retires", async () => {
+  it("stores a hob's wait to retire, keeps it through a pause and ends it when the hob retires", async () => {
     const hob = new Agent({
       id: AgentId.make("wren"),
       name: "Wren",
@@ -752,8 +741,7 @@ describe("HobbotsRepository", () => {
     expect(result.stored).toEqual(Option.some(null));
   });
 
-  // covers DP-003, CH-008
-  it("[TC-DP-050] keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
+  it("keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(

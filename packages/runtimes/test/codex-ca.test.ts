@@ -39,8 +39,8 @@ describe("codexCaBundle", () => {
 const realSandbox = process.platform === "darwin" || process.env.HOBBOTS_SANDBOX_TESTS === "1";
 
 describe.runIf(realSandbox)("Codex's CA bundle in the real sandbox", () => {
-  // covers RT-001, ADR 014, ADR 024
-  it("[TC-RT-106] gives the command that starts Codex its CA bundle, readable inside the sandbox", async () => {
+  // covers ADR 014, ADR 024
+  it("gives the command that starts Codex its CA bundle, readable inside the sandbox", async () => {
     const root = realpathSync(mkdtempSync(join(temp, "ca-")));
     const project = join(root, "project");
     mkdirSync(project);

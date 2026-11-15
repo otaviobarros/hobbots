@@ -28,8 +28,7 @@ const tool = (label: string, state: ReplyStep["state"], reason?: string): ReplyS
 });
 
 describe("buildBriefing", () => {
-  // covers RT-001, CH-001
-  it("[TC-CH-183] keeps the latest messages verbatim, summarizes older ones with their tool steps, and reuses the checkpoint", () => {
+  it("keeps the latest messages verbatim, summarizes older ones with their tool steps, and reuses the checkpoint", () => {
     // Nothing to tell, nothing told.
     expect(buildBriefing({ kind: "new", messages: [], checkpoint: null })).toBeNull();
 
@@ -79,8 +78,7 @@ describe("buildBriefing", () => {
     expect(resumed?.checkpoint).toBeNull();
   });
 
-  // covers RT-001, CH-001
-  it("[TC-CH-134] bounds the summary and a busy reply's tool steps and quotes text that looks like the briefing's markers", () => {
+  it("bounds the summary and a busy reply's tool steps and quotes text that looks like the briefing's markers", () => {
     const latest = message("user", "And now?");
     // A summary over its budget drops its oldest lines and says how many.
     const many = Array.from({ length: 200 }, (_, i) => message("user", `note ${i} ${"z".repeat(300)}`));
@@ -111,8 +109,7 @@ describe("buildBriefing", () => {
 });
 
 describe("a briefing's uncertain tool calls", () => {
-  // covers EX-004, RT-001
-  it("[TC-EX-014] lists a call cut off while it ran even past the briefing's tool limit", () => {
+  it("lists a call cut off while it ran even past the briefing's tool limit", () => {
     const finished = Array.from({ length: BRIEFING_LIMITS.steps + 2 }, (_, i) => tool(`Ran step ${i}`, "done"));
     const reply = message("assistant", "Pushing now", {
       status: "interrupted",

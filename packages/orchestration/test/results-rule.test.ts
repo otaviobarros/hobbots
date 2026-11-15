@@ -72,8 +72,7 @@ const tree = (quests: ReadonlyArray<Quest>, ...tasks: ReadonlyArray<Task>) =>
   });
 
 describe("how results move in a Quest", () => {
-  // covers OR-003, OR-005
-  it("[TC-OR-216] the lead's turn on a Task that leads a Quest states the hand-off rule, and a turn that leads none does not", () => {
+  it("the lead's turn on a Task that leads a Quest states the hand-off rule, and a turn that leads none does not", () => {
     const read = tree(
       [quest],
       task("backend", QUILL, "completed", [], "Backend ready."),
@@ -88,8 +87,7 @@ describe("how results move in a Quest", () => {
     expect(ownerBriefing(alone.tasks[0] as Task, alone)).not.toContain(RESULTS_RULE);
   });
 
-  // covers OR-003, OR-005
-  it("[TC-OR-217] the member's prompt states the same rule, word for word, and neither says a dependent needs a hand-off", () => {
+  it("the member's prompt states the same rule, word for word, and neither says a dependent needs a hand-off", () => {
     const read = tree([quest], task("backend", QUILL, "active"), task("review", PIP, "queued", ["backend"]));
     const member = memberPrompt(read.tasks[2] as Task, read, "Frodo");
     const lead = ownerBriefing(read.tasks[0] as Task, read);
@@ -103,8 +101,7 @@ describe("how results move in a Quest", () => {
     expect(RESULTS_RULE).toContain("only when the lead calls hand_off");
   });
 
-  // covers OR-003, OR-004, OR-005
-  it("[TC-OR-226] a member that leads a nested Quest is told the rule and the lead's duty on every later turn, and one that leads none is not", () => {
+  it("a member that leads a nested Quest is told the rule and the lead's duty on every later turn, and one that leads none is not", () => {
     const nested = new Quest({
       ...quest,
       id: QuestId.make("nested"),

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-/** The fixed set of hob colors from the Hobbots design (docs/design/ui-ux.md). */
+/** The fixed set of hob colors from the Hobbots design. */
 export const HobColor = Schema.Literals(["violet", "moss", "amber", "rose", "sky", "ember"]);
 export type HobColor = typeof HobColor.Type;
 

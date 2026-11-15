@@ -99,8 +99,7 @@ const NoSandbox = Layer.succeed(
 );
 
 describe("The GitHub Charm on a hub", () => {
-  // covers PE-002, PE-008
-  it("[TC-PE-144] is offered to a hob with the Charm once GitHub is connected, and from the next turn after it disconnects", async () => {
+  it("is offered to a hob with the Charm once GitHub is connected, and from the next turn after it disconnects", async () => {
     // The hob's own switch, as saved right now.
     let githubCharm = true;
     const tools = Layer.succeed(

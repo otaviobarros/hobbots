@@ -246,8 +246,7 @@ describe("a lead's continuations and its Task's Attempts", () => {
     reports = 0;
   });
 
-  // covers IN-005, EX-001, OR-003
-  it("[TC-OR-313] routine progress starts no turn, findings that arrive together start one, and every continuation stays in Attempt 1", async () => {
+  it("routine progress starts no turn, findings that arrive together start one, and every continuation stays in Attempt 1", async () => {
     const { run, continuations } = setUp();
     await run(party);
 
@@ -277,8 +276,7 @@ describe("a lead's continuations and its Task's Attempts", () => {
     expect(await run(settledAttempts)).toEqual([{ number: 1, agentId: FRODO, state: "completed" }]);
   }, 15_000);
 
-  // covers EX-001, OR-003
-  it("[TC-OR-314] a continuation on another brain than the Attempt it would resume starts Attempt 2 instead", async () => {
+  it("a continuation on another brain than the Attempt it would resume starts Attempt 2 instead", async () => {
     const { run, continuations } = setUp();
     await run(party);
     await run(everyoneReports("finding"));

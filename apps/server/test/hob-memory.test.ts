@@ -210,7 +210,7 @@ const current = () => Effect.runPromise(store.page({ _tag: "You" }, pipsOwn, pat
 
 describe("memory in a chat and on a hob's page", () => {
   // covers ADR 028 (The memory tools), #961
-  it("[TC-GEN-341] lists the saves a thread's replies made, and only that thread's", async () => {
+  it("lists the saves a thread's replies made, and only that thread's (#961)", async () => {
     await get("/api/threads/thread-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     await saved("s2", "# Elsewhere", { threadId: ThreadId.make("thread-2"), messageId: MessageId.make("reply-2") });
@@ -225,7 +225,7 @@ describe("memory in a chat and on a hob's page", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-342] Undo puts back the version a save replaced, marks it undone and announces it, once", async () => {
+  it("Undo puts back the version a save replaced, marks it undone and announces it, once (#961)", async () => {
     await get("/api/threads/thread-1/memory-saves");
     await saved("s1", "# Launch emails go out Monday");
     await saved("s2", "# Launch emails go out Tuesday at 9 AM", { messageId: MessageId.make("reply-2") });
@@ -251,7 +251,7 @@ describe("memory in a chat and on a hob's page", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-343] Undo of a save that made a page removes the page", async () => {
+  it("Undo of a save that made a page removes the page (#961)", async () => {
     await get("/api/threads/thread-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     expect((await undo("s1")).status).toBe(200);
@@ -259,7 +259,7 @@ describe("memory in a chat and on a hob's page", () => {
   });
 
   // covers ADR 028 (Writes, When memory is down), #961
-  it("[TC-GEN-344] refuses Undo after a newer version, before memory has the save, and while memory is down", async () => {
+  it("refuses Undo after a newer version, before memory has the save, and while memory is down (#961)", async () => {
     await get("/api/threads/thread-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     // You changed the page after the save: Undo would throw that away.
@@ -285,7 +285,7 @@ describe("memory in a chat and on a hob's page", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-347] refuses Undo when a change lands after it read the page's history, and keeps that change", async () => {
+  it("refuses Undo when a change lands after it read the page's history, and keeps that change (#961)", async () => {
     await get("/api/threads/thread-1/memory-saves");
     await saved("s1", "# Launch emails go out Monday");
     await saved("s2", "# Launch emails go out Tuesday at 9 AM", { messageId: MessageId.make("reply-2") });
@@ -306,7 +306,7 @@ describe("memory in a chat and on a hob's page", () => {
   });
 
   // covers ADR 028 (Scopes), #961
-  it("[TC-GEN-345] answers what a hob reads: its own memory, About you and the projects of its folders", async () => {
+  it("answers what a hob reads: its own memory, About you and the projects of its folders (#961)", async () => {
     await get("/api/threads/thread-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     const site: MemoryScope = { _tag: "Project", identity: memoryProjectIdentity(null, "site") };

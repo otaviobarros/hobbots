@@ -10,7 +10,6 @@ const temp = mkdtempSync(join(tmpdir(), "hobbots-keep-running-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 describe("keep running in the menu bar", () => {
-  // covers EX-005
   it("is on by default and keeps the login-item choice beside it", async () => {
     const file = join(temp, "settings.json");
     const settings = fileSettingsStore(file);

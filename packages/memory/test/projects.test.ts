@@ -25,7 +25,7 @@ const identityOf = (folder: string) =>
 
 describe("MemoryProjectsLive", () => {
   // covers ADR 028
-  it("[TC-GEN-194] gives a clone and its linked worktree the identity of their origin, and a plain folder its name", async () => {
+  it("gives a clone and its linked worktree the identity of their origin, and a plain folder its name", async () => {
     root = mkdtempSync(join(tmpdir(), "hobbots-projects-"));
     const clone = join(root, "App");
     mkdirSync(clone);
@@ -43,7 +43,7 @@ describe("MemoryProjectsLive", () => {
   });
 
   // covers ADR 028 (The ai-memory adapter): a project is its origin remote, shared across clones.
-  it("[TC-GEN-253] puts two clones of one repository in one memory project, and a folder with no remote in its own", async () => {
+  it("puts two clones of one repository in one memory project, and a folder with no remote in its own", async () => {
     root = mkdtempSync(join(tmpdir(), "hobbots-projects-"));
     const first = join(root, "memory-app");
     const second = join(root, "memory-app-copy");

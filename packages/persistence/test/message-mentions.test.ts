@@ -98,7 +98,7 @@ const unread = (actor: Actor) => Effect.flatMap(ThreadMemberRepository, (members
 
 describe("message mentions", () => {
   // covers ADR 039 (Who answers)
-  it("[TC-PE-1455-01] stores a message's mentions in order, hobs and people, and reads and journals them", async () => {
+  it("stores a message's mentions in order, hobs and people, and reads and journals them (#1455)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -126,7 +126,7 @@ describe("message mentions", () => {
   });
 
   // covers ADR 039 (Who answers)
-  it("[TC-PE-1455-02] parses a reply once it ends, never while it streams, and keeps what it parsed", async () => {
+  it("parses a reply once it ends, never while it streams, and keeps what it parsed (#1455)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -150,7 +150,7 @@ describe("message mentions", () => {
   });
 
   // covers ADR 039 (Who answers)
-  it("[TC-PE-1455-04] keeps a continued reply's mentions while it streams and adds only those of its new text", async () => {
+  it("keeps a continued reply's mentions while it streams and adds only those of its new text (#1455)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -180,7 +180,7 @@ describe("message mentions", () => {
   });
 
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1455-03] counts each person's unread mentions for them alone, and clears them as they read", async () => {
+  it("counts each person's unread mentions for them alone, and clears them as they read (#1455)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;

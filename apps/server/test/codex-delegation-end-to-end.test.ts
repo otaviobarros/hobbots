@@ -235,8 +235,8 @@ const messagesWhen = (threadId: ThreadId, ready: (all: ReadonlyArray<Message>) =
   );
 
 describe("delegating between Codex and Claude hobs", () => {
-  // covers OR-001, OR-002, RT-001, AG-005, ADR 024
-  it("[TC-RT-084] a Claude hob delegates to a Codex hob, which completes its Task through hub tools, and gets the result", {
+  // covers ADR 024
+  it("a Claude hob delegates to a Codex hob, which completes its Task through hub tools, and gets the result", {
     timeout: 60_000,
   }, async () => {
     const run = await start();
@@ -269,8 +269,8 @@ describe("delegating between Codex and Claude hobs", () => {
     await run(eventually(() => claudeRequests.some((request) => request.prompt.includes("Pip checked the copy"))));
   });
 
-  // covers OR-001, OR-002, RT-001, AG-005, ADR 024
-  it("[TC-RT-085] a Codex hob delegates to a Claude hob through hub tools, and gets the result on Codex", {
+  // covers ADR 024
+  it("a Codex hob delegates to a Claude hob through hub tools, and gets the result on Codex", {
     timeout: 60_000,
   }, async () => {
     const run = await start();

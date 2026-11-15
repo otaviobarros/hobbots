@@ -23,7 +23,7 @@ const artifact = (review: Partial<Pick<Artifact, "review" | "reviewedAt" | "revi
   });
 
 describe("reviewLine", () => {
-  it("[TC-CH-1387-33] says an artifact waits for you, or who reviewed or dismissed it", () => {
+  it("says an artifact waits for you, or who reviewed or dismissed it (#1387)", () => {
     expect(reviewLine(artifact({}), "Aldric")).toBe("Waiting for you");
     expect(
       reviewLine(artifact({ review: "reviewed", reviewedAt: at, reviewedBy: { kind: "user", id: "owner" } }), "Aldric"),

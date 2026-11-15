@@ -4,7 +4,7 @@ import { githubUserCommitIdentity, parseCommitIdentity } from "../src/index.ts";
 // Issue #741: the identity a hob on the user's account commits as when their Git config sets none.
 
 describe("A commit identity the user gives the hub", () => {
-  it("reads a name and email written as Git writes them", () => {
+  it("reads a name and email written as Git writes them (#741)", () => {
     expect(parseCommitIdentity("Ada Lovelace <ada@example.com>")).toEqual({
       name: "Ada Lovelace",
       email: "ada@example.com",
@@ -12,13 +12,13 @@ describe("A commit identity the user gives the hub", () => {
     expect(parseCommitIdentity("  Ada <ada@example.com>. ")).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("finds none in words without both, or with an email that is not one", () => {
+  it("finds none in words without both, or with an email that is not one (#741)", () => {
     for (const answer of ["done", "ada@example.com", "<ada@example.com>", "Ada <ada>", "Ada <a@b@c>", "Ada <a b@c>"]) {
       expect(parseCommitIdentity(answer), answer).toBeNull();
     }
   });
 
-  it("commits as a GitHub account under its name, or login, at the noreply address GitHub links to it", () => {
+  it("commits as a GitHub account under its name, or login, at the noreply address GitHub links to it (#741)", () => {
     expect(githubUserCommitIdentity({ login: "otaviobarros", id: 35647586, name: null })).toEqual({
       name: "otaviobarros",
       email: "35647586+otaviobarros@users.noreply.github.com",

@@ -70,7 +70,7 @@ const input = (more: Partial<HealthInput>): HealthInput => ({
 
 describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
   // covers ADR 029 (Health checks), #1099
-  it("[TC-AG-1099-01] names a skill some place gets that nobody used in 60 days, and leaves alone one added lately or given to nobody", () => {
+  it("names a skill some place gets that nobody used in 60 days, and leaves alone one added lately or given to nobody (#1099)", () => {
     const stale = skill("stale");
     const fresh = skill("fresh", { createdAt: LATELY });
     const idle = skill("idle");
@@ -99,7 +99,7 @@ describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
     expect(once.unused).toEqual([{ skillId: used.id, name: "used", lastUsedAt: LONG_AGO, assignments: 1 }]);
   });
 
-  it("[TC-AG-1099-02] names each place a revision behind, held or not, and one on a revision the library lost", () => {
+  it("names each place a revision behind, held or not, and one on a revision the library lost (#1099)", () => {
     const release = skill("release");
     const held = assignment("release", { _tag: "Hob", agentId: PIP }, { pin: R1, held: true });
     const lost = SkillRevisionHash.make("9".repeat(64));
@@ -131,7 +131,7 @@ describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
     ]);
   });
 
-  it("[TC-AG-1099-03] names a hob's clashes: two projects defining a name, another skill replacing one, never a pin of the same skill", () => {
+  it("names a hob's clashes: two projects defining a name, another skill replacing one, never a pin of the same skill (#1099)", () => {
     const pinned = (name: string, skillId: string, scope: SkillScope) => ({
       assignment: assignment(skillId, scope),
       name: SkillName.make(name),
@@ -157,7 +157,7 @@ describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
     ]);
   });
 
-  it("[TC-AG-1099-04] calls a description vague when it is short or says nothing of when to use it, and long past 500 characters", () => {
+  it("calls a description vague when it is short or says nothing of when to use it, and long past 500 characters (#1099)", () => {
     expect(descriptionProblem(GOOD)).toBeNull();
     expect(descriptionProblem("Releases.")).toBe("vague");
     expect(descriptionProblem("Everything about releases, versions, changelogs and tags in this repo.")).toBe("vague");
@@ -169,7 +169,7 @@ describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
     ]);
   });
 
-  it("[TC-AG-1099-05] counts each hob's skills and the characters its listing takes, leaving out Only when asked skills", () => {
+  it("counts each hob's skills and the characters its listing takes, leaving out Only when asked skills (#1099)", () => {
     const resolved = resolveSkills(
       [
         { assignment: assignment("release", { _tag: "Everyone" }), name: SkillName.make("release"), charms: [] },
@@ -209,12 +209,12 @@ describe("a chat that tries a draft (ADR 029, Try in a chat)", () => {
   });
   const release = { skillId: SkillId.make("release"), name: SkillName.make("release"), pin: R2, onlyWhenAsked: false };
 
-  it("[TC-AG-1099-06] lets / name the draft alone, and none of the hob's own skills", () => {
+  it("lets / name the draft alone, and none of the hob's own skills (#1099)", () => {
     expect(namedSkills([release], trial)).toEqual([{ name: "changelog", set: null }]);
     expect(namedSkills([release], null)).toEqual([release]);
   });
 
-  it("[TC-AG-1099-07] shows a use of the draft under the reply and records nothing in the library", async () => {
+  it("shows a use of the draft under the reply and records nothing in the library (#1099)", async () => {
     const used = await Effect.runPromise(
       Effect.gen(function* () {
         const uses = yield* skillUseRecorder({ agentId: PIP, threadId: null, messageId: null });

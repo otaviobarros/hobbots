@@ -155,7 +155,7 @@ describe("0099_chapters", () => {
     });
 
   // covers ADR 037 (Chapters), DP-003
-  it("[TC-DP-1379-01] gives each thread one live chapter holding its history, and every message and session its chapter", async () => {
+  it("gives each thread one live chapter holding its history, and every message and session its chapter (#1379)", async () => {
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -255,7 +255,7 @@ describe("chapters in the database", () => {
   );
 
   // covers ADR 037 (Chapters), DP-003
-  it("[TC-DP-1379-02] keeps one live chapter per thread and refuses a message without a chapter", async () => {
+  it("keeps one live chapter per thread and refuses a message without a chapter (#1379)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(hob("ada"));
@@ -314,7 +314,7 @@ describe("chapters in the database", () => {
   });
 
   // covers ADR 037 (Chapters), STD-ARCH-014
-  it("[TC-DP-1379-03] changes nothing when a command is sent again, or fails midway", async () => {
+  it("changes nothing when a command is sent again, or fails midway (#1379)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const chapters = yield* ChapterRepository;
@@ -469,7 +469,7 @@ describe("chapters in the database", () => {
   afterAll(() => hub.dispose());
 
   // covers ADR 037 (Chapters), STD-ARCH-013, STD-ARCH-015
-  it("[TC-DP-1379-04] keeps every message in exactly one chapter through random starts, splits and merges", async () => {
+  it("keeps every message in exactly one chapter through random starts, splits and merges (#1379)", async () => {
     let runs = 0;
     await fc.assert(
       fc.asyncProperty(fc.array(ops, { minLength: 1, maxLength: 25 }), (script) =>
@@ -526,7 +526,7 @@ describe("chapters in the database", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("[TC-DP-1379-05] refuses a move a chapter's state does not allow, and journals nothing", async () => {
+  it("refuses a move a chapter's state does not allow, and journals nothing (#1379)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -553,7 +553,7 @@ describe("chapters in the database", () => {
   });
 
   // covers ADR 037 (Chapters), ADR 017, CH-004, DP-001, STD-ARCH-018
-  it("[TC-DP-1379-06] versions the messages a split or merge moves, and forgets what the old boundaries gave", async () => {
+  it("versions the messages a split or merge moves, and forgets what the old boundaries gave (#1379)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -645,7 +645,7 @@ describe("chapters in the database", () => {
   });
 
   // covers ADR 037 (Chapters), STD-ARCH-014
-  it("[TC-DP-1379-07] a thread read before a merge and written back with its session after it does not bring that session back", async () => {
+  it("a thread read before a merge and written back with its session after it does not bring that session back (#1379)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;

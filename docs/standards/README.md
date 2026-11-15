@@ -55,9 +55,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 - the index lists an active rule that no area file defines,
 - a title differs between the index and the rule,
 - a retired ID comes back,
-- a rule sits in the wrong area file,
-- an ADR does not end with a Validation section that lists scenarios (STD-DOCS-009),
-- an evidence record misses a field or the status page does not link it (STD-DOCS-010).
+- a rule sits in the wrong area file.
 
 ## Index
 
@@ -95,7 +93,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-EFFECT-001 | Backend code and the HTTP API use Effect v4 | Active |
 | STD-EFFECT-002 | Expected failures are typed errors | Active |
 | STD-EFFECT-003 | Dependencies are services provided by Layers | Active |
-| STD-EFFECT-004 | State transitions are pure functions | Active |
+| STD-EFFECT-004 | State transitions are pure functions | Retired |
 | STD-EFFECT-005 | Effect packages share one exact version | Active |
 | STD-DATA-001 | Coordination state is durable | Active |
 | STD-DATA-002 | SQL stays PostgreSQL-compatible | Active |
@@ -105,7 +103,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-SEC-004 | Hobbots MCP controls exclude administrative powers | Active |
 | STD-SEC-005 | Patterns on untrusted text run in linear time | Active |
 | STD-SEC-006 | A person's actor comes from the user session | Active |
-| STD-REACT-001 | Server state comes only from query hooks | Active |
+| STD-REACT-001 | Server state and async work go through query hooks | Active |
 | STD-REACT-002 | Route-level state lives in the URL | Active |
 | STD-REACT-003 | Local UI state stays local | Active |
 | STD-REACT-004 | Effects only sync with external systems | Active |
@@ -131,17 +129,17 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-REACT-024 | Long lists render only what is on screen | Active |
 | STD-REACT-025 | Slow updates never block typing | Active |
 | STD-REACT-026 | Stored data is versioned and parsed | Active |
-| STD-REACT-027 | Query hooks own an async call's lifecycle | Active |
-| STD-REACT-028 | Clients render hub state, never derive it | Active |
+| STD-REACT-027 | Query hooks own an async call's lifecycle | Retired |
+| STD-REACT-028 | Clients show the hub's records, never derive a status | Active |
 | STD-REACT-029 | A flow is a reducer with one type per state | Active |
 | STD-UI-001 | Styles use theme tokens only | Active |
 | STD-UI-002 | Build on the shared primitives | Active |
 | STD-UI-003 | Every control works by keyboard and has a name | Active |
 | STD-UI-004 | Motion is stepped and stops with Reduce motion | Active |
-| STD-UI-005 | Screens match the design specification | Active |
+| STD-UI-005 | Screens follow the themes and the shared components | Active |
 | STD-UI-006 | Selection uses a fill, never a left-edge accent | Active |
-| STD-UI-007 | The UI calls agents hobs | Active |
-| STD-UI-008 | Durable records drive every status | Active |
+| STD-UI-007 | The UI calls agents hobs | Retired |
+| STD-UI-008 | Durable records drive every status | Retired |
 | STD-UI-009 | Every failure says what went wrong and how to recover | Active |
 | STD-UI-010 | Only primitives take a className, and only for layout | Active |
 | STD-UI-011 | Visual variants come from cva | Active |
@@ -161,16 +159,17 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DESKTOP-008 | The main process never blocks | Active |
 | STD-DESKTOP-009 | Electron stays on a supported release | Active |
 | STD-DESKTOP-010 | A window never flashes blank or fails silently | Active |
-| STD-TEST-001 | Integration and end-to-end tests carry a case ID | Active |
-| STD-TEST-002 | Fakes first, then the real runtime | Active |
+| STD-TEST-001 | Integration and end-to-end tests carry a case ID | Retired |
+| STD-TEST-002 | Tests use fakes; the real runtimes are checked at each milestone | Active |
 | STD-TEST-003 | Pure logic has unit tests | Active |
-| STD-TEST-004 | Each user flow has an end-to-end test | Active |
-| STD-TEST-005 | Component tests only where end-to-end cannot reach | Active |
+| STD-TEST-004 | Main flows have a smoke test; rules have unit tests | Active |
+| STD-TEST-005 | Component tests cover interaction logic | Active |
 | STD-TEST-006 | Database tests run on SQLite and PostgreSQL | Active |
 | STD-TEST-007 | Every end-to-end screen passes an accessibility scan | Active |
 | STD-TEST-008 | Each main flow works by keyboard alone | Active |
 | STD-TEST-009 | Tests wait on state, and a flaky test is a bug | Active |
 | STD-TEST-010 | The window never scrolls | Active |
+| STD-TEST-011 | A regression test names its issue, and tags group browser tests | Active |
 | STD-DOCS-001 | Decided choices change only through an ADR | Active |
 | STD-DOCS-002 | Read the contract before changing its area | Active |
 | STD-DOCS-003 | Public text links only public sources | Active |
@@ -179,6 +178,6 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DOCS-006 | Dependencies take the latest stable release, pinned exactly | Active |
 | STD-DOCS-007 | Docs use short, plain sentences | Active |
 | STD-DOCS-008 | Work stays inside the requested scope | Active |
-| STD-DOCS-009 | An ADR ends with the scenarios that validate it | Active |
-| STD-DOCS-010 | A proof leaves a dated evidence record | Active |
+| STD-DOCS-009 | An ADR ends with the scenarios that validate it | Retired |
+| STD-DOCS-010 | A proof leaves a dated evidence record | Retired |
 | STD-DOCS-011 | UI words and code names follow the glossary | Active |

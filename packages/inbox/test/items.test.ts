@@ -150,8 +150,7 @@ describe("backpackItemsFor", () => {
     expect(items(attempt)).toEqual([]);
   });
 
-  // covers OR-006, EX-001
-  it("[TC-IN-141] gives a Task you retried or reassigned to its owner again, as the work it now has", () => {
+  it("gives a Task you retried or reassigned to its owner again, as the work it now has", () => {
     const ADA = AgentId.make("ada");
     const retried = task("copy", QUILL, "campaign", "queued", 7);
     expect(
@@ -193,8 +192,7 @@ describe("backpackItemsFor", () => {
     expect(items({ _tag: "CheckpointRecorded", checkpoint: own, milestone: null })).toEqual([]);
   });
 
-  // covers IN-004, OR-004
-  it("[TC-IN-562] sends the hub's finding that the Quest you asked for has nothing moving it to that Quest's own lead", () => {
+  it("sends the hub's finding that the Quest you asked for has nothing moving it to that Quest's own lead", () => {
     const idle = (overrides: Partial<Pick<Checkpoint, "source" | "kind" | "summary" | "taskId">>) =>
       new Checkpoint({ ...checkpoint("finding", campaign.id), source: "automatic", summary: IDLE_QUEST, ...overrides });
     expect(items({ _tag: "CheckpointRecorded", checkpoint: idle({}), milestone: null })).toEqual([
@@ -216,8 +214,7 @@ describe("backpackItemsFor", () => {
     );
   });
 
-  // covers IN-004, OR-005
-  it("[TC-IN-490] sends one Failure with its reason when the hub moves a member's Task for one, and keeps a lone blocker a Checkpoint", () => {
+  it("sends one Failure with its reason when the hub moves a member's Task for one, and keeps a lone blocker a Checkpoint", () => {
     const blocker = (taskId: TaskId, summary: string) =>
       new Checkpoint({ ...checkpoint("blocker", taskId), source: "unplanned", summary });
     const moved = (state: TaskState, of = copy) => ({
@@ -268,8 +265,7 @@ describe("backpackItemsFor", () => {
     ]);
   });
 
-  // covers IN-004
-  it("[TC-IN-130] gives your note on a member's Task to the hob it was left for, keyed by the note", () => {
+  it("gives your note on a member's Task to the hob it was left for, keyed by the note", () => {
     const note = new TaskNote({
       id: NoteId.make("n1"),
       taskId: copy.id,
@@ -284,8 +280,7 @@ describe("backpackItemsFor", () => {
     expect(tasksTouched([{ _tag: "NoteLeft", note }])).toEqual(["copy"]);
   });
 
-  // covers IN-004, OR-004
-  it("[TC-IN-135] holds your note on a lead's own step under the Task it coordinates, so its chat hears it", () => {
+  it("holds your note on a lead's own step under the Task it coordinates, so its chat hears it", () => {
     const active = task("brief-step", ALDRIC, "campaign");
     const done = task("plan-step", ALDRIC, "campaign", "completed");
     const nested = task("plan-detail", ALDRIC, "plan-step", "completed");
@@ -314,8 +309,7 @@ describe("backpackItemsFor", () => {
     }
   });
 
-  // covers IN-004, OR-005
-  it("[TC-IN-1447-01] names Hobbots, not you, as the author of a note the supervisor left", () => {
+  it("names Hobbots, not you, as the author of a note the supervisor left (#1447)", () => {
     const note = new TaskNote({
       id: NoteId.make("supervisor:copy:deadline"),
       taskId: copy.id,

@@ -50,8 +50,8 @@ const captureOver = (party: ReturnType<typeof partyHub>, memory: ReturnType<type
   );
 
 describe("memory capture of a party's work", () => {
-  // covers OR-003, ADR 028 (Capture and summaries), #1028
-  it("[TC-OR-600] the answer that wakes a member reaches its memory, and its result reaches its lead's thread", async () => {
+  // covers ADR 028 (Capture and summaries), #1028
+  it("the answer that wakes a member reaches its memory, and its result reaches its lead's thread (#1028)", async () => {
     const memory = makeMemoryStoreFake();
     const party = partyHub({ memory: memory.store, activity: true });
     dispose = party.dispose;
@@ -95,8 +95,8 @@ describe("memory capture of a party's work", () => {
     expect(frodo.some((item) => item.text.startsWith("Answer:"))).toBe(false);
   }, 30_000);
 
-  // covers OR-004, ADR 028 (Capture and summaries)
-  it("[TC-OR-598] a member's and a sub-Quest member's Attempts reach their own memory, never their lead's", async () => {
+  // covers ADR 028 (Capture and summaries)
+  it("a member's and a sub-Quest member's Attempts reach their own memory, never their lead's", async () => {
     const memory = makeMemoryStoreFake();
     const party = partyHub({ memory: memory.store, activity: true });
     dispose = party.dispose;
@@ -154,7 +154,7 @@ describe("memory capture of a party's work", () => {
   }, 30_000);
 
   // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-  it("[TC-GEN-1377-04] nothing of a private camp reaches memory, its Quest's members' work included", async () => {
+  it("nothing of a private camp reaches memory, its Quest's members' work included (#1377)", async () => {
     const memory = makeMemoryStoreFake();
     const party = partyHub({ memory: memory.store, activity: true });
     dispose = party.dispose;

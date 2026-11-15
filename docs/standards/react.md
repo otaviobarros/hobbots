@@ -6,11 +6,13 @@ Every rule names the tool that enforces it. A rule says "review" only when it ne
 
 ## State
 
-### STD-REACT-001 Server state comes only from query hooks
+### STD-REACT-001 Server state and async work go through query hooks
 
-Read and change server data only through the TanStack Query hooks in `apps/web/src/api/`. A component never calls `fetch` or the API client directly, and never copies query data into `useState`.
+Read and change server data only through the TanStack Query hooks in `apps/web/src/api/`. A component never calls `fetch` or the API client directly, and never copies query data into `useState`. Let the hook track async work too: `useQuery` for a read, `useMutation` for a change, and read whether it is pending, done or failed from the hook, never from a flag set by hand around an `await`. When another component needs to know that the work is running, give the mutation a `mutationKey` and read it with `useIsMutating` or `useMutationState`. `useState` stays for state the user owns, such as a draft, a choice or a toggle (STD-REACT-003).
 
-- **Why:** one cache keeps every screen consistent, and live events update it in one place.
+- ✅ `const importing = useMutation({ mutationKey: importRunKey, mutationFn: run })`, then `disabled={importing.isPending}`, and `useIsMutating({ mutationKey: importRunKey }) > 0` elsewhere
+- ❌ `const [running, setRunning] = useState(false)` with `setRunning(true)` before an `await` and `setRunning(false)` in a `finally`
+- **Why:** one cache keeps every screen consistent, live events update it in one place, and it keeps tracking work after the component that started it unmounts. A flag kept by hand drifts from the real request.
 - **Enforced by:** review.
 - **Applies to:** `apps/web`.
 
@@ -48,13 +50,13 @@ React's [You Might Not Need an Effect](https://react.dev/learn/you-might-not-nee
 - **Enforced by:** Strict Mode in `apps/web/src/main.tsx`, Biome `useExhaustiveDependencies`, and review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
-### STD-REACT-028 Clients render hub state, never derive it
+### STD-REACT-028 Clients show the hub's records, never derive a status
 
-Show a hob's, thread's and quest's status from the hub's projections, such as `ThreadRunChanged`, `HobPresence` and `QuestSummary`. A client never works one out from messages or Task states. Only view state, such as a label or tone for a state, is local.
+Show a hob's, thread's and quest's status from the hub's durable records and projections, such as `ThreadRunChanged`, `HobPresence` and `QuestSummary`. A client never works one out from messages or Task states, and text from a model never sets a status. Only view state, such as a label or tone for a state, is local.
 
-- **Why:** two devices then always agree, and a rule is not copied into every screen. See [ADR 037](../decisions/037-chat-and-camps.md).
-- **Enforced by:** review; `[TC-UX-1374-05]` and `[TC-UX-1374-06]` check that two devices show the same status.
-- **Applies to:** `apps/web`, `apps/desktop`.
+- **Why:** two devices then always agree, a rule is not copied into every screen, and a model cannot claim a success that did not happen. See [ADR 037](../decisions/037-chat-and-camps.md).
+- **Enforced by:** review, and browser tests that check two devices show the same status.
+- **Applies to:** `apps/web`, `apps/desktop`, `apps/server`.
 
 ### STD-REACT-029 A flow is a reducer with one type per state
 
@@ -177,7 +179,7 @@ Every route sets an `errorComponent`, and the router sets a `defaultErrorCompone
 Read data with `useQuery` and handle its states explicitly. Do not use Suspense for data. Each section that shows server data has a loading state, an empty state and an error state with a retry, built from the shared primitives in `packages/ui`, such as `Empty`, not from one-off markup.
 
 - **Why:** the user always sees what is happening, and every section handles the same states the same way.
-- **Enforced by:** review, and end-to-end tests that cover the empty and error states of each flow (STD-TEST-004).
+- **Enforced by:** review, and unit or component tests of the empty and error states (STD-TEST-005).
 - **Applies to:** `apps/web`.
 
 ### STD-REACT-016 Mutations show progress and keep the user's input
@@ -185,17 +187,7 @@ Read data with `useQuery` and handle its states explicitly. Do not use Suspense 
 Change server data with TanStack Query mutations, not React form actions. While a mutation is pending, its control shows progress and cannot be triggered again. When it fails, the user's input stays where it was, and the error follows STD-UI-009. Update the cache optimistically only for actions that rarely fail, such as archive or pin, and roll back on failure.
 
 - **Why:** a double submit or a lost draft costs the user's trust, and mutations already feed the query cache and the live events (STD-REACT-001).
-- **Enforced by:** review, and end-to-end tests of the pending and failure paths.
-- **Applies to:** `apps/web`.
-
-### STD-REACT-027 Query hooks own an async call's lifecycle
-
-When something async runs, such as a read, a save or a run of several saves, let a TanStack Query hook track it: `useQuery` for a read, `useMutation` for a change. Read whether it is pending, done or failed, and its data and error, from the hook. Do not keep that in `useState`, `useRef` or a flag set by hand around an `await`. When another component needs to know that the work is running, give the mutation a `mutationKey` and read it with `useIsMutating` or `useMutationState`. Do not lift a flag up through a callback. `useState` stays for state the user owns, such as a draft, a choice or a toggle (STD-REACT-003).
-
-- ✅ `const importing = useMutation({ mutationKey: importRunKey, mutationFn: run })`, then `disabled={importing.isPending}`, and `useIsMutating({ mutationKey: importRunKey }) > 0` elsewhere
-- ❌ `const [running, setRunning] = useState(false)` with `setRunning(true)` before an `await` and `setRunning(false)` in a `finally`
-- **Why:** the query cache already tracks pending, success and error, keeps tracking after the component that started the work unmounts, and lets any component read it by key. A flag kept by hand drifts from the real request and is lost on unmount.
-- **Enforced by:** review.
+- **Enforced by:** review, and unit or component tests of the pending and failure paths (STD-TEST-005).
 - **Applies to:** `apps/web`.
 
 ### STD-REACT-017 Forms validate with an Effect Schema

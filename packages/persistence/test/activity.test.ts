@@ -122,8 +122,7 @@ const change = (path: string, settled: boolean, after = version("h2", contents(3
 });
 
 describe("Workbench records", () => {
-  // covers UX-002
-  it("[TC-IN-173] keeps a command from its start to its end, with its Task taken from its Attempt, and journals each write", async () => {
+  it("keeps a command from its start to its end, with its Task taken from its Attempt, and journals each write", async () => {
     const { started, ended, entries, activity } = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -146,8 +145,7 @@ describe("Workbench records", () => {
     expect(activity.commands[0]?.output?.head).toBe("formatted\n");
   });
 
-  // covers UX-002
-  it("[TC-IN-174] rewrites a folder's changes as later scans find them, removing a file put back", async () => {
+  it("rewrites a folder's changes as later scans find them, removing a file put back", async () => {
     const { first, second, activity } = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -180,8 +178,7 @@ describe("Workbench records", () => {
     expect(activity.changes[0]).toMatchObject({ path: "b.md", settled: true, after: { hash: "h3" } });
   });
 
-  // covers UX-002
-  it("[TC-IN-493] keeps an Attempt's steps outside any chat, replacing them whole as they change, and journals each write (#892)", async () => {
+  it("keeps an Attempt's steps outside any chat, replacing them whole as they change, and journals each write (#892)", async () => {
     const searching = {
       id: "s1",
       kind: "tool" as const,
@@ -217,8 +214,7 @@ describe("Workbench records", () => {
     expect(result.journaled).toBe(2);
   });
 
-  // covers UX-002
-  it("[TC-IN-524] reads several Attempts' records at once, in the order asked, each as its own read finds it (#899)", async () => {
+  it("reads several Attempts' records at once, in the order asked, each as its own read finds it (#899)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -260,7 +256,7 @@ describe("Workbench records", () => {
     expect(result.none).toEqual([]);
   });
 
-  it("[TC-IN-175] writes nothing for an Attempt that is not there", async () => {
+  it("writes nothing for an Attempt that is not there", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -291,8 +287,7 @@ describe("Workbench records", () => {
     });
   });
 
-  // covers UX-002, PE-005
-  it("[TC-IN-176] serves only the contents an Attempt's records name, and says which kept contents no record names", async () => {
+  it("serves only the contents an Attempt's records name, and says which kept contents no record names", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -325,8 +320,7 @@ describe("Workbench records", () => {
     expect(result.scans).toMatchObject([{ folder: project, stopped: "too-many-files", filesScanned: 100_001 }]);
   });
 
-  // covers UX-002
-  it("[TC-IN-177] clears the details of a Task that ended past the window, keeping its records, and none of an open one", async () => {
+  it("clears the details of a Task that ended past the window, keeping its records, and none of an open one", async () => {
     const result = await run(
       Effect.gen(function* () {
         const started = yield* seed;

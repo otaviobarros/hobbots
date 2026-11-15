@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { commitFolders } from "../src/tool-calls.ts";
 
 // Issue #742: Frodo, the lead, committed its member Nettle's work from its own session. The hub
-// holds such a commit (TC-OR-742-02 for every runtime), so it must find every repository a command
+// holds such a commit (commit-contract.test.ts, for every runtime), so it must find every repository a command
 // line commits in, wherever the line moves to first.
 
 const project = "/work/ledger";
@@ -10,8 +10,7 @@ const other = "/work/notes";
 const folders = (command: string) => commitFolders("Bash", { command }, project, "/Users/frodo");
 
 describe("the repositories a command line commits in (#742)", () => {
-  // covers PE-005, OR-004
-  it("[TC-RT-742-01] finds each one after cd, git -C, wrappers that move it, eval and sh -c, and nothing for any other command", () => {
+  it("finds each one after cd, git -C, wrappers that move it, eval and sh -c, and nothing for any other command (#742)", () => {
     expect(folders("git commit -m 'chore: pocket ledger v0.1'")).toEqual([project]);
     expect(folders("git add -A && git commit -am x")).toEqual([project]);
     expect(folders(`cd ${other} && git commit -m x`)).toEqual([other]);

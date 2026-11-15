@@ -21,7 +21,7 @@ body:
     id: done-when
     attributes:
       label: Done when
-      description: Checks that prove the slice works end to end.
+      description: What a person can do once the slice is done, checked at the milestone's dogfood check.
       value: |
         - [ ] 
     validations:
@@ -34,8 +34,8 @@ body:
     id: references
     attributes:
       label: References
-      description: Requirement IDs, ADRs and screens this slice implements.
-      placeholder: "DP-001, ADR 010, screen 2"
+      description: ADRs and issues this slice builds on.
+      placeholder: "ADR 039, #1450"
   - type: markdown
     attributes:
       value: |

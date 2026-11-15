@@ -34,6 +34,7 @@ import { hubQuestionChanged } from "./hub-questions.ts";
 import { applyStatusFrame, statusReady } from "./hub-status.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
+import { applyMembersEvent } from "./members.ts";
 import { applyMemoryChanged, refreshMemory } from "./memory-pages.ts";
 import { applyMemorySave, refreshMemorySaves } from "./memory-saves.ts";
 import { memorySharesChanged } from "./memory-shares.ts";
@@ -214,10 +215,13 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
-  // Only the sidebar shows members (ADR 039), and it reads them again; a new member has read nothing.
+  // The sidebar and the members sheet show members (ADR 039), and read them again; a new member has
+  // read nothing.
   "ThreadMemberAdded",
   // What the supervisor did reaches you as the failure, retry or note it made (#1447), not its record.
   "TaskSupervised",
+  // Let them go on reaches the chat as the thread's run, published on `status` frames (ADR 039).
+  "RelayBudgetReset",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -231,7 +235,8 @@ type UnappliedEvent = Extract<
       | "HobPresenceChanged"
       | "HobPresenceRemoved"
       | "ThreadMemberAdded"
-      | "TaskSupervised";
+      | "TaskSupervised"
+      | "RelayBudgetReset";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);
@@ -368,6 +373,7 @@ const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
  */
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applySidebarEvent(queryClient, event);
+  applyMembersEvent(queryClient, event);
   applyQuestWork(queryClient, event);
   applyHistory(queryClient, event);
   applyHobChanges(queryClient, event);

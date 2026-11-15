@@ -25,7 +25,6 @@ import {
   ArtifactId,
   AttemptId,
   CommandId,
-  CriterionId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -185,8 +184,6 @@ const seed = Effect.gen(function* () {
     taskId: top,
     goal: "A Black Friday campaign",
     acceptance: ["Copy approved"],
-    // Optional, so the Quest completes without checks; quest-criteria.test.ts holds the gate.
-    criteria: [{ id: CriterionId.make("c-copy"), text: "Copy approved", required: false }],
     limits: DEFAULT_QUEST_LIMITS,
     createdAt: AT,
   });
@@ -409,8 +406,7 @@ const expectMarkdown = (files: Record<string, Buffer>) => {
 };
 
 describe("exports", () => {
-  // covers OP-003
-  it("[TC-OP-040] an export of a hob opens on its own and holds its threads, Quests, artifacts and work history", async () => {
+  it("an export of a hob opens on its own and holds its threads, Quests, artifacts and work history", async () => {
     const result = await run({ _tag: "Hob", agentId: ALDRIC });
     expect(result.folder.startsWith(join(saved, "Hobbots export Aldric "))).toBe(true);
     expect(result).toMatchObject({ threads: 2, quests: 1, files: 2, notCopied: 3 });
@@ -434,8 +430,7 @@ describe("exports", () => {
     expect(files["README.md"]?.toString()).toContain("Redaction is best effort");
   });
 
-  // covers OP-003
-  it("[TC-OP-041] redacts every string, your own messages included, and holds no device record, token hash or other hob's brief", async () => {
+  it("redacts every string, your own messages included, and holds no device record, token hash or other hob's brief", async () => {
     const result = await run({ _tag: "Hob", agentId: ALDRIC });
     // The copied files included: what the Tasks made is redacted too.
     const text = Object.values(filesIn(result.folder))
@@ -456,8 +451,7 @@ describe("exports", () => {
     expect(existsSync(join(result.folder, "files", "campaign-task", ".env"))).toBe(false);
   });
 
-  // covers OP-003
-  it("[TC-OP-042] exports one thread, or everything, and never writes over an earlier export", async () => {
+  it("exports one thread, or everything, and never writes over an earlier export", async () => {
     const thread = await run({ _tag: "Thread", threadId: CAMPAIGN });
     const threadData = decode(readFileSync(join(thread.folder, "export.json"), "utf8"));
     expect(threadData.threads.map((each) => each.title)).toEqual(["Black Friday campaign"]);
@@ -478,8 +472,8 @@ describe("exports", () => {
     expect(again.folder).toBe(`${everything.folder} (2)`);
   });
 
-  // covers OP-003, #1357
-  it("[TC-OP-1357-02] keeps the history of settings changes in an export of everything, and in no narrower one", async () => {
+  // Issue #1357
+  it("keeps the history of settings changes in an export of everything, and in no narrower one (#1357)", async () => {
     await runtime.runPromise(
       SetupRepository.use((setup) =>
         setup.update({ approvedFolders: [project], safetyPreset: "careful" }, OWNER_ACTOR),
@@ -494,8 +488,7 @@ describe("exports", () => {
     expect(hob.settingChanges).toBeUndefined();
   });
 
-  // covers OP-003
-  it("[TC-OP-043] refuses a destination inside a hob's folder, or one that is not a folder, and writes nothing", async () => {
+  it("refuses a destination inside a hob's folder, or one that is not a folder, and writes nothing", async () => {
     const before = readdirSync(project).sort();
     const inside = await refusal({ _tag: "Everything" }, join(project));
     expect(inside._tag).toBe("InvalidFolder");
@@ -508,14 +501,13 @@ describe("exports", () => {
     expect(relativePath._tag).toBe("InvalidFolder");
   });
 
-  // covers OP-003
-  it("[TC-OP-044] refuses a hob or thread that is not there", async () => {
+  it("refuses a hob or thread that is not there", async () => {
     expect((await refusal({ _tag: "Hob", agentId: AgentId.make("nobody") }))._tag).toBe("AgentNotFound");
     expect((await refusal({ _tag: "Thread", threadId: ThreadId.make("nothing") }))._tag).toBe("ThreadNotFound");
   });
 
-  // covers OP-003, ADR 028 (Backups)
-  it("[TC-OP-100] exports each memory scope's pages as redacted Markdown, a hob's own with its export, and says when memory is down", async () => {
+  // covers ADR 028 (Backups)
+  it("exports each memory scope's pages as redacted Markdown, a hob's own with its export, and says when memory is down", async () => {
     const everything = await run({ _tag: "Everything" });
     const files = filesIn(everything.folder);
     expect(
@@ -564,8 +556,8 @@ describe("exports", () => {
     }
   });
 
-  // covers OP-003, ADR 039 (A member hob works as itself)
-  it("[TC-CH-1461-17] a reply a member hob wrote in a camp is exported as that hob's, with its name", async () => {
+  // covers ADR 039 (A member hob works as itself)
+  it("a reply a member hob wrote in a camp is exported as that hob's, with its name (#1461)", async () => {
     await runtime.runPromise(
       HobbotsRepository.use((repo) =>
         repo.upsertMessage(

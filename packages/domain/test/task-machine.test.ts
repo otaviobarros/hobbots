@@ -162,7 +162,7 @@ const events: fc.Arbitrary<TaskEvent> = fc.oneof(
 );
 
 describe("TaskMachine", () => {
-  it("[TC-OR-1446-01] agrees with a model of the rules, pauses included, over random runs of events", () => {
+  it("agrees with a model of the rules, pauses included, over random runs of events (#1446)", () => {
     agreesWithModel({
       machine: TaskMachine,
       records: fc.constantFrom(...TaskStates.literals).map(task),

@@ -67,63 +67,7 @@ const openSettings = async (page: Page) => {
   await page.goto(`${hub.url}/#/settings/app`);
 };
 
-// covers UX-003
-test("[TC-UX-087] switching data-theme restyles the open screen without a reload, and Reduce motion still works", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await openSettings(page);
-  const section = page.getByRole("region", { name: "This app" });
-  await expect(section).toBeVisible();
-
-  // The app opens in Workshop Night, today's look.
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
-  expect((await looks(page)).background).toBe(rgb("ground", "workshop-night"));
-
-  // Each theme restyles the screen in place: the page is never reloaded.
-  await page.evaluate(() => Object.assign(window, { hobbotsThemeProbe: true }));
-  for (const { id } of themes.themes) {
-    await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), id);
-    const now = await looks(page);
-    expect(now.background, id).toBe(rgb("ground", id));
-    expect(now.primary, id).toBe(rgb("lantern", id));
-    expect(now.text, id).toBe(rgb("text-strong", id));
-    expect(now.animation, id).toBe("hb-bob");
-    // The skin: Lamplight rounds a card and keeps labels in sentence case; Workshop cuts and capitalizes.
-    const workshop = id.startsWith("workshop-");
-    expect(now.corner, id).toBe(workshop ? "0px" : "16px");
-    expect(now.clipped, id).toBe(workshop);
-    expect(now.labelCase, id).toBe(workshop ? "uppercase" : "none");
-  }
-  expect(await page.evaluate(() => "hobbotsThemeProbe" in window)).toBe(true);
-
-  // Reduce motion stops every animation in any theme.
-  await section.getByRole("switch", { name: "Reduce motion" }).click();
-  expect((await looks(page)).animation).toBe("none");
-});
-
-// covers UX-003
-test("[TC-UX-088] the first run opens in Workshop Night, and a saved theme survives a restart", async ({ page }) => {
-  await openSettings(page);
-  await expect(page.getByRole("region", { name: "This app" })).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
-  expect((await looks(page)).background).toBe(rgb("ground", "workshop-night"));
-
-  // Saved the way the theme picker saves it, then Hobbots opens again.
-  await page.evaluate(() => localStorage.setItem("hobbots.theme", JSON.stringify("lamplight-paper")));
-  await page.reload();
-  await expect(page.getByRole("region", { name: "This app" })).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-paper");
-  expect((await looks(page)).background).toBe(rgb("ground", "lamplight-paper"));
-
-  // A value that is not a theme falls back to Workshop Night.
-  await page.evaluate(() => localStorage.setItem("hobbots.theme", JSON.stringify("sepia")));
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
-});
-
-// covers UX-003
-test("[TC-UX-124] This app picks the look, Light, Dark or Automatic and the text size, and keeps them on this device", async ({
+test("This app picks the look, Light, Dark or Automatic and the text size, and keeps them on this device", async ({
   page,
 }) => {
   await openSettings(page);

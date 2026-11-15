@@ -25,7 +25,7 @@ const setup = (folders: ReadonlySet<string>, openError = "") => {
 
 describe("the Show the files bridge for memory", () => {
   // covers ADR 028
-  it("[TC-GEN-210] opens only the memory pages folder, whatever the page sends", async () => {
+  it("opens only the memory pages folder, whatever the page sends", async () => {
     const { handlers, opened, show } = setup(new Set([FOLDER]));
     expect([...handlers.keys()]).toEqual([showMemoryChannel]);
     await expect(show(trusted, "/etc")).resolves.toBe(true);
@@ -33,7 +33,7 @@ describe("the Show the files bridge for memory", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-211] opens nothing for a stranger, before memory has pages, or when Finder fails", async () => {
+  it("opens nothing for a stranger, before memory has pages, or when Finder fails", async () => {
     await expect(setup(new Set([FOLDER])).show(stranger)).resolves.toEqual({ refused: "notAllowed" });
     const missing = setup(new Set());
     await expect(missing.show(trusted)).resolves.toBe(false);

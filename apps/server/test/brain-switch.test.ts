@@ -198,8 +198,7 @@ const switchTo = (threadId: string, brain: unknown, makeDefault?: boolean) =>
   request("PUT", `/api/threads/${threadId}/brain`, { brain, ...(makeDefault === undefined ? {} : { makeDefault }) });
 
 describe("switching a thread's brain", () => {
-  // covers RT-001, CH-001
-  it("[TC-CH-126] continues on another runtime, whose first turn is briefed with the thread so far", async () => {
+  it("continues on another runtime, whose first turn is briefed with the thread so far", async () => {
     start();
     const agent = await summon();
     const { id } = await newThread(agent);
@@ -232,8 +231,7 @@ describe("switching a thread's brain", () => {
     expect(asked.codex[1]).toMatchObject({ prompt: "Thanks.", briefing: null, sessionId: sessions[1]?.sessionId });
   });
 
-  // covers RT-001, CH-001
-  it("[TC-CH-127] switching back resumes the first runtime's session and tells it only what it missed", async () => {
+  it("switching back resumes the first runtime's session and tells it only what it missed", async () => {
     start();
     const agent = await summon();
     const { id } = await newThread(agent);
@@ -262,8 +260,7 @@ describe("switching a thread's brain", () => {
     expect(asked["claude-code"].at(-1)).toMatchObject({ prompt: "Thanks.", briefing: null, sessionId: claudeId });
   });
 
-  // covers AG-002, RT-001
-  it("[TC-CH-128] the picker changes only its thread; making it the hob's default edits the hob", async () => {
+  it("the picker changes only its thread; making it the hob's default edits the hob", async () => {
     start();
     const agent = await summon();
     const mine = await newThread(agent);
@@ -287,8 +284,7 @@ describe("switching a thread's brain", () => {
     expect((await switchTo(mine.id, codex)).body.brain).toBeNull();
   });
 
-  // covers RT-001, EX-005
-  it("[TC-CH-129] a switch away from a limited or unavailable Claude Code still works without asking it", async () => {
+  it("a switch away from a limited or unavailable Claude Code still works without asking it", async () => {
     start();
     const agent = await summon();
     const { id } = await newThread(agent);
@@ -324,8 +320,7 @@ describe("switching a thread's brain", () => {
     expect(asked["claude-code"]).toHaveLength(before);
   });
 
-  // covers RT-001
-  it("[TC-CH-180] refuses a brain the hub cannot run, or a model or effort its runtime does not offer", async () => {
+  it("refuses a brain the hub cannot run, or a model or effort its runtime does not offer", async () => {
     start({ codex: false });
     const agent = await summon();
     const { id } = await newThread(agent);
@@ -349,8 +344,7 @@ describe("switching a thread's brain", () => {
     expect(retired).toMatchObject({ status: 409, body: { _tag: "HobUnavailable" } });
   });
 
-  // covers RT-001, AG-005
-  it("[TC-CH-202] refuses a runtime that offers no models, as Codex does until its turns run", async () => {
+  it("refuses a runtime that offers no models, as Codex does until its turns run", async () => {
     start({ codex: "noModels" });
     const agent = await summon();
     const { id } = await newThread(agent);

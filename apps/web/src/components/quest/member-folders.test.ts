@@ -29,20 +29,20 @@ const taskOf = (read: ReturnType<typeof narrowed>, id: TaskId) => {
 };
 
 describe("The folders a member works in", () => {
-  it("are those its Delegation gives, and the nearest Delegation's for a step under it", () => {
+  it("are those its Delegation gives, and the nearest Delegation's for a step under it (#582)", () => {
     const read = narrowed();
     expect(memberFolders(read, taskOf(read, COPY))).toEqual(["/Users/you/shop/copy"]);
     expect(memberFolders(read, taskOf(read, STEP))).toEqual(["/Users/you/shop/copy"]);
     expect(taskDetail(read, taskOf(read, COPY)).folders).toEqual(["/Users/you/shop/copy"]);
   });
 
-  it("are not shown for work no lead gave, or a Delegation that left its lead's folders as they were", () => {
+  it("are not shown for work no lead gave, or a Delegation that left its lead's folders as they were (#582)", () => {
     const read = narrowed();
     expect(memberFolders(read, taskOf(read, CAMPAIGN))).toBeNull();
     expect(memberFolders(read, taskOf(read, BUILD))).toBeNull();
   });
 
-  it("show by their last name", () => {
+  it("show by their last name (#582)", () => {
     expect(folderName("/Users/you/shop/copy")).toBe("copy");
     expect(folderName("C:\\Users\\you\\shop\\")).toBe("shop");
     expect(folderName("/")).toBe("/");

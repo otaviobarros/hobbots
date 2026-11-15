@@ -4,7 +4,7 @@ import { usedLine, usedPage } from "./skill-line-model.ts";
 
 describe("the line for a skill a reply used (ADR 029)", () => {
   // covers ADR 029 (The use line)
-  it("[TC-UI-1096-01] names the skill as the screens do, with its revision, or that it is your organization's", () => {
+  it("names the skill as the screens do, with its revision, or that it is your organization's (#1096)", () => {
     const library = {
       source: "library" as const,
       skillId: SkillId.make("s1"),
@@ -21,7 +21,7 @@ describe("the line for a skill a reply used (ADR 029)", () => {
   });
 
   // covers ADR 029 (Skill sets, The use line)
-  it("[TC-UI-1192-01] names the set a set's skill comes from, before the set's revision", () => {
+  it("names the set a set's skill comes from, before the set's revision (#1192)", () => {
     const fromSet = {
       source: "library" as const,
       skillId: SkillId.make("s2"),
@@ -39,7 +39,7 @@ describe("the line for a skill a reply used (ADR 029)", () => {
   });
 
   // covers ADR 029 (The use line)
-  it("[TC-UI-1194-01] opens a library skill's page, a set's skill in its set, and nothing for your organization's", () => {
+  it("opens a library skill's page, a set's skill in its set, and nothing for your organization's (#1194)", () => {
     const library = {
       source: "library" as const,
       skillId: SkillId.make("s1"),
