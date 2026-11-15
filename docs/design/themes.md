@@ -1,6 +1,6 @@
 # Themes
 
-The redesign (#462) moves the app from one night palette to four themes. This page and [themes.json](themes.json) hold every value the themes need. Until Redesign 1 (#463) lands, the [design specification](ui-ux.md) still describes the app as it ships today.
+The redesign (#462) moves the app from one night palette to four themes. This page and [themes.json](themes.json) hold every value the themes need.
 
 ## The four themes
 

@@ -1,6 +1,6 @@
 # ADR 023 — The Workbench
 
-Status: **Accepted.** Amended by [ADR 027](027-quest-room.md): the Workbench is one per Quest, docked in the Quest room under the lanes, its Summary tab and Task chat card go, and the Terminal is drawn with xterm.js. What it records, how it captures changes and how long it keeps them stand. Refines screen 7 of the [screen inventory](../design/screens-and-flows.md), the Workbench rules of the [design specification](../design/ui-ux.md) and UX-002 and UX-006 of the [MVP requirements](../product/mvp-requirements.md) for Slice 12 ([#13](https://github.com/otaviobarros/hobbots/issues/13)). Builds on the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the sandbox and redaction of [ADR 014](014-tool-policy-and-enforcement.md) and the event journal of [ADR 013](013-event-journal.md).
+Status: **Accepted.** Amended by [ADR 027](027-quest-room.md): the Workbench is one per Quest, docked in the Quest room under the lanes, its Summary tab and Task chat card go, and the Terminal is drawn with xterm.js. What it records, how it captures changes and how long it keeps them stand. Refines screen 7 of the screen inventory, the Workbench rules of the design specification and UX-002 and UX-006 of the MVP requirements for Slice 12 ([#13](https://github.com/otaviobarros/hobbots/issues/13)). Builds on the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the sandbox and redaction of [ADR 014](014-tool-policy-and-enforcement.md) and the event journal of [ADR 013](013-event-journal.md).
 
 ## Context
 

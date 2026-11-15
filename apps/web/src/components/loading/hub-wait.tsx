@@ -13,7 +13,7 @@ export const ROW_WIDTHS = ["26ch", "18ch", "22ch"] as const;
 /**
  * The wait line of a region that reads from the hub. Hub reads are quick, so it shows nothing for
  * the first 10 seconds, only the region's skeletons. Then it says the hub is slow and offers Try
- * again, in case the hub is out of reach (the Skeleton and WaitNote rules in docs/design/ui-ux.md). The status stays mounted
+ * again, in case the hub is out of reach. The status stays mounted
  * while the region waits, so its line is announced once when it appears.
  */
 export function HubWait({ pending, onRetry }: { pending: boolean; onRetry: () => void }) {

@@ -1,6 +1,6 @@
 # UI standards
 
-Rules for how UI code is written and how it must look. The [design specification](../design/ui-ux.md) and the [screen inventory](../design/screens-and-flows.md) define the design. These rules point to them and do not copy them.
+Rules for how UI code is written and how it must look. The [themes](../design/themes.md) and [themes.json](../design/themes.json) hold the design's values. These rules point to them and do not copy them.
 
 ### STD-UI-001 Styles use theme tokens only
 
@@ -34,11 +34,11 @@ Animate only with the stepped `--animate-hb-*` tokens. Every animation stops wit
 - **Enforced by:** the token guard, `apps/web/tokens.test.ts`, in `pnpm check`, which fails on a literal duration or an animation that is not an `--animate-hb-*` token, and review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
-### STD-UI-005 Screens match the design specification
+### STD-UI-005 Screens follow the themes and the shared components
 
-Every screen matches the [design specification](../design/ui-ux.md). It defines the Home landing page and the chat workspace with Quest, Inbox and Workshop tabs. It also sets the night palette, Atkinson Hyperlegible Next for reading text and Pixelify Sans for headings. A UI change also updates the design specification when it changes the design.
+A screen is built from the theme tokens ([themes](../design/themes.md)) and the shared components in `packages/ui`. Atkinson Hyperlegible Next sets reading text and Pixelify Sans sets headings. A change to how a screen looks or flows is agreed on its issue, with a picture or a short description, before it is built.
 
-- **Why:** the specification is the single description of the product's look and behavior. See [ADR 008](../decisions/008-design.md).
+- **Why:** the themes and the components keep every screen consistent, and agreeing a design on its issue keeps one place to look without a separate spec to keep in step. See [ADR 008](../decisions/008-design.md).
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 

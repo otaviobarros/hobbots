@@ -25,7 +25,7 @@ Option A, for the MVP and until there is evidence that B is needed.
 
 ## Rationale
 
-Keeping the app alive after the window closes is the default because hobs are meant to keep working ([EX-005](../product/mvp-requirements.md)), but people expect to choose how a menu-bar app behaves, as they do in other apps that live there. The switch makes that choice explicit and warns before it stops work.
+Keeping the app alive after the window closes is the default because hobs are meant to keep working (EX-005), but people expect to choose how a menu-bar app behaves, as they do in other apps that live there. The switch makes that choice explicit and warns before it stops work.
 
 A is the smallest change that satisfies ADR 010 on macOS: no extra bundle content, no separate install, update or uninstall step, and no chance of the app and the service running different versions after an update. Quit has one obvious meaning. The menu-bar app is also the familiar shape for an always-on Mac tool.
 

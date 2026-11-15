@@ -24,9 +24,9 @@ const sources = tracked.filter(
     /^(?:packages\/[^/]+\/src|apps\/server\/src)\//.test(file) && /\.ts$/.test(file) && !/\.test\.ts$/.test(file),
 );
 const modules = tracked.filter((file) => /^apps\/(?:web|desktop)\/src\/(?:.+\/)?messages\.ts$/.test(file));
-// ADRs and evidence records are history and stay as written; the glossary names the words it retires.
+// ADRs are history and stay as written; the glossary names the words it retires.
 const docs = tracked.filter(
-  (file) => /^docs\/.+\.md$/.test(file) && !/^docs\/(?:decisions|evidence)\//.test(file) && file !== GLOSSARY,
+  (file) => /^docs\/.+\.md$/.test(file) && !/^docs\/decisions\//.test(file) && file !== GLOSSARY,
 );
 
 const exported = new Set(sources.flatMap((file) => exportsOf(read(file))));

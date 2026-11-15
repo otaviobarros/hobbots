@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Checks the rules that docs can be checked against:
 // - docs/standards/README.md indexes every rule in the area files, and nothing else.
-// - Every evidence record has its fields, and docs/STATUS.md links it (STD-DOCS-010).
 // - No record says who did something with a bare user or hob id (STD-ARCH-020), the rule
 //   scripts/owner-actor.mjs keeps beside the owner-actor check.
 // Usage: node scripts/check-standards.mjs
@@ -51,27 +50,6 @@ for (const [id, { status }] of index) {
   if (status === "Active" && !rules.has(id)) errors.push(`${id} is in the index but no area file defines it`);
 }
 
-const evidenceDir = fileURLToPath(new URL("../docs/evidence/", import.meta.url));
-const status = readFileSync(fileURLToPath(new URL("../docs/STATUS.md", import.meta.url)), "utf8");
-const evidenceFields = ["Date", "Issue", "Pull request", "Commit", "Setup", "Result"];
-const records = readdirSync(evidenceDir).filter((name) => name !== "README.md" && name.endsWith(".md"));
-for (const file of records) {
-  const date = file.match(/^(\d{4}-\d{2}-\d{2})-[a-z0-9-]+\.md$/);
-  if (!date) {
-    errors.push(`evidence record ${file} must be named YYYY-MM-DD-<short-name>.md (STD-DOCS-010)`);
-    continue;
-  }
-  const text = readFileSync(`${evidenceDir}${file}`, "utf8");
-  for (const field of evidenceFields) {
-    if (!text.includes(`\n- **${field}:** `))
-      errors.push(`evidence record ${file} is missing "${field}" (STD-DOCS-010)`);
-  }
-  if (!text.includes(`\n- **Date:** ${date[1]}\n`))
-    errors.push(`evidence record ${file} has a Date that differs from its name`);
-  if (!status.includes(`(evidence/${file}`))
-    errors.push(`docs/STATUS.md does not link evidence record ${file} (STD-DOCS-010)`);
-}
-
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sources = execFileSync("git", ["ls-files", "packages", "apps"], { cwd: root, encoding: "utf8" }).split("\n");
 errors.push(...checkRecords(sources, (file) => readFileSync(`${root}${file}`, "utf8")));
@@ -80,4 +58,4 @@ if (errors.length > 0) {
   console.error(`Standards check failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
   process.exit(1);
 }
-console.log(`Standards check passed: ${rules.size} rules, ${records.length} evidence records.`);
+console.log(`Standards check passed: ${rules.size} rules.`);

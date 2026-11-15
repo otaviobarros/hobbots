@@ -32,7 +32,7 @@ Effect Workflow or persistent workflow services may implement long waits and res
 
 ## Module map
 
-`apps/web` renders the UI described in the [design specification](../design/ui-ux.md). `apps/desktop` owns Electron lifecycle, the background server service and connection setup. `apps/server` assembles Effect Layers and serves the browser/API. Packages separate domain, API, agents, runtimes, orchestration, inbox, supervision, permissions, `execution`, workbench and persistence. Packages without code yet contain boundary descriptions only.
+`apps/web` renders the UI, built from the [themes](../design/themes.md) and the shared components in `packages/ui`. `apps/desktop` owns Electron lifecycle, the background server service and connection setup. `apps/server` assembles Effect Layers and serves the browser/API. Packages separate domain, API, agents, runtimes, orchestration, inbox, supervision, permissions, `execution`, workbench and persistence. Packages without code yet contain boundary descriptions only.
 
 `packages/agents` holds the hob and thread use cases and defines the ports they use: `HobbotsRepository`, `InstallationSettings`, `RuntimeAdapter`, `EventPublisher` and `FolderChecks`. `packages/persistence` and `packages/runtimes` implement those ports, so they depend on `packages/agents`. `apps/server` implements the event and folder ports, holds the HTTP handlers and the event stream, and composes the Layers.
 

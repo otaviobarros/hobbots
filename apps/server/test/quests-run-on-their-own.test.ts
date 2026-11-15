@@ -64,8 +64,7 @@ import {
 // approval card, as his app's bot, against a fake GitHub on a local port. Then you ask Aldric to stop,
 // and the Quest ends stopped, never delivered. The one approval and your stop are all that reached
 // you. Every hob runs on the fake runtime, as Claude Code and as Codex; CI runs it on SQLite and on
-// PostgreSQL (TestDatabase). The real runtimes run the same scenario by hand, in
-// docs/evidence/checklists/quests-run-on-their-own.md.
+// PostgreSQL (TestDatabase).
 
 const TOKEN = "github_pat_quests_on_their_own";
 const SLUG = "otaviobarros/workshop";

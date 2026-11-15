@@ -91,7 +91,7 @@ The main process follows the hub's event stream. When the stream is lost, it che
 | `401 DeviceRevoked` | "This Mac was removed from <hub>." | Ask again, or Disconnect |
 | `401 DeviceRequired` | "<hub> no longer knows this Mac." | Ask again, or Disconnect |
 
-- **While a page is open,** the hub's own reconnecting banner shows ([design specification](../design/ui-ux.md)), with the reason from this table in place of its generic "may be off or paused" text, and Change address where the table offers it. The page stays, so the open thread and its unsent message stay too.
+- **While a page is open,** the hub's own reconnecting banner shows (design specification), with the reason from this table in place of its generic "may be off or paused" text, and Change address where the table offers it. The page stays, so the open thread and its unsent message stay too.
 - **With no page open,** such as on start, or when a page load fails, the window shows the same state as a local page.
 - **Trying again.** The app checks again every 5 seconds and at once when the Mac wakes. Each try while the hub is out of reach reads Tailscale afresh, so a change of network or of Tailscale's state is found by the next one. When the hub answers again, the stream reconnects and the page carries on, with the same token and no new approval.
 - **A changed port.** While connected, the hub's `remote-access` event carries the new port. The app moves to it, sets the cookies again and reloads the window at the same path, as the hub's own window does today. If the app missed the change, Change address takes the new address. An address on the same node keeps the token, so no new approval is needed, since ADR 021 binds the token to the node and not to the port.

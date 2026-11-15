@@ -1,8 +1,8 @@
 /**
  * Lists the flaky and failed tests in Playwright and Vitest JSON reports as Markdown, for a CI job
- * summary or the nightly flake hunt's issue (STD-TEST-009). A test is flaky when it failed and
+ * summary (STD-TEST-009). A test is flaky when it failed and
  * then passed on a retry or a repeat; it is failed when no run of it passed. The runs of one test
- * in several reports, such as the hunt's three separate runs of a suite, count together. It prints
+ * in several reports, such as separate runs of a suite, count together. It prints
  * nothing when every test passed on its first run.
  *
  *   node scripts/flaky-tests.mjs [--on <setup>] <report.json>… [--on <setup> <report.json>…]
@@ -47,8 +47,8 @@ const playwrightOutcomes = (report) => {
 
 /**
  * Every test in a Vitest JSON report, as one run. The report keeps one result per test, so the
- * flake hunt runs a suite several times, each in a fresh process with its own report, and the
- * runs are counted together (`mergeOutcomes`).
+ * runs of a suite several times over, each in a fresh process with its own report, are counted
+ * together (`mergeOutcomes`).
  */
 const vitestOutcomes = (report) =>
   report.testResults.flatMap((file) =>

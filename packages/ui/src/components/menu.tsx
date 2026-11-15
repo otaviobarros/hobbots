@@ -3,7 +3,7 @@ import { ContextMenu as ContextMenuPrimitive, DropdownMenu as DropdownMenuPrimit
 import type * as React from "react";
 import { cn } from "../lib/utils.ts";
 
-// Hobbots menus (docs/design/ui-ux.md): a card with pixel corners and the line-2 border, opened from
+// Hobbots menus: a card with pixel corners and the line-2 border, opened from
 // a ⋯ button (DropdownMenu) or by right-click, Shift+F10 or the context-menu key (ContextMenu).
 // Radix moves focus into the menu, moves it with the arrow keys, closes it on Escape and returns
 // focus to where it was. The highlighted item keeps the hover fill and adds an inset focus-ring
