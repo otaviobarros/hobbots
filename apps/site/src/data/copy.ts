@@ -222,7 +222,7 @@ export const THEMES: ReadonlyArray<Shot & { name: string; kind: string; chip: st
 export const TRUST = [
   {
     title: "Your data stays with you",
-    body: "Every channel, memory and skill lives on your computer. There is no Hobbots account and no Hobbots server in between.",
+    body: "Every thread, memory and skill lives on your computer. There is no Hobbots account and no Hobbots server in between.",
   },
   {
     title: "Brings the AI you already use",
@@ -245,7 +245,7 @@ export const FAQ = [
   },
   {
     q: "Does my work leave my computer?",
-    a: "Hobbots keeps every channel, memory, skill and backup on your computer. Your hobs talk to Claude or ChatGPT the same way their own apps do.",
+    a: "Hobbots keeps every thread, memory, skill and backup on your computer. Your hobs talk to Claude or ChatGPT the same way their own apps do.",
   },
   {
     q: "Is Linux supported?",
