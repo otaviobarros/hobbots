@@ -73,7 +73,7 @@ export const startGeneration = (client: QueryClient) => {
 export const recordAgent = (client: QueryClient, agent: Agent) =>
   record(client, `agent:${agent.id}`, { kind: "agent", revision: agent.revision, value: agent });
 export const recordChannel = (client: QueryClient, channel: Channel) =>
-  record(client, `thread:${channel.id}`, { kind: "channel", revision: channel.revision, value: channel });
+  record(client, `channel:${channel.id}`, { kind: "channel", revision: channel.revision, value: channel });
 export const recordMessage = (client: QueryClient, message: Message) =>
   record(client, `message:${message.id}`, { kind: "message", revision: message.revision, value: message });
 export const recordApproval = (client: QueryClient, approval: ApprovalRequest) =>

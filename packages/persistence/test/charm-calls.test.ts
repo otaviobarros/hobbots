@@ -16,7 +16,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations, TaskRepositoryLive } from "../src/index.ts";
 import charmCallValues from "../src/migrations/0075_charm_call_values.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const TestLayer = CharmCallService.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, TaskRepositoryLive, EventJournal.layer)),
@@ -277,27 +277,19 @@ describe("Charm call records", () => {
 
   // covers ADR 031
   it("0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
-    // Keeps 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its Charms, whether
-    // other hobs see it, its good at and who made and summoned it, and its Summoning scope;
-    // 0053 and 0114 too: the journal moves a retired hob's channel members (ADR 039), which need both.
-    const earlier = Object.fromEntries(
-      Object.entries(migrations).filter(
-        ([id]) =>
-          id < "0075" ||
-          [
-            "0076_charm_grants",
-            "0079_hob_visibility",
-            "0080_hob_good_at",
-            "0082_hob_actors",
-            "0083_summoning",
-            "0053_thread_reads",
-            "0114_thread_members",
-          ].includes(id),
-      ),
-    ) as typeof migrations;
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0075")) as typeof migrations;
     const stored = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* seed;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: agentId,
+        name: "Aldric",
+        runtime: "claude-code",
+        roleTitle: "Lead",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: now,
+      })}`;
       for (const [key, plan] of [
         ["push", `{"commit":"abc","appliedText":"Pushed feat/x."}`],
         ["old", `{"commit":"def"}`],
@@ -313,7 +305,7 @@ describe("Charm call records", () => {
           plan,
           state: "uncertain",
           result: null,
-          channelId: null,
+          threadId: null,
           messageId: null,
           stepId: null,
           createdAt: now,
@@ -321,6 +313,8 @@ describe("Charm call records", () => {
         })}`;
       }
       yield* charmCallValues;
+      // Today's calls read them, so the rows go on to today's schema.
+      yield* migrateAfter("0075");
       return yield* (yield* CharmCalls).unsettled;
     }).pipe(
       Effect.provide(

@@ -1,7 +1,7 @@
 /**
  * Adds a persistence migration named by the UTC second it was made (ADR 040):
  * `pnpm migration:new channel_members` writes
- * `packages/persistence/src/migrations/20261113231542_thread_members.ts`.
+ * `packages/persistence/src/migrations/20261113231542_channel_members.ts`.
  *
  * No list names the migrations, and the migrator runs every one a database has not applied, whatever
  * its id, so two pull requests that each add one never edit the same file and never renumber because

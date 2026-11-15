@@ -353,7 +353,7 @@ const ServerLive = Layer.unwrap(
 
     // New installations start without hobs; the user summons the first one during setup.
     const database = join(config.dataDir, "hobbots.sqlite");
-    // Search reads the same file from a worker channel, so a long search never blocks the server.
+    // Search reads the same file from a worker thread, so a long search never blocks the server.
     // One SQLite client for the hub: the layer is shared, so it is built once. On the first start
     // after a restore, its rules apply before anything reads the database (ADR 026).
     const Sqlite = RestoreRulesLive(dataDir).pipe(Layer.provideMerge(SqliteLive(database)));

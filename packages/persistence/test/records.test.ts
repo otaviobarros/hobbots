@@ -465,15 +465,15 @@ describe("message authors", () => {
         look_color: "moss",
         created_at: NOW,
       })}`;
-      yield* sql`INSERT INTO channels ${sql.insert({ id: CHANNEL, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
-      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", channel_id: CHANNEL, number: 1, state: "live", started_at: NOW })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({ id: CHANNEL, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
+      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", thread_id: CHANNEL, number: 1, state: "live", started_at: NOW })}`;
       for (const [index, [id, role]] of [
         ["ask-1", "user"],
         [REPLY, "assistant"],
       ].entries()) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
-          channel_id: CHANNEL,
+          thread_id: CHANNEL,
           chapter_id: "c1",
           seq: index + 1,
           role,
@@ -482,7 +482,7 @@ describe("message authors", () => {
           created_at: NOW,
         })}`;
         const sequence = index + 1;
-        const payload = { _tag: "MessageUpserted", message: { id, channelId: CHANNEL, chapterId: "c1", role } };
+        const payload = { _tag: "MessageUpserted", message: { id, threadId: CHANNEL, chapterId: "c1", role } };
         yield* sql`INSERT INTO event_journal ${sql.insert({
           sequence,
           id: `event-${sequence}`,
@@ -490,7 +490,7 @@ describe("message authors", () => {
           schema_version: 5,
           occurred_at: NOW,
           agent_id: ADA,
-          channel_id: CHANNEL,
+          thread_id: CHANNEL,
           payload: JSON.stringify(payload),
         })}`;
         yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
@@ -503,7 +503,7 @@ describe("message authors", () => {
       const refused = yield* Effect.exit(
         sql`INSERT INTO messages ${sql.insert({
           id: "no-author",
-          channel_id: CHANNEL,
+          thread_id: CHANNEL,
           chapter_id: "c1",
           seq: 9,
           role: "user",

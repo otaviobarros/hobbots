@@ -279,7 +279,7 @@ const placeKey = (place: InboxPlace): string => {
     case "quest":
       return `quest:${place.quest.id}`;
     case "channel":
-      return `thread:${place.channelId}`;
+      return `channel:${place.channelId}`;
     default:
       return place.kind;
   }

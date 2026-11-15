@@ -1,16 +1,11 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { AgentId, Channel, ChannelId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, EVENT_SCHEMA_VERSIONS } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import channelKinds from "../src/migrations/0095_thread_kinds.ts";
-import chapters from "../src/migrations/0099_chapters.ts";
-import projectorCursors from "../src/migrations/0100_projector_cursors.ts";
-import records from "../src/migrations/0101_records.ts";
-import campSuggestions from "../src/migrations/0104_camp_suggestions.ts";
-import channelMembers from "../src/migrations/0114_thread_members.ts";
-import { TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1375 (ADR 037): a channel is a chat or a camp. The migration makes each hob's most recent open
 // channel its chat and every other channel a camp with its title, and the database then refuses a second
@@ -40,7 +35,7 @@ interface Old {
 
 let sequence = 0;
 
-/** A channel and its ChannelUpserted entry, as the hub stored them before 0095. */
+/** A channel and its ThreadUpserted entry, as the hub stored them before 0095 named it a thread. */
 const storedChannel = (old: Old) =>
   Effect.gen(function* () {
     const sql = (yield* SqlClient.SqlClient).withoutTransforms();
@@ -55,7 +50,7 @@ const storedChannel = (old: Old) =>
             proposalId: null,
           }
         : null;
-    yield* sql`INSERT INTO channels ${sql.insert({
+    yield* sql`INSERT INTO threads ${sql.insert({
       id: old.id,
       agent_id: old.agentId,
       title: old.title,
@@ -85,12 +80,12 @@ const storedChannel = (old: Old) =>
     yield* sql`INSERT INTO event_journal ${sql.insert({
       sequence,
       id: `event-${sequence}`,
-      type: "ChannelUpserted",
+      type: "ThreadUpserted",
       schema_version: 3,
       occurred_at: NOW,
       agent_id: old.agentId,
-      channel_id: old.id,
-      payload: JSON.stringify({ _tag: "ChannelUpserted", channel }),
+      thread_id: old.id,
+      payload: JSON.stringify({ _tag: "ThreadUpserted", thread: channel }),
     })}`;
     yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
   });
@@ -133,10 +128,8 @@ describe("0095_thread_kinds", () => {
       yield* storedChannel({ id: "di-trial", agentId: "di", title: "Try", updatedAt: at(1), skillTrial: true });
 
       yield* channelKinds;
-      // The repository reads each channel's live chapter, which 0099 adds, and who wrote its last
-      // line, which 0101 adds.
-      yield* chapters;
-      yield* records;
+      // Today's repository reads them, so the rows go on to today's schema.
+      yield* migrateAfter("0095");
 
       const repo = yield* HobbotsRepository;
       const channels: Array<Channel> = [];
@@ -151,20 +144,22 @@ describe("0095_thread_kinds", () => {
 
     expect(kindsOf(result.channels)).toEqual({
       "ada-old": ["camp", "open", "Old plans"],
-      "ada-recent": ["chat", "open", "Lamps"],
+      "ada-recent": ["direct", "open", "Lamps"],
       "ada-trial": ["camp", "open", "Try Lamps"],
       "ada-archived": ["camp", "archived", "Done"],
       "bo-1": ["camp", "archived", "Gone"],
-      "cy-a": ["chat", "open", "A"],
+      "cy-a": ["direct", "open", "A"],
       "cy-b": ["camp", "open", "B"],
       "di-trial": ["camp", "open", "Try"],
     });
     expect(
       result.channels.every((channel) => channel.goal === null && !channel.private && channel.origin === null),
     ).toBe(true);
-    // Each journaled channel decodes with the kind it has now and the state its own entry said.
-    // 0099 then took each entry on to version 5, with its chapter.
-    expect(result.entries.map((entry) => entry.schemaVersion)).toEqual(result.entries.map(() => 5));
+    // Each journaled channel decodes with the kind it has now and the state its own entry said, and
+    // the migrations after took each entry on to today's version.
+    expect(result.entries.map((entry) => entry.schemaVersion)).toEqual(
+      result.entries.map(() => EVENT_SCHEMA_VERSIONS.ChannelUpserted),
+    );
     const journaled = kindsOf(
       result.entries.flatMap((entry) => (entry.payload._tag === "ChannelUpserted" ? [entry.payload.channel] : [])),
     );
@@ -178,15 +173,8 @@ describe("0095_thread_kinds", () => {
       yield* storedHob("bo");
       yield* storedChannel({ id: "ada-chat", agentId: "ada", title: "Lamps", updatedAt: at(1) });
       yield* channelKinds;
-      // The repository reads each channel's live chapter, which 0099 adds, and who wrote its last
-      // line, which 0101 adds; a closed channel's camp suggestions expire, which 0102 keeps (after
-      // 0100's projector cursors).
-      yield* chapters;
-      yield* projectorCursors;
-      yield* records;
-      yield* campSuggestions;
-      // A new channel starts with its members, which 0114 keeps.
-      yield* channelMembers;
+      // Today's repository writes them, so the rows go on to today's schema.
+      yield* migrateAfter("0095");
 
       const repo = yield* HobbotsRepository;
       const channel = (id: string, agentId: string, fields: Partial<Channel> = {}) =>

@@ -7,9 +7,10 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Agent / hob | A persistent identity with versioned configuration, runtime preference, instructions and policy. The domain model says *agent*; the UI says *hob*. | [Agent model](../architecture/agent-model.md), [ADR 008](../decisions/008-design.md) |
 | Retire | Archiving a hob. New dispatch stops and history stays inspectable. Bring back makes it active again. | [Agent model](../architecture/agent-model.md) |
 | Orchestrator | A role an agent plays when it coordinates others, not a privileged runtime type. | [ADR 005](../decisions/005-agent-parity.md) |
-| Channel | A durable conversation that belongs to one agent. Its `kind` is *chat* or *camp*; the UI never says channel. | [Conversations](../architecture/conversations.md), [ADR 037](../decisions/037-chat-and-camps.md) |
+| Channel | A durable conversation that belongs to one hob, its owner (`ownerHobId`). Its `kind` is `direct` (the UI's *chat*) or `camp`; the UI never says channel. Was `Thread` in the code before [#1610](https://github.com/otaviobarros/hobbots/issues/1610). | [Conversations](../architecture/conversations.md), [ADR 037](../decisions/037-chat-and-camps.md) |
 | Chat | A hob's one open channel, always there, for quick questions and small jobs on any topic. Start fresh replaces it and carries its open items over. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Camp | A channel with a goal of its own, made when a topic grows. Quests started there belong to it. A private camp is never captured into memory. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Thread | The replies to one message in a channel, kept under it (`rootMessageId`). In the code, *thread* means only this. | [ADR 039](../decisions/039-shared-camps.md) |
 | Chapter | One topic's run of messages in a chat or camp. Exactly one is live; a new chapter starts a new runtime session. A chapter can move into a camp and leave a stub. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Decision | A choice recorded once in a chat or camp, with who made it. A changed decision is kept, crossed out. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Artifact | What a hob makes or changes: a doc, page, email, image, code file, PR or link. The registry indexes what Attempts and Quests record and copies nothing. | [ADR 037](../decisions/037-chat-and-camps.md) |
@@ -65,7 +66,7 @@ Change a row here in the same pull request that renames the word or the code.
 | UI | Code | Never in the UI | Never in the docs |
 | --- | --- | --- | --- |
 | hob | `Agent` | | |
-| chat, camp | `Channel` | `channel` | |
+| chat, camp | `Channel` | `channel`, `thread` | |
 | chapter | `Chapter` | | |
 | decision | `Decision` | | |
 | artifact | `Artifact` | | |

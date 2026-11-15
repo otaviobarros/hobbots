@@ -389,7 +389,7 @@ export const CONTRACT_ROSTER = ((): string => {
 })();
 
 /**
- * Two hobs' prompts in one thread (ADR 039, #1464): each hob's session is started with its own and
+ * Two hobs' prompts in one channel (ADR 039, #1464): each hob's session is started with its own and
  * resumed by its own id, so a resumed session's history holds its own marker and never the other's.
  */
 export const HOB_SESSION_PROMPTS = {

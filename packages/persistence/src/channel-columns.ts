@@ -10,7 +10,7 @@ import type { SqlClient } from "effect/sql";
  * read, since its message takes a new revision. A reply still under way waits until it ends, and a
  * person's own messages and a lead's quiet progress (#1006) never count.
  */
-export const unreadReplies = (sql: SqlClient.SqlClient, channel: string, marker: string) =>
+const unreadReplies = (sql: SqlClient.SqlClient, channel: string, marker: string) =>
   sql`FROM messages u WHERE u.channel_id = ${sql.literal(channel)} AND u.role = 'assistant'
       AND u.revision > COALESCE(${sql.literal(marker)}, 0)
       AND u.status NOT IN ('queued', 'streaming', 'stopping') AND u.quiet = 0

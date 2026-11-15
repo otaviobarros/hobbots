@@ -20,7 +20,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { ChannelMemberRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import channelMembers, { MEMBER_ROLES, MEMBER_STATES } from "../src/migrations/0114_thread_members.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1453 (ADR 039, Members): every channel has members, a person or a hob each. The migration
 // gives each channel its owner and its hob; a new channel starts with the person who made it and its
@@ -131,9 +131,11 @@ describe("channel members", () => {
           ...fields,
         })}`;
         const old = { sessions: "[]", createdAt: NOW, updatedAt: NOW, revision: 4 };
-        yield* sql`INSERT INTO channels ${sql.insert({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "direct", readRevision: 3, ...old })}`;
-        yield* sql`INSERT INTO channels ${sql.insert({ id: CAMP, agentId: ROOK, title: "Camp", kind: "camp", ...old })}`;
+        yield* sql`INSERT INTO threads ${sql.insert({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "chat", readRevision: 3, ...old })}`;
+        yield* sql`INSERT INTO threads ${sql.insert({ id: CAMP, agentId: ROOK, title: "Camp", kind: "camp", ...old })}`;
         yield* channelMembers;
+        // Today's repository reads them, so the rows go on to today's schema.
+        yield* migrateAfter("0114");
         const all = yield* Effect.flatMap(ChannelMemberRepository, (repository) => repository.list(CHAT));
         return { chat: all.map(shown), reads: all.map((member) => member.readRevision), camp: yield* members(CAMP) };
       }),

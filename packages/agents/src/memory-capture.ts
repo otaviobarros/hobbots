@@ -252,7 +252,7 @@ const arrivalOf = (
   if (text.trim() === "") return null;
   const items = redacted([{ key: `arrival:${item.id}`, kind: "message", text }]);
   const [target, id] = splitTarget(delivery.target);
-  if (target === "channel") {
+  if (target === "thread") {
     const channelId = id as ChannelId;
     return { sessionId: channelId, agentId: item.recipientId, opening: [channelStart(channelId)], items, ends: false };
   }
@@ -533,7 +533,7 @@ const backpackMarks = (item: BackpackItem): EntryMarks => {
   if (delivery !== undefined && target === "task") {
     return { channelId: item.channelId, taskId: id as TaskId, unit: attemptUnit(delivery.turnId) };
   }
-  const channelId = target === "channel" ? (id as ChannelId) : item.channelId;
+  const channelId = target === "thread" ? (id as ChannelId) : item.channelId;
   return { channelId, taskId: item.taskId, unit: `arrival:${item.id}` };
 };
 

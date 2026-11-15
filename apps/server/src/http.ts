@@ -140,16 +140,14 @@ const ChannelsHandlers = HttpApiBuilder.group(HobbotsApi, "channels", (handlers)
       });
     // A read of a channel that must exist: refused with ChannelNotFound when it does not.
     const ofChannel = <A>(channelId: ChannelId, read: (channelId: ChannelId) => Effect.Effect<A>) =>
-      repo
-        .findChannel(channelId)
-        .pipe(
-          Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.fail(new ChannelNotFound({ channelId })),
-              onSome: () => read(channelId),
-            }),
-          ),
-        );
+      repo.findChannel(channelId).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(new ChannelNotFound({ channelId })),
+            onSome: () => read(channelId),
+          }),
+        ),
+      );
     return handlers.handleAll({
       messages: ({ params }) => ofChannel(params.channelId, repo.listMessages),
       sendPrompt: ({ params, payload }) =>

@@ -17,7 +17,7 @@ import { channelRows } from "./repositories.ts";
 // Search over channel titles and settled messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
 // search (migration 0011). Hobs that retired are left out, and so are private camps, which are found
 // only from inside them (ADR 037). Its layers also give find (#1386), on the same connection. On a
-// SQLite file the queries run in a worker channel with its own read-only connection, so a long
+// SQLite file the queries run in a worker thread with its own read-only connection, so a long
 // search never blocks the server (ADR 011).
 
 /** The most channels one search returns, and the newest matching messages shown for each. */
@@ -50,7 +50,7 @@ export class SearchIndex extends Context.Service<
   );
 
   /**
-   * Search and find in a worker channel on the SQLite database at `filename`, which the server's
+   * Search and find in a worker thread on the SQLite database at `filename`, which the server's
    * connection must already have migrated. The worker starts with the first query.
    */
   static readonly sqliteWorker = (filename: string) =>
@@ -182,7 +182,7 @@ parentPort.on("message", ({ id, sql, params }) => {
 
 type Reply = { readonly id: number; readonly rows?: ReadonlyArray<Row>; readonly error?: string };
 
-/** One read-only SQLite connection in a worker channel, started on first use and again after a crash. */
+/** One read-only SQLite connection in a worker thread, started on first use and again after a crash. */
 class WorkerConnection {
   private worker: Worker | undefined;
   private nextId = 0;

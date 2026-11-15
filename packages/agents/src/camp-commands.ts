@@ -70,16 +70,23 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         yield* requireActive(agent.value);
       });
 
+    // A new camp's hob and the others it is made with must all take new work; a camp asked for again
+    // is answered as it is, whatever they do now.
+    const requireNewCamp = (stored: boolean, agent: Agent, hobs: ReadonlyArray<AgentId>) =>
+      stored
+        ? Effect.void
+        : Effect.gen(function* () {
+            yield* requireActive(agent);
+            yield* Effect.forEach(hobs, requireJoins, { discard: true });
+          });
+
     const makeCamp = Effect.fn("ChatService.makeCamp")(function* (agentId: AgentId, request: CampRequest) {
       return yield* withHob(agentId, (agent) =>
         Effect.gen(function* () {
           // The same camp asked for again is answered as it is, whatever the hob does now.
           const stored = yield* repo.findChannel(request.key);
           const hobs = othersOf(agentId, request.hobs);
-          if (Option.isNone(stored)) {
-            yield* requireActive(agent);
-            yield* Effect.forEach(hobs, requireJoins, { discard: true });
-          }
+          yield* requireNewCamp(Option.isSome(stored), agent, hobs);
           const now = yield* nowIso;
           const camp = new Channel({
             id: request.key,
@@ -162,10 +169,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         if (request._tag === "camp") return { _tag: "camp", campId: request.campId } satisfies ChapterMoveTarget;
         // The same camp asked for again is answered as it is, whatever the hob does now.
         const hobs = othersOf(channel.ownerHobId, request.hobs);
-        if (Option.isNone(yield* repo.findChannel(request.key))) {
-          yield* requireActive(agent);
-          yield* Effect.forEach(hobs, requireJoins, { discard: true });
-        }
+        yield* requireNewCamp(Option.isSome(yield* repo.findChannel(request.key)), agent, hobs);
         const now = yield* nowIso;
         const camp = new Channel({
           id: request.key,

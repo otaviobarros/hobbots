@@ -23,7 +23,7 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ChannelMemberRepositoryLive, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import turnRequests, { TURN_CAUSES, TURN_REQUEST_STATES } from "../src/migrations/20261114003401_turn_requests.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1461 (ADR 039, One hob speaks at a time): each answer a hob owes is a TurnRequest written
 // with the message that caused it; it takes the floor with its turn's reply, is answered when the
@@ -47,12 +47,9 @@ const run = <A, E>(effect: Effect.Effect<A, E, Services>, database: typeof TestD
     Effect.runPromise,
   );
 
-/**
- * The migrations that ran before turn requests were recorded, and the one that keeps a reply's
- * read-the-web mark, which the repository writes each message with.
- */
+/** The migrations that ran before turn requests were recorded. */
 const earlier = Object.fromEntries(
-  Object.entries(migrations).filter(([id]) => id < "20261114003401" || id === "20261115002636_message_read_web"),
+  Object.entries(migrations).filter(([id]) => id < "20261114003401"),
 ) as typeof migrations;
 
 const hob = (id: AgentId) =>
@@ -292,15 +289,35 @@ describe("recording the answers already owed", () => {
     const chat = ChannelId.make("chat");
     const result = await run(
       Effect.gen(function* () {
-        const repo = yield* HobbotsRepository;
-        yield* repo.insertAgent(hob(QUILL));
-        yield* repo.upsertChannel(
-          new Channel({ id: chat, ownerHobId: QUILL, title: "chat", createdAt: NOW, updatedAt: NOW }),
-        );
-        yield* repo.upsertMessage(said(chat, "first", "complete"));
-        yield* repo.upsertMessage(said(chat, "second", "queued"));
-        yield* repo.upsertMessage(said(chat, "third", "queued", MARINA));
+        // The rows as the hub stored them before, when a channel was a thread.
+        const sql = yield* SqlClient.SqlClient;
+        const fields = { roleTitle: "Guide", instructions: "", lookSeed: 1, lookColor: "moss", createdAt: NOW };
+        yield* sql`INSERT INTO agents ${sql.insert({ id: QUILL, name: QUILL, runtime: "claude-code", ...fields })}`;
+        yield* sql`INSERT INTO threads ${sql.insert({ id: chat, agentId: QUILL, title: "chat", kind: "chat", createdAt: NOW, updatedAt: NOW, revision: 1 })}`;
+        yield* sql`INSERT INTO chapters ${sql.insert({ id: "chat-1", threadId: chat, number: 1, state: "live", startedAt: NOW, revision: 1 })}`;
+        const messages = [
+          ["first", "complete", OWNER_ACTOR],
+          ["second", "queued", OWNER_ACTOR],
+          ["third", "queued", MARINA],
+        ] as const;
+        for (const [index, [id, status, actor]] of messages.entries()) {
+          yield* sql`INSERT INTO messages ${sql.insert({
+            id,
+            threadId: chat,
+            chapterId: "chat-1",
+            role: "user",
+            content: id,
+            status,
+            actorKind: actor.kind,
+            actorId: actor.id,
+            createdAt: NOW,
+            seq: index + 1,
+            revision: index + 2,
+          })}`;
+        }
         yield* turnRequests;
+        // Today's repository reads them, so the rows go on to today's schema.
+        yield* migrateAfter("20261114003401");
         return yield* open(chat);
       }),
       TestDatabaseAt(earlier),

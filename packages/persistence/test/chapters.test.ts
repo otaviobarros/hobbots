@@ -21,9 +21,7 @@ import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import chaptersMigration from "../src/migrations/0099_chapters.ts";
-import recordsMigration from "../src/migrations/0101_records.ts";
-import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1379 (ADR 037): a channel's transcript is split into chapters. The migration gives each
 // channel one live chapter holding its history, and every message a chapter; the database keeps one
@@ -76,7 +74,7 @@ describe("0099_chapters", () => {
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const keyed = sessions.map((sessionId) => ({ runtime: "claude-code", sessionId, seenThrough: null }));
-      yield* sql`INSERT INTO channels ${sql.insert({
+      yield* sql`INSERT INTO threads ${sql.insert({
         id: channelId,
         agent_id: "ada",
         title: channelId,
@@ -97,7 +95,7 @@ describe("0099_chapters", () => {
             schema_version: version,
             occurred_at: NOW,
             agent_id: "ada",
-            channel_id: channelId,
+            thread_id: channelId,
             payload: JSON.stringify({ _tag: type, ...payload }),
           })}`;
           yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
@@ -122,11 +120,11 @@ describe("0099_chapters", () => {
         updatedAt: at(2),
         revision: 1,
       };
-      yield* journal("ChannelUpserted", 4, { channel });
+      yield* journal("ThreadUpserted", 4, { thread: channel });
       for (const [index, [id, status]] of messages.entries()) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
-          channel_id: channelId,
+          thread_id: channelId,
           seq: index + 1,
           role: "user",
           content: id,
@@ -135,7 +133,7 @@ describe("0099_chapters", () => {
         })}`;
         const message = {
           id,
-          channelId,
+          threadId: channelId,
           role: "user",
           content: id,
           status,
@@ -180,12 +178,9 @@ describe("0099_chapters", () => {
       yield* stored("empty", [], []);
 
       yield* chaptersMigration;
-      // Sessions now also name their hob (20261114005209_hob_sessions), which the hub reads them with.
-      yield* hobSessionsMigration;
-      // The entries as 0099 left them, before 0101 names every message's author, which the hub reads
-      // a channel's last line with.
+      // Today's hub reads them, so the rows and entries go on to today's schema.
+      yield* migrateAfter("0099");
       const entries = yield* (yield* EventJournal).readAfter(0);
-      yield* recordsMigration;
 
       const repo = yield* HobbotsRepository;
       const chapters = yield* ChapterRepository;
@@ -231,9 +226,9 @@ describe("0099_chapters", () => {
     // Every old entry decodes, with the chapter its channel now has, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
       ["ChannelUpserted", 7],
-      ["MessageUpserted", 5],
-      ["MessageUpserted", 5],
-      ["MessageQueued", 2],
+      ["MessageUpserted", 6],
+      ["MessageUpserted", 6],
+      ["MessageQueued", 3],
       ["ChannelUpserted", 7],
     ]);
     const payloads = result.entries.map((e) => e.payload);

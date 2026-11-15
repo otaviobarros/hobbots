@@ -29,7 +29,7 @@ import {
   unreadByMember,
 } from "../src/index.ts";
 import memberReads from "../src/migrations/20261114004500_member_reads.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1454 (ADR 039, read markers per member): unread counts, the unread line and catch-up read
 // the member row of the person asking. Migration 20261114004500 drops the channel's own marker after moving the
@@ -43,12 +43,9 @@ const CAMP = ChannelId.make("camp");
 const QUIET = ChannelId.make("quiet");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
-/**
- * The migrations that ran before 20261114004500, when each channel kept its own read marker, and the
- * one that keeps a reply's read-the-web mark, which the repository writes each message with.
- */
+/** The migrations that ran before 20261114004500, when each channel kept its own read marker. */
 const earlier = Object.fromEntries(
-  Object.entries(migrations).filter(([id]) => id < "20261114004500" || id === "20261115002636_message_read_web"),
+  Object.entries(migrations).filter(([id]) => id < "20261114004500"),
 ) as typeof migrations;
 
 type Services =
@@ -131,28 +128,60 @@ describe("read markers per member", () => {
   it("gives the owner the channel's marker where it lagged, drops the channel's, and unread counts read the same (#1454)", async () => {
     const result = await run(
       Effect.gen(function* () {
+        // The rows as the hub stored them before, when a channel was a thread with its own marker.
         const sql = yield* SqlClient.SqlClient;
-        const repo = yield* HobbotsRepository;
-        yield* repo.insertAgent(aldric);
+        const fields = { roleTitle: "Guide", instructions: "", lookSeed: 1, lookColor: "moss", createdAt: NOW };
+        yield* sql`INSERT INTO agents ${sql.insert({ id: ALDRIC, name: "Aldric", runtime: "claude-code", ...fields })}`;
+        let revision = 0;
         for (const [id, kind] of [
-          [CHAT, "direct"],
+          [CHAT, "chat"],
           [CAMP, "camp"],
           [QUIET, "camp"],
         ] as const) {
-          yield* repo.upsertChannel(channel(id, kind));
+          yield* sql`INSERT INTO threads ${sql.insert({ id, agentId: ALDRIC, title: id, kind, createdAt: NOW, updatedAt: NOW, revision: 1 })}`;
+          yield* sql`INSERT INTO chapters ${sql.insert({ id: `${id}-1`, threadId: id, number: 1, state: "live", startedAt: NOW, revision: 1 })}`;
+          for (const [actorKind, actorId, role] of [
+            ["user", "owner", "owner"],
+            ["hob", ALDRIC, "member"],
+          ] as const) {
+            yield* sql`INSERT INTO thread_members ${sql.insert({ threadId: id, actorKind, actorId, role, state: "active", joinedAt: NOW, addedByKind: "user", addedById: "owner", revision: 1 })}`;
+          }
         }
+        /** A reply of Aldric's, as stored then; answers its revision. */
+        const say = (threadId: ChannelId, id: string) =>
+          Effect.gen(function* () {
+            revision += 1;
+            yield* sql`INSERT INTO messages ${sql.insert({
+              id,
+              threadId,
+              chapterId: `${threadId}-1`,
+              role: "assistant",
+              content: "Done.",
+              status: "complete",
+              actorKind: "hob",
+              actorId: ALDRIC,
+              configVersion: 1,
+              createdAt: NOW,
+              seq: revision,
+              revision,
+            })}`;
+            return revision;
+          });
         const read = yield* say(CHAT, "c1");
         yield* say(CHAT, "c2");
         yield* say(CHAT, "c3");
         const campRead = yield* say(CAMP, "k1");
         yield* say(QUIET, "q1");
         // The hub kept both markers until now; here the owner's lags behind the chat's.
-        yield* sql`UPDATE channels SET read_revision = ${read} WHERE id = ${CHAT}`;
-        yield* sql`UPDATE channels SET read_revision = ${campRead} WHERE id = ${CAMP}`;
-        yield* sql`UPDATE channel_members SET read_revision = NULL WHERE channel_id = ${CHAT}`;
-        yield* sql`UPDATE channel_members SET read_revision = ${campRead} WHERE channel_id = ${CAMP} AND role = 'owner'`;
+        yield* sql`UPDATE threads SET read_revision = ${read} WHERE id = ${CHAT}`;
+        yield* sql`UPDATE threads SET read_revision = ${campRead} WHERE id = ${CAMP}`;
+        yield* sql`UPDATE thread_members SET read_revision = NULL WHERE thread_id = ${CHAT}`;
+        yield* sql`UPDATE thread_members SET read_revision = ${campRead} WHERE thread_id = ${CAMP} AND role = 'owner'`;
         const before = yield* unreadByChannelMarker;
         yield* memberReads;
+        const dropped = Exit.isFailure(yield* Effect.exit(sql`SELECT read_revision FROM threads`));
+        // Today's code reads them, so the rows go on to today's schema.
+        yield* migrateAfter("20261114004500");
         const owners = yield* sql<{ readonly channelId: string; readonly readRevision: unknown }>`SELECT channel_id,
           read_revision FROM channel_members WHERE role = 'owner' ORDER BY channel_id`;
         return {
@@ -160,7 +189,7 @@ describe("read markers per member", () => {
           after: yield* unreadByMember,
           owners: owners.map((row) => [row.channelId, row.readRevision == null ? null : Number(row.readRevision)]),
           marker: yield* keepsChannelMarker,
-          dropped: Exit.isFailure(yield* Effect.exit(sql`SELECT read_revision FROM channels`)),
+          dropped,
           read,
           campRead,
         };
@@ -184,21 +213,41 @@ describe("read markers per member", () => {
 
   // covers ADR 039 (Members), ADR 013
   it("takes `unread` out of every journaled channel, at its new version, and the entries decode (#1454)", async () => {
-    const carriers = { ChannelUpserted: 5, CampMade: 2, ChatStartedFresh: 2, ChapterMoved: 1 } as const;
+    // The types and versions as the hub journaled them before, when a channel was a thread.
+    const carriers = { ThreadUpserted: 5, CampMade: 2, ChatStartedFresh: 2, ChapterMoved: 1 } as const;
     // The versions 20261114004500_member_reads writes, without `unread`.
-    const written = { ChannelUpserted: 6, CampMade: 3, ChatStartedFresh: 3, ChapterMoved: 2 } as const;
+    const written = { ThreadUpserted: 6, CampMade: 3, ChatStartedFresh: 3, ChapterMoved: 2 } as const;
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        const repo = yield* HobbotsRepository;
         const journal = yield* EventJournal;
-        yield* repo.insertAgent(aldric);
-        const made = yield* repo.upsertChannel(channel(CHAT, "direct"));
         // Each kind of entry that carries a channel, as the hub wrote it before: with its `unread`.
-        const stored = { ...JSON.parse(JSON.stringify(made.value)), unread: true };
+        const stored = {
+          id: CHAT,
+          agentId: ALDRIC,
+          title: CHAT,
+          kind: "chat",
+          goal: null,
+          private: false,
+          origin: null,
+          state: "open",
+          sessions: [],
+          liveChapterId: null,
+          liveChapterMerges: 0,
+          brain: null,
+          archivedAt: null,
+          lastLine: null,
+          lastAuthor: null,
+          pinnedAt: null,
+          skillTrial: null,
+          createdAt: NOW,
+          updatedAt: NOW,
+          revision: 1,
+          unread: true,
+        };
         const payloads = {
-          ChannelUpserted: { _tag: "ChannelUpserted", channel: stored },
-          CampMade: { _tag: "CampMade", channel: stored },
+          ThreadUpserted: { _tag: "ThreadUpserted", thread: stored },
+          CampMade: { _tag: "CampMade", thread: stored },
           ChatStartedFresh: { _tag: "ChatStartedFresh", superseded: stored, chat: stored, carried: [] },
         };
         let sequence = 1000;
@@ -211,7 +260,7 @@ describe("read markers per member", () => {
             schemaVersion: carriers[type as keyof typeof carriers],
             occurredAt: NOW,
             agentId: ALDRIC,
-            channelId: CHAT,
+            threadId: CHAT,
             messageId: null,
             causationId: null,
             payload: JSON.stringify(payload),
@@ -221,6 +270,8 @@ describe("read markers per member", () => {
         yield* memberReads;
         const rows = yield* sql<{ readonly type: string; readonly schemaVersion: unknown; readonly payload: string }>`
           SELECT type, schema_version, payload FROM event_journal WHERE id LIKE 'old-%' ORDER BY sequence`;
+        // Today's journal reads them, so the rows go on to today's schema.
+        yield* migrateAfter("20261114004500");
         const entries = yield* journal.readAfter(1000);
         return { rows, decoded: entries.map((entry) => entry.payload._tag) };
       }),
@@ -228,15 +279,16 @@ describe("read markers per member", () => {
     );
     // At the version this migration writes; a later migration may move them on.
     expect(result.rows.map((row) => [row.type, Number(row.schemaVersion)])).toEqual([
-      ["ChannelUpserted", written.ChannelUpserted],
+      ["ThreadUpserted", written.ThreadUpserted],
       ["CampMade", written.CampMade],
       ["ChatStartedFresh", written.ChatStartedFresh],
     ]);
     expect(result.rows.every((row) => !row.payload.includes('"unread"'))).toBe(true);
     expect(result.decoded).toEqual(["ChannelUpserted", "CampMade", "ChatStartedFresh"]);
     // The migration lists every event type that carries a channel; each is at its version or a later one.
-    for (const [type, version] of Object.entries(written))
-      expect(EVENT_SCHEMA_VERSIONS[type as keyof typeof written]).toBeGreaterThanOrEqual(version);
+    const today = { ...written, ChannelUpserted: written.ThreadUpserted };
+    for (const type of ["ChannelUpserted", "CampMade", "ChatStartedFresh", "ChapterMoved"] as const)
+      expect(EVENT_SCHEMA_VERSIONS[type]).toBeGreaterThanOrEqual(today[type]);
   });
 
   // covers ADR 039 (Members: unread counts, the unread line and catch-up are per person)

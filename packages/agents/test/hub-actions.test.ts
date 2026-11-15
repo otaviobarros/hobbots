@@ -395,7 +395,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     const [context] = contexts as Array<Record<string, Record<string, unknown>>>;
     expect(Object.keys(context ?? {}).sort()).toEqual(["access", "stepId", "turn"]);
     expect(context?.stepId).toBe("toolu_1");
-    expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "messageId", "scope", "channelId"]);
+    expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "channelId", "messageId", "scope"]);
   });
 
   // covers ADR 036 (Amendment: the screens), #1271

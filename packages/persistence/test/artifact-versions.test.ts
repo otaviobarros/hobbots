@@ -225,13 +225,13 @@ describe("artifact versions", () => {
         look_color: "moss",
         created_at: NOW,
       })}`;
-      yield* sql`INSERT INTO channels ${sql.insert({ id: CHANNEL, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
-      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", channel_id: CHANNEL, number: 1, state: "live", started_at: NOW })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({ id: CHANNEL, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
+      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", thread_id: CHANNEL, number: 1, state: "live", started_at: NOW })}`;
       yield* sql`INSERT INTO tasks ${sql.insert({
         id: TASK,
         owner_id: ADA,
         root_id: TASK,
-        channel_id: CHANNEL,
+        thread_id: CHANNEL,
         brief: "Write the social post",
         state: "completed",
         created_at: NOW,
@@ -269,7 +269,7 @@ describe("artifact versions", () => {
       })}`;
       const row = (id: string, locator: string, title: string, origin: string, review: string, at: string) => ({
         id,
-        channel_id: CHANNEL,
+        thread_id: CHANNEL,
         chapter_id: "c1",
         kind: "doc",
         title,
@@ -298,7 +298,7 @@ describe("artifact versions", () => {
         yield* sql`INSERT INTO find_records ${sql.insert({
           kind: "artifact",
           record_id: id,
-          channel_id: CHANNEL,
+          thread_id: CHANNEL,
           chapter_id: "c1",
           title: id,
           detail: locator,

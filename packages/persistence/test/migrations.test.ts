@@ -26,9 +26,16 @@ import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
 import hobActors from "../src/migrations/0082_hob_actors.ts";
 import summoning from "../src/migrations/0083_summoning.ts";
 import channelSkillTrial from "../src/migrations/0084_thread_skill_trial.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
+
+/** The journal as today's code reads it, once the migrations after the one with this id ran. */
+const journaledToday = (id: string) =>
+  Effect.andThen(
+    migrateAfter(id),
+    Effect.flatMap(EventJournal, (journal) => journal.readAfter(0)),
+  );
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
 const migrationsBefore = (id: string) =>
@@ -93,7 +100,7 @@ describe("0007_hob_config_versions", () => {
         lookColor: "moss",
         createdAt: "2026-10-28T00:00:00.000Z",
       })}`;
-      yield* sql`INSERT INTO channels ${sql.insert({
+      yield* sql`INSERT INTO threads ${sql.insert({
         id: "t1",
         agentId: "aldric",
         title: "Hi",
@@ -106,7 +113,7 @@ describe("0007_hob_config_versions", () => {
       ] as const) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id: `m${seq}`,
-          channelId: "t1",
+          threadId: "t1",
           role,
           content: "",
           status: "complete",
@@ -444,7 +451,7 @@ describe("0014_hob_tone", () => {
         payload: JSON.stringify(before),
       })}`;
       yield* hobTone;
-      return yield* (yield* EventJournal).readAfter(0);
+      return yield* journaledToday("0014");
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
     expect(entries.map((e) => e.payload)).toMatchObject([
@@ -529,7 +536,7 @@ describe("0015_hob_policy", () => {
         payload: JSON.stringify(before),
       })}`;
       yield* hobPolicy;
-      return yield* (yield* EventJournal).readAfter(0);
+      return yield* journaledToday("0015");
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
     expect(entries.map((e) => e.payload)).toMatchObject([
@@ -569,7 +576,7 @@ describe("0020_thread_brains", () => {
         ["bound", "s1"],
         ["fresh", null],
       ] as const) {
-        yield* sql`INSERT INTO channels ${sql.insert({
+        yield* sql`INSERT INTO threads ${sql.insert({
           id,
           agentId: "pip",
           title: id,
@@ -586,14 +593,14 @@ describe("0020_thread_brains", () => {
       for (const m of messages) {
         yield* sql`INSERT INTO messages ${sql.insert({
           ...m,
-          channelId: "bound",
+          threadId: "bound",
           content: m.id,
           createdAt: "2026-10-28T00:00:00.000Z",
         })}`;
       }
       yield* channelBrains;
       return {
-        channels: yield* sql`SELECT id, sessions, brain FROM channels ORDER BY id`,
+        channels: yield* sql`SELECT id, sessions, brain FROM threads ORDER BY id`,
         messages: yield* sql`SELECT id, runtime, model FROM messages ORDER BY seq`,
         versions: yield* sql`SELECT runtime FROM agent_config_versions`,
       };
@@ -617,8 +624,8 @@ describe("0020_thread_brains", () => {
 
   it("still reads a channel event journaled before brains existed, with no sessions and no brain", async () => {
     const before = {
-      _tag: "ChannelUpserted",
-      channel: {
+      _tag: "ThreadUpserted",
+      thread: {
         id: "t1",
         agentId: "pip",
         title: "Hello",
@@ -635,14 +642,14 @@ describe("0020_thread_brains", () => {
       yield* sql`INSERT INTO event_journal ${sql.insert({
         sequence: 1,
         id: "0b6f2c1e-7a3d-4e8f-9b0a-1c2d3e4f5a6b",
-        type: "ChannelUpserted",
+        type: "ThreadUpserted",
         schemaVersion: 1,
         occurredAt: "2026-10-28T00:00:00.000Z",
-        channelId: "t1",
+        threadId: "t1",
         payload: JSON.stringify(before),
       })}`;
       yield* channelBrains;
-      return yield* (yield* EventJournal).readAfter(0);
+      return yield* journaledToday("0020");
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
     expect(entries.map((e) => e.payload)).toMatchObject([
@@ -690,8 +697,8 @@ describe("0021_hob_sign_commits", () => {
 describe("0023_thread_archived_at", () => {
   it("keeps every existing channel live, and still reads channel events journaled before archiving", async () => {
     const before = {
-      _tag: "ChannelUpserted",
-      channel: {
+      _tag: "ThreadUpserted",
+      thread: {
         id: "t1",
         agentId: "pip",
         title: "Hello",
@@ -715,7 +722,7 @@ describe("0023_thread_archived_at", () => {
         lookColor: "moss",
         createdAt: "2026-10-28T00:00:00.000Z",
       })}`;
-      yield* sql`INSERT INTO channels ${sql.insert({
+      yield* sql`INSERT INTO threads ${sql.insert({
         id: "t1",
         agentId: "pip",
         title: "Hello",
@@ -726,16 +733,16 @@ describe("0023_thread_archived_at", () => {
       yield* sql`INSERT INTO event_journal ${sql.insert({
         sequence: 1,
         id: "5d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6",
-        type: "ChannelUpserted",
+        type: "ThreadUpserted",
         schemaVersion: 2,
         occurredAt: "2026-10-28T00:00:00.000Z",
-        channelId: "t1",
+        threadId: "t1",
         payload: JSON.stringify(before),
       })}`;
       yield* channelArchivedAt;
       return {
-        channels: yield* sql`SELECT archived_at FROM channels`,
-        entries: yield* (yield* EventJournal).readAfter(0),
+        channels: yield* sql`SELECT archived_at FROM threads`,
+        entries: yield* journaledToday("0023"),
       };
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
@@ -1006,7 +1013,7 @@ describe("0035_task_grants", () => {
       yield* taskGrants;
       return {
         grants: yield* sql`SELECT id, task_id FROM grants`,
-        entries: yield* (yield* EventJournal).readAfter(0),
+        entries: yield* journaledToday("0035"),
       };
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
@@ -1079,7 +1086,7 @@ describe("0053_thread_reads", () => {
         createdAt: "2026-11-04T00:00:00.000Z",
       })}`;
       for (const id of ["t1", "t2"]) {
-        yield* sql`INSERT INTO channels ${sql.insert({
+        yield* sql`INSERT INTO threads ${sql.insert({
           id,
           agentId: "hob1",
           title: "Plan",
@@ -1093,7 +1100,7 @@ describe("0053_thread_reads", () => {
       ] as const) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
-          channelId: "t1",
+          threadId: "t1",
           role: id === "m1" ? "user" : "assistant",
           content: "Hello",
           status: "complete",
@@ -1106,7 +1113,7 @@ describe("0053_thread_reads", () => {
       const rows = yield* sql<{
         id: string;
         readRevision: unknown;
-      }>`SELECT id, read_revision FROM channels ORDER BY id`;
+      }>`SELECT id, read_revision FROM threads ORDER BY id`;
       // PostgreSQL reads BIGINT as text.
       return rows.map((row) => ({ ...row, readRevision: row.readRevision === null ? null : Number(row.readRevision) }));
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0053"))), Effect.runPromise);
@@ -1223,7 +1230,7 @@ describe("0079_hob_visibility", () => {
       return {
         agents: yield* sql`SELECT visible_to_hobs FROM agents`,
         versions: yield* sql`SELECT visible_to_hobs FROM agent_config_versions`,
-        entries: yield* (yield* EventJournal).readAfter(0),
+        entries: yield* journaledToday("0079"),
       };
     }).pipe(
       Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0079"))))),
@@ -1357,7 +1364,7 @@ describe("0080_hob_good_at", () => {
         payload: JSON.stringify(before),
       })}`;
       yield* hobGoodAt;
-      return yield* (yield* EventJournal).readAfter(0);
+      return yield* journaledToday("0080");
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
     expect(entries.map((e) => e.payload)).toMatchObject([
@@ -1435,7 +1442,7 @@ describe("0082_hob_actors", () => {
       return {
         agents: yield* sql`SELECT summoned_by, summoned_for, summoned_unattended FROM agents`,
         versions: yield* sql`SELECT version, actor FROM agent_config_versions ORDER BY version`,
-        entries: yield* (yield* EventJournal).readAfter(0),
+        entries: yield* journaledToday("0082"),
       };
     }).pipe(
       Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(TestDatabaseAt(migrationsBefore("0082"))))),
@@ -1517,7 +1524,7 @@ describe("0084_thread_skill_trial", () => {
         configVersion: 1,
         createdAt: "2026-11-08T00:00:00.000Z",
       })}`;
-      yield* sql`INSERT INTO channels ${sql.insert({
+      yield* sql`INSERT INTO threads ${sql.insert({
         id: "t1",
         agentId: "hob1",
         title: "Plan",
@@ -1525,7 +1532,7 @@ describe("0084_thread_skill_trial", () => {
         updatedAt: "2026-11-08T00:00:00.000Z",
       })}`;
       yield* channelSkillTrial;
-      return yield* sql<{ id: string; skillTrial: unknown }>`SELECT id, skill_trial FROM channels`;
+      return yield* sql<{ id: string; skillTrial: unknown }>`SELECT id, skill_trial FROM threads`;
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0084"))), Effect.runPromise);
 
     expect(channels).toEqual([{ id: "t1", skillTrial: null }]);

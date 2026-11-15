@@ -5,7 +5,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HubQuestionRepositoryLive, migrations } from "../src/index.ts";
 import hubQuestionCodes from "../src/migrations/0078_hub_question_codes.ts";
-import { TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1045: hub questions stored before 0078 held English text and labels. The migration reads
 // them back into codes and keys, rows and journaled events alike, so an answer given before it is
@@ -150,6 +150,8 @@ describe("0078_hub_question_codes", () => {
         5,
       );
       yield* hubQuestionCodes;
+      // Today's repository and journal write them, so the rows go on to today's schema.
+      yield* migrateAfter("0078");
 
       const questions = yield* HubQuestionRepository;
       const unapplied = yield* questions.listUnapplied("commit-identity");

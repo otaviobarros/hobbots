@@ -44,6 +44,7 @@ import {
 } from "../src/index.ts";
 import questSummaries from "../src/migrations/0103_quest_summaries.ts";
 import artifactReviews from "../src/migrations/0105_artifact_reviews.ts";
+import channelsMigration from "../src/migrations/20261115225102_channels.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1373 (ADR 037): the hub's QuestSummary. Every change that touches a Task tree folds the
@@ -592,10 +593,12 @@ describe("Quest summaries", () => {
           milestones: [],
         });
         const published = yield* tasks.listQuestSummaries(channelId);
-        // As a hub from before the migration: no summaries at all.
+        // As a hub from before the migration: no summaries at all, and a Quest's channel still named its thread.
         yield* sql`DROP TABLE quest_summaries`;
+        yield* sql`ALTER TABLE quests RENAME COLUMN channel_id TO thread_id`;
         const head = yield* journal.head;
         yield* questSummaries;
+        yield* channelsMigration;
         const tree = Option.getOrThrow(yield* tasks.readTree(top));
         return {
           published,

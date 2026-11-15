@@ -273,7 +273,7 @@ describe("entries", () => {
       ["quest:quest-bf", ["stuck", "approval", "question"]],
     ]);
     const outside = groupByPlace(entries, () => undefined).map((group) => group.key);
-    expect(outside).toEqual(["hub", "thread:other", `thread:${CHANNEL}`]);
+    expect(outside).toEqual(["hub", "channel:other", `channel:${CHANNEL}`]);
   });
 
   it("shows the entry the address names when the list has it, otherwise the first", () => {

@@ -23,6 +23,18 @@ export const TestDatabase = Layer.unwrap(Effect.sync(() => testDatabase(migratio
 export const TestDatabaseAt = (record: typeof migrations) => Layer.unwrap(Effect.sync(() => testDatabase(record)));
 
 /**
+ * Runs every migration after the one with id `id` (its number, such as "0095"), in id order, as the
+ * migrator does on a database that applied `id` last: a test of an old migration takes its rows on
+ * to today's schema before today's code reads them.
+ */
+export const migrateAfter = (id: string) =>
+  Effect.forEach(
+    Object.entries(migrations).filter(([key]) => Number.parseInt(key, 10) > Number.parseInt(id, 10)),
+    ([, migration]) => migration,
+    { discard: true },
+  );
+
+/**
  * Adds a person to the hub for tests that play several people (ADR 039): the hub itself has no way
  * to add one until accounts exist. A user already there is left as it is.
  */

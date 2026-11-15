@@ -5,7 +5,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { DeviceRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import deviceUsers from "../src/migrations/0112_device_users.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1452 (ADR 039, Users as actors): every device belongs to a user, the owner until accounts
 // exist, and a person's message names them as it is stored. On SQLite and PostgreSQL alike (STD-TEST-006).
@@ -90,6 +90,8 @@ describe("devices and users", () => {
         })}`;
         yield* sql`UPDATE event_journal_head SET sequence = 1`;
         yield* deviceUsers;
+        // Today's journal reads it, so the rows go on to today's schema.
+        yield* migrateAfter("0112");
         return yield* (yield* EventJournal).readAfter(0);
       }),
       TestDatabaseAt(earlier),

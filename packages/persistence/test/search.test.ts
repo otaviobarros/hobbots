@@ -9,7 +9,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { migrations, SearchIndex, SqliteLive } from "../src/index.ts";
 import searchIndex from "../src/migrations/0011_search_index.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const now = "2026-10-28T00:00:00.000Z";
 
@@ -203,12 +203,50 @@ describe("SearchIndex", () => {
   });
 
   it("finds channels and messages written before the index existed", async () => {
-    const before = Object.fromEntries(
-      Object.entries(migrations).filter(([key]) => key !== "0011_search_index"),
-    ) as typeof migrations;
+    const before = Object.fromEntries(Object.entries(migrations).filter(([key]) => key < "0011")) as typeof migrations;
     const result = await Effect.gen(function* () {
-      yield* seed;
+      // The same hobs, channels and messages as the seed, as the hub stored them before 0011.
+      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+      for (const [id, status] of [
+        ["pip", "active"],
+        ["old", "retired"],
+      ]) {
+        yield* sql`INSERT INTO agents ${sql.insert({
+          id,
+          name: id,
+          role_title: "Guide",
+          runtime: "claude-code",
+          instructions: "",
+          status,
+          created_at: now,
+        })}`;
+      }
+      for (const [id, agentId, title, updatedAt] of [
+        ["garden", "pip", "Plan the garden", "2026-10-01T00:00:00.000Z"],
+        ["taxes", "pip", "Taxes for 2026", "2026-10-20T00:00:00.000Z"],
+        ["gone", "old", "Retired chat", now],
+      ]) {
+        yield* sql`INSERT INTO threads ${sql.insert({ id, agent_id: agentId, title, created_at: now, updated_at: updatedAt })}`;
+      }
+      for (const [seq, [id, threadId, content]] of [
+        ["g1", "garden", "Plant the tomatoes in late spring."],
+        ["g2", "garden", "Water the TOMATOES every morning, near the fence."],
+        ["t1", "taxes", "Gather the receipts for the fence repair."],
+        ["x1", "gone", "Tomatoes from a retired hob."],
+      ].entries()) {
+        yield* sql`INSERT INTO messages ${sql.insert({
+          id,
+          thread_id: threadId,
+          role: "assistant",
+          content,
+          status: "complete",
+          created_at: now,
+          seq: seq + 1,
+        })}`;
+      }
       yield* searchIndex;
+      // Today's index reads them, so the rows go on to today's schema.
+      yield* migrateAfter("0011");
       const index = yield* SearchIndex;
       return { message: yield* index.search("receipts"), title: yield* index.search("plan garden") };
     }).pipe(
@@ -222,7 +260,7 @@ describe("SearchIndex", () => {
     expect(result.title.map((hit) => hit.channel.id)).toEqual(["garden"]);
   });
 
-  it("searches a SQLite file from a worker channel that sees the server's writes", async () => {
+  it("searches a SQLite file from a worker thread that sees the server's writes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hobbots-search-"));
     try {
       const filename = join(dir, "hobbots.sqlite");

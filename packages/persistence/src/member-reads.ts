@@ -1,7 +1,7 @@
 import { sessionActor } from "@hobbots/agents";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
-import { memberUnreadCount, unreadReplies } from "./channel-columns.ts";
+import { memberUnreadCount } from "./channel-columns.ts";
 
 // Unread counts per channel, from the channel's own read marker as the hub kept it before migration
 // 20261114004500 and from the member row of the person asking after it (ADR 039, read markers per member;
@@ -30,13 +30,17 @@ const rows = (read: ReadonlyArray<Row>): ReadonlyArray<ChannelUnread> =>
     unread: Number(row.unread),
   }));
 
-/** Whether the channels still keep their own read marker: the database is from before migration 20261114004500. */
+/**
+ * Whether the channels still keep their own read marker: the database is from before migration
+ * 20261114004500. Such a database is from before migration 20261115225102 too, which named a channel
+ * a thread, so this and `unreadByChannelMarker` read the tables by their names from then.
+ */
 export const keepsChannelMarker = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const found = yield* sql.onDialectOrElse({
     pg: () =>
-      sql`SELECT 1 FROM information_schema.columns WHERE table_name = 'channels' AND column_name = 'read_revision'`,
-    orElse: () => sql`SELECT 1 FROM pragma_table_info('channels') WHERE name = 'read_revision'`,
+      sql`SELECT 1 FROM information_schema.columns WHERE table_name = 'threads' AND column_name = 'read_revision'`,
+    orElse: () => sql`SELECT 1 FROM pragma_table_info('threads') WHERE name = 'read_revision'`,
   });
   return found.length > 0;
 });
@@ -45,9 +49,12 @@ export const keepsChannelMarker = Effect.gen(function* () {
 export const unreadByChannelMarker = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   return rows(
-    yield* sql<Row>`SELECT channels.id AS channel_id, channels.title, channels.agent_id,
-        (SELECT COUNT(*) ${unreadReplies(sql, "channels.id", "channels.read_revision")}) AS unread
-      FROM channels ORDER BY channels.id`,
+    yield* sql<Row>`SELECT t.id AS channel_id, t.title, t.agent_id,
+        (SELECT COUNT(*) FROM messages u WHERE u.thread_id = t.id AND u.role = 'assistant'
+          AND u.revision > COALESCE(t.read_revision, 0)
+          AND u.status NOT IN ('queued', 'streaming', 'stopping') AND u.quiet = 0
+          AND (trim(u.content) <> '' OR u.status = 'failed')) AS unread
+      FROM threads t ORDER BY t.id`,
   );
 });
 

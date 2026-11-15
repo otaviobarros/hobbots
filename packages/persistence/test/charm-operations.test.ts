@@ -63,6 +63,7 @@ const before = Object.fromEntries(
         "20261114004439_pauses",
         "20261114193617_camp_suggestion_names",
         "20261115002636_message_read_web",
+        "20261115225102_channels",
       ].includes(key),
   ),
 ) as typeof migrations;

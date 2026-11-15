@@ -5,7 +5,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
-import { TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1464 (ADR 039): a runtime session belongs to one hob. The migration gives each session a
 // channel keeps, and each session in its journaled entries, the channel's hob, so the hob goes on
@@ -34,7 +34,7 @@ describe("20261114005209_hob_sessions", () => {
         chapterId,
         seenThrough: null,
       }));
-      yield* sql`INSERT INTO channels ${sql.insert({
+      yield* sql`INSERT INTO threads ${sql.insert({
         id: channelId,
         agent_id: agentId,
         title: channelId,
@@ -45,7 +45,7 @@ describe("20261114005209_hob_sessions", () => {
       })}`;
       yield* sql`INSERT INTO chapters ${sql.insert({
         id: chapterId,
-        channel_id: channelId,
+        thread_id: channelId,
         number: 1,
         title: null,
         summary: null,
@@ -89,7 +89,7 @@ describe("20261114005209_hob_sessions", () => {
         schema_version: version,
         occurred_at: NOW,
         agent_id: agentId,
-        channel_id: channelId,
+        thread_id: channelId,
         payload: JSON.stringify({ _tag: type, ...payload }),
       })}`;
       yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
@@ -115,19 +115,22 @@ describe("20261114005209_hob_sessions", () => {
       const garden = yield* stored("garden", QUILL, ["codex"]);
       const fresh = yield* stored("fresh", QUILL, []);
       yield* stored("empty", ADA, []);
-      yield* journal("ChannelUpserted", 6, ADA, "lamps", { channel: lamps });
-      yield* journal("CampMade", 3, QUILL, "garden", { channel: garden });
+      yield* journal("ThreadUpserted", 6, ADA, "lamps", { thread: lamps });
+      yield* journal("CampMade", 3, QUILL, "garden", { thread: garden });
       yield* journal("ChatStartedFresh", 3, QUILL, "fresh", { superseded: garden, chat: fresh, carried: [] });
 
       yield* hobSessionsMigration;
-      const once = yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM channels ORDER BY id`;
+      const once = yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM threads ORDER BY id`;
       // A second run changes nothing: every entry is at its new version, every session has its hob.
       yield* hobSessionsMigration;
+      const twice = yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM threads ORDER BY id`;
+      // Today's repository and journal read them, so the rows go on to today's schema.
+      yield* migrateAfter("20261114005209");
 
       const repo = yield* HobbotsRepository;
       return {
         once,
-        twice: yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM channels ORDER BY id`,
+        twice,
         channels: yield* Effect.forEach(["lamps", "garden", "empty"], (id) =>
           repo.findChannel(ChannelId.make(id)).pipe(Effect.map(Option.getOrThrow)),
         ),

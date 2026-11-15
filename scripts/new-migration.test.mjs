@@ -9,7 +9,7 @@ test("a new migration is named by the UTC second it was made", () => {
   assert.equal(secondId(at), "20261113231542");
   assert.equal(
     migrationFileName("channel_members", at, ["0114_thread_members.ts", "index.ts"]),
-    "20261113231542_thread_members.ts",
+    "20261113231542_channel_members.ts",
   );
 });
 
