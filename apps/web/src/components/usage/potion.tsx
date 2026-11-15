@@ -2,7 +2,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { POTION_CORK } from "../../art/icons.ts";
 import type { PlanLevel } from "../../lib/usage.ts";
 
-// A plan's potion (docs/design/ui-ux.md, Usage): a bottle of `deep` glass with a `line-2` outline,
+// A plan's potion: a bottle of `deep` glass with a `line-2` outline,
 // so it reads on light cards too, filled with what is left of the window it shows. The liquid takes
 // the meter's tone: mint, lantern when low, rose when used up. A plan that reported nothing is an
 // empty bottle. The cork is the same wood in every theme, from the art in src/art.

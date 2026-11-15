@@ -23,12 +23,12 @@ Every change follows the [engineering standards](docs/standards/README.md). Befo
 | State, events and camps     | [architecture](docs/standards/architecture.md), [react](docs/standards/react.md)             | [State and events](docs/architecture/state-and-events.md), [chat and camps](docs/architecture/chat-and-camps.md)                                         |
 | Tools and authority         | [security](docs/standards/security.md)                                                       | [Permissions](docs/architecture/permissions.md), [runtime adapters](docs/architecture/runtime-adapters.md)                                               |
 | Storage and transport       | [data](docs/standards/data.md), [effect](docs/standards/effect.md)                           | [Persistence](docs/architecture/persistence.md), [API and events](docs/architecture/api-events.md), [deployment](docs/architecture/deployment.md)        |
-| UI                          | [react](docs/standards/react.md), [ui](docs/standards/ui.md), [i18n](docs/standards/i18n.md) | [Design specification](docs/design/ui-ux.md), [screen inventory](docs/design/screens-and-flows.md)                                                       |
+| UI                          | [react](docs/standards/react.md), [ui](docs/standards/ui.md), [i18n](docs/standards/i18n.md) | [Themes](docs/design/themes.md), [ADR 008](docs/decisions/008-design.md)                                                                                 |
 | Desktop app                 | [desktop](docs/standards/desktop.md), [security](docs/standards/security.md)                 | [Deployment](docs/architecture/deployment.md), [ADR 010](docs/decisions/010-desktop-hub.md)                                                              |
 | Tests                       | [testing](docs/standards/testing.md)                                                         | [Project workflow guide](docs/agent-engineering.md#checks)                                                                                               |
-| Docs, commits and decisions | [docs](docs/standards/docs.md)                                                               | [ADRs](docs/decisions/README.md), [status](docs/STATUS.md)                                                                                               |
+| Docs, commits and decisions | [docs](docs/standards/docs.md)                                                               | [ADRs](docs/decisions/README.md)                                                                                                                         |
 
-Read the [MVP requirements](docs/product/mvp-requirements.md) and [open questions](docs/product/open-questions.md) before you plan.
+Read the [vision](docs/product/vision.md) and [open questions](docs/product/open-questions.md) before you plan.
 
 ## Workflow
 

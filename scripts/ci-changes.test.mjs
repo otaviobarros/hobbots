@@ -20,7 +20,7 @@ test("a pull request runs the suites its files reach", () => {
     database: true,
     browser: false,
   });
-  assert.deepEqual(suitesFor("pull_request", false, ["apps/web/src/app.tsx", "docs/STATUS.md"]), {
+  assert.deepEqual(suitesFor("pull_request", false, ["apps/web/src/app.tsx", "docs/agent-engineering.md"]), {
     database: false,
     browser: true,
   });

@@ -7,7 +7,7 @@
 | Target | Planned route | Status in this foundation |
 |---|---|---|
 | Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior, the policy on its tool calls and a whole turn in the sandbox on macOS verified with a stand-in model; the sandbox on Linux and a real sign-in still need verification. |
-| Claude Code | The host's `claude` through the Claude Agent SDK, 2.1.301 or later | Built; the [status page](../STATUS.md) lists what is proven on real Claude Code. |
+| Claude Code | The host's `claude` through the Claude Agent SDK, 2.1.301 or later | Built. |
 | ACP agents | ACP client adapter with capability negotiation | Foundation selected; per-agent interoperability is not yet demonstrated. |
 | Other CLIs/local-model runtimes | Individually validated future adapters | Outside initial support guarantees. |
 
@@ -27,7 +27,7 @@ A turn carries its skills as `PromptRequest.skills`, a list of mounts: each skil
 - **Codex** gets the folder's `skills/` as its only root through `skills/extraRoots/set`, and the App Server starts with `-c skills.bundled.enabled=false` and one `skills.config` rule with `enabled = false` for each `SKILL.md` under `~/.agents/skills`, the hob's `CODEX_HOME/skills`, and each `.agents/skills` and `.codex/skills` from the repository's root to the turn's folder. Before the thread opens, `skills/list` must show every enabled skill inside the turn's folder or with scope `admin`; otherwise the turn does not start. Administrators' skills are reported on `SessionStarted` as `organizationSkills`.
 - **The fake runtime** answers the prompt `/skills` with the mounted skills.
 
-The clean-runtime contract tests (`packages/runtimes/test/clean-runtime-*.test.ts`) run each adapter against one fixture: a fake home and repository holding skills, MCP servers, a plugin, hooks and instruction files in every place each runtime reads. A new runtime adapter is not accepted until it passes them ([evidence](../evidence/2026-11-06-skills-delivery.md)).
+The clean-runtime contract tests (`packages/runtimes/test/clean-runtime-*.test.ts`) run each adapter against one fixture: a fake home and repository holding skills, MCP servers, a plugin, hooks and instruction files in every place each runtime reads. A new runtime adapter is not accepted until it passes them ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-06-skills-delivery.md)).
 
 ## Hub tools
 
@@ -41,7 +41,7 @@ A turn's `PromptRequest.steers` hands it messages that arrive while it runs, suc
 - **Codex** adds them to the running turn with `turn/steer` as they arrive, and before it answers a hub call, so the model reads them with the request that carries that answer. Codex then drops a tool call it was about to make on an earlier request and samples again with the message, so no call runs after the message reached it unread. While no Codex turn runs, as while the adapter waits for a command that outlived one, they wait.
 - **The fake runtime** takes them before each scripted hub call after the first, and its reply shows them as `Steered: <text>` among the calls' answers.
 
-An adapter that can do this declares `steersTurns`. For one that cannot, the hub stops the turn and starts the next one with the message instead. The contract test `packages/runtimes/test/turn-steers.test.ts` checks each runtime: a message that arrives during one hub call reaches the model before the next. It passed with Claude Code 2.1.323 and Codex 0.166.0 and 0.167.0 against stand-in models ([evidence](../evidence/2026-11-12-steer-running-member.md)).
+An adapter that can do this declares `steersTurns`. For one that cannot, the hub stops the turn and starts the next one with the message instead. The contract test `packages/runtimes/test/turn-steers.test.ts` checks each runtime: a message that arrives during one hub call reaches the model before the next. It passed with Claude Code 2.1.323 and Codex 0.166.0 and 0.167.0 against stand-in models ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-12-steer-running-member.md)).
 
 ## Web search
 
@@ -59,7 +59,7 @@ Classify each capability as verified supported, unsupported, conditional or unve
 
 ## Codex column
 
-Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](../decisions/024-codex-adapter.md), [evidence](../evidence/2026-11-03-codex-app-server-probe.md)).
+Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](../decisions/024-codex-adapter.md), [evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-03-codex-app-server-probe.md)).
 
 | Capability | Codex | Status |
 |---|---|---|
@@ -70,17 +70,17 @@ Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](..
 | Concurrency | One App Server process per turn; two turns of one hob at once | Unverified |
 | Streaming | Item notifications and text deltas; command output streams (`ToolOutput`) | Verified |
 | Interruption | `turn/interrupt`, acknowledged by `turn/completed` with status `interrupted` | Verified |
-| Tool interception | Approval requests for every command, file change and MCP call under `untrusted`, decided by the policy and recorded before they run, with execution rules closed off (folders untrusted, `CODEX_HOME` read-only but for what Codex writes) | Verified ([evidence](../evidence/2026-11-03-codex-tool-policy.md)); the read-only home checked at start only |
+| Tool interception | Approval requests for every command, file change and MCP call under `untrusted`, decided by the policy and recorded before they run, with execution rules closed off (folders untrusted, `CODEX_HOME` read-only but for what Codex writes) | Verified ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-03-codex-tool-policy.md)); the read-only home checked at start only |
 | Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Verified on macOS; Codex starts inside it on Linux, a whole turn there unverified |
 | Hub tools | Dynamic tools, called back on the App Server channel | Verified |
 | Tool events | `item/started`, `item/completed`, output deltas, reported to the Workbench as Claude Code's are | Verified |
-| Commands that outlive a turn | Kept running after `turn/completed`, their `item/completed` sent when they end; the adapter waits and follows up | Verified with a stand-in model ([evidence](../evidence/2026-11-06-codex-outlived-command.md)) |
+| Commands that outlive a turn | Kept running after `turn/completed`, their `item/completed` sent when they end; the adapter waits and follows up | Verified with a stand-in model ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-06-codex-outlived-command.md)) |
 | Usage | `thread/tokenUsage/updated` per turn; the plan's windows from `account/rateLimits/read`, shown on the Usage screen; no cost | Per turn verified; plan windows unverified with a real sign-in |
 | Sign-in for a turn | `chatgptAuthTokens` with refresh requests answered by the hub | Unverified |
 | Commit attribution | Hob instructions; Codex's own trailer request when signed in | Unverified |
-| Web search | `-c web_search="cached"` on the App Server of a turn that may search, and `"disabled"` in the shared `config.toml` ([ADR 036](../decisions/036-web-search-and-pages.md)); with Hobbots' App Server settings the model is offered search without live access. The same setting under a full-access `codex exec` is live, so the contract test holds the mode per version | Verified with a stand-in model on 0.166.0 and 0.167.0; a real cached search on macOS reported its queries and results on `item/completed`, with no search count in token usage ([evidence](../evidence/2026-11-08-codex-web-search-modes.md)); through the adapter verified with the stand-in on 0.166.0 and 0.167.0, for a new and a resumed thread (`packages/runtimes/test/clean-runtime-codex.test.ts`), and a version not listed in `CACHED_SEARCH_CODEX_VERSIONS` offers no search |
+| Web search | `-c web_search="cached"` on the App Server of a turn that may search, and `"disabled"` in the shared `config.toml` ([ADR 036](../decisions/036-web-search-and-pages.md)); with Hobbots' App Server settings the model is offered search without live access. The same setting under a full-access `codex exec` is live, so the contract test holds the mode per version | Verified with a stand-in model on 0.166.0 and 0.167.0; a real cached search on macOS reported its queries and results on `item/completed`, with no search count in token usage ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-08-codex-web-search-modes.md)); through the adapter verified with the stand-in on 0.166.0 and 0.167.0, for a new and a resumed thread (`packages/runtimes/test/clean-runtime-codex.test.ts`), and a version not listed in `CACHED_SEARCH_CODEX_VERSIONS` offers no search |
 | Input to a running turn | `turn/steer` with `expectedTurnId`, read with the model's next request ([#1345](https://github.com/otaviobarros/hobbots/issues/1345)) | Verified with a stand-in model on 0.166.0 and 0.167.0 (`packages/runtimes/test/turn-steers.test.ts`) |
-| Skills | The turn's folder as the only extra root, every other root's skills turned off on the command line, checked with `skills/list` before the thread opens ([ADR 029](../decisions/029-skills.md)) | Verified with a stand-in model ([evidence](../evidence/2026-11-06-skills-delivery.md)) |
+| Skills | The turn's folder as the only extra root, every other root's skills turned off on the command line, checked with `skills/list` before the thread opens ([ADR 029](../decisions/029-skills.md)) | Verified with a stand-in model ([evidence](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/evidence/2026-11-06-skills-delivery.md)) |
 
 Evidence so far: a resumed Claude Code session (2.1.301) keeps the system prompt it started with and ignores the one passed with a new turn, including `--append-system-prompt`, a full `--system-prompt` and `--fork-session`. So when a hob's instructions change after a thread's session started, the adapter carries the new instructions inside the next turn instead of the system prompt, which keeps the session's context. A note that follows the hob's permissions rather than its instructions, such as the sandbox note that says whether its commands are read-only, can change without the instructions changing, so every resumed turn of a sandboxed hob carries the current one in a `<current-sandbox>` block, on Claude Code and Codex alike ([#1344](https://github.com/otaviobarros/hobbots/issues/1344)).
 

@@ -5,7 +5,7 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Term | Meaning | Owner |
 |---|---|---|
 | Agent / hob | A persistent identity with versioned configuration, runtime preference, instructions and policy. The domain model says *agent*; the UI says *hob*. | [Agent model](../architecture/agent-model.md), [ADR 008](../decisions/008-design.md) |
-| Retire | Archiving a hob. New dispatch stops and history stays inspectable. Bring back makes it active again. | [MVP requirements](mvp-requirements.md) (AG-006) |
+| Retire | Archiving a hob. New dispatch stops and history stays inspectable. Bring back makes it active again. | [Agent model](../architecture/agent-model.md) |
 | Orchestrator | A role an agent plays when it coordinates others, not a privileged runtime type. | [ADR 005](../decisions/005-agent-parity.md) |
 | Thread | A durable conversation that belongs to one agent. Its `kind` is *chat* or *camp*; the UI never says thread. | [Conversations](../architecture/conversations.md), [ADR 037](../decisions/037-chat-and-camps.md) |
 | Chat | A hob's one open thread, always there, for quick questions and small jobs on any topic. Start fresh replaces it and carries its open items over. | [ADR 037](../decisions/037-chat-and-camps.md) |
@@ -27,7 +27,7 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Delegation | An explicit request/result relationship from a lead to a party member, with a brief and narrowed authority. | [Orchestration](../architecture/orchestration.md) |
 | Attempt | One attempt to perform task work; retries create new attempts, not new tasks. The docs no longer say *execution* ([ADR 037](../decisions/037-chat-and-camps.md)). | [Attempt lifecycle](../architecture/attempt-lifecycle.md) |
 | Backpack / backpack item | A hob's durable queue of what it still has to deal with: Tasks, results, failures, questions, answers, hand-offs, messages, approval outcomes and deadlines, with separate delivery and processing states. Not your Inbox. | [Backpack contract](../architecture/inbox.md), [ADR 019](../decisions/019-hob-backpack-and-continuations.md) |
-| Inbox | Your page for what needs you: approval requests and questions no lead could answer. | [Screen inventory](../design/screens-and-flows.md), [ADR 015](../decisions/015-approval-lifetimes-and-grants.md) |
+| Inbox | Your page for what needs you: approval requests and questions no lead could answer. | [ADR 015](../decisions/015-approval-lifetimes-and-grants.md) |
 | Continuation | A turn the dispatcher starts for a hob when an actionable backpack item arrives, without a prompt from you. | [ADR 019](../decisions/019-hob-backpack-and-continuations.md) |
 | Responsibility | An outstanding promise, reply, deliverable or dependency that must be reconciled before success. | [Agent model](../architecture/agent-model.md), [Attempt lifecycle](../architecture/attempt-lifecycle.md) |
 | Proactive closure | Agents continue and close outstanding work when results arrive, without a user prompt. | [ADR 004](../decisions/004-durable-inbox.md) |
@@ -49,8 +49,8 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Executor | An authorized execution environment with its platform, runtime versions and boundaries. | [Agent model](../architecture/agent-model.md) |
 | Hub | The one computer that runs the server, the database and every runtime connection. Hobs act only on the hub. | [ADR 010](../decisions/010-desktop-hub.md) |
 | Device / client | Another desktop app or browser connected to the hub, approved once and holding a revocable token. | [ADR 010](../decisions/010-desktop-hub.md), [Deployment](../architecture/deployment.md) |
-| Home | The landing page: an animated dashboard of hob activity, what needs you, Quests and usage. | [ADR 008](../decisions/008-design.md), [Design specification](../design/ui-ux.md) |
-| Workbench | One Task's full view: Summary, Changes, Files, Terminal and (later) Browser, labeled by what the hub recorded. | [ADR 023](../decisions/023-workbench.md), [design specification](../design/ui-ux.md), [`packages/workbench`](../../packages/workbench/README.md) |
+| Home | The landing page: an animated dashboard of hob activity, what needs you, Quests and usage. | [ADR 008](../decisions/008-design.md) |
+| Workbench | One Task's full view: Summary, Changes, Files, Terminal and (later) Browser, labeled by what the hub recorded. | [ADR 023](../decisions/023-workbench.md), [`packages/workbench`](../../packages/workbench/README.md) |
 
 ## Words and code names
 

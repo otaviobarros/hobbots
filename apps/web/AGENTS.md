@@ -5,7 +5,7 @@ The web app holds the routes and screens every client shows. These rules add to 
 ## Code Review Rules
 
 - Read the [React](../../docs/standards/react.md), [UI](../../docs/standards/ui.md) and [i18n](../../docs/standards/i18n.md) standards. A component change touches all three.
-- Screens match the [design specification](../../docs/design/ui-ux.md) and the [screen inventory](../../docs/design/screens-and-flows.md) (STD-UI-005).
+- Screens follow the [themes](../../docs/design/themes.md) and the shared components in `packages/ui` (STD-UI-005).
 - Server state comes only from query hooks (STD-REACT-001). A client shows the hub's status and never works one out from messages or Task states (STD-REACT-028). A multi-step flow is a reducer with one type per state (STD-REACT-029).
 - Every data section shows its loading, empty and error states (STD-REACT-015), and every failure says what went wrong and how to recover (STD-UI-009).
 - User-facing copy lives in a `messages.ts` module (STD-I18N-001), and the UI calls agents hobs (STD-UI-007).

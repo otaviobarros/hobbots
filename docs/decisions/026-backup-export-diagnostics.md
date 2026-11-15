@@ -1,6 +1,6 @@
 # ADR 026 — Backup, restore, export and diagnostics
 
-Status: **Accepted.** Start over added for [#948](https://github.com/otaviobarros/hobbots/issues/948). Decides what [ADR 011](011-sqlite-storage.md), the [persistence contract](../architecture/persistence.md) and the [API and events contract](../architecture/api-events.md#operational-observability) leave open for OP-002 and OP-003 of the [MVP requirements](../product/mvp-requirements.md), for Slice 15 ([#16](https://github.com/otaviobarros/hobbots/issues/16)). Builds on the event journal of [ADR 013](013-event-journal.md), the redaction of [ADR 014](014-tool-policy-and-enforcement.md), the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the credentials of [ADR 020](020-github-charm.md), [ADR 021](021-devices-and-remote-access.md) and [ADR 022](022-hob-github-app.md), and the Workbench records of [ADR 023](023-workbench.md).
+Status: **Accepted.** Start over added for [#948](https://github.com/otaviobarros/hobbots/issues/948). Decides what [ADR 011](011-sqlite-storage.md), the [persistence contract](../architecture/persistence.md) and the [API and events contract](../architecture/api-events.md#operational-observability) leave open for OP-002 and OP-003 of the [MVP requirements](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/product/mvp-requirements.md), for Slice 15 ([#16](https://github.com/otaviobarros/hobbots/issues/16)). Builds on the event journal of [ADR 013](013-event-journal.md), the redaction of [ADR 014](014-tool-policy-and-enforcement.md), the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the credentials of [ADR 020](020-github-charm.md), [ADR 021](021-devices-and-remote-access.md) and [ADR 022](022-hob-github-app.md), and the Workbench records of [ADR 023](023-workbench.md).
 
 ## Context
 
@@ -218,7 +218,7 @@ Folders, rather than single archive files, need no new dependency and can be ins
 
 ## Consequences
 
-- Settings gains Backup & export and Diagnostics, and Welcome's "I already use Hobbots" gains Restore a backup. Screens 1 and 13 of the [screen inventory](../design/screens-and-flows.md) change with #452, #453 and #455.
+- Settings gains Backup & export and Diagnostics, and Welcome's "I already use Hobbots" gains Restore a backup. Screens 1 and 13 of the [screen inventory](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/design/screens-and-flows.md) change with #452, #453 and #455.
 - The hub gains a cleanup hold and a workspace hold for the length of a backup, and a held dispatcher after a restore, with Resume work, and "Revoked by a restore" as a device's revoke reason.
 - The data folder gains `backups/` with the latest backup before a migration, and a restored hub leaves its earlier folder beside it until you delete it.
 - The redactor runs over message and reply text for exports, which it does not do for stored messages.

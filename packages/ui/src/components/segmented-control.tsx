@@ -3,7 +3,7 @@ import { ToggleGroup } from "radix-ui";
 import * as React from "react";
 import { cn } from "../lib/utils.ts";
 
-// A segmented control (docs/design/ui-ux.md): one choice from a few, on a sunken track. Built from
+// A segmented control: one choice from a few, on a sunken track. Built from
 // the shadcn Toggle Group, kept to a single choice so one segment is always on. It is a radio group,
 // so selection follows focus: the arrow keys, Home and End pick the segment they move to, as native
 // radios and Radix Radio Group do. Radix moves focus a tick after the key, so the item remembers

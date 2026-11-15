@@ -47,8 +47,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Slice 7's done-when checks, at hub level and over the HTTP API, with the hub's own composition:
 // the setup's preset and folders read at every turn, one policy engine, and the fake runtime making
-// the scripted tool calls. The fake decides calls but runs nothing; real Claude Code on macOS is the
-// manual checklist in docs/evidence/2026-10-31-tools-under-policy.md.
+// the scripted tool calls. The fake decides calls but runs nothing.
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-tools-policy-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");

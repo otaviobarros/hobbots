@@ -3,7 +3,7 @@ import type * as React from "react";
 import { useRestoreFocus } from "../lib/restore-focus.ts";
 import { cn } from "../lib/utils.ts";
 
-// The work sheet (docs/design/ui-ux.md): a panel at the right edge of the window, over the chat,
+// The work sheet: a panel at the right edge of the window, over the chat,
 // for the quest and the task inside it. Built on the shadcn Sheet, so it is a Radix dialog: focus
 // stays inside while it is open, Escape or a click outside closes it, and focus goes back to what had
 // it before, even when the app opened the sheet with no trigger. It slides in 24px and fades, and

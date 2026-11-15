@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
-// Interaction check 10 of the screen inventory, end to end in the browser (ADR 021): turn on remote
+// Remote access end to end in the browser (ADR 021): turn on remote
 // access, open the hub's tailnet address in another browser, Allow it on the hub, then Remove it.
 // The hub-level proof of the same slice is in apps/server/test/remote-access-end-to-end.test.ts.
 

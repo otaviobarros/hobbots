@@ -1,10 +1,10 @@
 # ADR 008 — Hobbots design
 
-Status: **Accepted.**
+Status: **Accepted.** Amended by [#1584](https://github.com/otaviobarros/hobbots/issues/1584): the design specification and the screen inventory are removed. The [themes](../design/themes.md) and the shared components in `packages/ui` carry the design, and a design change is agreed on its issue before it is built (STD-UI-005).
 
 ## Decision
 
-The [design specification](../design/ui-ux.md) records its style, layout and components, and the [screen inventory](../design/screens-and-flows.md) lists every screen. They are the visual and interaction reference for the MVP:
+The [design specification](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/design/ui-ux.md) records its style, layout and components, and the [screen inventory](https://github.com/otaviobarros/hobbots/blob/07e7d13427061e49a0356ec9e7599995b948e59f/docs/design/screens-and-flows.md) lists every screen. They are the visual and interaction reference for the MVP:
 
 - **Home is the landing page.** It is an animated dashboard: what each hob is doing, what needs you, Quests in progress and usage. Chat stays one click away and opens on the last thread.
 - **The chat workspace keeps its layout** (rail, hob and thread list, chat, right panel). The right panel has three tabs: **Quest**, **Inbox** and a live **Workshop** scene that links to the full Workbench.
@@ -31,4 +31,4 @@ The chief replaced the earlier crest at the user's direction (#41) so the app ic
 
 ## Change control
 
-A deliberate, user-directed design change updates the design specification and this ADR, or supersedes it with a new ADR.
+A deliberate, user-directed design change is agreed on its issue. A change to a decision above updates this ADR, or supersedes it with a new ADR.

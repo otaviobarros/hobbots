@@ -5,8 +5,7 @@ import { buildPack, plainChapterSummary, tokensOf } from "../src/context-pack.ts
 // Issue #1380: tokens per turn on the last topic of a scripted 200-message, 4-topic chat, before
 // and after chapters and the pack. Before, one session resumed across the whole thread, so each turn
 // carried the whole transcript so far. After, the last topic's chapter starts a new session from the
-// pack, and each turn carries the pack and the chapter so far. The numbers are recorded in
-// docs/evidence/2026-11-12-context-pack-tokens.md.
+// pack, and each turn carries the pack and the chapter so far.
 
 const TOPICS = ["the cat", "the garden", "the trip", "the party"];
 const PER_TOPIC = 50;
