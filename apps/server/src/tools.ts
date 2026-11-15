@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import {
+  type AccessReads,
   CharmDeclarations,
   CommitIdentityQuestions,
   effectiveFolders,
@@ -50,6 +51,9 @@ export const HobToolsLive = Layer.effect(
     const charmOperations = declaredOperations(yield* CharmDeclarations);
     // What you took over from a Task, which every hob's sandbox closes to writes (#1537).
     const takenPlaces = yield* makeTakenPlaces(sep === "\\" ? "\\" : "/");
+    // A read that needs only the folders and the policy leaves them out (#1578).
+    const takenFor = (folders: ReadonlyArray<string>, reads: AccessReads | undefined) =>
+      reads?.taken === false ? Effect.succeed<ReadonlyArray<string>>([]) : takenPlaces(folders);
     return HobTools.of({
       access: (agent, turn, reads) =>
         Effect.gen(function* () {
@@ -87,7 +91,7 @@ export const HobToolsLive = Layer.effect(
                 : settleCommitsAs(null, userGitIdentity(homedir()), null);
           // A hob with its own app needs no coding setup card (#1241).
           if (app !== null && Option.isSome(identities)) yield* identities.value.settled(agent.id);
-          const taken = reads?.taken === false ? [] : yield* takenPlaces(turnFolders);
+          const taken = yield* takenFor(turnFolders, reads);
           return {
             policy,
             folders: turnFolders,

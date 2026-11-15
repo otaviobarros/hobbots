@@ -1,7 +1,7 @@
 import { type CallWrites, ClaimRegister, GitWorkspace, MemoryProjects } from "@hobbots/agents";
 import { type Claim, claimBranch, memoryProjectIdentity, takenWriteText, touchesPath } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import type { PathSeparator } from "./authority.ts";
+import { holds, type PathSeparator } from "./authority.ts";
 
 /** The last name of a folder, which a repository with no `origin` remote is known by. */
 const lastName = (folder: string, separator: PathSeparator) =>
@@ -199,38 +199,27 @@ export const makeTakenWrites = (separator: PathSeparator) =>
   });
 
 /**
- * What a hob's turn may not write at all, because you took it over from a Task (#1537): for every
- * repository its folders reach, and every repository around those, each taken path by absolute
- * path, as claimed and where its links land. The turn's sandbox closes them, so a write the
- * call-level check cannot see, from a script, a variable or an interpreter, fails too. A taken
- * branch is left to the call-level check: the sandbox closes paths, and Git keeps every branch of a
- * repository in the same files. Every hob's turn gets them, whatever Task it works
- * on. Empty when nothing is taken there, or when the hub keeps no claims register; while no path
- * is taken anywhere, no folder is scanned.
+ * What a hob's turn may not write at all, because you took it over from a Task (#1537): each taken
+ * path, by absolute path, as claimed and where its links land, in the checkout it was claimed in and
+ * in every worktree Git lists for that checkout, where it lies in or around the turn's folders. The
+ * turn's sandbox closes them, so a write the call-level check cannot see, from a script, a variable
+ * or an interpreter, fails too. No folder is walked (#1578): a separate clone of the repository, and
+ * a path claimed before checkouts were kept, are left to the call-level check, as a taken branch is,
+ * since Git keeps every branch of a repository in the same files. Every hob's turn gets them,
+ * whatever Task it works on. Empty when nothing is taken, which is one query, or when the hub keeps
+ * no claims register.
  */
 export const makeTakenPlaces = (separator: PathSeparator) =>
   Effect.gen(function* () {
     const register = yield* Effect.serviceOption(ClaimRegister);
     const workspace = yield* Effect.serviceOption(GitWorkspace);
-    const identityOf = yield* makeRepositoryIdentity(separator);
     if (Option.isNone(register) || Option.isNone(workspace)) {
       return (_folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> => Effect.succeed([]);
     }
     const git = workspace.value;
     const claims = register.value;
 
-    // A repository inside another is a folder of it, whose taken paths may hold it.
-    const withOuter = (top: string, tops: Set<string>) =>
-      Effect.gen(function* () {
-        let at: string | null = top;
-        while (at !== null && !tops.has(at)) {
-          tops.add(at);
-          const up = at.lastIndexOf(separator);
-          const outer: string | null = up <= 0 ? null : yield* git.repository(at.slice(0, up));
-          at = outer !== null && outer.length < at.length ? outer : null;
-        }
-      });
-    // What one taken path closes in the repository at `top`: as claimed and where its links land.
+    // What one taken path closes in the checkout at `top`: as claimed and where its links land.
     const closedBy = (top: string, key: string, keysOf: ReturnType<typeof makeKeysOf>) =>
       Effect.map(keysOf(top, key), (keys) =>
         keys.map((each) => (each === "" ? top : `${top}${separator}${each.split("/").join(separator)}`)),
@@ -238,21 +227,20 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
 
     return (folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
       Effect.gen(function* () {
-        // Nothing taken anywhere is the usual case: one query, and no folder is walked (#1578).
-        if (!(yield* claims.anyTakenPath)) return [];
-        const tops = new Set<string>();
-        const closed = new Set<string>();
-        for (const folder of folders) {
-          const reached = yield* git.repositoriesIn(folder);
-          for (const top of reached.tops) yield* withOuter(top, tops);
-          // A folder too big to scan whole may hold a repository with something taken: closed whole.
-          if (!reached.complete) closed.add(folder);
-        }
+        const taken = yield* claims.takenCheckouts;
+        if (taken.length === 0) return [];
+        const real = (yield* Effect.forEach(folders, git.realFolder)).filter((each) => each !== null);
+        // A path in a folder, or around one, as a hob given only `docs/decisions` is.
+        const near = (path: string) =>
+          real.some((folder) => holds(folder, path, separator) || holds(path, folder, separator));
         const keysOf = makeKeysOf(git, separator);
-        for (const top of tops) {
-          for (const claim of yield* claims.takenIn(yield* identityOf(top))) {
-            if (claim.scope !== "path") continue;
-            for (const path of yield* closedBy(top, claim.key, keysOf)) closed.add(path);
+        const checkouts = new Map<string, ReadonlyArray<string>>();
+        const closed = new Set<string>();
+        for (const { key, checkout } of taken) {
+          const tops = checkouts.get(checkout) ?? (yield* git.worktreesOf(checkout));
+          checkouts.set(checkout, tops);
+          for (const top of tops) {
+            for (const path of yield* closedBy(top, key, keysOf)) if (near(path)) closed.add(path);
           }
         }
         return [...closed].sort();

@@ -361,36 +361,23 @@ const hub = () => {
   /** What every hob turn's sandbox closes in `folders`, as the hub reads it when the turn starts (#1537). */
   const takenPlaces = (folders: ReadonlyArray<string>) =>
     run(Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)));
-  /** The same, when the scan of the folders stops at its limit before it sees them all. */
-  const takenPlacesPartly = (folders: ReadonlyArray<string>) =>
-    run(
-      Effect.flatMap(Effect.service(GitWorkspace), (git) =>
-        Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)).pipe(
-          Effect.provideService(GitWorkspace, {
-            ...git,
-            repositoriesIn: (folder) =>
-              Effect.map(git.repositoriesIn(folder), (reached) => ({ ...reached, complete: false })),
-          }),
-        ),
-      ),
-    );
-  /** The same, with how many folders the hub scanned for repositories to find them (#1578). */
-  const takenPlacesScanned = (folders: ReadonlyArray<string>) => {
-    let scans = 0;
+  /** The same, with how many times the hub asked Git for a checkout's worktrees to find them (#1578). */
+  const takenPlacesRead = (folders: ReadonlyArray<string>) => {
+    let reads = 0;
     return run(
       Effect.flatMap(Effect.service(GitWorkspace), (git) =>
         Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)).pipe(
           Effect.provideService(GitWorkspace, {
             ...git,
-            repositoriesIn: (folder) =>
+            worktreesOf: (top) =>
               Effect.suspend(() => {
-                scans += 1;
-                return git.repositoriesIn(folder);
+                reads += 1;
+                return git.worktreesOf(top);
               }),
           }),
         ),
       ),
-    ).then((places) => ({ places, scans }));
+    ).then((places) => ({ places, reads }));
   };
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
@@ -415,8 +402,7 @@ const hub = () => {
     takenWrite,
     takenItems,
     takenPlaces,
-    takenPlacesPartly,
-    takenPlacesScanned,
+    takenPlacesRead,
     dispose: () => runtime.dispose(),
   };
 };
@@ -680,9 +666,8 @@ describe("the claims register", () => {
       symlinkSync(join(checkout, "web"), join(checkout, "web-link"));
       mkdirSync(join(checkout, "web"), { recursive: true });
       await h.call(FRODO, A, { key: "l", scope: "path", path: "web-link" });
-      // Nothing is yours yet, so nothing is closed, even where the scan stops short.
+      // Nothing is yours yet, so nothing is closed.
       expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
-      expect(await h.takenPlacesPartly([outside])).toEqual([]);
 
       await h.takeOver(A);
       // Each clone closes its own `docs`, as claimed and where its link lands. The taken branch is
@@ -699,10 +684,8 @@ describe("the claims register", () => {
       expect(await h.takenPlaces([root])).toEqual(
         expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs")]),
       );
-      // A repository with nothing taken closes nothing, but a folder the scan could not see whole
-      // may hold one with something taken, so it is closed whole.
+      // A repository with nothing taken closes nothing.
       expect(await h.takenPlaces([outside])).toEqual([]);
-      expect(await h.takenPlacesPartly([outside])).toEqual([outside]);
 
       expect((await h.takenPlaces([root])).some((path) => path.startsWith(dotGit))).toBe(false);
 
@@ -719,27 +702,32 @@ describe("the claims register", () => {
   });
 
   // covers OR-006, PE-006, #1578
-  it("[TC-OR-1578-02] scans no shared folder while nothing is taken, however large, and still closes what you take over", async () => {
+  it("[TC-OR-1578-02] walks no shared folder, however large: nothing is read while nothing is taken, and a takeover reads only its checkout's worktrees", async () => {
     const h = hub();
-    // A large shared folder beside the repositories: thousands of folders a scan would walk.
+    // A large shared folder beside the repositories: thousands of folders a walk would read.
     const big = join(root, "big");
-    for (let i = 0; i < 40; i += 1)
+    for (let i = 0; i < 40; i += 1) {
       for (let j = 0; j < 100; j += 1) mkdirSync(join(big, `a${i}`, `b${j}`), { recursive: true });
+    }
     try {
       await h.seed;
       await h.request(FRODO, A, false);
       await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
-      // A Task holds a path, but nothing is yours: no folder is walked.
-      expect(await h.takenPlacesScanned([root, big])).toEqual({ places: [], scans: 0 });
+      // A Task holds a path, but nothing is yours: Git is not asked.
+      expect(await h.takenPlacesRead([root, big])).toEqual({ places: [], reads: 0 });
 
+      // Taken: the checkout it was claimed in names its worktrees once, and `docs` is closed in each.
       await h.takeOver(A);
-      const taken = await h.takenPlacesScanned([root, big]);
+      const taken = await h.takenPlacesRead([root, big]);
       expect(taken.places).toEqual(expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs")]));
-      expect(taken.scans).toBe(2);
+      expect(taken.places.some((path) => path.startsWith(big))).toBe(false);
+      expect(taken.reads).toBe(1);
+      // A hob whose folders reach neither checkout gets nothing closed.
+      expect((await h.takenPlacesRead([big])).places).toEqual([]);
 
-      // Given back, nothing is taken again, and the folders are left alone.
+      // Given back, nothing is taken again, and Git is not asked.
       await h.giveBack(A);
-      expect(await h.takenPlacesScanned([root, big])).toEqual({ places: [], scans: 0 });
+      expect(await h.takenPlacesRead([root, big])).toEqual({ places: [], reads: 0 });
     } finally {
       rmSync(big, { recursive: true, force: true });
       await h.dispose();

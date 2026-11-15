@@ -50,14 +50,11 @@ export interface GitWorkspaceShape {
    */
   readonly currentBranch: (top: string) => Effect.Effect<string | null>;
   /**
-   * The repositories a folder reaches, by the real path of each top folder: the one Git finds from
-   * `folder`, and every one inside it, past dependency folders and Git's own, as a folder of several
-   * checkouts holds them (#1537), and whether the scan saw every folder (`complete`), since it stops
-   * after a limit or at a folder it cannot read. Read without running Git.
+   * Every checkout of the repository whose top is `top`, by the real path of each top folder: its
+   * main worktree and each linked one, as Git lists them (#1578). Empty when `top` is no checkout.
+   * Read without running Git.
    */
-  readonly repositoriesIn: (
-    folder: string,
-  ) => Effect.Effect<{ readonly tops: ReadonlyArray<string>; readonly complete: boolean }>;
+  readonly worktreesOf: (top: string) => Effect.Effect<ReadonlyArray<string>>;
 }
 
 /** Reads the Git state of a hob's folders for the hub, without running Git. */

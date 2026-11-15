@@ -185,6 +185,7 @@ export const makeClaiming = (deps: Deps) =>
           key,
           onMain: numbersIn(onMain ?? []),
           asked: input.number ?? null,
+          checkout: top,
           taskId: task.id,
           actor: { kind: "hob", id: scope.caller.agentId },
           at: scope.at,
