@@ -58,10 +58,7 @@ test("a Playwright test that passed on a retry is flaky, one that never passed i
     ],
   );
   const markdown = flakyTestsMarkdown(outcomes);
-  assert.match(
-    markdown,
-    /### Flaky tests[\s\S]*`a group › retried` \(`chat\.e2e\.ts:9`\), passed 1 of 2 runs/,
-  );
+  assert.match(markdown, /### Flaky tests[\s\S]*`a group › retried` \(`chat\.e2e\.ts:9`\), passed 1 of 2 runs/);
   assert.match(markdown, /### Failed tests[\s\S]*`a group › broken`/);
   assert.doesNotMatch(markdown, /first|skipped/);
 });
@@ -80,10 +77,7 @@ test("a Vitest test that failed in its only run is failed", () => {
     ],
   };
   const markdown = flakyTestsMarkdown(outcomesOf(vitest));
-  assert.match(
-    markdown,
-    /### Failed tests\n\n- `hub recovers` \(`test\/hub\.test\.ts:12`\), passed 0 of 1 runs\n/,
-  );
+  assert.match(markdown, /### Failed tests\n\n- `hub recovers` \(`test\/hub\.test\.ts:12`\), passed 0 of 1 runs\n/);
   assert.doesNotMatch(markdown, /Flaky|starts|later/);
 });
 
