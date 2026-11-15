@@ -3,12 +3,12 @@ import {
   CampSuggestionId,
   type CampSuggestionReason,
   CampSuggestions,
+  ChannelLifecycle,
   ChapterId,
   campSuggestionReasons,
   isInProgress,
   type JournaledEvent,
   planCampSuggestion,
-  ChannelLifecycle,
 } from "@hobbots/domain";
 import { Array as Arr, DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";

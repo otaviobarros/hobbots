@@ -27,6 +27,7 @@ import {
   AgentId as AgentIds,
   ApprovalId,
   AttemptId,
+  ChannelId,
   EMPTY_HOB_POLICY,
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
@@ -36,7 +37,6 @@ import {
   type PolicyDecision,
   SafetyPreset,
   TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";

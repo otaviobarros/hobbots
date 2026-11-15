@@ -1,4 +1,4 @@
-import type { Agent, AgentId, ApprovalRequest, DeviceId, Quest, TaskId, ChannelId } from "@hobbots/domain";
+import type { Agent, AgentId, ApprovalRequest, ChannelId, DeviceId, Quest, TaskId } from "@hobbots/domain";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { devicesQuery } from "../../api/devices.ts";
 import { agentsQuery, archivedAgentsQuery, channelsQuery } from "../../api/queries.ts";

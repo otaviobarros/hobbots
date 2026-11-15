@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   Delegation,
   DelegationId,
@@ -9,7 +10,6 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ChannelId,
 } from "@hobbots/domain";
 
 const at = (second: number) => new Date(Date.UTC(2026, 10, 1, 0, 0, second)).toISOString();

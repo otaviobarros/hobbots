@@ -19,7 +19,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
-import { type Agent, isInProgress, type Message, READ_HOB_LABEL, roleFields, type Channel } from "@hobbots/domain";
+import { type Agent, type Channel, isInProgress, type Message, READ_HOB_LABEL, roleFields } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ActivityRepositoryLive,

@@ -5,7 +5,7 @@ import {
   type MemoryCaptureWork,
   PrivateCamps,
 } from "@hobbots/agents";
-import { AgentId, Message, TaskId, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, Message, TaskId } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { EventJournal } from "./journal.ts";

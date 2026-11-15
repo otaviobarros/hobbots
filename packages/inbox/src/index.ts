@@ -8,10 +8,10 @@ export {
 } from "./blockers.ts";
 export {
   arrivalsText,
-  carryingTask,
   carryingChannel,
-  continuationTask,
+  carryingTask,
   continuationChannel,
+  continuationTask,
   RESULT_IN_BRIEFING,
   type ResultsIn,
   runningTurnAsk,

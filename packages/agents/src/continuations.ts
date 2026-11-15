@@ -1,4 +1,12 @@
-import type { AgentId, AttemptId, BackpackTurnEnding, CarriedItem, MessageId, TaskId, ChannelId } from "@hobbots/domain";
+import type {
+  AgentId,
+  AttemptId,
+  BackpackTurnEnding,
+  CarriedItem,
+  ChannelId,
+  MessageId,
+  TaskId,
+} from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
 /** What arrived for a hob in a channel, put into one turn there under the claims the turn holds (ADR 019). */

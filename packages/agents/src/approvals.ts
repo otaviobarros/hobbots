@@ -16,6 +16,7 @@ import {
   ApprovalRequest,
   type ApprovalState,
   type ApprovalSurface,
+  type ChannelId,
   type CharmId,
   type Committed,
   decidedState,
@@ -28,7 +29,6 @@ import {
   ruleOperation,
   stableJson,
   type TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { unguarded, type WriteGuard } from "./devices.ts";

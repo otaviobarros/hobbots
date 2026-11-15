@@ -19,13 +19,13 @@ import {
 import {
   AgentId,
   ApprovalId,
+  ChannelId,
   CharmCall,
   EMPTY_HOB_POLICY,
   type GitHubRepository,
   MessageId,
   type PolicyDecision,
   type SafetyPreset,
-  ChannelId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Redacted } from "effect";

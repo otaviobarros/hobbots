@@ -1,4 +1,4 @@
-import { AgentId, QuestId, type QuestState, QuestSummary, TaskId, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, QuestId, type QuestState, QuestSummary, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { questPill } from "./quest-pill.ts";
 

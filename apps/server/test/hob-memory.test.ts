@@ -20,6 +20,7 @@ import {
 import {
   Agent,
   AgentId,
+  ChannelId,
   type EventEnvelope,
   type MemoryActor,
   MemoryPath,
@@ -27,7 +28,6 @@ import {
   type MemoryScope,
   MessageId,
   memoryProjectIdentity,
-  ChannelId,
 } from "@hobbots/domain";
 import { type MemoryStoreFakeControls, makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {

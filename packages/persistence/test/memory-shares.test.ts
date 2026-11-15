@@ -2,12 +2,12 @@ import { HobbotsRepository, MemoryShareLog } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  ChannelId,
   MemoryPath,
   MemoryProjectIdentity,
   MemoryShare,
   MemoryVersion,
   MessageId,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";

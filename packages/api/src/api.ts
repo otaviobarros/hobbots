@@ -4,6 +4,11 @@ import {
   AgentStatus,
   Brain,
   CarriedOverEntry,
+  CHANNEL_TITLE_MAX,
+  Channel,
+  ChannelId,
+  ChannelMember,
+  ChannelRunStatus,
   Effort,
   HOB_LABEL_MAX,
   HobColor,
@@ -21,11 +26,6 @@ import {
   SkillName,
   StartedFresh,
   SummonCaps,
-  CHANNEL_TITLE_MAX,
-  Channel,
-  ChannelId,
-  ChannelMember,
-  ChannelRunStatus,
   UnreadChannels,
   Voice,
 } from "@hobbots/domain";
@@ -34,7 +34,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { BackupGroup } from "./backup.ts";
-import { MakeCampPayload, ChannelKey } from "./camp-payloads.ts";
+import { ChannelKey, MakeCampPayload } from "./camp-payloads.ts";
 import { CampSuggestionsGroup } from "./camp-suggestions.ts";
 import { ChaptersGroup } from "./chapters.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
@@ -43,17 +43,17 @@ import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } fr
 import { DiagnosticsGroup } from "./diagnostics.ts";
 import {
   AgentNotFound,
+  ChannelArchived,
+  ChannelArchiveRefused,
+  ChannelKeyReused,
+  ChannelNotCamp,
+  ChannelNotFound,
   HobUnavailable,
   InvalidHob,
   MentionRefused,
   MessageNotQueued,
   ReplyNotResumable,
   StartFreshRefused,
-  ChannelArchived,
-  ChannelArchiveRefused,
-  ChannelKeyReused,
-  ChannelNotCamp,
-  ChannelNotFound,
   ToolLogNotFound,
   TurnsAtLimit,
 } from "./errors.ts";

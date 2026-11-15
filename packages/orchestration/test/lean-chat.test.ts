@@ -1,6 +1,7 @@
 import {
   AgentId,
   CHECKPOINT_WORDS,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -12,7 +13,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { CHECKPOINT_RULE, memberPrompt, memberReminder, ownerBriefing, planNote, stepPrompt } from "../src/briefs.ts";

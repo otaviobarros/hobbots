@@ -1,13 +1,13 @@
 import {
   type AgentId,
+  type Channel,
+  type ChannelId,
   isTerminalTask,
   type MemberWork,
   openChannelTask,
   type QuestSummary,
   type TaskId,
   type TaskTree,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import type { ActivityMap } from "../../api/hub-status.ts";
 import { groupOf } from "../../lib/crew.ts";
@@ -118,7 +118,9 @@ export const pickUpRows = <H, T extends Pick<Channel, "id" | "updatedAt">>(
 ): ReadonlyArray<PickUpRow<H, T>> => {
   const open = new Set(chats.map(({ channel }) => channel.id));
   const shown = quests.filter(({ quest }) => quest.channelId === null || open.has(quest.channelId));
-  const questChannels = new Set(shown.flatMap((group) => (group.quest.channelId === null ? [] : [group.quest.channelId])));
+  const questChannels = new Set(
+    shown.flatMap((group) => (group.quest.channelId === null ? [] : [group.quest.channelId])),
+  );
   const rows: Array<PickUpRow<H, T>> = [
     ...chats
       .filter(({ channel }) => !questChannels.has(channel.id))

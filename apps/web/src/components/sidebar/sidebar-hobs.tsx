@@ -1,8 +1,8 @@
 import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { useHobPresence } from "../../api/hub-status.ts";
 import { useKnownUnreadChannels } from "../../api/channel-reads.ts";
+import { useHobPresence } from "../../api/hub-status.ts";
 import { formatCount } from "../../lib/format.ts";
 import { presenceState } from "../../lib/hob-state.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
@@ -34,7 +34,11 @@ const isOpen = (pathname: string, row: DirectRow) =>
  * time, closed by All your hobs. A hob's row opens its chat. The + summons a hob.
  */
 export function SidebarHobs({ data, pathname, wide }: { data: SidebarData; pathname: string; wide: boolean }) {
-  const rows = directRows({ hobs: data.hobs, places: data.read?.sidebar.directMessages ?? [], channels: data.channels });
+  const rows = directRows({
+    hobs: data.hobs,
+    places: data.read?.sidebar.directMessages ?? [],
+    channels: data.channels,
+  });
   return (
     <>
       <div className={sidebarSection}>

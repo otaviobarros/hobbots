@@ -21,14 +21,14 @@ import {
   Agent,
   AgentId,
   type ApprovalRequest,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type Task,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
@@ -334,7 +334,8 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const send = (prompt: ReadonlyArray<string>) => ChatService.use((chat) => chat.sendPrompt(channelId, prompt.join("\n")));
+const send = (prompt: ReadonlyArray<string>) =>
+  ChatService.use((chat) => chat.sendPrompt(channelId, prompt.join("\n")));
 
 const messages = () => HobbotsRepository.use((repo) => repo.listMessages(channelId));
 

@@ -1,4 +1,4 @@
-import type { MessageId, ChannelId } from "@hobbots/domain";
+import type { ChannelId, MessageId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { useQuery } from "@tanstack/react-query";

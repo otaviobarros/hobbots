@@ -1,10 +1,10 @@
 import { ChapterService, ChatService, PackReports } from "@hobbots/agents";
 import {
+  type ChannelNotFound,
   type ChapterChangeRefusal,
   ChapterChangeRefused,
   type FocusRead,
   HobbotsApi,
-  type ChannelNotFound,
 } from "@hobbots/api";
 import type { ChannelId } from "@hobbots/domain";
 import { Effect, Option } from "effect";

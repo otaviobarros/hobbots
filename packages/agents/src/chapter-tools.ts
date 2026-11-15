@@ -1,5 +1,7 @@
 import {
   type AgentId,
+  type Channel,
+  ChannelMembers,
   ChapterId,
   type ChapterRefusal,
   hobActor,
@@ -18,15 +20,13 @@ import {
   START_CHAPTER_TOOL,
   StartChapterInput,
   startChapterJsonSchema,
-  type Channel,
-  ChannelMembers,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { ChapterService } from "./chapters.ts";
 import { ChapterTools, type CharmTurn, hubAnswer } from "./charms.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
-import { ChannelMemberRepository } from "./channel-members.ts";
 import { pageParts } from "./web-fetch.ts";
 
 /** Why a Chapter tool call did not run, in words for the hob. */
@@ -104,7 +104,6 @@ export const ChapterToolsLive = Layer.effect(
     const members = yield* Effect.serviceOption(ChannelMemberRepository);
     // A hob reads the messages of its own channels and of the camps it is an active member of (ADR 039).
     const readsIn = (channel: Channel, turn: CharmTurn) =>
-      // standards-allow STD-ARCH-021: the hob a channel belongs to reads it, as its owner
       channel.ownerHobId === turn.agentId
         ? Effect.succeed(true)
         : Option.isNone(members)

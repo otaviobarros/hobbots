@@ -1,5 +1,5 @@
 import type { ChannelArchived } from "@hobbots/api";
-import type { Actor, Committed, MemberRefused, ChannelId, ChannelMember } from "@hobbots/domain";
+import type { Actor, ChannelId, ChannelMember, Committed, MemberRefused } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
 /**

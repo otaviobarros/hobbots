@@ -1,8 +1,8 @@
-import { type CatchUp, hasNews, type Channel, type ChannelId } from "@hobbots/domain";
+import { type CatchUp, type Channel, type ChannelId, hasNews } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
-import { catchUpQuery } from "../../api/notes.ts";
 import { useKnownUnreadChannels, usePageShown } from "../../api/channel-reads.ts";
+import { catchUpQuery } from "../../api/notes.ts";
 import { CATCH_UP_START, type CatchUpFlow, catchUpStep, moves, seeing } from "./catch-up-flow.ts";
 
 /** What the chat shows of catching up, and whether its read still holds back marking it read. */

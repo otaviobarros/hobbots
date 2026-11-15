@@ -9,6 +9,8 @@ import {
   type ArtifactKind,
   ArtifactReviewRefused,
   AttemptId,
+  Channel,
+  ChannelId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -26,8 +28,6 @@ import {
   TaskId,
   type TaskTarget,
   type TaskTree,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -412,7 +412,15 @@ describe("Quest summaries", () => {
       );
       const top = TaskId.make(`top-${run}`);
       yield* tasks.createTask({
-        task: { id: top, ownerId: ALDRIC, parentId: null, channelId, brief: "Launch", dependsOn: [], createdAt: tick() },
+        task: {
+          id: top,
+          ownerId: ALDRIC,
+          parentId: null,
+          channelId,
+          brief: "Launch",
+          dependsOn: [],
+          createdAt: tick(),
+        },
         delegation: null,
         milestones: [],
       });

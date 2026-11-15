@@ -1,9 +1,9 @@
-import type { Agent, AgentId, TaskId, TaskTree, ChannelId } from "@hobbots/domain";
+import type { Agent, AgentId, ChannelId, TaskId, TaskTree } from "@hobbots/domain";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { agentsQuery } from "../../api/queries.ts";
-import { taskTreeQuery, channelTasksQuery } from "../../api/tasks.ts";
+import { channelTasksQuery, taskTreeQuery } from "../../api/tasks.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages } from "./messages.ts";
 

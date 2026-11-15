@@ -9,14 +9,14 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   type Checkpoint,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   FileChangeId,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import {

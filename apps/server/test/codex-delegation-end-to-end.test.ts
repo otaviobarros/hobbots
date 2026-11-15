@@ -20,14 +20,14 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type RuntimeKind,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
@@ -288,7 +288,9 @@ describe("delegating between Codex and Claude hobs", () => {
       ]),
     );
     const tree = await run(
-      settledTree(pipChannel, (each) => each.tasks.some((task) => task.ownerId === QUILL && task.state === "completed")),
+      settledTree(pipChannel, (each) =>
+        each.tasks.some((task) => task.ownerId === QUILL && task.state === "completed"),
+      ),
     );
     expect(tree.tasks.find((task) => task.ownerId === QUILL)?.result?.summary).toBe("Quill drafted the copy");
 

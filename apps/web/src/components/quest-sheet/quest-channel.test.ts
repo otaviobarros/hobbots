@@ -1,6 +1,6 @@
 import { AttemptId, Message, MessageId, NoteId, Task, TaskNote } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { ADA, ALDRIC, BUILD, blackFriday, CAMPAIGN, COPY, QUILL, CHANNEL, tree } from "../../test/quests.ts";
+import { ADA, ALDRIC, BUILD, blackFriday, CAMPAIGN, CHANNEL, COPY, QUILL, tree } from "../../test/quests.ts";
 import { questChannel } from "./quest-channel.ts";
 
 // #1390: a quest opens as a channel in its camp's sheet. The channel is built from records: your

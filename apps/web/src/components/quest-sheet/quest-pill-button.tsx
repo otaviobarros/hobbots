@@ -11,7 +11,15 @@ const copy = messages.pill;
  * hub's quest summaries say, opening the camp's sheet where each quest is listed. Hidden while no
  * quest of the camp is under way.
  */
-export function QuestPillButton({ channelId, open, onOpen }: { channelId: ChannelId; open: boolean; onOpen: () => void }) {
+export function QuestPillButton({
+  channelId,
+  open,
+  onOpen,
+}: {
+  channelId: ChannelId;
+  open: boolean;
+  onOpen: () => void;
+}) {
   const pill = questPill(channelId, useChannelSummaries(channelId));
   if (pill === null) return null;
   return (

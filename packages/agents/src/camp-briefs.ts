@@ -1,6 +1,9 @@
 import {
   type Artifact,
   type BriefDraft,
+  type Channel,
+  type ChannelId,
+  ChannelLifecycle,
   type Decision,
   DecisionStates,
   type EventEnvelope,
@@ -9,9 +12,6 @@ import {
   type JournaledEvent,
   type Message,
   type TaskId,
-  type Channel,
-  type ChannelId,
-  ChannelLifecycle,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { BriefLog } from "./brief-log.ts";

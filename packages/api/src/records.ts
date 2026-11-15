@@ -5,12 +5,12 @@ import {
   ArtifactReviewRefusal,
   ArtifactVersions,
   Brief,
+  ChannelId,
   DECISION_TEXT_MAX,
   Decision,
   DecisionId,
   DecisionRefusal,
   RegisteredArtifactId,
-  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";

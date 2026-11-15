@@ -1,4 +1,4 @@
-import type { ClaimClash, ChannelId } from "@hobbots/domain";
+import type { ChannelId, ClaimClash } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { expect, it } from "vitest";
 import { applyClaimEvent, clashesQuery } from "./clashes.ts";

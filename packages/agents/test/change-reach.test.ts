@@ -1,4 +1,4 @@
-import { AgentId, type CharmOperation, EMPTY_HOB_POLICY, type HobPolicy, type Channel } from "@hobbots/domain";
+import { AgentId, type Channel, type CharmOperation, EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {

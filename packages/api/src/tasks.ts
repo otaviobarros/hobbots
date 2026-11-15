@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   FailedTask,
   HistoryFilter,
   HistoryPage,
@@ -19,12 +20,12 @@ import {
   TaskId,
   TaskNote,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   AgentNotFound,
+  ChannelNotFound,
   HobUnavailable,
   HubChoiceNotOffered,
   HubQuestionClosed,
@@ -35,7 +36,6 @@ import {
   QuestNotFound,
   TaskNotControllable,
   TaskNotFound,
-  ChannelNotFound,
 } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 

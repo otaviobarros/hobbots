@@ -4,6 +4,8 @@ import {
   AgentId,
   type AgentStatus,
   AttemptId,
+  Channel,
+  ChannelId,
   type HobUsage,
   Message,
   MessageId,
@@ -11,8 +13,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   type ReplyUsage,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";

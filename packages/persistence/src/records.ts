@@ -4,6 +4,7 @@ import { ChannelNotFound } from "@hobbots/api";
 import {
   Artifact,
   ArtifactReviewRefused,
+  type ChannelId,
   ChapterId,
   Decision,
   type DecisionId,
@@ -16,7 +17,6 @@ import {
   planPullRequestEnded,
   planReview,
   type RegisteredArtifactId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, type Statement } from "effect/sql";

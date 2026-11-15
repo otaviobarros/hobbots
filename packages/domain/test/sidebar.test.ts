@@ -3,15 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
-  type MemberState,
-  type SidebarSection,
-  type SidebarChannel,
-  sidebarOf,
-  sidebarSectionOf,
   Channel,
   ChannelId,
   ChannelMember,
   channelsNeedingYou,
+  type MemberState,
+  type SidebarChannel,
+  type SidebarSection,
+  sidebarOf,
+  sidebarSectionOf,
 } from "../src/index.ts";
 
 // Issue #1469 (ADR 039, The sidebar): the hub sorts channels into Camps and Direct messages with one

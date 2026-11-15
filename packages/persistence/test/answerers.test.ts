@@ -1,20 +1,20 @@
-import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository, type SentTo } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   hobActor,
   MentionRefused,
   Message,
   MessageId,
   type MessageStatus,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, ChannelMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, EventJournal, HobbotsRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1460 (ADR 039, Who answers): the hub decides who answers a message you send in the same

@@ -3,6 +3,7 @@ import { usageTokens } from "@hobbots/domain";
 import { UsageLedger } from "@hobbots/persistence";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  channelId,
   FRODO,
   hub,
   isLive,
@@ -12,7 +13,6 @@ import {
   PIP,
   partyHub,
   send,
-  channelId,
   treeWhen,
 } from "./party-hub.ts";
 

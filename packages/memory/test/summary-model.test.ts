@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { MemoryStore, MemoryVersionAuthors } from "@hobbots/agents";
-import { AgentId, DEFAULT_MEMORY_SETTINGS, type MemoryActor, type MemoryScope, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, DEFAULT_MEMORY_SETTINGS, type MemoryActor, type MemoryScope } from "@hobbots/domain";
 import { Context, Effect, Exit, Layer, Redacted, Schedule, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";

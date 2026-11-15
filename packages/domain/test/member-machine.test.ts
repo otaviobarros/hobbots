@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
+  ChannelId,
+  ChannelMember,
+  ChannelMembers,
   IllegalMemberTransition,
   type MemberEvent,
   MemberMachine,
@@ -10,9 +13,6 @@ import {
   MemberState as MemberStates,
   planMemberAdd,
   planMemberRemove,
-  ChannelId,
-  ChannelMember,
-  ChannelMembers,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -90,7 +90,10 @@ describe("planMemberAdd", () => {
 
   // covers ADR 039 (Members)
   it("refuses a third member in a direct message, and lets its own two come back (#1453)", () => {
-    expect(planMemberAdd({ kind: "direct" }, [owner, hob], rook)).toEqual({ _tag: "refused", reason: "direct-message" });
+    expect(planMemberAdd({ kind: "direct" }, [owner, hob], rook)).toEqual({
+      _tag: "refused",
+      reason: "direct-message",
+    });
     expect(planMemberAdd({ kind: "direct" }, [owner, hob], hob.actor)).toEqual({ _tag: "active", member: hob });
     const away = member("left");
     expect(planMemberAdd({ kind: "direct" }, [owner, away], away.actor)).toEqual({ _tag: "return", member: away });

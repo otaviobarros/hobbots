@@ -3,13 +3,13 @@ import { MessageNotQueued } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type HobbotsEvent,
   Message,
   MessageId,
   mainLine,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

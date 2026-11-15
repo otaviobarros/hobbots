@@ -1,4 +1,4 @@
-import { Artifact, ChapterId, RegisteredArtifactId, ChannelId } from "@hobbots/domain";
+import { Artifact, ChannelId, ChapterId, RegisteredArtifactId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { filterArtifacts, filterInEffect, isArtifactFilter, linkOf, shownFilters } from "./artifact-rows.ts";
 

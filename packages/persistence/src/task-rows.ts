@@ -3,6 +3,7 @@ import {
   ApprovalRequest,
   ArtifactRef,
   Attempt,
+  type ChannelId,
   Checkpoint,
   Delegation,
   descendantsOf,
@@ -18,7 +19,6 @@ import {
   TaskNote,
   TaskTree,
   TaskWait,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";

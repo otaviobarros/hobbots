@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   ChapterId,
   DecisionId,
   type FindResult,
@@ -8,7 +9,6 @@ import {
   MessageId,
   OWNER_ACTOR,
   RegisteredArtifactId,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { findGroups, foundNothing, rowOf } from "./find-model.ts";

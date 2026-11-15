@@ -1,10 +1,13 @@
-import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository, type SentTo } from "@hobbots/agents";
 import type { ChannelArchived } from "@hobbots/api";
 import {
   type Actor,
   Agent,
   AgentId,
   type AgentStatus,
+  Channel,
+  ChannelId,
+  type ChannelMember,
   hobActor,
   type MemberRefused,
   Message,
@@ -13,14 +16,11 @@ import {
   mainLine,
   OWNER_ACTOR,
   type ReplyUsage,
-  Channel,
-  ChannelId,
-  type ChannelMember,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, ChannelMemberRepositoryLive, UsageLedger } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, EventJournal, HobbotsRepositoryLive, UsageLedger } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1467 (ADR 039, Members): a camp is made with the hobs you pick, and hobs are added and taken
@@ -118,7 +118,8 @@ const plantJournalRow = Effect.gen(function* () {
 });
 
 /** Why a member change was refused: its reason, or the error's tag when it is not a membership refusal. */
-const refusal = (error: MemberRefused | ChannelArchived) => (error._tag === "MemberRefused" ? error.reason : error._tag);
+const refusal = (error: MemberRefused | ChannelArchived) =>
+  error._tag === "MemberRefused" ? error.reason : error._tag;
 
 describe("a camp's hobs", () => {
   // covers ADR 039 (Members)

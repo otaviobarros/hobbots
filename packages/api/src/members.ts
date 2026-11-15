@@ -1,7 +1,7 @@
-import { Actor, ActorKind, AgentId, MemberRefusal, ChannelId, ChannelMember, User } from "@hobbots/domain";
+import { Actor, ActorKind, AgentId, ChannelId, ChannelMember, MemberRefusal, User } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { AgentNotFound, HobUnavailable, ChannelArchived, ChannelNotFound } from "./errors.ts";
+import { AgentNotFound, ChannelArchived, ChannelNotFound, HobUnavailable } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**

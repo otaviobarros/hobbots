@@ -2,6 +2,7 @@ import {
   type AgentId,
   type AnyOperation,
   type AttemptId,
+  type ChannelId,
   type CharmDeclaration,
   GIT_INIT_TOOL,
   holdsCharm,
@@ -17,7 +18,6 @@ import {
   START_CHAPTER_TOOL,
   TASK_TOOLS,
   type TaskId,
-  type ChannelId,
   WEB_FETCH_TOOL,
   type WebPageCache,
 } from "@hobbots/domain";

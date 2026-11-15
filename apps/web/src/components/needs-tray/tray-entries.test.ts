@@ -2,15 +2,15 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  ChannelId,
   HobProposal,
   HobProposalId,
   HubQuestion,
   HubQuestionId,
   Revision,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { ADA, ALDRIC, COPY, memberApproval, QUILL, question, stuckItem, CHANNEL, task } from "../../test/quests.ts";
+import { ADA, ALDRIC, CHANNEL, COPY, memberApproval, QUILL, question, stuckItem, task } from "../../test/quests.ts";
 import { scopedTray, shownEntry, trayEntries } from "./tray-entries.ts";
 
 const pending = new ApprovalRequest({ ...memberApproval(COPY, QUILL), state: "pending" });
@@ -91,7 +91,11 @@ describe("trayEntries with hob proposals", () => {
       requests: [pending],
       blockers: [stuckItem(CHANNEL)],
       questions: [],
-      hobProposals: [proposalIn("open", CHANNEL), proposalIn("elsewhere", other), proposalIn("done", CHANNEL, "settled")],
+      hobProposals: [
+        proposalIn("open", CHANNEL),
+        proposalIn("elsewhere", other),
+        proposalIn("done", CHANNEL, "settled"),
+      ],
       channelId: CHANNEL,
     });
     expect(entries.slice(0, 2).map((entry) => entry.key)).toEqual([pending.id, "hob-proposal:open"]);

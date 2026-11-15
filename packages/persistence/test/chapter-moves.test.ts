@@ -18,6 +18,8 @@ import {
   CAMP_SUGGESTION_DECISIONS,
   CAMP_SUGGESTION_QUESTS,
   type CampSuggestion,
+  Channel,
+  ChannelId,
   ChapterId,
   ChapterStates,
   carriedFrom,
@@ -29,8 +31,6 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -545,7 +545,10 @@ describe("a quest whose chapter moves into a camp", () => {
     expect(result.chat).toEqual([]);
     // It is journaled after the move, at its new revision, naming the channel it left.
     const movedApproval = result.moved.entries.find((entry) => entry.payload._tag === "ApprovalMoved");
-    expect(movedApproval?.payload).toMatchObject({ fromChannelId: CHAT, approval: { id: "member-rm", channelId: CAMP } });
+    expect(movedApproval?.payload).toMatchObject({
+      fromChannelId: CHAT,
+      approval: { id: "member-rm", channelId: CAMP },
+    });
     expect(result.camp[0]?.revision).toBe(movedApproval?.sequence);
     const types = result.moved.entries.map((entry) => entry.type);
     expect(types.indexOf("ApprovalMoved")).toBeGreaterThan(types.indexOf("ChapterMoved"));
@@ -1073,7 +1076,13 @@ describe("camp suggestions", () => {
       const records = yield* RecordRepository;
       const artifact = (yield* records.listArtifacts(channelId)).find((each) => each.locator === locator);
       if (artifact === undefined) return yield* Effect.die(new Error(`No ${locator} in ${channelId}`));
-      return yield* records.reviewArtifact({ channelId, artifactId: artifact.id, outcome, by: OWNER_ACTOR, at: tick() });
+      return yield* records.reviewArtifact({
+        channelId,
+        artifactId: artifact.id,
+        outcome,
+        by: OWNER_ACTOR,
+        at: tick(),
+      });
     });
 
   const readyOf = Effect.gen(function* () {

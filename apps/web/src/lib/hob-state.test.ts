@@ -1,6 +1,6 @@
 import { AgentId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { hobNeeds, presenceState, sceneOrder, channelState } from "./hob-state.ts";
+import { channelState, hobNeeds, presenceState, sceneOrder } from "./hob-state.ts";
 
 describe("presenceState", () => {
   it("shows the presence the hub published", () => {

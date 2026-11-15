@@ -1,10 +1,10 @@
-import { Message, MessageId, ChannelId, ChannelMember, UnreadChannels } from "@hobbots/domain";
+import { ChannelId, ChannelMember, Message, MessageId, UnreadChannels } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { lastRead, readThrough, showUnread, unreadChannelsQuery } from "./channel-reads.ts";
 import { applyEvent } from "./events.ts";
 import { queryKeys } from "./queries.ts";
 import { syncedUnread } from "./sync.ts";
-import { lastRead, readThrough, showUnread, unreadChannelsQuery } from "./channel-reads.ts";
 
 const channelId = ChannelId.make("t1");
 const now = "2026-11-04T00:00:00.000Z";

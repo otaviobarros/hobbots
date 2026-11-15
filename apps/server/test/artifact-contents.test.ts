@@ -14,14 +14,14 @@ import {
   AgentId,
   Artifact,
   AttemptId,
+  Channel,
+  ChannelId,
   ChapterId,
   ContentId,
   EMPTY_HOB_POLICY,
   OWNER_ACTOR,
   RegisteredArtifactId,
   type StoredVersion,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -141,7 +141,9 @@ const Seed = Layer.effectDiscard(
     yield* repo.insertAgent(
       new Agent({ ...aldric, id: BRYN, name: "Bryn", policy: { ...EMPTY_HOB_POLICY, ownFolders: [workshop] } }),
     );
-    yield* repo.upsertChannel(new Channel({ id: CAMP, ownerHobId: ALDRIC, title: "Launch", createdAt: AT, updatedAt: AT }));
+    yield* repo.upsertChannel(
+      new Channel({ id: CAMP, ownerHobId: ALDRIC, title: "Launch", createdAt: AT, updatedAt: AT }),
+    );
   }),
 );
 

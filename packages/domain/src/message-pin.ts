@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { MessageId, ChannelId } from "./ids.ts";
+import { ChannelId, MessageId } from "./ids.ts";
 import { Revision } from "./revision.ts";
 
 /**

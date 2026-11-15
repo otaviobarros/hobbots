@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { MemoryScope } from "./memory.ts";
 import { Revision } from "./revision.ts";
 

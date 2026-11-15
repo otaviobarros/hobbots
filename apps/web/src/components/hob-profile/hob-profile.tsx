@@ -12,7 +12,7 @@ import { Schema } from "effect";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { settleBrain } from "../../api/first-hob.ts";
-import { useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
+import { useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import {
   changeCount,
   draftProblem,
@@ -28,9 +28,9 @@ import {
 import {
   agentsQuery,
   archivedAgentsQuery,
+  channelsQuery,
   modelsQuery,
   runtimesQuery,
-  channelsQuery,
   usePauseHob,
   useUpdateHob,
 } from "../../api/queries.ts";

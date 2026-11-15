@@ -9,7 +9,7 @@ import {
   RuntimeAdapter,
   TaskRepository,
 } from "@hobbots/agents";
-import { Agent, AgentId, TaskId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, TaskId } from "@hobbots/domain";
 import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, DispatcherHost, type DispatchLimits } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {

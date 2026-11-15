@@ -1,5 +1,6 @@
 import {
   CHAPTER_SUMMARY_MAX,
+  type ChannelId,
   type Chapter,
   type ChapterId,
   ChapterStates,
@@ -8,7 +9,6 @@ import {
   hobReads,
   type JournaledEvent,
   type Message,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { clip, summaryLine } from "./briefing.ts";

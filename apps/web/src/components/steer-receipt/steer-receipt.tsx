@@ -1,8 +1,8 @@
-import type { AgentId, Message, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, Message } from "@hobbots/domain";
 import { Fragment, type ReactNode } from "react";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { type HobLookup, useHobLookup, useChannelTrees } from "../quest/use-work.ts";
+import { type HobLookup, useChannelTrees, useHobLookup } from "../quest/use-work.ts";
 import { messages } from "./messages.ts";
 import { type ReceiptHop, type SteerReceipt, steerReceiptOf } from "./steer-model.ts";
 
@@ -126,7 +126,11 @@ function SteerReceiptLine({ receipt, hobs }: { receipt: SteerReceipt; hobs: HobL
  * Steer receipts for a channel's transcript: `of(message)` is the receipt under that message, or
  * null. It reads the channel's Task trees, which stay live through the journal's events.
  */
-export const useSteerReceipts = (lead: AgentId, channelId: ChannelId | undefined, transcript: ReadonlyArray<Message>) => {
+export const useSteerReceipts = (
+  lead: AgentId,
+  channelId: ChannelId | undefined,
+  transcript: ReadonlyArray<Message>,
+) => {
   const trees = useChannelTrees(channelId);
   const hobs = useHobLookup();
   return {

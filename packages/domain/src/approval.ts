@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { DeviceId } from "./device.ts";
 import { ApprovalLifetime, GrantRule } from "./grant-rule.ts";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";

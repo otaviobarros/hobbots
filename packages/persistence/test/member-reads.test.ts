@@ -1,17 +1,17 @@
-import { CatchUpRepository, ChapterRepository, HobbotsRepository, ChannelMemberRepository } from "@hobbots/agents";
+import { CatchUpRepository, ChannelMemberRepository, ChapterRepository, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
   type Actor,
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   ChapterId,
   DeviceId,
   EVENT_SCHEMA_VERSIONS,
   Message,
   MessageId,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
   UserId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer } from "effect";
@@ -19,14 +19,14 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import {
   CatchUpRepositoryLive,
+  ChannelMemberRepositoryLive,
   ChapterRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
   keepsChannelMarker,
   migrations,
-  ChannelMemberRepositoryLive,
-  unreadByMember,
   unreadByChannelMarker,
+  unreadByMember,
 } from "../src/index.ts";
 import memberReads from "../src/migrations/20261114004500_member_reads.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";

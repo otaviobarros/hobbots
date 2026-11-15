@@ -3,11 +3,11 @@ import {
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  ChannelId,
   Task,
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberPrompt } from "../src/briefs.ts";

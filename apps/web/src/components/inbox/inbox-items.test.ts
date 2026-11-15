@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, MessageId, ChannelId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, ChannelId, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   expiryText,

@@ -4,13 +4,13 @@ import {
   type AgentId,
   Artifact,
   type Artifact as ArtifactRecord,
+  ChannelId,
   ChapterId,
   GITHUB_ACTOR,
   type GitHubItem,
   OWNER_ACTOR,
   planPullRequestEnded,
   RegisteredArtifactId,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Redacted } from "effect";
 import { describe, expect, it } from "vitest";

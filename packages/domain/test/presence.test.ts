@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AgentId, ChannelId } from "../src/ids.ts";
 import type { MessageStatus, ReplyStep } from "../src/message.ts";
 import {
+  type ChannelRunStatus,
   type HobPresence,
   hobPresenceState,
   leadsNeedingYou,
@@ -10,7 +11,6 @@ import {
   type StatusEvent,
   type StatusSnapshot,
   shownStatus,
-  type ChannelRunStatus,
   withSnapshot,
   withStatusEvent,
 } from "../src/presence.ts";

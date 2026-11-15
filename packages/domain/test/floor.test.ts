@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
+  ChannelId,
   decideFloor,
   type FloorAction,
   type FloorHob,
@@ -10,7 +11,6 @@ import {
   type FloorSnapshot,
   MessageId,
   startsAtOnce,
-  ChannelId,
   TurnRequest,
   TurnRequestId,
   type TurnRequestState,

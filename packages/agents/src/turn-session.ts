@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark, WebReadMark } from "@hobbots/domain";
-import { isSessionOf, isTaskToolName, liveSession, PASS_TOOL, Channel } from "@hobbots/domain";
+import { Channel, isSessionOf, isTaskToolName, liveSession, PASS_TOOL } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";

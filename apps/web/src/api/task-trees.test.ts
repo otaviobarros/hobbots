@@ -7,6 +7,7 @@ import {
   BUILD,
   blackFriday,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   checkpoint,
   delegation,
@@ -15,7 +16,6 @@ import {
   QUILL,
   quest,
   question,
-  CHANNEL,
   task,
   tree,
 } from "../test/quests.ts";

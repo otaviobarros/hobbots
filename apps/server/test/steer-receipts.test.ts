@@ -5,6 +5,7 @@ import { EventJournal } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  channelId,
   FRODO,
   firstPending,
   hub,
@@ -15,7 +16,6 @@ import {
   partyHub,
   QUILL,
   send,
-  channelId,
   treeWhen,
 } from "./party-hub.ts";
 
@@ -151,10 +151,12 @@ describe("a steer receipt for a message you send the lead", () => {
     // The journal says so too, each event correlated with your message (ADR 013).
     // Each event carries the note at its own sequence, and is in the channel of your message.
     const events = await run(noteEvents);
-    expect(events.map(({ type, noteId, messageId, channelId: channel }) => [type, noteId, messageId, channel])).toEqual([
-      ["NoteLeft", passed.note.id, message.id, channelId],
-      ["NotePickedUp", passed.note.id, message.id, channelId],
-    ]);
+    expect(events.map(({ type, noteId, messageId, channelId: channel }) => [type, noteId, messageId, channel])).toEqual(
+      [
+        ["NoteLeft", passed.note.id, message.id, channelId],
+        ["NotePickedUp", passed.note.id, message.id, channelId],
+      ],
+    );
     expect(events.every((each) => each.revision === each.sequence)).toBe(true);
     expect(events.at(-1)?.revision).toBe(passed.note.revision);
   }, 30_000);

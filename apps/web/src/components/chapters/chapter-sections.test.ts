@@ -1,4 +1,4 @@
-import { Chapter, ChapterId, Message, MessageId, ChannelId } from "@hobbots/domain";
+import { ChannelId, Chapter, ChapterId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   chapterFocus,

@@ -4,11 +4,11 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  Channel,
+  ChannelId,
   DeviceId,
   Message,
   MessageId,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { ApprovalRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
@@ -66,7 +66,9 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "t", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: agentId, title: "t", createdAt: now, updatedAt: now }),
+  );
   yield* repo.upsertMessage(
     new Message({
       id: messageId,

@@ -1,4 +1,4 @@
-import { type Actor, isInProgress, type Message, mentionsIn, sameActor, type ChannelId } from "@hobbots/domain";
+import { type Actor, type ChannelId, isInProgress, type Message, mentionsIn, sameActor } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { markdownCode } from "./markdown-code.ts";

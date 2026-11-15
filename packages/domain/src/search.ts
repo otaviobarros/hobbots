@@ -1,7 +1,7 @@
 import { Schema } from "effect";
+import { Channel } from "./channel.ts";
 import { MessageId } from "./ids.ts";
 import { MessageRole } from "./message.ts";
-import { Channel } from "./channel.ts";
 
 /** A piece of a snippet; `match` marks words that matched the search. */
 export const SnippetPart = Schema.Struct({

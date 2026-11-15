@@ -2,10 +2,10 @@ import type { HobToday, MembersReport } from "@hobbots/api";
 import {
   type Agent,
   AgentId,
-  hobActor,
   type Channel,
   type ChannelMember,
   ChannelMembers,
+  hobActor,
   takesNewWork,
 } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
@@ -80,7 +80,6 @@ export function HobsSection({
               key={member.actor.id}
               member={member}
               hob={hob}
-              // standards-allow STD-ARCH-021: the camp's lead is the hob it was made with (ADR 039)
               lead={member.actor.id === camp.ownerHobId}
               today={report.today.find((each) => each.hobId === member.actor.id)}
               speaking={runs?.speaking ?? null}

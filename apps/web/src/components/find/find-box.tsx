@@ -1,4 +1,4 @@
-import { type Actor, type Agent, searchTerms, type Channel } from "@hobbots/domain";
+import { type Actor, type Agent, type Channel, searchTerms } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";

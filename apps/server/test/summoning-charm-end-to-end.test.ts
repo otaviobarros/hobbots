@@ -32,6 +32,7 @@ import {
   type Agent,
   type AgentConfiguration,
   type ApprovalRequest,
+  type Channel,
   declaredOperations,
   HobProposal,
   HobProposalId,
@@ -41,7 +42,6 @@ import {
   SUMMONING_DEFAULTS,
   SUMMONING_SELF_DEFAULTS,
   TaskId,
-  type Channel,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {

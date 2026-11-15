@@ -1,6 +1,7 @@
 import {
   AgentId,
   CarriedOver,
+  ChannelId,
   Chapter,
   ChapterId,
   type ChatWork,
@@ -10,7 +11,6 @@ import {
   QuestionId,
   Task,
   TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";

@@ -1,4 +1,4 @@
-import { ChapterId, Message, MessageId, ChannelId } from "@hobbots/domain";
+import { ChannelId, ChapterId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { buildPack, plainChapterSummary, tokensOf } from "../src/context-pack.ts";
 

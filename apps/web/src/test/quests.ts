@@ -7,6 +7,7 @@ import {
   BackpackBlocker,
   BackpackItem,
   BackpackItemId,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -22,7 +23,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 
 /** The Black Friday Quest of ADR 018 as records, for tests: Aldric leads, Quill drafts the copy, Ada builds the campaign. */

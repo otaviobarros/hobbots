@@ -2,14 +2,14 @@ import { ChapterRepository, HobbotsRepository, TaskRepository } from "@hobbots/a
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type ChapterId,
   Message,
   MessageId,
   OWNER_ACTOR,
   type Task,
   type TaskTree,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import {
   BackpackLive,

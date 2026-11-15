@@ -1,12 +1,12 @@
 import type { HobPermissions } from "@hobbots/api";
 import {
   type AgentId,
+  Channel,
+  ChannelId,
   Message,
   MessageId,
   type MessageStatus,
   PRESET_DECISIONS,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";

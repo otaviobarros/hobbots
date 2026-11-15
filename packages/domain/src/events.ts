@@ -9,6 +9,8 @@ import { Brief } from "./brief.ts";
 import { CampSuggestion } from "./camp-suggestion.ts";
 import { CarriedOver } from "./carried-over.ts";
 import { ChangeActor, YOU } from "./change-actor.ts";
+import { Channel } from "./channel.ts";
+import { ChannelMember } from "./channel-member.ts";
 import { Chapter } from "./chapter.ts";
 import { Claim } from "./claim.ts";
 import { Decision } from "./decision.ts";
@@ -16,12 +18,12 @@ import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HobProposal } from "./hob-proposals.ts";
 import { HubQuestion } from "./hub-question.ts";
-import { AgentId, ChapterId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId, MessageId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
 import { MessagePin } from "./message-pin.ts";
-import { HobPresence, ChannelRunStatus } from "./presence.ts";
+import { ChannelRunStatus, HobPresence } from "./presence.ts";
 import {
   ArtifactRef,
   Checkpoint,
@@ -50,8 +52,6 @@ import {
 } from "./skills.ts";
 import { Supervision } from "./supervision.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
-import { Channel } from "./channel.ts";
-import { ChannelMember } from "./channel-member.ts";
 import { TurnRequest, TurnRequestId } from "./turn-request.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 

@@ -3,6 +3,8 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   hobActor,
@@ -10,8 +12,6 @@ import {
   NoteId,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";

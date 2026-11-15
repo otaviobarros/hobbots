@@ -12,6 +12,7 @@ import {
   CampSuggestionRefused,
   CampSuggestionStateMachine,
   CampSuggestions,
+  ChannelId,
   Chapter,
   ChapterId,
   campSuggestionReasons,
@@ -21,7 +22,6 @@ import {
   type SuggestionState,
   suggestedCampGoal,
   suggestedCampTitle,
-  ChannelId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 

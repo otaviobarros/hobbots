@@ -19,13 +19,13 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type Channel,
   isInProgress,
   MEMORY_SAVE_LABEL,
   MEMORY_SEARCH_LABEL,
   MemoryPath,
   type Message,
   roleFields,
-  type Channel,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { MemoryProjectsLive, MemoryToolsLive } from "@hobbots/memory";

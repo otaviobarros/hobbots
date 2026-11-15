@@ -1,4 +1,4 @@
-import type { Actor, Agent, SidebarPlace, Channel, ChannelId, User } from "@hobbots/domain";
+import type { Actor, Agent, Channel, ChannelId, SidebarPlace, User } from "@hobbots/domain";
 import { formatMonthDay, formatTime } from "../../lib/format.ts";
 import { messages as copy } from "./messages.ts";
 

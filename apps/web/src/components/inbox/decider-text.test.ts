@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, DeviceId, MessageId, ChannelId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, ChannelId, DeviceId, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { deciderText } from "./inbox-items.ts";
 

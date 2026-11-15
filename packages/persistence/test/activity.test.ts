@@ -3,14 +3,14 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   ContentId,
   FileChangeId,
   type FileVersion,
   FolderScanId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";

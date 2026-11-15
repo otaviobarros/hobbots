@@ -1,4 +1,4 @@
-import type { Quest, QuestId, QuestSummary, ChannelId } from "@hobbots/domain";
+import type { ChannelId, Quest, QuestId, QuestSummary } from "@hobbots/domain";
 import { type QueryClient, type QueryFunctionContext, queryOptions, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";

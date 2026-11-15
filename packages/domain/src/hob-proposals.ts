@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { AgentStatus, ConfigVersion, RetireWork } from "./agent.ts";
 import { ChangeCall } from "./change-actor.ts";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { CharmOperationId } from "./policy.ts";
 import { Revision } from "./revision.ts";

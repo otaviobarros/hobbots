@@ -14,12 +14,12 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   FileChangeId,
   TaskId,
   type TaskToolDone,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {

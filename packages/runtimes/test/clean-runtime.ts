@@ -15,12 +15,12 @@ import {
 import {
   Agent,
   AgentId,
+  ChannelId,
   ChapterId,
   EMPTY_HOB_POLICY,
   Message,
   MessageId,
   roleFields,
-  ChannelId,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_LABEL,
   WEB_FETCH_TOOL,

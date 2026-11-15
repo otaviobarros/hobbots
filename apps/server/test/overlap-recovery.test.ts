@@ -16,6 +16,8 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   DEFAULT_ACTIVITY_LIMITS,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -25,8 +27,6 @@ import {
   QuestId,
   TaskId,
   type TaskToolDone,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";

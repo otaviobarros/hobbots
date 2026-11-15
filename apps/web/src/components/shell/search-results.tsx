@@ -1,4 +1,4 @@
-import type { Agent, AgentId, SearchHit, SnippetPart, ChannelId } from "@hobbots/domain";
+import type { Agent, AgentId, ChannelId, SearchHit, SnippetPart } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -42,7 +42,15 @@ export const useSearchResults = (query: string) => {
     ...search.hits.flatMap((hit) => {
       const hob = byId.get(hit.channel.ownerHobId);
       return hob
-        ? [{ kind: "channel" as const, key: `channel-${hit.channel.id}`, hob, hit, messageId: hit.matches[0]?.messageId }]
+        ? [
+            {
+              kind: "channel" as const,
+              key: `channel-${hit.channel.id}`,
+              hob,
+              hit,
+              messageId: hit.matches[0]?.messageId,
+            },
+          ]
         : [];
     }),
   ];

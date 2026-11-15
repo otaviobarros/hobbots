@@ -38,13 +38,13 @@ import { type FakeGitHub, startFakeGitHub } from "@hobbots/charms/testing";
 import {
   type Agent,
   type ApprovalRequest,
+  type Channel,
   type CharmCall,
   type CharmDeclaration,
   isInProgress,
   type Message,
   type ReplyStep,
   roleFields,
-  type Channel,
 } from "@hobbots/domain";
 import { MemoryProjectsLive, MemoryToolsLive } from "@hobbots/memory";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
@@ -204,7 +204,11 @@ const ShelfCharm = Effect.gen(function* () {
               appliedText: `The note is on the ${shelf} shelf.`,
               // The note lands, but the answer is lost on the way back, so the hub must read the shelf.
               send: Effect.promise(async () => {
-                sends.push({ tool: "shelf_write", input: { shelf, note }, ...(await seenFrom(context.turn.channelId)) });
+                sends.push({
+                  tool: "shelf_write",
+                  input: { shelf, note },
+                  ...(await seenFrom(context.turn.channelId)),
+                });
                 shelves.set(shelf, [...(shelves.get(shelf) ?? []), note]);
                 return { _tag: "Uncertain", text: "The shelf did not answer." } as const;
               }),

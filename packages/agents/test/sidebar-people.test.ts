@@ -1,4 +1,4 @@
-import { AgentId, Sidebar, SidebarPlace, ChannelId, UserId } from "@hobbots/domain";
+import { AgentId, ChannelId, Sidebar, SidebarPlace, UserId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { namedPeople } from "../src/sidebar.ts";
 

@@ -22,7 +22,12 @@ export type CatchUpFlow =
 
 export type CatchUpEvent =
   /** The chat in front, as each render sees it, and whether it is unread. */
-  | { readonly _tag: "See"; readonly channelId: ChannelId | undefined; readonly shown: boolean; readonly unread: boolean }
+  | {
+      readonly _tag: "See";
+      readonly channelId: ChannelId | undefined;
+      readonly shown: boolean;
+      readonly unread: boolean;
+    }
   | { readonly _tag: "Fold" };
 
 export const CATCH_UP_START: CatchUpFlow = { step: "idle", channelId: undefined, shown: false, visits: 0 };

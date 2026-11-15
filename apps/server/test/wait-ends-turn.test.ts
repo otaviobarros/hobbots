@@ -3,13 +3,13 @@ import { HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   MessageId,
   QuestionId,
   type TaskId,
   TaskId as TaskIdSchema,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";

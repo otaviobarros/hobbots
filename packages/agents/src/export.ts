@@ -1,20 +1,21 @@
-import { AgentNotFound, type ExportFailed, type ExportResult, type InvalidFolder, ChannelNotFound } from "@hobbots/api";
+import { AgentNotFound, ChannelNotFound, type ExportFailed, type ExportResult, type InvalidFolder } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
   type ArtifactNotCopied,
   type ArtifactRef,
+  type Channel,
   EXPORT_FORMAT,
   EXPORT_VERSION,
   type ExportedArtifact,
   type ExportedAttempt,
+  type ExportedChannel,
   type ExportedHob,
   type ExportedMemory,
   type ExportedMemoryPage,
   type ExportedMessage,
   type ExportedQuest,
   type ExportedTask,
-  type ExportedChannel,
   type ExportedTree,
   type ExportedWeb,
   type ExportScope,
@@ -27,7 +28,6 @@ import {
   safeFileName,
   type Task,
   type TaskTree,
-  type Channel,
   taskTitleOf,
   uniqueName,
 } from "@hobbots/domain";
@@ -35,7 +35,7 @@ import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { ActivityRepository } from "./activity.ts";
 import { SaveDestinations } from "./destinations.ts";
 import { EXPORT_LIMITS, type ExportLimits, exportedContents, overLimits } from "./export-files.ts";
-import { type ExportNames, readmeMarkdown, channelMarkdown, treeMarkdown } from "./export-markdown.ts";
+import { channelMarkdown, type ExportNames, readmeMarkdown, treeMarkdown } from "./export-markdown.ts";
 import { MemoryStore } from "./memory.ts";
 import { hobFoldersNow } from "./permissions.ts";
 import { FolderChecks, InstallationSettings, SettingHistory } from "./ports.ts";
@@ -270,10 +270,10 @@ export class DataExport extends Context.Service<
 
         const allHobs = repo.listAgentsWithStatus(["active", "paused", "retired"]);
         const channelsOf = (agentId: AgentId) =>
-          Effect.map(Effect.all([repo.listChannels(agentId), repo.listArchivedChannels(agentId)]), ([live, archived]) => [
-            ...live,
-            ...archived,
-          ]);
+          Effect.map(
+            Effect.all([repo.listChannels(agentId), repo.listArchivedChannels(agentId)]),
+            ([live, archived]) => [...live, ...archived],
+          );
         const allChannels = (hobs: ReadonlyArray<Agent>) =>
           Effect.map(
             Effect.forEach(hobs, (hob) => channelsOf(hob.id)),
@@ -479,7 +479,6 @@ export class DataExport extends Context.Service<
           trees: ReadonlyArray<ExportedTree>,
         ) => {
           if (scope._tag === "Everything") return gathered.hobs;
-          // standards-allow STD-ARCH-021: an export names whose channels it holds
           const named = new Set<string>(gathered.channels.map((channel) => channel.ownerHobId));
           for (const channel of channels) {
             for (const message of channel.messages) if (message.authorId !== null) named.add(message.authorId);
@@ -503,7 +502,6 @@ export class DataExport extends Context.Service<
                 repo.listMessages(channel.id),
                 (messages): ExportedChannel => ({
                   id: channel.id,
-                  // standards-allow STD-ARCH-021: an export names whose channel it is
                   agentId: channel.ownerHobId,
                   title: channel.title,
                   createdAt: channel.createdAt,
@@ -633,7 +631,8 @@ export class DataExport extends Context.Service<
             const names: ExportNames = new Map(data.hobs.map((hob) => [hob.id, hob.name]));
             const artifacts = data.quests.flatMap((tree) => tree.tasks.flatMap((task) => task.artifacts));
             const copied = artifacts.filter((artifact) => artifact.copiedTo !== null).length;
-            for (const channel of data.channels) yield* folders.write(folder, channel.file, channelMarkdown(channel, names));
+            for (const channel of data.channels)
+              yield* folders.write(folder, channel.file, channelMarkdown(channel, names));
             for (const tree of data.quests) yield* folders.write(folder, tree.file, treeMarkdown(tree, names));
             // Each memory page as its Markdown, through the redactor like every other string.
             for (const [index, page] of data.memory.pages.entries()) {

@@ -1,5 +1,7 @@
 import { ChapterRepository, type SplitInput } from "@hobbots/agents";
 import {
+  type Channel,
+  type ChannelId,
   Chapter,
   ChapterId,
   type ChapterNotFound,
@@ -13,15 +15,13 @@ import {
   planSplit,
   planStart,
   type SplitPoint,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { reconcileSplit } from "./camp-suggestion-rows.ts";
+import { keepReadersRead } from "./channel-member-rows.ts";
 import { chapterRows, messagesRevisionOf } from "./chapter-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
-import { keepReadersRead } from "./channel-member-rows.ts";
 
 // A channel's chapters (ADR 037, migration 0099). The rules of each command are the pure planners
 // in @hobbots/domain; this runs them on the chapters as stored, inside the transaction that writes
@@ -263,7 +263,8 @@ export const ChapterRepositoryLive = Layer.effect(
     const mergeChapters = (channelId: ChannelId, chapterId: ChapterId) =>
       journaledChange<ChapterPlan, ChapterRefused | ChapterNotFound | IllegalChapterTransition>((first) =>
         Effect.gen(function* () {
-          const merged = yield* sql`SELECT 1 FROM merged_chapters WHERE id = ${chapterId} AND channel_id = ${channelId}`;
+          const merged =
+            yield* sql`SELECT 1 FROM merged_chapters WHERE id = ${chapterId} AND channel_id = ${channelId}`;
           if (merged.length > 0) return yield* unchanged(channelId);
           const chapters = yield* listChapters(channelId);
           const plan = yield* planOrFail(planMerge(channelId, chapters, chapterId), first);

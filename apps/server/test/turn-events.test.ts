@@ -1,6 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  ChannelMemberRepository,
   ChatService,
   EventPublisher,
   GrantService,
@@ -12,29 +13,28 @@ import {
   PermissionSummary,
   RuntimeAdapter,
   type RuntimeEvent,
-  ChannelMemberRepository,
 } from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
+  Channel,
+  ChannelId,
   Agent as HobRecord,
   hobActor,
   type Message,
   OWNER_ACTOR,
   roleFields,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
-  ChannelMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";

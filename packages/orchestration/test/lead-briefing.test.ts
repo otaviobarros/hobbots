@@ -1,6 +1,7 @@
 import {
   AgentId,
   AttemptId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   FINISH_RULE,
   LEAN_CHAT_RULE,
@@ -12,7 +13,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { type BriefPart, fixed, renderBrief, rule, SINCE_LAST_TURN } from "../src/brief-parts.ts";

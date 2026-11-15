@@ -1,4 +1,4 @@
-import { type AgentId, type Task, type TaskId, TaskPauses, type TaskTree, type ChannelId } from "@hobbots/domain";
+import { type AgentId, type ChannelId, type Task, type TaskId, TaskPauses, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import {
@@ -26,10 +26,10 @@ import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
 import { QuestDoneWhen } from "./done-when.tsx";
 import { messages } from "./messages.ts";
 import { PauseControls, pauseControl } from "./pause-controls.tsx";
+import { QuestChannelView } from "./quest-channel-view.tsx";
 import { QuestCost } from "./quest-cost.tsx";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
-import { QuestChannelView } from "./quest-channel-view.tsx";
 import { RoomFinished, RoomStopped } from "./room-finished.tsx";
 import { Team } from "./team.tsx";
 

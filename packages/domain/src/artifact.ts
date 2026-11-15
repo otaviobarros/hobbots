@@ -3,7 +3,7 @@ import { baseName, extensionOf, isImageFile } from "./activity.ts";
 import { Actor, GITHUB_ACTOR, hobActor } from "./actor.ts";
 import type { JournaledEvent } from "./events.ts";
 import { pullRequestOf } from "./github.ts";
-import { type AgentId, ChapterId, type MessageId, RegisteredArtifactId, ChannelId } from "./ids.ts";
+import { type AgentId, ChannelId, ChapterId, type MessageId, RegisteredArtifactId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { isInProgress, type Message } from "./message.ts";
 import type { ArtifactRef } from "./quest.ts";
@@ -435,7 +435,12 @@ export interface PlacedSighting {
 export const placedFromTask = (
   sighting: ArtifactSighting,
   task: { readonly channelId: ChannelId; readonly chapterId: ChapterId; readonly ownerId: AgentId },
-): PlacedSighting => ({ sighting, channelId: task.channelId, chapterId: task.chapterId, actor: hobActor(task.ownerId) });
+): PlacedSighting => ({
+  sighting,
+  channelId: task.channelId,
+  chapterId: task.chapterId,
+  actor: hobActor(task.ownerId),
+});
 
 /**
  * The registry's row after `placed`, or null when it changes nothing: a record that already saw the

@@ -1,6 +1,7 @@
 import type { InvalidFolder } from "@hobbots/api";
 import type {
   AgentId,
+  ChannelId,
   CommitIdentity,
   Committed,
   EventEnvelope,
@@ -9,7 +10,6 @@ import type {
   InstallationSetup,
   MessageId,
   SettingChange,
-  ChannelId,
   TransientEvent,
 } from "@hobbots/domain";
 import { Context, Effect, Option, Schema } from "effect";

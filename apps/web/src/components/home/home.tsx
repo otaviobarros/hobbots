@@ -6,7 +6,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
+import { useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import { agentsQuery, channelsQuery } from "../../api/queries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { HOME_VILLAGE, HOME_VILLAGE_PALETTE } from "../../art/home-village.ts";

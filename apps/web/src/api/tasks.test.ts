@@ -1,11 +1,11 @@
-import type { TaskTreeRead, ChannelTasksRead } from "@hobbots/api";
+import type { ChannelTasksRead, TaskTreeRead } from "@hobbots/api";
 import { Attempt } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { attempt, BUILD, blackFriday, CAMPAIGN, COPY, QUILL, CHANNEL, task, tree } from "../test/quests.ts";
+import { attempt, BUILD, blackFriday, CAMPAIGN, CHANNEL, COPY, QUILL, task, tree } from "../test/quests.ts";
 import * as client from "./client.ts";
 import { startGeneration } from "./sync.ts";
-import { applyTaskEvent, taskKeys, channelTasksQuery } from "./tasks.ts";
+import { applyTaskEvent, channelTasksQuery, taskKeys } from "./tasks.ts";
 
 afterEach(() => vi.restoreAllMocks());
 

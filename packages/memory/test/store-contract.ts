@@ -1,6 +1,7 @@
 import type { MemoryStoreShape } from "@hobbots/agents";
 import {
   AgentId,
+  ChannelId,
   type MemoryActor,
   MemoryConflict,
   type MemoryDraft,
@@ -10,7 +11,6 @@ import {
   type MemoryScope,
   type MemoryVersion,
   memoryProjectIdentity,
-  ChannelId,
 } from "@hobbots/domain";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";

@@ -18,6 +18,7 @@ import {
 import {
   AgentId,
   ApprovalId,
+  ChannelId,
   type CharmCall,
   EMPTY_HOB_POLICY,
   type GitHubRepository,
@@ -25,7 +26,6 @@ import {
   MessageId,
   type PolicyDecision,
   type SafetyPreset,
-  ChannelId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Schema } from "effect";

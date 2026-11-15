@@ -4,7 +4,7 @@ import { ApprovalRequest } from "./approval.ts";
 import { Artifact, ArtifactReviews } from "./artifact.ts";
 import { type AwayInput, awayItems, awaySummaryOf, CatchUpItem } from "./catch-up.ts";
 import { HubQuestion } from "./hub-question.ts";
-import { MessageId, ChannelId } from "./ids.ts";
+import { ChannelId, MessageId } from "./ids.ts";
 import { Question } from "./quest.ts";
 import { Task } from "./task.ts";
 
@@ -102,7 +102,12 @@ const latestChange = (channel: ForYouChannel): number => {
   const since = channel.marker ?? 0;
   return Math.max(
     0,
-    ...[...channel.messages, ...channel.decisions, ...channel.artifacts, ...channel.quests.map((quest) => quest.summary)]
+    ...[
+      ...channel.messages,
+      ...channel.decisions,
+      ...channel.artifacts,
+      ...channel.quests.map((quest) => quest.summary),
+    ]
       .map((record) => record.revision)
       .filter((revision) => revision > since),
   );

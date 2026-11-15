@@ -1,5 +1,5 @@
 import type { MoveChapterPayload } from "@hobbots/api";
-import type { CampSuggestion, CampSuggestionId, ChapterId, HobbotsEvent, ChannelId } from "@hobbots/domain";
+import type { CampSuggestion, CampSuggestionId, ChannelId, ChapterId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chapterMoved } from "./camps.ts";
 import { call } from "./client.ts";

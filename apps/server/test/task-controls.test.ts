@@ -18,6 +18,8 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   MessageId,
@@ -25,8 +27,6 @@ import {
   OWNER_USER_ID,
   type Task,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";

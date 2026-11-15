@@ -20,6 +20,7 @@ import { moveApproval, storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { applySuggestionEvent, isSuggestionEvent } from "./camp-suggestions.ts";
 import { chapterMoved, chatStartedFresh } from "./camps.ts";
+import { showUnread, unreadChanged } from "./channel-reads.ts";
 import { applyChapterEvent } from "./chapters.ts";
 import { applyClaimEvent, type ClaimEvent, isClaimEvent } from "./clashes.ts";
 import { API_URL } from "./client.ts";
@@ -55,15 +56,14 @@ import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.
 import {
   newer,
   recordAgent,
+  recordChannel,
   recordMessage,
   recordRemovedMessage,
-  recordChannel,
   startGeneration,
   syncState,
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
-import { showUnread, unreadChanged } from "./channel-reads.ts";
 import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
 

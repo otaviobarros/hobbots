@@ -1,4 +1,4 @@
-import type { HobUnavailable, ChannelArchived, ChannelKeyReused } from "@hobbots/api";
+import type { ChannelArchived, ChannelKeyReused, HobUnavailable } from "@hobbots/api";
 import type {
   Actor,
   Agent,
@@ -9,6 +9,10 @@ import type {
   CarriedOver,
   CarriedOverEntry,
   ChangeActor,
+  Channel,
+  ChannelCheckpoint,
+  ChannelId,
+  ChannelMember,
   ChapterId,
   ChapterMove,
   ChapterNotFound,
@@ -24,10 +28,6 @@ import type {
   Retiring,
   SkillUse,
   StartedFresh,
-  Channel,
-  ChannelCheckpoint,
-  ChannelId,
-  ChannelMember,
   TurnRequest,
   TurnRequestId,
   UnreadChannels,
@@ -264,7 +264,10 @@ export class HobbotsRepository extends Context.Service<
       MemberRefused | ChannelArchived
     >;
     /** Deletes a message that is still queued in the channel; none, and nothing deleted, when it is not. */
-    readonly removeQueuedMessage: (channelId: ChannelId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
+    readonly removeQueuedMessage: (
+      channelId: ChannelId,
+      id: MessageId,
+    ) => Effect.Effect<Option.Option<Committed<void>>>;
     /** The channel's stored summary of older messages, if a handoff made one (ADR 017). */
     readonly findCheckpoint: (channelId: ChannelId) => Effect.Effect<Option.Option<ChannelCheckpoint>>;
     /** Replaces the channel's stored summary. */

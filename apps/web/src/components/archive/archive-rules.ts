@@ -1,4 +1,4 @@
-import type { ApprovalRequest, Message, Channel, ChannelId } from "@hobbots/domain";
+import type { ApprovalRequest, Channel, ChannelId, Message } from "@hobbots/domain";
 import { isInProgress } from "@hobbots/domain";
 
 /**

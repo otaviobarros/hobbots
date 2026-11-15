@@ -8,6 +8,8 @@ import {
   type CampSuggestionReason,
   type CampSuggestionRefused,
   CampSuggestions,
+  type ChannelId,
+  ChannelLifecycle,
   type Chapter,
   type ChapterId,
   ChapterStates,
@@ -21,8 +23,6 @@ import {
   type Message,
   suggestedCampGoal,
   suggestedCampTitle,
-  type ChannelId,
-  ChannelLifecycle,
 } from "@hobbots/domain";
 import { Array as Arr, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HobAdmission, withChannelLock } from "./admission.ts";

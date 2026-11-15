@@ -1,4 +1,4 @@
-import type { QuestSummary, ChannelId } from "@hobbots/domain";
+import type { ChannelId, QuestSummary } from "@hobbots/domain";
 
 /** What a camp's quest pill says (ADR 037): its quests under way, what is ready for review and what needs you. */
 export interface QuestPill {

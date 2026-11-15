@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { CommandState, FileChangeKind } from "./activity.ts";
 import { AgentStatus, Effort, RuntimeKind } from "./agent.ts";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { MemoryAuthor, MemoryPath, MemoryScope } from "./memory.ts";
 import { MessageRole, MessageStatus, ReplyStepState, ReplyUsage } from "./message.ts";
 import { ArtifactId, ArtifactKind, QuestId, QuestionId, QuestionState, QuestState } from "./quest.ts";

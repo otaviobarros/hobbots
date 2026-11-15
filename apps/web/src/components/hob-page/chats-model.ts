@@ -1,13 +1,13 @@
 import {
   type ApprovalRequest,
+  CHANNEL_TITLE_MAX,
+  type Channel,
   type QuestId,
   type QuestSummary,
   type SearchHit,
   type SnippetPart,
   searchTerms,
   snippetOf,
-  CHANNEL_TITLE_MAX,
-  type Channel,
 } from "@hobbots/domain";
 import { summaryProgress } from "../../lib/led-quests.ts";
 import type { QuestInProgress } from "../../lib/quest-work.ts";

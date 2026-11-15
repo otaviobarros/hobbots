@@ -4,6 +4,7 @@ import {
   ArtifactRef,
   AttemptId,
   type BackpackItem,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
@@ -21,7 +22,6 @@ import {
   TaskId,
   TaskNote,
   type TaskState,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {

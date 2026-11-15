@@ -1,5 +1,8 @@
 import {
   type AgentId,
+  type ChannelId,
+  ChannelRunChanged,
+  type ChannelRunStatus,
   HobPresenceChanged,
   HobPresenceRemoved,
   type HobPresenceState,
@@ -7,9 +10,6 @@ import {
   type ReplyActivity,
   type StatusView,
   shownStatus,
-  type ChannelId,
-  ChannelRunChanged,
-  type ChannelRunStatus,
   withSnapshot,
   withStatusEvent,
 } from "@hobbots/domain";

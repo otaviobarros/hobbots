@@ -1,11 +1,11 @@
 import {
+  type ChannelKind,
+  ChannelMembers,
   isStopAsked,
   type Message,
   type MessageId,
   type MessageStatus,
   relayDepthAfter,
-  type ChannelKind,
-  ChannelMembers,
   type TurnRequest,
   TurnRequests,
 } from "@hobbots/domain";
@@ -62,7 +62,9 @@ export const relaysFor = (
       (actor) => actor.kind === "hob" && actor.id !== author.id && camp.has(actor.id),
     );
     if (mentions.length === 0) return [];
-    const [channel] = yield* sql<{ readonly kind: ChannelKind }>`SELECT kind FROM channels WHERE id = ${reply.channelId}`;
+    const [channel] = yield* sql<{
+      readonly kind: ChannelKind;
+    }>`SELECT kind FROM channels WHERE id = ${reply.channelId}`;
     if (channel === undefined) return [];
     const answerers = yield* answerersIn(
       sql,

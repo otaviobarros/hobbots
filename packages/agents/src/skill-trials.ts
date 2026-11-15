@@ -1,6 +1,8 @@
 import { type AgentNotFound, type HobUnavailable, SkillDraftGone } from "@hobbots/api";
 import {
   type AgentId,
+  type Channel,
+  type ChannelId,
   type SkillId,
   SkillNotFound,
   SkillProposalNotFound,
@@ -9,8 +11,6 @@ import {
   type SkillSourceUnreadable,
   SkillTrial,
   skillTitle,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ChatService } from "./chat.ts";

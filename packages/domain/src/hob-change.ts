@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { AgentConfiguration, AgentStatus } from "./agent.ts";
 import { ChangeActor } from "./change-actor.ts";
-import { AgentId, MessageId, TaskId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId, TaskId } from "./ids.ts";
 import { type HobPolicy, hobAnswers, type PolicyLayer } from "./policy.ts";
 import { SettingChange } from "./setting-change.ts";
 import { SUMMONING_CHARM_NAME } from "./summoning.ts";

@@ -47,7 +47,6 @@
     "//#lint:machines": {},
     "//#lint:glossary": {},
     "//#lint:actor": {},
-    "//#lint:speaker": {},
     "//#lint:markdown": {},
     "//#test:scripts": {},
     "dev": {

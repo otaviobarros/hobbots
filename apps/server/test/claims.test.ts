@@ -18,6 +18,8 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   type Claim,
   ClaimId,
   type ClaimScope,
@@ -28,8 +30,6 @@ import {
   TaskId as TaskIds,
   type TaskToolDone,
   TaskToolRefused,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
 import { makeTakenPlaces, TaskTools } from "@hobbots/orchestration";
@@ -167,7 +167,14 @@ const hub = () => {
         const repo = yield* HobbotsRepository;
         const channelId = ChannelId.make(`camp-${taskId}`);
         yield* repo.upsertChannel(
-          new Channel({ id: channelId, ownerHobId: agentId, title: "Work", kind: "camp", createdAt: now, updatedAt: now }),
+          new Channel({
+            id: channelId,
+            ownerHobId: agentId,
+            title: "Work",
+            kind: "camp",
+            createdAt: now,
+            updatedAt: now,
+          }),
         );
         const tasks = yield* TaskRepository;
         const created = yield* tasks.createTask({

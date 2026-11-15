@@ -54,7 +54,7 @@ const lineFinder = (text) => {
 
 /**
  * The lines an opt-out of `rule` covers: a real comment, with a reason, ending on a line or the line
- * above it. Shared with the speaker check (scripts/speaker.mjs).
+ * above it.
  */
 export const optOutLines = (text, comments, rule, lineAt = lineFinder(text)) => {
   const optOut = new RegExp(`^\\s*standards-allow ${rule}:\\s*\\S`);

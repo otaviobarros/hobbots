@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, INBOX_HISTORY, MessageId, ChannelId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, ChannelId, INBOX_HISTORY, MessageId } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { approvalQuery, inboxQuery, storeApproval } from "./approvals.ts";

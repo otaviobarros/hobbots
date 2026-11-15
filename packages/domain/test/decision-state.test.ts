@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  ChannelId,
   ChapterId,
   DECISION_TEXT_MAX,
   Decision,
@@ -15,7 +16,6 @@ import {
   OWNER_ACTOR,
   planCrossOut,
   planDecision,
-  ChannelId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  ChannelMemberRepository,
   ChatService,
   GrantService,
   HobAdmission,
@@ -15,22 +16,22 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type SkillMount,
-  ChannelMemberRepository,
 } from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
+  type Channel,
+  type ChannelId,
   hobActor,
   isInProgress,
   type Message,
   OWNER_ACTOR,
   roleFields,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -38,7 +39,6 @@ import {
   SetupRepository,
   SkillLibraryLive,
   TaskRepositoryLive,
-  ChannelMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
@@ -550,7 +550,10 @@ describe("skill uses", () => {
     expect(sent.body.userMessage.askedSkill).toBe("release-steps");
     expect((await replies(pipChannel, 1)).skillsUsed).toMatchObject([{ name: "release-steps", explicit: true }]);
     // A skill the hob does not have is not handed to the turn.
-    const unknown = await request("POST", `/api/channels/${pipChannel.id}/messages`, { content: "Go.", skill: "other" });
+    const unknown = await request("POST", `/api/channels/${pipChannel.id}/messages`, {
+      content: "Go.",
+      skill: "other",
+    });
     expect(unknown.status).toBe(200);
     expect((await replies(pipChannel, 2)).skillsUsed).toEqual([]);
     // Typed as the composer writes it, `/release-steps` at the start picks it, and the runtime gets the rest.

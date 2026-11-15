@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect";
+import { CAMP_GOAL_MAX, CHANNEL_TITLE_MAX } from "./channel.ts";
 import { type Chapter, ChapterStates, oneLineUpTo } from "./chapter.ts";
-import { ChapterId, ChannelId } from "./ids.ts";
+import { ChannelId, ChapterId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
-import { CAMP_GOAL_MAX, CHANNEL_TITLE_MAX } from "./channel.ts";
 
 /**
  * Camp suggestions (ADR 037, Records): when a topic in the chat grows, the hub suggests making it a

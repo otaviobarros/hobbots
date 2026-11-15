@@ -18,8 +18,8 @@ import { messages as appCopy } from "../messages.ts";
 import { useChannelBrain } from "../providers/brain-picker.tsx";
 import { useArchive } from "./archive-context.tsx";
 import { isMac } from "./archive-rules.ts";
+import { CampItems, ChannelItems, HobItems, Line } from "./channel-menu-items.tsx";
 import { messages as copy } from "./messages.ts";
-import { CampItems, HobItems, Line, ChannelItems } from "./channel-menu-items.tsx";
 import { useArchiveBlock } from "./use-archive-block.ts";
 
 const brainCopy = appCopy.brain;

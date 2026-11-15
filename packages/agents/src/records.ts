@@ -4,6 +4,7 @@ import {
   type Artifact,
   type ArtifactReviewOutcome,
   type ArtifactReviewRefused,
+  type ChannelId,
   type Committed,
   type Decision,
   type DecisionId,
@@ -21,7 +22,6 @@ import {
   recordDecisionJsonSchema,
   type StoredVersion,
   stableJson,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { CharmTurn } from "./charms.ts";

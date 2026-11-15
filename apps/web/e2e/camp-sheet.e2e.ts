@@ -1,4 +1,4 @@
-import type { Message, Channel, ChannelId, UnreadChannels } from "@hobbots/domain";
+import type { Channel, ChannelId, Message, UnreadChannels } from "@hobbots/domain";
 import type { Locator, Page, Route } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, test } from "./hub.ts";

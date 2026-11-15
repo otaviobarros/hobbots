@@ -1,4 +1,4 @@
-import { AgentId, type HobPresence, type StatusSnapshot, ChannelId, type ChannelRunStatus } from "@hobbots/domain";
+import { AgentId, ChannelId, type ChannelRunStatus, type HobPresence, type StatusSnapshot } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

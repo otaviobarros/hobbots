@@ -5,6 +5,9 @@ import {
   answerersFor,
   authorOf,
   brainLabel,
+  type Channel,
+  type ChannelMember,
+  ChannelMembers,
   hobActor,
   isActiveQuest,
   MentionRefused,
@@ -12,15 +15,12 @@ import {
   type RunningQuest,
   replyHobOf,
   sameActor,
-  type Channel,
-  type ChannelMember,
-  ChannelMembers,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { Speaker } from "./speaker.ts";
 import { TaskRepository } from "./tasks.ts";
-import { ChannelMemberRepository } from "./channel-members.ts";
 import { UserRepository } from "./users.ts";
 
 // Who a hob's turn hears from and why it runs (ADR 039, The context pack with several hobs): every
@@ -119,7 +119,6 @@ export const makePackPeople = Effect.gen(function* () {
       const active = stored.filter(ChannelMembers.isActive);
       const owner = ownerOf(stored);
       const actors: ReadonlyArray<Actor> =
-        // standards-allow STD-ARCH-021: without members stored, the channel is the hob's it belongs to, alone
         active.length > 0 ? active.map((member) => member.actor) : [hobActor(channel.ownerHobId)];
       const people = Option.isNone(users) ? [] : yield* users.value.list;
       const agents = yield* repo.listAgents;

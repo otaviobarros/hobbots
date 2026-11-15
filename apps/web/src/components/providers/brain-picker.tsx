@@ -2,6 +2,7 @@ import {
   type Agent,
   type Brain,
   brainLabel,
+  type Channel,
   type Effort,
   offeredModels,
   RUNTIME_NAMES,
@@ -9,7 +10,6 @@ import {
   type RuntimeKind,
   type RuntimeModels,
   sameBrain,
-  type Channel,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@hobbots/ui/components/popover";
@@ -20,7 +20,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { effortWords } from "../../api/first-hob.ts";
-import { modelsQuery, runtimesQuery, channelBrain, useSetBrain } from "../../api/queries.ts";
+import { channelBrain, modelsQuery, runtimesQuery, useSetBrain } from "../../api/queries.ts";
 import { modelName, pickedBrain } from "../../lib/brains.ts";
 import { PROVIDER_MARKS, RUNTIME_STATE_WORDS } from "../../lib/providers.ts";
 import { messages } from "../messages.ts";

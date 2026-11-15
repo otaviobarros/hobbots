@@ -3,13 +3,13 @@ import {
   type AnswerOwed,
   type AnswerPlace,
   answerersFor,
+  type Channel,
+  type ChannelId,
   isActiveQuest,
   MentionRefused,
   QuestState,
   type RunningQuest,
   type SaidMessage,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";

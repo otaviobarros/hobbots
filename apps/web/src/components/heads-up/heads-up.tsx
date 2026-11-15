@@ -1,4 +1,4 @@
-import type { Message, MessageId, ChannelId } from "@hobbots/domain";
+import type { ChannelId, Message, MessageId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { clashesQuery } from "../../api/clashes.ts";

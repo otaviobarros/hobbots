@@ -1,5 +1,5 @@
 import type { MembersReport } from "@hobbots/api";
-import type { Actor, Agent, RuntimeKind, Channel, ChannelMember, User } from "@hobbots/domain";
+import type { Actor, Agent, Channel, ChannelMember, RuntimeKind, User } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";

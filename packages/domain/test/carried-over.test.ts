@@ -4,13 +4,13 @@ import {
   BackpackItem,
   type BackpackItemId,
   CarriedOver,
+  type ChannelId,
   carriedOverBriefing,
   carriedOverFrom,
   Question,
   type QuestionId,
   Task,
   type TaskId,
-  type ChannelId,
 } from "../src/index.ts";
 
 const at = "2026-11-11T00:00:00.000Z";

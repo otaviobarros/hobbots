@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
+  ChannelId,
   HOB_RELAY_BUDGET,
   IllegalTurnRequestTransition,
   lineKey,
@@ -11,7 +12,6 @@ import {
   RESUMED_RELAY_DEPTH,
   relayDepthAfter,
   relayStateFor,
-  ChannelId,
   TurnRequest,
   type TurnRequestEvent,
   TurnRequestId,

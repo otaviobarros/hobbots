@@ -1,9 +1,9 @@
 import { Schema } from "effect";
 import type { Actor } from "./actor.ts";
-import { AgentId, ChannelId } from "./ids.ts";
-import type { MessageRole } from "./message.ts";
 import type { ChannelKind } from "./channel.ts";
 import { type ChannelMember, ChannelMembers } from "./channel-member.ts";
+import { AgentId, ChannelId } from "./ids.ts";
+import type { MessageRole } from "./message.ts";
 
 /**
  * Who answers a message (ADR 039, Who answers): a pure rule, run in the transaction that stores the

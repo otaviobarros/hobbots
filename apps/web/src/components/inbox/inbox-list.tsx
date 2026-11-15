@@ -11,9 +11,9 @@ import { FlagIcon } from "../quest/flag-icon.tsx";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import {
   entryAsker,
+  entryChannel,
   entryPlace,
   entryRow,
-  entryChannel,
   groupByPlace,
   type InboxEntry,
   type InboxGroup,

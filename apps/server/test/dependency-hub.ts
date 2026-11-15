@@ -24,6 +24,8 @@ import { LocalGitToolsLive } from "@hobbots/charms";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type CharmOperation,
   type HobPolicy,
   type Message,
@@ -33,8 +35,6 @@ import {
   type SafetyPreset,
   type Task,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";

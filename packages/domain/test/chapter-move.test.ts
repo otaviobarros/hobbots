@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentId,
+  Channel,
+  ChannelId,
   Chapter,
   ChapterId,
   type ChapterMoveInput,
@@ -9,8 +11,6 @@ import {
   ChapterRefused,
   type ChapterState,
   planMove,
-  Channel,
-  ChannelId,
 } from "../src/index.ts";
 
 // Issue #1385 (ADR 037, Moving a chapter into a camp moves it): the pure rule of a move. The channel

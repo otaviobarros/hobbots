@@ -1,4 +1,4 @@
-import type { AgentId, TaskTree, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -10,8 +10,8 @@ import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { messages } from "./messages.ts";
-import { QuestComposer } from "./quest-composer.tsx";
 import { type QuestEntry, questChannel } from "./quest-channel.ts";
+import { QuestComposer } from "./quest-composer.tsx";
 
 const copy = messages.sheet;
 

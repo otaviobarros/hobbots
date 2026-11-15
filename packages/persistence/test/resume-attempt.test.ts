@@ -1,5 +1,5 @@
 import { type AttemptResume, HobbotsRepository, type NewAttempt, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, type AttemptEnd, AttemptId, TaskId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, type AttemptEnd, AttemptId, Channel, ChannelId, TaskId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "../src/index.ts";

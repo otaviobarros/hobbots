@@ -1,9 +1,9 @@
 import { Schema } from "effect";
 import { type BackpackItem, BackpackItemId } from "./backpack.ts";
+import { Channel } from "./channel.ts";
 import { ChannelId } from "./ids.ts";
 import { type Question, QuestionId } from "./quest.ts";
 import { type Task, TaskId } from "./task.ts";
-import { Channel } from "./channel.ts";
 
 /**
  * What Start fresh carries from a chat into the one that replaces it (ADR 037): the work it still

@@ -1,11 +1,11 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { RegisteredArtifactKind } from "./artifact.ts";
+import { ChannelKind } from "./channel.ts";
 import { DecisionId, DecisionState, DecisionStates } from "./decision.ts";
-import { AgentId, ChapterId, MessageId, RegisteredArtifactId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId, MessageId, RegisteredArtifactId } from "./ids.ts";
 import { MessageRole } from "./message.ts";
 import { SnippetPart } from "./search.ts";
-import { ChannelKind } from "./channel.ts";
 
 // Find (ADR 037, Records, #1386): the records of every chat and camp, decisions, artifacts and
 // chapters, found by their words beside the messages that say them, in one chat or camp or

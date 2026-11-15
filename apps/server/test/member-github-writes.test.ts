@@ -39,6 +39,7 @@ import { type HubCallRuntime, hubCallRuntimes } from "@hobbots/runtimes/testing"
 import { Effect, Layer, Redacted } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  channelId,
   givePolicy,
   hub,
   memberTask,
@@ -52,7 +53,6 @@ import {
   sharedDatabase,
   startHub,
   taskOf,
-  channelId,
   treeWhen,
 } from "./dependency-hub.ts";
 

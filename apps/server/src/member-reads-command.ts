@@ -2,12 +2,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { NodeRuntime } from "@effect/platform-node";
 import {
+  type ChannelUnread,
   keepsChannelMarker,
   onDatabaseFile,
   SqliteLive,
-  type ChannelUnread,
-  unreadByMember,
   unreadByChannelMarker,
+  unreadByMember,
 } from "@hobbots/persistence";
 import { Console, Effect } from "effect";
 import { exitOnFailure, freeDataFolder, isHubDataFolder } from "./command-line.ts";
@@ -35,12 +35,12 @@ const report = (before: ReadonlyArray<ChannelUnread>, after: ReadonlyArray<Chann
       if (moved !== channel.unread) differ += 1;
       const mark = moved === channel.unread ? "" : "  differs";
       yield* Console.log(
-        // standards-allow STD-ARCH-021: the listing shows whose channel it is
         `${row([channel.channelId, channel.title, channel.agentId, String(channel.unread), String(moved ?? "gone")], widths)}${mark}`,
       );
     }
     const sum = (channels: ReadonlyArray<ChannelUnread>) => channels.reduce((total, each) => total + each.unread, 0);
-    const unreadChannels = (channels: ReadonlyArray<ChannelUnread>) => channels.filter((each) => each.unread > 0).length;
+    const unreadChannels = (channels: ReadonlyArray<ChannelUnread>) =>
+      channels.filter((each) => each.unread > 0).length;
     yield* Console.log(
       `${before.length} channels. Before: ${sum(before)} unread replies in ${unreadChannels(before)} channels. ` +
         `After: ${sum(after)} unread replies in ${unreadChannels(after)} channels.`,

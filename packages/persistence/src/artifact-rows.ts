@@ -6,6 +6,7 @@ import {
   type ArtifactSighting,
   AttemptId,
   artifactSightings,
+  ChannelId,
   ChapterId,
   ContentId,
   type DeliveredArtifact,
@@ -22,7 +23,6 @@ import {
   type StoredVersion,
   type StoredVersionSource,
   TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";

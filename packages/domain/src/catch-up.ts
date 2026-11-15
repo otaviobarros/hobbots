@@ -1,13 +1,13 @@
 import { Schema } from "effect";
 import { Actor, sameActor } from "./actor.ts";
 import { Artifact } from "./artifact.ts";
+import { leavesUnread } from "./channel.ts";
 import { Decision, DecisionStates } from "./decision.ts";
 import { MessageId } from "./ids.ts";
 import { mentions } from "./mention.ts";
 import type { Message } from "./message.ts";
 import { QuestId, QuestState } from "./quest.ts";
 import type { QuestSummary } from "./quest-summary.ts";
-import { leavesUnread } from "./channel.ts";
 
 /**
  * Catch-up (ADR 037): what changed in a chat or camp since you last read it, as the hub works it out

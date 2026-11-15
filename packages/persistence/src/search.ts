@@ -1,13 +1,13 @@
 import { Worker } from "node:worker_threads";
 import { FindIndex } from "@hobbots/agents";
 import {
+  Channel,
   type MessageMatch,
   MessageRole,
   type SearchHit,
   searchTerms,
   searchWords,
   snippetOf,
-  Channel,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema, String as Str } from "effect";
 import { SqlClient } from "effect/sql";
@@ -134,7 +134,10 @@ const makeSearch = (run: Run) =>
 
 /** One hit per channel, in the query's order, with its newest matching messages. */
 const groupHits = (rows: ReadonlyArray<Row>, terms: ReadonlyArray<string>): Array<SearchHit> => {
-  const hits = new Map<string, { channel: Channel; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }>();
+  const hits = new Map<
+    string,
+    { channel: Channel; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }
+  >();
   for (const row of rows) {
     // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every revision fits a number.
     const channel = decodeChannel(channelRows([row])[0]);

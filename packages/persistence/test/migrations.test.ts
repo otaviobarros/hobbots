@@ -1103,7 +1103,10 @@ describe("0053_thread_reads", () => {
         })}`;
       }
       yield* channelReads;
-      const rows = yield* sql<{ id: string; readRevision: unknown }>`SELECT id, read_revision FROM channels ORDER BY id`;
+      const rows = yield* sql<{
+        id: string;
+        readRevision: unknown;
+      }>`SELECT id, read_revision FROM channels ORDER BY id`;
       // PostgreSQL reads BIGINT as text.
       return rows.map((row) => ({ ...row, readRevision: row.readRevision === null ? null : Number(row.readRevision) }));
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0053"))), Effect.runPromise);

@@ -14,12 +14,12 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   DEFAULT_ACTIVITY_LIMITS,
   EMPTY_HOB_POLICY,
   TaskId,
   type TaskToolDone,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {
@@ -134,7 +134,9 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: FRODO, title: "Spec", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "Spec", createdAt: now, updatedAt: now }),
+  );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({
     task: { id: TASK, ownerId: FRODO, parentId: null, channelId, brief: "Wrap up", dependsOn: [], createdAt: now },

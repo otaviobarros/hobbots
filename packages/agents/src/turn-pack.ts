@@ -1,4 +1,4 @@
-import { isActiveQuest, type Message, type PackReport, type Channel, type ChannelId } from "@hobbots/domain";
+import { type Channel, type ChannelId, isActiveQuest, type Message, type PackReport } from "@hobbots/domain";
 import { Context, Effect, HashMap, Layer, Option, Ref } from "effect";
 import { BriefLog } from "./brief-log.ts";
 import { ChapterRepository } from "./chapters.ts";
@@ -107,7 +107,10 @@ export const makePackSources = Effect.gen(function* () {
       const sources: PackSources = {
         campBrief: Option.isNone(briefs)
           ? null
-          : Option.match(yield* briefs.value.briefOf(channel.id), { onNone: () => null, onSome: (brief) => brief.text }),
+          : Option.match(yield* briefs.value.briefOf(channel.id), {
+              onNone: () => null,
+              onSome: (brief) => brief.text,
+            }),
         decisions: Option.isNone(records) ? [] : yield* records.value.activeDecisions(channel.id),
         // Only a shared channel lists who is here and why the hob answers (ADR 039).
         members: people.shared

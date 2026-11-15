@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { StoredPolicyLayer } from "./policy.ts";
 import { Revision } from "./revision.ts";

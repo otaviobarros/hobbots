@@ -1,4 +1,4 @@
-import { CampSuggestion, CampSuggestionId, Chapter, ChapterId, ChannelId } from "@hobbots/domain";
+import { CampSuggestion, CampSuggestionId, ChannelId, Chapter, ChapterId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { suggestedFrom } from "./camp-suggestions.tsx";
 import { startMakeCamp } from "./make-camp-flow.ts";

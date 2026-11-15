@@ -1,4 +1,4 @@
-import type { MessageId, ChannelId } from "@hobbots/domain";
+import type { ChannelId, MessageId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { charmCallsQuery, useSettleCharmCall } from "../../api/charm-calls.ts";

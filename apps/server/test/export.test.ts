@@ -24,6 +24,8 @@ import {
   AgentId,
   ArtifactId,
   AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
@@ -40,8 +42,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {

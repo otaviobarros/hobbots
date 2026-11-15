@@ -1,4 +1,4 @@
-import type { AgentId, AttemptId, TaskId, ChannelId } from "@hobbots/domain";
+import type { AgentId, AttemptId, ChannelId, TaskId } from "@hobbots/domain";
 import { useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { searchParam } from "../../lib/search-params.ts";

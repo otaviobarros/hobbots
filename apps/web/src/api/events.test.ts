@@ -4,6 +4,8 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  Channel,
+  ChannelId,
   Message,
   MessageId,
   OWNER_ACTOR,
@@ -14,8 +16,6 @@ import {
   SkillId,
   SkillName,
   SkillRevisionHash,
-  Channel,
-  ChannelId,
   TurnRequest,
   TurnRequestId,
   YOU,
@@ -136,7 +136,14 @@ describe("applyEvent", () => {
   it("moves a channel archived or restored elsewhere between its hob's two lists", () => {
     const client = new QueryClient();
     const hobId = AgentId.make("aldric");
-    const live = new Channel({ id: channelId, ownerHobId: hobId, title: "Hi", createdAt: now, updatedAt: now, revision: 1 });
+    const live = new Channel({
+      id: channelId,
+      ownerHobId: hobId,
+      title: "Hi",
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+    });
     const archived = new Channel({ ...live, archivedAt: "2026-10-29T09:00:00.000Z", revision: 2 });
     const restored = new Channel({ ...live, revision: 3 });
     client.setQueryData(queryKeys.channels(hobId), [live]);

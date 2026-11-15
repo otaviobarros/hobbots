@@ -2,6 +2,7 @@ import {
   type ApprovalRequest,
   type ArtifactRef,
   Attempt,
+  type ChannelId,
   type HobbotsEvent,
   isTerminalTask,
   type Milestone,
@@ -13,7 +14,6 @@ import {
   type TaskNote,
   TaskTree,
   type TaskWait,
-  type ChannelId,
 } from "@hobbots/domain";
 
 /**

@@ -3,13 +3,13 @@ import { ChannelArchived, ChannelArchiveRefused } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  type ChannelId,
   type JournaledEvent,
   type Message,
   OWNER_ACTOR,
   SkillName,
   SkillRevisionHash,
   SkillTrial,
-  type ChannelId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SearchIndex } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -193,8 +193,12 @@ describe("archived channels", () => {
         return { running: refusal(running), queued: refusal(queued), archived };
       }),
     );
-    expect(result.running).toEqual(new ChannelArchiveRefused({ channelId: result.archived.id, reason: "reply-running" }));
-    expect(result.queued).toEqual(new ChannelArchiveRefused({ channelId: result.archived.id, reason: "reply-running" }));
+    expect(result.running).toEqual(
+      new ChannelArchiveRefused({ channelId: result.archived.id, reason: "reply-running" }),
+    );
+    expect(result.queued).toEqual(
+      new ChannelArchiveRefused({ channelId: result.archived.id, reason: "reply-running" }),
+    );
     expect(result.archived.archivedAt).not.toBeNull();
   });
 
@@ -223,7 +227,10 @@ describe("archived channels", () => {
         };
       }),
     );
-    const expected = new ChannelArchived({ channelId: result.archived.id, archivedAt: result.archived.archivedAt ?? "" });
+    const expected = new ChannelArchived({
+      channelId: result.archived.id,
+      archivedAt: result.archived.archivedAt ?? "",
+    });
     expect(result.refusals).toEqual([expected, expected, expected]);
     expect(result.before).toBe(2);
     expect(result.after).toBe(4);
@@ -329,7 +336,10 @@ describe("renamed and pinned channels", () => {
         };
       }),
     );
-    const refused = new ChannelArchived({ channelId: result.archived.id, archivedAt: result.archived.archivedAt ?? "" });
+    const refused = new ChannelArchived({
+      channelId: result.archived.id,
+      archivedAt: result.archived.archivedAt ?? "",
+    });
     expect(result.rename).toEqual(refused);
     expect(result.pin).toEqual(refused);
   });
@@ -402,7 +412,14 @@ describe("read channels", () => {
         const next = yield* chat.createChannel(HOB_ID);
         const restored = yield* chat.restore(first.id);
         const open = yield* repo.listChannels(HOB_ID);
-        return { first, second, trial, next, restored, chats: open.filter((t) => t.kind === "direct").map((t) => t.id) };
+        return {
+          first,
+          second,
+          trial,
+          next,
+          restored,
+          chats: open.filter((t) => t.kind === "direct").map((t) => t.id),
+        };
       }),
     );
 

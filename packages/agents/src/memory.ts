@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  type ChannelId,
   type Committed,
   type EventEnvelope,
   type MemoryActor,
@@ -29,7 +30,6 @@ import {
   memoryScopeKey,
   type SafetyPreset,
   type TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
 import type { CharmTurn } from "./charms.ts";
@@ -442,7 +442,12 @@ export interface MemoryCapturePrivacy {
 /** Whether a turn's work is in a private camp (ADR 037): its channel is one, or its Task's channel is. */
 export class PrivateCamps extends Context.Service<
   PrivateCamps,
-  { readonly holds: (work: { readonly channelId: ChannelId | null; readonly taskId?: TaskId }) => Effect.Effect<boolean> }
+  {
+    readonly holds: (work: {
+      readonly channelId: ChannelId | null;
+      readonly taskId?: TaskId;
+    }) => Effect.Effect<boolean>;
+  }
 >()("@hobbots/agents/PrivateCamps") {}
 
 /**

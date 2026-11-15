@@ -1,9 +1,9 @@
 import { ChatService, HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { type ChapterId, isLiveAttempt, type RuntimeKind, ChannelId } from "@hobbots/domain";
+import { ChannelId, type ChapterId, isLiveAttempt, type RuntimeKind } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { continuations, hub, ownedBy, PIP, partyHub, send, channelId, treeWhen } from "./party-hub.ts";
+import { channelId, continuations, hub, ownedBy, PIP, partyHub, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1389 (ADR 037, Quests in camps): a quest belongs to the chat or camp that started it, and
 // moves with the chapter that started it. A quest still running when its chapter moves goes on in

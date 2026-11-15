@@ -1,4 +1,4 @@
-import type { AgentId, TaskTree, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, TaskTree } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { messagesQuery } from "../../api/queries.ts";

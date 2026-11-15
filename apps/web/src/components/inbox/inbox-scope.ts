@@ -1,4 +1,4 @@
-import { hobProposalOpen, memoryShareWaits, skillProposalOpen, type ChannelId } from "@hobbots/domain";
+import { type ChannelId, hobProposalOpen, memoryShareWaits, skillProposalOpen } from "@hobbots/domain";
 import { Schema } from "effect";
 import { entryChannel, type InboxEntry } from "./inbox-entries.ts";
 import type { InboxTab } from "./inbox-items.ts";

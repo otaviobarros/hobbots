@@ -30,6 +30,7 @@ import type { SkillProposalView } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  type ChannelId,
   EMPTY_HOB_POLICY,
   type EventEnvelope,
   type HobPolicy,
@@ -43,7 +44,6 @@ import {
   SkillProposal,
   SkillRevisionHash,
   type SkillScope,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { PolicyEngine } from "@hobbots/permissions";

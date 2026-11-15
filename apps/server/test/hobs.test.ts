@@ -745,9 +745,9 @@ describe("several hobs at once", () => {
       ["Moss", 1],
       ["Wren", 2],
     ]);
-    expect((await request("POST", `/api/channels/${channels.moss}/messages`, { content: "third for Moss" })).status).toBe(
-      200,
-    );
+    expect(
+      (await request("POST", `/api/channels/${channels.moss}/messages`, { content: "third for Moss" })).status,
+    ).toBe(200);
     await settled();
     expect((await transcript(channels.moss)).at(-1)).toEqual(["Echo: third for Moss", 1]);
   });

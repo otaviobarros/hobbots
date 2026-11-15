@@ -1,4 +1,4 @@
-import { Message, MessageId, type ReplyStep, ChannelId } from "@hobbots/domain";
+import { ChannelId, Message, MessageId, type ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { BRIEFING_LIMITS, buildBriefing } from "../src/briefing.ts";
 

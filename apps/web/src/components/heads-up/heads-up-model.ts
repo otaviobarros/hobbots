@@ -1,4 +1,4 @@
-import type { AgentId, ClaimClash, Message, MessageId, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, ClaimClash, Message, MessageId } from "@hobbots/domain";
 import { taskTitle } from "../quest/work-model.ts";
 
 /** One side of a clash, as its Heads-up names it. */

@@ -5,13 +5,13 @@ import {
   type Agent,
   type AgentConfiguration,
   type AgentId,
+  type Channel,
   liveSession,
   Message,
   type RuntimeKind,
   type RuntimeSession,
   skillTitle,
   systemInstructions,
-  type Channel,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { buildBriefing } from "./briefing.ts";

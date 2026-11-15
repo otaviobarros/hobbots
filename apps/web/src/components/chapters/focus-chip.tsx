@@ -1,5 +1,5 @@
 import type { FocusRead } from "@hobbots/api";
-import type { Agent, PackPart, Channel } from "@hobbots/domain";
+import type { Agent, Channel, PackPart } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/popover";

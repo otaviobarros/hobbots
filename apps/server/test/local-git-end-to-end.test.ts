@@ -32,6 +32,7 @@ import { LocalGitToolsLive } from "@hobbots/charms";
 import {
   type Agent,
   type ApprovalRequest,
+  type Channel,
   GIT_INIT_LABEL,
   type GitIdentity,
   type HubQuestion,
@@ -39,7 +40,6 @@ import {
   type Message,
   roleFields,
   settleCommitsAs,
-  type Channel,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";

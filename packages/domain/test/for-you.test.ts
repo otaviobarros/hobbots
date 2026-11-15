@@ -8,6 +8,7 @@ import {
   Artifact,
   type AwayMessage,
   awayItems,
+  ChannelId,
   ChapterId,
   catchUpOf,
   Decision,
@@ -26,7 +27,6 @@ import {
   sameActor,
   Task,
   TaskId,
-  ChannelId,
 } from "../src/index.ts";
 
 // Issue #1456 (ADR 039, Cards every channel shares › For you): one list per person, built from the
@@ -218,35 +218,39 @@ describe("forYouOf", () => {
   // covers ADR 039 (Cards every channel shares › For you; Validation)
   it("lists the same mentions, decisions and changed artifacts as catch-up, for the same records and read marker (#1456)", () => {
     fc.assert(
-      fc.property(fc.constantFrom<Actor>(...PEOPLE), fc.tuple(channelArb("camp"), channelArb("direct")), (you, channels) => {
-        const forYou = forYouOf({ you, channels, ...empty });
-        expect(forYou.for).toEqual(you);
-        for (const each of channels) {
-          // Its part of While you were away is exactly the catch-up of that channel.
-          // With no owner listed, the hub's owner decides each channel.
-          const decides = sameActor(you, OWNER_ACTOR);
-          const caught = catchUpOf({ ...each, you, decides });
-          const away = forYou.away.find((part) => part.channelId === each.channelId);
-          expect(away?.items ?? []).toEqual(caught.items);
-          expect(away?.more ?? 0).toBe(caught.more);
-          // And the list's mentions are every mention of you the away summary has, uncapped.
-          const mentioned = awayItems({ ...each, you, decides }).flatMap((item) =>
-            item._tag === "Mentioned" ? [item.messageId] : [],
-          );
-          const listed = forYou.items.flatMap((item) =>
-            item._tag === "Mention" && item.channelId === each.channelId ? [item.messageId] : [],
-          );
-          expect([...listed].sort()).toEqual([...mentioned].sort());
-        }
-        // Nothing in your list is for anyone else, and nothing in it is yours to have written.
-        for (const item of forYou.items) expect(item.for).toEqual(you);
-        for (const part of forYou.away)
-          for (const item of part.items) {
-            if (item._tag === "Decided" || item._tag === "CrossedOut") expect(item.decision.actor).not.toEqual(you);
-            if (item._tag === "Made") expect(item.artifact.actor).not.toEqual(you);
-            if (item._tag === "Mentioned") expect(item.author).not.toEqual(you);
+      fc.property(
+        fc.constantFrom<Actor>(...PEOPLE),
+        fc.tuple(channelArb("camp"), channelArb("direct")),
+        (you, channels) => {
+          const forYou = forYouOf({ you, channels, ...empty });
+          expect(forYou.for).toEqual(you);
+          for (const each of channels) {
+            // Its part of While you were away is exactly the catch-up of that channel.
+            // With no owner listed, the hub's owner decides each channel.
+            const decides = sameActor(you, OWNER_ACTOR);
+            const caught = catchUpOf({ ...each, you, decides });
+            const away = forYou.away.find((part) => part.channelId === each.channelId);
+            expect(away?.items ?? []).toEqual(caught.items);
+            expect(away?.more ?? 0).toBe(caught.more);
+            // And the list's mentions are every mention of you the away summary has, uncapped.
+            const mentioned = awayItems({ ...each, you, decides }).flatMap((item) =>
+              item._tag === "Mentioned" ? [item.messageId] : [],
+            );
+            const listed = forYou.items.flatMap((item) =>
+              item._tag === "Mention" && item.channelId === each.channelId ? [item.messageId] : [],
+            );
+            expect([...listed].sort()).toEqual([...mentioned].sort());
           }
-      }),
+          // Nothing in your list is for anyone else, and nothing in it is yours to have written.
+          for (const item of forYou.items) expect(item.for).toEqual(you);
+          for (const part of forYou.away)
+            for (const item of part.items) {
+              if (item._tag === "Decided" || item._tag === "CrossedOut") expect(item.decision.actor).not.toEqual(you);
+              if (item._tag === "Made") expect(item.artifact.actor).not.toEqual(you);
+              if (item._tag === "Mentioned") expect(item.author).not.toEqual(you);
+            }
+        },
+      ),
     );
   });
 

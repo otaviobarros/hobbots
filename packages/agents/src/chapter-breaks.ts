@@ -2,6 +2,7 @@ import {
   breakChapterId,
   breakTitle,
   CHAPTER_BREAK_CONFIDENCE,
+  ChannelLifecycle,
   ChapterStates,
   chapterTitle,
   type EventEnvelope,
@@ -10,7 +11,6 @@ import {
   isInProgress,
   type JournaledEvent,
   type Message,
-  ChannelLifecycle,
 } from "@hobbots/domain";
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect";
 import { summaryLine } from "./briefing.ts";

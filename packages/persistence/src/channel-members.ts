@@ -2,17 +2,15 @@ import { ChannelMemberRepository } from "@hobbots/agents";
 import { ChannelArchived } from "@hobbots/api";
 import {
   type Actor,
-  isActiveMember,
-  MemberRefused,
-  planMemberAdd,
   type Channel,
   type ChannelId,
   ChannelMember,
+  isActiveMember,
+  MemberRefused,
+  planMemberAdd,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
-import { makeJournaledChange } from "./journal.ts";
-import { unreadMentionsOf } from "./message-mentions.ts";
 import { memberUnread, memberUnreadCount } from "./channel-columns.ts";
 import {
   insertMember,
@@ -22,6 +20,8 @@ import {
   saveState,
   selectMembers,
 } from "./channel-member-rows.ts";
+import { makeJournaledChange } from "./journal.ts";
+import { unreadMentionsOf } from "./message-mentions.ts";
 
 /** The SQL store of channel members, for SQLite and PostgreSQL (migration 0114). */
 export const ChannelMemberRepositoryLive = Layer.effect(
@@ -90,11 +90,16 @@ export const ChannelMemberRepositoryLive = Layer.effect(
       add,
       unreadMentions: (actor) => unreadMentionsOf(sql, actor).pipe(Effect.orDie),
       unreadReplies: (actor) =>
-        sql<{ readonly channelId: string; readonly count: unknown }>`SELECT channel_id, ${memberUnreadCount(sql)} AS count
+        sql<{
+          readonly channelId: string;
+          readonly count: unknown;
+        }>`SELECT channel_id, ${memberUnreadCount(sql)} AS count
           FROM channel_members
           WHERE actor_kind = ${actor.kind} AND actor_id = ${actor.id} AND state = 'active' AND ${memberUnread(sql)}
           ORDER BY ${sql.onDialectOrElse({ pg: () => sql.literal(`channel_id COLLATE "C"`), orElse: () => sql.literal("channel_id") })}`.pipe(
-          Effect.map((rows) => rows.map((row) => ({ channelId: row.channelId as ChannelId, count: Number(row.count) }))),
+          Effect.map((rows) =>
+            rows.map((row) => ({ channelId: row.channelId as ChannelId, count: Number(row.count) })),
+          ),
           Effect.orDie,
         ),
     });

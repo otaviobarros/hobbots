@@ -1,10 +1,11 @@
 import { HobbotsRepository, MemoryCapture, MemoryStore } from "@hobbots/agents";
-import { type AgentId, type MemoryCaptureItem, type TaskTree, Channel } from "@hobbots/domain";
+import { type AgentId, Channel, type MemoryCaptureItem, type TaskTree } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { MemoryCaptureLive } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  channelId,
   continuations,
   FRODO,
   hub,
@@ -15,7 +16,6 @@ import {
   partyHub,
   QUILL,
   send,
-  channelId,
   treeWhen,
 } from "./party-hub.ts";
 

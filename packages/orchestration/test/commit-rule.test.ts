@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   Quest,
   QuestId,
@@ -7,7 +8,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { COMMIT_RULE, memberPrompt, ownerBriefing, stepPrompt } from "../src/briefs.ts";

@@ -4,11 +4,11 @@ import {
   AttemptId,
   artifactShow,
   artifactVersions,
+  ChannelId,
   ChapterId,
   ContentId,
   RegisteredArtifactId,
   type StoredVersion,
-  ChannelId,
 } from "../src/index.ts";
 
 const artifact = (locator: string, kind: Artifact["kind"] = "doc") =>

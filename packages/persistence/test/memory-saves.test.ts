@@ -1,5 +1,5 @@
 import { HobbotsRepository, MemorySaves } from "@hobbots/agents";
-import { Agent, AgentId, MemoryPath, MemorySave, MemoryVersion, MessageId, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, ChannelId, MemoryPath, MemorySave, MemoryVersion, MessageId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";

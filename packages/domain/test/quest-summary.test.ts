@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentId,
   type ArtifactReview,
+  ChannelId,
   QuestId,
   type QuestState,
   questSummaryOf,
@@ -11,7 +12,6 @@ import {
   sameSummary,
   TaskId,
   type TaskState,
-  ChannelId,
 } from "../src/index.ts";
 
 const task = (id: string, parentId: string | null, state: TaskState) => ({

@@ -1,4 +1,4 @@
-import { AgentId, Quest, type TaskTree, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, Quest, type TaskTree } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import type { HobState } from "../../lib/hob-state.ts";
 import { memberWork, quest } from "../../test/member-work.ts";

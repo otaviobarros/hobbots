@@ -4,8 +4,8 @@ import {
   type ApprovalLifetime,
   type ApprovalRequest,
   type ApprovalSurface,
-  type GrantRule,
   type ChannelId,
+  type GrantRule,
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";

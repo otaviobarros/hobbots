@@ -21,6 +21,7 @@ import {
 import {
   Agent,
   AgentId,
+  type ChannelId,
   ChapterId,
   isInProgress,
   Message,
@@ -29,7 +30,6 @@ import {
   type RuntimeKind,
   roleFields,
   TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import {
   ChapterRepositoryLive,

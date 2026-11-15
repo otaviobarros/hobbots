@@ -5,6 +5,11 @@ import {
   AgentId,
   type BackpackTurnEnd,
   type Brain,
+  Channel,
+  type ChannelId,
+  ChannelLifecycle,
+  ChannelMembers,
+  type ChannelRunStatus,
   DEFAULT_CHANNEL_TITLE,
   decideFloor,
   type FloorHob,
@@ -27,11 +32,6 @@ import {
   replyActivity,
   startsAtOnce,
   systemInstructions,
-  Channel,
-  type ChannelId,
-  ChannelLifecycle,
-  ChannelMembers,
-  type ChannelRunStatus,
   TurnRequest,
   TurnRequestId,
   TurnRequests,
@@ -40,6 +40,18 @@ import {
 } from "@hobbots/domain";
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
 import { HobAdmission, withChannelLock } from "./admission.ts";
+import { ChannelMemberRepository } from "./channel-members.ts";
+import {
+  type ChannelRun,
+  type ChannelRunEvent,
+  ChannelRunMachine,
+  idleRun,
+  isAtRest,
+  isBusy,
+  isDispatching,
+  type Reply,
+  runStatus,
+} from "./channel-run.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { passStands } from "./pass-tool.ts";
@@ -50,18 +62,6 @@ import { type Speaker, speakerIn } from "./speaker.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
 import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
-import { ChannelMemberRepository } from "./channel-members.ts";
-import {
-  idleRun,
-  isAtRest,
-  isBusy,
-  isDispatching,
-  type Reply,
-  runStatus,
-  type ChannelRun,
-  type ChannelRunEvent,
-  ChannelRunMachine,
-} from "./channel-run.ts";
 import type { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
@@ -226,7 +226,8 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     }
     const runIn = (all: Runs["all"], line: Line) =>
       Option.match(HashMap.get(all, lineKey(line)), { onNone: () => idleRun, onSome: ({ run }) => run });
-    const runOf = (channelId: ChannelId) => Ref.get(runs).pipe(Effect.map(({ all }) => runIn(all, mainLine(channelId))));
+    const runOf = (channelId: ChannelId) =>
+      Ref.get(runs).pipe(Effect.map(({ all }) => runIn(all, mainLine(channelId))));
     // Applies an event to the line's run: `taken` says whether its rules allowed it, and `before`
     // is the run it found. A run back at rest is dropped, so the map holds only what is remembered.
     // Every transition taken is published once as `ChannelRunChanged`, after the change.
@@ -564,7 +565,6 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     // keeps its rules for open Tasks.
     const activeHobs = (channel: Channel, hobIds: ReadonlyArray<AgentId>) =>
       Effect.gen(function* () {
-        // standards-allow STD-ARCH-021: the hob a channel belongs to keeps its own rules for open Tasks
         const owner = channel.ownerHobId;
         const found = yield* Effect.forEach([...new Set(hobIds)], (hobId) => repo.findAgent(hobId));
         const retiringMember = found.some(
@@ -584,7 +584,6 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
 
     // The hobs that speak in the channel: its own hob, then its active member hobs as they joined.
     const hobsOf = (channel: Channel) => {
-      // standards-allow STD-ARCH-021: the hob a channel belongs to speaks there first, and is listed once
       const owner = channel.ownerHobId;
       return Option.isNone(members)
         ? Effect.succeed<ReadonlyArray<AgentId>>([owner])

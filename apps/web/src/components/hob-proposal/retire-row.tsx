@@ -2,7 +2,7 @@ import type { HobProposalRow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useChannelReplies } from "../../api/hub-status.ts";
-import { openWorkQuery, channelsQuery } from "../../api/queries.ts";
+import { channelsQuery, openWorkQuery } from "../../api/queries.ts";
 import { OpenWorkList } from "../hob-profile/retire-parts.tsx";
 import { messages } from "./messages.ts";
 

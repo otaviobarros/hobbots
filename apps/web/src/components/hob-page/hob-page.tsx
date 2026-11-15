@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useIsNewHob } from "../../api/history.ts";
 import { useHobSkills } from "../../api/hob-skills.ts";
-import { useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
+import { useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
 import { agentsQuery, channelsQuery } from "../../api/queries.ts";
 import { presenceState } from "../../lib/hob-state.ts";

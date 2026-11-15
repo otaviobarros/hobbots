@@ -1,23 +1,23 @@
-import { HobbotsRepository, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
   type Actor,
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   DeviceId,
   hobActor,
   Message,
   MessageId,
   MessageTransitions,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
   UserId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, ChannelMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, EventJournal, HobbotsRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1455 (ADR 039, Who answers; Users as actors): a message's @mentions are parsed once, when

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { SkillFeedbackKind } from "./skill-tools.ts";
 import { SkillId, SkillName, SkillRevisionHash } from "./skills.ts";
 import { AttemptId } from "./task.ts";

@@ -1,4 +1,4 @@
-import { Claim, ClaimClash, TaskId, ChannelId } from "@hobbots/domain";
+import { ChannelId, Claim, ClaimClash, TaskId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { TaskNotFound } from "./errors.ts";

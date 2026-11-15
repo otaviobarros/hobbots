@@ -4,6 +4,7 @@ import {
   CATCH_UP_MAX,
   type CatchUpInput,
   type CatchUpQuest,
+  ChannelId,
   ChapterId,
   catchUpOf,
   Decision,
@@ -13,7 +14,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   RegisteredArtifactId,
-  ChannelId,
 } from "../src/index.ts";
 
 const CHANNEL = ChannelId.make("channel-1");

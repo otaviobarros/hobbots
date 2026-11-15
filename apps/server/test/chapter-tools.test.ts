@@ -1,10 +1,10 @@
 import {
+  ChannelMemberRepository,
   ChapterService,
   ChatService,
   HobbotsRepository,
   type PromptRequest,
   START_CHAPTER_OUTSIDE_CHAT,
-  ChannelMemberRepository,
   unknownMessageText,
 } from "@hobbots/agents";
 import {
@@ -19,7 +19,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRODO, hub, messagesWhen, PIP, partyHub, send, channelId } from "./party-hub.ts";
+import { channelId, FRODO, hub, messagesWhen, PIP, partyHub, send } from "./party-hub.ts";
 
 // Issue #1381 (ADR 037): the hob ends a chapter itself with `start_chapter`, and reads back a message
 // the context pack cut with `read_message`. Both are hub tools, so Claude Code and Codex serve them

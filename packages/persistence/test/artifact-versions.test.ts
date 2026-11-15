@@ -5,6 +5,8 @@ import {
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  Channel,
+  ChannelId,
   FileChange,
   FileChangeId,
   type JournaledEvent,
@@ -12,8 +14,6 @@ import {
   roleFields,
   Task,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -110,7 +110,9 @@ const seedWork = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(
+    new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }),
+  );
   yield* sql`INSERT INTO tasks ${sql.insert({
     id: TASK,
     owner_id: ADA,

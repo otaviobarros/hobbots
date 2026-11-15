@@ -12,7 +12,7 @@ import {
   HobService,
   PermissionSummary,
 } from "@hobbots/agents";
-import { type Agent, type ApprovalRequest, roleFields, type Channel, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { type Agent, type ApprovalRequest, type Channel, roleFields, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,

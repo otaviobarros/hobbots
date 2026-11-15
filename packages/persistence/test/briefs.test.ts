@@ -1,5 +1,5 @@
 import { BriefLog, HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, type BriefDraft, roleFields, TaskId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, type BriefDraft, Channel, ChannelId, roleFields, TaskId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -44,7 +44,9 @@ const seed = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: CAMP, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(
+    new Channel({ id: CAMP, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }),
+  );
 });
 
 const draft = (fields: Partial<BriefDraft> = {}): BriefDraft => ({

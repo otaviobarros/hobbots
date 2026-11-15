@@ -1,4 +1,4 @@
-import type { Agent, AgentId, QuestId, QuestSummary, Channel } from "@hobbots/domain";
+import type { Agent, AgentId, Channel, QuestId, QuestSummary } from "@hobbots/domain";
 import { Empty } from "@hobbots/ui/components/empty";
 import { Progress } from "@hobbots/ui/components/progress";
 import { Link } from "@tanstack/react-router";
@@ -81,7 +81,11 @@ function Row({
     const { hob, channel } = row;
     const now = activity[channel.id];
     return (
-      <Link to="/hobs/$hobId/channels/$channelId" params={{ hobId: hob.id, channelId: channel.id }} className={rowClass}>
+      <Link
+        to="/hobs/$hobId/channels/$channelId"
+        params={{ hobId: hob.id, channelId: channel.id }}
+        className={rowClass}
+      >
         <HobTile hob={hob} tile="lg" />
         <Body title={channel.title} who={hob.name}>
           {now === undefined
@@ -100,7 +104,12 @@ function Row({
   const lead = hobs.get(group.quest.leadId);
   const { done, total, needs } = questProgress(summaries.get(group.quest.id));
   return (
-    <QuestLink quest={group.quest} channelAgentId={group.channelAgentId} taskId={group.quest.taskId} className={rowClass}>
+    <QuestLink
+      quest={group.quest}
+      channelAgentId={group.channelAgentId}
+      taskId={group.quest.taskId}
+      className={rowClass}
+    >
       {lead ? <HobTile hob={lead} tile="lg" /> : <span />}
       <span className="flex min-w-0 flex-col gap-0.5">
         <Body title={group.quest.goal} who={lead?.name ?? ""}>

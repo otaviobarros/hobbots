@@ -1,9 +1,9 @@
 import { Schema } from "effect";
 import { Actor, sameActor } from "./actor.ts";
+import type { Channel } from "./channel.ts";
 import { ChannelId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
-import type { Channel } from "./channel.ts";
 
 /**
  * Who is in a direct message or a camp (ADR 039, Members): a person or a hob, each one row per channel.

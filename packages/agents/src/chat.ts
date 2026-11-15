@@ -1,21 +1,26 @@
 import {
   AgentNotFound,
-  HobUnavailable,
-  type InvalidHob,
-  MessageNotQueued,
-  ReplyNotResumable,
-  type StartFreshRefused,
   ChannelArchived,
   type ChannelArchiveRefused,
   type ChannelKeyReused,
   type ChannelNotCamp,
   ChannelNotFound,
+  HobUnavailable,
+  type InvalidHob,
+  MessageNotQueued,
+  ReplyNotResumable,
+  type StartFreshRefused,
   TurnsAtLimit,
 } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
   type Brain,
+  Channel,
+  ChannelId,
+  ChannelLifecycle,
+  type ChannelMember,
+  type ChannelRunStatus,
   type ChapterId,
   type ChapterMove,
   type ChapterNotFound,
@@ -37,11 +42,6 @@ import {
   type SkillMention,
   type SkillTrial,
   type StartedFresh,
-  Channel,
-  ChannelId,
-  ChannelLifecycle,
-  type ChannelMember,
-  type ChannelRunStatus,
   type TurnRequest,
   type TurnRequestId,
   TurnRequests,
@@ -52,6 +52,9 @@ import {
 import { Context, DateTime, Deferred, Effect, Layer, Option, Ref, Semaphore } from "effect";
 import { HobAdmission, withChannelLock } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
+import { makeChannelCommands } from "./channel-commands.ts";
+import { isBusy } from "./channel-run.ts";
+import { brainFor, makeChannelRunner } from "./channel-runner.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
 import { makeMentionNotes } from "./mention-notes.ts";
@@ -64,9 +67,6 @@ import { speakerIn } from "./speaker.ts";
 import { uncertainCalls } from "./steps.ts";
 import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
-import { makeChannelCommands } from "./channel-commands.ts";
-import { isBusy } from "./channel-run.ts";
-import { brainFor, makeChannelRunner } from "./channel-runner.ts";
 import { HobTools } from "./tools.ts";
 import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
@@ -205,7 +205,10 @@ export class ChatService extends Context.Service<
     /** Renames the channel. Refused while it is archived. */
     readonly rename: (channelId: ChannelId, title: string) => Effect.Effect<Channel, ChannelNotFound | ChannelArchived>;
     /** Pins the channel to the top of its hob's chats, or unpins it. Refused while it is archived. */
-    readonly setPinned: (channelId: ChannelId, pinned: boolean) => Effect.Effect<Channel, ChannelNotFound | ChannelArchived>;
+    readonly setPinned: (
+      channelId: ChannelId,
+      pinned: boolean,
+    ) => Effect.Effect<Channel, ChannelNotFound | ChannelArchived>;
     /**
      * Makes a camp private, or public again (ADR 037): from then on, memory capture takes nothing it
      * writes while private, and what it captured before stays. Refused for a chat and while archived.
@@ -502,7 +505,6 @@ export class ChatService extends Context.Service<
             yield* findChannel(channelId),
             Effect.gen(function* () {
               const channel = yield* findChannel(channelId);
-              // standards-allow STD-ARCH-021: the hob the channel belongs to, its default answerer
               const agent = yield* repo.findAgent(channel.ownerHobId).pipe(Effect.map(Option.getOrThrow));
               return yield* body(channel, agent);
             }),
@@ -616,7 +618,10 @@ export class ChatService extends Context.Service<
         );
       });
 
-      const removeQueued = Effect.fn("ChatService.removeQueued")(function* (channelId: ChannelId, messageId: MessageId) {
+      const removeQueued = Effect.fn("ChatService.removeQueued")(function* (
+        channelId: ChannelId,
+        messageId: MessageId,
+      ) {
         yield* withChannelLock(
           admission,
           yield* findChannel(channelId),
@@ -747,7 +752,9 @@ export class ChatService extends Context.Service<
         return yield* withChannelHob(channelId, (channel, own) =>
           Effect.gen(function* () {
             // A note to self written since does not stand in the way: the hob never reads it.
-            const transcript = (yield* repo.listMessages(channelId)).filter((m) => m.status !== "queued" && hobReads(m));
+            const transcript = (yield* repo.listMessages(channelId)).filter(
+              (m) => m.status !== "queued" && hobReads(m),
+            );
             const message = transcript.at(-1);
             // The hob that wrote the reply goes on with it, in a camp it joined too.
             const writer = message === undefined ? null : replyHobOf(message, channel);
@@ -825,10 +832,9 @@ export class ChatService extends Context.Service<
         // A hob that wakes takes up its work in its channels.
         const channels = yield* channelsWaiting(agentId);
         const own = yield* Effect.filter(channels, (channelId) =>
-          repo.findChannel(channelId).pipe(
-            // standards-allow STD-ARCH-021: a hob that wakes takes up the channels it owns
-            Effect.map((channel) => Option.isSome(channel) && channel.value.ownerHobId === agentId),
-          ),
+          repo
+            .findChannel(channelId)
+            .pipe(Effect.map((channel) => Option.isSome(channel) && channel.value.ownerHobId === agentId)),
         );
         // And the requests it owes in camps it joined, which wait for it there.
         const owed = yield* Effect.filter(channels, (channelId) =>
@@ -846,7 +852,8 @@ export class ChatService extends Context.Service<
       });
 
       const wake = (channelId: ChannelId) => drainChannels([channelId]);
-      const resume = (channelId: ChannelId) => step(channelId, { _tag: "Release" }).pipe(Effect.andThen(wake(channelId)));
+      const resume = (channelId: ChannelId) =>
+        step(channelId, { _tag: "Release" }).pipe(Effect.andThen(wake(channelId)));
 
       const packSources = yield* makePackSources;
       const packPeople = yield* makePackPeople;
@@ -858,7 +865,6 @@ export class ChatService extends Context.Service<
           const transcript = (yield* repo.listMessages(channelId)).filter((m) => m.status !== "queued" && hobReads(m));
           const live = transcript.filter((m) => m.chapterId === channel.value.liveChapterId);
           // The pack shown is the one the hob the channel belongs to would start its next session from.
-          // standards-allow STD-ARCH-021: the dev view shows the owner's pack, not a turn's
           const owner = channel.value.ownerHobId;
           const people = yield* packPeople({ channel: channel.value, agent: { id: owner } });
           const sources = yield* packSources(channel.value, live, transcript, people, null);

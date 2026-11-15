@@ -1,4 +1,13 @@
-import { type Actor, AgentId, Message, MessageId, OWNER_ACTOR, Channel, ChannelId, ChannelMember } from "@hobbots/domain";
+import {
+  type Actor,
+  AgentId,
+  Channel,
+  ChannelId,
+  ChannelMember,
+  Message,
+  MessageId,
+  OWNER_ACTOR,
+} from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { buildBriefing } from "../src/briefing.ts";
 import { reasonLine, type TurnReason, turnReasonOf } from "../src/pack-people.ts";
@@ -26,7 +35,14 @@ const member = (actor: Actor) =>
     revision: 1,
   });
 
-const channel = new Channel({ id: CAMP, ownerHobId: WREN, title: "Market", kind: "camp", createdAt: NOW, updatedAt: NOW });
+const channel = new Channel({
+  id: CAMP,
+  ownerHobId: WREN,
+  title: "Market",
+  kind: "camp",
+  createdAt: NOW,
+  updatedAt: NOW,
+});
 
 const said = (actor: Actor, mentions: ReadonlyArray<Actor> = []) =>
   new Message({

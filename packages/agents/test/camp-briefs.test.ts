@@ -2,6 +2,8 @@ import {
   AgentId,
   Artifact,
   type ArtifactOrigin,
+  Channel,
+  ChannelId,
   ChapterId,
   Decision,
   DecisionId,
@@ -10,8 +12,6 @@ import {
   RegisteredArtifactId,
   Task,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -164,7 +164,12 @@ describe("what asks for a brief", () => {
       entry(6, { _tag: "ChapterStarted", channelId: other, chapter: {}, ended: null }),
       // A step or member's Task with no Quest of its own that failed or was cancelled asks for one;
       // one that only started asks for none.
-      entry(7, { _tag: "TaskStateChanged", task: { state: "failed", channelId: failedIn }, attempt: null, quest: null }),
+      entry(7, {
+        _tag: "TaskStateChanged",
+        task: { state: "failed", channelId: failedIn },
+        attempt: null,
+        quest: null,
+      }),
       entry(8, {
         _tag: "TaskStateChanged",
         task: { state: "cancelled", channelId: cancelledIn },

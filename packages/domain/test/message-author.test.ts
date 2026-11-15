@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Actor, AgentId, authorOf, Message, MessageId, replyHobOf, ChannelId } from "../src/index.ts";
+import { type Actor, AgentId, authorOf, ChannelId, Message, MessageId, replyHobOf } from "../src/index.ts";
 
 // Issue #1549 (ADR 039, A member hob works as itself; STD-ARCH-021): a message's author is its
 // actor, and only a message not stored yet falls back to the hob the channel belongs to.

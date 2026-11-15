@@ -24,11 +24,11 @@ import {
   BUILD,
   blackFriday,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   checkpoint,
   milestone,
   question,
-  CHANNEL,
   task,
   tree,
 } from "../../../test/quests.ts";

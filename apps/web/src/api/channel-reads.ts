@@ -1,4 +1,11 @@
-import { isInProgress, leavesUnread, type Message, type MessageId, type Channel, type ChannelId } from "@hobbots/domain";
+import {
+  type Channel,
+  type ChannelId,
+  isInProgress,
+  leavesUnread,
+  type Message,
+  type MessageId,
+} from "@hobbots/domain";
 import { type QueryClient, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { call } from "./client.ts";

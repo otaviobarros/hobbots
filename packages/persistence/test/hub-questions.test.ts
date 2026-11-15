@@ -1,5 +1,5 @@
 import { HobbotsRepository, HubQuestionRepository } from "@hobbots/agents";
-import { Agent, AgentId, DeviceId, HubQuestionId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, DeviceId, HubQuestionId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";

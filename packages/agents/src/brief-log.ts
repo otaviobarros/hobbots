@@ -1,4 +1,4 @@
-import type { Brief, BriefDraft, EventEnvelope, TaskId, ChannelId } from "@hobbots/domain";
+import type { Brief, BriefDraft, ChannelId, EventEnvelope, TaskId } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
 /** Where the projector's cursor and the briefs are kept. */

@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, INBOX_HISTORY, MessageId, ChannelId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, ChannelId, INBOX_HISTORY, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { inboxWindow } from "../../api/inbox-window.ts";
 import { selectedRequest, tabRequests } from "./inbox-items.ts";

@@ -13,14 +13,14 @@ import {
   Agent,
   AgentId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   type CheckpointKind,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HobbotsRepository } from "@hobbots/agents";
-import { Agent, AgentId, type AgentStatus, Message, MessageId, OWNER_ACTOR, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, type AgentStatus, Channel, ChannelId, Message, MessageId, OWNER_ACTOR } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";

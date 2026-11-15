@@ -23,13 +23,13 @@ import { HubQuestionsRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type GitHubUser,
   type GitIdentity,
   type HobGitHubApp,
   type HubQuestion,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,

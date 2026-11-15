@@ -6,6 +6,9 @@ import {
   type AgentId,
   AgentStatus,
   type ChangeActor,
+  Channel,
+  ChannelCheckpoint,
+  ChannelId,
   ChapterId,
   type Committed,
   type HobPolicy,
@@ -20,9 +23,6 @@ import {
   type ReplyUsage,
   type Retiring,
   type SkillUse,
-  Channel,
-  ChannelCheckpoint,
-  ChannelId,
   type TurnRequestId,
   TurnRequests,
   UnreadChannels,
@@ -31,15 +31,15 @@ import {
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { answerersIn } from "./answerer-reads.ts";
-import { makeCampWrites, channelColumns } from "./camps.ts";
+import { channelColumns, makeCampWrites } from "./camps.ts";
+import { liveChapterColumn, memberUnread } from "./channel-columns.ts";
+import { markMemberRead, startMembersIn } from "./channel-member-rows.ts";
 import { makeChapterMoves } from "./chapter-moves.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { joinedMentions, mentionsToStore, parseMentions, type StoredMentions } from "./message-mentions.ts";
 import { mayComplete, mayRelay, relaysFor, stopWasAsked } from "./relays.ts";
 import { insertSkillUse } from "./skill-uses.ts";
-import { liveChapterColumn, memberUnread } from "./channel-columns.ts";
-import { markMemberRead, startMembersIn } from "./channel-member-rows.ts";
 import {
   insertRequest,
   requestsFor,

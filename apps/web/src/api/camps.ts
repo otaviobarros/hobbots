@@ -1,12 +1,12 @@
 import type { MakeCampPayload } from "@hobbots/api";
-import { type AgentId, type Chapter, type Channel, type ChannelId, ChannelLifecycle } from "@hobbots/domain";
+import { type AgentId, type Channel, type ChannelId, ChannelLifecycle, type Chapter } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chaptersMoved } from "./chapters.ts";
 import { call } from "./client.ts";
 import { recordsMoved } from "./notes.ts";
 import { placeChannel, queryKeys } from "./queries.ts";
 import { questionsMoved } from "./questions.ts";
-import { recordMovedMessages, recordChannel } from "./sync.ts";
+import { recordChannel, recordMovedMessages } from "./sync.ts";
 import { channelTasksMoved } from "./tasks.ts";
 
 // Make a camp and Start fresh (ADR 037). Both take a key the client makes, which becomes the new

@@ -1,16 +1,16 @@
 import {
+  ChannelMemberRepository,
   ChapterService,
   ChatService,
   HobbotsRepository,
   type PromptRequest,
-  ChannelMemberRepository,
   WEB_MARK_NOTE,
 } from "@hobbots/agents";
-import { ChapterId, hobActor, OWNER_ACTOR, Channel } from "@hobbots/domain";
+import { Channel, ChapterId, hobActor, OWNER_ACTOR } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, messagesWhen, PIP, partyHub, send, channelId } from "./party-hub.ts";
+import { channelId, FRODO, messagesWhen, PIP, partyHub, send } from "./party-hub.ts";
 
 // Issue #1463 (ADR 039, Hobs talking to hobs; ADR 036, The read-the-web mark): a hob whose session
 // read the web writes what a page said into its reply, and a reply that mentions another hob wakes

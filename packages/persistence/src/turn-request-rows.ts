@@ -1,11 +1,11 @@
 import {
   type Actor,
   type AnswerOwed,
+  type ChannelId,
   type Line,
   type Message,
   type MessageId,
   relayStateFor,
-  type ChannelId,
   TurnRequest,
   type TurnRequestEvent,
   TurnRequestId,

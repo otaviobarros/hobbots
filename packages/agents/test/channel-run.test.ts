@@ -1,8 +1,11 @@
-import { AgentId, MessageId, mainLine, type ReplyActivity, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, MessageId, mainLine, type ReplyActivity } from "@hobbots/domain";
 import { agreesWithModel } from "@hobbots/domain/machine-testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  type ChannelRun,
+  type ChannelRunEvent,
+  ChannelRunMachine,
   idleRun,
   isAtRest,
   isBusy,
@@ -10,9 +13,6 @@ import {
   RUN_STATES,
   type RunState,
   runStatus,
-  type ChannelRun,
-  type ChannelRunEvent,
-  ChannelRunMachine,
 } from "../src/channel-run.ts";
 
 // The machine compares replies by identity only, so plain objects stand in for them.

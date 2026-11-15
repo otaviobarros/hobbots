@@ -14,17 +14,17 @@ import {
   type RuntimeEvent,
 } from "@hobbots/agents";
 import type { MembersReport } from "@hobbots/api";
-import { Agent, AgentId, type Message, type Channel, type ChannelMember } from "@hobbots/domain";
+import { Agent, AgentId, type Channel, type ChannelMember, type Message } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
-  ChannelMemberRepositoryLive,
   UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

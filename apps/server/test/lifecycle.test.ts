@@ -203,7 +203,12 @@ describe("retiring hobs", () => {
 
     await request("POST", `/api/channels/${channel.id}/messages`, { content: "again" });
     await settled(channel.id);
-    expect((await messages(channel.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello", "again", "Echo: again"]);
+    expect((await messages(channel.id)).map((m) => m.content)).toEqual([
+      "hello",
+      "Echo: hello",
+      "again",
+      "Echo: again",
+    ]);
     // Bringing back an active hob changes nothing; a paused one is refused, and an unknown one is not found.
     expect((await request("POST", `/api/agents/${agent.id}/bring-back`)).body).toMatchObject({ status: "active" });
     await request("POST", `/api/agents/${agent.id}/pause`);

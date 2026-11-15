@@ -25,6 +25,7 @@ import {
   Agent,
   AgentId,
   ApprovalId,
+  ChannelId,
   type CharmCall,
   Device,
   DeviceId,
@@ -37,7 +38,6 @@ import {
   OWNER_USER_ID,
   type PolicyDecision,
   type SafetyPreset,
-  ChannelId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";

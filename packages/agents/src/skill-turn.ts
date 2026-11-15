@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  type ChannelId,
   type HobPolicy,
   heldCharms,
   type MessageId,
@@ -9,7 +10,6 @@ import {
   SkillUse,
   SkillUseId,
   skillMentionOf,
-  type ChannelId,
   type TurnSkill,
   type UsedSkill,
 } from "@hobbots/domain";

@@ -22,14 +22,14 @@ import {
   AgentId,
   type ApprovalLifetime,
   type ApprovalRequest,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type PolicyOverrides,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";

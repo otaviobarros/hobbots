@@ -2,6 +2,9 @@ import { ChapterRepository, HobbotsRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelCheckpoint,
+  ChannelId,
   ChapterId,
   type ChapterRefusal,
   ChapterRefused,
@@ -11,9 +14,6 @@ import {
   MessageId,
   OWNER_ACTOR,
   roleFields,
-  Channel,
-  ChannelCheckpoint,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -298,7 +298,16 @@ describe("chapters in the database", () => {
       // A channel saved again keeps its one chapter.
       yield* repo.upsertChannel(new Channel({ ...channel.value, title: "Renamed" }));
       const chapters = yield* (yield* ChapterRepository).listChapters(ChannelId.make("lamps"));
-      return { channel: channel.value, secondLive, resting, unknownState, orphan, saved: saved.value, cleared, chapters };
+      return {
+        channel: channel.value,
+        secondLive,
+        resting,
+        unknownState,
+        orphan,
+        saved: saved.value,
+        cleared,
+        chapters,
+      };
     }).pipe(Effect.provide(layer), Effect.runPromise);
 
     expect(Exit.isFailure(result.secondLive)).toBe(true);
@@ -598,7 +607,8 @@ describe("chapters in the database", () => {
           messageId: MessageId.make("v3"),
           title: "Later",
         });
-        const unread = () => repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
+        const unread = () =>
+          repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
         const afterSplit = {
           messages: yield* revisions(),
           unread: yield* unread(),
@@ -641,7 +651,11 @@ describe("chapters in the database", () => {
     // A split leaves the first chapter's session, which is resting; the merge makes it live again
     // and drops it, so it is never resumed.
     expect(result.afterSplit.channel.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
-    expect(result.afterMerge.channel).toMatchObject({ liveChapterId: result.first, liveChapterMerges: 1, sessions: [] });
+    expect(result.afterMerge.channel).toMatchObject({
+      liveChapterId: result.first,
+      liveChapterMerges: 1,
+      sessions: [],
+    });
   });
 
   // covers ADR 037 (Chapters), STD-ARCH-014

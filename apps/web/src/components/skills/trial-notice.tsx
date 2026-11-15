@@ -1,4 +1,4 @@
-import { skillTitle, type Channel } from "@hobbots/domain";
+import { type Channel, skillTitle } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { draftGone, skillTrialDraftQuery } from "../../api/skill-trials.ts";

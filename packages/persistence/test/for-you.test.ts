@@ -1,11 +1,11 @@
 import {
   ApprovalRepository,
   CatchUps,
+  ChannelMemberRepository,
   ForYouList,
   ForYouRepository,
   HobbotsRepository,
   RecordRepository,
-  ChannelMemberRepository,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
@@ -14,6 +14,8 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  Channel,
+  ChannelId,
   DecisionId,
   DeviceId,
   hobActor,
@@ -21,8 +23,6 @@ import {
   MessageId,
   OWNER_ACTOR,
   OWNER_USER_ID,
-  Channel,
-  ChannelId,
   UserId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
@@ -31,12 +31,12 @@ import { describe, expect, it } from "vitest";
 import {
   ApprovalRepositoryLive,
   CatchUpRepositoryLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   ForYouRepositoryLive,
   HobbotsRepositoryLive,
   RecordRepositoryLive,
   TaskRepositoryLive,
-  ChannelMemberRepositoryLive,
 } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 

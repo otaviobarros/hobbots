@@ -1,12 +1,12 @@
 import {
   type AskAnswer,
+  type ChannelId,
   type EventEnvelope,
   type FindKind,
   type FindResult,
   type FoundRecord,
   isCrossedOut,
   type JournaledEvent,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, type Duration, Effect, Layer, Option, Schema } from "effect";
 import { clip } from "./briefing.ts";
@@ -90,7 +90,9 @@ export class FindIndexer extends Context.Service<FindIndexer, FindIndexerShape>(
     Effect.gen(function* () {
       const log = yield* FindIndexLog;
       return FindIndexer.of({
-        runOnce: projectorRound("Find index", log, (entries, sequence) => log.index(sequence, channelsTouched(entries))),
+        runOnce: projectorRound("Find index", log, (entries, sequence) =>
+          log.index(sequence, channelsTouched(entries)),
+        ),
       });
     }),
   );

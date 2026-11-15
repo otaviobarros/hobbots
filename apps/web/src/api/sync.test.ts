@@ -1,4 +1,4 @@
-import { AgentId, Chapter, ChapterId, Message, MessageId, Channel, ChannelId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, Chapter, ChapterId, Message, MessageId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applyEvent } from "./events.ts";

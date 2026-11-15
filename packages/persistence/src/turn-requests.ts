@@ -2,6 +2,9 @@ import { type HobbotsRepository, passStands } from "@hobbots/agents";
 import { ChannelArchived } from "@hobbots/api";
 import {
   type Actor,
+  type Channel,
+  type ChannelId,
+  type ChannelMember,
   isActiveMember,
   type JournaledEvent,
   type Line,
@@ -10,24 +13,21 @@ import {
   type MessageId,
   planMemberRemove,
   QueuedMessageTransitions,
-  type Channel,
-  type ChannelId,
-  type ChannelMember,
   type TurnRequest,
   type TurnRequestId,
   TurnRequests,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
-import type { makeJournaled, makeJournaledChange } from "./journal.ts";
 import { movedMember, saveState, selectMembers } from "./channel-member-rows.ts";
+import type { makeJournaled, makeJournaledChange } from "./journal.ts";
 import {
+  selectChannelsWaiting,
   selectOpenRequests,
   selectOpenRequestsOf,
   selectRequestsById,
   selectRequestsIn,
   selectRequestsOfReply,
-  selectChannelsWaiting,
   selectWaitingOf,
   stepRequests,
 } from "./turn-request-rows.ts";
@@ -130,7 +130,12 @@ export const makeTurnRequestWrites = (
       const passed = yield* stepRequests(sql, speaking, { _tag: "Pass", reason });
       yield* stepRequests(sql, yield* selectOpenRequestsOf(sql, "message_id", [replyId]), { _tag: "Drop", by: null });
       const events = passed.map(
-        (request): JournaledEvent => ({ _tag: "TurnPassed", channelId: request.channelId, messageId: replyId, request }),
+        (request): JournaledEvent => ({
+          _tag: "TurnPassed",
+          channelId: request.channelId,
+          messageId: replyId,
+          request,
+        }),
       );
       return { value: passed, events };
     });

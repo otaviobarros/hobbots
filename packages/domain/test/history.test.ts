@@ -7,6 +7,7 @@ import {
   type ApprovalState,
   Attempt,
   AttemptId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   Delegation,
   DelegationId,
@@ -23,7 +24,6 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ChannelId,
 } from "../src/index.ts";
 
 const ALDRIC = AgentId.make("aldric");

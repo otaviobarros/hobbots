@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Brief, type BriefDraft, briefChange, briefSourceOf, HUB_ACTOR, ChannelId } from "../src/index.ts";
+import { Brief, type BriefDraft, briefChange, briefSourceOf, ChannelId, HUB_ACTOR } from "../src/index.ts";
 
 // Issue #1384 (ADR 037, Records): a brief is rewritten by the hub's projector. A draft from no
 // further along the journal than the stored brief never writes, a failed brain never replaces a

@@ -1,7 +1,7 @@
-import { type MemorySave, MessageId, ChannelId } from "@hobbots/domain";
+import { ChannelId, type MemorySave, MessageId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { applyMemorySave, refreshMemorySaves, channelMemorySavesQuery } from "./memory-saves.ts";
+import { applyMemorySave, channelMemorySavesQuery, refreshMemorySaves } from "./memory-saves.ts";
 
 const channel = ChannelId.make("channel-1");
 

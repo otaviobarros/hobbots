@@ -2,6 +2,8 @@ import {
   type AgentConfiguration,
   type AgentId,
   type Brain,
+  type Channel,
+  type ChannelId,
   type Committed,
   liveSession,
   Message,
@@ -14,8 +16,6 @@ import {
   systemInstructions,
   type TaskBriefMark,
   type TaskId,
-  type Channel,
-  type ChannelId,
   type TurnEnding,
   toolsSucceeded,
   type WebReadMark,
@@ -23,6 +23,7 @@ import {
 import { DateTime, Effect, Option, Ref, Semaphore, Stream } from "effect";
 import { ApprovalService } from "./approvals.ts";
 import { contextBlock } from "./briefing.ts";
+import type { Reply } from "./channel-run.ts";
 import { type CharmTurn, hubToolOffer, joinHubTools, type WebRecordPlace } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import type { CarriedWork } from "./continuations.ts";
@@ -50,7 +51,6 @@ import type { Speaker } from "./speaker.ts";
 import { nextSteps, replyStepId } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
-import type { Reply } from "./channel-run.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import type { makeTurnGrants } from "./turn-grants.ts";

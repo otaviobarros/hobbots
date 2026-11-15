@@ -3,20 +3,20 @@ import {
   type AgentId,
   type Attempt,
   type BackpackItem,
+  type ChannelId,
   isLiveAttempt,
   isTerminalTask,
   type StaleBackpackClaim,
   type Task,
   type TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import {
   arrivalsText,
   Backpack,
   type BackpackScope,
   BackpackTurnFailed,
-  carryingTask,
   carryingChannel,
+  carryingTask,
   continuationTask,
   type Delivery,
   Dispatcher,
@@ -282,7 +282,9 @@ export const WakeOnArrival = Layer.effectDiscard(
         : Effect.all([
             item.channelId === null ? Effect.void : chat.wake(item.channelId),
             Option.isSome(signal) ? signal.value.notify : Effect.void,
-          ]).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not wake a channel for its hob's work", cause)));
+          ]).pipe(
+            Effect.catchCause((cause) => Effect.logWarning("Could not wake a channel for its hob's work", cause)),
+          );
     // An Attempt that ended frees its Task: a member's work that waited behind it can start now.
     const freed = (attempt: Attempt | null) =>
       attempt === null || isLiveAttempt(attempt.state) || Option.isNone(signal) ? Effect.void : signal.value.notify;

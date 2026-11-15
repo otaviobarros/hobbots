@@ -22,6 +22,8 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -30,8 +32,6 @@ import {
   SkillName,
   SkillRevisionHash,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { MemoryEngine } from "@hobbots/memory";
 import {

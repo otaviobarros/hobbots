@@ -2,13 +2,13 @@ import {
   AgentId,
   Attempt,
   AttemptId,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   Task,
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { stepPrompt } from "../src/briefs.ts";

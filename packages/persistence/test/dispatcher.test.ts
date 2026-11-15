@@ -4,6 +4,8 @@ import {
   AgentId,
   AttemptId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   type Committed,
   carriedFrom,
@@ -12,8 +14,6 @@ import {
   openBlocker,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import {
   Backpack,

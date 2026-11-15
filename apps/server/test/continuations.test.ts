@@ -3,6 +3,7 @@ import {
   ApprovalService,
   type CarriedWork,
   type CarryingTurn,
+  ChannelMemberRepository,
   ChatService,
   Continuations,
   HobAdmission,
@@ -13,7 +14,6 @@ import {
   RuntimeAdapter,
   TaskControls,
   TaskRepository,
-  ChannelMemberRepository,
   TurnSlots,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
@@ -24,6 +24,8 @@ import {
   ApprovalRequest,
   AttemptId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -35,8 +37,6 @@ import {
   OWNER_USER_ID,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
@@ -52,11 +52,11 @@ import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
-  ChannelMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";

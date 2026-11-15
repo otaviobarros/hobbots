@@ -1,7 +1,7 @@
-import { CatchUp, Message, MessageId, MessagePin, NOTE_TEXT_MAX, ChannelId } from "@hobbots/domain";
+import { CatchUp, ChannelId, Message, MessageId, MessagePin, NOTE_TEXT_MAX } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { MessageKeyReused, MessageNotFound, ChannelArchived, ChannelNotFound } from "./errors.ts";
+import { ChannelArchived, ChannelNotFound, MessageKeyReused, MessageNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** A note to self (ADR 037); `key` becomes its id, so the same note sent again is written once. */

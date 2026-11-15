@@ -1,17 +1,17 @@
-import { ChatService, HobAdmission, HobbotsRepository, HobTools, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, ChatService, HobAdmission, HobbotsRepository, HobTools } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
+  type ChannelRunStatus,
   hobActor,
   isInProgress,
   Message,
   MessageId,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
-  type ChannelRunStatus,
 } from "@hobbots/domain";
-import { HobbotsRepositoryLive, ChannelMemberRepositoryLive } from "@hobbots/persistence";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, PubSub, Schedule } from "effect";

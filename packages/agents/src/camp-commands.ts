@@ -1,17 +1,17 @@
-import { AgentNotFound, StartFreshRefused, ChannelKeyReused } from "@hobbots/api";
+import { AgentNotFound, ChannelKeyReused, StartFreshRefused } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
-  type ChapterId,
-  DEFAULT_CHANNEL_TITLE,
-  StartedFresh,
   Channel,
   type ChannelId,
   ChannelLifecycle,
+  type ChapterId,
+  DEFAULT_CHANNEL_TITLE,
+  StartedFresh,
 } from "@hobbots/domain";
 import { Data, DateTime, Effect, Option, Schedule } from "effect";
-import { type ChapterMoveTarget, HobbotsRepository } from "./repository.ts";
 import { archiveBlockersOf, type ChannelCommandsDeps } from "./channel-commands.ts";
+import { type ChapterMoveTarget, HobbotsRepository } from "./repository.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376). Each is a command: it reads under the hob's lock,
 // runs the channel's lifecycle where one changes, and commits the channels, what moves and the journal
@@ -126,7 +126,6 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         }
         const chat = new Channel({
           id: key,
-          // standards-allow STD-ARCH-021: the new chat belongs to the same hob
           ownerHobId: channel.ownerHobId,
           title: DEFAULT_CHANNEL_TITLE,
           kind: "direct",
@@ -162,7 +161,6 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
       Effect.gen(function* () {
         if (request._tag === "camp") return { _tag: "camp", campId: request.campId } satisfies ChapterMoveTarget;
         // The same camp asked for again is answered as it is, whatever the hob does now.
-        // standards-allow STD-ARCH-021: a camp made from a chapter is led by the hob the chapter belongs to
         const hobs = othersOf(channel.ownerHobId, request.hobs);
         if (Option.isNone(yield* repo.findChannel(request.key))) {
           yield* requireActive(agent);
@@ -171,7 +169,6 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         const now = yield* nowIso;
         const camp = new Channel({
           id: request.key,
-          // standards-allow STD-ARCH-021: a camp made from a chapter belongs to the same hob
           ownerHobId: channel.ownerHobId,
           title: request.title,
           kind: "camp",

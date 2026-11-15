@@ -9,8 +9,8 @@ import {
   agentsQuery,
   archivedAgentsQuery,
   archivedChannelsQuery,
-  messagesQuery,
   channelsQuery,
+  messagesQuery,
 } from "../../api/queries.ts";
 import { formatDay, formatWhen } from "../../lib/time.ts";
 import { MessageRow, useScrollToMessage } from "../chat/message-row.tsx";
@@ -52,7 +52,10 @@ export function ArchivedChatPage({
   const navigate = useNavigate();
   const actions = useArchiveActions();
   const hob = useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === hobId) });
-  const archived = useQuery({ ...archivedChannelsQuery(hobId), select: (list) => list.find((t) => t.id === channelId) });
+  const archived = useQuery({
+    ...archivedChannelsQuery(hobId),
+    select: (list) => list.find((t) => t.id === channelId),
+  });
   const live = useQuery({ ...channelsQuery(hobId), select: (list) => list.some((t) => t.id === channelId) });
   const channel = archived.data;
 

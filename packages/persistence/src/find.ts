@@ -1,5 +1,6 @@
 import { FindIndex, FindIndexLog, type FindScope } from "@hobbots/agents";
 import {
+  type ChannelId,
   FIND_KINDS,
   type FindKind,
   FoundMessage,
@@ -7,7 +8,6 @@ import {
   searchTerms,
   searchWords,
   snippetOf,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";

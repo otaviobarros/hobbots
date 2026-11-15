@@ -3,12 +3,12 @@ import { HobUnavailable } from "@hobbots/api";
 import {
   type Actor,
   AgentId,
-  type JournaledEvent,
-  type MemberEvent,
   type Channel,
   type ChannelId,
   ChannelMember,
   ChannelMembers,
+  type JournaledEvent,
+  type MemberEvent,
 } from "@hobbots/domain";
 import { Effect, Option, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";

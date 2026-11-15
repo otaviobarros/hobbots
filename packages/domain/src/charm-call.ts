@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AgentId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 
 /**
  * A Charm's write, recorded with its key before anything is sent (ADR 020, ADR 031), so a retried

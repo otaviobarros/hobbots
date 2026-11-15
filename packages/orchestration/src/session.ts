@@ -37,6 +37,7 @@ import {
   type AgentConfiguration,
   type AgentId,
   type AttemptId,
+  type ChannelId,
   endedSteps,
   previewToolOutput,
   type ReplyStep,
@@ -46,7 +47,6 @@ import {
   stripEscapes,
   systemInstructions,
   type TaskId,
-  type ChannelId,
   usageLimitOutcome,
   type WebReadMark,
 } from "@hobbots/domain";

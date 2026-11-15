@@ -1,5 +1,5 @@
-import type { TaskTreeRead, ChannelTasksRead } from "@hobbots/api";
-import type { TaskId, ChannelId } from "@hobbots/domain";
+import type { ChannelTasksRead, TaskTreeRead } from "@hobbots/api";
+import type { ChannelId, TaskId } from "@hobbots/domain";
 import { type QueryClient, type QueryFunctionContext, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { syncState } from "./sync.ts";

@@ -1,4 +1,4 @@
-import { AskAnswer, FIND_QUERY_MAX, FindKind, FindResult, SearchHit, ChannelId } from "@hobbots/domain";
+import { AskAnswer, ChannelId, FIND_QUERY_MAX, FindKind, FindResult, SearchHit } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { DeviceSession } from "./user-session.ts";

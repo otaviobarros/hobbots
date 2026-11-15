@@ -5,13 +5,13 @@ import {
   AgentId,
   type AnswerPlace,
   answerersFor,
+  Channel,
+  ChannelId,
+  ChannelMember,
   type MemberState,
   MentionRefused,
   type RunningQuest,
   type SaidMessage,
-  Channel,
-  ChannelId,
-  ChannelMember,
 } from "../src/index.ts";
 
 // Issue #1460 (ADR 039, Who answers): answerersFor decides from the message and the members alone

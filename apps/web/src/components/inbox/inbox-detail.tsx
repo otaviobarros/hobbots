@@ -11,13 +11,13 @@ import {
   type AnyOperation,
   type ApprovalRequest,
   type BackpackItem,
+  type ChannelId,
   exactAction,
   type FailedTask,
   type HubQuestion,
   type MemoryShare,
   type Quest,
   type TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
@@ -57,7 +57,7 @@ import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.ts
 import { proposalFoot } from "../skill-review/proposal-model.ts";
 import { webAskOf } from "../web/web-ask.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
-import { entryRow, entryChannel, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
+import { entryChannel, entryRow, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
 import { expiryText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";

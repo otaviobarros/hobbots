@@ -3,9 +3,9 @@ import type {
   ArtifactNotCopied,
   ExportedArtifact,
   ExportedAttempt,
+  ExportedChannel,
   ExportedMessage,
   ExportedTask,
-  ExportedChannel,
   ExportedTree,
   HobbotsExport,
 } from "@hobbots/domain";
@@ -55,7 +55,6 @@ const messageBlock = (message: ExportedMessage, names: ExportNames): string => {
 /** One channel: who wrote each message and when, the replies, and each tool step as one line with its outcome. */
 export const channelMarkdown = (channel: ExportedChannel, names: ExportNames): string => {
   const about = [
-    // standards-allow STD-ARCH-021: an export names whose channel it is
     nameOf(names, channel.agentId),
     `started ${when(channel.createdAt)}`,
     ...(channel.archivedAt === null ? [] : [`archived ${when(channel.archivedAt)}`]),

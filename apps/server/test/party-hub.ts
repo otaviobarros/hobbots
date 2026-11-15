@@ -29,6 +29,8 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
@@ -37,8 +39,6 @@ import {
   type SafetyPreset,
   type Task,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
@@ -49,13 +49,13 @@ import {
   ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   ChapterRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
   SupervisionRecordsLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
-  ChannelMemberRepositoryLive,
   UsageLedger,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

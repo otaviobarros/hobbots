@@ -1,9 +1,9 @@
 import {
   blockedSiteFor,
+  type ChannelId,
   estimatedTokens,
   type Task,
   type TaskId,
-  type ChannelId,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_LABEL,
   WEB_FETCH_TOOL,
@@ -579,7 +579,10 @@ export const makeWebTools = <V extends WebVerdict>(
               if (pages >= limits.pagesPerTurn) {
                 return yield* new HubRefusal({ message: webLimitReason.pagesPerTurn(limits) });
               }
-              const session: WebSession = { channelId: turn.channelId, ...(turn.taskId ? { taskId: turn.taskId } : {}) };
+              const session: WebSession = {
+                channelId: turn.channelId,
+                ...(turn.taskId ? { taskId: turn.taskId } : {}),
+              };
               const found = (yield* provenance.sources(session, [url.href])).has(url.href);
               // A URL the hob wrote is not looked up before you approve it: its name could carry your data.
               const target = found ? yield* fetcher.resolve(url).pipe(Effect.mapError(refused)) : null;

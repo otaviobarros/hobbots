@@ -4,11 +4,11 @@ import {
   type AgentId,
   AgentStatus,
   ChangeActor,
+  ChannelId,
   type HobChange,
   type HobChangeOrigin,
   MessageId,
   scopeWork,
-  ChannelId,
   YOU,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";

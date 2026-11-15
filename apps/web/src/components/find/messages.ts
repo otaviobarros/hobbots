@@ -1,4 +1,4 @@
-import type { AskWithoutAnswer, RegisteredArtifactKind, ChannelKind } from "@hobbots/domain";
+import type { AskWithoutAnswer, ChannelKind, RegisteredArtifactKind } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
 import type { FindGroupKind } from "./find-model.ts";
 

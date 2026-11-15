@@ -5,10 +5,10 @@ import {
   ApprovalLifetime,
   ApprovalRequest,
   ApprovalSurface,
+  ChannelId,
   Grant,
   GrantId,
   GrantRule,
-  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -18,9 +18,9 @@ import {
   ApprovalNotConfirmed,
   ApprovalNotFound,
   ApprovalNotGrantable,
+  ChannelNotFound,
   GrantNotFound,
   GrantRuleRefused,
-  ChannelNotFound,
 } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 

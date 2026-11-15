@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  ChannelId,
   Chapter,
   type ChapterEvent,
   ChapterId,
@@ -15,7 +16,6 @@ import {
   planMerge,
   planSplit,
   planStart,
-  ChannelId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 

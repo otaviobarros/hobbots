@@ -233,7 +233,12 @@ export const finishedQuest = (payload: unknown): FinishedQuest | null => {
   const leadId = text(quest?.leadId);
   if (id === null || goal === null || leadId === null) return null;
   if (quest?.state !== "completed" || quest.parentQuestId !== null) return null;
-  return { id, goal: firstLine(goal), leadId, link: taskLink(leadId, { id: quest.taskId, channelId: quest.channelId }) };
+  return {
+    id,
+    goal: firstLine(goal),
+    leadId,
+    link: taskLink(leadId, { id: quest.taskId, channelId: quest.channelId }),
+  };
 };
 
 /** The notification for a finished Quest: its goal is done, cut to fit, and whose chat has the finish. */

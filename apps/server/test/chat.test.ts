@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Charms, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
-import { Agent, AgentId, EMPTY_HOB_POLICY, isInProgress, Message, MessageId, type ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, type ChannelId, EMPTY_HOB_POLICY, isInProgress, Message, MessageId } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

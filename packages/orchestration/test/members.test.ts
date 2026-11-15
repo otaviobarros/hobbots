@@ -1,6 +1,7 @@
 import type { ToolAccess } from "@hobbots/agents";
 import {
   AgentId,
+  ChannelId,
   Delegation,
   DelegationId,
   EMPTY_HOB_POLICY,
@@ -11,7 +12,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberPrompt } from "../src/briefs.ts";

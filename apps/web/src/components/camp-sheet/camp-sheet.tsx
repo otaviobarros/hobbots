@@ -1,4 +1,4 @@
-import { type Agent, isNote, type MessageId, type TaskId, type Channel } from "@hobbots/domain";
+import { type Agent, type Channel, isNote, type MessageId, type TaskId } from "@hobbots/domain";
 import { Sheet, SheetCloseButton, SheetContent, SheetHeader, SheetTitle } from "@hobbots/ui/components/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";

@@ -2,13 +2,13 @@ import type { HobToday } from "@hobbots/api";
 import {
   AgentId,
   AgentStatus,
+  type ChannelId,
   type HobUsage,
   type MinuteUsage,
   QuestId,
   type QuestSpend,
   type QuestUsage,
   RuntimeKind,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -103,7 +103,11 @@ export class UsageLedger extends Context.Service<
      * What each hob's settled replies in one channel used from `since` until `until` (ADR 039, Status
      * and cost), from the same columns as `usage`, and when each hob last answered there at all.
      */
-    readonly channelUsage: (channelId: ChannelId, since: string, until: string) => Effect.Effect<ReadonlyArray<HobToday>>;
+    readonly channelUsage: (
+      channelId: ChannelId,
+      since: string,
+      until: string,
+    ) => Effect.Effect<ReadonlyArray<HobToday>>;
     /**
      * What a top Quest's whole party spent, ever (#1449): its replies and turns outside a chat, as
      * `usage` attributes them, a sub-quest's included.

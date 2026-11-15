@@ -8,7 +8,7 @@ import {
   type RuntimeEvent,
   type ToolStartedEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, isInProgress, type Message, type ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, type ChannelId, isInProgress, type Message } from "@hobbots/domain";
 import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Context, Deferred, Effect, Layer, Schedule, Stream } from "effect";

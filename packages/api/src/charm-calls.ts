@@ -1,7 +1,7 @@
-import { CharmCall, MessageId, Task, TaskId, ChannelId } from "@hobbots/domain";
+import { ChannelId, CharmCall, MessageId, Task, TaskId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { CharmCallNotFound, CharmCallSettled, ChannelNotFound } from "./errors.ts";
+import { ChannelNotFound, CharmCallNotFound, CharmCallSettled } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** How the user settles an uncertain Charm call, after looking on GitHub (ADR 020, ADR 038). */

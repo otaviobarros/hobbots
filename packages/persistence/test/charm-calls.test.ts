@@ -3,12 +3,12 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  ChannelId,
   CharmCall,
   MessageId,
   OWNER_ACTOR,
   OWNER_USER_ID,
   TaskId,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
@@ -191,7 +191,14 @@ describe("Charm call records", () => {
         const missing = yield* service.settle(step("toolu_9"), "applied").pipe(Effect.flip, Effect.provide(user));
         // Not sent frees the key: the same call may be made again.
         const retried = yield* calls.begin(call("k1"));
-        return { sending, settled, again, missing, retried, listed: yield* service.listForChannel(ChannelId.make("t1")) };
+        return {
+          sending,
+          settled,
+          again,
+          missing,
+          retried,
+          listed: yield* service.listForChannel(ChannelId.make("t1")),
+        };
       }),
     );
     expect(result.sending).toMatchObject({ _tag: "CharmCallSettled", state: "sending" });

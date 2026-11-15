@@ -1,6 +1,6 @@
 import { ApprovalId, ApprovalRequest, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { COPY, memberApproval, QUILL, CHANNEL } from "../../test/quests.ts";
+import { CHANNEL, COPY, memberApproval, QUILL } from "../../test/quests.ts";
 import { approvalEntry } from "./inbox-entries.ts";
 import { inScope, inSearch, waitingIn } from "./inbox-scope.ts";
 

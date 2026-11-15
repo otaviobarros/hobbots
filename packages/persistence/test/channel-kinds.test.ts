@@ -159,9 +159,9 @@ describe("0095_thread_kinds", () => {
       "cy-b": ["camp", "open", "B"],
       "di-trial": ["camp", "open", "Try"],
     });
-    expect(result.channels.every((channel) => channel.goal === null && !channel.private && channel.origin === null)).toBe(
-      true,
-    );
+    expect(
+      result.channels.every((channel) => channel.goal === null && !channel.private && channel.origin === null),
+    ).toBe(true);
     // Each journaled channel decodes with the kind it has now and the state its own entry said.
     // 0099 then took each entry on to version 5, with its chapter.
     expect(result.entries.map((entry) => entry.schemaVersion)).toEqual(result.entries.map(() => 5));

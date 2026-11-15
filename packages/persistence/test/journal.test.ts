@@ -2,12 +2,12 @@ import { HobbotsRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EVENT_SCHEMA_VERSIONS,
   Message,
   MessageId,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";

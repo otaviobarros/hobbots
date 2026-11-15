@@ -1,22 +1,22 @@
-import { AgentNotFound, HobUnavailable, ChannelArchived, ChannelNotFound } from "@hobbots/api";
+import { AgentNotFound, ChannelArchived, ChannelNotFound, HobUnavailable } from "@hobbots/api";
 import {
   type Actor,
   AgentId,
-  hobStanding,
-  MemberRefused,
   type Channel,
   type ChannelId,
   type ChannelMember,
   ChannelMembers,
+  hobStanding,
+  MemberRefused,
   takesNewWork,
   UserId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { HobAdmission, withChannelLock } from "./admission.ts";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { ChatService } from "./chat.ts";
 import { announcer, announcing, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { ChannelMemberRepository } from "./channel-members.ts";
 import { sessionActor, UserRepository } from "./users.ts";
 
 /**
@@ -35,7 +35,10 @@ export class CampMembers extends Context.Service<
     readonly add: (
       channelId: ChannelId,
       actor: Actor,
-    ) => Effect.Effect<ChannelMember, ChannelNotFound | ChannelArchived | AgentNotFound | HobUnavailable | MemberRefused>;
+    ) => Effect.Effect<
+      ChannelMember,
+      ChannelNotFound | ChannelArchived | AgentNotFound | HobUnavailable | MemberRefused
+    >;
     /**
      * Takes a member out of the camp, by the person asking. A hob's answers still waiting there are
      * dropped with it, and a reply it is writing is stopped. The camp's owner, the hob that leads it
@@ -63,7 +66,8 @@ export class CampMembers extends Context.Service<
           const found = yield* repo.findChannel(channelId);
           if (Option.isNone(found)) return yield* new ChannelNotFound({ channelId });
           const channel = found.value;
-          if (channel.archivedAt !== null) return yield* new ChannelArchived({ channelId, archivedAt: channel.archivedAt });
+          if (channel.archivedAt !== null)
+            return yield* new ChannelArchived({ channelId, archivedAt: channel.archivedAt });
           return channel;
         });
 

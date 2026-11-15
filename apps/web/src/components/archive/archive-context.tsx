@@ -98,7 +98,10 @@ export function ArchiveProvider({
 
   const show = (body: NoticeBody) => setNotice((old) => ({ ...body, id: (old?.id ?? 0) + 1 }) as Notice);
   const openChannel = (channel: Channel) =>
-    void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId: channel.ownerHobId, channelId: channel.id } });
+    void navigate({
+      to: "/hobs/$hobId/channels/$channelId",
+      params: { hobId: channel.ownerHobId, channelId: channel.id },
+    });
 
   /** Moves off the open channel to the next one, else the fresh page, and says where. */
   const moveOn = (hob: Agent, channel: Channel): Place => {

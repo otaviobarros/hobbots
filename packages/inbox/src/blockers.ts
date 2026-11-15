@@ -4,9 +4,9 @@ import {
   type BackpackItemId,
   BackpackItemNotBlocked,
   BlockerRecipientRetired,
+  type ChannelId,
   type EventEnvelope,
   openBlocker,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect } from "effect";
 import { Backpack } from "./backpack.ts";

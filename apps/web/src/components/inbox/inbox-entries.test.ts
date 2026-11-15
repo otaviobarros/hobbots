@@ -2,13 +2,13 @@ import type { WaitingDevice } from "@hobbots/api";
 import {
   type AgentId,
   ApprovalRequest,
+  ChannelId,
   CharmCall,
   HobProposal,
   HobProposalId,
   PairingRequest,
   Revision,
   type TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -16,13 +16,13 @@ import {
   ALDRIC,
   BUILD,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   memberApproval,
   QUILL,
   quest,
   question,
   stuckItem,
-  CHANNEL,
   task,
   tree,
 } from "../../test/quests.ts";
@@ -32,9 +32,9 @@ import {
   charmCallEntry,
   deviceEntry,
   entryAsker,
+  entryChannel,
   entryPlace,
   entryRow,
-  entryChannel,
   failedEntry,
   groupByPlace,
   namesRequest,

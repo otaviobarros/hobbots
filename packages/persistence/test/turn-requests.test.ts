@@ -1,8 +1,10 @@
-import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository, type SentTo } from "@hobbots/agents";
 import {
   type Actor,
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   hobActor,
   Message,
   MessageId,
@@ -10,8 +12,6 @@ import {
   mainLine,
   OWNER_ACTOR,
   QueuedMessageTransitions,
-  Channel,
-  ChannelId,
   TurnCause,
   type TurnRequest,
   TurnRequestState,
@@ -21,7 +21,7 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepositoryLive, migrations, ChannelMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import turnRequests, { TURN_CAUSES, TURN_REQUEST_STATES } from "../src/migrations/20261114003401_turn_requests.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 

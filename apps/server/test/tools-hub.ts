@@ -1,6 +1,6 @@
 import { sep } from "node:path";
 import { HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
-import { Agent, type AgentId, AttemptId, type TaskId, type TaskToolDone, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, type AgentId, AttemptId, Channel, ChannelId, type TaskId, type TaskToolDone } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,

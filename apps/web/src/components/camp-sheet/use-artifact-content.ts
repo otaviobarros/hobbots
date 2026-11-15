@@ -1,9 +1,9 @@
 import {
   type ArtifactContentRefusal,
   type ArtifactVersionContent,
+  type ChannelId,
   previewMediaType,
   type RegisteredArtifactId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Base64 } from "effect/encoding";

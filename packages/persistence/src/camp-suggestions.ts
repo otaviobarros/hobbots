@@ -5,9 +5,9 @@ import {
   type CampSuggestionId,
   type CampSuggestionRefused,
   CampSuggestions,
+  type ChannelId,
   type JournaledEvent,
   planKeep,
-  type ChannelId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -95,7 +95,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
           }
           for (const raise of round.raises) {
             const suggestion = yield* raiseSuggestion(sql, raise.chapterId, raise.reasons, first + events.length, at);
-            if (suggestion !== null) events.push({ _tag: "CampSuggested", channelId: suggestion.channelId, suggestion });
+            if (suggestion !== null)
+              events.push({ _tag: "CampSuggested", channelId: suggestion.channelId, suggestion });
           }
           // Only forward: a round that read an older page never moves the cursor back.
           yield* sql`UPDATE projector_cursors SET sequence = ${sequence}

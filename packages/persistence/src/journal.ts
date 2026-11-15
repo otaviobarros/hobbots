@@ -1,6 +1,8 @@
 import type { TraceEntry } from "@hobbots/api";
 import {
   AgentId,
+  ChannelId,
+  type ChannelMember,
   type Committed,
   EVENT_SCHEMA_VERSIONS,
   type EventCorrelation,
@@ -9,8 +11,6 @@ import {
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
   type QuestSummary,
-  ChannelId,
-  type ChannelMember,
   type WebFetchRecord,
   type WebSearchRecord,
 } from "@hobbots/domain";
@@ -19,10 +19,10 @@ import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
 import { expireCampSuggestions, raiseCampSuggestions } from "./camp-suggestion-rows.ts";
+import { settleHobMembers } from "./channel-member-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
 import { refreshQuestSummaries } from "./quest-summary-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
-import { settleHobMembers } from "./channel-member-rows.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {

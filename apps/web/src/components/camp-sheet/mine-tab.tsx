@@ -1,4 +1,4 @@
-import { isNote, type Message, type MessageId, type Channel } from "@hobbots/domain";
+import { type Channel, isNote, type Message, type MessageId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";

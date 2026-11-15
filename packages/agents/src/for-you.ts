@@ -1,4 +1,4 @@
-import { type Actor, type Artifact, type ForYou, type ForYouChannel, forYouOf, type ChannelId } from "@hobbots/domain";
+import { type Actor, type Artifact, type ChannelId, type ForYou, type ForYouChannel, forYouOf } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ApprovalRepository } from "./approvals.ts";
 import { HubQuestions } from "./hub-questions.ts";

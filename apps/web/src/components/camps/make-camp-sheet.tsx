@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type Chapter, ChannelId, takesNewWork } from "@hobbots/domain";
+import { type Agent, type AgentId, ChannelId, type Chapter, takesNewWork } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Input } from "@hobbots/ui/components/input";

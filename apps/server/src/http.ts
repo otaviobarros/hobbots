@@ -16,7 +16,7 @@ import {
   ToolLogs,
   UnattendedSummonLimits,
 } from "@hobbots/agents";
-import { CONNECT_PROTOCOL, HobbotsApi, MentionRefused, type SetBrainPayload, ChannelNotFound } from "@hobbots/api";
+import { ChannelNotFound, CONNECT_PROTOCOL, HobbotsApi, MentionRefused, type SetBrainPayload } from "@hobbots/api";
 import type { ChannelId } from "@hobbots/domain";
 import type { Backpack } from "@hobbots/inbox";
 import { Effect, Layer, Option } from "effect";
@@ -134,7 +134,6 @@ const ChannelsHandlers = HttpApiBuilder.group(HobbotsApi, "channels", (handlers)
           );
         // One step under the hob's lock: an archived channel changes nothing, not even its hob's
         // default, and no archive lands between the hob's edit and the channel following it.
-        // standards-allow STD-ARCH-021: a channel's brain changes under the lock of the hob it belongs to
         return yield* hobs.updateThen(channel.ownerHobId, brain, chat.checkBrainSwitch(channelId), () =>
           chat.followHob(channelId),
         );
@@ -145,7 +144,10 @@ const ChannelsHandlers = HttpApiBuilder.group(HobbotsApi, "channels", (handlers)
         .findChannel(channelId)
         .pipe(
           Effect.flatMap(
-            Option.match({ onNone: () => Effect.fail(new ChannelNotFound({ channelId })), onSome: () => read(channelId) }),
+            Option.match({
+              onNone: () => Effect.fail(new ChannelNotFound({ channelId })),
+              onSome: () => read(channelId),
+            }),
           ),
         );
     return handlers.handleAll({

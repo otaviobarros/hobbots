@@ -1,6 +1,6 @@
 import { ArtifactContents, BriefLog, Records } from "@hobbots/agents";
 import { ArtifactNotFound, ArtifactReviewChangeRefused, DecisionChangeRefused, HobbotsApi } from "@hobbots/api";
-import type { DecisionRefused, ChannelId } from "@hobbots/domain";
+import type { ChannelId, DecisionRefused } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 

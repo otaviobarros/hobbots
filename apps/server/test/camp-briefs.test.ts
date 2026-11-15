@@ -22,6 +22,7 @@ import {
 import {
   Agent,
   AgentId,
+  type ChannelId,
   ChapterId,
   CheckpointId,
   DEFAULT_MEMORY_SETTINGS,
@@ -33,7 +34,6 @@ import {
   type RuntimeKind,
   roleFields,
   TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { HubBrainDecider, MemoryModelEndpoint } from "@hobbots/memory";
 import {

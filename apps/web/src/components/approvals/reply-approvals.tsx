@@ -1,4 +1,4 @@
-import type { Agent, ApprovalRequest, MessageId, ChannelId } from "@hobbots/domain";
+import type { Agent, ApprovalRequest, ChannelId, MessageId } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { approvalsQuery } from "../../api/approvals.ts";
@@ -11,7 +11,15 @@ const copy = messages.approval;
  * How each request a reply's tool calls made was decided, one plain line each, oldest first. A
  * request still waiting shows in the Needs-you tray above the composer instead.
  */
-export function ReplyApprovals({ channelId, messageId, hob }: { channelId: ChannelId; messageId: MessageId; hob: Agent }) {
+export function ReplyApprovals({
+  channelId,
+  messageId,
+  hob,
+}: {
+  channelId: ChannelId;
+  messageId: MessageId;
+  hob: Agent;
+}) {
   const approvals = useQuery({
     ...approvalsQuery(channelId),
     select: (all) => all.filter((approval) => approval.messageId === messageId),

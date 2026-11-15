@@ -2,7 +2,6 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   type AgentId,
-  IllegalChannelTransition,
   Channel,
   type ChannelId,
   type ChannelKind,
@@ -11,6 +10,7 @@ import {
   ChannelLifecycleMachine,
   type ChannelState,
   ChannelState as ChannelStates,
+  IllegalChannelTransition,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -121,7 +121,9 @@ describe("ChannelLifecycleMachine", () => {
       ),
     ).toBeNull();
     expect(
-      refusalOf(ChannelLifecycle.transition(channel("archived"), { _tag: "Restore", hobRetired: true, chatOpen: false })),
+      refusalOf(
+        ChannelLifecycle.transition(channel("archived"), { _tag: "Restore", hobRetired: true, chatOpen: false }),
+      ),
     ).toBe("hob-retired");
   });
 
@@ -153,7 +155,11 @@ describe("ChannelLifecycleMachine", () => {
   });
 
   it("brings a chat back as a camp when its hob opened another chat while it was archived", () => {
-    const back = ChannelLifecycle.transition(channel("archived"), { _tag: "Restore", hobRetired: false, chatOpen: true });
+    const back = ChannelLifecycle.transition(channel("archived"), {
+      _tag: "Restore",
+      hobRetired: false,
+      chatOpen: true,
+    });
     const alone = ChannelLifecycle.transition(channel("archived"), {
       _tag: "Restore",
       hobRetired: false,

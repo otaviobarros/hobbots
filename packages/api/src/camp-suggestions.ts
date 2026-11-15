@@ -2,15 +2,15 @@ import {
   CampSuggestion,
   CampSuggestionId,
   CampSuggestionRefusal,
+  ChannelId,
   ChapterId,
   ChapterMove,
   ChapterRefusal,
-  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { MakeCampPayload } from "./camp-payloads.ts";
-import { AgentNotFound, HobUnavailable, ChannelKeyReused, ChannelNotFound } from "./errors.ts";
+import { AgentNotFound, ChannelKeyReused, ChannelNotFound, HobUnavailable } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**

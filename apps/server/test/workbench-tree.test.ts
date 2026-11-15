@@ -27,6 +27,8 @@ import {
   ArtifactId,
   AttemptFiles,
   AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   type Committed,
   ContentId,
@@ -40,8 +42,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import {
   ActivityRepositoryLive,

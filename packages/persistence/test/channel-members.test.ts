@@ -1,24 +1,24 @@
-import { HobbotsRepository, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
   type Actor,
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
+  type ChannelMember,
   DeviceId,
   hobActor,
   MemberState,
   Message,
   MessageId,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
-  type ChannelMember,
   UserId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, migrations, ChannelMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import channelMembers, { MEMBER_ROLES, MEMBER_STATES } from "../src/migrations/0114_thread_members.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 

@@ -1,4 +1,4 @@
-import { Agent, AgentId, mainLine, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, mainLine } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { speakerIn } from "../src/speaker.ts";
 

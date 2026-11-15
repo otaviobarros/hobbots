@@ -1,4 +1,4 @@
-import { Agent, AgentId, SidebarPlace, Channel, ChannelId, User, UserId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, SidebarPlace, User, UserId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { authorName, campRows, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
 

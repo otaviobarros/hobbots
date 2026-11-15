@@ -4,13 +4,13 @@ import {
   AgentId,
   AttemptId,
   CANCELLED_ATTEMPT,
+  Channel,
+  ChannelId,
   type Committed,
   carriedFrom,
   MilestoneId,
   type TaskId,
   TaskId as TaskIdSchema,
-  Channel,
-  ChannelId,
   type TurnRunner,
 } from "@hobbots/domain";
 import { endTurn } from "@hobbots/orchestration";

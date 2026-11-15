@@ -1,13 +1,13 @@
 import {
   AgentId,
   AttemptId,
+  ChannelId,
   FileChange,
   FileChangeId,
   Task,
   TaskId,
   type TaskState,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { othersAtWork, overlapCheckpointId, overlapsOf } from "../src/overlaps.ts";

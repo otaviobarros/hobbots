@@ -1,4 +1,4 @@
-import { type Decision, DecisionStates, type Channel } from "@hobbots/domain";
+import { type Channel, type Decision, DecisionStates } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";

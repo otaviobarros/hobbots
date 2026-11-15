@@ -1,4 +1,4 @@
-import type { HobbotsEvent, ChannelId } from "@hobbots/domain";
+import type { ChannelId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";

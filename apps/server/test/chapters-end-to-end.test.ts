@@ -15,7 +15,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import type { FocusRead } from "@hobbots/api";
-import { type Agent, type Chapter, isInProgress, type Message, roleFields, type Channel } from "@hobbots/domain";
+import { type Agent, type Channel, type Chapter, isInProgress, type Message, roleFields } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,

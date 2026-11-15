@@ -20,12 +20,12 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type Channel,
   isInProgress,
   type Message,
   type RuntimeKind,
   roleFields,
   SKILL_PROPOSE_TOOL,
-  type Channel,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
 import { PolicyEngine } from "@hobbots/permissions";

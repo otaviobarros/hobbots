@@ -17,12 +17,12 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type Channel,
   isInProgress,
   type Message,
   type RuntimeKind,
   RuntimeModels,
   roleFields,
-  type Channel,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,

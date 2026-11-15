@@ -2,13 +2,13 @@ import {
   Artifact,
   CampSuggestion,
   CampSuggestionId,
+  ChannelId,
   ChapterId,
   Decision,
   DecisionId,
   MessageId,
   MessagePin,
   RegisteredArtifactId,
-  ChannelId,
 } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";

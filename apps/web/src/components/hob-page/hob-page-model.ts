@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type HistoryFilter, STARTER_ROLES, type Channel } from "@hobbots/domain";
+import { type Agent, type AgentId, type Channel, type HistoryFilter, STARTER_ROLES } from "@hobbots/domain";
 import { Schema } from "effect";
 import type { ActivityMap } from "../../api/hub-status.ts";
 import { firstLine } from "../../lib/format.ts";

@@ -3,14 +3,14 @@ import {
   Agent,
   AgentId,
   ApprovalId,
+  Channel,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   Message,
   MessageId,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -84,7 +84,9 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "t", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: agentId, title: "t", createdAt: now, updatedAt: now }),
+  );
   yield* repo.upsertMessage(
     new Message({
       id: messageId,

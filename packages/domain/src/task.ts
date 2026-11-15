@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { AgentId, TaskId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, TaskId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";

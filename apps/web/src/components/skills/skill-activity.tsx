@@ -1,13 +1,13 @@
 import type { SkillDetail } from "@hobbots/api";
 import {
   type AgentId,
+  type Channel,
+  type ChannelId,
   SKILL_FEEDBACK_SUGGESTS_REVISION,
   type SkillFeedback,
   type SkillId,
   type SkillUseCounts,
   skillRevisionLabel,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";

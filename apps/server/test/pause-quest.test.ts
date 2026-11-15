@@ -1,8 +1,9 @@
-import { HobbotsRepository, TaskControls, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository, TaskControls } from "@hobbots/agents";
 import { hobActor, mainLine, noteReceipt, OWNER_ACTOR, type RuntimeKind, type TaskTree } from "@hobbots/domain";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  channelId,
   FRODO,
   hub,
   isLive,
@@ -13,7 +14,6 @@ import {
   QUILL,
   ROOK,
   send,
-  channelId,
   treeWhen,
 } from "./party-hub.ts";
 

@@ -5,6 +5,7 @@ import {
   type ArtifactContentRefusal,
   type ArtifactVersions,
   artifactVersions,
+  type ChannelId,
   isFileLocator,
   isImageFile,
   isSecretFile,
@@ -13,7 +14,6 @@ import {
   type RegisteredArtifactId,
   SERVED_FILE_BYTES,
   type StoredVersion,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ActivityStore } from "./activity.ts";
@@ -77,7 +77,6 @@ export class ArtifactContents extends Context.Service<
           const channel = yield* repo.findChannel(channelId);
           if (Option.isNone(channel)) return [];
           const maker = artifact.actor.kind === "hob" ? [AgentId.make(artifact.actor.id)] : [];
-          // standards-allow STD-ARCH-021: an artifact may sit in the folders of the hob the channel belongs to
           const hobs = yield* Effect.forEach([...new Set([channel.value.ownerHobId, ...maker])], (id) =>
             repo.findAgent(id),
           );

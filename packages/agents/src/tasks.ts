@@ -9,6 +9,7 @@ import type {
   AttemptId,
   BackpackItemId,
   CarriedItem,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   CheckpointKind,
@@ -51,7 +52,6 @@ import type {
   TaskToolRefused,
   TaskTree,
   TaskWait,
-  ChannelId,
   WaitMode,
   WebReadMark,
 } from "@hobbots/domain";

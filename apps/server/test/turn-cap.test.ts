@@ -10,7 +10,7 @@ import {
   type RuntimeAdapterShape,
   TurnSlots,
 } from "@hobbots/agents";
-import { Agent, AgentId, type RuntimeKind, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, type RuntimeKind } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

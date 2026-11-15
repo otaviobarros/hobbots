@@ -19,6 +19,8 @@ import {
   BackpackItemId,
   type BackpackItemState,
   type BackpackPayload,
+  Channel,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   EVENT_SCHEMA_VERSIONS,
@@ -43,8 +45,6 @@ import {
   Task,
   TaskId,
   type TaskState,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Logger, type Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -179,7 +179,10 @@ const makeJournal = (start: string) => {
           if (channelId !== null) tasks.set(taskId, channelId);
         }
         const asked = [...work.channelIds, ...tasks.values()];
-        return { privateNow: new Set(asked.filter((channelId) => privateChannels.has(channelId))), taskChannels: tasks };
+        return {
+          privateNow: new Set(asked.filter((channelId) => privateChannels.has(channelId))),
+          taskChannels: tasks,
+        };
       }),
     hold: Effect.sync(() => ({
       sequence: cursor,

@@ -1,6 +1,7 @@
 import {
   type Actor,
   type AgentId,
+  type ChannelId,
   type FindResult,
   type FoundMessage,
   type FoundRecord,
@@ -8,7 +9,6 @@ import {
   type MessageId,
   type RegisteredArtifactKind,
   type SnippetPart,
-  type ChannelId,
 } from "@hobbots/domain";
 
 // What Find shows (ADR 037, #1386): what matched, grouped by kind in the design's order, each row

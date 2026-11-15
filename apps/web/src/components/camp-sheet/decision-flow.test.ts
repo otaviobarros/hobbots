@@ -1,4 +1,4 @@
-import { ChapterId, DECISION_TEXT_MAX, Decision, DecisionId, ChannelId } from "@hobbots/domain";
+import { ChannelId, ChapterId, DECISION_TEXT_MAX, Decision, DecisionId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import {

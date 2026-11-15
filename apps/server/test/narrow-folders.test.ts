@@ -5,12 +5,12 @@ import { HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   TaskId,
   type TaskToolDone,
   type TaskToolRefused,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { delegatedAccess, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -116,7 +116,9 @@ const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob(FRODO, "Frodo"));
   yield* repo.insertAgent(hob(QUILL, "Quill"));
-  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: FRODO, title: "Site", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "Site", createdAt: now, updatedAt: now }),
+  );
   yield* (yield* TaskRepository).createTask({
     task: {
       id: LEAD,

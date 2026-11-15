@@ -8,7 +8,7 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, type Message, type MessageId, type ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, type ChannelId, type Message, type MessageId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Layer, Schedule, Stream } from "effect";

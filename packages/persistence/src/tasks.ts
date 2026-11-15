@@ -16,6 +16,7 @@ import {
   AttemptTransitions,
   ancestorsOf,
   CHECKPOINT_KINDS,
+  type ChannelId,
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
@@ -53,7 +54,6 @@ import {
   type TaskTarget,
   TaskTransitions,
   TaskWait,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, SqlError } from "effect/sql";

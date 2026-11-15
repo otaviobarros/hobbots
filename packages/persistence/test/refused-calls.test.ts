@@ -1,5 +1,5 @@
 import { HobbotsRepository, TaskRepository, TaskToolCalls } from "@hobbots/agents";
-import { Agent, AgentId, TaskId, TaskToolRefused, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, TaskId, TaskToolRefused } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";

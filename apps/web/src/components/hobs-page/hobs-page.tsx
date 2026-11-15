@@ -7,7 +7,7 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { type ActivityMap, useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
+import { type ActivityMap, useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import { agentsQuery, archivedAgentsQuery, channelsQuery } from "../../api/queries.ts";
 import { matchesHob } from "../../lib/crew.ts";
 import { type HobState, presenceState } from "../../lib/hob-state.ts";

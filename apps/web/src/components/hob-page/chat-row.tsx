@@ -1,4 +1,4 @@
-import type { Agent, SnippetPart, Channel } from "@hobbots/domain";
+import type { Agent, Channel, SnippetPart } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -153,7 +153,15 @@ export function ChatRow({
 }
 
 /** The title as a field: Enter or leaving it saves, Esc keeps the old title. The chat header uses it too. */
-export function RenameField({ channel, onDone, className }: { channel: Channel; onDone: () => void; className?: string }) {
+export function RenameField({
+  channel,
+  onDone,
+  className,
+}: {
+  channel: Channel;
+  onDone: () => void;
+  className?: string;
+}) {
   const [typed, setTyped] = useState(channel.title);
   const rename = useRenameChannel();
   const save = () => {

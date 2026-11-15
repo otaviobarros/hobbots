@@ -1,20 +1,20 @@
-import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository, type SentTo } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   hobActor,
   Message,
   MessageId,
   mainLine,
   OWNER_ACTOR,
-  Channel,
-  ChannelId,
   type TurnRequest,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepositoryLive, ChannelMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1462 (ADR 039, One hob speaks at a time): a hob asked to answer that has nothing to add

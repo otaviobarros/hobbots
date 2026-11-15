@@ -1,4 +1,4 @@
-import { type Agent, ChapterId, ChapterStates, type Message, type Channel, ChannelLifecycle } from "@hobbots/domain";
+import { type Agent, type Channel, ChannelLifecycle, ChapterId, ChapterStates, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useReducer, useState } from "react";

@@ -2,6 +2,8 @@ import { HobbotsRepository, SkillLibrary, type SkillRevisionInput } from "@hobbo
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   MemoryProjectIdentity,
   Message,
   MessageId,
@@ -9,8 +11,6 @@ import {
   SkillRevisionHash,
   SkillUse,
   SkillUseId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -390,7 +390,9 @@ describe("skills library", () => {
         const skill = (yield* library.addRevision(null, input(H1))).value.skill;
         const at = "2026-11-06T10:00:00.000Z";
         const channelId = ChannelId.make("t1");
-        yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: pip, title: "t", createdAt: at, updatedAt: at }));
+        yield* repo.upsertChannel(
+          new Channel({ id: channelId, ownerHobId: pip, title: "t", createdAt: at, updatedAt: at }),
+        );
         const used = {
           source: "library",
           skillId: skill.id,

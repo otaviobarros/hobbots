@@ -14,14 +14,14 @@ import {
 import {
   Agent,
   AgentId,
+  type Channel,
+  type ChannelId,
   ChapterId,
   isInProgress,
   liveSession,
   type Message,
   type RuntimeKind,
   roleFields,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,

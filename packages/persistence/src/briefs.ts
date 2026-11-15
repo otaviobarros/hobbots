@@ -6,10 +6,10 @@ import {
   type BriefSource,
   briefChange,
   briefSourceOf,
+  ChannelId,
   HUB_ACTOR,
   type JournaledEvent,
   type TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";

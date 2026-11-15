@@ -1,7 +1,7 @@
-import type { AgentId, Message, MessageId, TaskTree, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, Message, MessageId, TaskTree } from "@hobbots/domain";
 import { useOpenQuest } from "../quest-sheet/quest-search.ts";
 import { QuestButtons } from "./quest-button.tsx";
-import { type Pins, useFollowedTrees, useHobLookup, useChannelTrees } from "./use-work.ts";
+import { type Pins, useChannelTrees, useFollowedTrees, useHobLookup } from "./use-work.ts";
 import { BEFORE_ALL, liveTrees, placeMoments } from "./work-model.ts";
 import { WorkMoments } from "./work-moments.tsx";
 
@@ -35,7 +35,11 @@ export function ChannelQuestButton({
  * The work moments of a channel's transcript, placed by time: `before` goes above the first message,
  * `after(id)` under the message with that id.
  */
-export const useWorkMoments = (hobId: AgentId, channelId: ChannelId | undefined, transcript: ReadonlyArray<Message>) => {
+export const useWorkMoments = (
+  hobId: AgentId,
+  channelId: ChannelId | undefined,
+  transcript: ReadonlyArray<Message>,
+) => {
   const trees = useChannelTrees(channelId);
   const hobs = useHobLookup();
   const open = useOpenQuest(hobId, channelId ?? ("" as ChannelId));

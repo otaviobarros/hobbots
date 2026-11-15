@@ -1,4 +1,4 @@
-import { AgentId, MemorySave, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, MemorySave } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound } from "./errors.ts";

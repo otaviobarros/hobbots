@@ -1,5 +1,5 @@
 import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, DEFAULT_QUEST_LIMITS, QuestId, QuestionId, TaskId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, DEFAULT_QUEST_LIMITS, QuestId, QuestionId, TaskId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";

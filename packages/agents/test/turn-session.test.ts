@@ -1,4 +1,4 @@
-import { AgentId, ChapterId, MessageId, Channel, ChannelId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, ChapterId, MessageId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { makeTurnSession } from "../src/turn-session.ts";

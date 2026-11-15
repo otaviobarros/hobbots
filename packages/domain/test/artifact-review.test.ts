@@ -9,6 +9,7 @@ import {
   ArtifactReviewMachine,
   ArtifactReviewRefused,
   ArtifactReviews,
+  ChannelId,
   ChapterId,
   carriedReview,
   GITHUB_ACTOR,
@@ -18,7 +19,6 @@ import {
   planReview,
   RegisteredArtifactId,
   type RegisteredArtifactKind,
-  ChannelId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 

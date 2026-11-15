@@ -20,12 +20,12 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type Channel,
   isInProgress,
   type Message,
   type RuntimeKind,
   roleFields,
   SKILL_PROPOSE_TOOL,
-  type Channel,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -498,6 +498,9 @@ describe("the skills library end to end", () => {
     expect(added).toMatchObject({ status: 200, body: { state: "added", added: { number: 1 } } });
     // Added, it goes to the hob that proposed it, and to no other.
     expect(pins((await turn(pipChannel, "/skills")).skills).map(([name]) => name)).toContain("changelog");
-    expect(pins((await turn(quillChannel, "/skills")).skills).map(([name]) => name)).toEqual(["house-style", "release"]);
+    expect(pins((await turn(quillChannel, "/skills")).skills).map(([name]) => name)).toEqual([
+      "house-style",
+      "release",
+    ]);
   });
 });

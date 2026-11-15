@@ -1,5 +1,5 @@
 import { TaskNotFound, UserSession } from "@hobbots/api";
-import type { Actor, Claim, ClaimClash, ClaimId, ClaimScope, Committed, TaskId, ChannelId } from "@hobbots/domain";
+import type { Actor, ChannelId, Claim, ClaimClash, ClaimId, ClaimScope, Committed, TaskId } from "@hobbots/domain";
 import { Context, DateTime, Effect, Option } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { TaskRepository } from "./tasks.ts";

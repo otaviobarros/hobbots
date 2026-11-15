@@ -1,4 +1,4 @@
-import { Message, MessageId, type MessageStatus, type ReplyStep, ChannelId } from "@hobbots/domain";
+import { ChannelId, Message, MessageId, type MessageStatus, type ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { isQuietReply } from "./quiet-replies.ts";
 

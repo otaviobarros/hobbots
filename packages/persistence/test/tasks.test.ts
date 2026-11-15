@@ -13,6 +13,8 @@ import {
   ApprovalRequest,
   ArtifactId,
   AttemptId,
+  Channel,
+  ChannelId,
   CheckpointId,
   type Committed,
   carriedFrom,
@@ -25,8 +27,6 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -209,15 +209,15 @@ describe("Task records", () => {
       }),
     );
 
-    expect(result.tree.tasks.map((task) => [task.id, task.ownerId, task.parentId, task.rootId, task.channelId])).toEqual(
-      [
-        ["campaign", ALDRIC, null, "campaign", channelId],
-        ["copy", QUILL, "campaign", "campaign", channelId],
-        ["build", ADA, "campaign", "campaign", channelId],
-        ["research", ADA, "build", "campaign", channelId],
-        ["keywords", PIP, "build", "campaign", channelId],
-      ],
-    );
+    expect(
+      result.tree.tasks.map((task) => [task.id, task.ownerId, task.parentId, task.rootId, task.channelId]),
+    ).toEqual([
+      ["campaign", ALDRIC, null, "campaign", channelId],
+      ["copy", QUILL, "campaign", "campaign", channelId],
+      ["build", ADA, "campaign", "campaign", channelId],
+      ["research", ADA, "build", "campaign", channelId],
+      ["keywords", PIP, "build", "campaign", channelId],
+    ]);
     expect(result.tree.tasks.find((task) => task.id === "build")?.dependsOn).toEqual(["copy"]);
     expect(
       result.tree.quests.map((quest) => [quest.id, quest.taskId, quest.leadId, quest.parentQuestId, quest.depth]),

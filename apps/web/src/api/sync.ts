@@ -3,12 +3,12 @@ import {
   type AgentId,
   type ApprovalRequest,
   type BackpackItem,
+  type Channel,
+  type ChannelId,
   type Chapter,
   leavesUnread,
   Message,
   openBlocker,
-  type Channel,
-  type ChannelId,
   type UnreadChannels,
 } from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
@@ -252,7 +252,12 @@ export const syncedChannels = (
   order: (items: Array<Channel>) => Array<Channel>,
   archived: boolean,
 ) =>
-  synced(fetch, "channel", (channel) => channel.ownerHobId === agentId && (channel.archivedAt !== null) === archived, order);
+  synced(
+    fetch,
+    "channel",
+    (channel) => channel.ownerHobId === agentId && (channel.archivedAt !== null) === archived,
+    order,
+  );
 
 export const syncedMessages = (
   channelId: ChannelId,

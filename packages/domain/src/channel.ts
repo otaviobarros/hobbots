@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import type { RuntimeKind } from "./agent.ts";
 import { Brain, RuntimeSession } from "./brain.ts";
-import { AgentId, ChapterId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 import { SkillTrial } from "./skills.ts";
@@ -159,12 +159,15 @@ export type ChannelLifecycleEvent =
   | ({ readonly _tag: "Supersede"; readonly at: string } & ArchiveBlockers);
 
 /** A change to a channel's lifecycle its state does not allow, with why when something stops it. */
-export class IllegalChannelTransition extends Schema.TaggedError<IllegalChannelTransition>()("IllegalChannelTransition", {
-  channelId: ChannelId,
-  from: ChannelState,
-  to: ChannelState,
-  refusal: Schema.NullOr(ChannelArchiveRefusal),
-}) {}
+export class IllegalChannelTransition extends Schema.TaggedError<IllegalChannelTransition>()(
+  "IllegalChannelTransition",
+  {
+    channelId: ChannelId,
+    from: ChannelState,
+    to: ChannelState,
+    refusal: Schema.NullOr(ChannelArchiveRefusal),
+  },
+) {}
 
 /** The refusal that wins among an archive's blockers, or null when none stops it. */
 const archiveRefusal = (blockers: ArchiveBlockers): ChannelArchiveRefusal | null => {
@@ -185,48 +188,56 @@ const refusalOf = (channel: Channel, event: ChannelLifecycleEvent): ChannelArchi
  * A channel's lifecycle (ADR 037, CH-009), declared once. Neither archiving nor restoring changes
  * `updatedAt`, so a restored channel goes back to its place in the list.
  */
-export const ChannelLifecycleMachine = defineMachine<ChannelState, ChannelLifecycleEvent, Channel, IllegalChannelTransition>(
-  {
-    name: "ChannelLifecycle",
-    states: {
-      open: "Takes messages and turns",
-      archived: "Left out of channel lists and read-only until restored; search still finds it",
-      superseded: "A chat that Start fresh replaced with a new one; read-only for good, and search still finds it",
-    },
-    field: "state",
-    events: {
-      // Refused while a reply runs or waits, while an approval waits, or when the hob is retired.
-      Archive: {
-        from: ["open"],
-        to: "archived",
-        guard: (_, e) => archiveRefusal(e) === null,
-        apply: (channel, e) => new Channel({ ...channel, state: "archived", archivedAt: e.at }),
-      },
-      // A chat restored while its hob has opened another comes back as a camp, so the hob keeps one chat.
-      Restore: {
-        from: ["archived"],
-        to: "open",
-        guard: (_, e) => !e.hobRetired,
-        apply: (channel, e) =>
-          new Channel({
-            ...channel,
-            state: "open",
-            archivedAt: null,
-            kind: channel.kind === "direct" && e.chatOpen ? "camp" : channel.kind,
-          }),
-      },
-      // Only a chat is superseded, and only when nothing would stop its archive.
-      Supersede: {
-        from: ["open"],
-        to: "superseded",
-        guard: (channel, e) => channel.kind === "direct" && archiveRefusal(e) === null,
-        apply: (channel, e) => new Channel({ ...channel, state: "superseded", archivedAt: e.at, updatedAt: e.at }),
-      },
-    },
-    illegal: (channel, event, to) =>
-      new IllegalChannelTransition({ channelId: channel.id, from: channel.state, to, refusal: refusalOf(channel, event) }),
+export const ChannelLifecycleMachine = defineMachine<
+  ChannelState,
+  ChannelLifecycleEvent,
+  Channel,
+  IllegalChannelTransition
+>({
+  name: "ChannelLifecycle",
+  states: {
+    open: "Takes messages and turns",
+    archived: "Left out of channel lists and read-only until restored; search still finds it",
+    superseded: "A chat that Start fresh replaced with a new one; read-only for good, and search still finds it",
   },
-);
+  field: "state",
+  events: {
+    // Refused while a reply runs or waits, while an approval waits, or when the hob is retired.
+    Archive: {
+      from: ["open"],
+      to: "archived",
+      guard: (_, e) => archiveRefusal(e) === null,
+      apply: (channel, e) => new Channel({ ...channel, state: "archived", archivedAt: e.at }),
+    },
+    // A chat restored while its hob has opened another comes back as a camp, so the hob keeps one chat.
+    Restore: {
+      from: ["archived"],
+      to: "open",
+      guard: (_, e) => !e.hobRetired,
+      apply: (channel, e) =>
+        new Channel({
+          ...channel,
+          state: "open",
+          archivedAt: null,
+          kind: channel.kind === "direct" && e.chatOpen ? "camp" : channel.kind,
+        }),
+    },
+    // Only a chat is superseded, and only when nothing would stop its archive.
+    Supersede: {
+      from: ["open"],
+      to: "superseded",
+      guard: (channel, e) => channel.kind === "direct" && archiveRefusal(e) === null,
+      apply: (channel, e) => new Channel({ ...channel, state: "superseded", archivedAt: e.at, updatedAt: e.at }),
+    },
+  },
+  illegal: (channel, event, to) =>
+    new IllegalChannelTransition({
+      channelId: channel.id,
+      from: channel.state,
+      to,
+      refusal: refusalOf(channel, event),
+    }),
+});
 
 /** `ChannelLifecycleMachine` with the questions code outside this module asks of a channel's state. */
 export const ChannelLifecycle = {

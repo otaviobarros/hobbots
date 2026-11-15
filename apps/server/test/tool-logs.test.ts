@@ -2,7 +2,7 @@ import { linkSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ToolLogs } from "@hobbots/agents";
-import type { MessageId, ChannelId } from "@hobbots/domain";
+import type { ChannelId, MessageId } from "@hobbots/domain";
 import { Effect, Exit, Option } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { ToolLogsLive } from "../src/tool-logs.ts";

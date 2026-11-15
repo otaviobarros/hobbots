@@ -7,7 +7,7 @@ import { Supervisor } from "@hobbots/supervision";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
-import { hub, isLive, NETTLE, ownedBy, PIP, partyHub, send, channelId, treeWhen } from "./party-hub.ts";
+import { channelId, hub, isLive, NETTLE, ownedBy, PIP, partyHub, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1447: the supervisor stops a member past its deadline and tells its lead, and fails a
 // member whose runtime ran out of allowance, ending the work under it first, with no model call.

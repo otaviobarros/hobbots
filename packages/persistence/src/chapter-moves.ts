@@ -1,10 +1,12 @@
 import type { ChapterMoveTarget } from "@hobbots/agents";
-import type { HobUnavailable, ChannelKeyReused } from "@hobbots/api";
+import type { ChannelKeyReused, HobUnavailable } from "@hobbots/api";
 import {
   Artifact,
   type BackpackItem,
   CampSuggestion,
   CampSuggestions,
+  type Channel,
+  type ChannelId,
   Chapter,
   ChapterId,
   ChapterMove,
@@ -18,8 +20,6 @@ import {
   type MessageId,
   planMove,
   type ReplyStep,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
@@ -27,11 +27,11 @@ import { type ArtifactRow, artifactFromRow, renumberVersions, saveReview } from 
 import { makeItemReads } from "./backpack-rows.ts";
 import { settleSuggestion, suggestionOfChapter } from "./camp-suggestion-rows.ts";
 import type { makeCampWrites } from "./camps.ts";
+import { keepReadersRead } from "./channel-member-rows.ts";
 import { chapterRows } from "./chapter-rows.ts";
 import { writeChapters } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
-import { keepReadersRead } from "./channel-member-rows.ts";
 
 // Moving a chapter into a camp (ADR 037, #1385): one transaction that runs the pure `planMove` on
 // the chapters as stored, re-parents the chapter's messages, decisions, artifacts and the quests

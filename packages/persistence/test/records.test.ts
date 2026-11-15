@@ -5,6 +5,8 @@ import {
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  Channel,
+  ChannelId,
   ChapterId,
   DECISION_TEXT_MAX,
   DecisionId,
@@ -18,8 +20,6 @@ import {
   roleFields,
   Task,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -90,7 +90,9 @@ const run = <A, E>(
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob);
-  yield* repo.upsertChannel(new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(
+    new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }),
+  );
   const yours = (yield* repo.upsertMessage(message("ask-1", "user"))).value;
   const reply = (yield* repo.upsertMessage(message(REPLY, "assistant", { status: "streaming" }))).value;
   return { yours, reply };

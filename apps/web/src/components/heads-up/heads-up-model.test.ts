@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   Claim,
   ClaimClash,
   ClaimId,
@@ -7,7 +8,6 @@ import {
   Message,
   MessageId,
   type TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { BEFORE_FIRST, headsUpOf, placeHeadsUps } from "./heads-up-model.ts";

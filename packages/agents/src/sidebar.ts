@@ -2,25 +2,25 @@ import type { SidebarRead } from "@hobbots/api";
 import {
   type Actor,
   type BackpackItem,
+  type Channel,
+  type ChannelId,
+  channelsNeedingYou,
   deciderOf,
   hobActor,
   type Sidebar,
   type SidebarChannel,
   sameActor,
   sidebarOf,
-  type Channel,
-  type ChannelId,
-  channelsNeedingYou,
   User,
   UserId,
   userIdOf,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ApprovalRepository } from "./approvals.ts";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { ForYouRepository } from "./for-you.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { TaskRepository } from "./tasks.ts";
-import { ChannelMemberRepository } from "./channel-members.ts";
 import { hubOwner, sessionActor, UserRepository } from "./users.ts";
 
 /**
@@ -85,7 +85,6 @@ export class SidebarList extends Context.Service<SidebarList, { readonly current
           onNone: () =>
             Effect.succeed<SidebarChannel["members"]>([
               { actor: you, state: "active" as const },
-              // standards-allow STD-ARCH-021: with no member list, the channel's members are you and the hob it belongs to
               { actor: hobActor(channel.ownerHobId), state: "active" as const },
             ]),
           onSome: (repository) => repository.list(channel.id),

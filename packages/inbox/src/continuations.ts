@@ -1,6 +1,7 @@
 import {
   answerHow,
   type BackpackItem,
+  type ChannelId,
   CONTINUATION_HEADER,
   checkpointText,
   choicesText,
@@ -11,7 +12,6 @@ import {
   type Question,
   skillProposalText,
   type Task,
-  type ChannelId,
 } from "@hobbots/domain";
 import { heldUnder } from "./dispatcher.ts";
 

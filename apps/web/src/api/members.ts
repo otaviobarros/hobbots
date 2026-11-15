@@ -1,5 +1,5 @@
 import type { MembersReport } from "@hobbots/api";
-import type { Actor, HobbotsEvent, ChannelId } from "@hobbots/domain";
+import type { Actor, ChannelId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { localDay, periodStart } from "../lib/usage.ts";
 import { call } from "./client.ts";
@@ -19,7 +19,9 @@ const membersQuery = (channelId: ChannelId, today: string) =>
   queryOptions({
     queryKey: [...membersKey(channelId), today] as const,
     queryFn: (): Promise<MembersReport> =>
-      call((c) => c.members.list({ params: { channelId }, query: { since: periodStart(new Date(), 1).toISOString() } })),
+      call((c) =>
+        c.members.list({ params: { channelId }, query: { since: periodStart(new Date(), 1).toISOString() } }),
+      ),
     staleTime: 30_000,
   });
 

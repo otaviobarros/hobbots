@@ -1,27 +1,27 @@
-import { type HobUnavailable, ChannelKeyReused } from "@hobbots/api";
+import { ChannelKeyReused, type HobUnavailable } from "@hobbots/api";
 import {
   type AgentId,
   ApprovalRequest,
   type BackpackItem,
   CarriedOver,
   CarriedOverRef,
+  Channel,
+  type ChannelId,
   carriedOverFrom,
   carriedOverRefId,
   type JournaledEvent,
   StartedFresh,
-  Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { carryingChannel } from "@hobbots/inbox";
 import { Data, Effect, Option, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { approvalRow } from "./approvals.ts";
 import { makeItemReads } from "./backpack-rows.ts";
+import { addHobsIn, copyMembersIn, startMembersIn } from "./channel-member-rows.ts";
 import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { decodeRows, type Row } from "./task-rows.ts";
-import { addHobsIn, copyMembersIn, startMembersIn } from "./channel-member-rows.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376): each one transaction that writes the channels, moves
 // what Start fresh carries, and journals the change, so a crash between the writes leaves neither half.

@@ -1,4 +1,4 @@
-import type { AgentId, Task, TaskId, TaskTree, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";

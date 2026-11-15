@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ChapterId, type MessageId, ChannelId } from "./ids.ts";
+import { ChannelId, ChapterId, type MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 

@@ -1,11 +1,11 @@
 import {
   CHAPTER_TITLE_MAX,
+  ChannelId,
   Chapter,
   ChapterId,
   ChapterRefusal,
   MessageId,
   PackReport,
-  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";

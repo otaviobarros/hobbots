@@ -2,6 +2,7 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  ChannelId,
   type GrantRule,
   MessageId,
   offersThisTask,
@@ -9,7 +10,6 @@ import {
   QuestId,
   TaskId,
   TaskTree,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {

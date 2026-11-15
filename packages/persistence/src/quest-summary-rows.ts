@@ -1,6 +1,7 @@
 import {
   AgentId,
   ApprovalState,
+  type ChannelId,
   type JournaledEvent,
   type Quest,
   QuestionState,
@@ -10,7 +11,6 @@ import {
   type SummaryTree,
   sameSummary,
   TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";

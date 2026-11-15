@@ -1,6 +1,6 @@
 import { CatchUpRepository, PinRepository, sessionActor } from "@hobbots/agents";
 import { MessageNotFound } from "@hobbots/api";
-import { type JournaledEvent, MessageId, MessagePin, ChannelId } from "@hobbots/domain";
+import { ChannelId, type JournaledEvent, MessageId, MessagePin } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient, type Statement } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";

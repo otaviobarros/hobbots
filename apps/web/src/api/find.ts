@@ -1,4 +1,4 @@
-import { FIND_QUERY_MAX, type FindResult, type ChannelId } from "@hobbots/domain";
+import { type ChannelId, FIND_QUERY_MAX, type FindResult } from "@hobbots/domain";
 import { keepPreviousData, queryOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { useSettledQuery } from "./search.ts";

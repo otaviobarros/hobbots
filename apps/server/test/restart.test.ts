@@ -9,7 +9,16 @@ import {
   RuntimeAdapter,
   TaskRepository,
 } from "@hobbots/agents";
-import { Agent, AgentId, AttemptId, type BackpackItem, type Message, TaskId, Channel, ChannelId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  AttemptId,
+  type BackpackItem,
+  Channel,
+  ChannelId,
+  type Message,
+  TaskId,
+} from "@hobbots/domain";
 import { Backpack, Dispatcher, RESULT_IN_BRIEFING } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {

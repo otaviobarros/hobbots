@@ -1,4 +1,4 @@
-import type { Agent, BackpackItem, Task, TaskTree, ChannelId } from "@hobbots/domain";
+import type { Agent, BackpackItem, ChannelId, Task, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   DropdownMenu,

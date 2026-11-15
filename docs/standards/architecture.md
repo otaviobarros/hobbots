@@ -177,12 +177,12 @@ A field that says who did something, such as `requestedBy`, `addedBy` or `author
 - **Enforced by:** `checkRecords` in `scripts/owner-actor.mjs`, run by `scripts/check-standards.mjs` and `pnpm lint:actor`, which fails on a schema field whose name ends in `By` (or is `author`, `actor`, `creator`, `requester`) and whose schema is a bare `UserId`, `AgentId` or `HobId`. The two fields that predate the rule are listed in `KNOWN_BARE_AUTHORS`, and that list only shrinks. Review covers the rest.
 - **Applies to:** `packages/*`, `apps/*`.
 
-### STD-ARCH-021 A turn names its speaker, never the channel's hob
+### STD-ARCH-021 A turn names its speaker, never the channel's owner
 
-A camp has one floor and many speakers (ADR 039), so a channel's `agentId` means one thing: the hob the channel belongs to, for listing, ownership, its lock and its own default answerer. Code that asks which hob a turn, a reply or a message is for never answers with it. Inside a turn, the hob is the turn's `Speaker` (`packages/agents/src/speaker.ts`): its channel, line, hob, reason and role. Outside one, it is the run's `speaking`, or the message's author through `authorOf` and `replyHobOf` (`packages/domain/src/message.ts`), the one place a message not stored yet falls back to the channel's hob.
+A camp has one floor and many speakers (ADR 039), so a channel's `ownerHobId` means one thing: the hob the channel belongs to, for listing, ownership, its lock and its own default answerer. Code that asks which hob a turn, a reply or a message is for never answers with it. Inside a turn, the hob is the turn's `Speaker` (`packages/agents/src/speaker.ts`): its channel, line, hob, reason and role. Outside one, it is the run's `speaking`, or the message's author through `authorOf` and `replyHobOf` (`packages/domain/src/message.ts`), the one place a message not stored yet falls back to the channel's hob.
 
-- **Why:** #1461 turned one hob per channel into one floor with many speakers, and about seventeen review findings on it were code that still read the turn's hob from `channel.agentId`.
-- **Enforced by:** `scripts/speaker.mjs`, run by `pnpm lint:speaker`, which fails on a read of `agentId` from a channel in `packages/agents/src` and `apps/server/src`: a value named like a channel, bound from one (`const found = yield* repo.findChannel(id)`) or typed `Channel`. A read that means the owner says so with `// standards-allow STD-ARCH-021: <reason>` on its line or the line above. Review covers the web app, which reads authors through `replyHobOf`.
+- **Why:** #1461 turned one hob per channel into one floor with many speakers, and about seventeen review findings on it were code that still read the turn's hob from the channel's own hob, then named `agentId`.
+- **Enforced by:** the field's name, `Channel.ownerHobId`, which says it is the owner and never the speaker, and review. `pnpm lint:speaker` flagged every read of the old `agentId` until the field was renamed.
 - **Applies to:** `packages/agents`, `apps/server`, `apps/web`.
 
 ## Guidance

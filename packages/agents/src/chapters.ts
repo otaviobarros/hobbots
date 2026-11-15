@@ -1,6 +1,8 @@
 import { ChannelNotFound } from "@hobbots/api";
 import {
   type CampSuggestionId,
+  type ChannelId,
+  ChannelLifecycle,
   type Chapter,
   type ChapterId,
   type ChapterNotFound,
@@ -9,8 +11,6 @@ import {
   type Committed,
   type IllegalChapterTransition,
   type MessageId,
-  type ChannelId,
-  ChannelLifecycle,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission, withChannelLock } from "./admission.ts";

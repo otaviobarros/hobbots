@@ -2,6 +2,8 @@ import { CatchUpRepository, HobbotsRepository, PinRepository, TaskRepository } f
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type ChapterId,
   DEFAULT_QUEST_LIMITS,
   Message,
@@ -9,8 +11,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";

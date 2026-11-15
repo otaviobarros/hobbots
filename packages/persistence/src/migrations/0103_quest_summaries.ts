@@ -1,13 +1,13 @@
 import {
   type AgentId,
   type ApprovalState,
+  type ChannelId,
   type QuestId,
   type QuestionState,
   type QuestState,
   questSummaryOf,
   type TaskId,
   type TaskState,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";

@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { CharmCalls, type ChatTaskTurn, HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, CharmCall, MessageId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, CharmCall, MessageId } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {
   BackpackLive,

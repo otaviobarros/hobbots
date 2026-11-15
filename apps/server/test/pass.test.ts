@@ -1,17 +1,25 @@
 import {
+  ChannelMemberRepository,
   HobbotsRepository,
   PASS_ONLY_HOB,
   PASS_TAKEN,
   PASS_UNREADABLE,
   type PromptRequest,
-  ChannelMemberRepository,
 } from "@hobbots/agents";
-import { hobActor, liveSession, type Message, OWNER_ACTOR, PASS_TOOL, type RuntimeKind, Channel } from "@hobbots/domain";
+import {
+  Channel,
+  hobActor,
+  liveSession,
+  type Message,
+  OWNER_ACTOR,
+  PASS_TOOL,
+  type RuntimeKind,
+} from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, hub, messagesWhen, PIP, partyHub, send, channelId } from "./party-hub.ts";
+import { channelId, FRODO, hub, messagesWhen, PIP, partyHub, send } from "./party-hub.ts";
 
 // Issue #1462 (ADR 039, One hob speaks at a time): a hob asked to answer that has nothing to add
 // calls `pass` with a reason. Its turn ends with no message, its request ends `passed`, and the floor

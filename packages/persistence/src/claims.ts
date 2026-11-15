@@ -7,6 +7,8 @@ import {
 } from "@hobbots/agents";
 import {
   AgentId,
+  type ChannelId,
+  ChannelId as ChannelIds,
   Claim,
   ClaimClash,
   Claims,
@@ -18,8 +20,6 @@ import {
   type JournaledEvent,
   pickNumber,
   sinceOf,
-  type ChannelId,
-  ChannelId as ChannelIds,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";

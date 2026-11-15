@@ -4,9 +4,9 @@ import {
   BackpackItemId,
   type BackpackItemKind,
   type BackpackPayload,
+  ChannelId,
   Task,
   TaskId,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { startingText } from "../src/index.ts";

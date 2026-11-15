@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, TaskId, type Channel, type ChannelId } from "@hobbots/domain";
+import { type Agent, type AgentId, type Channel, type ChannelId, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SheetContent, Sheet as SheetRoot } from "@hobbots/ui/components/sheet";
 import { useNavigate, useSearch } from "@tanstack/react-router";

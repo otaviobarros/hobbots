@@ -9,6 +9,7 @@ import {
   BackpackItemId,
   type BackpackItemKind,
   type BackpackPayload,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   CONTINUATION_HEADER,
@@ -19,16 +20,15 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   arrivalsText,
   backpackItemsFor,
-  carryingTask,
   carryingChannel,
-  continuationTask,
+  carryingTask,
   continuationChannel,
+  continuationTask,
   lateness,
   RESULT_IN_BRIEFING,
 } from "../src/index.ts";
@@ -115,9 +115,9 @@ describe("which channel a backpack item continues", () => {
     expect(continuationChannel(fromStep, tree)).toBe(channelId);
     // A single hob's step result is checked against the request, which still runs, so it is not late.
     expect(lateness(fromStep, tree)).toBeNull();
-    expect(continuationChannel(item(FRODO, "cook", "result", { _tag: "result", task: sams, artifacts: [] }), tree)).toBe(
-      channelId,
-    );
+    expect(
+      continuationChannel(item(FRODO, "cook", "result", { _tag: "result", task: sams, artifacts: [] }), tree),
+    ).toBe(channelId);
   });
 
   it("leaves a Task's own item, and work held under a step or a member's Task, to the session that works it", () => {

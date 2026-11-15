@@ -3,12 +3,12 @@ import {
   type AgentId,
   type ApprovalRequest,
   type BackpackItem,
+  type ChannelId,
   type FailedTask,
   type HobPresence,
   hobPresenceState,
   leadsNeedingYou,
   type ReplyActivity,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { Context, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule } from "effect";
@@ -34,7 +34,9 @@ const CHANGES_PRESENCE: ReadonlySet<string> = new Set([
 ]);
 
 const changesPresence = (event: BusEvent) =>
-  event._tag === "Journaled" ? CHANGES_PRESENCE.has(event.entry.payload._tag) : event.event._tag === "ChannelRunChanged";
+  event._tag === "Journaled"
+    ? CHANGES_PRESENCE.has(event.entry.payload._tag)
+    : event.event._tag === "ChannelRunChanged";
 
 /** The chats whose hob a presence needs to know: those something waits on you in. */
 const chatsToOwn = ({

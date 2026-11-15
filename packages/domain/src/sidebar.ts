@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { Actor, sameActor } from "./actor.ts";
-import { AgentId, ChannelId } from "./ids.ts";
 import type { Channel } from "./channel.ts";
 import type { ChannelMember } from "./channel-member.ts";
+import { AgentId, ChannelId } from "./ids.ts";
 
 /**
  * The sidebar's sections (ADR 039, The sidebar): Camps, with the camps you share first and then the

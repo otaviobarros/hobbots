@@ -1,4 +1,4 @@
-import { AgentId, DEFAULT_WEB_SETTINGS, EMPTY_HOB_POLICY, type HobPolicy, MessageId, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, DEFAULT_WEB_SETTINGS, EMPTY_HOB_POLICY, type HobPolicy, MessageId } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {

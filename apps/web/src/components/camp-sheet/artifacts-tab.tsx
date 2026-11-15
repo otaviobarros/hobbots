@@ -1,4 +1,4 @@
-import { type Artifact, MessageId, type Channel, type ChannelId } from "@hobbots/domain";
+import { type Artifact, type Channel, type ChannelId, MessageId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
@@ -98,7 +98,15 @@ export function ArtifactsTab({
   );
 }
 
-function ArtifactRow({ channelId, artifact, onOpen }: { channelId: ChannelId; artifact: Artifact; onOpen: () => void }) {
+function ArtifactRow({
+  channelId,
+  artifact,
+  onOpen,
+}: {
+  channelId: ChannelId;
+  artifact: Artifact;
+  onOpen: () => void;
+}) {
   return (
     <li className="flex items-start gap-2.5 rounded-control px-2 py-2 [content-visibility:auto] hover:bg-hover">
       <RowMark channelId={channelId} artifact={artifact} />

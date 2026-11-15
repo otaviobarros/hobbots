@@ -4,11 +4,11 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   type TaskId,
   TaskId as TaskIdSchema,
   type TaskToolDone,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";

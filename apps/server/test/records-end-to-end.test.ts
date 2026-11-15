@@ -27,6 +27,7 @@ import {
   CAMP_SUGGESTION_DECISIONS,
   type CampSuggestion,
   type CatchUp,
+  type Channel,
   type ChapterMove,
   type Decision,
   hobActor,
@@ -36,7 +37,6 @@ import {
   OWNER_ACTOR,
   RECORD_DECISION_TOOL,
   roleFields,
-  type Channel,
   type UnreadChannels,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -46,6 +46,7 @@ import {
   BriefLogLive,
   CampSuggestionRepositoryLive,
   CatchUpRepositoryLive,
+  ChannelMemberRepositoryLive,
   ChapterRepositoryLive,
   EventJournal,
   ForYouRepositoryLive,
@@ -56,7 +57,6 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
-  ChannelMemberRepositoryLive,
   UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

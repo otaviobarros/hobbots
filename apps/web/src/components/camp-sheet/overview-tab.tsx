@@ -1,9 +1,9 @@
-import { type Chapter, ChapterStates, type TaskId, type TaskTree, type Channel } from "@hobbots/domain";
+import { type Channel, type Chapter, ChapterStates, type TaskId, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { useQuery } from "@tanstack/react-query";
+import { useSetCampPrivate } from "../../api/channel-settings.ts";
 import { chaptersQuery } from "../../api/chapters.ts";
 import { briefQuery } from "../../api/records.ts";
-import { useSetCampPrivate } from "../../api/channel-settings.ts";
 import { AlongRow } from "../camps/camp-parts.tsx";
 import { StatusStrip } from "../quest/status-strip.tsx";
 import { useQuestProgress } from "../quest/use-quest-progress.ts";

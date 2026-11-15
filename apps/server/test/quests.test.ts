@@ -21,6 +21,8 @@ import {
   type ApprovalRequest,
   AttemptId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   type Committed,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
@@ -34,8 +36,6 @@ import {
   type Task,
   TaskId,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher, RESULT_IN_BRIEFING } from "@hobbots/inbox";

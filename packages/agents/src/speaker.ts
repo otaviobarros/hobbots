@@ -1,11 +1,11 @@
-import type { Agent, Line, Channel } from "@hobbots/domain";
+import type { Agent, Channel, Line } from "@hobbots/domain";
 import { mainLine } from "@hobbots/domain";
 import type { TurnReason } from "./pack-people.ts";
 
 /**
  * Who a turn belongs to (ADR 039, One hob speaks at a time): the hob that holds a line's floor. A
  * camp has one floor and many speakers, so the hob a turn is for is its speaker, never the hob the
- * channel belongs to (`channel.agentId`, STD-ARCH-021). Everything inside a turn reads its hob from
+ * channel belongs to (`channel.ownerHobId`, STD-ARCH-021). Everything inside a turn reads its hob from
  * here: its prompt and brief, skills, pack, memory and tools.
  */
 export interface Speaker {
@@ -38,6 +38,5 @@ export const speakerIn = (
   line,
   agent,
   reason,
-  // standards-allow STD-ARCH-021: the speaker's role compares it with the hob the channel belongs to
   role: agent.id === channel.ownerHobId ? "owner" : "member",
 });

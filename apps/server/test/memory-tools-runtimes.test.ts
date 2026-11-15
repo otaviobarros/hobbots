@@ -14,11 +14,11 @@ import {
 } from "@hobbots/agents";
 import {
   AgentId,
+  ChannelId,
   EMPTY_HOB_POLICY,
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
   memoryProjectIdentity,
-  ChannelId,
 } from "@hobbots/domain";
 import { MemoryToolsLive, PRIVATE_CAMP_SAVE } from "@hobbots/memory";
 import { makeMemorySavesFake, makeMemoryStoreFake } from "@hobbots/memory/testing";

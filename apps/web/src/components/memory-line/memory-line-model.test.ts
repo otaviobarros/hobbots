@@ -1,4 +1,4 @@
-import { AgentId, MemoryPath, MemorySave, MemoryVersion, MessageId, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, MemoryPath, MemorySave, MemoryVersion, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { replySaves, savedLine, undoFailure } from "./memory-line-model.ts";

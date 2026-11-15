@@ -3,14 +3,14 @@ import {
   Agent,
   AgentId,
   type ChangeActor,
+  Channel,
+  ChannelId,
   ChapterId,
   Message,
   MessageId,
   OWNER_ACTOR,
   roleFields,
   TaskId,
-  Channel,
-  ChannelId,
   YOU,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
@@ -176,8 +176,12 @@ describe("HobbotsRepository", () => {
         }),
       );
       const other = ChannelId.make("t2");
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }));
-      yield* repo.upsertChannel(new Channel({ id: other, ownerHobId: agentId, title: "Shop", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      );
+      yield* repo.upsertChannel(
+        new Channel({ id: other, ownerHobId: agentId, title: "Shop", createdAt: now, updatedAt: now }),
+      );
       yield* repo.upsertMessage(new Message({ ...message("m1"), content: "On it." }));
       yield* repo.upsertMessage(
         new Message({ ...message("m2"), role: "user", actor: OWNER_ACTOR, configVersion: null, content: "Thanks!" }),
@@ -226,7 +230,9 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      );
       const unread = () => repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
       const asked = new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(asked);
@@ -244,7 +250,9 @@ describe("HobbotsRepository", () => {
       const again = yield* repo.markChannelRead(channelId, MessageId.make("m2"), seen);
       const elsewhere = yield* repo.markChannelRead(channelId, MessageId.make("nope"), seen);
       // A write of the channel keeps the marker, and a failed reply with no text is unread too.
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Renamed", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: agentId, title: "Renamed", createdAt: now, updatedAt: now }),
+      );
       const kept = yield* unread();
       yield* repo.upsertMessage(new Message({ ...message("m3", "failed"), content: "" }));
       return {
@@ -301,7 +309,9 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      );
       const plan = (yield* repo.upsertMessage(new Message({ ...message("m1"), content: "Quill drafts the copy." })))
         .value;
       yield* repo.markChannelRead(channelId, plan.id, plan.revision);
@@ -351,7 +361,9 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      );
       const unread = () => repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
       yield* repo.upsertMessage(
         new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null }),
@@ -394,7 +406,14 @@ describe("HobbotsRepository", () => {
 
   it("stores when a channel was archived and lists live and archived channels apart", async () => {
     const channel = (id: string, archivedAt: string | null) =>
-      new Channel({ id: ChannelId.make(id), ownerHobId: agentId, title: id, archivedAt, createdAt: now, updatedAt: now });
+      new Channel({
+        id: ChannelId.make(id),
+        ownerHobId: agentId,
+        title: id,
+        archivedAt,
+        createdAt: now,
+        updatedAt: now,
+      });
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -759,7 +778,9 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Queue", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: agentId, title: "Queue", createdAt: now, updatedAt: now }),
+      );
       const user = (id: string, status: Message["status"]) =>
         new Message({ ...message(id, status), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(user("q1", "queued"));

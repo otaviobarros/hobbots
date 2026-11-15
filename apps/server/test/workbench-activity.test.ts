@@ -21,14 +21,14 @@ import {
   Agent,
   AgentId,
   type AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   type CommandOutput,
   DEFAULT_ACTIVITY_LIMITS,
   EMPTY_HOB_POLICY,
   type Message,
   type TaskTree,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";

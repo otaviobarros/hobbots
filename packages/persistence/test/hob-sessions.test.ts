@@ -1,5 +1,5 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { AgentId, liveSession, ChannelId } from "@hobbots/domain";
+import { AgentId, ChannelId, liveSession } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";

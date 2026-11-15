@@ -7,6 +7,8 @@ import {
   AttemptId,
   type BackpackItem,
   type CarriedItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   type Committed,
   carriedFrom,
@@ -20,8 +22,6 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";

@@ -32,7 +32,8 @@ export const HobMemoryHandlers = HttpApiBuilder.group(HobbotsApi, "hobMemory", (
     // One Undo at a time, so two clicks never both write the earlier version back.
     const undoing = yield* Semaphore.make(1);
     return handlers.handleAll({
-      channelSaves: ({ params }) => (Option.isNone(saves) ? Effect.succeed([]) : saves.value.inChannel(params.channelId)),
+      channelSaves: ({ params }) =>
+        Option.isNone(saves) ? Effect.succeed([]) : saves.value.inChannel(params.channelId),
       undoSave: ({ params }) =>
         Effect.gen(function* () {
           if (Option.isNone(saves)) return yield* new MemorySaveNotFound();

@@ -5,6 +5,7 @@ import {
   answerHow,
   type BackpackItem,
   type BackpackPayload,
+  type ChannelId,
   checkpointText,
   choicesText,
   claimClashText,
@@ -30,7 +31,6 @@ import {
   skillProposalText,
   type Task,
   type TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Option, Schedule } from "effect";
 import {
@@ -540,7 +540,8 @@ const backpackMarks = (item: BackpackItem): EntryMarks => {
 /** Where a settled save belongs: the Attempt outside any chat it was made in, or itself in its channel. */
 const saveMarks = (save: MemorySave): EntryMarks => {
   const taskId = saveTaskOf(save);
-  const unit = save.channelId === null && save.attemptId !== undefined ? attemptUnit(save.attemptId) : `save:${save.id}`;
+  const unit =
+    save.channelId === null && save.attemptId !== undefined ? attemptUnit(save.attemptId) : `save:${save.id}`;
   return { channelId: save.channelId, taskId, unit };
 };
 

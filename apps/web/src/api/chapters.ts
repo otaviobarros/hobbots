@@ -1,5 +1,5 @@
 import type { SplitChapterPayload } from "@hobbots/api";
-import type { Chapter, ChapterId, HobbotsEvent, ChannelId } from "@hobbots/domain";
+import type { ChannelId, Chapter, ChapterId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents, queryKeys } from "./queries.ts";

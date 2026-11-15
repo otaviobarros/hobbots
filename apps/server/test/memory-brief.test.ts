@@ -10,7 +10,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, MemoryPath, type MemoryScope, Channel, type ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, type ChannelId, MemoryPath, type MemoryScope } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

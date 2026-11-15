@@ -6,7 +6,7 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, Message, MessageId, OWNER_ACTOR, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, Message, MessageId, OWNER_ACTOR } from "@hobbots/domain";
 import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
@@ -530,7 +530,9 @@ describe("cursors", () => {
           delta: "a\nb",
         },
       }),
-    ).toBe('event: delta\ndata: {"_tag":"MessageDelta","channelId":"t","messageId":"m","offset":2,"delta":"a\\nb"}\n\n');
+    ).toBe(
+      'event: delta\ndata: {"_tag":"MessageDelta","channelId":"t","messageId":"m","offset":2,"delta":"a\\nb"}\n\n',
+    );
     expect(encodeFrame({ _tag: "KeepAlive" })).toBe(": keep-alive\n\n");
   });
 });

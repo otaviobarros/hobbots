@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Channel, ChannelLifecycle } from "./channel.ts";
 import {
   Chapter,
   ChapterNotFound,
@@ -11,7 +12,6 @@ import {
   IllegalChapterTransition,
 } from "./chapter.ts";
 import type { ChapterId } from "./ids.ts";
-import { Channel, ChannelLifecycle } from "./channel.ts";
 
 /**
  * Moving a chapter into a camp (ADR 037): the chapter's messages and records leave the channel for

@@ -42,6 +42,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import {
   ALDRIC,
+  channelId,
   givePolicy,
   hub,
   memberTask,
@@ -52,7 +53,6 @@ import {
   send,
   sharedDatabase,
   startHub,
-  channelId,
   treeWhen,
 } from "./dependency-hub.ts";
 

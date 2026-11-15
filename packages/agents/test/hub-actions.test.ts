@@ -2,6 +2,7 @@ import { UserSession } from "@hobbots/api";
 import {
   AgentId,
   ApprovalId,
+  ChannelId,
   type CharmCall,
   type CharmDeclaration,
   CharmWriteKey,
@@ -12,7 +13,6 @@ import {
   OWNER_USER_ID,
   type PolicyDecision,
   type ReplyStep,
-  ChannelId,
   toolInputJsonSchema,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";

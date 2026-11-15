@@ -1,10 +1,10 @@
 import {
   type Agent,
   type AgentId,
-  HOB_RELAY_BUDGET,
   type Channel,
   type ChannelId,
   ChannelLifecycle,
+  HOB_RELAY_BUDGET,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useChannelRuns } from "../../api/hub-status.ts";

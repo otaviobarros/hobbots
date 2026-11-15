@@ -7,6 +7,8 @@ import {
   AgentId,
   AttemptId,
   type CarriedItem,
+  Channel,
+  ChannelId,
   carriedFrom,
   DelegationId,
   EMPTY_HOB_POLICY,
@@ -16,8 +18,6 @@ import {
   type TaskToolDone,
   type TaskToolName,
   TaskToolRefused,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";

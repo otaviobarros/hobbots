@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Effort, RUNTIME_NAMES, RuntimeKind } from "./agent.ts";
-import { AgentId, ChapterId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId, MessageId } from "./ids.ts";
 import { TaskId } from "./task.ts";
 import { WebReadMark } from "./web-mark.ts";
 

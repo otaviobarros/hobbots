@@ -1,12 +1,12 @@
-import { MessageKeyReused, type MessageNotFound, ChannelArchived, ChannelNotFound, UserSession } from "@hobbots/api";
+import { ChannelArchived, ChannelNotFound, MessageKeyReused, type MessageNotFound, UserSession } from "@hobbots/api";
 import {
+  type Channel,
+  type ChannelId,
   type Committed,
   isNote,
   Message,
   type MessageId,
   type MessagePin,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission, withChannelLock } from "./admission.ts";
@@ -92,7 +92,8 @@ export class Notes extends Context.Service<
           const same = stored.value.channelId === channelId && isNote(stored.value) && stored.value.content === content;
           return same ? stored.value : yield* new MessageKeyReused({ messageId: key });
         }
-        if (channel.archivedAt !== null) return yield* new ChannelArchived({ channelId, archivedAt: channel.archivedAt });
+        if (channel.archivedAt !== null)
+          return yield* new ChannelArchived({ channelId, archivedAt: channel.archivedAt });
         const note = new Message({
           id: key,
           channelId,

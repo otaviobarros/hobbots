@@ -10,14 +10,14 @@ import {
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   DECISION_TEXT_MAX,
   DecisionStates,
   Message,
   MessageId,
   RECORD_DECISION_TOOL,
   roleFields,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, RecordRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -48,7 +48,9 @@ const camp = (id: string) =>
       const repo = yield* HobbotsRepository;
       const channelId = ChannelId.make(`camp-${id}`);
       const messageId = MessageId.make(`reply-${id}`);
-      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: ADA, title: id, createdAt: NOW, updatedAt: NOW }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: ADA, title: id, createdAt: NOW, updatedAt: NOW }),
+      );
       yield* repo.upsertMessage(
         new Message({
           id: messageId,

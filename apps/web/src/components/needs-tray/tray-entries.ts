@@ -2,10 +2,10 @@ import type { HobProposalView, WaitingQuestion } from "@hobbots/api";
 import {
   type ApprovalRequest,
   type BackpackItem,
+  type ChannelId,
   type HubQuestion,
   hobProposalOpen,
   openBlocker,
-  type ChannelId,
 } from "@hobbots/domain";
 import {
   approvalEntry,

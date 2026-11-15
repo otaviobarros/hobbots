@@ -1,4 +1,4 @@
-import { AgentId, SkillDescription, SkillId, SkillRevisionHash, SkillTrial, Channel, ChannelId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, SkillDescription, SkillId, SkillRevisionHash, SkillTrial } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound, HobUnavailable } from "./errors.ts";

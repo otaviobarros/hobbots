@@ -19,6 +19,7 @@ import {
   type Actor,
   type Agent,
   type ApprovalRequest,
+  type Channel,
   type Decision,
   DeviceId,
   type Grant,
@@ -27,7 +28,6 @@ import {
   type PairingRequest,
   type ReplyStep,
   roleFields,
-  type Channel,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -551,9 +551,9 @@ describe("a device acts for its user", () => {
       }),
     );
     const asBruna = browser(cookie, "POST");
-    expect((await request(asBruna, "POST", `/api/channels/${channel.id}/messages`, { content: "Hi, Pip" })).status).toBe(
-      200,
-    );
+    expect(
+      (await request(asBruna, "POST", `/api/channels/${channel.id}/messages`, { content: "Hi, Pip" })).status,
+    ).toBe(200);
     await settledReply(channel);
     expect((await request(APP, "POST", `/api/channels/${channel.id}/messages`, { content: "Hi again" })).status).toBe(
       200,

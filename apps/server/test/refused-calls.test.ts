@@ -14,14 +14,14 @@ import {
   AgentId,
   AttemptId,
   type CarriedItem,
+  Channel,
+  ChannelId,
   type EventEnvelope,
   MessageId,
   type TaskId,
   TaskId as TaskIdSchema,
   type TaskToolDone,
   type TaskToolRefused,
-  Channel,
-  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";

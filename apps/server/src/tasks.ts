@@ -1,11 +1,11 @@
 import { HobbotsRepository, HubQuestions, QuestionService, TaskControls, TaskRepository } from "@hobbots/agents";
 import {
   AgentNotFound,
+  ChannelNotFound,
   HobbotsApi,
   HubQuestionNotFound,
   QuestNotFound,
   TaskNotFound,
-  ChannelNotFound,
 } from "@hobbots/api";
 import {
   type AgentId,

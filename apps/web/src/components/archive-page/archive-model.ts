@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, foldWord, searchTerms, type Channel, type ChannelId } from "@hobbots/domain";
+import { type Agent, type AgentId, type Channel, type ChannelId, foldWord, searchTerms } from "@hobbots/domain";
 import { Schema } from "effect";
 
 /** The Archive's two tabs. */

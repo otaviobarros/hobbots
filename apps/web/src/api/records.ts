@@ -4,11 +4,11 @@ import {
   ArtifactContentRefusal,
   type ArtifactReviewOutcome,
   type ArtifactVersionContent,
+  type ChannelId,
   type Decision,
   type DecisionId,
   type HobbotsEvent,
   type RegisteredArtifactId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";

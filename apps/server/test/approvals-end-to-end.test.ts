@@ -15,12 +15,12 @@ import {
 import {
   type Agent,
   type ApprovalRequest,
+  type Channel,
   type Grant,
   isInProgress,
   type Message,
   type ReplyStep,
   roleFields,
-  type Channel,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {

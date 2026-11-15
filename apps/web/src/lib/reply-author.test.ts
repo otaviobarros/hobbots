@@ -1,4 +1,4 @@
-import { type Actor, Agent, AgentId, Message, MessageId, ChannelId } from "@hobbots/domain";
+import { type Actor, Agent, AgentId, ChannelId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { replyAuthor } from "./reply-author.ts";
 

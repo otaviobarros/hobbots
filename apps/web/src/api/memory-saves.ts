@@ -1,4 +1,4 @@
-import type { AgentId, MemorySave, ChannelId } from "@hobbots/domain";
+import type { AgentId, ChannelId, MemorySave } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { MEMORY_RETRY_MS, memoryKeys, refreshMemory } from "./memory-pages.ts";

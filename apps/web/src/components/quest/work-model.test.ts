@@ -6,12 +6,12 @@ import {
   BUILD,
   blackFriday,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   checkpoint,
   memberApproval,
   QUILL,
   question,
-  CHANNEL,
   task,
   tree,
 } from "../../test/quests.ts";

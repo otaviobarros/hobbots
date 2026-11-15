@@ -10,6 +10,7 @@ import {
   type AgentId,
   ArtifactId,
   AttemptId,
+  type Channel,
   CheckpointId,
   ClaimId,
   type Committed,
@@ -30,7 +31,6 @@ import {
   QuestStates,
   type Task,
   TaskId,
-  type Channel,
 } from "@hobbots/domain";
 import { DateTime, Duration, Effect, FiberMap, Layer, Option, Schedule, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";

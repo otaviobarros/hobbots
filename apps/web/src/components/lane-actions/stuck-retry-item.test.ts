@@ -1,6 +1,6 @@
 import { BackpackItem, BackpackItemId, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { blackFriday, COPY, QUILL, stuckItem, CHANNEL, task, tree } from "../../test/quests.ts";
+import { blackFriday, CHANNEL, COPY, QUILL, stuckItem, task, tree } from "../../test/quests.ts";
 import type { HobLookup } from "../quest/use-work.ts";
 import { stuckRetries } from "./stuck-retry-item.tsx";
 

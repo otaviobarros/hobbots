@@ -12,7 +12,7 @@ import {
   PermissionSummary,
   SecretRedaction,
 } from "@hobbots/agents";
-import { type Agent, isInProgress, type Message, roleFields, type StartedFresh, type Channel } from "@hobbots/domain";
+import { type Agent, type Channel, isInProgress, type Message, roleFields, type StartedFresh } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,

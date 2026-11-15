@@ -1,6 +1,7 @@
 import {
   AdditionalRuntimes,
   ApprovalService,
+  ChannelMemberRepository,
   ChapterService,
   ChatService,
   GrantService,
@@ -12,11 +13,12 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type RuntimeAdapterShape,
-  ChannelMemberRepository,
 } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  type ChannelId,
   hobActor,
   isInProgress,
   liveSession,
@@ -26,19 +28,17 @@ import {
   OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
-  Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {
   ApprovalRepositoryLive,
+  ChannelMemberRepositoryLive,
   ChapterRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   MemoryCaptureLive,
   TaskRepositoryLive,
-  ChannelMemberRepositoryLive,
   UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";

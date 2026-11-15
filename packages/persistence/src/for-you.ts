@@ -1,5 +1,5 @@
 import { ForYouRepository } from "@hobbots/agents";
-import type { Actor, AwayMessage, MessageId, ChannelId } from "@hobbots/domain";
+import type { Actor, AwayMessage, ChannelId, MessageId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { type ArtifactRow, artifactsFromRows } from "./artifact-rows.ts";

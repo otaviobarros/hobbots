@@ -24,12 +24,12 @@ import {
   CAMP_SUGGESTION_DECISIONS,
   type CampSuggestion,
   CHAPTER_BREAK_IDLE_MINUTES,
+  ChannelId,
   ChapterId,
   isInProgress,
   type Message,
   type RuntimeKind,
   roleFields,
-  ChannelId,
 } from "@hobbots/domain";
 import {
   CampSuggestionRepositoryLive,

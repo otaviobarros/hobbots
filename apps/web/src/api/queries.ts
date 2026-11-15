@@ -10,14 +10,14 @@ import type {
   Agent,
   AgentId,
   Brain,
+  ChannelId,
   Message,
   MessageId,
   RuntimeKind,
   SummonCaps,
-  ChannelId,
   UsagePeriod,
 } from "@hobbots/domain";
-import { authorOf, messagePreview, sameActor, Channel } from "@hobbots/domain";
+import { authorOf, Channel, messagePreview, sameActor } from "@hobbots/domain";
 import {
   keepPreviousData,
   type QueryClient,
@@ -29,7 +29,7 @@ import {
 import { periodStart } from "../lib/usage.ts";
 import { ApiError, call } from "./client.ts";
 import { runtimeRefetchOnFocus } from "./runtime-health.ts";
-import { newer, syncedAgents, syncedMessages, syncedChannels } from "./sync.ts";
+import { newer, syncedAgents, syncedChannels, syncedMessages } from "./sync.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
@@ -102,7 +102,11 @@ export const messagesQuery = (channelId: ChannelId) =>
   queryOptions({
     queryKey: queryKeys.messages(channelId),
     ...followsEvents,
-    queryFn: syncedMessages(channelId, () => call((c) => c.channels.messages({ params: { channelId } })), upsertMessage),
+    queryFn: syncedMessages(
+      channelId,
+      () => call((c) => c.channels.messages({ params: { channelId } })),
+      upsertMessage,
+    ),
   });
 
 export const runtimesQuery = queryOptions({

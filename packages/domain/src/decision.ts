@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
-import { ChapterId, MessageId, ChannelId } from "./ids.ts";
+import { ChannelId, ChapterId, MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 

@@ -1,4 +1,4 @@
-import type { TaskId, ChannelId } from "@hobbots/domain";
+import type { ChannelId, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import type { FormEvent } from "react";

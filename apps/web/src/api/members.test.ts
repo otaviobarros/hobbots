@@ -1,4 +1,4 @@
-import { AgentId, type HobbotsEvent, Channel, ChannelId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, type HobbotsEvent } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applyMembersEvent } from "./members.ts";

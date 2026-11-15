@@ -13,6 +13,7 @@ import {
 import {
   type AgentId,
   type ChangeCall,
+  type ChannelId,
   type CharmOperationId,
   type Committed,
   ConfigVersion,
@@ -29,7 +30,6 @@ import {
   type MessageId,
   type SummoningDraft,
   type TaskId,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import { CharmCalls } from "./charm-calls.ts";

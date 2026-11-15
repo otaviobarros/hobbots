@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Actor, hobActor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { AgentId, ChapterId, MessageId, ChannelId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId, MessageId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";

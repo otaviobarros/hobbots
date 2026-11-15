@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, Message, MessageId, Channel, ChannelId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, Channel, ChannelId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { archiveBlock, isArchiveKey, isUndoKey, nextChannel } from "./archive-rules.ts";
 

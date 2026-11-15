@@ -20,6 +20,7 @@ import type { AttemptActivityRead, ChannelTasksRead } from "@hobbots/api";
 import {
   type Agent,
   type AttemptFiles,
+  type Channel,
   type CommandOutput,
   type EventEnvelope,
   isInProgress,
@@ -27,7 +28,6 @@ import {
   type Message,
   roleFields,
   type TaskTree,
-  type Channel,
 } from "@hobbots/domain";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";

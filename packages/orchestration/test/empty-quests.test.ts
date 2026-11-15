@@ -2,6 +2,7 @@ import {
   AgentId,
   type BackpackItem,
   BackpackItemId,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -16,7 +17,6 @@ import {
   TaskId,
   TaskTree,
   TaskWait,
-  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { emptyQuestFinding, idleQuestOf } from "../src/empty-quests.ts";

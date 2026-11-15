@@ -19,12 +19,12 @@ import {
   Agent,
   AgentId,
   type ApprovalRequest,
+  type ChannelId,
   EMPTY_HOB_POLICY,
   isInProgress,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
-  type ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";

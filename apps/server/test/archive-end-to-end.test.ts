@@ -15,11 +15,11 @@ import {
 import {
   type Agent,
   type ApprovalRequest,
+  type Channel,
   isInProgress,
   type Message,
   roleFields,
   type SearchHit,
-  type Channel,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -210,7 +210,11 @@ describe("archiving channels, end to end", () => {
 
     const refused = await archive(channel);
     expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({ _tag: "ChannelArchiveRefused", channelId: channel.id, reason: "reply-running" });
+    expect(refused.body).toMatchObject({
+      _tag: "ChannelArchiveRefused",
+      channelId: channel.id,
+      reason: "reply-running",
+    });
     expect(await listed(pip.id)).toEqual([channel.id]);
     // The refusal did not interrupt the reply.
     const reply = await replyEnded(channel);

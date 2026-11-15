@@ -10,17 +10,17 @@ import {
   TaskControls,
   TaskRepository,
 } from "@hobbots/agents";
-import { StartFreshRefused, ChannelKeyReused, UserSession } from "@hobbots/api";
+import { ChannelKeyReused, StartFreshRefused, UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   TaskId,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";

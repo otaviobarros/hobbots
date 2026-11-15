@@ -1,32 +1,33 @@
 import {
   type Agent,
   type AgentId,
+  type Channel,
+  type ChannelId,
   isInProgress,
   isResumable,
   type Message,
   type MessageId,
   RUNTIME_NAMES,
   type RuntimeKind,
-  type Channel,
-  type ChannelId,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import { useReadChannel } from "../../api/channel-reads.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useHobSkills } from "../../api/hob-skills.ts";
-import { useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
+import { useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import { useConnection } from "../../api/live.ts";
 import { channelMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
 import {
   agentsQuery,
   archivedAgentsQuery,
-  messagesQuery,
-  runtimesQuery,
   channelBrain,
   channelsQuery,
+  messagesQuery,
+  runtimesQuery,
   useContinueReply,
   useInterrupt,
   usePauseHob,
@@ -38,7 +39,6 @@ import {
   useStopWaiting,
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
-import { useReadChannel } from "../../api/channel-reads.ts";
 import { channelWebQuery } from "../../api/web.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
@@ -54,7 +54,7 @@ import { type CatchUpView, useCatchUp } from "../catch-up/use-catch-up.ts";
 import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
 import { FindBox } from "../find/find-box.tsx";
 import { useHeadsUps } from "../heads-up/heads-up.tsx";
-import { stateLabel, channelState } from "../hob-sprite/hob-sprite.tsx";
+import { channelState, stateLabel } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
 import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
@@ -62,8 +62,8 @@ import { messages } from "../messages.ts";
 import { ChannelTray } from "../needs-tray/channel-tray.tsx";
 import { useNoteToSelf } from "../notes/use-note-to-self.ts";
 import { BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picker.tsx";
-import { PinNotes } from "../quest/pin-notes.tsx";
 import { useWorkMoments } from "../quest/channel-work.tsx";
+import { PinNotes } from "../quest/pin-notes.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { skillPicking } from "../skill-line/skill-picker-model.ts";
@@ -514,7 +514,10 @@ function Transcript({
   // Under a message you sent while work ran, where it went next (ADR 027).
   const receipts = useSteerReceipts(hob.id, channelId, transcript);
   // Under a reply, what it saved to the hob's memory (ADR 028).
-  const saves = useQuery({ ...channelMemorySavesQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== undefined });
+  const saves = useQuery({
+    ...channelMemorySavesQuery(channelId ?? ("" as ChannelId)),
+    enabled: channelId !== undefined,
+  });
   // A reply's searches and pages, as step lines and sources (ADR 036).
   const webUsage = useQuery({ ...channelWebQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== undefined });
   const web = repliesWeb(webUsage.data, transcript);

@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type HistoryEvent, historyNeedsYou, type ChannelId } from "@hobbots/domain";
+import { type Agent, type AgentId, type ChannelId, type HistoryEvent, historyNeedsYou } from "@hobbots/domain";
 import { firstLine, formatList, formatWeekdayDate } from "../../lib/format.ts";
 import { localDay } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";

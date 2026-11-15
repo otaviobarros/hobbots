@@ -1,4 +1,4 @@
-import { type Agent, type CarriedOverEntry, carriedOverRefId, type Channel, ChannelId } from "@hobbots/domain";
+import { type Agent, type CarriedOverEntry, type Channel, ChannelId, carriedOverRefId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Skeleton } from "@hobbots/ui/components/skeleton";

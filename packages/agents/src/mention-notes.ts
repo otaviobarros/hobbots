@@ -1,4 +1,4 @@
-import { type Message, mentionTargets, NoteId, type TaskNote, type ChannelId } from "@hobbots/domain";
+import { type ChannelId, type Message, mentionTargets, NoteId, type TaskNote } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";

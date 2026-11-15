@@ -1,9 +1,9 @@
 import { ChannelNotFound } from "@hobbots/api";
-import { type CatchUp, type CatchUpQuest, catchUpOf, deciderOf, sameActor, type ChannelId } from "@hobbots/domain";
+import { type CatchUp, type CatchUpQuest, type ChannelId, catchUpOf, deciderOf, sameActor } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { RecordRepository } from "./records.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { ChannelMemberRepository } from "./channel-members.ts";
 import { hubOwner, sessionActor } from "./users.ts";
 
 /**

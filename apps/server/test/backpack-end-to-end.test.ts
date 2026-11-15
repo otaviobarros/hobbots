@@ -16,13 +16,13 @@ import {
   Agent,
   AgentId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type Task,
   type TaskTree,
-  Channel,
-  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type Agent,
+  type Channel,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -12,7 +13,6 @@ import {
   type MemoryShare,
   type Message,
   memoryScopeKey,
-  type Channel,
 } from "@hobbots/domain";
 import { testEngine } from "@hobbots/memory/testing";
 import { FAKE_SAY_ANSWERS_DIRECTIVE } from "@hobbots/runtimes";

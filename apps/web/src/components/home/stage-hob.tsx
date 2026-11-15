@@ -1,4 +1,4 @@
-import type { Agent, TaskTree, Channel } from "@hobbots/domain";
+import type { Agent, Channel, TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/popover";

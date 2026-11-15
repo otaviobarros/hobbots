@@ -14,6 +14,7 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  type ChannelId,
   isLiveAttempt,
   type Message,
   SkillName,
@@ -22,7 +23,6 @@ import {
   type Task,
   TaskId,
   type TaskTree,
-  type ChannelId,
 } from "@hobbots/domain";
 import { waitFor, waitUntil } from "@hobbots/domain/testing";
 import {
@@ -889,7 +889,9 @@ describe("a Task's steps in fresh sessions", () => {
     await run(send(channel.id, hub("cancel_task", { key: "stop", task_id: survey.id })));
     await run(treeWhen(channel.id, (tree) => states(tree).join() === "cancelled,cancelled"));
 
-    await run(send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "Dropped the research" })));
+    await run(
+      send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "Dropped the research" })),
+    );
     const briefing = control.requests.at(-1)?.briefing ?? "";
     expect(briefing).toContain(`1. Step ${survey.id}, cancelled: Survey.`);
     expect(briefing).toMatch(/\n {2}1\.1\. Step \S+, cancelled: Dig\./);

@@ -10,6 +10,7 @@ import {
   type ApprovalRequest,
   type BackpackBlocker,
   type BackpackItem,
+  type ChannelId,
   type FailedTask,
   type HubQuestion,
   hobProposalOpen,
@@ -20,7 +21,6 @@ import {
   skillProposalOpen,
   type TaskId,
   type TaskTree,
-  type ChannelId,
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";

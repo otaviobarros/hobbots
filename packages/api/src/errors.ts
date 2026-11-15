@@ -4,6 +4,8 @@ import {
   ApprovalId,
   ApprovalLifetime,
   ApprovalState,
+  ChannelArchiveRefusal,
+  ChannelId,
   CharmCallState,
   GrantId,
   HobStanding,
@@ -13,8 +15,6 @@ import {
   QuestionId,
   SafetyPreset,
   TaskId,
-  ChannelArchiveRefusal,
-  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 

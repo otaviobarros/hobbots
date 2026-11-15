@@ -1,5 +1,5 @@
 import { HobbotsRepository, MemoryCaptureLog, PrivateCamps } from "@hobbots/agents";
-import { Agent, AgentId, Message, MessageId, OWNER_ACTOR, TaskId, Channel, ChannelId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, Message, MessageId, OWNER_ACTOR, TaskId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -34,7 +34,9 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Tests", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: agentId, title: "Tests", createdAt: now, updatedAt: now }),
+  );
   const old = DateTime.formatIso(
     DateTime.subtractDuration(yield* DateTime.now, Duration.sum(JOURNAL_RETENTION.age, Duration.days(1))),
   );

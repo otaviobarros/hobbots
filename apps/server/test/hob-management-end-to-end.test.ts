@@ -29,6 +29,7 @@ import type { HobPermissions, HobProposalView } from "@hobbots/api";
 import {
   type Agent,
   type ChangeActor,
+  type Channel,
   CharmCall,
   isInProgress,
   type Message,
@@ -36,7 +37,6 @@ import {
   roleFields,
   SUMMONING_DEFAULTS,
   type TaskTree,
-  type Channel,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -273,7 +273,9 @@ const messages = async (channel: Channel) =>
 /** Sends `lines` to `hob` in a new channel of its own. */
 const send = async (hob: Agent, lines: ReadonlyArray<string>) => {
   const channel = (await request<Channel>("POST", `/api/agents/${hob.id}/channels`)).body;
-  expect((await request("POST", `/api/channels/${channel.id}/messages`, { content: lines.join("\n") })).status).toBe(200);
+  expect((await request("POST", `/api/channels/${channel.id}/messages`, { content: lines.join("\n") })).status).toBe(
+    200,
+  );
   return channel;
 };
 

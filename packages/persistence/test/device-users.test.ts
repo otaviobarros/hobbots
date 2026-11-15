@@ -1,5 +1,5 @@
 import { DeviceRepository, HobbotsRepository } from "@hobbots/agents";
-import { DeviceId, Message, MessageId, OWNER_USER_ID, ChannelId, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { ChannelId, DeviceId, Message, MessageId, OWNER_USER_ID, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";

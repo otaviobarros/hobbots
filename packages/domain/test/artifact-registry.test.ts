@@ -7,6 +7,7 @@ import {
   type ArtifactSighting,
   AttemptId,
   artifactSightings,
+  ChannelId,
   ChapterId,
   canonicalPath,
   FileChange,
@@ -22,7 +23,6 @@ import {
   registeredArtifact,
   resolvedSighting,
   TaskId,
-  ChannelId,
 } from "../src/index.ts";
 
 const at = "2026-11-12T00:00:00.000Z";
