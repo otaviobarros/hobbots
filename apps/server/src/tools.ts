@@ -51,7 +51,7 @@ export const HobToolsLive = Layer.effect(
     // What you took over from a Task, which every hob's sandbox closes to writes (#1537).
     const takenPlaces = yield* makeTakenPlaces(sep === "\\" ? "\\" : "/");
     return HobTools.of({
-      access: (agent, turn) =>
+      access: (agent, turn, reads) =>
         Effect.gen(function* () {
           const { safetyPreset, approvedFolders, summoningForEveryHob } = yield* setup.get;
           const folders = yield* effectiveFolders(folderChecks, approvedFolders, agent.policy);
@@ -87,7 +87,7 @@ export const HobToolsLive = Layer.effect(
                 : settleCommitsAs(null, userGitIdentity(homedir()), null);
           // A hob with its own app needs no coding setup card (#1241).
           if (app !== null && Option.isSome(identities)) yield* identities.value.settled(agent.id);
-          const taken = yield* takenPlaces(turnFolders);
+          const taken = reads?.taken === false ? [] : yield* takenPlaces(turnFolders);
           return {
             policy,
             folders: turnFolders,

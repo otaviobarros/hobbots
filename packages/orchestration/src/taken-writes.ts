@@ -205,7 +205,8 @@ export const makeTakenWrites = (separator: PathSeparator) =>
  * call-level check cannot see, from a script, a variable or an interpreter, fails too. A taken
  * branch is left to the call-level check: the sandbox closes paths, and Git keeps every branch of a
  * repository in the same files. Every hob's turn gets them, whatever Task it works
- * on. Empty when nothing is taken there, or when the hub keeps no claims register.
+ * on. Empty when nothing is taken there, or when the hub keeps no claims register; while no path
+ * is taken anywhere, no folder is scanned.
  */
 export const makeTakenPlaces = (separator: PathSeparator) =>
   Effect.gen(function* () {
@@ -237,13 +238,15 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
 
     return (folders: ReadonlyArray<string>): Effect.Effect<ReadonlyArray<string>> =>
       Effect.gen(function* () {
+        // Nothing taken anywhere is the usual case: one query, and no folder is walked (#1578).
+        if (!(yield* claims.anyTakenPath)) return [];
         const tops = new Set<string>();
         const closed = new Set<string>();
         for (const folder of folders) {
           const reached = yield* git.repositoriesIn(folder);
           for (const top of reached.tops) yield* withOuter(top, tops);
           // A folder too big to scan whole may hold a repository with something taken: closed whole.
-          if (!reached.complete && (yield* claims.anyTakenPath)) closed.add(folder);
+          if (!reached.complete) closed.add(folder);
         }
         const keysOf = makeKeysOf(git, separator);
         for (const top of tops) {

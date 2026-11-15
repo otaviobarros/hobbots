@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HobGitHubApps, HobTools } from "@hobbots/agents";
+import { ClaimRegister, GitWorkspace, HobGitHubApps, HobTools } from "@hobbots/agents";
 import { type Agent, EMPTY_HOB_POLICY, type HobGitHubApp, OWNER_ACTOR } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -84,5 +84,51 @@ describe("a hob's tools", () => {
     // Without an app, or on a hub without the GitHub Charm, the hob keeps the user's identity.
     expect((await accessWith([project], appsWith({})))?.commitAs).toBeUndefined();
     expect((await accessWith([project]))?.commitAs).toBeUndefined();
+  });
+
+  // covers PE-006, #1578
+  it("[TC-PE-1578-01] scans no folder for repositories while nothing is taken, nor for a read that needs only the folders", async () => {
+    let scans = 0;
+    // A folder the scan never sees whole, so a taken path anywhere closes it whole.
+    const git = Layer.succeed(GitWorkspace, {
+      repositoriesIn: () => Effect.sync(() => (scans += 1)).pipe(Effect.as({ tops: [], complete: false })),
+    } as unknown as GitWorkspace["Service"]);
+    const claimsWith = (anyTaken: boolean) =>
+      Layer.succeed(ClaimRegister, {
+        anyTakenPath: Effect.succeed(anyTaken),
+        takenIn: () => Effect.succeed([]),
+      } as unknown as ClaimRegister["Service"]);
+    const reads = (anyTaken: boolean) =>
+      Effect.gen(function* () {
+        const setup = yield* SetupRepository;
+        yield* setup.update({ approvedFolders: [project] }, OWNER_ACTOR);
+        const tools = yield* HobTools;
+        return { full: yield* tools.access(hob), folders: yield* tools.access(hob, undefined, { taken: false }) };
+      }).pipe(
+        Effect.provide(
+          HobToolsLive.pipe(
+            Layer.provideMerge(SetupRepository.layer),
+            Layer.provide(NodeFolderChecks),
+            Layer.provide(Layer.mergeAll(git, claimsWith(anyTaken))),
+            Layer.provide(TestDatabase),
+            Layer.provide(
+              Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
+            ),
+          ),
+        ),
+        Effect.runPromise,
+      );
+
+    const idle = await reads(false);
+    expect(idle.full?.taken).toBeUndefined();
+    expect(idle.folders?.folders).toEqual([project]);
+    expect(scans).toBe(0);
+
+    // Something taken: the full read scans and closes the folder; the folders-only read does not scan.
+    const busy = await reads(true);
+    expect(busy.full?.taken).toEqual([project]);
+    expect(busy.folders?.taken).toBeUndefined();
+    expect(busy.folders?.folders).toEqual([project]);
+    expect(scans).toBe(1);
   });
 });

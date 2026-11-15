@@ -127,13 +127,24 @@ export class HobTools extends Context.Service<
   {
     /**
      * What `agent` may do with tools now. `turn` is given for a turn about to start: only then may
-     * the hub put a question about it to you, such as who its commits are made as (#741).
+     * the hub put a question about it to you, such as who its commits are made as (#741). `reads`
+     * says what the caller leaves out.
      */
-    readonly access: (agent: Agent, turn?: TurnStart) => Effect.Effect<ToolAccess | null>;
+    readonly access: (agent: Agent, turn?: TurnStart, reads?: AccessReads) => Effect.Effect<ToolAccess | null>;
   }
 >()("@hobbots/agents/HobTools") {
   /** Every turn chat-only, for hubs and tests that give hobs no tools. */
   static readonly chatOnly = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null) }));
+}
+
+/**
+ * What a read of a hob's tool access leaves out. With `taken: false` the caller reads only the
+ * folders and the policy, so the taken places (`ToolAccess.taken`), which scan the hob's folders
+ * for repositories, are not computed (#1578). Only a turn's sandbox and a check of what a turn may
+ * still do need them.
+ */
+export interface AccessReads {
+  readonly taken?: false;
 }
 
 /** What the hob may do with tools now, read again from its stored policy; null once it is gone. */

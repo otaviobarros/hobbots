@@ -826,7 +826,11 @@ export class ChatService extends Context.Service<
           const agent = yield* repo.findAgent(owner);
           const memory = Option.isNone(agent)
             ? null
-            : yield* inputs.memoryBriefFor(agent.value, yield* hobTools.access(agent.value), undefined);
+            : yield* inputs.memoryBriefFor(
+                agent.value,
+                yield* hobTools.access(agent.value, undefined, { taken: false }),
+                undefined,
+              );
           const lastTurn = Option.isNone(packReports) ? Option.none() : yield* packReports.value.last(threadId);
           return {
             next: buildPack({ ...sources, memoryBrief: memory?.text ?? null }),

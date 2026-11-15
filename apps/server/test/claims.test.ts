@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import {
@@ -374,6 +374,24 @@ const hub = () => {
         ),
       ),
     );
+  /** The same, with how many folders the hub scanned for repositories to find them (#1578). */
+  const takenPlacesScanned = (folders: ReadonlyArray<string>) => {
+    let scans = 0;
+    return run(
+      Effect.flatMap(Effect.service(GitWorkspace), (git) =>
+        Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)).pipe(
+          Effect.provideService(GitWorkspace, {
+            ...git,
+            repositoriesIn: (folder) =>
+              Effect.suspend(() => {
+                scans += 1;
+                return git.repositoriesIn(folder);
+              }),
+          }),
+        ),
+      ),
+    ).then((places) => ({ places, scans }));
+  };
   const taskOf = (taskId: TaskId) =>
     run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(
       (tree) => Option.getOrThrow(tree).tasks[0],
@@ -398,6 +416,7 @@ const hub = () => {
     takenItems,
     takenPlaces,
     takenPlacesPartly,
+    takenPlacesScanned,
     dispose: () => runtime.dispose(),
   };
 };
@@ -695,6 +714,34 @@ describe("the claims register", () => {
       await h.end(A);
       expect(await h.takenPlaces([checkout, worktree])).toEqual([]);
     } finally {
+      await h.dispose();
+    }
+  });
+
+  // covers OR-006, PE-006, #1578
+  it("[TC-OR-1578-02] scans no shared folder while nothing is taken, however large, and still closes what you take over", async () => {
+    const h = hub();
+    // A large shared folder beside the repositories: thousands of folders a scan would walk.
+    const big = join(root, "big");
+    for (let i = 0; i < 40; i += 1)
+      for (let j = 0; j < 100; j += 1) mkdirSync(join(big, `a${i}`, `b${j}`), { recursive: true });
+    try {
+      await h.seed;
+      await h.request(FRODO, A, false);
+      await h.call(FRODO, A, { key: "p", scope: "path", path: "docs" });
+      // A Task holds a path, but nothing is yours: no folder is walked.
+      expect(await h.takenPlacesScanned([root, big])).toEqual({ places: [], scans: 0 });
+
+      await h.takeOver(A);
+      const taken = await h.takenPlacesScanned([root, big]);
+      expect(taken.places).toEqual(expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs")]));
+      expect(taken.scans).toBe(2);
+
+      // Given back, nothing is taken again, and the folders are left alone.
+      await h.giveBack(A);
+      expect(await h.takenPlacesScanned([root, big])).toEqual({ places: [], scans: 0 });
+    } finally {
+      rmSync(big, { recursive: true, force: true });
       await h.dispose();
     }
   });
