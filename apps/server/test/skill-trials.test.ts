@@ -269,7 +269,7 @@ describe("trying a skill in a chat, and the health checks", () => {
     });
     expect(written.status).toBe(200);
     expect(written.body).toMatchObject({
-      agentId: pip.id,
+      ownerHobId: pip.id,
       title: "Trying Notes",
       skillTrial: { name: "notes", skillId: null, base: null, proposalId: null },
     });
