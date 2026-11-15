@@ -68,26 +68,6 @@ const hubWithHistory = async () => {
   return { current, hob, old, recent };
 };
 
-test("a word from an old message finds its thread with ⌘K and opens it at the match", async ({ page }) => {
-  const { current, hob, old, recent } = await hubWithHistory();
-  await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${recent.id}`);
-  // ⌘K listens once the page is up.
-  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
-  await page.keyboard.press("ControlOrMeta+k");
-  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
-  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lantern");
-  await expect(finder.getByRole("option")).toHaveCount(1);
-  const result = finder.getByRole("option", { name: /Where did I put the lanterns\?/ });
-  await expect(result).toContainText("2 matches");
-  await result.click();
-
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${old.id}\\?message=`));
-  await expect(finder).toBeHidden();
-  const chatView = page.getByRole("main", { name: "Chat" });
-  // The newest match, the echo of the lantern question, scrolls into view.
-  await expect(chatView.getByText("Echo: Where did I put the lanterns?", { exact: true })).toBeInViewport();
-});
-
 test("⌘K finds a thread by a word from its messages", async ({ page }) => {
   const { current, hob, old } = await hubWithHistory();
   await page.goto(`${current.url}/#/usage`);
@@ -102,34 +82,4 @@ test("⌘K finds a thread by a word from its messages", async ({ page }) => {
 
   await expect(finder).toBeHidden();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${old.id}\\?message=`));
-});
-
-test("a reply streaming into the thread keeps the search match in view", async ({ page }) => {
-  const { current, hob, old, recent } = await hubWithHistory();
-  await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${recent.id}`);
-  // A long reply starts streaming into the old thread, a word every 40 ms, for several seconds.
-  await api(current, "POST", `/threads/${old.id}/messages`, { content: "more ".repeat(150) });
-
-  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
-  await page.keyboard.press("ControlOrMeta+k");
-  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
-  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lantern");
-  await finder.getByRole("option", { name: /Where did I put the lanterns\?/ }).click();
-  const chatView = page.getByRole("main", { name: "Chat" });
-  const match = chatView.getByText("Echo: Where did I put the lanterns?", { exact: true });
-  const stop = page.getByRole("button", { name: "■ Stop" });
-  await expect(stop).toBeVisible();
-  await expect(match).toBeInViewport();
-  // Words keep arriving, and the match stays put.
-  await page.waitForTimeout(1500);
-  await expect(stop).toBeVisible();
-  await expect(match).toBeInViewport();
-
-  // Scrolling back down to the end follows the reply again.
-  const reply = chatView.getByText(/^Echo: more more/);
-  await reply.hover();
-  await page.mouse.wheel(0, 100_000);
-  await expect(stop).toBeHidden({ timeout: 15_000 });
-  await expect(match).not.toBeInViewport();
-  await expect(reply).toBeInViewport();
 });

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { campAt, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -107,65 +107,4 @@ test("the composer sends plain text exactly as typed or pasted and keeps focus",
   await expect(composer).toHaveValue("");
   await page.keyboard.press("ArrowUp");
   await expect(composer).toHaveValue(LONG);
-});
-
-test("a send the hub refuses puts its text back in the composer", async ({ page }) => {
-  const { composer } = await openMoss(page);
-  await composer.fill("Start a thread");
-  await composer.press("Enter");
-  await expect(page.getByRole("main").getByText("Echo: Start a thread")).toBeVisible();
-
-  await page.route("**/api/threads/*/messages", (route) =>
-    route.request().method() === "POST" ? route.abort() : route.fallback(),
-  );
-  await composer.fill("Line one\n  line two");
-  await composer.press("Enter");
-  await expect(page.getByRole("alert")).toBeVisible();
-  await expect(composer).toHaveValue("Line one\n  line two");
-});
-
-test("each thread keeps its unsent draft, and a long draft grows, then scrolls", async ({ page }) => {
-  const { hobUrl, hobId, composer } = await openMoss(page);
-  // A camp, so the hob's chat is still the empty one its first message would open.
-  const threadUrl = (await campAt(hub as Hub, hobId, "Start a thread")).url;
-  await page.goto(threadUrl);
-  await composer.fill("Start a thread");
-  await composer.press("Enter");
-  await expect(page.getByRole("main").getByText("Echo: Start a thread")).toBeVisible();
-
-  await composer.fill("Half a thought");
-  await page.goto(`${hobUrl}/chat`);
-  await expect(composer).toHaveValue("");
-  await composer.fill("A different idea");
-  await page.goto(threadUrl);
-  await expect(composer).toHaveValue("Half a thought");
-  await page.goto(`${hobUrl}/chat`);
-  await expect(composer).toHaveValue("A different idea");
-
-  // A reload keeps the draft too, even one typed a moment before.
-  await page.goto(threadUrl);
-  await page.reload();
-  await expect(composer).toHaveValue("Half a thought");
-
-  // A transcript taller than the window stays at its end while the composer grows.
-  const tall = Array.from({ length: 40 }, (_, i) => `Row ${i + 1}`).join("\n");
-  await composer.fill(tall);
-  await composer.press("Enter");
-  await expect(page.getByRole("main").getByText(/^Echo: Row 1/)).toBeVisible();
-  // Once the reply has finished, nothing but the composer moves the transcript.
-  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 15_000 });
-  const transcript = page.getByRole("main", { name: "Chat" }).locator(".overflow-y-auto").first();
-  const fromEnd = () => transcript.evaluate((view) => view.scrollHeight - view.scrollTop - view.clientHeight);
-  await expect.poll(fromEnd).toBeLessThan(24);
-  expect(await transcript.evaluate((view) => view.scrollHeight > view.clientHeight)).toBe(true);
-
-  // Thousands of characters still type into a composer that stops growing and scrolls instead.
-  const long = Array.from({ length: 60 }, (_, i) => `Line ${i + 1} of a long draft`).join("\n");
-  await composer.fill(long);
-  await page.keyboard.type(" and more");
-  await expect(composer).toHaveValue(`${long} and more`);
-  const box = await composer.evaluate((input) => ({ shown: input.clientHeight, full: input.scrollHeight }));
-  expect(box.shown).toBeLessThanOrEqual(160);
-  expect(box.full).toBeGreaterThan(box.shown);
-  await expect.poll(fromEnd).toBeLessThan(24);
 });

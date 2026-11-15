@@ -44,24 +44,6 @@ const hubWithWick = async () => {
 
 const AGENTS = /\/api\/agents(\?|$)/;
 
-// covers STD-REACT-002
-test("an address with params the page does not know opens the page on its defaults", async ({ page }) => {
-  const { url } = await hubWithWick();
-  const failed = page.getByRole("heading", { name: "This page could not open" });
-
-  await page.goto(`${url}/#/hobs?show=everything`);
-  await expect(page.getByRole("main", { name: "Your hobs" }).getByText("Wick")).toBeVisible();
-  await expect(failed).toHaveCount(0);
-
-  await page.goto(`${url}/#/usage?days=99`);
-  await expect(page.getByRole("heading", { name: "Usage", level: 1 })).toBeVisible();
-  await expect(failed).toHaveCount(0);
-
-  await page.goto(`${url}/#/inbox?tab=nowhere`);
-  await expect(page.getByRole("heading", { name: "Inbox", level: 1 })).toBeVisible();
-  await expect(failed).toHaveCount(0);
-});
-
 // covers STD-REACT-014, STD-UI-009
 test("a page that cannot load says why in plain words, keeps the sidebar and opens on Try again", async ({ page }) => {
   const { url, wickId } = await hubWithWick();

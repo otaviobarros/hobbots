@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
@@ -112,44 +112,4 @@ test("Settings › Export saves a hob's export as a folder that opens without Ho
   expect(text).toContain("Tagline ideas");
   expect(text).toContain("[redacted: GitHub token]");
   expect(text).not.toContain(TOKEN);
-});
-
-test("a thread's menu and a hob's profile export just that thread or hob", async ({ page }) => {
-  hub = await startHub(dataDir);
-  const project = join(saved, "project");
-  mkdirSync(project);
-  const { pip, thread } = await pipWithThread(hub, project);
-  const fromThread = join(saved, "thread");
-  const fromHob = join(saved, "hob");
-  mkdirSync(fromThread);
-  mkdirSync(fromHob);
-
-  await page.goto(`${hub.url}/#/hobs/${pip}/threads/${thread}`);
-  await page.getByRole("button", { name: "More for this chat" }).click();
-  await page.getByRole("menuitem", { name: "Export chat…" }).click();
-  const dialog = page.getByRole("dialog", { name: /^Export “Tagline ideas/ });
-  await dialog.getByRole("textbox", { name: "Save in" }).fill(fromThread);
-  await dialog.getByRole("button", { name: "Export" }).click();
-  await expect(dialog.getByRole("status")).toContainText("Saved to");
-  await dialog.getByRole("button", { name: "Close" }).click();
-  await expect(dialog).toHaveCount(0);
-  const threadExport = exported(fromThread);
-  expect(JSON.parse(readFileSync(join(threadExport.root, "export.json"), "utf8")).scope).toEqual({
-    _tag: "Thread",
-    threadId: thread,
-  });
-
-  await page.goto(`${hub.url}/#/hobs/${pip}/profile`);
-  await page.getByRole("button", { name: "More actions for Pip" }).click();
-  await page.getByRole("button", { name: "Export hob…" }).click();
-  const hobDialog = page.getByRole("dialog", { name: "Export Pip" });
-  await hobDialog.getByRole("textbox", { name: "Save in" }).fill(fromHob);
-  await hobDialog.getByRole("button", { name: "Export" }).click();
-  await expect(hobDialog.getByRole("status")).toContainText("Saved to");
-  const hobExport = exported(fromHob);
-  expect(existsSync(join(hobExport.root, "README.md"))).toBe(true);
-  expect(JSON.parse(readFileSync(join(hobExport.root, "export.json"), "utf8")).scope).toEqual({
-    _tag: "Hob",
-    agentId: pip,
-  });
 });

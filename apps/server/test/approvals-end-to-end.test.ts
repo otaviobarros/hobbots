@@ -50,7 +50,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // Slice 8's done-when checks (ADR 015), at hub level and over the HTTP API, with the hub's own
 // composition: the setup's preset and folders read at every turn, one policy engine, grants, and
 // the fake runtime making the scripted tool calls. CI runs them on SQLite and on PostgreSQL. The
-// browser side of the same checks is in apps/web/e2e/approvals.e2e.ts and inbox.e2e.ts.
+// browser side is in apps/web/e2e/approvals.e2e.ts.
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-approvals-e2e-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");
