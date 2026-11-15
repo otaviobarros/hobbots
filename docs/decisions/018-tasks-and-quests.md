@@ -159,7 +159,7 @@ On every call the server checks:
 
 - **Who may call it:** the Task's owner, or a lead above it in the tree. A hob can never act on a Task outside its own subtree.
 - **Depth:** a delegation past the depth limit is refused.
-- **Concurrency and time limits:** per hob, per Quest and per runtime session, with Task deadlines, as the orchestration contract sets them.
+- **Concurrency and time limits:** one cap on the turns the hub runs at once, with Task deadlines, as the orchestration contract sets them (see the amendment below).
 - **No cycles:** a hob cannot be given a Task whose lineage it already leads.
 - **Authority only narrows:** a child's permissions and limits are the intersection of its own and its parent's. A brief cannot widen them.
 - **Idempotency:** each call carries a key, so a retried call returns the first result and never creates a second Task, Question or hand-off.
@@ -239,3 +239,7 @@ You could cancel a Quest but not hold it, a lead could not retry or reassign the
 - **Pause, Pause now and Resume.** Pausing a Quest or a Task holds it and everything under it still under way. The Task machine gains `pausing`, while a turn that ran as you paused ends, and `paused`; the Quest machine gains `paused`, kept in step with its Task. Pause lets a running turn end; Pause now stops it. A Task's pause records where it stood, who paused it, when, and whether it was Pause now, so Resume puts it back there and a restart loses nothing. Resume tells each hob that goes back to work what changed while it was paused, from the records.
 - **A lead retries and reassigns.** `retry_task` and `reassign_task` reach a member's Task directly under the lead's own, as `message_task` does. Each takes a reason, the Task's revision as the lead read it and an idempotency key, and is refused when the Task changed since, while its last Attempt may still run, or by the rules your own Retry and Reassign follow. A reassign works the new hob's authority out again rather than keeping the old member's. The journal names the lead and its reason on the change.
 - **Your note to a member.** An @mention of a member in a Quest's chat reaches that member's Task as your note, and does not wake the lead, which reads it on its next turn. Its receipt shows only what the hub recorded.
+
+## Amendment: one cap on turns replaces the turn limits ([#1590](https://github.com/otaviobarros/hobbots/issues/1590))
+
+[#1448](https://github.com/otaviobarros/hobbots/issues/1448) limited turns per hob, per Quest and per runtime, gave free slots to Quests in a fair order, and kept limits you could change. With no one asking for those knobs, they cost more than they gave. One fixed cap replaces them: at most four turns run at once across the hub, and turns past it start in the order they asked. A turn still waits rather than fails, and a step's own limits per hob and per tree are unchanged.

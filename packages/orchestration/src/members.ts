@@ -463,13 +463,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         // Its work waits, queued, until every Task it comes after has completed: that completion
         // wakes the runner again, as it does for a step (ADR 018).
         if (TaskReadiness.of(task, tree.tasks)._tag !== "Ready") return;
-        // Past a turn limit its work stays waiting in its backpack, and the next round once a slot
-        // frees starts it (#1448).
-        const slot = yield* takeSlot(
-          deps.slots,
-          { id: `member:${taskId}`, agentId, runtime: config.value.runtime, quest: task.rootId },
-          deps.wake,
-        );
+        // Past the hub's cap on turns its work stays waiting in its backpack, and the next round once
+        // a slot frees starts it (#1590).
+        const slot = yield* takeSlot(deps.slots, { id: `member:${taskId}`, agentId }, deps.wake);
         if (slot === null) return;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can

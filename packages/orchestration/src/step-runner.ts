@@ -356,10 +356,11 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             if (Option.isNone(agent) || agent.value.status !== "active") return;
             const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
             if (Option.isNone(config)) return;
-            // Past a turn limit the step stays queued, and the next round once a slot frees starts it.
+            // Past the hub's cap on turns the step stays queued, and the next round once a slot frees
+            // starts it (#1590).
             const slot = yield* takeSlot(
               slots,
-              { id: `step:${queued.id}`, agentId: queued.ownerId, runtime: config.value.runtime, quest: queued.rootId },
+              { id: `step:${queued.id}`, agentId: queued.ownerId },
               Effect.suspend(() => round),
             );
             if (slot === null) return;

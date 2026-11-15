@@ -1,4 +1,4 @@
-import { PlanUsage, QuestCost, QuestId, TurnLimits, TurnSlotsReport, UsagePeriod, UsageReport } from "@hobbots/domain";
+import { PlanUsage, QuestCost, QuestId, TurnSlotsReport, UsagePeriod, UsageReport } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { QuestNotFound } from "./errors.ts";
@@ -21,13 +21,9 @@ export class UsageGroup extends HttpApiGroup.make("usage")
     }),
   )
   .add(
-    // How many turns run at once (#1448): the limits per hob, Quest and runtime, the turns that run
-    // and those that wait, and why. Limits count turns: runtimes report usage only after a turn.
+    // How many turns run at once (#1590): the hub's cap, the turns that run and those that wait. The
+    // cap counts turns: runtimes report usage only after a turn.
     HttpApiEndpoint.get("turns", "/usage/turns", { success: TurnSlotsReport }),
-  )
-  .add(
-    // Keeps new turn limits across restarts; turns that fit under them start at once.
-    HttpApiEndpoint.put("setTurnLimits", "/usage/turns/limits", { payload: TurnLimits, success: TurnSlotsReport }),
   )
   .add(
     // What a Quest cost (#1449): what its whole party used, from the same records as the report

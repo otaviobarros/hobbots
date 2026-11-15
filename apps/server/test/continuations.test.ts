@@ -14,7 +14,6 @@ import {
   TaskControls,
   TaskRepository,
   ThreadMemberRepository,
-  TurnLimitsStore,
   TurnSlots,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
@@ -27,7 +26,6 @@ import {
   type BackpackItem,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
-  DEFAULT_TURN_LIMITS,
   DelegationId,
   hobActor,
   IDLE_QUEST,
@@ -39,7 +37,6 @@ import {
   TaskId,
   Thread,
   ThreadId,
-  type TurnLimits,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
@@ -199,7 +196,7 @@ const makeApp = (
   requests: Array<PromptRequest>,
   before: Before,
   limits: DispatchLimits,
-  turnLimits: TurnLimits | null,
+  turnCap: number | null,
 ) =>
   Layer.mergeAll(WakeOnArrival, BlockOnRetirement, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
@@ -225,13 +222,7 @@ const makeApp = (
         NoTools,
         HobAdmission.layer,
         held(gate, requests),
-        turnLimits === null
-          ? Layer.empty
-          : TurnSlots.layer.pipe(
-              Layer.provide(
-                Layer.succeed(TurnLimitsStore, { get: Effect.succeed(turnLimits), set: () => Effect.void }),
-              ),
-            ),
+        turnCap === null ? Layer.empty : TurnSlots.layerWith(turnCap),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",
@@ -300,10 +291,10 @@ const SamsCamp: Before = Layer.effectDiscard(
   }),
 );
 
-const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS, turnLimits: TurnLimits | null = null) => {
+const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS, turnCap: number | null = null) => {
   const requests: Array<PromptRequest> = [];
   const gate = Deferred.makeUnsafe<void>();
-  const app = ManagedRuntime.make(makeApp(gate, requests, before, limits, turnLimits));
+  const app = ManagedRuntime.make(makeApp(gate, requests, before, limits, turnCap));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
   return { run, requests, release: () => run(Deferred.succeed(gate, undefined)) };
@@ -1230,7 +1221,7 @@ describe("blockers", () => {
 });
 
 describe("turn limits", () => {
-  it("answers every one of many chats sent at once to one hob that may run four turns at a time (#1448)", async () => {
+  it("answers every one of many chats sent at once to one hob, four turns at a time (#1448, #1590)", async () => {
     const ids = Array.from({ length: 13 }, (_, n) => ThreadId.make(`chat-${n + 1}`));
     const ManyChats: Before = Layer.effectDiscard(
       Effect.gen(function* () {
@@ -1241,13 +1232,13 @@ describe("turn limits", () => {
         }
       }),
     );
-    const perHob = 4;
-    const { run, release } = setUp(ManyChats, LIMITS, { ...DEFAULT_TURN_LIMITS, perHob });
+    const cap = 4;
+    const { run, release } = setUp(ManyChats, LIMITS, cap);
     // The first four turns hold until the gate opens, so the other nine messages wait, queued.
     const sent = await Promise.all(
       ids.map((id) => run(ChatService.use((chat) => chat.sendPrompt(id, `${HOLD} Hello from ${id}`)))),
     );
-    expect(sent.filter((each) => each.userMessage.status === "queued")).toHaveLength(ids.length - perHob);
+    expect(sent.filter((each) => each.userMessage.status === "queued")).toHaveLength(ids.length - cap);
     await release();
     // A thread that finds no backpack work keeps its slot for your message, so every chat is
     // answered, never more than four at once.
@@ -1259,7 +1250,7 @@ describe("turn limits", () => {
               Effect.serviceOption(TurnSlots),
               (slots) => Option.getOrThrow(slots).report,
             );
-            expect(report.active.length).toBeLessThanOrEqual(perHob);
+            expect(report.active.length).toBeLessThanOrEqual(cap);
             return (yield* HobbotsRepository.use((repo) => repo.listMessages(id))).map((m) => m.status).join();
           }),
           (statuses) => statuses === "complete,complete",
