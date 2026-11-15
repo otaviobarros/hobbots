@@ -4,12 +4,12 @@
 
 Work goes through the [agent-engineering](https://github.com/otaviobarros/agent-engineering) skills:
 
-| Task | Skill |
-|---|---|
-| An issue to build | `deliver-change` |
-| A plan only | `plan-change` |
-| A pull request to review | `review-pr` |
-| Review findings to fix | `remediate-findings` |
+| Task                     | Skill                |
+| ------------------------ | -------------------- |
+| An issue to build        | `deliver-change`     |
+| A plan only              | `plan-change`        |
+| A pull request to review | `review-pr`          |
+| Review findings to fix   | `remediate-findings` |
 
 The [project workflow guide](docs/agent-engineering.md) lists the other skills, where each authority lives and the checks. Run only the tests your change affects; CI runs the whole suite. The task's own limits and this file govern. If a skill is missing, report it. This file does not authorize you to install plugins, commit, push or publish.
 
