@@ -130,7 +130,7 @@ describe("the search API", () => {
     );
     expect(hits.status).toBe(200);
     const [hit] = hits.body as Array<SearchHit>;
-    expect(hit?.channel).toMatchObject({ id: channel.id, agentId: agent.id });
+    expect(hit?.channel).toMatchObject({ id: channel.id, ownerHobId: agent.id });
     expect(hit?.matches.map((m) => m.role)).toEqual(["assistant", "user"]);
 
     expect((await search("")).body).toEqual([]);

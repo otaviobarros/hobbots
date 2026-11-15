@@ -115,7 +115,9 @@ export const ASK_TIMEOUT: Duration.Input = "90 seconds";
 
 /** How a record reads to the hub's brain: what it is, where, when, and its words. */
 const recordLine = (record: FoundRecord, number: number) => {
-  const where = `in ${record.channelKind} "${record.channelTitle}", ${record.at.slice(0, 10)}`;
+  // A hob's direct channel is its chat, as the hub's brain reads it.
+  const kind = record.channelKind === "direct" ? "chat" : record.channelKind;
+  const where = `in ${kind} "${record.channelTitle}", ${record.at.slice(0, 10)}`;
   switch (record._tag) {
     case "decision":
       return `[${number}] Decision${isCrossedOut(record) ? " (crossed out, no longer holds)" : ""} ${where}: ${record.text}`;

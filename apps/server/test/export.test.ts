@@ -414,12 +414,12 @@ describe("exports", () => {
     const files = filesIn(result.folder);
     expect(Object.keys(files).sort()).toEqual([
       "README.md",
+      "channels/2026-11-02 Black Friday campaign.md",
+      "channels/2026-11-02 Notes ideas.md",
       "export.json",
       "files/campaign-task/chart #1.png",
       "files/campaign-task/report.md",
       "quests/2026-11-02 A Black Friday campaign.md",
-      "channels/2026-11-02 Black Friday campaign.md",
-      "channels/2026-11-02 Notes ideas.md",
     ]);
     // A text file is redacted like any other string; a binary one with no secret is copied as it is.
     expect(files["files/campaign-task/report.md"]?.toString()).toBe(REPORT.replace(PASTED, "[redacted: GitHub token]"));
