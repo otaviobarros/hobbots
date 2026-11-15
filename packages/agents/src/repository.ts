@@ -150,6 +150,10 @@ export class HobbotsRepository extends Context.Service<
      * Saves the message with the events it produces (`messageEvents`), and in the same transaction
      * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line). A new
      * message joins its thread's live chapter; the message returned carries the chapter it is in.
+     * A hob's reply saved complete that @mentions other hobs of the camp owes each one a relay
+     * request (ADR 039, Hobs talking to hobs), at one more than its turn's relay depth and `paused`
+     * past `HOB_RELAY_BUDGET`, written with it; a reply whose turn was stopped relays nothing, and a
+     * reply relays once, however often it is saved.
      */
     readonly upsertMessage: (message: Message, uses?: ReadonlyArray<SkillUse>) => Effect.Effect<Committed<Message>>;
     /**
@@ -196,7 +200,7 @@ export class HobbotsRepository extends Context.Service<
       reply: Message,
       speaking: ReadonlyArray<TurnRequestId>,
     ) => Effect.Effect<Option.Option<Committed<Message>>>;
-    /** The turn writing `replyId` ended: its speaking requests are answered. */
+    /** The turn writing `replyId` ended: the requests it spoke for are answered. */
     readonly answerTurnRequests: (replyId: MessageId) => Effect.Effect<void>;
     /** The requests still owed that the turn writing `replyId` speaks for. */
     readonly turnRequestsOf: (replyId: MessageId) => Effect.Effect<ReadonlyArray<TurnRequest>>;
@@ -216,6 +220,12 @@ export class HobbotsRepository extends Context.Service<
       reason: string,
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
+     * Let them go on (ADR 039, Hobs talking to hobs): the line's paused requests wait again, each at
+     * `RESUMED_RELAY_DEPTH`, journaled as one `RelayBudgetReset` by `by`. Returns the requests it
+     * woke; none, and nothing journaled, when none was paused.
+     */
+    readonly letHobsGoOn: (line: Line, by: Actor) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
+    /**
      * Drops the requests that are still owed, recording who stopped them (Stop and Stop all). A
      * queued message left with nothing owed leaves the queue said, journaled `MessageDequeued`
      * `dropped`. Returns the requests it dropped.
@@ -234,7 +244,7 @@ export class HobbotsRepository extends Context.Service<
      * reply, or passed, with its reply removed, when its hob had passed.
      */
     readonly answerUnfinishedTurnRequests: Effect.Effect<Committed<void>>;
-    /** Threads with a `TurnRequest` waiting. */
+    /** Threads with a `TurnRequest` waiting, or paused past the relay budget, so a start shows each line as it was. */
     readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
     /**
      * Takes `actor` out of a camp, by `by` (ADR 039, Members), in one transaction: the member moves to

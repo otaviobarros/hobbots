@@ -23,6 +23,26 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
   await composer(page).press("Enter");
 };
 
+/** The chat's thread, from the page's address once the first message made it. */
+const threadOf = (page: Page) => /\/threads\/([^/?]+)/.exec(page.url())?.[1];
+
+/** Waits until Aldric has answered you and the turn the hub woke him for on its own has ended too. */
+const leadWokeAndEnded = (page: Page) =>
+  expect
+    .poll(
+      async () => {
+        const thread = threadOf(page);
+        if (thread === undefined) return false;
+        const messages = (await (
+          await page.request.get(`${new URL(page.url()).origin}/api/threads/${thread}/messages`)
+        ).json()) as ReadonlyArray<{ readonly role: string; readonly status: string }>;
+        const replies = messages.filter((message) => message.role === "assistant");
+        return replies.length === 2 && replies.every((reply) => reply.status === "complete");
+      },
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+
 // covers CH-004, CH-007, CH-008
 test("[TC-CH-1056-03] a reply waiting on a command says which one and for how long, and Stop waiting ends it with the command stopped", async ({
   page,
@@ -35,6 +55,9 @@ test("[TC-CH-1056-03] a reply waiting on a command says which one and for how lo
   // A Quest gives the commands a Workbench, whose Terminal shows how each one ended.
   await send(page, ["Start the dev server", script("start_quest", { key: "quest", goal: "Start the dev server" })]);
   await expect(ticket(page, "Start the dev server")).toBeVisible({ timeout: 20_000 });
+  // The hub then wakes Aldric on its own, as the Quest's lead with nothing moving it (#1081). That
+  // turn echoes a long brief, so the next message would wait behind it: it is let end first.
+  await leadWokeAndEnded(page);
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
   // The dev server never ends on its own, so once Aldric has answered the reply waits on it. The hub

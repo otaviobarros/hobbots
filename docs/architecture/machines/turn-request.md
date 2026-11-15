@@ -21,6 +21,7 @@ stateDiagram-v2
   waiting --> dropped: Drop
   paused --> dropped: Drop
   speaking --> dropped: Drop
+  paused --> waiting: GoOn
   answered --> [*]
   passed --> [*]
   dropped --> [*]
@@ -32,3 +33,4 @@ stateDiagram-v2
 | Answer | speaking | answered | no |
 | Pass | speaking | passed | no |
 | Drop | waiting, paused, speaking | dropped | no |
+| GoOn | paused | waiting | no |

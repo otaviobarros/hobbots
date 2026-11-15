@@ -97,6 +97,12 @@ export interface FakeRuntimeOptions {
    * such a turn was told in its echo.
    */
   readonly quietContinuations?: boolean;
+  /**
+   * Why every reply should end with what the hub answered its scripted calls, as a `fake:say-answers`
+   * line asks for one turn (#1560). Only for a suite whose tests check the words of a tool's answer,
+   * which a model reads in the turn that made the call. Without it the reply leaves the answers out.
+   */
+  readonly saysAnswers?: string;
 }
 
 /** What the fake runtime claims to enforce. Nothing is run, so its claims are about decisions only. */
@@ -698,22 +704,38 @@ const resolveReferences = (input: unknown, details: ReadonlyMap<string, unknown>
   return input;
 };
 
+/**
+ * A prompt line `fake:say-answers`, anywhere in it, makes the fake's reply end with what the hub
+ * answered its scripted calls. Without it the reply leaves those answers out (#1560): a real model's
+ * reply rarely repeats a tool result, ids included, so a later session that reads only what the hob
+ * wrote must not find them there either. A test that reads an answer takes it from the party hub's
+ * `answers` or the journal; one that needs it in the reply asks for it with this line, or for a
+ * whole suite with the `saysAnswers` option, and says why.
+ */
+export const FAKE_SAY_ANSWERS_DIRECTIVE = "fake:say-answers";
+
+/** Whether a turn's prompt asks the fake to repeat the hub's answers in its reply. */
+const saysAnswers = (prompt: string) => prompt.split("\n").some((line) => line.trim() === FAKE_SAY_ANSWERS_DIRECTIVE);
+
 /** How the fake's reply shows a message that reached its turn between two scripted hub calls (#1345). */
 export const FAKE_STEERED = "Steered: ";
 
 /**
  * The hub tool calls a prompt scripts, each shown as a step. What the hub answers is added to
- * `answers`, one `<tool>: <answer>` each, for the reply to end with as a model would read it. The
- * details each answer gives back are kept in `details` under the call's key, for later calls to
- * refer to as `$<key>.<path>`.
+ * `answers`, one `<tool>: <answer>` each, only when the prompt has a `fake:say-answers` line (#1560);
+ * a message that steers the turn and a call the runtime refuses are added always, as the reply shows
+ * them. The details each answer gives back are kept in `details` under the call's key, for later
+ * calls to refer to as `$<key>.<path>`.
  */
 export const scriptedHubEvents = (
   request: PromptRequest,
   answers: Array<string>,
   details: Map<string, unknown> = new Map(),
+  alwaysSays = false,
 ): Stream.Stream<RuntimeEvent> => {
   const hub = request.hubTools;
   if (!hub) return Stream.empty;
+  const says = alwaysSays || saysAnswers(request.prompt);
   const calls = request.prompt
     .split("\n")
     .map((line) => line.trim())
@@ -769,7 +791,7 @@ export const scriptedHubEvents = (
             resolveReferences(call.input, details),
             hubCallStep(call.id, report, request.recordToolStart),
           );
-          answers.push(`${call.name}: ${answer.text}`);
+          if (says) answers.push(`${call.name}: ${answer.text}`);
           const key = (call.input as { readonly key?: unknown } | null)?.key;
           if (typeof key === "string" && !answer.refused) details.set(key, answerDetails(answer.text));
           yield* Queue.offer(queue, { _tag: "StepEnded", id: call.id });
@@ -961,7 +983,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     // The searches the turn ran, counted in its usage when it could search (ADR 036).
     const searchTurn = toolTurn(request.tools, sandbox, request);
     let webSearches = 0;
-    // The reply ends with what the hub answered its scripted calls, known once they are made.
+    // The reply ends with the steers, refusals and, when asked, hub answers its scripted calls met.
     const written = Stream.suspend(() => {
       const reply = quiet ? "" : answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
       const words = reply === "" ? [] : reply.split(/(?<= )/);
@@ -1010,7 +1032,14 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
           }),
         ),
       ),
-      Stream.concat(scriptedHubEvents({ ...request, ...held.hubTools, prompt: scripted }, answers, details)),
+      Stream.concat(
+        scriptedHubEvents(
+          { ...request, ...held.hubTools, prompt: scripted },
+          answers,
+          details,
+          options.saysAnswers !== undefined,
+        ),
+      ),
       // Like Claude Code, the turn completes once its background commands that end have ended.
       Stream.concat(Stream.suspend(() => backgroundEnds(background.filter((run) => !run.outlives)))),
       Stream.concat(written),

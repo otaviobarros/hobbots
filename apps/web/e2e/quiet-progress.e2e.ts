@@ -95,6 +95,8 @@ test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine prog
         ].join("\n"),
       }),
       hubCall("wait_for", { key: "wait", tasks: ["$copy.task_id", "$pages.task_id"] }),
+      // Frodo's plan repeats what delegate_task answered, so the chat shows the Tasks he made (#1560).
+      "fake:say-answers",
     ].join("\n"),
   );
   await expect(page.getByRole("button", { name: /^Send( after this reply)?$/ })).toBeEnabled();

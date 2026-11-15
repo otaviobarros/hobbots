@@ -315,6 +315,31 @@ describe("skill assignments", () => {
     expect(reply.skills?.map((skill) => skill.name)).toEqual(["shared"]);
   });
 
+  // covers ADR 029 (Scopes), ADR 039 (Hobs talking to hobs)
+  it("[TC-CH-1463-07] the camp's hob answers a member hob's relay with its own skills, never the member's", async () => {
+    const pip = await summon("Pip", 965);
+    const quill = await summon("Quill", 966);
+    const releaseSkill = await importSkill("release");
+    await request("POST", `/api/skills/${releaseSkill.skill.id}/assignments`, {
+      scope: { _tag: "Hob", agentId: pip.id },
+    });
+    await request("POST", `/api/agents/${pip.id}/threads`);
+    const camp: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await joinCamp(camp.id, quill.id);
+
+    await send(camp, "@pip what do you know?");
+    await replies(camp, 1);
+    // Quill's echoed briefing quotes the message to Pip, so its reply mentions Pip and wakes it.
+    await send(camp, "@quill and you?");
+    await replies(camp, 3);
+    const hobReplies = (await messages(camp)).filter((m) => m.role === "assistant");
+    const [, fromQuill, relayed] = hobReplies;
+    expect(fromQuill?.actor).toMatchObject({ kind: "hob", id: quill.id });
+    expect(fromQuill?.skills?.map((skill) => skill.name)).toEqual(["shared"]);
+    expect(relayed?.actor).toMatchObject({ kind: "hob", id: pip.id });
+    expect(relayed?.skills?.map((skill) => skill.name)).toEqual(["release", "shared"]);
+  });
+
   // covers RT-001, ADR 029 (Pins and rollout)
   it("[TC-AG-143] saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
     const pip = await summon("Pip", 963);

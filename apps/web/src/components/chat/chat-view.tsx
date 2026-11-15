@@ -74,6 +74,7 @@ import { repliesWeb, replyWebOf } from "../web/web-model.ts";
 import { ChatHeader } from "./chat-header.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
+import { HobsPaused } from "./hobs-paused.tsx";
 import { type ContinueReply, MessageRow, QueuedRow, useScrollToMessage, WaitingRow } from "./message-row.tsx";
 import { TranscriptSkeleton } from "./transcript-skeleton.tsx";
 
@@ -575,6 +576,8 @@ function Transcript({
           renderMessage={row}
         />
       )}
+      {/* Hobs that kept answering each other wait for a person after the relay budget (ADR 039). */}
+      <HobsPaused thread={thread} hobs={hobs} />
       {caughtAt === null && catchUpAt}
       {headsUps.failed}
       {saves.isError && saves.data === undefined && (

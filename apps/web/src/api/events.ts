@@ -220,6 +220,8 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ThreadMemberAdded",
   // What the supervisor did reaches you as the failure, retry or note it made (#1447), not its record.
   "TaskSupervised",
+  // Let them go on reaches the chat as the thread's run, published on `status` frames (ADR 039).
+  "RelayBudgetReset",
 ]);
 type UnappliedEvent = Extract<
   HobbotsEvent,
@@ -233,7 +235,8 @@ type UnappliedEvent = Extract<
       | "HobPresenceChanged"
       | "HobPresenceRemoved"
       | "ThreadMemberAdded"
-      | "TaskSupervised";
+      | "TaskSupervised"
+      | "RelayBudgetReset";
   }
 >;
 const isUnapplied = (event: HobbotsEvent): event is UnappliedEvent => UNAPPLIED.has(event._tag);

@@ -333,7 +333,7 @@ const expectAdaFinished = (
 describe("leading a party on a Quest", () => {
   // covers OR-002, OR-003, IN-004
   it("[TC-OR-090] Aldric delegates to Quill and Ada; Ada's Task waits for Quill's to complete and starts with his copy, and Aldric wraps up in the chat", async () => {
-    const { run, requests, release } = setUp();
+    const { run, requests, answers, release } = setUp();
     const prompt = [
       "Plan the Black Friday campaign",
       hub("delegate_task", {
@@ -404,9 +404,10 @@ describe("leading a party on a Quest", () => {
     // is open, then Ada's, where Aldric wraps up with the Quest's result.
     const all = await run(messagesWhen((each) => continuations(each).length === 2));
     const [early, wrapUp] = continuations(all);
-    expect(early?.content).toContain("Refused");
+    expect(early).toBeDefined();
+    expect(answers.get("early")).toContain("Refused");
     expect(wrapUp?.content).toContain(`finished. ${RESULT_IN_BRIEFING}`);
-    expect(wrapUp?.content).toContain("complete_task: Task");
+    expect(answers.get("wrap")).toMatch(/^Task /);
     // Nothing is left for anyone to deal with, routine progress included: Ada's reached Aldric as a
     // digest along his next turns (#293), and what the wrap-up carries resolves once it has ended.
     for (const agentId of [ALDRIC, QUILL, ADA]) {
@@ -795,7 +796,7 @@ const questionsWhen = (ready: (tree: TaskTree) => boolean) =>
 describe("questions in a party", () => {
   // covers OR-002, IN-004
   it("[TC-OR-130] Quill's question reaches Aldric, who answers it himself; it never reaches you and Quill goes on with the answer", async () => {
-    const { run, requests } = setUp();
+    const { run, requests, answers } = setUp();
     const prompt = [
       "Plan the campaign",
       hub("delegate_task", {
@@ -829,7 +830,7 @@ describe("questions in a party", () => {
     expect(asked?.content).toContain(`question ${question?.id} about Task ${quill?.id}`);
     expect(asked?.content).toContain("Playful or formal?");
     expect(asked?.content).toContain("pass it up with escalate");
-    expect(asked?.content).toContain("answer: Answered");
+    expect(answers.get("reply")).toMatch(/^Answered/);
     // Quill's next turn went on in his own session with Aldric's answer.
     const quillPrompts = promptsTo(requests, quill);
     expect(quillPrompts).toHaveLength(2);

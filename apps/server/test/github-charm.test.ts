@@ -32,6 +32,10 @@ import { Effect, Layer, Schedule } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the GitHub Charm's answers, which a hob reads in the turn that made the call.";
+
 const HOB_ID = AgentId.make("aldric");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-github-charm-")));
 const folder = join(root, "project");
@@ -146,7 +150,7 @@ describe("The GitHub Charm on a hub", () => {
           Layer.effectDiscard(summonHob),
           EventBus.layer,
           HobAdmission.layer,
-          FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
+          FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS }).pipe(Layer.provide(PolicyEngine.node)),
           Charms,
         ),
       ),

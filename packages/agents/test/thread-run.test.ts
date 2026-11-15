@@ -29,6 +29,7 @@ interface RunView {
   readonly speaking: AgentId | null;
   readonly carrier: AgentId | null;
   readonly next: ReadonlyArray<AgentId>;
+  readonly paused: ReadonlyArray<AgentId>;
   readonly reply: number | null;
   readonly activity: ReplyActivity | null;
   readonly chosen: MessageId | null;
@@ -40,6 +41,7 @@ const view = (run: ThreadRun): RunView => ({
   speaking: run.speaking,
   carrier: run.carrier,
   next: run.next,
+  paused: run.paused,
   reply: replyIndex(run.reply),
   activity: run.activity,
   chosen: run.chosen,
@@ -77,8 +79,11 @@ const rules: { readonly [T in ThreadRunEvent["_tag"]]: Rule<T> } = {
     return m.run === "idle" ? m : "refused";
   },
   Delivered: (m) => (m.run === "dispatching" ? { ...m, run: "idle", carrier: null } : "refused"),
-  // Only a change of who is next is a transition.
-  Lined: (m, e) => (JSON.stringify(m.next) === JSON.stringify(e.next) ? "refused" : { ...m, next: e.next }),
+  // Only a change of who is next, or of whose relay waits for a person, is a transition.
+  Lined: (m, e) =>
+    JSON.stringify([m.next, m.paused]) === JSON.stringify([e.next, e.paused])
+      ? "refused"
+      : { ...m, next: e.next, paused: e.paused },
   Choose: (m, e) => ({ ...m, chosen: e.messageId }),
   Unchoose: (m, e) => (e.messageId === null || m.chosen === e.messageId ? { ...m, chosen: null } : m),
   // Each hob's stop is kept apart: holding one hob leaves another's hold as it is.
@@ -104,7 +109,7 @@ const events: fc.Arbitrary<ThreadRunEvent> = fc.oneof(
   reply.map((r) => ({ _tag: "TurnEnded", reply: r }) as const),
   fc.constant({ _tag: "Drained" } as const),
   fc.constant({ _tag: "Delivered" } as const),
-  next.map((ids) => ({ _tag: "Lined", next: ids }) as const),
+  fc.tuple(next, next).map(([ids, paused]) => ({ _tag: "Lined", next: ids, paused }) as const),
   messageId.map((id) => ({ _tag: "Choose", messageId: id }) as const),
   fc.option(messageId, { nil: null }).map((id) => ({ _tag: "Unchoose", messageId: id }) as const),
   hob.map((h) => ({ _tag: "Hold", hobId: h }) as const),
@@ -122,6 +127,7 @@ const records: fc.Arbitrary<ThreadRun> = fc.oneof(
       speaking: hob,
       carrier: hob,
       next,
+      paused: next,
       reply,
       activity,
       chosen: fc.option(messageId, { nil: null }),
@@ -179,6 +185,7 @@ describe("ThreadRunMachine", () => {
       reply: "working",
       speaking: hobs[0],
       next: [],
+      paused: [],
       revision: 4,
     });
     // No change, or a reply that no longer runs, is no transition, so nothing is published for it.
@@ -192,6 +199,7 @@ describe("ThreadRunMachine", () => {
       reply: null,
       speaking: null,
       next: [],
+      paused: [],
       revision: 5,
     });
   });
@@ -219,15 +227,26 @@ describe("ThreadRunMachine", () => {
   it("says who speaks while a turn runs, and keeps who is next until nobody waits", () => {
     const r = replies[0] as Reply;
     const [quill, pip, rook] = hobs as [AgentId, AgentId, AgentId];
-    const lined = apply(idleRun, { _tag: "Lined", next: [pip, rook] });
+    const lined = apply(idleRun, { _tag: "Lined", next: [pip, rook], paused: [] });
     expect(isAtRest(lined)).toBe(false);
     const speaking = apply(lined, { _tag: "Launch", hobId: quill, reply: r, activity: "thinking" });
     expect(speaking.speaking).toBe(quill);
     // The same line-up again is no transition, so nothing is published for it.
-    expect(ThreadRunMachine.can(speaking, { _tag: "Lined", next: [pip, rook] })).toBe(false);
+    expect(ThreadRunMachine.can(speaking, { _tag: "Lined", next: [pip, rook], paused: [] })).toBe(false);
     const ended = apply(speaking, { _tag: "TurnEnded", reply: r }, { _tag: "Drained" });
     expect(ended.speaking).toBeNull();
-    expect(isAtRest(apply(ended, { _tag: "Lined", next: [] }))).toBe(true);
+    expect(isAtRest(apply(ended, { _tag: "Lined", next: [], paused: [] }))).toBe(true);
+  });
+
+  it("[TC-CH-1463-04] keeps a line whose relay waits for a person, and publishes whose it is", () => {
+    const [quill, pip] = hobs as [AgentId, AgentId];
+    const paused = apply(idleRun, { _tag: "Lined", next: [], paused: [pip, quill] });
+    // Nothing runs or waits there, but the line still says the hobs wait for a person.
+    expect(isAtRest(paused)).toBe(false);
+    expect(runStatus(line, paused, 7)).toMatchObject({ run: "idle", next: [], paused: [pip, quill] });
+    expect(ThreadRunMachine.can(paused, { _tag: "Lined", next: [], paused: [pip, quill] })).toBe(false);
+    // Once a person lets them go on, or writes, nothing is paused and the line rests.
+    expect(isAtRest(apply(paused, { _tag: "Lined", next: [], paused: [] }))).toBe(true);
   });
 
   it("keeps a hold set when the stopped turn ended before the stop was saved", () => {

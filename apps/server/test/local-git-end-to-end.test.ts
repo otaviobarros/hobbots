@@ -75,6 +75,10 @@ import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
+/** Why the fake repeats the hub's answers in its replies here (#1560). */
+const SAYS_ANSWERS =
+  "These tests check the words of the Local Git and Task tools' answers, which a hob reads in the turn that made the call.";
+
 // #578 at hub level: a hob on a Quest creates a Git repository in its empty folder and commits in
 // it, with the hub's own composition (the local Git tools beside the Task tools), the fake runtime
 // making the scripted calls, and the records on SQLite or PostgreSQL (TestDatabase). A `git init`
@@ -156,7 +160,7 @@ beforeAll(() => {
           EventBus.layer,
           HobAdmission.layer,
           NodeFolderChecks,
-          FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
+          FakeRuntimeLayer({ saysAnswers: SAYS_ANSWERS }).pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
           SecretRedaction.layer([]),
           // The hub reads what a member left uncommitted, so its lead's commit of it is held (#742).
