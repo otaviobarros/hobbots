@@ -134,7 +134,7 @@ const seed = Effect.gen(function* () {
     );
   }
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({
@@ -440,7 +440,7 @@ describe("refused Task tool calls", () => {
     await run(
       Effect.flatMap(Effect.service(HobbotsRepository), (repo) =>
         repo.upsertChannel(
-          new Channel({ id: elsewhere, agentId: FRODO, title: "Other", createdAt: now, updatedAt: now }),
+          new Channel({ id: elsewhere, ownerHobId: FRODO, title: "Other", createdAt: now, updatedAt: now }),
         ),
       ),
     );

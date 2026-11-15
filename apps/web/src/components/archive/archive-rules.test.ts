@@ -44,7 +44,7 @@ const approval = (state: ApprovalRequest["state"]) =>
 const channel = (id: string) =>
   new Channel({
     id: ChannelId.make(id),
-    agentId: AgentId.make("pip"),
+    ownerHobId: AgentId.make("pip"),
     title: id,
     createdAt: now,
     updatedAt: now,

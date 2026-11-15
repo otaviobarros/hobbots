@@ -26,7 +26,7 @@ const member = (actor: Actor) =>
     revision: 1,
   });
 
-const channel = new Channel({ id: CAMP, agentId: WREN, title: "Market", kind: "camp", createdAt: NOW, updatedAt: NOW });
+const channel = new Channel({ id: CAMP, ownerHobId: WREN, title: "Market", kind: "camp", createdAt: NOW, updatedAt: NOW });
 
 const said = (actor: Actor, mentions: ReadonlyArray<Actor> = []) =>
   new Message({

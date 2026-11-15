@@ -66,7 +66,7 @@ const hob = (id: AgentId, status: AgentStatus = "active") =>
   });
 
 const camp = (id: ChannelId = CAMP, kind: Channel["kind"] = "camp") =>
-  new Channel({ id, agentId: QUILL, title: id, kind, createdAt: NOW, updatedAt: NOW });
+  new Channel({ id, ownerHobId: QUILL, title: id, kind, createdAt: NOW, updatedAt: NOW });
 
 const said = (id: string, status: MessageStatus, actor: Actor = OWNER_ACTOR) =>
   new Message({

@@ -68,7 +68,7 @@ const turnRunning = (milestones: ReadonlyArray<string> = []) =>
       }),
     );
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: PIP, title: "First run", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: PIP, title: "First run", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const task = (id: TaskId, parentId: TaskId | null, milestones: ReadonlyArray<string>) =>

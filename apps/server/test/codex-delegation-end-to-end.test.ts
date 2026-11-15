@@ -132,7 +132,7 @@ const Party = Layer.effectDiscard(
       [aldricChannel, ALDRIC, "Launch"],
       [pipChannel, PIP, "Copy"],
     ] as const) {
-      yield* repo.upsertChannel(new Channel({ id, agentId, title, createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(new Channel({ id, ownerHobId: agentId, title, createdAt: now, updatedAt: now }));
     }
   }),
 );

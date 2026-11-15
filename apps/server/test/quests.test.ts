@@ -161,7 +161,7 @@ const Party = Layer.effectDiscard(
     const party = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
     for (const each of party) yield* repo.insertAgent(each);
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
     );
   }),
 );

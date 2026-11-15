@@ -66,7 +66,7 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "t", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "t", createdAt: now, updatedAt: now }));
   yield* repo.upsertMessage(
     new Message({
       id: messageId,

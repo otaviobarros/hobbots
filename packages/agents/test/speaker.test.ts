@@ -24,7 +24,7 @@ const WREN = hob("wren", "Wren");
 const QUILL = hob("quill", "Quill");
 const camp = new Channel({
   id: ChannelId.make("camp"),
-  agentId: WREN.id,
+  ownerHobId: WREN.id,
   title: "Market",
   kind: "camp",
   createdAt: NOW,

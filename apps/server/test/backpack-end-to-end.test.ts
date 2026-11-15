@@ -278,7 +278,7 @@ const party = Effect.gen(function* () {
     yield* repo.insertAgent(each);
   }
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: ALDRIC, title: "The launch", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "The launch", createdAt: now, updatedAt: now }),
   );
 });
 

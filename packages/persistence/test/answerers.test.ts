@@ -60,7 +60,7 @@ const setUp = (...camps: ReadonlyArray<ChannelId>) =>
     for (const id of [QUILL, PIP, ROOK]) yield* repo.insertAgent(hob(id));
     for (const id of camps) {
       yield* repo.upsertChannel(
-        new Channel({ id, agentId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
+        new Channel({ id, ownerHobId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
       );
     }
   });

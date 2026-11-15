@@ -37,7 +37,7 @@ const agent = new Agent({
 });
 const channel = new Channel({
   id: channelId,
-  agentId,
+  ownerHobId: agentId,
   title: "New channel",
   createdAt: now,
   updatedAt: now,

@@ -303,7 +303,7 @@ const party = (runtime: RuntimeKind) =>
     ];
     for (const each of all) yield* repo.insertAgent(each);
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: ALDRIC, title: "Dependencies", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Dependencies", createdAt: now, updatedAt: now }),
     );
   });
 

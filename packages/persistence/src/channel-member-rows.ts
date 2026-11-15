@@ -117,13 +117,13 @@ export const startMembersIn =
   (channel: Channel, first: number): Effect.Effect<ReadonlyArray<JournaledEvent>, SqlError.SqlError> =>
     Effect.gen(function* () {
       const owner = yield* sessionActor;
-      const [hob] = yield* sql<{ readonly status: string }>`SELECT status FROM agents WHERE id = ${channel.agentId}`;
+      const [hob] = yield* sql<{ readonly status: string }>`SELECT status FROM agents WHERE id = ${channel.ownerHobId}`;
       const fields = { channelId: channel.id, joinedAt: channel.createdAt, addedBy: owner, readRevision: null };
       const members = [
         new ChannelMember({ ...fields, actor: owner, role: "owner", state: "active", mutedUntil: null }),
         new ChannelMember({
           ...fields,
-          actor: { kind: "hob", id: channel.agentId },
+          actor: { kind: "hob", id: channel.ownerHobId },
           role: "member",
           state: hob?.status === "retired" ? "left" : "active",
           mutedUntil: null,

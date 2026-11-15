@@ -22,7 +22,7 @@ const hob = (id: string) =>
 const channel = (id: string, agentId: string, kind: "direct" | "camp") =>
   new Channel({
     id: ChannelId.make(id),
-    agentId: AgentId.make(agentId),
+    ownerHobId: AgentId.make(agentId),
     title: id,
     kind,
     createdAt: NOW,

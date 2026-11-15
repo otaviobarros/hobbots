@@ -65,7 +65,7 @@ const hob = (id: AgentId) =>
   });
 
 const channel = (id: ChannelId, kind: Channel["kind"], agentId: AgentId = ALDRIC) =>
-  new Channel({ id, agentId, title: id, kind, createdAt: NOW, updatedAt: NOW });
+  new Channel({ id, ownerHobId: agentId, title: id, kind, createdAt: NOW, updatedAt: NOW });
 
 /** A request from Bruna's phone: the session the hub's device middleware provides. */
 const brunaSession = UserSession.of({

@@ -193,7 +193,7 @@ const twoHobQuest = Effect.gen(function* () {
     );
   }
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const task = (id: string, ownerId: AgentId, parentId: string | null, brief: string, second: number) => ({

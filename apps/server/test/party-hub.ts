@@ -268,7 +268,7 @@ export const partyHub = (
         );
       }
       yield* repo.upsertChannel(
-        new Channel({ id: channelId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
+        new Channel({ id: channelId, ownerHobId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
       );
     }),
   );

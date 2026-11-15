@@ -83,7 +83,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
           const now = yield* nowIso;
           const camp = new Channel({
             id: request.key,
-            agentId,
+            ownerHobId: agentId,
             title: request.title,
             kind: "camp",
             goal: request.goal,
@@ -127,7 +127,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         const chat = new Channel({
           id: key,
           // standards-allow STD-ARCH-021: the new chat belongs to the same hob
-          agentId: channel.agentId,
+          ownerHobId: channel.ownerHobId,
           title: DEFAULT_CHANNEL_TITLE,
           kind: "direct",
           origin: { channelId: channel.id, chapterId: null },
@@ -163,7 +163,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         if (request._tag === "camp") return { _tag: "camp", campId: request.campId } satisfies ChapterMoveTarget;
         // The same camp asked for again is answered as it is, whatever the hob does now.
         // standards-allow STD-ARCH-021: a camp made from a chapter is led by the hob the chapter belongs to
-        const hobs = othersOf(channel.agentId, request.hobs);
+        const hobs = othersOf(channel.ownerHobId, request.hobs);
         if (Option.isNone(yield* repo.findChannel(request.key))) {
           yield* requireActive(agent);
           yield* Effect.forEach(hobs, requireJoins, { discard: true });
@@ -172,7 +172,7 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
         const camp = new Channel({
           id: request.key,
           // standards-allow STD-ARCH-021: a camp made from a chapter belongs to the same hob
-          agentId: channel.agentId,
+          ownerHobId: channel.ownerHobId,
           title: request.title,
           kind: "camp",
           goal: request.goal,

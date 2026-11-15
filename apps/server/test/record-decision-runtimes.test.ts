@@ -48,7 +48,7 @@ const camp = (id: string) =>
       const repo = yield* HobbotsRepository;
       const channelId = ChannelId.make(`camp-${id}`);
       const messageId = MessageId.make(`reply-${id}`);
-      yield* repo.upsertChannel(new Channel({ id: channelId, agentId: ADA, title: id, createdAt: NOW, updatedAt: NOW }));
+      yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: ADA, title: id, createdAt: NOW, updatedAt: NOW }));
       yield* repo.upsertMessage(
         new Message({
           id: messageId,

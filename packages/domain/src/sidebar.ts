@@ -51,7 +51,7 @@ export const sidebarSectionOf = (
 
 /** What the hub knows about one channel when it sorts the sidebar. */
 export interface SidebarChannel {
-  readonly channel: Pick<Channel, "id" | "agentId" | "kind" | "state" | "pinnedAt" | "updatedAt">;
+  readonly channel: Pick<Channel, "id" | "ownerHobId" | "kind" | "state" | "pinnedAt" | "updatedAt">;
   /** The channel's members in every state. */
   readonly members: ReadonlyArray<Pick<ChannelMember, "actor" | "state">>;
   readonly unread: number;
@@ -93,7 +93,7 @@ export const sidebarOf = ({
       each,
       place: new SidebarPlace({
         channelId: each.channel.id,
-        agentId: each.channel.agentId,
+        agentId: each.channel.ownerHobId,
         section: sidebarSectionOf(each.channel, each.members, you),
         others: each.members
           .filter((member) => member.state === "active" && !sameActor(member.actor, you))

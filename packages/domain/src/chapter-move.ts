@@ -59,7 +59,7 @@ const channelsRefusal = (input: ChapterMoveInput): ChapterRefusal | null => {
   if (!ChannelLifecycle.isOpen(input.from)) return "channel-closed";
   if (input.to.id === input.from.id) return "same-channel";
   const camp = input.to;
-  if (camp.kind !== "camp" || camp.agentId !== input.from.agentId || !ChannelLifecycle.isOpen(camp)) {
+  if (camp.kind !== "camp" || camp.ownerHobId !== input.from.ownerHobId || !ChannelLifecycle.isOpen(camp)) {
     return "not-a-camp";
   }
   return null;

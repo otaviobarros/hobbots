@@ -728,7 +728,7 @@ describe("only the user decides approvals and manages grants", () => {
   it("refuses and records a change to what hobs may do that is not from an approved device", async () => {
     await setupDone();
     const channel = await hobChannel("Pip");
-    const hob = channel.agentId;
+    const hob = channel.ownerHobId;
     const permissions = `/api/agents/${hob}/permissions`;
     const before = (await request(APP, "GET", permissions)).body;
     refusals = [];
@@ -784,7 +784,7 @@ describe("only the user decides approvals and manages grants", () => {
       await request(SCRIPT, "POST", `/api/tasks/${task}/cancel`),
       await request({ origin: "https://attacker.example" }, "POST", `/api/quests/${task}/cancel`),
       await request(SCRIPT, "POST", `/api/tasks/${task}/retry`),
-      await request(SCRIPT, "POST", `/api/tasks/${task}/reassign`, { agentId: channel.agentId }),
+      await request(SCRIPT, "POST", `/api/tasks/${task}/reassign`, { agentId: channel.ownerHobId }),
       await request(SCRIPT, "POST", `/api/tasks/${task}/pause`, { now: true }),
       await request(SCRIPT, "POST", `/api/quests/${task}/pause`, {}),
       await request(SCRIPT, "POST", `/api/tasks/${task}/resume`),

@@ -116,7 +116,7 @@ const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob(FRODO, "Frodo"));
   yield* repo.insertAgent(hob(QUILL, "Quill"));
-  yield* repo.upsertChannel(new Channel({ id: channelId, agentId: FRODO, title: "Site", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: FRODO, title: "Site", createdAt: now, updatedAt: now }));
   yield* (yield* TaskRepository).createTask({
     task: {
       id: LEAD,

@@ -31,8 +31,8 @@ export class HobAdmission extends Context.Service<
  */
 export const withChannelLock = <A, E, R>(
   admission: HobAdmission["Service"],
-  channel: Pick<Channel, "agentId">,
+  channel: Pick<Channel, "ownerHobId">,
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   // standards-allow STD-ARCH-021: a channel's lock is the hob's it belongs to
-  admission.withHob(channel.agentId, effect);
+  admission.withHob(channel.ownerHobId, effect);

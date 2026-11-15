@@ -133,7 +133,7 @@ const Party = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill")]) yield* repo.insertAgent(each);
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: ALDRIC, title: "Launch", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Launch", createdAt: now, updatedAt: now }),
     );
   }),
 );

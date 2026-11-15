@@ -14,7 +14,7 @@ const useChannelChange = <V>(
 ) => {
   const queryClient = useQueryClient();
   const swap = (next: Channel) =>
-    queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(next.agentId), (old) =>
+    queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(next.ownerHobId), (old) =>
       old?.map((t) => (t.id === next.id ? next : t)),
     );
   return useMutation({

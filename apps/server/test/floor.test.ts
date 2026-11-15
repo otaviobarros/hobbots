@@ -50,7 +50,7 @@ const campOfThree = Effect.gen(function* () {
   const members = yield* ChannelMemberRepository;
   for (const id of [QUILL, PIP, ROOK]) yield* repo.insertAgent(hob(id));
   yield* repo.upsertChannel(
-    new Channel({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CAMP, ownerHobId: QUILL, title: "Plans", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
   yield* members.add(CAMP, hobActor(PIP), OWNER_ACTOR);
   yield* members.add(CAMP, hobActor(ROOK), OWNER_ACTOR);

@@ -14,7 +14,7 @@ export const useArchiveChannel = () => {
   return useMutation({
     mutationFn: (channel: Channel) => call((c) => c.channels.archive({ params: { channelId: channel.id } })),
     onMutate: (channel) => {
-      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(channel.agentId), (old) =>
+      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(channel.ownerHobId), (old) =>
         old?.filter((t) => t.id !== channel.id),
       );
     },

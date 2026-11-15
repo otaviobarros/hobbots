@@ -40,7 +40,7 @@ export const useSearchResults = (query: string) => {
         hob,
       })),
     ...search.hits.flatMap((hit) => {
-      const hob = byId.get(hit.channel.agentId);
+      const hob = byId.get(hit.channel.ownerHobId);
       return hob
         ? [{ kind: "channel" as const, key: `channel-${hit.channel.id}`, hob, hit, messageId: hit.matches[0]?.messageId }]
         : [];

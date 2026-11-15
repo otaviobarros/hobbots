@@ -480,7 +480,7 @@ export class DataExport extends Context.Service<
         ) => {
           if (scope._tag === "Everything") return gathered.hobs;
           // standards-allow STD-ARCH-021: an export names whose channels it holds
-          const named = new Set<string>(gathered.channels.map((channel) => channel.agentId));
+          const named = new Set<string>(gathered.channels.map((channel) => channel.ownerHobId));
           for (const channel of channels) {
             for (const message of channel.messages) if (message.authorId !== null) named.add(message.authorId);
           }
@@ -504,7 +504,7 @@ export class DataExport extends Context.Service<
                 (messages): ExportedChannel => ({
                   id: channel.id,
                   // standards-allow STD-ARCH-021: an export names whose channel it is
-                  agentId: channel.agentId,
+                  agentId: channel.ownerHobId,
                   title: channel.title,
                   createdAt: channel.createdAt,
                   updatedAt: channel.updatedAt,

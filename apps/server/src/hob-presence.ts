@@ -134,7 +134,7 @@ export class HobPresences extends Context.Service<
               Option.match(channel, {
                 onNone: () => [],
                 // What waits in a chat on you asks for the hob the chat belongs to.
-                onSome: (owned) => [[channelId, owned.agentId] as const],
+                onSome: (owned) => [[channelId, owned.ownerHobId] as const],
               }),
             ),
           ).pipe(Effect.map((pairs) => pairs.flat())),

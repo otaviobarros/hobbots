@@ -27,7 +27,7 @@ const channel = (
   more: { agentId?: string; pinnedAt?: string | null; updatedAt?: string; state?: "open" | "archived" } = {},
 ): SidebarChannel["channel"] => ({
   id: ChannelId.make(id),
-  agentId: AgentId.make(more.agentId ?? "aldric"),
+  ownerHobId: AgentId.make(more.agentId ?? "aldric"),
   kind,
   state: more.state ?? "open",
   pinnedAt: more.pinnedAt ?? null,

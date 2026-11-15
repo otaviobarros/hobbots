@@ -120,7 +120,7 @@ export const makePackPeople = Effect.gen(function* () {
       const owner = ownerOf(stored);
       const actors: ReadonlyArray<Actor> =
         // standards-allow STD-ARCH-021: without members stored, the channel is the hob's it belongs to, alone
-        active.length > 0 ? active.map((member) => member.actor) : [hobActor(channel.agentId)];
+        active.length > 0 ? active.map((member) => member.actor) : [hobActor(channel.ownerHobId)];
       const people = Option.isNone(users) ? [] : yield* users.value.list;
       const agents = yield* repo.listAgents;
       const nameOf = (actor: Actor): string => {

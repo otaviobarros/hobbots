@@ -56,7 +56,7 @@ const Party = Layer.effectDiscard(
     yield* repo.upsertChannel(
       new Channel({
         id: channelId,
-        agentId: ALDRIC,
+        ownerHobId: ALDRIC,
         title: "Black Friday",
         kind: "direct",
         createdAt: now,
@@ -154,7 +154,7 @@ describe("FakeQuestLive", () => {
             _tag: "new",
             camp: new Channel({
               id: camp,
-              agentId: ALDRIC,
+              ownerHobId: ALDRIC,
               title: "Black Friday",
               kind: "camp",
               goal: "Run the campaign",

@@ -93,7 +93,7 @@ const Frodo = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(frodo);
     yield* repo.upsertChannel(
-      new Channel({ id: SHIRE, agentId: FRODO, title: "The quest", kind: "direct", createdAt: now, updatedAt: now }),
+      new Channel({ id: SHIRE, ownerHobId: FRODO, title: "The quest", kind: "direct", createdAt: now, updatedAt: now }),
     );
   }),
 );

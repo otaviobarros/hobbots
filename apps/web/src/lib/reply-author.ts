@@ -6,7 +6,7 @@ import { type Agent, type Message, replyHobOf } from "@hobbots/domain";
  * `replyHobOf`; a hob no longer listed shows as the channel's own hob, `own`.
  */
 export const replyAuthor = (message: Message, own: Agent, hobs: ReadonlyArray<Agent> | undefined): Agent => {
-  const writer = replyHobOf(message, { agentId: own.id });
+  const writer = replyHobOf(message, { ownerHobId: own.id });
   if (writer === null || writer === own.id) return own;
   return hobs?.find((hob) => hob.id === writer) ?? own;
 };

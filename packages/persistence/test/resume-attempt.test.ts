@@ -57,7 +57,7 @@ const turnEnded = (ended: keyof typeof ENDS = "completed") =>
       }),
     );
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({

@@ -86,7 +86,7 @@ const chat = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "direct", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CHAT, ownerHobId: ALDRIC, title: "Chat", kind: "direct", createdAt: NOW, updatedAt: NOW }),
   );
   yield* repo.upsertMessage(message("ask", "user"));
   const reply = yield* repo.upsertMessage(message("reply", "assistant"));
@@ -147,7 +147,7 @@ describe("pins", () => {
             _tag: "new",
             camp: new Channel({
               id: CAMP,
-              agentId: ALDRIC,
+              ownerHobId: ALDRIC,
               title: "Launch",
               kind: "camp",
               origin: { channelId: CHAT, chapterId: null },

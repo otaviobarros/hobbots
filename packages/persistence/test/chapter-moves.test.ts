@@ -101,7 +101,7 @@ const hob = (id: AgentId, name: string) =>
   });
 
 const channel = (id: ChannelId, fields: Partial<Channel> = {}) =>
-  new Channel({ id, agentId: ALDRIC, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW, ...fields });
+  new Channel({ id, ownerHobId: ALDRIC, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW, ...fields });
 
 const newCamp = (fields: Partial<Channel> = {}) =>
   channel(CAMP, { title: "Launch", goal: "Ship the launch", origin: { channelId: CHAT, chapterId: null }, ...fields });
@@ -418,7 +418,7 @@ describe("moving a chapter into a camp", () => {
         const repo = yield* HobbotsRepository;
         const sql = yield* SqlClient.SqlClient;
         yield* repo.insertAgent(hob(AgentId.make("bo"), "Bo"));
-        yield* repo.upsertChannel(channel(ChannelId.make("bo-camp"), { agentId: AgentId.make("bo") }));
+        yield* repo.upsertChannel(channel(ChannelId.make("bo-camp"), { ownerHobId: AgentId.make("bo") }));
         yield* repo.upsertChannel(channel(ChannelId.make("old-camp"), { state: "archived", archivedAt: NOW }));
         yield* repo.makeCamp(newCamp());
         const refused = (chapterId: ChapterId, target: ChapterMoveTarget) =>

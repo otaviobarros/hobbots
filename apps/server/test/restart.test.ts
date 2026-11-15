@@ -248,7 +248,7 @@ const frodoAndChannel = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
   );
 });
 

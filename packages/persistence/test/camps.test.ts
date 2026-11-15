@@ -64,7 +64,7 @@ const hobWithChat = Effect.gen(function* () {
     }),
   );
   const chat = yield* repo.upsertChannel(
-    new Channel({ id: CHAT, agentId: ALDRIC, title: "Lamps", kind: "direct", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CHAT, ownerHobId: ALDRIC, title: "Lamps", kind: "direct", createdAt: NOW, updatedAt: NOW }),
   );
   return chat.value;
 });
@@ -111,7 +111,7 @@ const supersede = (chat: Channel) => {
 
 const freshChat = new Channel({
   id: FRESH,
-  agentId: ALDRIC,
+  ownerHobId: ALDRIC,
   title: "New channel",
   kind: "direct",
   origin: { channelId: CHAT, chapterId: null },
@@ -122,7 +122,7 @@ const freshChat = new Channel({
 const camp = (fields: Partial<Channel> = {}) =>
   new Channel({
     id: ChannelId.make("camp-1"),
-    agentId: ALDRIC,
+    ownerHobId: ALDRIC,
     title: "Launch post",
     kind: "camp",
     goal: "Write the launch post",

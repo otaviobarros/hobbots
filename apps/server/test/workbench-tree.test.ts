@@ -251,7 +251,7 @@ const campaign = Effect.gen(function* () {
     );
   }
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const activity = yield* ActivityRepository;

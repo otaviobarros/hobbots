@@ -16,7 +16,7 @@ export const useStartTrial = () => {
     mutationFn: (input: { readonly agentId: AgentId; readonly draft: SkillTrialDraftPayload }) =>
       call((c) => c.skillTrials.start({ payload: input })),
     onSuccess: (channel: Channel) => {
-      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(channel.agentId), (old) =>
+      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(channel.ownerHobId), (old) =>
         old === undefined || old.some((one) => one.id === channel.id) ? old : [channel, ...old],
       );
     },

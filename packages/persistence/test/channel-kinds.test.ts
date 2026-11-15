@@ -192,7 +192,7 @@ describe("0095_thread_kinds", () => {
       const channel = (id: string, agentId: string, fields: Partial<Channel> = {}) =>
         new Channel({
           id: ChannelId.make(id),
-          agentId: AgentId.make(agentId),
+          ownerHobId: AgentId.make(agentId),
           title: id,
           kind: "direct",
           createdAt: NOW,

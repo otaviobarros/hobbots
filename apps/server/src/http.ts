@@ -135,7 +135,7 @@ const ChannelsHandlers = HttpApiBuilder.group(HobbotsApi, "channels", (handlers)
         // One step under the hob's lock: an archived channel changes nothing, not even its hob's
         // default, and no archive lands between the hob's edit and the channel following it.
         // standards-allow STD-ARCH-021: a channel's brain changes under the lock of the hob it belongs to
-        return yield* hobs.updateThen(channel.agentId, brain, chat.checkBrainSwitch(channelId), () =>
+        return yield* hobs.updateThen(channel.ownerHobId, brain, chat.checkBrainSwitch(channelId), () =>
           chat.followHob(channelId),
         );
       });

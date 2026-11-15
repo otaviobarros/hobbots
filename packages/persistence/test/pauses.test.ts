@@ -64,7 +64,7 @@ const campaign = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(BRAM, "Bram")]) yield* repo.insertAgent(each);
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const root = yield* tasks.createTask({ task: newTask("campaign", ALDRIC, null), delegation: null, milestones: [] });

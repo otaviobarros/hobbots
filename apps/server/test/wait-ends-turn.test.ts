@@ -72,7 +72,7 @@ const seed = Effect.gen(function* () {
     );
   }
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
   );
 });
 

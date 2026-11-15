@@ -141,7 +141,7 @@ const seed = (paths: ReadonlyArray<string>) =>
       }),
     );
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: FRODO, title: "Spec", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: FRODO, title: "Spec", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({

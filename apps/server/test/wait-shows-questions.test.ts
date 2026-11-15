@@ -80,7 +80,7 @@ const toolsOnly = () => {
     }
     const channelId = ChannelId.make("review");
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: PIP, title: "Review", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: PIP, title: "Review", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({

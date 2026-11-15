@@ -296,7 +296,7 @@ describe("camp suggestions over the API", () => {
     expect(missing).toMatchObject({ status: 409, body: { _tag: "CampSuggestionChangeRefused", reason: "not-found" } });
 
     // The chat's live chapter moves into a new camp, with its messages and decisions.
-    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.agentId}/channels`);
+    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.ownerHobId}/channels`);
     const chapterId = listed.body.find((each) => each.id === channel.id)?.liveChapterId;
     const into = { _tag: "new", key: "camp-launch", title: "Launch", goal: null, private: false };
     const moved = await request<ChapterMove>("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, into);
@@ -403,7 +403,7 @@ describe("the camp sheet over the API", () => {
     const chat = await request("PUT", `/api/channels/${channel.id}/private`, { private: true });
     expect(chat).toMatchObject({ status: 409, body: { _tag: "ChannelNotCamp" } });
     await exchange(channel, "Let us plan the launch.");
-    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.agentId}/channels`);
+    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.ownerHobId}/channels`);
     const chapterId = listed.body.find((each) => each.id === channel.id)?.liveChapterId;
     const into = { _tag: "new", key: "camp-private", title: "Launch", goal: null, private: false };
     await request("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, into);

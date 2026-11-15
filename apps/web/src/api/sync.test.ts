@@ -169,7 +169,7 @@ describe("a chapter moved into a camp", () => {
         revision,
       });
     const channel = (id: ChannelId, kind: "direct" | "camp") =>
-      new Channel({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
+      new Channel({ id, ownerHobId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
     const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
     // The reply arrived live, so the overlay holds it, in the chat.
     applyEvent(client, { _tag: "MessageUpserted", message: inChat });
@@ -213,7 +213,7 @@ describe("a chapter moved into a camp", () => {
         revision: 9,
       });
     const channel = (id: ChannelId, kind: "direct" | "camp") =>
-      new Channel({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
+      new Channel({ id, ownerHobId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
     const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
     // The chat opens and reads its transcript; the read is slow, and nothing is cached yet.
     const { fetch, answer, pending } = pendingFetch();

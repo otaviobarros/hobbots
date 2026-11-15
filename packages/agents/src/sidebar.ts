@@ -86,7 +86,7 @@ export class SidebarList extends Context.Service<SidebarList, { readonly current
             Effect.succeed<SidebarChannel["members"]>([
               { actor: you, state: "active" as const },
               // standards-allow STD-ARCH-021: with no member list, the channel's members are you and the hob it belongs to
-              { actor: hobActor(channel.agentId), state: "active" as const },
+              { actor: hobActor(channel.ownerHobId), state: "active" as const },
             ]),
           onSome: (repository) => repository.list(channel.id),
         });

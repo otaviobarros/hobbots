@@ -105,7 +105,7 @@ describe("applyEvent", () => {
   it("makes a reply that lands its channel's last line in the hob's channel list", () => {
     const client = new QueryClient();
     const agentId = AgentId.make("aldric");
-    const channel = new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now });
+    const channel = new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now });
     client.setQueryData(queryKeys.channels(agentId), [channel]);
     const lastLine = () => client.getQueryData<ReadonlyArray<Channel>>(queryKeys.channels(agentId))?.[0]?.lastLine;
 
@@ -123,7 +123,7 @@ describe("applyEvent", () => {
       _tag: "ChannelUpserted",
       channel: new Channel({
         id: channelId,
-        agentId: AgentId.make("aldric"),
+        ownerHobId: AgentId.make("aldric"),
         title: "Hi",
         createdAt: now,
         updatedAt: now,
@@ -136,7 +136,7 @@ describe("applyEvent", () => {
   it("moves a channel archived or restored elsewhere between its hob's two lists", () => {
     const client = new QueryClient();
     const hobId = AgentId.make("aldric");
-    const live = new Channel({ id: channelId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now, revision: 1 });
+    const live = new Channel({ id: channelId, ownerHobId: hobId, title: "Hi", createdAt: now, updatedAt: now, revision: 1 });
     const archived = new Channel({ ...live, archivedAt: "2026-10-29T09:00:00.000Z", revision: 2 });
     const restored = new Channel({ ...live, revision: 3 });
     client.setQueryData(queryKeys.channels(hobId), [live]);
@@ -158,10 +158,10 @@ describe("applyEvent", () => {
   it("drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there (#1376)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const hobId = AgentId.make("aldric");
-    const old = new Channel({ id: channelId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now });
+    const old = new Channel({ id: channelId, ownerHobId: hobId, title: "Hi", createdAt: now, updatedAt: now });
     const fresh = new Channel({
       id: ChannelId.make("fresh"),
-      agentId: hobId,
+      ownerHobId: hobId,
       title: "New chat",
       origin: { channelId, chapterId: null },
       createdAt: now,

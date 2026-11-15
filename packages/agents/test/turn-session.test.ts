@@ -11,7 +11,7 @@ const MARK = { since: NOW, source: 'the web search "lamp oil"' };
 const session = () => {
   let channel = new Channel({
     id: ChannelId.make("camp"),
-    agentId: FRODO,
+    ownerHobId: FRODO,
     title: "Lamps",
     kind: "camp",
     liveChapterId: ChapterId.make("chapter-1"),

@@ -108,7 +108,7 @@ describe("planMemberRemove", () => {
   const owner = member("active", { kind: "user", id: "owner" });
   const lead = member("active");
   const rook = member("active", { kind: "hob", id: "rook" });
-  const camp = { kind: "camp" as const, agentId: AgentId.make("aldric") };
+  const camp = { kind: "camp" as const, ownerHobId: AgentId.make("aldric") };
 
   // covers ADR 039 (Members), #1467
   it("takes an active hob out of a camp, and keeps a direct message's two, the owner and the lead (#1467)", () => {

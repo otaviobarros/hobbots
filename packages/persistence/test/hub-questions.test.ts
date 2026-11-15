@@ -48,7 +48,7 @@ const seed = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: CHAT, agentId: FRODO, title: "First run", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CHAT, ownerHobId: FRODO, title: "First run", createdAt: NOW, updatedAt: NOW }),
   );
 });
 

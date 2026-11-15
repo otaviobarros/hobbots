@@ -231,7 +231,7 @@ describe("Stopping a reply", () => {
       yield* repo.upsertChannel(
         new Channel({
           id: channelId,
-          agentId: HOB_ID,
+          ownerHobId: HOB_ID,
           title: "t",
           createdAt: NOW,
           updatedAt: NOW,

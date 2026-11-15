@@ -77,7 +77,7 @@ describe("showLastLine", () => {
   const withLine = (lastLine: string) => [
     new Channel({
       id: channelId,
-      agentId,
+      ownerHobId: agentId,
       title: "Black Friday",
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",

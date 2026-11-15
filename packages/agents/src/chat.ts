@@ -448,7 +448,7 @@ export class ChatService extends Context.Service<
             const hasChat = (yield* repo.listChannels(agentId)).some(ChannelLifecycle.isOpenChat);
             const channel = new Channel({
               id: ChannelId.make(crypto.randomUUID()),
-              agentId,
+              ownerHobId: agentId,
               title: options.title ?? DEFAULT_CHANNEL_TITLE,
               kind: hasChat || options.skillTrial !== undefined ? "camp" : "direct",
               skillTrial: options.skillTrial ?? null,
@@ -503,7 +503,7 @@ export class ChatService extends Context.Service<
             Effect.gen(function* () {
               const channel = yield* findChannel(channelId);
               // standards-allow STD-ARCH-021: the hob the channel belongs to, its default answerer
-              const agent = yield* repo.findAgent(channel.agentId).pipe(Effect.map(Option.getOrThrow));
+              const agent = yield* repo.findAgent(channel.ownerHobId).pipe(Effect.map(Option.getOrThrow));
               return yield* body(channel, agent);
             }),
           );
@@ -827,7 +827,7 @@ export class ChatService extends Context.Service<
         const own = yield* Effect.filter(channels, (channelId) =>
           repo.findChannel(channelId).pipe(
             // standards-allow STD-ARCH-021: a hob that wakes takes up the channels it owns
-            Effect.map((channel) => Option.isSome(channel) && channel.value.agentId === agentId),
+            Effect.map((channel) => Option.isSome(channel) && channel.value.ownerHobId === agentId),
           ),
         );
         // And the requests it owes in camps it joined, which wait for it there.
@@ -859,7 +859,7 @@ export class ChatService extends Context.Service<
           const live = transcript.filter((m) => m.chapterId === channel.value.liveChapterId);
           // The pack shown is the one the hob the channel belongs to would start its next session from.
           // standards-allow STD-ARCH-021: the dev view shows the owner's pack, not a turn's
-          const owner = channel.value.agentId;
+          const owner = channel.value.ownerHobId;
           const people = yield* packPeople({ channel: channel.value, agent: { id: owner } });
           const sources = yield* packSources(channel.value, live, transcript, people, null);
           const agent = yield* repo.findAgent(owner);

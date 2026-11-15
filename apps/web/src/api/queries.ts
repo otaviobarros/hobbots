@@ -318,12 +318,12 @@ const sortArchivedChannels = (channels: Array<Channel>) =>
  */
 export const placeChannel = (queryClient: QueryClient, channel: Channel) => {
   const archived = channel.archivedAt !== null;
-  const known = [queryKeys.channels(channel.agentId), queryKeys.archivedChannels(channel.agentId)]
+  const known = [queryKeys.channels(channel.ownerHobId), queryKeys.archivedChannels(channel.ownerHobId)]
     .flatMap((key) => queryClient.getQueryData<ReadonlyArray<Channel>>(key) ?? [])
     .find((existing) => existing.id === channel.id);
   if (newer(known, channel) !== channel) return;
-  const into = archived ? queryKeys.archivedChannels(channel.agentId) : queryKeys.channels(channel.agentId);
-  const outOf = archived ? queryKeys.channels(channel.agentId) : queryKeys.archivedChannels(channel.agentId);
+  const into = archived ? queryKeys.archivedChannels(channel.ownerHobId) : queryKeys.channels(channel.ownerHobId);
+  const outOf = archived ? queryKeys.channels(channel.ownerHobId) : queryKeys.archivedChannels(channel.ownerHobId);
   const order = archived ? sortArchivedChannels : sortChannels;
   queryClient.setQueryData<ReadonlyArray<Channel>>(into, (old) => (old ? order(upsertById(old, channel)) : old));
   queryClient.setQueryData<ReadonlyArray<Channel>>(outOf, (old) => old?.filter((t) => t.id !== channel.id));

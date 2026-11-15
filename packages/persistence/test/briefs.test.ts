@@ -44,7 +44,7 @@ const seed = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: CAMP, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(new Channel({ id: CAMP, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
 });
 
 const draft = (fields: Partial<BriefDraft> = {}): BriefDraft => ({

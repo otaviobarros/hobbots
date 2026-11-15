@@ -271,7 +271,7 @@ const Frodo: Before = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(frodo);
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -285,7 +285,7 @@ const SamsCamp: Before = Layer.effectDiscard(
     yield* repo.insertAgent(frodo);
     yield* repo.insertAgent(new Agent({ ...frodo, id: SAM, name: "Sam", roleTitle: "Gardener" }));
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: SAM, title: "The quest", kind: "camp", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: SAM, title: "The quest", kind: "camp", createdAt: now, updatedAt: now }),
     );
     yield* Effect.orDie(ChannelMemberRepository.use((members) => members.add(channelId, hobActor(FRODO), OWNER_ACTOR)));
   }),
@@ -667,7 +667,7 @@ describe("continuing a hob when work arrives", () => {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(frodo);
         yield* repo.upsertChannel(
-          new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+          new Channel({ id: channelId, ownerHobId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
         );
         const tasks = yield* TaskRepository;
         const root = yield* tasks.createTask({
@@ -757,7 +757,7 @@ describe("continuing a hob when work arrives", () => {
           const repo = yield* HobbotsRepository;
           yield* repo.insertAgent(frodo);
           yield* repo.upsertChannel(
-            new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+            new Channel({ id: channelId, ownerHobId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
           );
           // The reply that asked was still running when Hobbots stopped.
           yield* repo.upsertMessage(
@@ -1228,7 +1228,7 @@ describe("turn limits", () => {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(frodo);
         for (const id of ids) {
-          yield* repo.upsertChannel(new Channel({ id, agentId: FRODO, title: id, createdAt: now, updatedAt: now }));
+          yield* repo.upsertChannel(new Channel({ id, ownerHobId: FRODO, title: id, createdAt: now, updatedAt: now }));
         }
       }),
     );

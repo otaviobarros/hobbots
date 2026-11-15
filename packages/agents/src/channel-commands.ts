@@ -80,7 +80,7 @@ export const makeChannelCommands = (deps: ChannelCommandsDeps) =>
     const checkBrainSwitch = Effect.fn("ChatService.checkBrainSwitch")(function* (channelId: ChannelId) {
       const channel = yield* findChannel(channelId);
       // standards-allow STD-ARCH-021: a channel's brain follows the hob it belongs to
-      const agent = yield* repo.findAgent(channel.agentId).pipe(Effect.map(Option.getOrThrow));
+      const agent = yield* repo.findAgent(channel.ownerHobId).pipe(Effect.map(Option.getOrThrow));
       if (agent.status === "retired") yield* requireActive(agent);
       yield* requireLive(channel);
     });
@@ -150,7 +150,7 @@ export const makeChannelCommands = (deps: ChannelCommandsDeps) =>
           Effect.gen(function* () {
             if (!ChannelLifecycle.isArchived(channel)) return channel;
             // standards-allow STD-ARCH-021: a restored channel goes back among its owner's channels
-            const others = yield* repo.listChannels(channel.agentId);
+            const others = yield* repo.listChannels(channel.ownerHobId);
             return yield* changeLifecycle(channel, {
               _tag: "Restore",
               hobRetired: agent.status === "retired",

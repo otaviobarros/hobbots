@@ -154,7 +154,7 @@ const seed = Effect.gen(function* () {
   ] as const)
     yield* sql`INSERT INTO users ${sql.insert({ id, name, initials: name[0] ?? "", color: "moss", state: "active" })}`;
   yield* repo.makeCamp(
-    new Channel({ id: CAMP, agentId: ALDRIC, title: "Winter Market", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CAMP, ownerHobId: ALDRIC, title: "Winter Market", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
   const members = yield* ChannelMemberRepository;
   yield* members.add(CAMP, BRUNA, OWNER_ACTOR);

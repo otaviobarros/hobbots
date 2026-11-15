@@ -38,7 +38,7 @@ export const useInboxDirectory = (approvals: ReadonlyArray<ApprovalRequest>): In
     hob: (agentId) => hobs.get(agentId),
     hobName: (agentId) => hobs.get(agentId)?.name ?? messages.unknownHob,
     channelTitle: (channelId) => channels.get(channelId)?.title || messages.untitledChannel,
-    channelHob: (channelId) => channels.get(channelId)?.agentId,
+    channelHob: (channelId) => channels.get(channelId)?.ownerHobId,
     deviceName: (deviceId) => deviceNames.get(deviceId) ?? messages.unknownDevice,
   };
 };

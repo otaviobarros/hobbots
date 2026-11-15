@@ -34,7 +34,7 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Tests", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: agentId, title: "Tests", createdAt: now, updatedAt: now }));
   const old = DateTime.formatIso(
     DateTime.subtractDuration(yield* DateTime.now, Duration.sum(JOURNAL_RETENTION.age, Duration.days(1))),
   );
@@ -115,7 +115,7 @@ describe("MemoryCaptureLog", () => {
       const camp = ChannelId.make("camp");
       const campChannel = new Channel({
         id: camp,
-        agentId,
+        ownerHobId: agentId,
         title: "Offer letters",
         private: true,
         createdAt: now,

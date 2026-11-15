@@ -126,7 +126,7 @@ const Seed = Layer.effectDiscard(
       }),
     );
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
     );
   }),
 );

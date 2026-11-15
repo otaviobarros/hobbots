@@ -288,11 +288,11 @@ export class Message extends Schema.Class<Message>("Message")({
  * reply is then `channel`'s own hob's, and a person's is null. This is the one place a message's
  * author falls back to the hob a channel belongs to (STD-ARCH-021).
  */
-export const authorOf = (message: Message, channel: { readonly agentId: AgentId }): Actor | null =>
-  message.actor ?? (message.role === "assistant" ? hobActor(channel.agentId) : null);
+export const authorOf = (message: Message, channel: { readonly ownerHobId: AgentId }): Actor | null =>
+  message.actor ?? (message.role === "assistant" ? hobActor(channel.ownerHobId) : null);
 
 /** The hob that wrote a reply, as `authorOf` names it; null for a message that is not a hob's reply. */
-export const replyHobOf = (message: Message, channel: { readonly agentId: AgentId }): AgentId | null => {
+export const replyHobOf = (message: Message, channel: { readonly ownerHobId: AgentId }): AgentId | null => {
   if (message.role !== "assistant") return null;
   const author = authorOf(message, channel);
   return author?.kind === "hob" ? AgentId.make(author.id) : null;

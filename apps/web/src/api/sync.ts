@@ -252,7 +252,7 @@ export const syncedChannels = (
   order: (items: Array<Channel>) => Array<Channel>,
   archived: boolean,
 ) =>
-  synced(fetch, "channel", (channel) => channel.agentId === agentId && (channel.archivedAt !== null) === archived, order);
+  synced(fetch, "channel", (channel) => channel.ownerHobId === agentId && (channel.archivedAt !== null) === archived, order);
 
 export const syncedMessages = (
   channelId: ChannelId,

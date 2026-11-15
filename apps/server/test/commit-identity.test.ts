@@ -219,7 +219,7 @@ const startHub = async (connected = true) => {
       yield* repo.upsertChannel(
         new Channel({
           id: QUEST_CHAT.channelId,
-          agentId: nettle.id,
+          ownerHobId: nettle.id,
           title: "Tide table",
           createdAt: NOW,
           updatedAt: NOW,

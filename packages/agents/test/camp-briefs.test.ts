@@ -28,7 +28,7 @@ const CHAPTER = ChapterId.make("chapter-1");
 const WREN = AgentId.make("wren");
 
 const camp = (goal: string | null = "Ship the launch emails") =>
-  new Channel({ id: CHANNEL, agentId: WREN, title: "Launch", kind: "camp", goal, createdAt: NOW, updatedAt: NOW });
+  new Channel({ id: CHANNEL, ownerHobId: WREN, title: "Launch", kind: "camp", goal, createdAt: NOW, updatedAt: NOW });
 
 const decision = (id: string, text: string, state: Decision["state"] = "active") =>
   new Decision({

@@ -155,7 +155,7 @@ const seed = Effect.gen(function* () {
     [NOTES, ALDRIC, "Notes / ideas"],
     [QUILL_CHANNEL, QUILL, "Quill's own chat"],
   ] as const) {
-    yield* repo.upsertChannel(new Channel({ id, agentId, title, createdAt: AT, updatedAt: AT }));
+    yield* repo.upsertChannel(new Channel({ id, ownerHobId: agentId, title, createdAt: AT, updatedAt: AT }));
   }
   yield* repo.upsertMessage(
     message("m1", CAMPAIGN, "user", `Plan the campaign. My token is ${PASTED} and the hub's is ${HUB_SECRET}.`),

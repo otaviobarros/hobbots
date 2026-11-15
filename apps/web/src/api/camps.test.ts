@@ -9,7 +9,7 @@ const agentId = AgentId.make("00000000-0000-4000-8000-000000000001");
 const channel = (n: number, fields: Partial<{ kind: "direct" | "camp"; updatedAt: string; pinnedAt: string }>) =>
   new Channel({
     id: ChannelId.make(`00000000-0000-4000-8000-00000000010${n}`),
-    agentId,
+    ownerHobId: agentId,
     title: `Channel ${n}`,
     createdAt: "2026-11-01T00:00:00.000Z",
     updatedAt: fields.updatedAt ?? "2026-11-01T00:00:00.000Z",

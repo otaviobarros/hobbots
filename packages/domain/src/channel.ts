@@ -21,7 +21,7 @@ export type ChannelOrigin = typeof ChannelOrigin.Type;
 
 export class Channel extends Schema.Class<Channel>("Channel")({
   id: ChannelId,
-  agentId: AgentId,
+  ownerHobId: AgentId,
   title: Schema.String,
   /**
    * A chat or a camp (ADR 037). A hob has at most one open chat, which the database holds; every

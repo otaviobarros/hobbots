@@ -154,7 +154,7 @@ export const planMemberAdd = (
  * camp keeps its owner and the hob it was made with, which leads its quests (ADR 039, Members).
  */
 export const planMemberRemove = (
-  channel: Pick<Channel, "kind" | "agentId">,
+  channel: Pick<Channel, "kind" | "ownerHobId">,
   members: ReadonlyArray<ChannelMember>,
   actor: Actor,
 ):
@@ -165,7 +165,7 @@ export const planMemberRemove = (
   const member = members.find((each) => sameActor(each.actor, actor));
   if (member === undefined) return { _tag: "refused", reason: "not-member" };
   if (member.role === "owner") return { _tag: "refused", reason: "owner" };
-  if (actor.kind === "hob" && actor.id === channel.agentId) return { _tag: "refused", reason: "lead" };
+  if (actor.kind === "hob" && actor.id === channel.ownerHobId) return { _tag: "refused", reason: "lead" };
   return member.state === "active" ? { _tag: "remove", member } : { _tag: "gone", member };
 };
 

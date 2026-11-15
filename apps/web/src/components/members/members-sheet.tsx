@@ -72,7 +72,7 @@ export function MembersSheet({ camp, onClose }: { camp: Channel; onClose: () => 
 }
 
 function SheetBody({ camp, report, hobs }: { camp: Channel; report: MembersReport; hobs: ReadonlyArray<Agent> }) {
-  const shown = shownMembers(report.members, camp.agentId);
+  const shown = shownMembers(report.members, camp.ownerHobId);
   const hobMembers = shown.filter((member) => member.actor.kind === "hob");
   const people = shown.filter((member) => member.actor.kind === "user");
   const answering = hobMembers.filter(ChannelMembers.isActive).length;

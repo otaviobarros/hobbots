@@ -56,7 +56,7 @@ const upgraded = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: CHANNEL, agentId: ALDRIC, title: "Campaign", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CHANNEL, ownerHobId: ALDRIC, title: "Campaign", createdAt: NOW, updatedAt: NOW }),
   );
   yield* tasks.createTask({
     task: {

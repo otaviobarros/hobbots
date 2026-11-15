@@ -29,7 +29,7 @@ import { addHobsIn, copyMembersIn, startMembersIn } from "./channel-member-rows.
 /** The columns a channel is stored with, at `revision`; what a read works out is never stored. */
 export const channelColumns = (channel: Channel) => ({
   id: channel.id,
-  agent_id: channel.agentId,
+  agent_id: channel.ownerHobId,
   title: channel.title,
   sessions: JSON.stringify(channel.sessions),
   brain: channel.brain === null ? null : JSON.stringify(channel.brain),
@@ -49,12 +49,12 @@ export const channelColumns = (channel: Channel) => ({
 
 /** The hobs a camp is made with besides its lead, each once and sorted, as its request keeps them. */
 const otherHobs = (camp: Channel, hobs: ReadonlyArray<AgentId>) =>
-  JSON.stringify([...new Set(hobs)].filter((hobId) => hobId !== camp.agentId).sort());
+  JSON.stringify([...new Set(hobs)].filter((hobId) => hobId !== camp.ownerHobId).sort());
 
 /** What Make a camp was asked under a key, as it was asked: a later rename does not change it. */
 const campRequestColumns = (camp: Channel, hobs: ReadonlyArray<AgentId>) => ({
   key: camp.id,
-  agent_id: camp.agentId,
+  agent_id: camp.ownerHobId,
   title: camp.title,
   goal: camp.goal,
   private: camp.private ? 1 : 0,
@@ -66,7 +66,7 @@ const campRequestColumns = (camp: Channel, hobs: ReadonlyArray<AgentId>) => ({
  * other hobs. A request stored before camps kept their hobs was made with none.
  */
 const sameRequest = (stored: Row, asked: Channel, hobs: ReadonlyArray<AgentId>) =>
-  stored.agentId === asked.agentId &&
+  stored.agentId === asked.ownerHobId &&
   stored.title === asked.title &&
   (stored.goal ?? null) === asked.goal &&
   Boolean(Number(stored.private)) === asked.private &&
@@ -148,7 +148,7 @@ export const makeCampWrites = (
       // Its person and its hob are its first members (ADR 039).
       const members = yield* startMembers(camp, first + 1 + started.length);
       // The hob it is made for leads it; each other hob joins once.
-      const others = [...new Set(hobs)].filter((hobId) => hobId !== camp.agentId);
+      const others = [...new Set(hobs)].filter((hobId) => hobId !== camp.ownerHobId);
       const joined = yield* addHobs(camp, others, first + 1 + started.length + members.length);
       const channel = yield* shown(camp.id);
       const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", channel }, ...started, ...members, ...joined];

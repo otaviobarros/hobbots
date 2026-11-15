@@ -154,7 +154,7 @@ const seed = Effect.gen(function* () {
   ] as const)
     yield* repo.insertAgent(hob(id, name));
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   yield* tasks.createTask({
@@ -438,7 +438,7 @@ describe("A finding on two Tasks changing the same file", () => {
         // A channel with no Task yet: the delegation starts Frodo's Task and his turn's Attempt on it.
         const elsewhere = ChannelId.make("rebuild");
         yield* (yield* HobbotsRepository).upsertChannel(
-          new Channel({ id: elsewhere, agentId: FRODO, title: "Rebuild", createdAt: now, updatedAt: now }),
+          new Channel({ id: elsewhere, ownerHobId: FRODO, title: "Rebuild", createdAt: now, updatedAt: now }),
         );
         const chat = yield* (yield* TaskTools).forChat({
           agentId: FRODO,

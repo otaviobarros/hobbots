@@ -6,7 +6,7 @@ import { applyMembersEvent } from "./members.ts";
 const channel = (id: string, kind: "direct" | "camp") =>
   new Channel({
     id: ChannelId.make(id),
-    agentId: AgentId.make("aldric"),
+    ownerHobId: AgentId.make("aldric"),
     title: id,
     kind,
     createdAt: "2026-11-14T10:00:00.000Z",

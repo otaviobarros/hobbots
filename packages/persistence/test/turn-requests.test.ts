@@ -81,7 +81,7 @@ const campOfThree = (id: ChannelId) =>
     const repo = yield* HobbotsRepository;
     const members = yield* ChannelMemberRepository;
     yield* repo.upsertChannel(
-      new Channel({ id, agentId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
+      new Channel({ id, ownerHobId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
     );
     yield* members.add(id, hobActor(PIP), OWNER_ACTOR);
     yield* members.add(id, hobActor(ROOK), OWNER_ACTOR);
@@ -295,7 +295,7 @@ describe("recording the answers already owed", () => {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(hob(QUILL));
         yield* repo.upsertChannel(
-          new Channel({ id: chat, agentId: QUILL, title: "chat", createdAt: NOW, updatedAt: NOW }),
+          new Channel({ id: chat, ownerHobId: QUILL, title: "chat", createdAt: NOW, updatedAt: NOW }),
         );
         yield* repo.upsertMessage(said(chat, "first", "complete"));
         yield* repo.upsertMessage(said(chat, "second", "queued"));

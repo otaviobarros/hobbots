@@ -58,7 +58,7 @@ const seed = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({

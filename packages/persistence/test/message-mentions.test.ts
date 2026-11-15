@@ -89,7 +89,7 @@ const seed = Effect.gen(function* () {
   yield* repo.insertAgent(hob(ROOK, "Rook"));
   yield* sql`INSERT INTO users ${sql.insert({ id: "bruna", name: "Bruna", initials: "B", color: "moss", state: "active" })}`;
   yield* repo.makeCamp(
-    new Channel({ id: CAMP, agentId: ALDRIC, title: "Camp", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CAMP, ownerHobId: ALDRIC, title: "Camp", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
   yield* Effect.flatMap(ChannelMemberRepository, (members) => members.add(CAMP, BRUNA, OWNER_ACTOR));
 });

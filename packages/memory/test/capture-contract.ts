@@ -303,7 +303,7 @@ const setPrivate = (journal: Journal, channelId: ChannelId, value: boolean) =>
       _tag: "ChannelUpserted",
       channel: new Channel({
         id: channelId,
-        agentId: pip,
+        ownerHobId: pip,
         title: "Tests",
         private: value,
         createdAt: "2026-11-05T12:00:00.000Z",
@@ -319,7 +319,7 @@ const archive = (journal: Journal, channelId: ChannelId) =>
       _tag: "ChannelUpserted",
       channel: new Channel({
         id: channelId,
-        agentId: pip,
+        ownerHobId: pip,
         title: "Tests",
         archivedAt: "2026-11-05T13:00:00.000Z",
         createdAt: "2026-11-05T12:00:00.000Z",

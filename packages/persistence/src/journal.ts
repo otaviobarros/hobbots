@@ -98,7 +98,7 @@ const isChannelEvent = (event: JournaledEventType): event is ChannelEvent => CHA
 /** A channel's own events; Start fresh is journaled in the new chat, whose origin names the chat it replaced. */
 const channelCorrelationOf = (event: ChannelEvent): RowCorrelation => {
   const channel = event._tag === "ChatStartedFresh" ? event.chat : event.channel;
-  return { ...NONE, agentId: channel.agentId, channelId: channel.id };
+  return { ...NONE, agentId: channel.ownerHobId, channelId: channel.id };
 };
 
 type ApprovalEvent = Extract<

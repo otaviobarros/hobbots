@@ -390,7 +390,7 @@ describe("skills library", () => {
         const skill = (yield* library.addRevision(null, input(H1))).value.skill;
         const at = "2026-11-06T10:00:00.000Z";
         const channelId = ChannelId.make("t1");
-        yield* repo.upsertChannel(new Channel({ id: channelId, agentId: pip, title: "t", createdAt: at, updatedAt: at }));
+        yield* repo.upsertChannel(new Channel({ id: channelId, ownerHobId: pip, title: "t", createdAt: at, updatedAt: at }));
         const used = {
           source: "library",
           skillId: skill.id,

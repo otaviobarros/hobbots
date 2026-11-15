@@ -83,7 +83,7 @@ const seed = Effect.gen(function* () {
     yield* repo.upsertChannel(
       new Channel({
         id: ChannelId.make(id),
-        agentId: AgentId.make(agentId),
+        ownerHobId: AgentId.make(agentId),
         title: id,
         createdAt: created,
         updatedAt: created,
@@ -184,7 +184,7 @@ const seedTurns = Effect.gen(function* () {
   yield* repo.upsertChannel(
     new Channel({
       id: ChannelId.make("t-moss-plan"),
-      agentId: AgentId.make("moss"),
+      ownerHobId: AgentId.make("moss"),
       title: "t-moss-plan",
       createdAt: created,
       updatedAt: created,

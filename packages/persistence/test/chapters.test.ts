@@ -50,7 +50,7 @@ const hob = (id: string) =>
   });
 
 const newChannel = (id: string, agentId = "ada") =>
-  new Channel({ id: ChannelId.make(id), agentId: AgentId.make(agentId), title: id, createdAt: NOW, updatedAt: NOW });
+  new Channel({ id: ChannelId.make(id), ownerHobId: AgentId.make(agentId), title: id, createdAt: NOW, updatedAt: NOW });
 
 const userMessage = (channelId: string, id: string, status: Message["status"] = "complete") =>
   new Message({

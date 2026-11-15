@@ -757,7 +757,7 @@ const castFor = (channelId: Channel["id"]) =>
     if (Option.isNone(channel) || (yield* tasks.readChannelTrees(channelId)).length > 0) return Option.none<Cast>();
     const hobs = yield* repo.listAgents;
     const named = (name: string) =>
-      hobs.find((hob) => hob.name.toLowerCase() === name && hob.id !== channel.value.agentId);
+      hobs.find((hob) => hob.name.toLowerCase() === name && hob.id !== channel.value.ownerHobId);
     const quill = named("quill");
     const ada = named("ada");
     if (quill === undefined || ada === undefined) {
@@ -770,7 +770,7 @@ const castFor = (channelId: Channel["id"]) =>
     const bram = named("bram")?.id ?? null;
     return Option.some({
       channel: channel.value,
-      lead: channel.value.agentId,
+      lead: channel.value.ownerHobId,
       quill: quill.id,
       ada: ada.id,
       nested,

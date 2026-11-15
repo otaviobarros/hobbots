@@ -96,7 +96,7 @@ const seed = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
   );
 });
 

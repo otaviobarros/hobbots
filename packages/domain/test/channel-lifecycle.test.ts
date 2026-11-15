@@ -19,7 +19,7 @@ const at = "2026-01-01T00:00:00.000Z";
 const channel = (state: ChannelState, kind: ChannelKind = "direct") =>
   new Channel({
     id: "channel-1" as ChannelId,
-    agentId: "hob-1" as AgentId,
+    ownerHobId: "hob-1" as AgentId,
     title: "Plans",
     kind,
     state,

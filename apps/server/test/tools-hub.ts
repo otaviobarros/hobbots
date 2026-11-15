@@ -99,7 +99,7 @@ export const toolsHub = (
     if (lead === undefined) return;
     const channelId = ChannelId.make("tools-hub");
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: lead[0], title: "Work", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: lead[0], title: "Work", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({

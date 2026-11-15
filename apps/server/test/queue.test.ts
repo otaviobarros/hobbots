@@ -47,7 +47,7 @@ const leftQueued = Effect.gen(function* () {
   yield* repo.upsertChannel(
     new Channel({
       id: CHANNEL_ID,
-      agentId: HOB_ID,
+      ownerHobId: HOB_ID,
       title: "Plans",
       createdAt: at,
       updatedAt: at,

@@ -408,7 +408,7 @@ describe("Quest summaries", () => {
       const tasks = yield* TaskRepository;
       const channelId = ChannelId.make(`chat-${run}`);
       yield* repo.upsertChannel(
-        new Channel({ id: channelId, agentId: ALDRIC, title: run, createdAt: NOW, updatedAt: NOW }),
+        new Channel({ id: channelId, ownerHobId: ALDRIC, title: run, createdAt: NOW, updatedAt: NOW }),
       );
       const top = TaskId.make(`top-${run}`);
       yield* tasks.createTask({

@@ -304,7 +304,7 @@ describe("long tool output", () => {
     const reply = await exchange(channel, ["Count", "fake:tool Bash seq 20000"]);
     const [step] = toolSteps(reply);
     const full = `${Array.from({ length: 20000 }, (_, i) => i + 1).join("\n")}\n`;
-    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.agentId}/channels`);
+    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.ownerHobId}/channels`);
     const chapterId = listed.body.find((each) => each.id === channel.id)?.liveChapterId;
     const moved = await request("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, {
       _tag: "new",

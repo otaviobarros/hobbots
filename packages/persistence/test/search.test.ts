@@ -32,7 +32,7 @@ const hob = (id: string, status: AgentStatus = "active") =>
 const channel = (id: string, agentId: string, title: string, updatedAt = now) =>
   new Channel({
     id: ChannelId.make(id),
-    agentId: AgentId.make(agentId),
+    ownerHobId: AgentId.make(agentId),
     title,
     createdAt: now,
     updatedAt,

@@ -315,7 +315,7 @@ describe("event stream", () => {
         const silent = yield* repo.upsertChannel(
           new Channel({
             id: ChannelId.make("silent"),
-            agentId: HOB_ID,
+            ownerHobId: HOB_ID,
             title: "Quiet",
             createdAt: now,
             updatedAt: now,
@@ -426,7 +426,7 @@ describe("reliable chat (#118)", () => {
         yield* repo.upsertChannel(
           new Channel({
             id: channelId,
-            agentId: HOB_ID,
+            ownerHobId: HOB_ID,
             title: "Crash",
             createdAt: now,
             updatedAt: now,

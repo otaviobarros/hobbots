@@ -90,7 +90,7 @@ const CampSeed = Layer.effectDiscard(
       );
     }
     yield* repo.upsertChannel(
-      new Channel({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: at, updatedAt: at }),
+      new Channel({ id: CAMP, ownerHobId: QUILL, title: "Plans", kind: "camp", createdAt: at, updatedAt: at }),
     );
     yield* Effect.orDie((yield* ChannelMemberRepository).add(CAMP, hobActor(PIP), OWNER_ACTOR));
   }),

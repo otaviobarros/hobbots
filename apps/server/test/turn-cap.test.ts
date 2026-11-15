@@ -111,7 +111,7 @@ const openDatabase = async (
         yield* repo.upsertChannel(
           new Channel({
             id: ChannelId.make(id),
-            agentId: AgentId.make(each.hob),
+            ownerHobId: AgentId.make(each.hob),
             title: id,
             createdAt: at,
             updatedAt: at,

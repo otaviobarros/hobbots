@@ -39,5 +39,5 @@ export const speakerIn = (
   agent,
   reason,
   // standards-allow STD-ARCH-021: the speaker's role compares it with the hob the channel belongs to
-  role: agent.id === channel.agentId ? "owner" : "member",
+  role: agent.id === channel.ownerHobId ? "owner" : "member",
 });

@@ -101,7 +101,7 @@ const aldric = new Agent({
 });
 
 const channel = (id: ChannelId, kind: Channel["kind"]) =>
-  new Channel({ id, agentId: ALDRIC, title: id, kind, createdAt: NOW, updatedAt: NOW });
+  new Channel({ id, ownerHobId: ALDRIC, title: id, kind, createdAt: NOW, updatedAt: NOW });
 
 const reply = (channelId: ChannelId, id: string, content = "Done.") =>
   new Message({

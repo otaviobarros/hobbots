@@ -35,7 +35,7 @@ const chapter = (channelId: ChannelId, id: string, number: number, state: Chapte
   });
 
 const channel = (id: ChannelId, fields: Partial<Channel> = {}) =>
-  new Channel({ id, agentId: ADA, title: id, kind: "camp", createdAt: at(0), updatedAt: at(0), ...fields });
+  new Channel({ id, ownerHobId: ADA, title: id, kind: "camp", createdAt: at(0), updatedAt: at(0), ...fields });
 
 const chatChapters = [chapter(CHAT, "c1", 1, "resting", "Lamps"), chapter(CHAT, "c2", 2, "live", "Billing")];
 
@@ -104,7 +104,7 @@ describe("planMove", () => {
     );
     expect(reason({ to: channel(CHAT, { kind: "direct" }) })).toBe("same-channel");
     expect(reason({ to: channel(ChannelId.make("chat-2"), { kind: "direct" }) })).toBe("not-a-camp");
-    expect(reason({ to: channel(CAMP, { agentId: AgentId.make("bo") }) })).toBe("not-a-camp");
+    expect(reason({ to: channel(CAMP, { ownerHobId: AgentId.make("bo") }) })).toBe("not-a-camp");
     expect(reason({ to: channel(CAMP, { state: "archived", archivedAt: at(1) }) })).toBe("not-a-camp");
     expect(
       reason({

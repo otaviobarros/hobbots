@@ -181,7 +181,7 @@ const seed = Effect.gen(function* () {
     }),
   );
   yield* repo.upsertChannel(
-    new Channel({ id: channelId, agentId: FRODO, title: "To Mordor", createdAt: now, updatedAt: now }),
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "To Mordor", createdAt: now, updatedAt: now }),
   );
   yield* repo.upsertMessage(
     new Message({

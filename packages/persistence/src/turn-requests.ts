@@ -233,8 +233,8 @@ export const makeTurnRequestWrites = (
         MemberRefused | ChannelArchived
       >((revision) =>
         Effect.gen(function* () {
-          const [channel] = yield* sql<Pick<Channel, "kind" | "agentId" | "archivedAt">>`SELECT kind, agent_id,
-            archived_at FROM channels WHERE id = ${channelId}`;
+          const [channel] = yield* sql<Pick<Channel, "kind" | "ownerHobId" | "archivedAt">>`SELECT kind,
+            agent_id AS owner_hob_id, archived_at FROM channels WHERE id = ${channelId}`;
           if (channel === undefined) return yield* Effect.die(new Error(`No channel ${channelId}`));
           // A camp archived since it was read is read-only by the time this is written.
           if (channel.archivedAt !== null) {

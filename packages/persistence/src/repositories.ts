@@ -151,9 +151,10 @@ const configColumns = (agent: Agent) => ({
 });
 // A channel's sessions, own brain and the draft it tries are JSON text columns (migrations 0020 and 0083).
 // `read_revision` stays on the hub: a read shows only whether the channel is `unread` (migration 0053).
-// `private` is 0 or 1, and `origin` two columns (migration 0095).
+// `private` is 0 or 1, and `origin` two columns (migration 0095). The owner hob is the `agent_id` column.
 export const channelRows = (
   rows: ReadonlyArray<{
+    readonly agentId?: unknown;
     readonly revision?: unknown;
     readonly private?: unknown;
     readonly originChannelId?: unknown;
@@ -168,8 +169,9 @@ export const channelRows = (
     readonly lastAuthorId?: unknown;
   }>,
 ) =>
-  rows.map(({ lastContent, lastAuthorKind, lastAuthorId, originChannelId, originChapterId, ...row }) => ({
+  rows.map(({ agentId, lastContent, lastAuthorKind, lastAuthorId, originChannelId, originChapterId, ...row }) => ({
     ...row,
+    ownerHobId: agentId,
     private: Number(row.private ?? 0) === 1,
     origin: originChannelId == null ? null : { channelId: originChannelId, chapterId: originChapterId ?? null },
     liveChapterId: row.liveChapterId ?? null,

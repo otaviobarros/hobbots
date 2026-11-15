@@ -167,7 +167,7 @@ const openDatabase = async (scope: Scope.Closeable): Promise<Database> => {
       }),
     );
     yield* repo.upsertChannel(
-      new Channel({ id: CHANNEL_ID, agentId: FRODO, title: "The quest", createdAt: at, updatedAt: at }),
+      new Channel({ id: CHANNEL_ID, ownerHobId: FRODO, title: "The quest", createdAt: at, updatedAt: at }),
     );
   });
   await Effect.runPromise(Effect.provide(seed, HobbotsRepositoryLive.pipe(Layer.provideMerge(database))));

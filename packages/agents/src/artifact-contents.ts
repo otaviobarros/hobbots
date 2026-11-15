@@ -78,7 +78,7 @@ export class ArtifactContents extends Context.Service<
           if (Option.isNone(channel)) return [];
           const maker = artifact.actor.kind === "hob" ? [AgentId.make(artifact.actor.id)] : [];
           // standards-allow STD-ARCH-021: an artifact may sit in the folders of the hob the channel belongs to
-          const hobs = yield* Effect.forEach([...new Set([channel.value.agentId, ...maker])], (id) =>
+          const hobs = yield* Effect.forEach([...new Set([channel.value.ownerHobId, ...maker])], (id) =>
             repo.findAgent(id),
           );
           const { approvedFolders } = yield* setup.get;

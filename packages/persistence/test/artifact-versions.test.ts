@@ -110,7 +110,7 @@ const seedWork = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertChannel(new Channel({ id: CHANNEL, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
   yield* sql`INSERT INTO tasks ${sql.insert({
     id: TASK,
     owner_id: ADA,

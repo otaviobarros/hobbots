@@ -106,7 +106,7 @@ const seedLead = (attempt: { readonly id: AttemptId; readonly startedAt: string 
     ] as const)
       yield* repo.insertAgent(hob(id, name));
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     yield* tasks.createTask({

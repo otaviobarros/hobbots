@@ -565,7 +565,7 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     const activeHobs = (channel: Channel, hobIds: ReadonlyArray<AgentId>) =>
       Effect.gen(function* () {
         // standards-allow STD-ARCH-021: the hob a channel belongs to keeps its own rules for open Tasks
-        const owner = channel.agentId;
+        const owner = channel.ownerHobId;
         const found = yield* Effect.forEach([...new Set(hobIds)], (hobId) => repo.findAgent(hobId));
         const retiringMember = found.some(
           (agent) => Option.isSome(agent) && agent.value.retiring !== null && agent.value.id !== owner,
@@ -585,7 +585,7 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     // The hobs that speak in the channel: its own hob, then its active member hobs as they joined.
     const hobsOf = (channel: Channel) => {
       // standards-allow STD-ARCH-021: the hob a channel belongs to speaks there first, and is listed once
-      const owner = channel.agentId;
+      const owner = channel.ownerHobId;
       return Option.isNone(members)
         ? Effect.succeed<ReadonlyArray<AgentId>>([owner])
         : members.value

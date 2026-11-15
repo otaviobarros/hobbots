@@ -101,7 +101,7 @@ export const makeChapterMoves = (
   const strandsLead = (from: ChannelId, chapterId: ChapterId, camp: Channel) =>
     sql`SELECT 1 FROM tasks t WHERE t.chapter_id = ${chapterId} AND t.channel_id = ${from}
       AND t.parent_id IS NULL AND t.state NOT IN ('completed', 'failed', 'cancelled')
-      AND t.owner_id <> ${camp.agentId} AND NOT EXISTS (SELECT 1 FROM channel_members m
+      AND t.owner_id <> ${camp.ownerHobId} AND NOT EXISTS (SELECT 1 FROM channel_members m
         WHERE m.channel_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = t.owner_id
         AND m.state = 'active') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
 

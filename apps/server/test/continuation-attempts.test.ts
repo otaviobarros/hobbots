@@ -101,7 +101,7 @@ const Party = Layer.effectDiscard(
       yield* repo.insertAgent(hob(id, name, index + 1));
     }
     yield* repo.upsertChannel(
-      new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+      new Channel({ id: channelId, ownerHobId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
     );
   }),
 );

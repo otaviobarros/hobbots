@@ -105,7 +105,7 @@ export const ChapterToolsLive = Layer.effect(
     // A hob reads the messages of its own channels and of the camps it is an active member of (ADR 039).
     const readsIn = (channel: Channel, turn: CharmTurn) =>
       // standards-allow STD-ARCH-021: the hob a channel belongs to reads it, as its owner
-      channel.agentId === turn.agentId
+      channel.ownerHobId === turn.agentId
         ? Effect.succeed(true)
         : Option.isNone(members)
           ? Effect.succeed(false)

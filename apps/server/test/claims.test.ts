@@ -167,7 +167,7 @@ const hub = () => {
         const repo = yield* HobbotsRepository;
         const channelId = ChannelId.make(`camp-${taskId}`);
         yield* repo.upsertChannel(
-          new Channel({ id: channelId, agentId, title: "Work", kind: "camp", createdAt: now, updatedAt: now }),
+          new Channel({ id: channelId, ownerHobId: agentId, title: "Work", kind: "camp", createdAt: now, updatedAt: now }),
         );
         const tasks = yield* TaskRepository;
         const created = yield* tasks.createTask({

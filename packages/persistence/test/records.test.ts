@@ -90,7 +90,7 @@ const run = <A, E>(
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob);
-  yield* repo.upsertChannel(new Channel({ id: CHANNEL, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
   const yours = (yield* repo.upsertMessage(message("ask-1", "user"))).value;
   const reply = (yield* repo.upsertMessage(message(REPLY, "assistant", { status: "streaming" }))).value;
   return { yours, reply };
@@ -232,7 +232,7 @@ describe("decisions", () => {
         const repo = yield* HobbotsRepository;
         const records = yield* RecordRepository;
         yield* repo.upsertChannel(
-          new Channel({ id: other, agentId: ADA, title: "Other", createdAt: NOW, updatedAt: NOW }),
+          new Channel({ id: other, ownerHobId: ADA, title: "Other", createdAt: NOW, updatedAt: NOW }),
         );
         yield* repo.upsertMessage(message("ask-2", "user", { channelId: other }));
         const yours = { sourceMessageId: null, actor: OWNER_ACTOR, key: "app:same" };

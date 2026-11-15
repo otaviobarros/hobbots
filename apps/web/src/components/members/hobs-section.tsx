@@ -81,7 +81,7 @@ export function HobsSection({
               member={member}
               hob={hob}
               // standards-allow STD-ARCH-021: the camp's lead is the hob it was made with (ADR 039)
-              lead={member.actor.id === camp.agentId}
+              lead={member.actor.id === camp.ownerHobId}
               today={report.today.find((each) => each.hobId === member.actor.id)}
               speaking={runs?.speaking ?? null}
               next={runs?.next ?? []}
