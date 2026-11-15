@@ -92,7 +92,7 @@ function SheetBody({ camp, report, hobs }: { camp: Thread; report: MembersReport
       <p className="m-0 text-meta text-label">{answering > 1 ? copy.several : copy.one}</p>
       <HobsSection camp={camp} report={report} hobs={hobs} members={hobMembers} />
       <PeopleSection report={report} members={people} />
-      <CostSection report={report} hobs={hobs} members={hobMembers} />
+      <CostSection camp={camp} report={report} hobs={hobs} members={hobMembers} />
       <p className="m-0 text-meta text-label">{copy.memory}</p>
     </>
   );

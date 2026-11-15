@@ -58,6 +58,9 @@ export const messages = {
     cost: "Today's cost",
     plan: ({ provider }: { readonly provider: string }) => `${provider} plan`,
     noPlan: "Plan not reported",
+    plansLoading: "Reading the plan…",
+    plansFailed: "Couldn't read",
+    plansFailedLong: "Couldn't read your plans. Hobbots may be reconnecting.",
     /** What the camp's hobs spent here today, on the owner's sign-in: yours when `owner` is null. */
     here: ({
       turns,

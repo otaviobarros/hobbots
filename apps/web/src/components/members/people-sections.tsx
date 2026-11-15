@@ -1,14 +1,16 @@
 import type { MembersReport } from "@hobbots/api";
-import type { Actor, Agent, RuntimeKind, ThreadMember, User } from "@hobbots/domain";
+import type { Actor, Agent, RuntimeKind, Thread, ThreadMember, User } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
+import { plansQuery } from "../../api/queries.ts";
 import { sidebarQuery } from "../../api/sidebar.ts";
 import { formatCompact } from "../../lib/format.ts";
 import { PROVIDER_NAMES } from "../../lib/providers.ts";
 import { PersonBadge } from "../sidebar/sidebar-faces.tsx";
-import { planOf, planSummary, usePlans } from "../usage/plan-summary.ts";
+import { planOf, planSummary } from "../usage/plan-summary.ts";
 import { messages } from "./messages.ts";
 import { row, sectionTitle } from "./sheet-styles.ts";
 
@@ -57,26 +59,44 @@ export function PeopleSection({ report, members }: { report: MembersReport; memb
   );
 }
 
+/**
+ * The runtimes the camp's turns spend: the camp's own brain when it has one, since every hob here
+ * thinks with it (brainFor, ADR 017), otherwise each hob's own.
+ */
+export const campRuntimes = (
+  camp: Pick<Thread, "brain">,
+  hobs: ReadonlyArray<Pick<Agent, "id" | "runtime">>,
+  members: ReadonlyArray<ThreadMember>,
+): ReadonlyArray<RuntimeKind> =>
+  camp.brain !== null
+    ? [camp.brain.runtime]
+    : [
+        ...new Set(
+          members.flatMap((member): ReadonlyArray<RuntimeKind> => {
+            const hob = hobs.find((each) => each.id === member.actor.id);
+            return hob === undefined ? [] : [hob.runtime];
+          }),
+        ),
+      ];
+
 /** Today's cost: the plan every turn here runs on, the owner's, and what the camp's hobs spent here. */
 export function CostSection({
+  camp,
   report,
   hobs,
   members,
 }: {
+  camp: Thread;
   report: MembersReport;
   hobs: ReadonlyArray<Agent>;
   members: ReadonlyArray<ThreadMember>;
 }) {
-  const plans = usePlans();
+  // The plans' own lifecycle: a slow or failed read is not a plan the hub didn't report.
+  const plansRead = useQuery(plansQuery);
+  const plans = plansRead.data;
+  const plansFailed = plansRead.isError && !plansRead.isFetching;
   const headingId = useId();
-  const runtimes = [
-    ...new Set(
-      members.flatMap((member): ReadonlyArray<RuntimeKind> => {
-        const hob = hobs.find((each) => each.id === member.actor.id);
-        return hob === undefined ? [] : [hob.runtime];
-      }),
-    ),
-  ];
+  const runtimes = campRuntimes(camp, hobs, members);
   const you = useQuery(sidebarQuery).data?.you;
   // Every turn here runs on the camp owner's sign-in, whoever asked: yours, or theirs by name.
   const owner = report.members.find((member) => member.role === "owner");
@@ -92,14 +112,14 @@ export function CostSection({
       </h3>
       <div className="flex flex-col gap-1.5 rounded-control bg-card p-3 border-(length:--edge) border-line">
         {runtimes.map((runtime) => {
-          const summary = planSummary(planOf(plans, runtime), now);
+          const summary = plans === undefined ? null : planSummary(planOf(plans, runtime), now);
+          const line =
+            plans === undefined ? (plansFailed ? copy.plansFailed : copy.plansLoading) : (summary?.line ?? copy.noPlan);
           return (
             <div key={runtime} className="flex flex-col gap-1.5">
               <div className="flex items-baseline gap-2 text-ui">
                 <b className="shrink-0 font-semibold">{copy.plan({ provider: PROVIDER_NAMES[runtime] })}</b>
-                <span className="min-w-0 flex-1 truncate text-end text-detail text-text-secondary">
-                  {summary?.line ?? copy.noPlan}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-end text-detail text-text-secondary">{line}</span>
               </div>
               {summary !== null && (
                 <Progress
@@ -112,6 +132,14 @@ export function CostSection({
             </div>
           );
         })}
+        {plans === undefined && plansFailed && (
+          <span role="alert" className="flex items-center gap-2 text-meta text-rose">
+            {copy.plansFailedLong}
+            <Button type="button" variant="outline" size="xs" onClick={() => void plansRead.refetch()}>
+              {copy.retry}
+            </Button>
+          </span>
+        )}
         <small className="text-meta text-label">
           {copy.here({ turns, tokens: formatCompact(tokens), owner: yours ? null : ownerName })}
         </small>
