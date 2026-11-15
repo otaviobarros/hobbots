@@ -475,7 +475,8 @@ describe("exports", () => {
     expect(again.folder).toBe(`${everything.folder} (2)`);
   });
 
-  it("keeps the history of settings changes in an export of everything, and in no narrower one", async () => {
+  // Issue #1357
+  it("keeps the history of settings changes in an export of everything, and in no narrower one (#1357)", async () => {
     await runtime.runPromise(
       SetupRepository.use((setup) =>
         setup.update({ approvedFolders: [project], safetyPreset: "careful" }, OWNER_ACTOR),
@@ -508,6 +509,7 @@ describe("exports", () => {
     expect((await refusal({ _tag: "Thread", threadId: ThreadId.make("nothing") }))._tag).toBe("ThreadNotFound");
   });
 
+  // covers ADR 028 (Backups)
   it("exports each memory scope's pages as redacted Markdown, a hob's own with its export, and says when memory is down", async () => {
     const everything = await run({ _tag: "Everything" });
     const files = filesIn(everything.folder);
@@ -557,7 +559,8 @@ describe("exports", () => {
     }
   });
 
-  it("a reply a member hob wrote in a camp is exported as that hob's, with its name", async () => {
+  // covers ADR 039 (A member hob works as itself)
+  it("a reply a member hob wrote in a camp is exported as that hob's, with its name (#1461)", async () => {
     await runtime.runPromise(
       HobbotsRepository.use((repo) =>
         repo.upsertMessage(

@@ -106,7 +106,7 @@ describe("MemoryCaptureLog", () => {
   });
 
   // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-  it("reads the camps private now and each Task's thread, and keeps the camps private at the cursor", async () => {
+  it("reads the camps private now and each Task's thread, and keeps the camps private at the cursor (#1377)", async () => {
     const result = await Effect.gen(function* () {
       const log = yield* MemoryCaptureLog;
       const repo = yield* HobbotsRepository;
@@ -176,7 +176,7 @@ describe("MemoryCaptureLog", () => {
   });
 
   // covers ADR 039 (Memory in a shared thread)
-  it("keeps a thread's session open in each hob's memory, ends each on its own, and reads the messages hobs took", async () => {
+  it("keeps a thread's session open in each hob's memory, ends each on its own, and reads the messages hobs took (#1466)", async () => {
     const result = await Effect.gen(function* () {
       const log = yield* MemoryCaptureLog;
       const repo = yield* HobbotsRepository;

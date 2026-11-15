@@ -45,7 +45,7 @@ const reply = (status: Message["status"], content: string) =>
   });
 
 describe("applyEvent", () => {
-  it("reads the Skills page again when a skill changes elsewhere, but not a revision, which never changes", async () => {
+  it("reads the Skills page again when a skill changes elsewhere, but not a revision, which never changes (#1062)", async () => {
     const client = new QueryClient();
     const hash = SkillRevisionHash.make("a".repeat(64));
     const skill = new Skill({
@@ -70,7 +70,7 @@ describe("applyEvent", () => {
   });
 
   // covers ADR 029 (skill_feedback), STD-REACT-012, #1062
-  it("a note left while a skill's first read of its notes is under way is read again, not lost", async () => {
+  it("a note left while a skill's first read of its notes is under way is read again, not lost (#1062)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const skillId = SkillId.make("s1");
     const reads: Array<(answer: { feedback: ReadonlyArray<SkillFeedback> }) => void> = [];
@@ -155,7 +155,7 @@ describe("applyEvent", () => {
     expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([]);
   });
 
-  it("drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there", async () => {
+  it("drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there (#1376)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const hobId = AgentId.make("aldric");
     const old = new Thread({ id: threadId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now });
@@ -308,7 +308,7 @@ describe("applyEvent", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("drops the reply of a hob that passed, which leaves no message, and reads what is unread again", async () => {
+  it("drops the reply of a hob that passed, which leaves no message, and reads what is unread again (#1462)", async () => {
     const client = new QueryClient();
     // The passed reply had ended, so the camp showed as unread.
     client.setQueryData(queryKeys.unreadThreads, [threadId]);
@@ -398,7 +398,7 @@ describe("approval events", () => {
   });
 
   // covers ADR 037 (Quests in camps), #1389
-  it("moves a request that went with its quest out of the thread it left and into the camp's list", () => {
+  it("moves a request that went with its quest out of the thread it left and into the camp's list (#1389)", () => {
     const client = new QueryClient();
     const camp = ThreadId.make("camp-1");
     const asked = approval("pending", 1);

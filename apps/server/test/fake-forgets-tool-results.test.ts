@@ -79,7 +79,8 @@ const questWithNewSession = async (firstLines: ReadonlyArray<string>) => {
 };
 
 describe("a new fake session", () => {
-  it("can't read an id that only an earlier session's tool result held", async () => {
+  // Issue #1560
+  it("can't read an id that only an earlier session's tool result held (#1560)", async () => {
     const { wake, ids, answer } = await questWithNewSession([]);
     expect(wake?.sessionId).toBeNull();
     // The hub did answer the id; the new session just isn't told it again by the pack.
@@ -89,7 +90,8 @@ describe("a new fake session", () => {
     }
   }, 30_000);
 
-  it("reads it once the earlier turn asks the fake to repeat the hub's answers", async () => {
+  // Issue #1560
+  it("reads it once the earlier turn asks the fake to repeat the hub's answers (#1560)", async () => {
     // The guard above holds only because the fake stays quiet: repeating the answers leaks the id.
     const { wake, ids } = await questWithNewSession([FAKE_SAY_ANSWERS_DIRECTIVE]);
     expect(wake?.sessionId).toBeNull();

@@ -57,7 +57,7 @@ const precedes = (events: ReadonlyArray<string>, first: string, second: string) 
 };
 
 describe("a lead steers a member whose turn runs", () => {
-  it("a steered message reaches the member between two tool calls in the same turn, and the note records when", async () => {
+  it("a steered message reaches the member between two tool calls in the same turn, and the note records when (#1345)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates } = party;
@@ -112,7 +112,7 @@ describe("a lead steers a member whose turn runs", () => {
     expect(requests.filter((each) => each.prompt.includes(CARRIED))).toHaveLength(0);
   }, 30_000);
 
-  it("an interrupting message stops the member's turn and restarts it with the message first", async () => {
+  it("an interrupting message stops the member's turn and restarts it with the message first (#1345)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates, reactions } = party;
@@ -176,7 +176,7 @@ describe("a lead steers a member whose turn runs", () => {
     expect(precedes(events, "TaskStateChanged:pip:waiting", "NotePickedUp")).toBe(true);
   }, 30_000);
 
-  it("a steered message that reaches a turn after its last tool call goes to the member's next turn", async () => {
+  it("a steered message that reaches a turn after its last tool call goes to the member's next turn (#1345)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates, reactions } = party;
@@ -219,7 +219,7 @@ describe("a lead steers a member whose turn runs", () => {
     expect(precedes(events, "CheckpointRecorded:Which theme?", "NotePickedUp")).toBe(true);
   }, 30_000);
 
-  it("a turn waiting on your approval keeps its card and gets the steered message at its next step once you decide", async () => {
+  it("a turn waiting on your approval keeps its card and gets the steered message at its next step once you decide (#1345)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers } = party;

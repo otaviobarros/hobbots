@@ -236,7 +236,7 @@ describe("Task and Quest reads", () => {
   });
 
   // covers ADR 037 (Quests in camps), OR-007
-  it("serves each Quest's summary as the sync snapshot, with a cursor the stream resumes from with its next change", async () => {
+  it("serves each Quest's summary as the sync snapshot, with a cursor the stream resumes from with its next change (#1373)", async () => {
     const copy = await runtime.runPromise(quest);
 
     const response = await get(`/api/quest-summaries?threadId=${threadId}`);

@@ -362,6 +362,7 @@ describe("a Task's activity", () => {
     expect(types).toEqual(expect.arrayContaining(["CommandRecorded", "FileChangesRecorded", "FolderScanned"]));
   }, 30_000);
 
+  // Issue #902
   it("a colored command keeps its colors in the Workbench, redacted where a color splits a secret, and its reply step reads plain", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     const green = "\u001b[32m";

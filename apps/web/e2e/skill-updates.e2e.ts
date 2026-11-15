@@ -147,7 +147,9 @@ test("Skills › Updates: check, review the diff, update, update automatically w
 });
 
 // covers ADR 029 (Updates from a source), #1097
-test("a SKILL.md too long to review whole says so, and Update waits until you say you read it", async ({ page }) => {
+test("a SKILL.md too long to review whole says so, and Update waits until you say you read it (#1097)", async ({
+  page,
+}) => {
   const { url, upstream } = await hubWithGitSkill();
   // A change past the first 200,000 characters, which the review leaves out.
   const long = `Bump the version.\n${"Keep each step short. ".repeat(10_000)}`;

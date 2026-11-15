@@ -1116,6 +1116,7 @@ describe("0053_thread_reads", () => {
 });
 
 describe("0074_milestone_reached_by", () => {
+  // Issue #743
   it("credits every milestone reached before it to its Task's owner, and leaves the rest unreached", async () => {
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -1159,7 +1160,7 @@ describe("0074_milestone_reached_by", () => {
 });
 
 describe("0079_hob_visibility", () => {
-  it("leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it", async () => {
+  it("leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it (#1233)", async () => {
     const before = {
       _tag: "AgentUpserted",
       agent: {
@@ -1250,7 +1251,7 @@ describe("0080_hob_good_at", () => {
     { id: "long", role: null, roleTitle: "Clerk", instructions: `Your chores, in the user's words:\n${longChores}` },
   ] as const;
 
-  it("fills every hob and version with the good at the profile showed, and shortens one past the limit", async () => {
+  it("fills every hob and version with the good at the profile showed, and shortens one past the limit (#1232)", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       for (const hob of hobs) {
@@ -1312,7 +1313,7 @@ describe("0080_hob_good_at", () => {
     ]);
   });
 
-  it("still reads a hob event journaled before good at was stored, with none", async () => {
+  it("still reads a hob event journaled before good at was stored, with none (#1232)", async () => {
     // The AgentUpserted payload as the hub journaled it before 0080, with no good at.
     const before = {
       _tag: "AgentUpserted",
@@ -1363,7 +1364,7 @@ describe("0080_hob_good_at", () => {
 });
 
 describe("0082_hob_actors", () => {
-  it("records you as the maker of every stored version and the summoner of every hob, and reads older hob events as yours", async () => {
+  it("records you as the maker of every stored version and the summoner of every hob, and reads older hob events as yours (#405)", async () => {
     // The AgentUpserted payload as the hub journaled it before 0082, with no actor and no summoner.
     const before = {
       _tag: "AgentUpserted",
@@ -1458,7 +1459,7 @@ describe("0082_hob_actors", () => {
 
 describe("0083_summoning", () => {
   // covers ADR 034 (Scope, The Charm), DP-003
-  it("leaves every hob and version with the default Summoning scope and no Charm withheld, and Summoning for every hob off", async () => {
+  it("leaves every hob and version with the default Summoning scope and no Charm withheld, and Summoning for every hob off (#406)", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -1498,7 +1499,8 @@ describe("0083_summoning", () => {
 });
 
 describe("0084_thread_skill_trial", () => {
-  it("keeps every thread from before it as an ordinary chat, trying no draft", async () => {
+  // covers ADR 029 (Try in a chat), #1099
+  it("keeps every thread from before it as an ordinary chat, trying no draft (#1099)", async () => {
     const threads = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({

@@ -167,7 +167,7 @@ const merge = (id: ThreadId, chapter: string) =>
 describe("runtime sessions keyed by chapter", () => {
   // covers ADR 037 (Chapters), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on %s, a new chapter starts a new session and never resumes the old chapter's",
+    "on %s, a new chapter starts a new session and never resumes the old chapter's (#1379)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
@@ -207,7 +207,7 @@ describe("runtime sessions keyed by chapter", () => {
   );
 
   // covers ADR 037 (Chapters), ADR 017, RT-001
-  it("a brain switch inside the live chapter is briefed with that chapter alone", async () => {
+  it("a brain switch inside the live chapter is briefed with that chapter alone (#1379)", async () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     await startChapter(id, "chapter-2", "Her age");
@@ -224,7 +224,7 @@ describe("runtime sessions keyed by chapter", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("splitting the live chapter starts a new session; merging it back starts another", async () => {
+  it("splitting the live chapter starts a new session; merging it back starts another (#1379)", async () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     const plants = await say(id, "What should I plant?");
@@ -261,7 +261,7 @@ describe("runtime sessions keyed by chapter", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("merging a split-off live chapter back before any turn in it starts a new session", async () => {
+  it("merging a split-off live chapter back before any turn in it starts a new session (#1379)", async () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     await say(id, "What should I plant?");
@@ -279,7 +279,7 @@ describe("runtime sessions keyed by chapter", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("a turn under way while its chapter is split and merged back keeps no session for it", async () => {
+  it("a turn under way while its chapter is split and merged back keeps no session for it (#1379)", async () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     let release = () => {};
@@ -304,7 +304,7 @@ describe("runtime sessions keyed by chapter", () => {
   });
 
   // covers ADR 037 (Chapters), ADR 017, STD-ARCH-018
-  it("a brain switch after a split is not briefed from a summary of the chapter before it", async () => {
+  it("a brain switch after a split is not briefed from a summary of the chapter before it (#1379)", async () => {
     const id = await start("claude-code");
     const filler = "about the garden beds and what grows in them ".repeat(110);
     await say(id, `Miso is my cat. ${filler}`);

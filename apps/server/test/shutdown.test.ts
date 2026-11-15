@@ -123,6 +123,7 @@ const command = (script: string, folder: string, args: ReadonlyArray<string> = [
   });
 
 describe("the command-line tools and a running hub", () => {
+  // Issue #999
   it("reset and restore refuse a hub on a port only it knows, and go ahead once it stops", {
     timeout: 90_000,
   }, async () => {
@@ -153,6 +154,7 @@ describe("the command-line tools and a running hub", () => {
     expect(after.output).toContain("Run again with --yes to delete everything.");
   });
 
+  // Issue #999
   it("a second hub on the same data folder does not start, and leaves the first one's record", {
     timeout: 90_000,
   }, async () => {

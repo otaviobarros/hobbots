@@ -7,7 +7,7 @@ const count = { searches: 3, pages: 2, bytes: 900, tokens: 40 } as const;
 
 describe("the web search price table", () => {
   // covers ADR 036 (Cost)
-  it("estimates a cost only for searches billed per search, at the provider's published price", () => {
+  it("estimates a cost only for searches billed per search, at the provider's published price (#1269)", () => {
     expect(WEB_SEARCH_PRICES_USD["claude-code"]).toBe(0.01);
     expect(pricedWebUsage({ ...count, billed: [{ runtime: "claude-code", count: 2 }] })).toEqual({
       ...count,

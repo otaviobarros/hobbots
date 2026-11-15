@@ -55,7 +55,7 @@ const judge = (settings: MemorySettings) =>
 describe.runIf(enabled)("the hub's brain on signed-in runtimes", () => {
   // covers ADR 037
   it.each(["claude", "chatgpt"] as const)(
-    "the %s provider answers a judgment in its shape through the hub's endpoint, counted for Usage",
+    "the %s provider answers a judgment in its shape through the hub's endpoint, counted for Usage (#1367)",
     { timeout: 180_000 },
     async (provider) => {
       const { decided, usage } = await judge({ ...DEFAULT_MEMORY_SETTINGS, provider });

@@ -178,7 +178,7 @@ describe("the setup API", () => {
 
   // covers #1225: a new shared folder is opened once, so macOS asks about Documents then. Root opens
   // any folder, so the refusal shows only for an ordinary user.
-  it.skipIf(process.getuid?.() === 0)("refuses a new folder the hub can't open, and stores none", async () => {
+  it.skipIf(process.getuid?.() === 0)("refuses a new folder the hub can't open, and stores none (#1225)", async () => {
     const closed = join(temp, "closed");
     mkdirSync(closed);
     chmodSync(closed, 0o000);
@@ -210,7 +210,8 @@ describe("the setup API", () => {
     expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual([]);
   });
 
-  it("keeps who turned Summoning for every hob on, changed its answers and turned it off, in Settings and in the History of the hob it reached", async () => {
+  // Issue #1357
+  it("keeps who turned Summoning for every hob on, changed its answers and turned it off, in Settings and in the History of the hob it reached (#1357)", async () => {
     const hob = (await (
       await request("POST", "/api/agents", {
         name: "Pip",

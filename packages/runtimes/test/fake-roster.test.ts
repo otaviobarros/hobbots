@@ -39,7 +39,7 @@ const reply = (prompt: string, briefing?: string) =>
 
 describe("the fake runtime's roster", () => {
   // covers ADR 032 (Every runtime)
-  it("is left out of its echo and given back when asked", async () => {
+  it("is left out of its echo and given back when asked (#1234)", async () => {
     expect(await reply("Hello", `${roster}\n\nYour Task.`)).toEqual(["Echo: Your Task.\n\nHello"]);
     expect(await reply("Hello", roster)).toEqual(["Echo: Hello"]);
     expect(await reply(fakeRosterPrompt, `${roster}\n\nYour Task.`)).toEqual([roster]);

@@ -115,7 +115,7 @@ describe("unread threads", () => {
   });
 
   // covers ADR 039 (Members), STD-REACT-012
-  it("a read of your unread threads taken before you read the thread elsewhere never brings its dot back", async () => {
+  it("a read of your unread threads taken before you read the thread elsewhere never brings its dot back (#1454)", async () => {
     const client = new QueryClient();
     const answers: Array<(read: UnreadThreads) => void> = [];
     const observer = new QueryObserver(client, {

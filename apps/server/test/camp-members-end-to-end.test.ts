@@ -197,7 +197,7 @@ const campOfThree = async () => {
 
 describe("a camp's members over the API", () => {
   // covers ADR 039 (Members), #1467
-  it("makes a camp with the hobs picked and lists them, then adds one back and refuses the lead's removal", async () => {
+  it("makes a camp with the hobs picked and lists them, then adds one back and refuses the lead's removal (#1467)", async () => {
     const camp = await campOfThree();
     const listed = await report(camp.id);
     expect(listed.members.map(shown).sort()).toEqual([
@@ -230,7 +230,7 @@ describe("a camp's members over the API", () => {
   });
 
   // covers ADR 039 (Members; One hob speaks at a time), #1467
-  it("drops what a hob taken out was waiting to answer, and stops the answer it was giving", async () => {
+  it("drops what a hob taken out was waiting to answer, and stops the answer it was giving (#1467)", async () => {
     const camp = await campOfThree();
     await request("POST", `/api/threads/${camp.id}/messages`, { content: "@pip @rook what do you think?" });
     await waitUntil(async () => (await working()).includes(PIP));

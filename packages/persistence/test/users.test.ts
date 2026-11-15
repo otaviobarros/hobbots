@@ -28,7 +28,7 @@ const storedUser = (row: { readonly id: string; readonly state: string }) =>
 
 describe("users", () => {
   // covers ADR 039 (Users as actors)
-  it("makes the owner a user in one pass over a hub that had none, so OWNER_ACTOR resolves to it", async () => {
+  it("makes the owner a user in one pass over a hub that had none, so OWNER_ACTOR resolves to it (#1451)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* users;
@@ -41,7 +41,7 @@ describe("users", () => {
   });
 
   // covers ADR 039 (Users as actors)
-  it("resolves only person actors with a user, and lists the owner first", async () => {
+  it("resolves only person actors with a user, and lists the owner first (#1451)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* storedUser({ id: "bruna", state: "active" });
@@ -64,7 +64,7 @@ describe("users", () => {
   });
 
   // covers ADR 039 (Users as actors)
-  it("refuses a user state outside the domain's, on insert and on update", async () => {
+  it("refuses a user state outside the domain's, on insert and on update (#1451)", async () => {
     // A new state needs a migration of its own.
     expect(USER_STATES).toEqual(UserState.literals);
     const result = await run(

@@ -309,7 +309,7 @@ describe("backpackItemsFor", () => {
     }
   });
 
-  it("names Hobbots, not you, as the author of a note the supervisor left", () => {
+  it("names Hobbots, not you, as the author of a note the supervisor left (#1447)", () => {
     const note = new TaskNote({
       id: NoteId.make("supervisor:copy:deadline"),
       taskId: copy.id,

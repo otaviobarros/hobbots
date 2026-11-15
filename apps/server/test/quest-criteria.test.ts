@@ -47,7 +47,7 @@ const returnsPage = (brief: string, key: string, path: string) =>
 const done = (tree: TaskTree) => tree.tasks[0]?.state === "completed";
 
 describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
-  it("hold the Quest open until its lead accepts the required one on evidence", async () => {
+  it("hold the Quest open until its lead accepts the required one on evidence (#1445)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -90,7 +90,7 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
     expect(quest?.criteria[0]?.evidence).toMatchObject([{ version: 1, taskId: pip?.id, voidedAt: null }]);
   }, 30_000);
 
-  it("voids the evidence when a newer version of the page arrives, until its lead checks it again", async () => {
+  it("voids the evidence when a newer version of the page arrives, until its lead checks it again (#1445)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -132,7 +132,7 @@ describe.each(RUNTIMES)("a Quest's acceptance criteria, on %s", (runtime) => {
     });
   }, 30_000);
 
-  it("waives a required criterion only when you choose to, in your answer to the question it asks you", async () => {
+  it("waives a required criterion only when you choose to, in your answer to the question it asks you (#1445)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;

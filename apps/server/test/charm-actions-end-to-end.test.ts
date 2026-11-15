@@ -559,6 +559,7 @@ const onEachRuntime = async (check: (runtime: string) => Promise<void>) => {
 const TIMEOUT = 300_000;
 
 describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
+  // covers ADR 015, ADR 031
   it("asks for a Charm read whose preset asks, records its step before it is sent, and lets the grant answer the next read", {
     timeout: TIMEOUT,
   }, async () => {
@@ -612,6 +613,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
+  // covers ADR 020, ADR 031
   it("records a Charm write before it is sent, sends it once for a repeated key, reads it back after an uncertain end, and redacts it", {
     timeout: TIMEOUT,
   }, async () => {
@@ -667,6 +669,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
+  // covers ADR 031
   it("stops the hob's turn when the Charm is taken away, and sends nothing", {
     timeout: TIMEOUT,
   }, async () => {
@@ -696,6 +699,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
+  // covers ADR 014, ADR 028, ADR 029, ADR 031
   it("records each Local Git, Memory and Skill call's step before the hub runs it", {
     timeout: TIMEOUT,
   }, async () => {
@@ -752,6 +756,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
     });
   });
 
+  // covers ADR 020, ADR 031
   it("reads, pushes, opens a pull request, comments and opens issues through the GitHub Charm, beside the Shelf Charm", {
     timeout: TIMEOUT,
   }, async () => {
@@ -837,7 +842,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
 
 describe("a GitHub comment after the session read the web (#1272)", () => {
   // covers ADR 036 (The read-the-web mark), ADR 031
-  it("a comment a saved grant answers waits for you once the session searched, and another chat still posts it", {
+  it("a comment a saved grant answers waits for you once the session searched, and another chat still posts it (#1272)", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();
@@ -868,7 +873,8 @@ describe("a GitHub comment after the session read the web (#1272)", () => {
 });
 
 describe("when a Charm granted applies", () => {
-  it("granting a Charm whose writes stay in chats says a Task session is still not offered them", {
+  // covers ADR 031, ADR 038
+  it("granting a Charm whose writes stay in chats says a Task session is still not offered them (#1347)", {
     timeout: TIMEOUT,
   }, async () => {
     await connected();
@@ -902,6 +908,7 @@ const toolList = (request: PromptRequest) =>
   (request.hubTools?.tools ?? []).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 
 describe("the tools the model sees", () => {
+  // covers ADR 020, ADR 028, ADR 029, ADR 031
   it("offers a GitHub-granted hob the same tools as before the slice, word for word", {
     timeout: TIMEOUT,
   }, async () => {

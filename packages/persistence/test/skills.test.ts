@@ -284,7 +284,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (Skill sets), #1143
-  it("keeps a set's skills with its revision, a hob's opt-out of one of them, and a use with its set", () =>
+  it("keeps a set's skills with its revision, a hob's opt-out of one of them, and a use with its set (#1143)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;

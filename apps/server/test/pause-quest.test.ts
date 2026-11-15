@@ -50,7 +50,7 @@ const pipRuns = (tree: TaskTree) =>
 const never = () => new Promise<void>(() => {});
 
 describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
-  it("Pause now stops the member's turn, starts nothing while paused, and Resume tells it what changed", async () => {
+  it("Pause now stops the member's turn, starts nothing while paused, and Resume tells it what changed (#1446)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, gates, requests, settledRound } = party;
@@ -81,7 +81,8 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     expect(told.filter((each) => each.prompt.includes("Your turn was stopped when it was paused"))).toHaveLength(1);
   }, 30_000);
 
-  it("an @mention reaches the member's running turn as your note, and never wakes the lead", async () => {
+  // covers STD-ARCH-019
+  it("an @mention reaches the member's running turn as your note, and never wakes the lead (#1446)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, gates, requests } = party;
@@ -119,7 +120,7 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
   }, 30_000);
 
   // covers ADR 039 (Who answers), #1446
-  it("a message that mentions a member and another hob of the chat sends the member its note and the other hob answers", async () => {
+  it("a message that mentions a member and another hob of the chat sends the member its note and the other hob answers (#1461)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, gates } = party;
@@ -146,7 +147,8 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
 });
 
 describe.each(RUNTIMES)("a lead's retry and reassign, on %s", (runtime) => {
-  it("are refused on a stale revision, while a turn runs or by the Task's state, and a reassign hands the Task over", async () => {
+  // covers STD-SEC-003
+  it("are refused on a stale revision, while a turn runs or by the Task's state, and a reassign hands the Task over (#1446)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, gates, answers } = party;

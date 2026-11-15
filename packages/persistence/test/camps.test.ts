@@ -162,7 +162,7 @@ const breakNextAppend = Effect.gen(function* () {
 });
 
 describe("Make a camp", () => {
-  it("writes the camp and journals CampMade once, answers the same request again even after a rename, and refuses a reused key", async () => {
+  it("writes the camp and journals CampMade once, answers the same request again even after a rename, and refuses a reused key (#1376)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* hobWithChat;
@@ -210,7 +210,7 @@ describe("Make a camp", () => {
 });
 
 describe("Start fresh", () => {
-  it("moves every open thing to the new chat once, records it as carried over, and leaves none on the old chat", async () => {
+  it("moves every open thing to the new chat once, records it as carried over, and leaves none on the old chat (#1376)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* hobWithChat;
@@ -278,7 +278,7 @@ describe("Start fresh", () => {
     expect(result.archived.map((thread) => [thread.id, thread.state])).toEqual([[CHAT, "superseded"]]);
   });
 
-  it("writes nothing when the chat changed since it was read", async () => {
+  it("writes nothing when the chat changed since it was read (#1376)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* hobWithChat;
@@ -294,7 +294,7 @@ describe("Start fresh", () => {
     expect(Option.getOrThrow(result.chat).state).toBe("open");
   });
 
-  it("leaves neither half of Make a camp or Start fresh when it fails midway through its writes", async () => {
+  it("leaves neither half of Make a camp or Start fresh when it fails midway through its writes (#1376)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* hobWithChat;

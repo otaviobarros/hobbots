@@ -56,6 +56,7 @@ const reads = (pid: number) => [
 ];
 
 describe("the process sandbox and other processes' environments", () => {
+  // covers ADR 028
   it.runIf(enabled)(
     "a sandboxed command cannot read the environment of another process of the same user",
     async () => {

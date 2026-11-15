@@ -205,7 +205,7 @@ const briefEntries = () =>
 describe("the camp brief projector", () => {
   // covers ADR 037 (Records, The hub's brain), CH-001, RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on %s under No AI, a chapter end writes the plain brief from decisions and artifacts, no model is called, and the next session reads it",
+    "on %s under No AI, a chapter end writes the plain brief from decisions and artifacts, no model is called, and the next session reads it (#1384)",
     async (runtime) => {
       const id = await start(runtime, NoAi);
       const reply = await say(id, "Plan the launch emails.");
@@ -233,7 +233,7 @@ describe("the camp brief projector", () => {
   );
 
   // covers ADR 037 (Records), STD-ARCH-016
-  it("resumes from its cursor after a restart and writes nothing twice", async () => {
+  it("resumes from its cursor after a restart and writes nothing twice (#1384)", async () => {
     const id = await start(
       "claude-code",
       scriptedBrain(() => Effect.succeed(brain("Dates are settled; emails next."))),
@@ -259,7 +259,7 @@ describe("the camp brief projector", () => {
   });
 
   // covers ADR 037 (The hub's brain), STD-ARCH-016
-  it("a failed or slow brain leaves the last brief in place and never holds up a turn", async () => {
+  it("a failed or slow brain leaves the last brief in place and never holds up a turn (#1384)", async () => {
     let next: () => Effect.Effect<Decided<string>> = () => Effect.succeed(brain("Dates are settled."));
     const id = await start(
       "claude-code",
@@ -301,7 +301,7 @@ describe("the camp brief projector", () => {
   });
 
   // covers ADR 037 (Records, Quests in camps)
-  it("a Quest's milestone writes its camp's brief again", async () => {
+  it("a Quest's milestone writes its camp's brief again (#1384)", async () => {
     let said = "Started on the emails.";
     const id = await start(
       "claude-code",
@@ -357,7 +357,7 @@ describe("the camp brief projector", () => {
 
   // covers ADR 037 (Records, Quests in camps)
   it.each<"failed" | "cancelled">(["failed", "cancelled"])(
-    "a step with no Quest of its own that ended %s writes its thread's brief again",
+    "a step with no Quest of its own that ended %s writes its thread's brief again (#1384)",
     async (end) => {
       let said = "Drafting the emails.";
       const id = await start(
@@ -392,7 +392,7 @@ describe("the camp brief projector", () => {
   );
 
   // covers ADR 037 (Records, The context pack), STD-ARCH-018
-  it("under No AI, crossing out the last decision a brief named clears it, and the next session's pack has no brief", async () => {
+  it("under No AI, crossing out the last decision a brief named clears it, and the next session's pack has no brief (#1384)", async () => {
     const id = await start("codex", NoAi);
     await say(id, "Plan the launch emails.");
     const decided = await decide(id, "a", "Emails go out on Tuesdays.");
@@ -414,7 +414,7 @@ describe("the camp brief projector", () => {
   });
 
   // covers ADR 037 (Records), ADR 028
-  it("a private camp's brief stays in that camp: memory capture takes nothing of it, and another thread's pack never reads it", async () => {
+  it("a private camp's brief stays in that camp: memory capture takes nothing of it, and another thread's pack never reads it (#1384)", async () => {
     const chat = await start("claude-code", NoAi);
     const camp = await run(
       ChatService.use((service) =>

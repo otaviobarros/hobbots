@@ -62,6 +62,7 @@ describe("Charm operations", () => {
     expect(hobAnswers(policy)).toEqual({ push: "ask", "github.comment": "deny" });
   });
 
+  // covers ADR 031
   it("reads the GitHub Charm flag stored or journaled before the Charm-id grant as the set it meant", () => {
     const decode = Schema.decodeUnknownSync(HobPolicy);
     const base = { ownFolders: [], hiddenSharedFolders: [], overrides: {} };

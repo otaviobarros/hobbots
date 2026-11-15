@@ -231,6 +231,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
 const LABEL = outsideDataLine("Pip");
 
 describe("the hub action pipeline (ADR 031)", () => {
+  // covers ADR 031
   it("answers a bad input, a plan refusal, a turn without tools and a Charm taken away, sending nothing", async () => {
     const bad = await callPip({ shelf: 3 });
     expect(bad.answer.refused).toBe(true);
@@ -263,6 +264,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect(unknown).toEqual({ text: "Hobbots has no pip_delete tool.", refused: true });
   });
 
+  // covers ADR 031
   it("records an allowed read's step before sending it, and labels and redacts what it returns", async () => {
     const { answer, happened, offered } = await callPip({ shelf: "top" });
     expect(offered).toEqual(["pip_read"]);
@@ -276,6 +278,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect(never.happened).toEqual(["planned top for hob", "decided"]);
   });
 
+  // covers ADR 015, ADR 031
   it("asks on the call's step with the plan's card, and runs only what was approved", async () => {
     const approved = await callPip({ shelf: "top" }, { decisions: ["ask", "ask"] });
     expect(approved.asked).toEqual([
@@ -334,6 +337,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect([...nobody.happened, ...noStep.happened]).not.toContain("sent");
   });
 
+  // covers ADR 031
   it("sends nothing for a call whose step is missing or cannot be recorded", async () => {
     for (const records of [null, Effect.succeed(false), Effect.die("the journal is gone")]) {
       const { answer, happened } = await callPip({ shelf: "top" }, { records });
@@ -378,6 +382,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect(() => callPip({ shelf: "top" }, { effect: "write" })).toThrow("gave no runner");
   });
 
+  // covers ADR 031
   it("stops a call whose Charm was taken away while you decided, and plans with the turn's ids alone", async () => {
     const off = await callPip({ shelf: "top" }, { decisions: ["ask", "ask"], offWhileAsking: true });
     expect(off.answer).toEqual({ text: "The Pip Charm is off for you now, so Pip cannot be read.", refused: true });
@@ -394,7 +399,7 @@ describe("the hub action pipeline (ADR 031)", () => {
   });
 
   // covers ADR 036 (Amendment: the screens), #1271
-  it("ends the step of an action that keeps its answer with the redacted answer, whichever runtime called it, and a refusal with nothing", async () => {
+  it("ends the step of an action that keeps its answer with the redacted answer, whichever runtime called it, and a refusal with nothing (#1271)", async () => {
     const kept = await callPip({ shelf: "top" }, { keepsAnswer: true });
     expect(kept.answer.refused).toBe(false);
     const finished = kept.events.filter((event) => event._tag === "ToolFinished");
@@ -580,6 +585,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
 const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state, row.result]);
 
 describe("Charm writes in the hub action pipeline (ADR 031)", () => {
+  // covers ADR 020, ADR 031
   it("adds a required key to a Charm write's input, and refuses a call without one", async () => {
     const hub = pipWrites();
     const missing = await hub.call({ shelf: "top" });
@@ -602,7 +608,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("decides every Charm write as one that sends, whatever its Charm planned", async () => {
+  it("decides every Charm write as one that sends, whatever its Charm planned (#1268)", async () => {
     const hub = pipWrites();
     await hub.call({ shelf: "top", key: "s-1" });
     // Decided as it asks, then again once approved, each time as one that sends.
@@ -612,7 +618,8 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     }
   });
 
-  it("refuses a Charm's push to a branch you took over, before it asks and again just before it sends", async () => {
+  // Issue #1449
+  it("refuses a Charm's push to a branch you took over, before it asks and again just before it sends (#1449)", async () => {
     const TAKEN =
       "The user took over branch feat/shop in github.com/me/app from Task build, so Hobbots refuses your writes to it.";
     const yours = pipWrites({ push: true, taken: () => TAKEN });
@@ -642,6 +649,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(own.askedTaken).toEqual([]);
   });
 
+  // covers ADR 020
   it("sends a key used twice once, answering the second call as the first ended, without asking again", async () => {
     const hub = pipWrites();
     const first = await hub.call({ shelf: "top", key: "s-1" });
@@ -658,6 +666,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(hub.happened.filter((each) => each === "sent")).toHaveLength(1);
   });
 
+  // covers ADR 020
   it("reads an uncertain write back and answers it as applied when the change is there", async () => {
     const hub = pipWrites({ outcomes: [{ _tag: "Uncertain", text: "Pip did not answer." }], readBack: () => true });
     const { answer, events } = await hub.call({ shelf: "top", key: "s-1" });
@@ -671,6 +680,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval"]);
   });
 
+  // covers ADR 020, ADR 031
   it("keeps an uncertain write without a read-back waiting until the user settles it from its step", async () => {
     const rows = new Map<string, CharmCall>();
     const hub = pipWrites({ outcomes: [{ _tag: "Uncertain", text: "Pip did not answer." }] }, rows);
@@ -712,6 +722,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(retried.asked).toHaveLength(1);
   });
 
+  // covers ADR 031
   it("plans and stores a Charm write's input redacted, and says which fields were", async () => {
     const hub = pipWrites();
     const { answer, asked } = await hub.call({ shelf: "top", note: `Use ${SECRET}`, key: "s-1" });
@@ -726,6 +737,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(JSON.parse(row?.plan ?? "{}")).toEqual({ shelf: "top" });
   });
 
+  // covers ADR 031
   it("records the call's step before its never-twice record, and records neither when the step cannot be", async () => {
     const hub = pipWrites();
     await hub.call({ shelf: "top", key: "s-1" });
@@ -852,6 +864,7 @@ const offerNotes = (scenario: NotesScenario = {}, now: ToolAccess | null = acces
 };
 
 describe("a built-in set on the hub action pipeline (#1135)", () => {
+  // covers ADR 014, ADR 031
   it("offers only the tools whose operation the hob's policy does not answer Never for", async () => {
     const all = await offerNotes().call("notes_search", { shelf: "top" });
     expect(all.offered).toEqual(["notes_search", "notes_save"]);
@@ -870,6 +883,7 @@ describe("a built-in set on the hub action pipeline (#1135)", () => {
     expect(await offerNotes({}, null).call("notes_search", { shelf: "top" })).toEqual({ offered: null, answer: null });
   });
 
+  // covers ADR 031
   it("answers a call that changes nothing unrecorded, and keeps a set's own words and answers", async () => {
     const kept = offerNotes();
     expect((await kept.call("notes_save", { shelf: "kept" })).answer).toEqual({

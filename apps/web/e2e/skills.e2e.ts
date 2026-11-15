@@ -133,7 +133,9 @@ test("Skills: write one, give it out, edit and roll out with one hob held back, 
 });
 
 // covers ADR 029 (Editing), #1062
-test("a save from another device while you edit keeps your text and says it cannot be saved over", async ({ page }) => {
+test("a save from another device while you edit keeps your text and says it cannot be saved over (#1062)", async ({
+  page,
+}) => {
   const { url, folder, api } = await hubWithHobs();
   const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
     imported: ReadonlyArray<{ skill: { id: string }; revision: { hash: string } }>;
@@ -159,7 +161,9 @@ test("a save from another device while you edit keeps your text and says it cann
 });
 
 // covers ADR 029 (Editing), #1062
-test("a save whose answer is lost is finished from the editor, not read as someone else's", async ({ page }) => {
+test("a save whose answer is lost is finished from the editor, not read as someone else's (#1062)", async ({
+  page,
+}) => {
   const { url, folder, api } = await hubWithHobs();
   const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
     imported: ReadonlyArray<{ skill: { id: string } }>;
@@ -190,7 +194,7 @@ test("a save whose answer is lost is finished from the editor, not read as someo
 });
 
 // covers ADR 029 (Editing), #1062
-test("rollout switches alone, or with text that saves the same, save nothing, and text that is an older revision again moves no place", async ({
+test("rollout switches alone, or with text that saves the same, save nothing, and text that is an older revision again moves no place (#1062)", async ({
   page,
 }) => {
   const { url, folder, api } = await hubWithHobs();

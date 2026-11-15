@@ -10,7 +10,7 @@ ${body}
 `;
 
 // covers ADR 037 (Validation), #1360
-test("a Set keyed by an id in a service's body fails", () => {
+test("a Set keyed by an id in a service's body fails (#1360)", () => {
   const problems = checkFile("a.ts", service("  const busy = new Set<ThreadId>();"));
   assert.equal(problems.length, 1);
   assert.match(problems[0], /^a\.ts:3: `busy` .*ThreadId.*\(STD-ARCH-013\)$/);
@@ -62,7 +62,7 @@ const machines = [
 const usingTask = (code) => `import type { Task } from "@hobbots/domain";\n${code}`;
 
 // covers ADR 037 (Validation), #1360
-test("a comparison of a machine's state outside its module fails", () => {
+test("a comparison of a machine's state outside its module fails (#1360)", () => {
   const problems = checkFile("a.ts", usingTask('const busy = task.state === "active";'), machines);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /^a\.ts:2: compares `\.state` with "active", a state of the Task machine in task\.ts/);

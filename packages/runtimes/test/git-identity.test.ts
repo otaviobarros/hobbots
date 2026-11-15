@@ -213,7 +213,7 @@ describe("what a hob is told about who it commits as (#1213)", () => {
   ];
 
   it.each(cases)(
-    "tells the hob, for $why, that Hobbots sets who commits and it runs git commit without an identity",
+    "tells the hob, for $why, that Hobbots sets who commits and it runs git commit without an identity (#1213)",
     ({ as }) => {
       const commits = turnCommits({ commitsAs: as });
       // In the system prompt, before the first commit, and again in every resumed session's prompt.

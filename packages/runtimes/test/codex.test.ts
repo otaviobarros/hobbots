@@ -178,7 +178,7 @@ describe("the App Server client", () => {
   }, 30_000);
 
   // covers ADR 036
-  it("handles a request Codex sent after a notification only once the work on that notification ended", async () => {
+  it("handles a request Codex sent after a notification only once the work on that notification ended (#1289)", async () => {
     const dir = folder();
     const binary = fakeCodex(dir, { behavior: "search" });
     const order: Array<string> = [];
@@ -300,6 +300,7 @@ describe("Codex's provider health", () => {
   });
 
   // Codex turns run now (#438), and the policy decides Codex's tool calls (#439).
+  // covers ADR 024
   it("declares the policy, events and interruption enforced, and the sandbox only where it started", async () => {
     const codex = await codexWith({}).adapter;
     const off = await Effect.runPromise(codex.enforcement);
@@ -317,7 +318,7 @@ describe("Codex's provider health", () => {
   });
 
   // covers ADR 036 (Search the web on Codex)
-  it("offers Codex's cached search only on a release the contract test held, and reports it with health", async () => {
+  it("offers Codex's cached search only on a release the contract test held, and reports it with health (#1266)", async () => {
     const codex = await codexWith({}).adapter;
     // The fake Codex is 0.166.0, a release the contract test held to the cached index.
     expect((await Effect.runPromise(codex.enforcement)).webSearch.status).toBe("verified");

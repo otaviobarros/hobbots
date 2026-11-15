@@ -287,7 +287,7 @@ test("picking a voice and a length in the profile saves them as the next version
   await expect(tone.getByRole("radio", { name: /^Brief/ })).toBeChecked();
 });
 
-test("turning Visible to other hobs off and on in the profile saves each as the next version", async ({
+test("turning Visible to other hobs off and on in the profile saves each as the next version (#1233)", async ({
   page,
   scan,
 }) => {
@@ -415,7 +415,8 @@ test("the Permissions tab adds a hob's own folder and narrows a rule as new vers
     .toMatchObject({ configVersion: 7, folders: [], policy: { ownFolders: [], overrides: {} } });
 });
 
-test("the Permissions tab sets Search the web to Never, and offers it no Ask", async ({ page }) => {
+// covers ADR 036
+test("the Permissions tab sets Search the web to Never, and offers it no Ask (#1266)", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);

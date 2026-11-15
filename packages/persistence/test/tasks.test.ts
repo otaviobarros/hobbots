@@ -1543,7 +1543,7 @@ describe("waits and Task tool calls", () => {
     expect(result.quillWork).toEqual([]);
   });
 
-  it("closes the stuck work about a Task once its earlier owner hands it on, and once it ends (#1087)", async () => {
+  it("closes the stuck work about a Task once its earlier owner hands it on, and once it ends (#1087) (#1087)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1626,7 +1626,7 @@ describe("Task records the third run found gaps in", () => {
   });
 
   // covers ADR 036 (The read-the-web mark), ADR 013
-  it("an Attempt's read-the-web mark is journaled as it changes: since its first read, naming its last", async () => {
+  it("an Attempt's read-the-web mark is journaled as it changes: since its first read, naming its last (#1268)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;

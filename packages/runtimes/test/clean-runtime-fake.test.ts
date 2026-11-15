@@ -54,6 +54,7 @@ describe("a clean fake runtime (ADR 029)", () => {
       .pipe(Stream.runCollect, Effect.runPromise)
       .then((events) => Array.from(events).flatMap((event) => (event._tag === "Completed" ? [event.text] : [])));
 
+  // covers ADR 029
   it("loads only the skills the turn mounts, Only when asked marked, and none without mounts", async () => {
     expect(await skillsOf(fixture.mounts)).toEqual([
       [
@@ -89,20 +90,21 @@ describe("a clean fake runtime (ADR 029)", () => {
       .then(() => contract.order);
   };
 
+  // covers ADR 031
   it("records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
     expect(await hubCall(true)).toEqual([`recorded ${CONTRACT_HUB_TOOL} as fake-hub-1`, "ran"]);
     expect(await hubCall(false)).toEqual([`recorded ${CONTRACT_HUB_TOOL} as fake-hub-1`, "not run"]);
   });
 
   // covers ADR 036 (On every runtime)
-  it("records a web_fetch call's step before the hub reads the page", async () => {
+  it("records a web_fetch call's step before the hub reads the page (#1267)", async () => {
     const tool = WEB_FETCH_CONTRACT_TOOL.name;
     expect(await hubCall(true, tool)).toEqual([`recorded ${tool} as fake-hub-1`, "ran"]);
     expect(await hubCall(false, tool)).toEqual([`recorded ${tool} as fake-hub-1`, "not run"]);
   });
 
   // covers ADR 032 (The roster, Every runtime)
-  it("the roster of other hobs reaches the turn as its briefing, apart from its instructions", async () => {
+  it("the roster of other hobs reaches the turn as its briefing, apart from its instructions (#1235)", async () => {
     const told = await makeFakeRuntime()
       .sendPrompt({
         prompt: fakeRosterPrompt,
@@ -119,7 +121,7 @@ describe("a clean fake runtime (ADR 029)", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001
-  it("the pack with several hobs reaches the turn as its briefing, ahead of the prompt", async () => {
+  it("the pack with several hobs reaches the turn as its briefing, ahead of the prompt (#1465)", async () => {
     const told = await makeFakeRuntime()
       .sendPrompt({
         prompt: PACK_PROMPT,
@@ -136,7 +138,7 @@ describe("a clean fake runtime (ADR 029)", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001
-  it("two hobs' sessions each resume their own instructions, never the other's", async () => {
+  it("two hobs' sessions each resume their own instructions, never the other's (#1464)", async () => {
     const fake = makeFakeRuntime();
     const turn = (instructions: string, sessionId: string | null, prompt = "Say hello.") =>
       fake

@@ -30,7 +30,8 @@ const access = (
 });
 
 describe("Search the web", () => {
-  it("stops a running turn when Search the web is set to Never, not when it is allowed again", () => {
+  // covers ADR 036
+  it("stops a running turn when Search the web is set to Never, not when it is allowed again (#1266)", () => {
     expect(narrows(access(), access({ "search-web": "deny" }))).toBe(true);
     expect(narrows(access({ "search-web": "deny" }), access())).toBe(false);
   });

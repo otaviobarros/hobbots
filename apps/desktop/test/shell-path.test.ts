@@ -21,6 +21,7 @@ describe("the login shell's PATH", () => {
     expect(mergePaths(undefined, "/usr/bin")).toBe("/usr/bin");
   });
 
+  // An honest Claude Code state when the app is opened from Finder
   it("gives up on a shell that hangs at startup, as an interactive shell ignoring SIGTERM would", async () => {
     const shell = join(temp, "hanging-shell");
     writeFileSync(shell, "#!/bin/sh\ntrap '' TERM\nsleep 30\n", { mode: 0o755 });

@@ -382,6 +382,7 @@ describe("replacing what a deleted repository leaves", () => {
     expect(fs.readdirSync(outside)).toEqual(["kept.txt"]);
   });
 
+  // covers ADR 031
   it("records its step before it creates anything, and creates nothing when the step cannot be recorded", async () => {
     const refused = await callInitIn(accessFor(project), accessFor(project), { folder: project }, undefined, false);
     expect(refused.answer).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });

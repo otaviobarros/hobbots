@@ -735,6 +735,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(states(hub.rows)).toEqual([["o-c", "uncertain"]]);
   });
 
+  // covers ADR 020, ADR 031
   it("shows the same card, with the same digest, for the same pull request and comment as before the pipeline", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
@@ -789,6 +790,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(digests).toEqual(CARD_DIGESTS);
   });
 
+  // covers ADR 031
   it("records each write's step before its keyed record, and sends nothing when the step cannot be recorded", async () => {
     const hub = makeHub();
     const trusting = accessFor("trusting");
@@ -819,6 +821,7 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
     expect(hub.github.sent).toEqual(["pull feat/x into main"]);
   });
 
+  // covers ADR 020
   it("redacts a secret that taking out a forged marker joins back together, before the card, record and send", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
@@ -842,7 +845,8 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
 describe("the GitHub Charm's issues (#1350)", () => {
   const MARKED = /^Found while testing\.\n\n<!-- hobbots-call: [0-9a-f-]{36} -->$/;
 
-  it("opens an issue after approval, with the card showing title, body and labels, and a marker the hob never sees", async () => {
+  // covers ADR 020
+  it("opens an issue after approval, with the card showing title, body and labels, and a marker the hob never sees (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const answer = await hub.call(
@@ -896,7 +900,8 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(answer.text).not.toContain(nonce);
   });
 
-  it("opens a sub-issue under a parent in one call, after one approval, and shows the parent on the card", async () => {
+  // covers ADR 020
+  it("opens a sub-issue under a parent in one call, after one approval, and shows the parent on the card (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const answer = await hub.call(
@@ -914,7 +919,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(String(asked[0]?.arguments.summary)).toContain("Open a sub-issue in octo/app under #7: Fix the login");
   });
 
-  it("refuses a label the repository does not have, and a pull request as parent, before the card", async () => {
+  it("refuses a label the repository does not have, and a pull request as parent, before the card (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const missing = await hub.call(
@@ -932,7 +937,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(hub.github.sent).toEqual([]);
   });
 
-  it("returns the first answer for a retried key without asking or opening again", async () => {
+  it("returns the first answer for a retried key without asking or opening again (#1350)", async () => {
     const hub = makeHub();
     const asked: Array<ApprovalAction> = [];
     const issue = { title: "Once", key: "i-same" };
@@ -945,7 +950,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(hub.github.issues).toHaveLength(1);
   });
 
-  it("reads a lost answer back by its marker and author, and keeps it uncertain when nothing is there", async () => {
+  it("reads a lost answer back by its marker and author, and keeps it uncertain when nothing is there (#1350)", async () => {
     const hub = makeHub();
     // Someone else opens an issue that copies the marker shape; only the hub's own nonce counts.
     hub.github.script.push("posted-by-other");
@@ -976,7 +981,7 @@ describe("the GitHub Charm's issues (#1350)", () => {
     expect(hubThree.github.sent).toEqual(["issue Dropped"]);
   });
 
-  it("reads a lost sub-issue step back, and tells the hob when GitHub refused to attach it", async () => {
+  it("reads a lost sub-issue step back, and tells the hob when GitHub refused to attach it (#1350)", async () => {
     const turn = { access: accessFor("trusting") };
     const lost = makeHub();
     lost.github.script.push("ok", "lost");

@@ -31,7 +31,7 @@ const press = async (page: Page, name: string) => {
   await page.keyboard.press("Enter");
 };
 
-test("Pause and Pause now hold the quest, its Paused banner says so, and Resume puts each hob back", async ({
+test("Pause and Pause now hold the quest, its Paused banner says so, and Resume puts each hob back (#1446)", async ({
   page,
   scan,
 }) => {
@@ -66,7 +66,8 @@ test("Pause and Pause now hold the quest, its Paused banner says so, and Resume 
   await expect(banner).toBeHidden({ timeout: 30_000 });
 });
 
-test("an @mention of a member reaches that member, and its receipt starts there, never at the lead", async ({
+// covers STD-ARCH-019
+test("an @mention of a member reaches that member, and its receipt starts there, never at the lead (#1446)", async ({
   page,
 }) => {
   test.setTimeout(240_000);

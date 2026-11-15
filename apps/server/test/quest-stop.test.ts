@@ -45,7 +45,7 @@ const settled = (tree: TaskTree) =>
   !tree.attempts.some((each) => isLive(each.state));
 
 describe.each(RUNTIMES)("a lead that stops its Quest, on %s", (runtime) => {
-  it("ends it stopped at your request while its member runs, cancelling the member", async () => {
+  it("ends it stopped at your request while its member runs, cancelling the member (#1346)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers, gates, requests } = party;
@@ -73,7 +73,7 @@ describe.each(RUNTIMES)("a lead that stops its Quest, on %s", (runtime) => {
     expect(requests.some((each) => each.prompt.includes(IDLE_QUEST))).toBe(false);
   }, 30_000);
 
-  it("refuses a stop from a turn its member's result woke, with what to do instead", async () => {
+  it("refuses a stop from a turn its member's result woke, with what to do instead (#1346)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;
@@ -99,7 +99,7 @@ describe.each(RUNTIMES)("a lead that stops its Quest, on %s", (runtime) => {
     expect(done.quests[0]).toMatchObject({ state: "completed", stop: null });
   }, 30_000);
 
-  it("stops it in the turn your answer to its question wakes, and stays quiet after", async () => {
+  it("stops it in the turn your answer to its question wakes, and stays quiet after (#1346)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers, requests } = party;

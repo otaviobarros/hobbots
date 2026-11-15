@@ -31,7 +31,7 @@ const reread = async (event: HobbotsEvent) => {
 
 describe("applyMembersEvent", () => {
   // covers ADR 039 (Cards every thread shares: Status and cost), #1467
-  it("reads both threads' members again when a chapter moves between them, and a camp's after a turn passed there, cancelling first", async () => {
+  it("reads both threads' members again when a chapter moves between them, and a camp's after a turn passed there, cancelling first (#1467)", async () => {
     const chat = thread("chat", "chat");
     const camp = thread("camp", "camp");
     const moved = { _tag: "ChapterMoved", threadId: chat.id, thread: chat, camp } as unknown as HobbotsEvent;

@@ -96,7 +96,7 @@ const sharedItems = Effect.gen(function* () {
 
 describe("Moving sign-ins out of the shared keychain items", () => {
   // covers ADR 020, ADR 022
-  it("moves what the hub's records say it stored into its own items, and leaves the rest", async () => {
+  it("moves what the hub's records say it stored into its own items, and leaves the rest (#1214)", async () => {
     const moved = await claim(records([FRODO], "app"), sharedItems);
     expect(moved).toEqual({
       problems: [],
@@ -115,7 +115,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     }
   });
 
-  it("keeps a sign-in the hub already has, and only finishes a move that stopped halfway", async () => {
+  it("keeps a sign-in the hub already has, and only finishes a move that stopped halfway (#1214)", async () => {
     // The hub's own item differs, so the shared one is another hub's and stays.
     const kept = await claim(
       records([], "app"),
@@ -139,7 +139,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     expect(finished.shared.signIn).toEqual(Option.none());
   });
 
-  it("lets the hub start when the keychain refuses, and says what is left in the shared items", async () => {
+  it("lets the hub start when the keychain refuses, and says what is left in the shared items (#1214)", async () => {
     const locked = new KeychainError({ reason: "failed", message: "The keychain is locked." });
     const refusing = Layer.succeed(Keychain, {
       read: Effect.succeed(Option.none()),
@@ -160,7 +160,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     });
   });
 
-  it("the reset command deletes nothing while a moved sign-in is still in the shared item", async () => {
+  it("the reset command deletes nothing while a moved sign-in is still in the shared item (#1214)", async () => {
     // The hub's own item takes the sign-in, then the keychain refuses to delete the shared one.
     const refused = new KeychainError({ reason: "failed", message: "The keychain refused the delete (161)." });
     const stuck = Layer.effect(
@@ -192,7 +192,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     });
   });
 
-  it("of two hubs moving at once, only one takes the shared sign-in", async () => {
+  it("of two hubs moving at once, only one takes the shared sign-in (#1214)", async () => {
     const lock = newLock();
     const outcome = await Effect.gen(function* () {
       const shared = yield* LegacyKeychain;
@@ -216,7 +216,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     expect(outcome.shared).toEqual(Option.none());
   });
 
-  it("waits for a hub holding the lock, and takes over one a stopped hub left", async () => {
+  it("waits for a hub holding the lock, and takes over one a stopped hub left (#1214)", async () => {
     const run = (lock: string) =>
       Effect.gen(function* () {
         yield* sharedItems;
@@ -239,7 +239,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     ]);
   });
 
-  it("still deletes a shared sign-in it moved after it refreshed its own copy", async () => {
+  it("still deletes a shared sign-in it moved after it refreshed its own copy (#1214)", async () => {
     const dataDir = newData();
     const refused = new KeychainError({ reason: "failed", message: "The keychain refused the delete (161)." });
     let deletes = 0;
@@ -274,7 +274,7 @@ describe("Moving sign-ins out of the shared keychain items", () => {
     expect(readdirSync(dataDir)).toEqual([]);
   });
 
-  it("lets one hub at a time take over a lock a stopped hub left, across processes", async () => {
+  it("lets one hub at a time take over a lock a stopped hub left, across processes (#1214)", async () => {
     // Hubs racing to take over the same dead owner's lock, each in its own process.
     const lock = heldAs("2147483646-a-hold");
     const log = join(folder, "holds.log");
@@ -307,7 +307,7 @@ releaseLock(lock, token);
     expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(Array.from({ length: 6 }, () => ["in", "out"]).flat());
   }, 20_000);
 
-  it("deletes a shared item it moved after GitHub was disconnected or switched to another sign-in", async () => {
+  it("deletes a shared item it moved after GitHub was disconnected or switched to another sign-in (#1214)", async () => {
     const refused = new KeychainError({ reason: "failed", message: "The keychain refused the delete (161)." });
     for (const after of [null, "gh"] as const) {
       const dataDir = newData();

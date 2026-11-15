@@ -75,7 +75,7 @@ const turnWith = async (post: object, ends: ReadonlyArray<object>) => {
 };
 
 describe("a background command on Claude Code", () => {
-  it("stays running when its call returns, and finishes with its output and exit code when its task ends", async () => {
+  it("stays running when its call returns, and finishes with its output and exit code when its task ends (#1018)", async () => {
     const output = join(tasks, "b7x2k.output");
     writeFileSync(output, "ready on http://localhost:5173\n");
     const { returned, events } = await turnWith(backgrounded, [taskEnd({ output_file: output })]);
@@ -89,7 +89,7 @@ describe("a background command on Claude Code", () => {
     });
   });
 
-  it("fails with its exit code when its task fails, and without one when it is stopped", async () => {
+  it("fails with its exit code when its task fails, and without one when it is stopped (#1018)", async () => {
     const failed = await turnWith(backgrounded, [
       taskEnd({ status: "failed", summary: 'Background command "pnpm dev" failed with exit code 1' }),
     ]);
@@ -100,7 +100,7 @@ describe("a background command on Claude Code", () => {
     expect(stopped.events.at(-1)).toEqual({ _tag: "ToolFinished", id: "t1", failed: true });
   });
 
-  it("ignores tasks that are not its background commands, and a call that ended in the foreground finishes at once", async () => {
+  it("ignores tasks that are not its background commands, and a call that ended in the foreground finishes at once (#1018)", async () => {
     const other = await turnWith(backgrounded, [taskEnd({ task_id: "agent-1", tool_use_id: "t9" })]);
     expect(other.events.map((event) => event._tag)).toEqual(["ToolStarted"]);
     const foreground = await turnWith(
@@ -188,7 +188,7 @@ const fakeTurn = (prompt: string, until?: (event: RuntimeEvent, seen: ReadonlyAr
 };
 
 describe("a background command on the fake runtime", () => {
-  it("returns at once, lets the turn go on, and ends with its outcome before the turn completes", async () => {
+  it("returns at once, lets the turn go on, and ends with its outcome before the turn completes (#1018)", async () => {
     const events = await fakeTurn(
       [
         `fake:run ${JSON.stringify({ command: "pnpm dev", background: true, runsFor: "50 millis", output: "ready\n", exitCode: 2 })}`,
@@ -230,7 +230,7 @@ describe("a background command on the fake runtime", () => {
     expect(events.at(-1)?._tag).toBe("Completed");
   });
 
-  it("with no time to run for, is still running when the turn completes", async () => {
+  it("with no time to run for, is still running when the turn completes (#1018)", async () => {
     const events = await fakeTurn(`fake:run ${JSON.stringify({ command: "pnpm dev", background: true })}`);
     expect(events.filter((event) => event._tag === "ToolFinished")).toEqual([]);
     expect(events.at(-1)?._tag).toBe("Completed");
@@ -240,7 +240,7 @@ describe("a background command on the fake runtime", () => {
 describe("a reply that waits on its background commands (#1056)", () => {
   const completed: RuntimeEvent = { _tag: "Completed", sessionId: "s1", text: "Started it." };
 
-  it("says Claude Code's turn waits on the background commands still running once a run replied", async () => {
+  it("says Claude Code's turn waits on the background commands still running once a run replied (#1056)", async () => {
     const background = backgroundCommands(() => {});
     expect(awaitingAfter([completed], background)).toEqual([completed]);
     expect(await background.moved("t1", backgrounded)).toBe(true);
@@ -252,7 +252,7 @@ describe("a reply that waits on its background commands (#1056)", () => {
     expect(background.waiting()).toEqual([]);
   });
 
-  it("on the fake runtime, writes the reply, waits on a command that outlives it, then follows up", async () => {
+  it("on the fake runtime, writes the reply, waits on a command that outlives it, then follows up (#1056)", async () => {
     const events = await fakeTurn(
       `fake:run ${JSON.stringify({ command: "pnpm build", background: true, outlives: true, runsFor: "50 millis" })}`,
     );
@@ -264,7 +264,7 @@ describe("a reply that waits on its background commands (#1056)", () => {
     expect(events.at(-1)).toMatchObject({ _tag: "Completed", text: expect.stringContaining("pnpm build ended.") });
   });
 
-  it("on the fake runtime, waits again on a command still running once another it waited on ends", async () => {
+  it("on the fake runtime, waits again on a command still running once another it waited on ends (#1056)", async () => {
     const runs = (input: object) => `fake:run ${JSON.stringify({ background: true, outlives: true, ...input })}`;
     const waits = (seen: ReadonlyArray<RuntimeEvent>) => seen.filter((event) => event._tag === "AwaitingCommands");
     const events = await fakeTurn(

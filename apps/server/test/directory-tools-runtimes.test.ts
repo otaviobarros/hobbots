@@ -120,7 +120,8 @@ const readPip = async (runtime: HubCallRuntime, records: boolean) => {
 };
 
 describe("read_hob on every runtime", () => {
-  it("each runtime records a read_hob call's step before the directory is read, and reads nothing unrecorded", {
+  // covers ADR 032 (read_hob, Every runtime)
+  it("each runtime records a read_hob call's step before the directory is read, and reads nothing unrecorded (#1234)", {
     timeout: 240_000,
   }, async () => {
     expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);

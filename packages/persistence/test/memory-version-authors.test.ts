@@ -16,7 +16,7 @@ describe("Who wrote each memory version", () => {
   const version = (id: string) => MemoryVersion.make(id);
 
   // covers ADR 028 (attribution)
-  it("names each recorded version, keeps the first record of one, and forgets a forgotten page's", async () => {
+  it("names each recorded version, keeps the first record of one, and forgets a forgotten page's (#1317)", async () => {
     const many = Array.from({ length: 1_200 }, (_, index) => version(`m${index}`));
     const found = await Effect.gen(function* () {
       const authors = yield* MemoryVersionAuthors;

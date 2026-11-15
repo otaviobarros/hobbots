@@ -132,7 +132,7 @@ test("a repository's own skills: offered once, read from the default branch, and
 });
 
 // covers ADR 029 (Scopes), #1098
-test("Not now closes the offer until the repository holds a new skill", async ({ page }) => {
+test("Not now closes the offer until the repository holds a new skill (#1098)", async ({ page }) => {
   const { url, site } = await hubWithRepository();
   await page.goto(`${url}/#/skills`);
   const main = page.getByRole("main", { name: "Skills" });
@@ -154,7 +154,7 @@ test("Not now closes the offer until the repository holds a new skill", async ({
 });
 
 // covers ADR 029 (Scopes), STD-REACT-015, #1098
-test("a repository list that cannot be read says so, with Try again, on the overview and in From a project", async ({
+test("a repository list that cannot be read says so, with Try again, on the overview and in From a project (#1098)", async ({
   page,
 }) => {
   const { url } = await hubWithRepository();

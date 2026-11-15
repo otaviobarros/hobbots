@@ -30,7 +30,7 @@ const summary = (
   });
 
 describe("a camp's quest pill", () => {
-  it("counts the camp's own quests under way, what they have ready for review and what needs you", () => {
+  it("counts the camp's own quests under way, what they have ready for review and what needs you (#1390)", () => {
     expect(
       questPill(CAMP, [
         summary("checkout", { readyForReview: 1 }),
@@ -43,7 +43,7 @@ describe("a camp's quest pill", () => {
     ).toEqual({ quests: 2, review: 1, needs: 1 });
   });
 
-  it("shows nothing while no quest of the camp is under way", () => {
+  it("shows nothing while no quest of the camp is under way (#1390)", () => {
     expect(questPill(CAMP, [])).toBeNull();
     expect(questPill(CAMP, [summary("done", { state: "completed" })])).toBeNull();
   });

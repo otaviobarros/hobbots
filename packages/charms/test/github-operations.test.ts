@@ -35,7 +35,7 @@ describe("the GitHub Charm's declaration", () => {
 
 describe("a hob's card with the GitHub Charm", () => {
   // covers ADR 032 (Answers), #1351
-  it("read_hob lists each GitHub operation's answer after the built-in ones, an override marked", () => {
+  it("read_hob lists each GitHub operation's answer after the built-in ones, an override marked (#1351)", () => {
     const pip = new Agent({
       id: AgentId.make("pip"),
       name: "Pip",

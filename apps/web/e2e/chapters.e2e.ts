@@ -27,7 +27,8 @@ const say = async (page: Page, lines: ReadonlyArray<string>) => {
 
 const threadOf = (page: Page) => new URL(page.url()).hash.split("/threads/")[1] ?? "";
 
-test("shows a divider after start_chapter, folds and opens a resting chapter, and merges and splits", async ({
+// covers ADR 037 (Chapters)
+test("shows a divider after start_chapter, folds and opens a resting chapter, and merges and splits (#1382)", async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();
@@ -110,7 +111,7 @@ test("shows a divider after start_chapter, folds and opens a resting chapter, an
 });
 
 // covers ADR 037 (Chapters, Focus chip), STD-REACT-015
-test("a chat whose chapters can't be read says so and reads them again, and a narrow header keeps the Focus chip", async ({
+test("a chat whose chapters can't be read says so and reads them again, and a narrow header keeps the Focus chip (#1382)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -144,7 +145,7 @@ test("a chat whose chapters can't be read says so and reads them again, and a na
 const tokens = (count: number) => (count === 1 ? "1 token" : `${count.toLocaleString("en-US")} tokens`);
 
 // covers ADR 037 (The context pack, Focus chip)
-test("the Focus chip lists the parts and sizes of the turn's PackReport, with its trim", async ({ page }) => {
+test("the Focus chip lists the parts and sizes of the turn's PackReport, with its trim (#1382)", async ({ page }) => {
   const { url, aldric, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);

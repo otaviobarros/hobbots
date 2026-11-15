@@ -57,7 +57,7 @@ const summon = (current: Hub, name: string) =>
 const charmsOf = async (current: Hub, hob: Hob) =>
   (await api<Permissions>(current, "GET", `/api/agents/${hob.id}/permissions`)).policy.charms;
 
-test("grants Summoning on a hob's Charms tab and sets its scope and field answers", async ({ page, scan }) => {
+test("grants Summoning on a hob's Charms tab and sets its scope and field answers (#410)", async ({ page, scan }) => {
   const current = await startHub(dataDir);
   hub = current;
   await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
@@ -116,7 +116,7 @@ test("grants Summoning on a hob's Charms tab and sets its scope and field answer
   await expect.poll(async () => (await charmsOf(current, chief))?.granted).not.toContain("summoning");
 });
 
-test("Summoning for every hob reaches the hobs you made, and a hob's own tab can take it away", async ({
+test("Summoning for every hob reaches the hobs you made, and a hob's own tab can take it away (#410)", async ({
   page,
   scan,
 }) => {
@@ -159,7 +159,7 @@ test("Summoning for every hob reaches the hobs you made, and a hob's own tab can
   await expect.poll(async () => (await charmsOf(current, pip))?.withheld).toContain("summoning");
 });
 
-test("says when your hobs cannot be read for the hobs you pick, and reads them again on Try again", async ({
+test("says when your hobs cannot be read for the hobs you pick, and reads them again on Try again (#410)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -186,7 +186,8 @@ test("says when your hobs cannot be read for the hobs you pick, and reads them a
   await expect(page.getByRole("menuitem", { name: "Pip" })).toBeVisible();
 });
 
-test("shows the live hobs a hob summoned without asking against its caps, and frees a place when one retires", async ({
+// covers ADR 034 (Limits for unattended summons)
+test("shows the live hobs a hob summoned without asking against its caps, and frees a place when one retires (#410)", async ({
   page,
 }) => {
   const current = await startHub(dataDir, {
@@ -231,7 +232,8 @@ test("shows the live hobs a hob summoned without asking against its caps, and fr
   await expect(caps).toContainText("0 of 2");
 });
 
-test("says when the caps cannot be read, at first and on a later read, and reads them again on Try again", async ({
+// covers STD-REACT-015
+test("says when the caps cannot be read, at first and on a later read, and reads them again on Try again (#410)", async ({
   page,
 }) => {
   const current = await startHub(dataDir, { HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_HOB: "2" });

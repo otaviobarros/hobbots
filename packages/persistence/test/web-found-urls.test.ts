@@ -8,7 +8,7 @@ import { TestDatabase } from "../src/testing.ts";
 // PostgreSQL alike.
 describe("The URLs a session found", () => {
   // covers ADR 036 (Where a URL came from)
-  it("keeps each URL once per work with where it was found first, and many at once", async () => {
+  it("keeps each URL once per work with where it was found first, and many at once (#1267)", async () => {
     const many = Array.from({ length: 1_200 }, (_, index) => `https://example.test/${index}`);
     const found = await Effect.gen(function* () {
       const store = yield* WebFoundUrls;

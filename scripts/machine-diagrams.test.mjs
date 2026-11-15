@@ -20,7 +20,7 @@ const file = `${kebab(entry.machine.name)}.md`;
 const pages = new Map([[file, render(entry)]]);
 
 // covers ADR 037 (Validation), #1360
-test("an out-of-date, missing or orphaned machine diagram fails the check", () => {
+test("an out-of-date, missing or orphaned machine diagram fails the check (#1360)", () => {
   assert.equal(file, "task-run.md");
   assert.deepEqual(
     diagramProblems(pages, [file], () => render(entry)),

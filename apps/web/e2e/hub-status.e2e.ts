@@ -73,7 +73,10 @@ const LONG_PROMPT = Array.from({ length: 150 }, (_, i) => `word${i}`).join(" ");
 // Long enough for both devices to see the turn run: about 2.4 s.
 const TURN_PROMPT = Array.from({ length: 60 }, (_, i) => `turn${i}`).join(" ");
 
-test("two devices show the same hob and thread status through a full turn and a stop", async ({ page, browser }) => {
+test("two devices show the same hob and thread status through a full turn and a stop (#1374)", async ({
+  page,
+  browser,
+}) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const current = hub;
@@ -115,7 +118,7 @@ test("two devices show the same hob and thread status through a full turn and a 
   await other.close();
 });
 
-test("two devices show the same quest progress and the same lead needing you through a quest step", async ({
+test("two devices show the same quest progress and the same lead needing you through a quest step (#1374)", async ({
   page,
   browser,
 }) => {
@@ -151,7 +154,9 @@ test("two devices show the same quest progress and the same lead needing you thr
   await other.close();
 });
 
-test("says when the hub's status cannot be read, keeps a paused hob paused, and reads it again", async ({ page }) => {
+test("says when the hub's status cannot be read, keeps a paused hob paused, and reads it again (#1374)", async ({
+  page,
+}) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const current = hub;

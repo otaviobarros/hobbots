@@ -138,7 +138,7 @@ describe("the memory brief", () => {
   });
 
   // covers ADR 037 (A camp is a thread with a kind), CH-001
-  it("a private camp's turn still carries the memory brief", async () => {
+  it("a private camp's turn still carries the memory brief (#1377)", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {

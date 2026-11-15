@@ -130,7 +130,7 @@ const until = (threadId: ThreadId, messageId: MessageId, ready: (message: Messag
   );
 
 describe("Stop waiting (#1056)", () => {
-  it("ends a reply that waits on a command with its text, and tells the next turn the command was stopped", async () => {
+  it("ends a reply that waits on a command with its text, and tells the next turn the command was stopped (#1056)", async () => {
     const result = await run((requests) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -162,7 +162,7 @@ describe("Stop waiting (#1056)", () => {
     expect(result.next?.briefing).toContain("- Running pnpm dev");
   });
 
-  it("refuses a command the runtime starts again while Stop waiting shuts it down, and tells the next turn not to rerun it", async () => {
+  it("refuses a command the runtime starts again while Stop waiting shuts it down, and tells the next turn not to rerun it (#1217)", async () => {
     const result = await run((requests, restarts) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -185,7 +185,7 @@ describe("Stop waiting (#1056)", () => {
     expect(result.next?.briefing).toContain("Do not run any of them again");
   });
 
-  it("changes nothing while the hob is still at work, so Stop stays the way to end it", async () => {
+  it("changes nothing while the hob is still at work, so Stop stays the way to end it (#1056)", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const chat = yield* ChatService;

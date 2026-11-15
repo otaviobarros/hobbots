@@ -535,7 +535,7 @@ describe("only approved devices reach the hub", () => {
 
 describe("a device acts for its user", () => {
   // covers ADR 039 (Users as actors)
-  it("names the device's user as the author of a message, a note and a decision it sends", async () => {
+  it("names the device's user as the author of a message, a note and a decision it sends (#1452)", async () => {
     await setupDone();
     const thread = await hobThread("Pip");
     const { cookie } = await pairedBrowser();
@@ -748,6 +748,7 @@ describe("only the user decides approvals and manages grants", () => {
     });
   });
 
+  // covers . A regression check: these refusals come from the runtime adapter (an unknown tool)
   // and the policy engine (loopback is never reachable, ADR 014), not from the device check.
   it("a hob's tool calls aimed at the hub's controls are refused and recorded, and the request stays pending", async () => {
     await setupDone();

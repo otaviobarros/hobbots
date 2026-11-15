@@ -116,7 +116,8 @@ const run = <A, E>(effect: Effect.Effect<A, E, HobProposals | HobProposalLog | H
   Effect.runPromise(Effect.provide(effect, Layer.merge(TestLayer, session)));
 
 describe("deciding a hob proposal", () => {
-  it("a decision from a device revoked before it was saved is refused, and nothing is made", async () => {
+  // covers ADR 034 (only you decide), docs/architecture/permissions.md
+  it("a decision from a device revoked before it was saved is refused, and nothing is made (#409)", async () => {
     made.length = 0;
     applying = "apply";
     await run(
@@ -141,7 +142,7 @@ describe("deciding a hob proposal", () => {
   });
 
   // covers STD-DATA-001, ADR 034 (Applying re-checks)
-  it("a row the hub stopped while making stays applying, and is settled from the hob before anything else decides it", async () => {
+  it("a row the hub stopped while making stays applying, and is settled from the hob before anything else decides it (#409)", async () => {
     made.length = 0;
     revoked = false;
     await run(
@@ -172,7 +173,7 @@ describe("deciding a hob proposal", () => {
     );
   });
   // covers STD-DATA-001: a stuck row needs no decision to be settled
-  it("a row the hub stopped while making is settled by reading the card, as made or as waiting again", async () => {
+  it("a row the hub stopped while making is settled by reading the card, as made or as waiting again (#409)", async () => {
     made.length = 0;
     revoked = false;
     await run(

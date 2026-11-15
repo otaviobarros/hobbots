@@ -33,7 +33,7 @@ const watched = () => {
 };
 
 describe("the sidebar's read", () => {
-  it("drops a first read taken before a camp was made, so the new camp shows", async () => {
+  it("drops a first read taken before a camp was made, so the new camp shows (#1469)", async () => {
     const list = watched();
     const changed = sidebarChanged(list.client);
     await list.settled();
@@ -46,7 +46,7 @@ describe("the sidebar's read", () => {
     list.unsubscribe();
   });
 
-  it("reads again after a member or thread event, and not after a message", async () => {
+  it("reads again after a member or thread event, and not after a message (#1469)", async () => {
     const list = watched();
     list.pending[0]?.(read());
     await list.settled();
@@ -59,7 +59,7 @@ describe("the sidebar's read", () => {
     list.unsubscribe();
   });
 
-  it("takes again a read that lands after a new sync generation began, so a camp made between them shows", async () => {
+  it("takes again a read that lands after a new sync generation began, so a camp made between them shows (#1469)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
     const reading = client.fetchQuery(sidebarQuery);
@@ -73,7 +73,7 @@ describe("the sidebar's read", () => {
     expect(shown.sidebar.camps.map((camp) => camp.threadId)).toEqual(["launch"]);
   });
 
-  it("reads again when a request, a blocker, a question or a Task changes what waits on you", async () => {
+  it("reads again when a request, a blocker, a question or a Task changes what waits on you (#1469)", async () => {
     const list = watched();
     list.pending[0]?.(read());
     await list.settled();
@@ -88,7 +88,7 @@ describe("the sidebar's read", () => {
     list.unsubscribe();
   });
 
-  it("reads again when a person's message lands or a queued one is taken back, and not on each update of a hob's reply", async () => {
+  it("reads again when a person's message lands or a queued one is taken back, and not on each update of a hob's reply (#1469)", async () => {
     const list = watched();
     list.pending[0]?.(read());
     await list.settled();
@@ -110,7 +110,7 @@ describe("the sidebar's read", () => {
     list.unsubscribe();
   });
 
-  it("counts a mention you have not read as unread, so opening its camp marks it read", () => {
+  it("counts a mention you have not read as unread, so opening its camp marks it read (#1469)", () => {
     const camp = ThreadId.make("camp");
     const withMention = {
       sidebar: { camps: [{ threadId: camp, mentions: 1 }], directMessages: [] },

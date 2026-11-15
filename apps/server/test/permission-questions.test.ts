@@ -22,7 +22,7 @@ afterEach(async () => {
 const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 
 describe.each(RUNTIMES)("a member that asks its lead for permission, on %s", (runtime) => {
-  it("still asks the user before the delete its lead said yes to, and tells every hob only the user approves", async () => {
+  it("still asks the user before the delete its lead said yes to, and tells every hob only the user approves (#1216)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, reactions, requests } = party;

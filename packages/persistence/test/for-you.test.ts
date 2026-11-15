@@ -179,7 +179,7 @@ const seed = Effect.gen(function* () {
 
 describe("For you", () => {
   // covers ADR 039 (Cards every thread shares › For you; Users as actors)
-  it("gives Bruna, Leo and the owner their own lists from the same camp, each item for its person", async () => {
+  it("gives Bruna, Leo and the owner their own lists from the same camp, each item for its person (#1456)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const ids = yield* seed;
@@ -212,7 +212,7 @@ describe("For you", () => {
   });
 
   // covers ADR 039 (Cards every thread shares › Approval: the decider)
-  it("reads each thread's owner, and lists only the threads a person is an active member of", async () => {
+  it("reads each thread's owner, and lists only the threads a person is an active member of (#1456)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;

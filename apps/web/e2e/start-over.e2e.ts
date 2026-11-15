@@ -158,7 +158,7 @@ const expectPairing = async (page: Page, url: string) => {
 };
 
 // covers #1220
-test("closing All clear with Escape starts fresh, as its button does", async ({ page }) => {
+test("closing All clear with Escape starts fresh, as its button does (#1220)", async ({ page }) => {
   test.setTimeout(60_000);
   const { url } = await setUpHub();
   await deleteEverything(page, url);
@@ -169,7 +169,7 @@ test("closing All clear with Escape starts fresh, as its button does", async ({ 
 });
 
 // covers #1220
-test("closing All clear by clicking outside it starts fresh too", async ({ page }) => {
+test("closing All clear by clicking outside it starts fresh too (#1220)", async ({ page }) => {
   test.setTimeout(60_000);
   const { url } = await setUpHub();
   await deleteEverything(page, url);
@@ -180,7 +180,7 @@ test("closing All clear by clicking outside it starts fresh too", async ({ page 
 });
 
 // covers #1220
-test("a Start over whose dialog the window lost on the way still ends at Welcome", async ({ browser }) => {
+test("a Start over whose dialog the window lost on the way still ends at Welcome (#1220)", async ({ browser }) => {
   test.setTimeout(60_000);
   const { dataDir, url } = await setUpHub();
   // The hub's own window: it signs every request with the window key of the hub answering now, as the

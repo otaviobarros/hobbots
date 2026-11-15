@@ -257,7 +257,8 @@ describe("UsageLedger", () => {
     });
   });
 
-  it("sums what a Quest's whole party ever spent, a sub-quest's and turns outside a chat included", async () => {
+  // Issue #1449
+  it("sums what a Quest's whole party ever spent, a sub-quest's and turns outside a chat included (#1449)", async () => {
     const spent = await Effect.gen(function* () {
       yield* seed;
       yield* seedQuests;
@@ -301,7 +302,8 @@ describe("UsageLedger", () => {
     });
   });
 
-  it("counts a passed turn, whose reply was removed, under the hob that passed", async () => {
+  // covers ADR 039 (One hob speaks at a time)
+  it("counts a passed turn, whose reply was removed, under the hob that passed (#1462)", async () => {
     const { hobs } = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

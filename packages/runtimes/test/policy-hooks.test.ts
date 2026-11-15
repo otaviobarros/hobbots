@@ -404,7 +404,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("asks before a push once the session has read the web, and the sandbox proxy refuses a new host", async () => {
+  it("asks before a push once the session has read the web, and the sandbox proxy refuses a new host (#1268)", async () => {
     const READ_MARK = {
       current: Effect.succeed({ since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" }),
       read: () => Effect.void,
@@ -557,6 +557,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     return { result, note };
   };
 
+  // Regression for #282
   it("tells the hob, with the result, that the user approved the call and for how long", async () => {
     const once = await deleteCall(approvalsAnswering(approve).approvals);
     expect(once.result).toMatchObject({ behavior: "allow" });
@@ -580,6 +581,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(first.note).toContain("approved calls like it always");
   });
 
+  // Regression for #282
   it("tells the hob when an approval the user saved earlier let the call run without asking", async () => {
     const { asked, approvals } = approvalsAnswering(approve);
     await deleteCall(approvals);
@@ -947,7 +949,8 @@ describe("the process sandbox", () => {
     expect(rules.denyWrite).toEqual(expect.arrayContaining(["/Users/me/Library/Hobbots"]));
   });
 
-  it("opens Apple's xcrun cache for reading only, so the developer tool shims stay quiet", () => {
+  // Issue #1219
+  it("opens Apple's xcrun cache for reading only, so the developer tool shims stay quiet (#1219)", () => {
     const cache = ["/var/folders/xy/T/xcrun_db", "/private/var/folders/xy/T/xcrun_db"];
     const rules = sandboxFilesystem({
       folders: ["/Volumes/Work/app"],

@@ -39,7 +39,7 @@ test("reads the table's UI words, code names and the words each never uses", () 
 });
 
 // covers #1423
-test("a code name no source exports any more fails", () => {
+test("a code name no source exports any more fails (#1423)", () => {
   const problems = checkTable(
     rows,
     new Set(["Agent", "Thread"]),
@@ -50,7 +50,7 @@ test("a code name no source exports any more fails", () => {
   ]);
 });
 
-test("a UI word no message module uses any more fails", () => {
+test("a UI word no message module uses any more fails (#1423)", () => {
   const problems = checkTable(
     rows,
     new Set(["Agent", "Thread", "Attempt"]),
@@ -59,14 +59,14 @@ test("a UI word no message module uses any more fails", () => {
   assert.deepEqual(problems, ['docs/product/glossary.md: no message module says "camp" any more (STD-DOCS-011)']);
 });
 
-test("copy that says a word the UI never shows fails, with its line", () => {
+test("copy that says a word the UI never shows fails, with its line (#1423)", () => {
   const text = `export const m = {\n  title: "Chats",\n  open: ({ n }: { n: number }) => \`Open \${n} threads\`,\n};`;
   assert.deepEqual(checkCopy("m.ts", copy(text), rows), [
     'm.ts:3: the UI never says "thread", which the code calls Thread: say "chat" or "camp" (STD-DOCS-011)',
   ]);
 });
 
-test("copy with a slash in it is still copy, in a string and in a template", () => {
+test("copy with a slash in it is still copy, in a string and in a template (#1423)", () => {
   const text = [
     "export const m = {",
     '  open: "Open this thread/camp",',
@@ -92,7 +92,7 @@ test("keys, codes, paths, types and imports are not copy", () => {
   );
 });
 
-test("a doc that uses a retired word fails, except in its phrases and in code", () => {
+test("a doc that uses a retired word fails, except in its phrases and in code (#1423)", () => {
   const doc = [
     "# Attempts",
     "Each execution is retried.",
@@ -114,7 +114,7 @@ test("a glossary without the table is refused", () => {
   assert.throws(() => parseGlossary("# Glossary\n"), /no "## Words and code names" section/);
 });
 
-test("the repository's UI, code and docs agree with its glossary", () => {
+test("the repository's UI, code and docs agree with its glossary (#1423)", () => {
   const out = execFileSync("node", ["scripts/check-glossary.mjs"], { encoding: "utf8" });
   assert.match(out, /^Glossary check passed/);
 });

@@ -332,7 +332,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Field answers), #406 (granting writes the defaults)
-  it("granting the Charm writes the default answers as overrides, and its tools reach the hob's turn", async () => {
+  it("granting the Charm writes the default answers as overrides, and its tools reach the hob's turn (#406)", async () => {
     const granted = await permissions(chief, { charms: { granted: ["github", "summoning"] } });
     expect(granted.policy.charms?.overrides).toMatchObject(SUMMONING_DEFAULTS);
     expect(granted.decisions["summoning.summon"]).toBe("ask");
@@ -352,7 +352,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (The check tool finds the gaps first), #406 done when 4
-  it("the check tool names what each draft lacks or gets wrong, and which fields would ask, and writes nothing", async () => {
+  it("the check tool names what each draft lacks or gets wrong, and which fields would ask, and writes nothing (#406)", async () => {
     const before = (await allHobs()).length;
     const { reply } = await turn(
       chief,
@@ -390,7 +390,7 @@ describe("the Summoning Charm, end to end", () => {
   let summoned: ReadonlyArray<Agent> = [];
 
   // covers ADR 034 (Never twice, A summon is decided on summoning.summon, No escalation), #406 done when 3
-  it("a summon of three hobs under Allow creates them within the chief's authority, and a retry returns the same three", async () => {
+  it("a summon of three hobs under Allow creates them within the chief's authority, and a retry returns the same three (#406)", async () => {
     await chiefAnswers({ "summoning.summon": "allow" });
     const call = hub("summoning_summon", {
       key: "hire-three",
@@ -436,7 +436,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Asking), #406 (Ask)
-  it("under the default Ask a summon becomes a proposal, and is created as summoned once you allow it", async () => {
+  it("under the default Ask a summon becomes a proposal, and is created as summoned once you allow it (#406)", async () => {
     await chiefAnswers({});
     const asked = await turn(chief, hub("summoning_summon", { key: "hire-dee", hobs: [draft("Dee")] }));
     expect(asked.pending).toBeUndefined();
@@ -458,7 +458,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Scope, Field answers, No escalation), #406 done when 1
-  it("changes within the scope and fields apply, and an out-of-scope, Never or wider call is refused with nothing written", async () => {
+  it("changes within the scope and fields apply, and an out-of-scope, Never or wider call is refused with nothing written (#406)", async () => {
     await chiefAnswers({ "summoning.good-at": "allow", "summoning.voice": "deny" });
     const ada = summoned.find((agent) => agent.name === "Ada") as Agent;
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
@@ -512,7 +512,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (No escalation), #406 (same validation as the screens)
-  it("a change is checked by the policy it leaves, so a replaced answer map or a shown folder never widens a hob, and a label the profile refuses is refused", async () => {
+  it("a change is checked by the policy it leaves, so a replaced answer map or a shown folder never widens a hob, and a label the profile refuses is refused (#406)", async () => {
     await chiefAnswers({
       "summoning.name": "allow",
       "summoning.folders": "allow",
@@ -565,7 +565,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers #1352 (a change merges the answers it names), ADR 034 (No escalation)
-  it("a change that sets one Charm answer keeps every other answer of the hob, is checked by the policy it leaves, and names what changed", async () => {
+  it("a change that sets one Charm answer keeps every other answer of the hob, is checked by the policy it leaves, and names what changed (#1352)", async () => {
     await chiefAnswers({ "summoning.charms": "allow" });
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
     const kept = (await hob(bo.id)).policy;
@@ -602,7 +602,8 @@ describe("the Summoning Charm, end to end", () => {
     });
   });
 
-  it("a Summoning change takes back the grants that relied on what it took away, as the Charms tab does", async () => {
+  // covers ADR 034 (The same use cases as the screens)
+  it("a Summoning change takes back the grants that relied on what it took away, as the Charms tab does (#406)", async () => {
     await chiefAnswers({ "summoning.charms": "allow" });
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
     // With every edit open, Bo is offered commands, and deleting files asks.
@@ -634,7 +635,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (The same use cases as the screens), #406 (refusals write nothing)
-  it("a hob's profile and permissions change as one version, so a change either part refuses stores nothing", async () => {
+  it("a hob's profile and permissions change as one version, so a change either part refuses stores nothing (#406)", async () => {
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
     const before = await hob(bo.id);
     const refused = await hobs.runPromise(
@@ -651,7 +652,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 032 (Answers), #1351
-  it("read_hob shows a hob's answers, and after a Summoning change its new ones at once", async () => {
+  it("read_hob shows a hob's answers, and after a Summoning change its new ones at once (#1351)", async () => {
     await chiefAnswers({ "summoning.charms": "allow" });
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
     const was = (await hob(bo.id)).policy;
@@ -682,7 +683,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (The confused deputy)
-  it("a change to a hob wider than the chief asks on every field, whatever its answers say", async () => {
+  it("a change to a hob wider than the chief asks on every field, whatever its answers say (#406)", async () => {
     await chiefAnswers({ "summoning.name": "allow" });
     // You put Other in the chief's scope: it can still do more than the chief.
     await permissions(chief, { charms: { summoning: { summoned: true, hobs: [other.id], self: false } } });
@@ -701,7 +702,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Managing itself), #406 done when 2
-  it("a hob managing itself changes its own instructions once you allow it, and never widens itself or retires itself", async () => {
+  it("a hob managing itself changes its own instructions once you allow it, and never widens itself or retires itself (#406)", async () => {
     const scoped = await permissions(chief, { charms: { summoning: { summoned: true, hobs: [], self: true } } });
     // Turning "Can manage itself" on writes every self field as Ask.
     expect(scoped.policy.charms?.overrides).toMatchObject(SUMMONING_SELF_DEFAULTS);
@@ -737,7 +738,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Pause, wake and retire; Retiring)
-  it("the chief pauses and wakes a hob it summoned, and retiring one always asks once only, with today's choice for its replies", async () => {
+  it("the chief pauses and wakes a hob it summoned, and retiring one always asks once only, with today's choice for its replies (#406)", async () => {
     const cy = summoned.find((agent) => agent.name === "Cy") as Agent;
     const paused = await turn(chief, hub("summoning_pause", { key: "pause-cy", hob: "Cy" }));
     expect(paused.reply?.content).toContain("Cy is paused now.");
@@ -760,7 +761,8 @@ describe("the Summoning Charm, end to end", () => {
     expect(after.reply?.content).toContain("Refused (outside-scope): Cy is retired, so it is outside every scope.");
   });
 
-  it("each runtime records a Summoning call's step before it pauses a hob, and pauses nothing unrecorded", {
+  // covers ADR 034 (Every runtime), #406 (every runtime: Claude Code, Codex, fake)
+  it("each runtime records a Summoning call's step before it pauses a hob, and pauses nothing unrecorded (#406)", {
     timeout: 240_000,
   }, async () => {
     const bo = summoned.find((agent) => agent.name === "Bo") as Agent;
@@ -823,7 +825,8 @@ describe("the Summoning Charm, end to end", () => {
     }
   });
 
-  it("each runtime checks, summons, changes, pauses and wakes hobs through the Charm, each call recorded before it acts", {
+  // covers ADR 034 (Tools; Every runtime), #412 (every runtime: Claude Code, Codex, fake)
+  it("each runtime checks, summons, changes, pauses and wakes hobs through the Charm, each call recorded before it acts (#412)", {
     timeout: 240_000,
   }, async () => {
     const lead = await manager("Rune", 4100);
@@ -910,7 +913,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (The Charm: Every hob), #406 (granted per hob or to every hob)
-  it("Summoning for every hob reaches the hobs you made, never a hob a hob summoned, read_hob says where it comes from, and a hob's own tab can take it away", async () => {
+  it("Summoning for every hob reaches the hobs you made, never a hob a hob summoned, read_hob says where it comes from, and a hob's own tab can take it away (#406)", async () => {
     const plain = await create("Plain", 4003);
     const set = await request<{ summoningForEveryHob: unknown }>("PATCH", "/api/setup", {
       summoningForEveryHob: { scope: { summoned: true, hobs: [], self: false }, overrides: {} },
@@ -938,7 +941,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Limits for unattended summons), #407 done when 1 and 2
-  it("a manager with summon at Allow summons up to its cap, the next summon asks, one you approve is not counted, and retiring frees a place", async () => {
+  it("a manager with summon at Allow summons up to its cap, the next summon asks, one you approve is not counted, and retiring frees a place (#407)", async () => {
     await chiefAnswers({ "summoning.summon": "allow" });
     const caps = async () =>
       (await request<{ live: number; perHob: number; perTree: number }>("GET", `/api/agents/${chief.id}/summon-caps`))
@@ -1062,7 +1065,7 @@ describe("the Summoning Charm, end to end", () => {
   const named = async (name: string) => (await allHobs()).find((agent) => agent.name === name);
 
   // covers ADR 034 (Limits for unattended summons), #407 (3 per Task tree)
-  it("summons without a card for one Task tree count across its root, children and siblings, stop at its cap and ask, and a summon that would pass a cap asks for all its hobs", async () => {
+  it("summons without a card for one Task tree count across its root, children and siblings, stop at its cap and ask, and a summon that would pass a cap asks for all its hobs (#407)", async () => {
     const lead = await manager("Lead", 4004);
     await tree(lead, "launch", ["launch-site", "launch-mail"]);
     await tree(lead, "sale", []);
@@ -1093,7 +1096,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Limits for unattended summons), #407 (counted under a lock)
-  it("two managers summoning at once in one Task tree never both take its last place", async () => {
+  it("two managers summoning at once in one Task tree never both take its last place (#407)", async () => {
     const first = await manager("Ora", 4005);
     const second = await manager("Pax", 4006);
     await tree(first, "fair", ["fair-stalls", "fair-music"]);
@@ -1123,7 +1126,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Asking is a proposal: a decision per row, Edit), #409 done when 1
-  it("you edit one of three hobs on a summon card, and all three are created, the edited one as you edited it", async () => {
+  it("you edit one of three hobs on a summon card, and all three are created, the edited one as you edited it (#409)", async () => {
     await chiefAnswers({});
     const asked = await turn(
       chief,
@@ -1175,7 +1178,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (A decision per row, the manager hears row by row, Changed since), #409 done when 2
-  it("a change to three hobs is allowed for two and denied for one, and the chief hears which", async () => {
+  it("a change to three hobs is allowed for two and denied for one, and the chief hears which (#409)", async () => {
     await chiefAnswers({});
     const hire = await turn(
       chief,
@@ -1221,7 +1224,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 ("Always allow"), #409 done when 3, #410 (the Charms tab reads it as Allow)
-  it("Always allow on a summon card sets summoning.summon to Allow as your change, and the next summons run without a card until the cap", async () => {
+  it("Always allow on a summon card sets summoning.summon to Allow as your change, and the next summons run without a card until the cap (#409)", async () => {
     // A manager of its own, so the caps the chief reached above leave its next summon free.
     const boss = await create("Bram", 4009);
     await permissions(boss, { ownFolders: [team], charms: { granted: ["summoning"], overrides: SUMMONING_DEFAULTS } });
@@ -1258,7 +1261,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (Asking is a proposal: Always allow; The Charm: Every hob), #409, #410
-  it("Always allow for a manager with the Charm from every hob gives it its own grant from that setting", async () => {
+  it("Always allow for a manager with the Charm from every hob gives it its own grant from that setting (#409)", async () => {
     const wren = await create("Wren", 4005);
     const scope = { summoned: true, hobs: [], self: false };
     expect((await request("PATCH", "/api/setup", { summoningForEveryHob: { scope, overrides: {} } })).status).toBe(200);
@@ -1278,7 +1281,7 @@ describe("the Summoning Charm, end to end", () => {
   });
 
   // covers ADR 034 (The call waits on its step; outcome as a backpack item), PE-006
-  it("only a user session decides a proposal, and one decided after its turn stopped reaches the chief's backpack", async () => {
+  it("only a user session decides a proposal, and one decided after its turn stopped reaches the chief's backpack (#409)", async () => {
     await chiefAnswers({});
     const asked = await turn(chief, hub("summoning_summon", { key: "hire-nell", hobs: [draft("Nell")] }));
     const view = asked.proposal as HobProposalView;
@@ -1308,7 +1311,7 @@ describe("the Summoning Charm, end to end", () => {
     expect(backpack).toBeDefined();
   });
   // covers ADR 034 (Applying re-checks), AG-002
-  it("a proposal you allow after its operation went to Never, or its hob left the scope, is refused and changes nothing", async () => {
+  it("a proposal you allow after its operation went to Never, or its hob left the scope, is refused and changes nothing (#409)", async () => {
     await chiefAnswers({});
     const hire = await turn(chief, hub("summoning_summon", { key: "hire-pair", hobs: [draft("Opal"), draft("Pim")] }));
     await decideProposal(hire, "allow-all");
@@ -1365,7 +1368,7 @@ describe("the Summoning Charm, end to end", () => {
     await decideProposal(hireQuill, "deny-all");
   });
   // covers ADR 034 ("Always allow" for a hob managing itself; Changed since)
-  it("Always allow on a hob's change to itself leaves that change yours to allow, and an edit of yours since still makes it stale", async () => {
+  it("Always allow on a hob's change to itself leaves that change yours to allow, and an edit of yours since still makes it stale (#409)", async () => {
     const sage = await create("Sage", 4010);
     await permissions(sage, {
       ownFolders: [team],
@@ -1396,7 +1399,7 @@ describe("the Summoning Charm, end to end", () => {
     await decideProposal(later, "deny-all");
   });
   // covers ADR 034 ("Always allow" for every field that asked, as one change)
-  it("Always allow for several fields sets each to Allow in one change of yours, and refuses one that did not ask", async () => {
+  it("Always allow for several fields sets each to Allow in one change of yours, and refuses one that did not ask (#409)", async () => {
     const tess = await create("Tess", 4013);
     await permissions(tess, {
       ownFolders: [team],
@@ -1435,7 +1438,7 @@ describe("the Summoning Charm, end to end", () => {
     expect(await hob(tess.id)).toMatchObject({ goodAt: "Tidy notes.", instructions: "Be tidy." });
   });
   // covers STD-DATA-001, ADR 034 (A decision is yours while your device is)
-  it("a row the hub stopped before it saved what it made is settled from the hob's history when the card is read, even after a later edit", async () => {
+  it("a row the hub stopped before it saved what it made is settled from the hob's history when the card is read, even after a later edit (#409)", async () => {
     await chiefAnswers({});
     const hire = await turn(chief, hub("summoning_summon", { key: "hire-duo", hobs: [draft("Rook"), draft("Sly")] }));
     await decideProposal(hire, "allow-all");

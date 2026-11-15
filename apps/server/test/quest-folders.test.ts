@@ -23,6 +23,7 @@ const scanned = async (run: ReturnType<typeof setUp>["run"], tree: TaskTree) => 
 };
 
 describe("a lead's turns on its Quest", () => {
+  // covers ADR 018, ADR 023
   it("scan only the folders start_quest names, from the turn that starts it on", async () => {
     const { run, folder, others } = setUp({ "README.md": "# Site\n" }, ["hobbots", "other"]);
     await run(
@@ -46,6 +47,7 @@ describe("a lead's turns on its Quest", () => {
     expect(others).toHaveLength(2);
   }, 30_000);
 
+  // covers ADR 018, ADR 023
   it("scan the folders the goal names when start_quest names none, and all of them when nothing does", async () => {
     const named = setUp({}, ["hobbots"]);
     await named.run(
@@ -61,6 +63,7 @@ describe("a lead's turns on its Quest", () => {
     expect(await scanned(unnamed.run, whole)).toEqual([[unnamed.folder, ...unnamed.others].sort()]);
   }, 30_000);
 
+  // covers ADR 018, ADR 023
   it("record changes against the Quest's folder when the lead's own folder holds it, as its members' are", async () => {
     const { run, folder } = setUp({ "full-run/README.md": "# Full run\n", "elsewhere.md": "Not the Quest's\n" });
     const quest = join(folder, "full-run");
@@ -85,6 +88,7 @@ describe("a lead's turns on its Quest", () => {
     ]);
   }, 30_000);
 
+  // covers ADR 023, STD-UI-008
   it("keep the lead's folder's stopped scan when it holds a small Quest folder, never a scan taken after the edit", async () => {
     const many = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`notes/${i}.md`, `${i}\n`]));
     const { run, folder } = setUp({ ...many, "full-run/README.md": "# Full run\n" }, [], { maxFiles: 5 });

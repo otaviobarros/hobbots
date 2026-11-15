@@ -517,7 +517,7 @@ describe("editing hobs", () => {
 });
 
 describe("what a hob is good at", () => {
-  it("prefills good at from the chores or the starter role, and stores what a create gives as one line", async () => {
+  it("prefills good at from the chores or the starter role, and stores what a create gives as one line (#1232)", async () => {
     const fromRole: Agent = (await request("POST", "/api/agents", hob)).body;
     expect(fromRole.goodAt).toBe(starterRole("writer").note);
     const fromChores: Agent = (
@@ -545,7 +545,7 @@ describe("what a hob is good at", () => {
     expect(long).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "goodAt" } });
   });
 
-  it("stores an edit of good at as a new version that the instructions never change, and never tells the hob", async () => {
+  it("stores an edit of good at as a new version that the instructions never change, and never tells the hob (#1232)", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
@@ -587,7 +587,7 @@ describe("visible to other hobs", () => {
     };
   };
 
-  it("hides a hob from every other hob's next look at the hub and brings it back, as new versions", async () => {
+  it("hides a hob from every other hob's next look at the hub and brings it back, as new versions (#1233)", async () => {
     const wren: Agent = (await request("POST", "/api/agents", hob)).body;
     const ada: Agent = (await request("POST", "/api/agents", { ...hob, name: "Ada" })).body;
     expect(wren.visibleToHobs).toBe(true);
@@ -609,7 +609,7 @@ describe("visible to other hobs", () => {
     expect([seen.listed, seen.found("Wren")]).toEqual([["Wren"], ["Wren"]]);
   });
 
-  it("creates a hob hidden when asked, and never tells the runtime about the switch", async () => {
+  it("creates a hob hidden when asked, and never tells the runtime about the switch (#1233)", async () => {
     const quiet: Agent = (await request("POST", "/api/agents", { ...hob, visibleToHobs: false })).body;
     expect(quiet.visibleToHobs).toBe(false);
     const thread = (await request("POST", `/api/agents/${quiet.id}/threads`)).body;

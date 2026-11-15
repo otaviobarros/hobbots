@@ -88,7 +88,7 @@ const questOn = async (runtime: RuntimeKind, withholds?: (request: PromptRequest
 };
 
 describe.each(RUNTIMES)("a Quest lead's Task tools, on %s", (runtime) => {
-  it("reach a lead whose session started before check_criterion existed, so it accepts the criterion and the Quest completes", async () => {
+  it("reach a lead whose session started before check_criterion existed, so it accepts the criterion and the Quest completes (#1543)", async () => {
     // Frodo's first turn runs as on a hub from before #1445 and #1446.
     const { finished, wake, session, answers } = await questOn(runtime, (request) =>
       isLeadsFirst(request) ? NEWER_TOOLS : [],
@@ -110,7 +110,7 @@ describe.each(RUNTIMES)("a Quest lead's Task tools, on %s", (runtime) => {
     expect(quest?.criteria.map((each) => [each.state, each.decided?.by.kind])).toEqual([["accepted", "hob"]]);
   }, 30_000);
 
-  it("resume a lead's session that holds every Task tool", async () => {
+  it("resume a lead's session that holds every Task tool (#1543)", async () => {
     const { finished, first, wake } = await questOn(runtime);
 
     expect(first.sessionId).toBeNull();

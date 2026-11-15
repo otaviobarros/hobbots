@@ -161,6 +161,7 @@ test("Help and about shows the version and the licenses, and Your data the hub's
   ).toBeVisible();
 });
 
+// Issue #1088
 test("Help's check says when it could not read memory, the first time or after an answer, never an old answer", async ({
   page,
 }) => {

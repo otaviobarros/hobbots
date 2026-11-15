@@ -55,7 +55,7 @@ const HITS = [
 
 describe("reading a Codex search", () => {
   // covers ADR 036
-  it("shows a search as a step, reports its whole query and structured hits, and counts it", () => {
+  it("shows a search as a step, reports its whole query and structured hits, and counts it (#1266)", () => {
     const read = codexTurnEvents(THREAD, [], [], [], true);
     read.map(usage(0));
     expect(read.map(item("item/started", search("s1", null))).events).toEqual([
@@ -188,7 +188,7 @@ describe("a Codex turn that may search the web", () => {
     });
 
   // covers ADR 036
-  it("offers cached search on a held Codex, labels the results as other people's text and counts them", async () => {
+  it("offers cached search on a held Codex, labels the results as other people's text and counts them (#1266)", async () => {
     const server = searchingTurn();
     const { turnConfig, request, settings, searches } = await setup(server);
     const exit = await run({ ...turnConfig, cachedSearch: Effect.succeed(true) }, request);
@@ -217,7 +217,7 @@ describe("a Codex turn that may search the web", () => {
   });
 
   // covers ADR 036
-  it("records a search's results with the turn's recorder before a hub call Codex sent after it runs", async () => {
+  it("records a search's results with the turn's recorder before a hub call Codex sent after it runs (#1289)", async () => {
     const order: Array<string> = [];
     const server = fakeServer({
       script: [
@@ -270,7 +270,7 @@ describe("a Codex turn that may search the web", () => {
   });
 
   // covers ADR 036
-  it("turns Codex's search off on a Codex the contract test did not hold, and for a hob set to Never", async () => {
+  it("turns Codex's search off on a Codex the contract test did not hold, and for a hob set to Never (#1266)", async () => {
     const unheld = await setup(fakeServer({ script: [completed("completed")] }));
     await run(unheld.turnConfig, unheld.request);
     expect(unheld.searches()).toBe(false);
@@ -290,7 +290,7 @@ describe("a Codex turn that may search the web", () => {
   });
 
   // covers ADR 036, STD-SEC-002
-  it("keeps a turn under Never from searching while another turn of the hob that may search starts beside it", async () => {
+  it("keeps a turn under Never from searching while another turn of the hob that may search starts beside it (#1266)", async () => {
     const root = realpathSync(mkdtempSync(join(temp, "shared-")));
     const never = { ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } } as const;
     const allowed = await setup(fakeServer({ script: [completed("completed")] }), EMPTY_HOB_POLICY, root);

@@ -66,6 +66,7 @@ const grant = (rule: GrantRule) =>
   });
 
 describe("a hob's Charms", () => {
+  // covers ADR 031
   it("stops a running turn when the hob loses a Charm, and keeps it when it gains one", () => {
     const both = access(policy({ granted: ["github", "pip"] }));
     expect(narrows(both, access(policy({ granted: ["pip"] })))).toBe(true);
@@ -77,6 +78,7 @@ describe("a hob's Charms", () => {
     expect(narrows(access(policy(undefined)), access(policy({ granted: ["github"] })))).toBe(false);
   });
 
+  // covers ADR 031
   it("stops a running turn when a Charm operation's answer gets narrower, not when it widens", () => {
     const allowed = access(policy({ granted: ["github"] }));
     const asks = access(policy({ granted: ["github"], overrides: { "github.read": "ask" } }));
@@ -85,6 +87,7 @@ describe("a hob's Charms", () => {
     expect(narrows(asks, allowed)).toBe(false);
   });
 
+  // covers ADR 031
   it("revokes the grants that relied on a Charm taken away, its sites and what it takes over", () => {
     const site = grant({ _tag: "CharmSite", charm: "github", operation: "github.read", site: { repository: "o/r" } });
     const push = grant({ _tag: "Push", cwd: "/work", remote: "origin", branch: "main" });
@@ -99,6 +102,7 @@ describe("a hob's Charms", () => {
     expect([site, push].map((each) => lostAuthority(each, undeclared))).toEqual(["narrowed", null]);
   });
 
+  // covers ADR 031
   it("matches a skill's Charm hint against the hob's set of Charm ids", () => {
     expect(hobCharms(policy(undefined))).toEqual(["github"]);
     expect(hobCharms(policy({ granted: ["github", "pip", "github"] }))).toEqual(["github", "pip"]);
@@ -107,7 +111,8 @@ describe("a hob's Charms", () => {
 });
 
 describe("what you took over, for a running turn", () => {
-  it("stops a turn only for a path its sandbox left open, not one inside a folder it already closed", () => {
+  // Issue #1537
+  it("stops a turn only for a path its sandbox left open, not one inside a folder it already closed (#1537)", () => {
     const base = access(policy(undefined));
     const closing = (...taken: Array<string>): ToolAccess => ({ ...base, taken });
     expect(takesMore(closing(), closing("/work/repo/docs"))).toBe(true);

@@ -280,7 +280,7 @@ const launchChat = async (decider: Layer.Layer<HubDecider, unknown> = brainAnswe
 
 describe("find", () => {
   // covers ADR 037 (Records), STD-ARCH-016, CH-006
-  it("finds decisions, artifacts and chapter summaries by their words, by kind and in a chat, with a changed decision crossed out", async () => {
+  it("finds decisions, artifacts and chapter summaries by their words, by kind and in a chat, with a changed decision crossed out (#1386)", async () => {
     const { id, reply, later } = await launchChat();
     // Nothing is in the index until the projector reads the journal.
     expect((await find("launch")).records).toEqual([]);
@@ -321,7 +321,7 @@ describe("find", () => {
   });
 
   // covers ADR 037 (Records), STD-ARCH-016
-  it("the projector resumes from its cursor and writes the same rows when the journal is read again", async () => {
+  it("the projector resumes from its cursor and writes the same rows when the journal is read again (#1386)", async () => {
     await launchChat();
     expect(await index()).toBe(true);
     const rows = await indexedRows();
@@ -340,7 +340,7 @@ describe("find", () => {
   });
 
   // covers ADR 037 (A private camp, Records)
-  it("a private camp's records and messages are found only from inside it", async () => {
+  it("a private camp's records and messages are found only from inside it (#1386)", async () => {
     const chat = await start("claude-code", brainAnswers(null));
     const camp = await run(
       ChatService.use((service) =>
@@ -366,7 +366,7 @@ describe("find", () => {
   });
 
   // covers ADR 037 (Records, Moving a chapter)
-  it("a chapter moved into a camp is found in the camp, and no longer in the chat", async () => {
+  it("a chapter moved into a camp is found in the camp, and no longer in the chat (#1386)", async () => {
     const { id } = await launchChat();
     expect(await index()).toBe(true);
     const [first] = await run(ChapterService.use((service) => service.listChapters(id)));
@@ -390,7 +390,7 @@ describe("find", () => {
   });
 
   // covers ADR 037 (Records, Moving a chapter, Private camps)
-  it("a chapter moved into a private camp is out of Find everywhere at once, before the index catches up", async () => {
+  it("a chapter moved into a private camp is out of Find everywhere at once, before the index catches up (#1386)", async () => {
     const { id } = await launchChat();
     expect(await index()).toBe(true);
     expect((await find("launch")).records.length).toBeGreaterThan(0);
@@ -424,7 +424,7 @@ describe("find", () => {
 
 describe("ask", () => {
   // covers ADR 037 (Records, The hub's brain)
-  it("answers a question about an old decision from the records on the hub's brain, and cites the records it rests on", async () => {
+  it("answers a question about an old decision from the records on the hub's brain, and cites the records it rests on (#1386)", async () => {
     const { later } = await launchChat(
       scriptedBrain((judgment) =>
         Effect.succeed({
@@ -458,7 +458,7 @@ describe("ask", () => {
   });
 
   // covers ADR 037 (The hub's brain)
-  it("an answer that cites no record it was given, none at all, or none in time leaves the matches alone", async () => {
+  it("an answer that cites no record it was given, none at all, or none in time leaves the matches alone (#1386)", async () => {
     let next: () => Effect.Effect<Decided<unknown>> = () =>
       Effect.succeed({ choice: null, confidence: 0.4, by: "brain" });
     await launchChat(
@@ -488,7 +488,7 @@ describe("ask", () => {
 
   // covers ADR 037 (The hub's brain, Records), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on %s under No AI, a resting chapter gets its plain summary, Ask shows the matches without an answer, and no model is called",
+    "on %s under No AI, a resting chapter gets its plain summary, Ask shows the matches without an answer, and no model is called (#1386)",
     async (runtime) => {
       const id = await start(runtime, NoAi);
       const reply = await say(id, "Plan the launch emails for spring.");

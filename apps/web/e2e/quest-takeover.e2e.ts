@@ -116,7 +116,7 @@ const askForTheNotes = async (page: Page) => {
   await composer.press("Enter");
 };
 
-test("takes over a hob's files from the quest's sheet, so its writes there are refused, and shows the quest's cost", async ({
+test("takes over a hob's files from the quest's sheet, so its writes there are refused, and shows the quest's cost (#1449)", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -149,7 +149,8 @@ test("takes over a hob's files from the quest's sheet, so its writes there are r
   expect(existsSync(join(shared, "docs", "plan.md"))).toBe(false);
 });
 
-test("gives back the files you took over from the quest's sheet, so the hob's write there goes through", async ({
+// Issue #1538
+test("gives back the files you took over from the quest's sheet, so the hob's write there goes through (#1538)", async ({
   page,
 }) => {
   test.setTimeout(90_000);

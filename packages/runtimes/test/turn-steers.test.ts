@@ -86,7 +86,7 @@ const completedText = (exit: Exit.Exit<ReadonlyArray<RuntimeEvent>, unknown>) =>
   Exit.isSuccess(exit) ? exit.value.flatMap((event) => (event._tag === "Completed" ? [event.text] : []))[0] : undefined;
 
 describe("a message that reaches a running turn", () => {
-  it("reaches the model after the call it arrived during and before the next call, on each runtime", async () => {
+  it("reaches the model after the call it arrived during and before the next call, on each runtime (#1345)", async () => {
     for (const runtime of all.runtimes) {
       const { events, handed, calls, order } = await steeredTurn(runtime);
       expect(Exit.isSuccess(events), runtime.name).toBe(true);

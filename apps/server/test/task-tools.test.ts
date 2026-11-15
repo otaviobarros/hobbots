@@ -483,7 +483,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, TOP, "plan_steps", { key: "many", steps })).reason).toBe("concurrency-limit");
   });
 
-  it("a reassign at the tree's limit counts the Task once, as it only changes hands", async () => {
+  it("a reassign at the tree's limit counts the Task once, as it only changes hands (#1446)", async () => {
     await run(seed);
     const copy: Array<TaskId> = [];
     for (const key of ["a", "b", "c", "d"]) copy.push(await delegate(ALDRIC, TOP, "Quill", key));
@@ -505,7 +505,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(moved.details).toMatchObject({ task_id: moving.id, hob: "Pip" });
   });
 
-  it("a retry of a failed Task at the tree's limit is refused, as it adds an open Task", async () => {
+  it("a retry of a failed Task at the tree's limit is refused, as it adds an open Task (#1446)", async () => {
     await run(seed);
     const failing = await delegate(ALDRIC, TOP, "Pip", "x");
     const before = (await tree()).tasks.find((each) => each.id === failing);
@@ -527,7 +527,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await tree()).tasks.find((each) => each.id === failing)?.state).toBe("failed");
   });
 
-  it("a lead's retry or reassign of a member's Task past its deadline is refused", async () => {
+  it("a lead's retry or reassign of a member's Task past its deadline is refused (#1447)", async () => {
     await run(seed);
     // Pip's Task was given a minute on the first of the month, long past by now, and failed.
     await delegate(ALDRIC, TOP, "Quill", "quest");
@@ -703,6 +703,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
+  // Issue #662
   it("a lead that cancels or reads what ended completes in the same turn, without retrying", async () => {
     await run(seed);
     await done(ALDRIC, TOP, "start_quest", { key: "quest", goal: "Launch the campaign" });
@@ -753,6 +754,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
+  // Issue #743
   it("a milestone reached through another hob's work in the same work is recorded with that hob", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Copy drafted", "Committed"] });
@@ -808,7 +810,8 @@ describe("hob tools for Tasks and Quests", () => {
     );
   });
 
-  it("a lead's own milestone is never credited to a member it leads, nor to a hob beside it", async () => {
+  // Issue #1219
+  it("a lead's own milestone is never credited to a member it leads, nor to a hob beside it (#1219)", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Review written"] });
     await delegate(ALDRIC, TOP, "Rook", "art");

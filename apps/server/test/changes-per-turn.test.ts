@@ -31,6 +31,7 @@ const stepAttempts = (tree: TaskTree) =>
 const write = (path: string, text: string) => `fake:write ${path} ${JSON.stringify(text)}`;
 
 describe("a turn's own changes", () => {
+  // covers ADR 023
   it("two turns writing different files in one folder at the same time each record only their own", async () => {
     const { run: inHub, release } = setUp({ "README.md": "# Site\n" });
     await inHub(
@@ -56,6 +57,7 @@ describe("a turn's own changes", () => {
     expect(await changesOf("review")).toEqual([{ path: "docs/REVIEW.md", kind: "added", sharedWith: [] }]);
   }, 30_000);
 
+  // covers ADR 023
   it("a file a command makes is the turn's that ran it, not another's working beside it, nor the hub's", async () => {
     const { run: inHub, release, holding, folder } = setUp({ "notes.txt": "Notes\n", "scratch/tmp.txt": "tmp\n" });
     await inHub(
@@ -92,6 +94,7 @@ describe("a turn's own changes", () => {
     expect(review.changes.map(({ path, kind }) => ({ path, kind }))).toEqual([{ path: "REVIEW.md", kind: "added" }]);
   }, 30_000);
 
+  // covers ADR 023
   it("leaves build caches and system files out of a turn's changes", async () => {
     const { run: inHub } = setUp({ "app.py": "print('hi')\n" });
     await inHub(

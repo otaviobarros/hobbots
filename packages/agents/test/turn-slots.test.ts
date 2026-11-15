@@ -116,7 +116,7 @@ const ALL: ReadonlyArray<Work> = [
 ];
 
 describe("TurnSlots", () => {
-  it("keeps every limit and leaves no turn waiting that fits, over random asks and ends", async () => {
+  it("keeps every limit and leaves no turn waiting that fits, over random asks and ends (#1448)", async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
@@ -150,7 +150,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  it("gives a freed slot to the Quest that has had none, though a busy Quest asked first", async () => {
+  it("gives a freed slot to the Quest that has had none, though a busy Quest asked first (#1448)", async () => {
     const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
     const busy = [1, 2, 3].map((n) => work(`step:busy-${n}`, `hob-${n}`, "claude-code", "busy"));
     const quiet = work("step:quiet", "hob-9", "claude-code", "quiet");
@@ -178,7 +178,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  it("passes a slot on when a woken turn no longer needs it, and frees a slot once", async () => {
+  it("passes a slot on when a woken turn no longer needs it, and frees a slot once (#1448)", async () => {
     const limits = { ...DEFAULT_TURN_LIMITS, perHob: 1 };
     await run(limits, (slots) =>
       Effect.gen(function* () {
@@ -213,7 +213,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  it("keeps new limits and starts the turns that fit under them", async () => {
+  it("keeps new limits and starts the turns that fit under them (#1448)", async () => {
     const kept: Array<TurnLimits> = [];
     const store = Layer.succeed(TurnLimitsStore, {
       get: Effect.succeed({ ...DEFAULT_TURN_LIMITS, perHob: 1 }),
@@ -241,7 +241,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  it("weighs a waiting turn as it asks now, when its chat moved to another runtime", async () => {
+  it("weighs a waiting turn as it asks now, when its chat moved to another runtime (#1448)", async () => {
     const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
     await run(limits, (slots) =>
       Effect.gen(function* () {

@@ -116,7 +116,7 @@ const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string
   }
 };
 
-test("Home's Pick up where you left off leaves out a Quest whose camp is archived until it is restored", async ({
+test("Home's Pick up where you left off leaves out a Quest whose camp is archived until it is restored (#1567)", async ({
   page,
 }) => {
   dataDir = emptyDataDir();

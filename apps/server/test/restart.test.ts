@@ -436,7 +436,7 @@ describe("recovering after a restart", () => {
     expect(await second.run(TaskRepository.use((tasks) => tasks.listStrandedSteps))).toEqual([]);
   });
 
-  it("a Quest paused while its step ran starts no turn at the next start, and its step runs again on Resume", async () => {
+  it("a Quest paused while its step ran starts no turn at the next start, and its step runs again on Resume (#1446)", async () => {
     const database = await sharedDatabase();
     const you = { kind: "user" as const, id: "owner" };
     await leftBehind(

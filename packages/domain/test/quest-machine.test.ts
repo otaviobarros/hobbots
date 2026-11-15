@@ -87,7 +87,7 @@ const events: fc.Arbitrary<QuestEvent> = fc.oneof(
 );
 
 describe("QuestMachine", () => {
-  it("agrees with a model of a Quest's end and its lead's stop over random runs of events", () => {
+  it("agrees with a model of a Quest's end and its lead's stop over random runs of events (#1346)", () => {
     agreesWithModel({
       machine: QuestMachine,
       records: fc.constantFrom(...QuestStateSchema.literals).map(quest),
@@ -97,7 +97,7 @@ describe("QuestMachine", () => {
     });
   });
 
-  it("ends a Quest its lead was stopping as stopped, never completed or cancelled", () => {
+  it("ends a Quest its lead was stopping as stopped, never completed or cancelled (#1346)", () => {
     const stopping = QuestMachine.transition(quest("active"), {
       _tag: "Stop",
       at: at(3),

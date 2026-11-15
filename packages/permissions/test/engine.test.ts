@@ -685,7 +685,7 @@ describe("GitHub reads", () => {
 
 describe("the hob directory", () => {
   // covers ADR 032 (Read other hobs, in the policy)
-  it("decides read_hob on the hob's answers alone, and an Ask is answered once only, never by a rule", async () => {
+  it("decides read_hob on the hob's answers alone, and an Ask is answered once only, never by a rule (#1234)", async () => {
     const request: PolicyRequest = { _tag: "Directory", operation: "read-hobs", hob: "Pip" };
     expect(await decide(contextFor(home, "careful"), request)).toMatchObject({
       decision: "allow",
@@ -708,7 +708,7 @@ describe("the hob directory", () => {
 
 describe("searching the web", () => {
   // covers ADR 036 (Search the web, in the policy)
-  it("decides a search on the hob's answers alone, Allow or Never, with an Ask refusing it", async () => {
+  it("decides a search on the hob's answers alone, Allow or Never, with an Ask refusing it (#1266)", async () => {
     const request: PolicyRequest = { _tag: "Search", operation: "search-web", query: "effect 4 release" };
     for (const preset of ["careful", "balanced", "trusting"] as const) {
       expect(await decide(contextFor(home, preset), request)).toMatchObject({

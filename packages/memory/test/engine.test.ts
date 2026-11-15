@@ -272,7 +272,7 @@ describe("the supervised engine", () => {
   }, 20_000);
 
   // covers ADR 028
-  it("counts as started only an engine whose own process says it holds the port, not whatever answers there", async () => {
+  it("counts as started only an engine whose own process says it holds the port, not whatever answers there (#1530)", async () => {
     const dataDir = tempFolder("hobbots-data-");
     mkdirSync(join(dataDir, "memory"), { recursive: true });
     // Each start answers `/healthz` but never says it bound the port, as when another engine holds it.

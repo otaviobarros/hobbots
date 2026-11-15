@@ -80,7 +80,7 @@ Each panel scrolls inside the window; the window itself never does. A shared fix
 
 ### STD-TEST-011 A regression test names its issue, and tags group browser tests
 
-A test that guards against a reported bug ends its title with the issue it fixes, such as `(#1026)`. Test titles carry no other ID. To mark a group of browser tests, such as the smoke set, give each a Playwright tag in its details, never in its title: `test("chat streams a reply", { tag: "@smoke" }, …)`, run with `--grep @smoke`.
+A test that guards against a reported bug ends its title with the issue it fixes, such as `(#1026)`, and so does a test written for an issue's change. Test titles carry no other ID. To mark a group of browser tests, such as the smoke set, give each a Playwright tag in its details, never in its title: `test("chat streams a reply", { tag: "@smoke" }, …)`, run with `--grep @smoke`.
 
 - ✅ `it("never serves a log for a step that has none (#153)", …)`
 - ❌ `it("[TC-CH-001] streams a turn", …)`

@@ -71,7 +71,8 @@ const recordIssueRequest = (folder: string) => {
   database.close();
 };
 
-test("the card for an issue shows its title, labels, parent and body, who opens it, and what it risks", async ({
+// covers ADR 020 (Amendment: opening issues)
+test("the card for an issue shows its title, labels, parent and body, who opens it, and what it risks (#1350)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

@@ -94,7 +94,7 @@ const events: fc.Arbitrary<TurnRequestEvent> = fc.oneof(
 
 describe("TurnRequestMachine", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("agrees with a model of speaking, answering, passing, dropping and going on over random runs", () => {
+  it("agrees with a model of speaking, answering, passing, dropping and going on over random runs (#1461)", () => {
     agreesWithModel({
       machine: TurnRequests,
       records: fc
@@ -115,7 +115,7 @@ describe("TurnRequestMachine", () => {
     });
   });
 
-  it("keys a reply thread apart from its thread's main line", () => {
+  it("keys a reply thread apart from its thread's main line (#1461)", () => {
     expect(lineKey(mainLine(THREAD))).toBe("camp");
     expect(lineKey({ threadId: THREAD, rootMessageId: MessageId.make("m-9") })).toBe("camp/m-9");
   });
@@ -326,7 +326,7 @@ const shownFloor = (records: ReadonlyArray<TurnRequest>) =>
 
 describe("the floor", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("agrees with a model of the floor across three hobs, whatever sends, mentions, passes, stops and restarts do", () => {
+  it("agrees with a model of the floor across three hobs, whatever sends, mentions, passes, stops and restarts do (#1461)", () => {
     fc.assert(
       fc.property(fc.array(ops, { maxLength: 40 }), (script) => {
         let owed: ReadonlyArray<Owed> = [];
@@ -347,7 +347,7 @@ describe("the floor", () => {
     );
   });
 
-  it("gives the floor to the message Send now picked, and to nobody while a hob speaks", () => {
+  it("gives the floor to the message Send now picked, and to nobody while a hob speaks (#1461)", () => {
     const [quill, pip] = HOBS as [AgentId, AgentId];
     const first = request("waiting", { id: TurnRequestId.make("a"), hobId: quill });
     const picked = request("waiting", {
@@ -362,7 +362,7 @@ describe("the floor", () => {
     expect(TurnRequests.next([request("speaking", { id: TurnRequestId.make("c") }), first])).toBeNull();
   });
 
-  it("keeps what a person asked for when Stop drops the speaking turn and the hand-offs it set off", () => {
+  it("keeps what a person asked for when Stop drops the speaking turn and the hand-offs it set off (#1461)", () => {
     const [quill, pip, rook] = HOBS as [AgentId, AgentId, AgentId];
     const speaking = request("speaking", { id: TurnRequestId.make("s"), hobId: quill });
     const handOff = request("waiting", {
@@ -386,7 +386,7 @@ describe("the relay budget", () => {
   const [quill, pip] = HOBS as [AgentId, AgentId];
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("lets hobs wake each other for 3 turns after a person speaks, and pauses the fourth", () => {
+  it("lets hobs wake each other for 3 turns after a person speaks, and pauses the fourth (#1463)", () => {
     expect(HOB_RELAY_BUDGET).toBe(3);
     // A person's message is depth 0; each hob's mention adds one to the turn that mentioned.
     const depths = [0];
@@ -402,7 +402,7 @@ describe("the relay budget", () => {
     expect(relayDepthAfter([request("speaking", { relayDepth: 2 }), request("speaking", { relayDepth: 0 })])).toBe(3);
   });
 
-  it("lets the paused hobs go on for exactly the budget's turns again, the resumed one first", () => {
+  it("lets the paused hobs go on for exactly the budget's turns again, the resumed one first (#1463)", () => {
     const paused = request("paused", { relayDepth: HOB_RELAY_BUDGET + 1, causedBy: { kind: "hob", id: pip } });
     const resumed = TurnRequests.transition(paused, { _tag: "GoOn" });
     if (!(resumed instanceof TurnRequest)) throw new Error("GoOn refused");
@@ -419,7 +419,7 @@ describe("the relay budget", () => {
     expect(TurnRequests.transition(request("waiting"), { _tag: "GoOn" })).toBeInstanceOf(IllegalTurnRequestTransition);
   });
 
-  it("names the hobs a paused relay is between, each once, and none while nothing is paused", () => {
+  it("names the hobs a paused relay is between, each once, and none while nothing is paused (#1463)", () => {
     const fromPip = request("paused", {
       id: TurnRequestId.make("p1"),
       hobId: quill,

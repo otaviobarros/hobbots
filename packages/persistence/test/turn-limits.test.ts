@@ -13,7 +13,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, TurnLimitsStore | SqlClient.SqlCl
   effect.pipe(Effect.provide(TurnLimitsRepositoryLive.pipe(Layer.provideMerge(TestDatabase))), Effect.runPromise);
 
 describe("turn limits", () => {
-  it("reads the defaults until limits are set, then the limits last set", async () => {
+  it("reads the defaults until limits are set, then the limits last set (#1448)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const store = yield* TurnLimitsStore;
@@ -27,7 +27,7 @@ describe("turn limits", () => {
     expect(result.after).toEqual({ perHob: 1, perQuest: 3, perRuntime: { "claude-code": 5, codex: 2 } });
   });
 
-  it("gives a runtime the row does not name its default, and reads a row it cannot as the defaults", async () => {
+  it("gives a runtime the row does not name its default, and reads a row it cannot as the defaults (#1448)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

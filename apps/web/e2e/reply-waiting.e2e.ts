@@ -43,7 +43,7 @@ const leadWokeAndEnded = (page: Page) =>
     )
     .toBe(true);
 
-test("a reply waiting on a command says which one and for how long, and Stop waiting ends it with the command stopped", async ({
+test("a reply waiting on a command says which one and for how long, and Stop waiting ends it with the command stopped (#1056)", async ({
   page,
   scan,
 }) => {

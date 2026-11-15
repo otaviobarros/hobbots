@@ -28,7 +28,7 @@ afterAll(() => {
 
 describe("web_fetch in a bundle", () => {
   // covers ADR 036 (Reading a page)
-  it("reads a page when the fetcher and undici are bundled into one file, as the desktop app runs it", {
+  it("reads a page when the fetcher and undici are bundled into one file, as the desktop app runs it (#1267)", {
     timeout: 60_000,
   }, async () => {
     await build({

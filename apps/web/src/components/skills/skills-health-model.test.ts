@@ -16,7 +16,7 @@ const NOW = new Date("2026-11-08T00:00:00.000Z");
 
 describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
   // covers ADR 029 (Health checks), #1099
-  it("puts what keeps a hob worse off first, each line opening where you act on it", () => {
+  it("puts what keeps a hob worse off first, each line opening where you act on it (#1099)", () => {
     const items = healthItems(
       {
         ...empty,
@@ -64,7 +64,7 @@ describe("the Skills Overview's health checks (ADR 029, Health checks)", () => {
     expect(items[2]?.hint).toBe("Kept there while r2 is the newest. Move it when you are ready.");
   });
 
-  it("shows what each hob carries, the most loaded first, heavy past 75% or 30 skills", () => {
+  it("shows what each hob carries, the most loaded first, heavy past 75% or 30 skills (#1099)", () => {
     const rows = loadRows(
       {
         ...empty,

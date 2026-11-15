@@ -61,7 +61,7 @@ const briefEntries = Effect.flatMap(EventJournal, (journal) => journal.readAfter
 
 describe("the brief store", () => {
   // covers ADR 037 (Records), STD-ARCH-014, STD-ARCH-016
-  it("writes a brief once with its BriefWritten and the cursor, and a replay writes nothing", async () => {
+  it("writes a brief once with its BriefWritten and the cursor, and a replay writes nothing (#1384)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -100,7 +100,7 @@ describe("the brief store", () => {
   });
 
   // covers ADR 037 (Records, The hub's brain)
-  it("keeps the last brief when the brain failed, and writes the rule's when there is none yet", async () => {
+  it("keeps the last brief when the brain failed, and writes the rule's when there is none yet (#1384)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -125,7 +125,7 @@ describe("the brief store", () => {
   });
 
   // covers ADR 037 (Records)
-  it("names the thread of a Task, and writes no brief for a thread that is not there", async () => {
+  it("names the thread of a Task, and writes no brief for a thread that is not there (#1384)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;

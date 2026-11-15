@@ -378,8 +378,9 @@ const scenario = async (runtime: RuntimeKind) => {
 };
 
 describe("a Quest runs on its own, end to end (#1342)", () => {
+  // covers ADR 014, ADR 018, ADR 019, ADR 020, ADR 022, ADR 038
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on the fake %s, a reviewer with its own app reviews after one approval, is steered mid-turn, and the Quest you stop ends stopped",
+    "on the fake %s, a reviewer with its own app reviews after one approval, is steered mid-turn, and the Quest you stop ends stopped (#1353)",
     async (runtime) => {
       await scenario(runtime);
     },

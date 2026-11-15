@@ -78,7 +78,8 @@ const pickTheme = async (page: Page, theme: string) => {
 
 const widthOf = async (page: Page) => (await sidebar(page).boundingBox())?.width;
 
-test("the wide sidebar shows Find, the four places, Camps, Direct messages and you, in the four themes", async ({
+// covers ADR 039 (The sidebar)
+test("the wide sidebar shows Find, the four places, Camps, Direct messages and you, in the four themes (#1469)", async ({
   page,
 }) => {
   const { url, ids } = await hubWithHobs();
@@ -107,7 +108,10 @@ test("the wide sidebar shows Find, the four places, Camps, Direct messages and y
   }
 });
 
-test("at 1024 and 960 wide the sidebar is a 76px rail of icons, each named, in the four themes", async ({ page }) => {
+// covers ADR 039 (The sidebar)
+test("at 1024 and 960 wide the sidebar is a 76px rail of icons, each named, in the four themes (#1469)", async ({
+  page,
+}) => {
   const { url, ids } = await hubWithHobs();
   for (const width of [1024, 960]) {
     await page.setViewportSize({ width, height: 760 });
@@ -137,7 +141,10 @@ test("at 1024 and 960 wide the sidebar is a 76px rail of icons, each named, in t
   expect(await widthOf(page)).toBe(276);
 });
 
-test("a hob's direct message opens its chat, a camp opens itself, and Find opens the finder", async ({ page }) => {
+// covers ADR 039 (The sidebar)
+test("a hob's direct message opens its chat, a camp opens itself, and Find opens the finder (#1469)", async ({
+  page,
+}) => {
   const { url, ids } = await hubWithHobs();
   await page.goto(`${url}/#/usage`);
   const nav = sidebar(page);
@@ -158,7 +165,10 @@ test("a hob's direct message opens its chat, a camp opens itself, and Find opens
   await expect(page).toHaveURL(/#\/summon/);
 });
 
-test("Camps and Direct messages hold their place while they load, then say when they are empty", async ({ page }) => {
+// covers ADR 039 (The sidebar), STD-REACT-015
+test("Camps and Direct messages hold their place while they load, then say when they are empty (#1469)", async ({
+  page,
+}) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const current = hub;
@@ -190,7 +200,7 @@ test("Camps and Direct messages hold their place while they load, then say when 
   await expectAccessible(page, nav);
 });
 
-test("Camps lists five camps, then Show more, and always shows the open camp", async ({ page }) => {
+test("Camps lists five camps, then Show more, and always shows the open camp (#1431)", async ({ page }) => {
   const { url, ids } = await hubWithHobs();
   // Aldric has two camps already; five more make seven.
   const titles = ["Camp three", "Camp four", "Camp five", "Camp six", "Camp seven"];
@@ -273,7 +283,8 @@ const shareCamp = async (page: Page, campId: string, members: ReadonlyArray<stri
   });
 };
 
-test("a shared camp's row names who wrote its last line as it lands, in the four themes, and the rail shows only its faces", async ({
+// covers ADR 039 (The sidebar)
+test("a shared camp's row names who wrote its last line as it lands, in the four themes, and the rail shows only its faces (#1563)", async ({
   page,
   browser,
 }) => {

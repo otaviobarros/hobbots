@@ -50,7 +50,7 @@ const judge = () =>
 
 describe("the hub's brain on the fake runtime", () => {
   // covers ADR 037
-  it("keeps the rule when the fake's reply does not decode, on Claude Code and on Codex", async () => {
+  it("keeps the rule when the fake's reply does not decode, on Claude Code and on Codex (#1367)", async () => {
     for (const provider of ["claude", "chatgpt"] as const) {
       writeFileSync(memorySettingsFile(dataDir), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, provider }));
       const { decided, usage } = await judge();
@@ -61,7 +61,7 @@ describe("the hub's brain on the fake runtime", () => {
   });
 
   // covers ADR 037
-  it("calls no model with No AI, and reads a memory model saved before the hub's tasks", async () => {
+  it("calls no model with No AI, and reads a memory model saved before the hub's tasks (#1367)", async () => {
     const saved = {
       provider: "none",
       model: null,

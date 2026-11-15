@@ -157,7 +157,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers ADR 039, The sidebar (#1563)
-  it("reads who wrote each thread's last line with it, in a list and alone", async () => {
+  it("reads who wrote each thread's last line with it, in a list and alone (#1563)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -548,7 +548,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers ADR 034 (Scope, The Charm), DP-003
-  it("keeps a hob's Summoning scope and its withheld Charms with each configuration version", async () => {
+  it("keeps a hob's Summoning scope and its withheld Charms with each configuration version (#406)", async () => {
     const first = new Agent({
       id: agentId,
       name: "Aldric",
@@ -593,7 +593,7 @@ describe("HobbotsRepository", () => {
     expect(Option.getOrThrow(result.agent).policy.charms).toEqual({ granted: ["github"], withheld: ["summoning"] });
   });
 
-  it("stores who made each version and who summoned the hob, and journals each change with its actor", async () => {
+  it("stores who made each version and who summoned the hob, and journals each change with its actor (#405)", async () => {
     const chief = AgentId.make("chief");
     const call = { scope: "task:t-hire", key: "hire-1" };
     const byHob: ChangeActor = { _tag: "Hob", hobId: chief, call };

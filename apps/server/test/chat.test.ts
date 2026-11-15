@@ -165,6 +165,7 @@ describe("a reply that ends early", () => {
     expect(result.again._tag).toBe("ReplyNotResumable");
   });
 
+  // covers ADR 017; regression for #398
   it("keeps each reply's latency and token usage next to its runtime and model", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
@@ -241,7 +242,8 @@ describe("a reply that ends early", () => {
     expect(error._tag).toBe("ReplyNotResumable");
   });
 
-  it("refuses to continue a reply by a hob that is not in the camp, as one moved here from another camp", async () => {
+  // covers ADR 039 (A member hob works as itself)
+  it("refuses to continue a reply by a hob that is not in the camp, as one moved here from another camp (#1461)", async () => {
     const error = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -478,6 +480,7 @@ describe("tool calls in a reply", () => {
     expect(await statusAfter(() => (hob = EMPTY_HOB_POLICY))).toBe("streaming");
   });
 
+  // covers ADR 031
   it("stops a running turn once its hob loses a Charm, and keeps it when the hob gains one", async () => {
     let hob: ToolAccess["policy"]["hob"] = { ...EMPTY_HOB_POLICY, charms: { granted: ["github"] } };
     const changing = Layer.succeed(
@@ -570,7 +573,8 @@ describe("tool calls in a reply", () => {
     expect(status).toBe("interrupted");
   });
 
-  it("stops a running turn once you take over what its command may write, and keeps it when you give it back", async () => {
+  // Issue #1537
+  it("stops a running turn once you take over what its command may write, and keeps it when you give it back (#1537)", async () => {
     const docs = join(folder, "docs");
     let taken: ReadonlyArray<string> = [];
     const changing = Layer.succeed(

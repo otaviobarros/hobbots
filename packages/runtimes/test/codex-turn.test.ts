@@ -130,6 +130,7 @@ describe("a Codex turn", () => {
     expect(server.closed()).toBe(1);
   });
 
+  // covers ADR 024
   it("starts a Codex thread that asks about every call, inside Hobbots' sandbox, with no Codex attribution", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     const turnConfig = config(server.start);
@@ -174,6 +175,7 @@ describe("a Codex turn", () => {
     expect(starts[1]?.params).not.toHaveProperty("ephemeral");
   });
 
+  // covers ADR 017
   it("resumes the thread's Codex session, with changed instructions and a briefing inside the turn", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     await run(
@@ -241,6 +243,7 @@ describe("a Codex turn", () => {
     expect(exit).toEqual(Exit.fail(new RuntimeError({ message: LOST_TURN })));
   });
 
+  // covers ADR 024
   it("refuses every tool call on a turn without tools, and the turn goes on", async () => {
     const ask = (method: string, params: Record<string, unknown>) => ({
       method,
@@ -284,7 +287,7 @@ describe("a Codex turn", () => {
   });
 
   // regression for #1082
-  it("tells the running turn why each call was refused, as input the model reads next", async () => {
+  it("tells the running turn why each call was refused, as input the model reads next (#1082)", async () => {
     const ask = (method: string, params: Record<string, unknown>) => ({
       method,
       params: { threadId: THREAD, turnId: TURN, ...params },
@@ -340,6 +343,7 @@ describe("a Codex turn", () => {
     expect(limited).toEqual(Exit.fail(new RuntimeLimitReached({ resetsAt: null })));
   });
 
+  // covers ADR 024
   it("signs the turn in through the protocol and answers Codex's refresh with a fresh token", async () => {
     let issued = 0;
     const signIn = Effect.sync(
@@ -411,6 +415,7 @@ describe("a Codex turn", () => {
   const toolDone = (id: string, tool: string, success: boolean) =>
     item("item/completed", { type: "dynamicToolCall", id, tool, status: success ? "completed" : "failed", success });
 
+  // covers ADR 031: the step-recording contract every adapter passes (clean-runtime.ts).
   it("records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
     for (const records of [true, false]) {
       const contract = stepRecordingContract(records);
@@ -427,6 +432,7 @@ describe("a Codex turn", () => {
     }
   });
 
+  // covers ADR 024
   it("declares the turn's hub tools on a new Codex thread and answers each call through the hub, as a step", async () => {
     hubCalls.length = 0;
     const server = fakeServer({
@@ -464,6 +470,7 @@ describe("a Codex turn", () => {
     expect(Object.keys(command?.env ?? {}).filter((name) => /HOBBOTS|HUB|TOKEN/i.test(name))).toEqual([]);
   });
 
+  // covers ADR 024
   it("refuses a hub tool the turn does not offer, including on a resumed thread that offers none", async () => {
     hubCalls.length = 0;
     const offered = fakeServer({
@@ -503,6 +510,7 @@ describe("a Codex turn", () => {
     expect(hubCalls).toHaveLength(1);
   });
 
+  // covers ADR 024
   it("starts the turn only once the hub has taken the session, so no hub call comes before it", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     let taken = false;
@@ -532,6 +540,7 @@ describe("a Codex turn", () => {
     expect(startedAfterTaken).toBe(true);
   });
 
+  // covers ADR 024
   it("marks a hub tool call uncertain when Codex stops before it recorded the answer", async () => {
     hubCalls.length = 0;
     const server = fakeServer({ asks: [toolCall("call_1", "delegate_task", { hob: "Quill" })], dies: true });
@@ -554,6 +563,7 @@ describe("a Codex turn", () => {
 });
 
 describe("a Codex turn with tools", () => {
+  // covers ADR 014, ADR 024
   it("starts Codex in the sandbox, in the hob's folder, with its home closed but for what it writes", async () => {
     const root = realpathSync(mkdtempSync(join(temp, "tools-")));
     const repository = join(root, "repo");
@@ -883,7 +893,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   const runsSleep = runs("c1");
 
   // regression for #1048
-  it("waits for the command, records its real exit code and tells the hob in a follow-up turn", async () => {
+  it("waits for the command, records its real exit code and tells the hob in a follow-up turn (#1048)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -921,7 +931,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
     });
   });
 
-  it("says the reply waits on the outlived command once the hob has answered, and keeps waiting", async () => {
+  it("says the reply waits on the outlived command once the hob has answered, and keeps waiting (#1056)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -946,7 +956,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   });
 
   // regression for #1048
-  it("ends with no follow-up when every command ended inside the turn", async () => {
+  it("ends with no follow-up when every command ended inside the turn (#1048)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -964,7 +974,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   });
 
   // regression for #1048
-  it("reports each of two outlived commands as it ends, saying how many still run", async () => {
+  it("reports each of two outlived commands as it ends, saying how many still run (#1048)", async () => {
     const turn3 = "turn-3";
     const server = fakeServer({
       asks: [runs("c1"), runs("c2", "make build")],
@@ -1011,7 +1021,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   });
 
   // regression for #1048
-  it("cancelling during a follow-up turn interrupts that turn and ends once Codex acknowledges it", async () => {
+  it("cancelling during a follow-up turn interrupts that turn and ends once Codex acknowledges it (#1048)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -1163,6 +1173,7 @@ describe("a Codex turn's skills (ADR 029)", () => {
   const scripted = (skills: NonNullable<Parameters<typeof fakeServer>[0]["skills"]>) =>
     fakeServer({ script: [message("m1", "Hi."), completed("completed")], skills });
 
+  // covers ADR 029
   it("gives the App Server the turn's folder as its only extra root, with every other skill off", async () => {
     const server = scripted([]);
     // A home of its own, so no other test sees its skill.
@@ -1189,6 +1200,7 @@ describe("a Codex turn's skills (ADR 029)", () => {
     expect(existsSync(root)).toBe(false);
   });
 
+  // covers ADR 029
   it("does not start a turn Codex would load another skill in, and lets an administrator's through", async () => {
     const refused = scripted([
       { name: "stray", path: "/repo/.agents/skills/stray/SKILL.md", scope: "repo", enabled: true },

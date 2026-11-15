@@ -80,7 +80,7 @@ const tree = (attempts: ReadonlyArray<Attempt>) =>
   });
 
 describe("a step started again after its turn was stopped", () => {
-  it("is told the earlier session was stopped and what it reported, so it checks before redoing work", () => {
+  it("is told the earlier session was stopped and what it reported, so it checks before redoing work (#1446)", () => {
     const step = tree([attempt("interrupted")]);
     const prompt = stepPrompt(step.tasks[1] as Task, step);
     expect(prompt).toContain("An earlier session of this step was stopped before it finished");

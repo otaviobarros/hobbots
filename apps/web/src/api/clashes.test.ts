@@ -6,7 +6,7 @@ import { applyClaimEvent, clashesQuery } from "./clashes.ts";
 const clash = (key: string) => ({ key }) as unknown as ClaimClash;
 
 // A camp opens, and its first read of the clashes answers only after a Task claimed a file.
-it("drops a first read of the clashes taken before a claim, so the new Heads-up shows", async () => {
+it("drops a first read of the clashes taken before a claim, so the new Heads-up shows (#1390)", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const reads: Array<(clashes: ReadonlyArray<ClaimClash>) => void> = [];
   const observer = new QueryObserver(client, {

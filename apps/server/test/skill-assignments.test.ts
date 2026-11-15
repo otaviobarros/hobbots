@@ -244,6 +244,7 @@ const importSkill = async (name: string, extra?: string) => {
 };
 
 describe("skill assignments", () => {
+  // covers ADR 029 (Scopes, Delivery per runtime)
   it("a turn gets Everyone's skills, the hob's own and Only when asked ones, never another hob's or one it opted out of", async () => {
     const pip = await summon("Pip", 961);
     const quill = await summon("Quill", 962);
@@ -295,7 +296,7 @@ describe("skill assignments", () => {
   });
 
   // covers ADR 029 (Scopes), ADR 039 (One hob speaks at a time)
-  it("a member hob mentioned in a camp answers with its own skills, never the camp's hob's", async () => {
+  it("a member hob mentioned in a camp answers with its own skills, never the camp's hob's (#1461)", async () => {
     const pip = await summon("Pip", 963);
     const quill = await summon("Quill", 964);
     const releaseSkill = await importSkill("release");
@@ -315,7 +316,7 @@ describe("skill assignments", () => {
   });
 
   // covers ADR 029 (Scopes), ADR 039 (Hobs talking to hobs)
-  it("the camp's hob answers a member hob's relay with its own skills, never the member's", async () => {
+  it("the camp's hob answers a member hob's relay with its own skills, never the member's (#1463)", async () => {
     const pip = await summon("Pip", 965);
     const quill = await summon("Quill", 966);
     const releaseSkill = await importSkill("release");
@@ -339,6 +340,7 @@ describe("skill assignments", () => {
     expect(relayed?.skills?.map((skill) => skill.name)).toEqual(["release", "shared"]);
   });
 
+  // covers ADR 029 (Pins and rollout)
   it("saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
     const pip = await summon("Pip", 963);
     const quill = await summon("Quill", 964);
@@ -503,6 +505,7 @@ describe("skill exports", () => {
 
 // #1096: which skills a reply used, mapped to the revision its turn mounted, and how often (ADR 029, The use line).
 describe("skill uses", () => {
+  // covers ADR 029 (The use line)
   it("a reply records each skill it used at the revision its turn had, and never one it was not given", async () => {
     const pip = await summon("Pip", 965);
     const first = await importSkill("release-steps");
@@ -531,6 +534,7 @@ describe("skill uses", () => {
     expect((await replies(thread, 2)).skillsUsed).toEqual([]);
   });
 
+  // covers ADR 029 (Explicit use, The use line)
   it("a skill you pick is handed to the turn and shown as yours, and its uses are counted per hob and thread", async () => {
     const pip = await summon("Pip", 966);
     const quill = await summon("Quill", 967);
@@ -625,7 +629,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("a set's new version is one update for all its skills, a held hob stays on the old one, and both mention forms pick a skill", async () => {
+  it("a set's new version is one update for all its skills, a held hob stays on the old one, and both mention forms pick a skill (#1143)", async () => {
     const pip = await summon("Pip", 970);
     const quill = await summon("Quill", 971);
     const plugin = join(root, "agent-engineering");
@@ -754,7 +758,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("the Skills page reads a set: its skills in the library, the files they share, each skill's uses, and a copy of one", async () => {
+  it("the Skills page reads a set: its skills in the library, the files they share, each skill's uses, and a copy of one (#1143)", async () => {
     const pip = await summon("Pip", 973);
     const plugin = join(root, "agent-engineering-page");
     await mkdir(join(plugin, ".claude-plugin"), { recursive: true });

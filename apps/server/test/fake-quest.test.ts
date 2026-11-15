@@ -133,7 +133,8 @@ const askForCampaign = Effect.gen(function* () {
 });
 
 describe("FakeQuestLive", () => {
-  it("a Quest whose chapter moves into a camp while it runs goes on there, and its lead's next messages land in the camp", async () => {
+  // covers ADR 037 (Quests in camps)
+  it("a Quest whose chapter moves into a camp while it runs goes on there, and its lead's next messages land in the camp (#1389)", async () => {
     runtime = ManagedRuntime.make(App);
     await runtime.runPromise(
       Effect.gen(function* () {

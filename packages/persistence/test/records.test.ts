@@ -110,7 +110,8 @@ const request = (fields: Partial<DecisionRequest> = {}): DecisionRequest => ({
 });
 
 describe("decisions", () => {
-  it("keeps a replaced decision crossed out in the record and out of the active ones", async () => {
+  // covers ADR 037 (Records)
+  it("keeps a replaced decision crossed out in the record and out of the active ones (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { reply } = yield* seed;
@@ -151,7 +152,8 @@ describe("decisions", () => {
     expect(result.all.filter(DecisionStates.isActive).map((decision) => decision.id)).toEqual(["d2"]);
   });
 
-  it("records a retried key once, refuses it for another decision, and refuses a text over the limit", async () => {
+  // covers ADR 037 (Records)
+  it("records a retried key once, refuses it for another decision, and refuses a text over the limit (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -176,7 +178,8 @@ describe("decisions", () => {
     expect(result.all.map((decision) => decision.id)).toEqual(["d1"]);
   });
 
-  it("crosses a decision out once, by you, and takes no decision in a closed camp", async () => {
+  // covers ADR 037 (Records)
+  it("crosses a decision out once, by you, and takes no decision in a closed camp (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { yours } = yield* seed;
@@ -220,7 +223,8 @@ describe("decisions", () => {
     expect(result.closed).toMatchObject(Exit.fail({ _tag: "DecisionRefused", reason: "thread-closed" }));
   });
 
-  it("takes the same key in another thread as a new request, recording a decision there too", async () => {
+  // covers ADR 037 (Records), STD-ARCH-014
+  it("takes the same key in another thread as a new request, recording a decision there too (#1383)", async () => {
     const other = ThreadId.make("t2");
     const result = await run(
       Effect.gen(function* () {
@@ -244,7 +248,7 @@ describe("decisions", () => {
   });
 
   // covers ADR 037 (Chapters, Records), STD-ARCH-019
-  it("moves a chapter's decisions and artifacts with its messages when it is split or merged", async () => {
+  it("moves a chapter's decisions and artifacts with its messages when it is split or merged (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { reply } = yield* seed;
@@ -368,7 +372,8 @@ describe("artifacts", () => {
     removed: [],
   };
 
-  it("keeps each artifact once at its latest version, whatever record made it, and a record twice counts once", async () => {
+  // covers ADR 037 (Records)
+  it("keeps each artifact once at its latest version, whatever record made it, and a record twice counts once (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { reply } = yield* seed;
@@ -430,7 +435,7 @@ describe("artifacts", () => {
 
 describe("message authors", () => {
   // covers ADR 037 (Every author is an actor)
-  it("names you or the thread's hob as each message's author, read and journaled", async () => {
+  it("names you or the thread's hob as each message's author, read and journaled (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { yours, reply } = yield* seed;
@@ -444,7 +449,7 @@ describe("message authors", () => {
   });
 
   // covers ADR 037 (Every author is an actor), DP-003
-  it("gives every stored message and journaled message entry an author when it migrates", async () => {
+  it("gives every stored message and journaled message entry an author when it migrates (#1383)", async () => {
     const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0101")) as typeof migrations;
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();

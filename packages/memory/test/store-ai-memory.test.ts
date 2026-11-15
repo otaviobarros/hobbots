@@ -76,7 +76,7 @@ describe("ai-memory scopes", () => {
 
 describe.runIf(engineEnabled)("who wrote each version, when the hub cannot keep it", () => {
   // covers ADR 028 (forget, restore), #1317
-  it("still writes, forgets with its Undo, and restores when the record of authors fails", async () => {
+  it("still writes, forgets with its Undo, and restores when the record of authors fails (#1317)", async () => {
     const { dataDir, keys } = engineDataDir();
     const broken = MemoryVersionAuthors.of({
       record: () => Effect.die(new Error("the database is gone")),

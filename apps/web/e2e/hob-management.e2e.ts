@@ -32,7 +32,7 @@ const hobPayload = (name: string, lookSeed: number) => ({
 });
 
 // covers ADR 034 (Asking is a proposal: created hobs come back as cards; Records and events: Summoned by), #412
-test("once you allow a summon in the chat, each hob it made opens from its card in the chat and shows who summoned it", async ({
+test("once you allow a summon in the chat, each hob it made opens from its card in the chat and shows who summoned it (#412)", async ({
   page,
 }) => {
   dataDir = emptyDataDir();

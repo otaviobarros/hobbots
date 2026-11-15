@@ -88,7 +88,9 @@ const draftWith = async (page: Page, url: string, name: string, skill: string) =
 };
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
-test("Draft it with a hob offers only the hobs that may suggest skills, and passes the scan", async ({ page }) => {
+test("Draft it with a hob offers only the hobs that may suggest skills, and passes the scan (#1144)", async ({
+  page,
+}) => {
   const { url } = await draftHub();
   await page.goto(`${url}/#/skills?add=write`);
   const main = page.getByRole("main", { name: "Skills" });
@@ -107,7 +109,7 @@ test("Draft it with a hob offers only the hobs that may suggest skills, and pass
 });
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
-test("hobs that could not be read never read as none allowed, and Try again lists them", async ({ page }) => {
+test("hobs that could not be read never read as none allowed, and Try again lists them (#1144)", async ({ page }) => {
   const { url } = await draftHub();
   // The hobs fail to read until the hub answers again; every other read answers.
   let down = true;
@@ -135,7 +137,7 @@ test("hobs that could not be read never read as none allowed, and Try again list
 });
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
-test("with no hob that may suggest skills, it says so and where to allow it", async ({ page }) => {
+test("with no hob that may suggest skills, it says so and where to allow it (#1144)", async ({ page }) => {
   const { url, api, ada, cody } = await draftHub();
   for (const hob of [ada, cody]) {
     await api("PATCH", `/agents/${hob.id}/permissions`, { overrides: { "propose-skill": "deny" } });
@@ -154,7 +156,7 @@ for (const [name, runtime] of [
   ["Cody", "Codex"],
 ] as const) {
   // covers ADR 029 (Proactive hobs, The Skills page), #1144
-  test(`a ${runtime} hob drafts the skill in a new chat, and it waits in To review from that chat`, async ({
+  test(`a ${runtime} hob drafts the skill in a new chat, and it waits in To review from that chat (#1144)`, async ({
     page,
   }) => {
     const started = await draftHub();

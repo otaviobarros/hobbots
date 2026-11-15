@@ -372,6 +372,7 @@ describe.runIf(sandboxed && outsideAddress !== undefined)("a turn on an installe
 
   const turn = (prompt: string, sessionId: string | null) => policyTurn(config, access, prompt, sessionId);
 
+  // covers ADR 023, ADR 024
   it("holds a command for approval, runs it after Allow in the sandbox, and a rule it writes never skips the policy", {
     timeout: 120_000,
   }, async () => {
@@ -475,6 +476,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
     rmSync(root, { recursive: true, force: true });
   });
 
+  // covers ADR 023, ADR 024
   it("holds a command for approval, runs it after Allow, streams it to the Workbench, and records a patch", {
     timeout: 60_000,
   }, async () => {
@@ -501,7 +503,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
   });
 
   // regression for #1082
-  it("tells the hob why a command was refused, beside the rejection in its next model request", {
+  it("tells the hob why a command was refused, beside the rejection in its next model request (#1082)", {
     timeout: 60_000,
   }, async () => {
     // The commit sets its own identity, which the hub refuses; told why, the hob commits without it.
@@ -525,7 +527,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
   });
 
   // regression for #1048
-  it("waits for a command that outlives Codex's turn, records how it really ended and tells the hob", {
+  it("waits for a command that outlives Codex's turn, records how it really ended and tells the hob (#1048)", {
     timeout: 60_000,
   }, async () => {
     // Codex answers the call once its wait ends while the command goes on, and the model replies.

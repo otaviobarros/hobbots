@@ -80,7 +80,7 @@ const TITLE = "Write the launch page";
 const criterion = (page: Page, text: string) =>
   page.getByRole("dialog").getByRole("region", { name: "Done when" }).getByRole("listitem").filter({ hasText: text });
 
-test("the quest's sheet shows each criterion accepted on a version, voided by a newer one, and waived only by your answer", async ({
+test("the quest's sheet shows each criterion accepted on a version, voided by a newer one, and waived only by your answer (#1445)", async ({
   page,
 }) => {
   test.setTimeout(90_000);

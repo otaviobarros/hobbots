@@ -240,7 +240,7 @@ describe("hob tools for Tasks and Quests", () => {
 describe("holdsEveryTaskTool", () => {
   const all = TASK_TOOLS.map((tool) => tool.name);
   // covers ADR 024, RT-001 (#1543)
-  it("holds only a session whose recorded tools include every Task tool, in any order", () => {
+  it("holds only a session whose recorded tools include every Task tool, in any order (#1543)", () => {
     // Not known, as for every session recorded before #1543: not held, so the session is replaced.
     expect(holdsEveryTaskTool(undefined)).toBe(false);
     expect(holdsEveryTaskTool([])).toBe(false);
@@ -287,7 +287,8 @@ describe("the ids a Task tool takes", () => {
   };
   const ID_LISTS = new Set(["tasks", "depends_on", "criteria", "evidence", "expected_revision"]);
 
-  it("each have a place a lead reads them again from the records", () => {
+  // Issue #1555
+  it("each have a place a lead reads them again from the records (#1555)", () => {
     const taken = Object.entries(TaskToolInputs).flatMap(([tool, schema]) =>
       Object.keys(schema.fields)
         .filter((field) => field.endsWith("_id") || ID_LISTS.has(field))

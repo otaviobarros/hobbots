@@ -111,7 +111,8 @@ describe("authority only narrows", () => {
 });
 
 describe("the authority of a hob taking a Task over", () => {
-  it("keeps a restriction the lead gained after the delegation, and never holds more than the lead or the new hob", () => {
+  // covers STD-SEC-003
+  it("keeps a restriction the lead gained after the delegation, and never holds more than the lead or the new hob (#1446)", () => {
     // The delegation answered only push; since then the lead was refused edit-files on purpose.
     const leadNow: Authority = {
       ...lead,

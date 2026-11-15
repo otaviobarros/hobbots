@@ -1192,7 +1192,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("sends nothing of a private camp or its Quest's work, after a replayed journal too, and moves the cursor past it", () =>
+    it("sends nothing of a private camp or its Quest's work, after a replayed journal too, and moves the cursor past it (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1265,7 +1265,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("stops capture from when a camp is made private, keeps what memory had, and goes on once it is public again", () =>
+    it("stops capture from when a camp is made private, keeps what memory had, and goes on once it is public again (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1302,7 +1302,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("never sends what was written while a camp was private, once it is public again, from a backlog or a replay", () =>
+    it("never sends what was written while a camp was private, once it is public again, from a backlog or a replay (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           // Memory is down while the camp is private, and public again by the time it is back.
@@ -1364,7 +1364,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("keeps out for good an Attempt's step and a reply written while the camp was private, after it is public again", () =>
+    it("keeps out for good an Attempt's step and a reply written while the camp was private, after it is public again (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1433,7 +1433,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread)
-    it("keeps each hob's own replies, and the messages it took a turn on, in its own memory only, on Claude Code and Codex", () =>
+    it("keeps each hob's own replies, and the messages it took a turn on, in its own memory only, on Claude Code and Codex (#1466)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const camp = ThreadId.make(crypto.randomUUID());
@@ -1483,7 +1483,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
-    it("captures nothing of a private camp in any member hob's memory, and making it private ends every hob's session", () =>
+    it("captures nothing of a private camp in any member hob's memory, and making it private ends every hob's session (#1466)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const quiet = ThreadId.make(crypto.randomUUID());
@@ -1517,7 +1517,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread), ADR 028 (Scopes)
-    it("writes a hob's capture only to its own memory, as itself, never to another hob's", () =>
+    it("writes a hob's capture only to its own memory, as itself, never to another hob's (#1466)", () =>
       run(({ memory, journal }) =>
         Effect.gen(function* () {
           const writes: Array<{ readonly as: string; readonly to: string; readonly sessionId: string }> = [];
@@ -1561,7 +1561,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
-    it("never keeps a message written before capture started, whose camp may have been private then", () =>
+    it("never keeps a message written before capture started, whose camp may have been private then (#1466)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           // Memory was off when the message was written, so capture never saw whether its camp was private.

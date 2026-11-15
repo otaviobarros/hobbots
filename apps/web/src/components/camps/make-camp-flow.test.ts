@@ -46,7 +46,7 @@ describe("Make a camp", () => {
   });
 
   // covers ADR 039 (Members), #1467
-  it("keeps the hobs in the order picked, the first leading, and sends the others", () => {
+  it("keeps the hobs in the order picked, the first leading, and sends the others (#1467)", () => {
     expect(toggleHob([ALDRIC], QUILL)).toEqual([ALDRIC, QUILL]);
     expect(toggleHob([ALDRIC, QUILL], PIP)).toEqual([ALDRIC, QUILL, PIP]);
     // Unticking the lead makes the next hob picked lead.

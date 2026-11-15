@@ -140,7 +140,9 @@ test("while a turn runs the Terminal is Live: a running command counts its time,
 
 // Issue #1018: a command run in the background stays Running after its call returns, until it
 // really ends, and one still running when the turn ends is Cut off rather than Succeeded.
-test("a background command stays Running after its call returns, then ends with its own outcome", async ({ page }) => {
+test("a background command stays Running after its call returns, then ends with its own outcome (#1018)", async ({
+  page,
+}) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, ["Start the dev server", script("start_quest", { key: "quest", goal: "Start the dev server" })]);

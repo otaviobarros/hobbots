@@ -86,7 +86,7 @@ const withinLimits = (bounds: TurnLimits, all: ReadonlyArray<TurnHolder>) =>
   );
 
 describe("TurnTicketMachine", () => {
-  it("agrees with a model of waiting, starting, ending and going away over random runs", () => {
+  it("agrees with a model of waiting, starting, ending and going away over random runs (#1448)", () => {
     agreesWithModel({
       machine: TurnTicketMachine,
       records: fc
@@ -98,7 +98,7 @@ describe("TurnTicketMachine", () => {
     });
   });
 
-  it("names the turn it refuses and lists its rules", () => {
+  it("names the turn it refuses and lists its rules (#1448)", () => {
     const refused = TurnTicketMachine.transition(ticket({ state: "released" }), { _tag: "Admit" });
     expect(refused).toBeInstanceOf(IllegalTurnTicketTransition);
     expect(refused).toMatchObject({ id: "thread:shire", from: "released", to: "active" });
@@ -119,7 +119,7 @@ describe("turn limits", () => {
     ...holder,
   });
 
-  it("names the limit a turn would go past: its hob's, its Quest's, then its runtime's", () => {
+  it("names the limit a turn would go past: its hob's, its Quest's, then its runtime's (#1448)", () => {
     const bounds = { perHob: 1, perQuest: 1, perRuntime: { "claude-code": 2, codex: 1 } };
     expect(limitReached(bounds, [active({})], active({}))).toBe("hob");
     expect(limitReached(bounds, [active({ quest: "q1" })], active({ agentId: BRAM, quest: "q1" }))).toBe("quest");
@@ -131,7 +131,7 @@ describe("turn limits", () => {
     expect(limitReached(DEFAULT_TURN_LIMITS, [], active({}))).toBe(null);
   });
 
-  it("starts waiting turns only within every limit, the Quest served least recently first", () => {
+  it("starts waiting turns only within every limit, the Quest served least recently first (#1448)", () => {
     fc.assert(
       fc.property(
         limits,
@@ -166,7 +166,7 @@ describe("turn limits", () => {
     );
   });
 
-  it("gives a free slot to the Quest that waited without a turn, not the busy one that asked first", () => {
+  it("gives a free slot to the Quest that waited without a turn, not the busy one that asked first (#1448)", () => {
     const bounds = { perHob: 4, perQuest: 4, perRuntime: { "claude-code": 1, codex: 1 } };
     const busy = ticket({ id: "step:busy-2", quest: "busy", asked: 1 });
     const quiet = ticket({ id: "step:quiet-1", agentId: BRAM, quest: "quiet", asked: 2 });

@@ -60,7 +60,7 @@ const replies = (all: ReadonlyArray<Message>) =>
 describe("pass", () => {
   // covers ADR 039 (One hob speaks at a time), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on %s, a hob that passes leaves no message, and the next hob asked answers",
+    "on %s, a hob that passes leaves no message, and the next hob asked answers (#1462)",
     async (runtime) => {
       const { run, requests, answers, reactions } = await campOn(runtime);
       // Pip, asked first, has nothing to add; Frodo answers after it.
@@ -91,7 +91,7 @@ describe("pass", () => {
   );
 
   // covers ADR 039 (One hob speaks at a time)
-  it("every chat turn is offered pass, and a turn only it was asked for, or with no reason, is refused", async () => {
+  it("every chat turn is offered pass, and a turn only it was asked for, or with no reason, is refused (#1462)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers } = party;
@@ -110,7 +110,7 @@ describe("pass", () => {
   }, 30_000);
 
   // covers ADR 039 (One hob speaks at a time), ADR 024, RT-001
-  it("on codex, a session that started without pass is not resumed, so the next turn holds it", async () => {
+  it("on codex, a session that started without pass is not resumed, so the next turn holds it (#1462)", async () => {
     let first = true;
     const party = partyHub({
       lead: "codex",

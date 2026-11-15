@@ -132,7 +132,7 @@ const byChief: ChangeActor = { _tag: "Hob", hobId: chief, call };
 const now = "2026-11-08T12:00:00.000Z";
 
 describe("a hob's History and the Changes log", () => {
-  it("lists every version and status change with its actor, the one before it and the request behind a hob's change", async () => {
+  it("lists every version and status change with its actor, the one before it and the request behind a hob's change (#411)", async () => {
     await request("POST", "/api/agents", { ...hob, id: chief, name: "Chief" });
     const created = (await request("POST", "/api/agents", hob)).body as Agent;
     await runtime.runPromise(
@@ -192,7 +192,7 @@ describe("a hob's History and the Changes log", () => {
     expect(await request("GET", "/api/agents/nobody/changes")).toMatchObject({ status: 404 });
   });
 
-  it("reverts the latest change as a new version made by you, and refuses an older one or the first", async () => {
+  it("reverts the latest change as a new version made by you, and refuses an older one or the first (#411)", async () => {
     const created = (await request("POST", "/api/agents", hob)).body as Agent;
     await runtime.runPromise(
       HobService.use((hobs) => hobs.update(created.id, { name: "Ash", instructions: "Planted." }, byChief)),
@@ -219,7 +219,7 @@ describe("a hob's History and the Changes log", () => {
     const events = await runtime.runPromise(EventJournal.use((journal) => journal.readAfter(0)));
     expect(events.at(-1)?.payload).toMatchObject({ _tag: "AgentUpserted", agent: { configVersion: 3 }, actor: YOU });
   });
-  it("checks a folder a revert gives back as adding it would: gone is refused, a link is stored canonical", async () => {
+  it("checks a folder a revert gives back as adding it would: gone is refused, a link is stored canonical (#411)", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "hob-revert-")));
     try {
       const created = (await request("POST", "/api/agents", hob)).body as Agent;

@@ -30,7 +30,7 @@ const run = (events: ReadonlyArray<DecisionFormEvent>, from: DecisionForm = DECI
   events.reduce(decisionFormStep, from);
 
 describe("recording a decision", () => {
-  it("shows the problem only once a send finds it, then saves the trimmed text under its key", () => {
+  it("shows the problem only once a send finds it, then saves the trimmed text under its key (#1387)", () => {
     const empty = run([
       { _tag: "Open", replaces: null },
       { _tag: "Send", key: "k1" },
@@ -49,7 +49,7 @@ describe("recording a decision", () => {
     expect(run([{ _tag: "Saved" }], saving)).toEqual(DECISION_FORM_CLOSED);
   });
 
-  it("keeps a change's text and key when it fails, and asks under a new key once edited", () => {
+  it("keeps a change's text and key when it fails, and asks under a new key once edited (#1387)", () => {
     const failed = run([
       { _tag: "Open", replaces: old },
       { _tag: "Edit", text: "Ship on Wednesdays." },
@@ -70,7 +70,7 @@ describe("recording a decision", () => {
     expect(run([{ _tag: "Close" }, { _tag: "Edit", text: "x" }], edited)).toBe(edited);
   });
 
-  it("tells a refused change from one that got no answer", () => {
+  it("tells a refused change from one that got no answer (#1387)", () => {
     expect(recordDecisionError(new ApiError("", "DecisionChangeRefused"))).toBe("refused");
     expect(recordDecisionError(new TypeError("Failed to fetch"))).toBe("unreachable");
   });

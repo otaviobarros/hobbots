@@ -152,7 +152,7 @@ describe("query responses during a sync generation", () => {
 
 describe("a chapter moved into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, STD-REACT-028
-  it("shows a message an event brought in the camp it moved to, and never again in the chat", async () => {
+  it("shows a message an event brought in the camp it moved to, and never again in the chat (#1385)", async () => {
     const client = new QueryClient();
     const campId = ThreadId.make("camp-1");
     const chapter = (id: string, thread: ThreadId, state: "moved" | "live", revision: number) =>
@@ -196,7 +196,7 @@ describe("a chapter moved into a camp", () => {
   });
 
   // covers ADR 037 (Moving a chapter into a camp moves it), STD-REACT-012
-  it("drops a first transcript read that began before the move, which no event told about the message", async () => {
+  it("drops a first transcript read that began before the move, which no event told about the message (#1385)", async () => {
     const client = new QueryClient();
     const campId = ThreadId.make("camp-1");
     const chapter = (id: string, thread: ThreadId, state: "moved" | "live") =>

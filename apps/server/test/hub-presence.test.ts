@@ -68,6 +68,7 @@ const health = (installationId: string) =>
   JSON.stringify({ app: "hobbots", installationId, version: "test", dataDir: "/elsewhere" });
 
 describe("whether a hub is using a data folder", () => {
+  // Issue #999
   it("trusts a live record, sees past a stale one, and refuses a port that does not answer", async () => {
     // A hub's record of a live process counts, whatever port it names.
     writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: process.pid, port: 4393 }));
@@ -125,6 +126,7 @@ describe("whether a hub is using a data folder", () => {
 });
 
 describe("a hub's record of itself", () => {
+  // Issue #999
   it("a second hub cannot take a live hub's record, and only the hub that holds it updates or removes it", async () => {
     const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"]);
     try {
@@ -159,6 +161,7 @@ describe("a hub's record of itself", () => {
 });
 
 describe("hubs that claim a data folder at once", () => {
+  // Issue #999
   it("of hubs starting together on a crashed hub's folder, exactly one takes it", {
     timeout: 60_000,
   }, async () => {

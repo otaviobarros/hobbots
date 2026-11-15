@@ -172,7 +172,7 @@ describe("entryRow", () => {
     ]);
   });
 
-  it("lists a Task's write whose answer was lost from its hob, under the Task's quest", () => {
+  it("lists a Task's write whose answer was lost from its hob, under the Task's quest (#1343)", () => {
     const entry = charmCallEntry(lostComment);
     expect(entry.key).toBe(`charm-call:${COPY}:attempt-1`);
     expect(namesRequest(entry.key)).toBe(false);
@@ -323,7 +323,7 @@ describe("hob proposals", () => {
       revision: Revision.make(1),
     });
 
-  it("lists a manager's open proposal under its Task's quest, and keeps a settled one only while it is open", () => {
+  it("lists a manager's open proposal under its Task's quest, and keeps a settled one only while it is open (#409)", () => {
     const base = { devices: [], questions: [], blockers: [], failed: [], requests: [] };
     const open = { proposal: proposal("open"), changedSince: [] };
     const settled = { proposal: proposal("settled"), changedSince: [] };

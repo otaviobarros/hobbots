@@ -218,6 +218,7 @@ describe("Completing a Task that changed a Git repository", () => {
     });
   });
 
+  // Issue #665
   it("holds the Quest's top Task once on files it left uncommitted, and completes when its lead says why", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
@@ -264,6 +265,7 @@ describe("Completing a Task that changed a Git repository", () => {
     ]);
   });
 
+  // Issue #665
   it("keeps holding the Quest's top Task on a file an earlier Attempt left, after a brain or configuration change", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");

@@ -102,7 +102,7 @@ test("search finds pages across scopes, and What changed shows a new hob's saves
 });
 
 // covers ADR 028 (Search), #1047
-test("search finds a page by a question in plain words or a word start, and marks the words it matched", async ({
+test("search finds a page by a question in plain words or a word start, and marks the words it matched (#1047)", async ({
   page,
 }) => {
   const { url, summon } = await hubWithMemory("seeded");

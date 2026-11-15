@@ -72,7 +72,7 @@ const stuckCopy = async (page: import("@playwright/test").Page, after: ReadonlyA
   return current;
 };
 
-test("a stuck member's lane says Stuck with Retry, and Reassign… on its Inbox card hands the Task on and clears the stuck work", async ({
+test("a stuck member's lane says Stuck with Retry, and Reassign… on its Inbox card hands the Task on and clears the stuck work (#1087)", async ({
   page,
 }) => {
   const current = await stuckCopy(page);
@@ -99,7 +99,9 @@ test("a stuck member's lane says Stuck with Retry, and Reassign… on its Inbox 
   await expect(page.getByRole("dialog")).not.toContainText("Stuck");
 });
 
-test("cancelling a stuck member's Task from its lane closes its stuck work, so nothing needs you", async ({ page }) => {
+test("cancelling a stuck member's Task from its lane closes its stuck work, so nothing needs you (#1087)", async ({
+  page,
+}) => {
   const current = await stuckCopy(page);
   await openQuest(page, "Plan the launch");
   await expect(laneHead(page, "Quill")).toContainText("Stuck");
@@ -110,7 +112,7 @@ test("cancelling a stuck member's Task from its lane closes its stuck work, so n
   await expect(page.getByText("Nothing needs you")).toBeVisible();
 });
 
-test("says when Retry in a stuck lane is not saved, and when the card cannot read whether the Task can change hands", async ({
+test("says when Retry in a stuck lane is not saved, and when the card cannot read whether the Task can change hands (#1087)", async ({
   page,
 }) => {
   const current = await stuckCopy(page);
@@ -142,7 +144,7 @@ test("says when Retry in a stuck lane is not saved, and when the card cannot rea
   await expect(card.getByRole("button", { name: "Reassign…" })).toBeVisible();
 });
 
-test("Retry in a stuck lane gives the hob a fresh try, which finishes the Task, so the lane and the Inbox stop saying it is stuck", async ({
+test("Retry in a stuck lane gives the hob a fresh try, which finishes the Task, so the lane and the Inbox stop saying it is stuck (#1087)", async ({
   page,
 }) => {
   // The try that is cut off keeps the completion for the session's next turn: only the fresh try

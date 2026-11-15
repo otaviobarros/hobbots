@@ -66,7 +66,7 @@ const page = (id: string, messageId: string, at: string) =>
 
 describe("web records and Settings › Web", () => {
   // covers ADR 036 (Usage and limits), ADR 013
-  it("records searches and pages with their journal events, and counts them per turn, hob and day", async () => {
+  it("records searches and pages with their journal events, and counts them per turn, hob and day (#1269)", async () => {
     const read = await Effect.gen(function* () {
       yield* storedHob("ada");
       const records = yield* WebRecords;
@@ -129,7 +129,7 @@ describe("web records and Settings › Web", () => {
   });
 
   // covers ADR 036 (Usage and limits: settings and Codex's next turn)
-  it("keeps Settings › Web, a hob's own limits and a session's hold on search, which is taken once", async () => {
+  it("keeps Settings › Web, a hob's own limits and a session's hold on search, which is taken once (#1269)", async () => {
     const read = await Effect.gen(function* () {
       yield* storedHob("ada");
       const records = yield* WebRecords;
@@ -161,7 +161,7 @@ describe("web records and Settings › Web", () => {
   });
 
   // covers ADR 036 (Usage and limits: Quest counts), OR-002
-  it("counts a Quest's records over its own Task and every Task under it, a nested Quest's too", async () => {
+  it("counts a Quest's records over its own Task and every Task under it, a nested Quest's too (#1269)", async () => {
     const read = await Effect.gen(function* () {
       yield* storedHob("ada");
       const sql = yield* SqlClient.SqlClient;
@@ -212,7 +212,7 @@ describe("web records and Settings › Web", () => {
   });
 
   // covers ADR 036 (Usage and limits: Usage's searches and pages)
-  it("counts what every hob searched and read since a time, per hob and per turn, as the memory records do", async () => {
+  it("counts what every hob searched and read since a time, per hob and per turn, as the memory records do (#1271)", async () => {
     const recorded = Effect.gen(function* () {
       const records = yield* WebRecords;
       yield* records.recordSearch(search("s0", "m0", "2026-11-01T10:00:00.000Z", null));

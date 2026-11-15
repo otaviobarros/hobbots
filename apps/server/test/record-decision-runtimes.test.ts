@@ -135,7 +135,8 @@ const decide = async (runtime: HubCallRuntime) => {
 };
 
 describe("record_decision on every runtime", () => {
-  it("each runtime records a decision by the hob from its reply, and refuses one over the limit", {
+  // covers ADR 037 (Records)
+  it("each runtime records a decision by the hob from its reply, and refuses one over the limit (#1383)", {
     timeout: 240_000,
   }, async () => {
     expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);

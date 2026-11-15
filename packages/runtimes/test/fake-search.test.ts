@@ -44,7 +44,7 @@ const turn = (
     .then((events) => Array.from(events));
 
 describe("the fake runtime's web search", () => {
-  it("runs a scripted search a hob may make, reports it and counts it in the turn's usage", async () => {
+  it("runs a scripted search a hob may make, reports it and counts it in the turn's usage (#1266)", async () => {
     const events = await turn(EMPTY_HOB_POLICY, true);
     expect(events).toContainEqual({
       _tag: "WebSearched",
@@ -55,7 +55,7 @@ describe("the fake runtime's web search", () => {
     expect(events.at(-1)).toMatchObject({ _tag: "Completed", usage: { webSearches: 1 } });
   });
 
-  it("does not search for a hob set to Never, nor on a turn the hub did not let search", async () => {
+  it("does not search for a hob set to Never, nor on a turn the hub did not let search (#1266)", async () => {
     for (const events of [
       await turn({ ...EMPTY_HOB_POLICY, overrides: { "search-web": "deny" } }, true),
       await turn(EMPTY_HOB_POLICY, false),
@@ -67,7 +67,7 @@ describe("the fake runtime's web search", () => {
   });
 
   // covers ADR 036
-  it("records a search's results with the turn's recorder before a hub call after it runs", async () => {
+  it("records a search's results with the turn's recorder before a hub call after it runs (#1289)", async () => {
     const order: Array<string> = [];
     const hubTools: HubTools = {
       tools: [{ name: "web_fetch", description: "Reads a page.", inputSchema: { type: "object" }, label: "Reading" }],
@@ -96,7 +96,7 @@ describe("the fake runtime's web search", () => {
   });
 
   // covers ADR 036 (Usage and limits)
-  it("refuses a search the hub's limits refuse, with their words, as Claude Code does", async () => {
+  it("refuses a search the hub's limits refuse, with their words, as Claude Code does (#1269)", async () => {
     const limit = "This hob reached its limit of 0 web searches a day, set in Settings › Web.";
     const events = await turn(EMPTY_HOB_POLICY, true, () => Effect.succeed(limit));
     expect(events).toContainEqual(

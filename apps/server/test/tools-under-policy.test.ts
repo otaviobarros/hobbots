@@ -300,7 +300,7 @@ describe("long tool output", () => {
   });
 
   // covers ADR 037 (Moving a chapter into a camp moves it)
-  it("serves a long output's full log from the camp its chapter moved to, and no longer from the chat", async () => {
+  it("serves a long output's full log from the camp its chapter moved to, and no longer from the chat (#1385)", async () => {
     const thread = await hobInProject("balanced");
     const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
     const [step] = toolSteps(reply);

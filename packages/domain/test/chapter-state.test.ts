@@ -83,7 +83,7 @@ const events: fc.Arbitrary<ChapterEvent> = fc.oneof(
 
 describe("ChapterStateMachine", () => {
   // covers ADR 037 (Chapters)
-  it("declares live, resting and moved, and which events lead where", () => {
+  it("declares live, resting and moved, and which events lead where (#1379)", () => {
     expect(ChapterStateMachine.states).toEqual(["live", "resting", "moved"]);
     expect(ChapterStateMachine.table.map((row) => [row.event, row.from, row.to, row.guarded])).toEqual([
       ["End", ["live"], "resting", false],
@@ -102,7 +102,7 @@ describe("ChapterStateMachine", () => {
   });
 
   // covers ADR 037 (Chapters), STD-ARCH-013
-  it("agrees with its model on random runs of events", () => {
+  it("agrees with its model on random runs of events (#1379)", () => {
     agreesWithModel({
       machine: ChapterStateMachine,
       records: fc
@@ -125,7 +125,7 @@ describe("chapter commands' rules", () => {
   const two = [chapter("c1", 1, "resting", { endedAt: at(5) }), chapter("c2", 2, "live", { startedAt: at(5) })];
 
   // covers ADR 037 (Chapters)
-  it("starts a chapter after the live one, which rests, and refuses an empty title or an empty live chapter", () => {
+  it("starts a chapter after the live one, which rests, and refuses an empty title or an empty live chapter (#1379)", () => {
     const started = plan(
       planStart(THREAD, two, { id: ChapterId.make("c3"), title: "  The\n garden ", at: at(9), liveHasMessages: true }),
     );
@@ -146,7 +146,7 @@ describe("chapter commands' rules", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("splits a chapter at a message into the chapter after it, numbering the rest again", () => {
+  it("splits a chapter at a message into the chapter after it, numbering the rest again (#1379)", () => {
     const point = { messageId: MessageId.make("m4"), chapterId: ChapterId.make("c1"), createdAt: at(3), first: false };
     const split = plan(planSplit(THREAD, two, point, { id: ChapterId.make("n"), title: "Lamps" }));
     expect(shape(split.chapters)).toEqual([
@@ -181,7 +181,7 @@ describe("chapter commands' rules", () => {
   });
 
   // covers ADR 037 (Chapters)
-  it("merges a chapter into the one before it, which is live when the merged one was", () => {
+  it("merges a chapter into the one before it, which is live when the merged one was (#1379)", () => {
     const merged = plan(planMerge(THREAD, two, ChapterId.make("c2")));
     expect(shape(merged.chapters)).toEqual([["c1", 1, "live", null]]);
     const three = [...two.slice(0, 1), chapter("c2", 2, "resting", { endedAt: at(7) }), chapter("c3", 3, "live")];

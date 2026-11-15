@@ -48,7 +48,7 @@ const names = (actor: Actor) => ({ leo: "Leo", wren: "Wren", quill: "Quill" })[a
 
 describe("why a turn runs", () => {
   // covers ADR 039 (The context pack with several hobs, Who answers)
-  it("is the hob's own answer from the floor's rule, said in one line", () => {
+  it("is the hob's own answer from the floor's rule, said in one line (#1465)", () => {
     const two = [member(OWNER_ACTOR), member(LEO), member(hob(WREN)), member(hob(QUILL))];
     const mentioned = turnReasonOf(said(LEO, [hob(WREN)]), thread, two, WREN);
     expect(mentioned).toEqual({ cause: "mention", by: LEO });
@@ -78,7 +78,7 @@ describe("why a turn runs", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), ADR 017
-  it("a brain switch's briefing names each speaker when it is given names", () => {
+  it("a brain switch's briefing names each speaker when it is given names (#1465)", () => {
     const told = buildBriefing({
       kind: "resumed",
       messages: [said(LEO)],

@@ -109,7 +109,7 @@ describe("the status a client holds", () => {
   });
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("shows an idle run whose hobs wait for a person, from the snapshot as from an event", () => {
+  it("shows an idle run whose hobs wait for a person, from the snapshot as from an event (#1463)", () => {
     const waiting: ThreadRunStatus = { ...run("idle", 4), paused: [hob] };
     expect(shownStatus(withSnapshot(noStatus, snapshot({ runsRevision: 4, runs: [waiting] }))).runs).toEqual([waiting]);
     expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: waiting })).runs).toEqual([waiting]);

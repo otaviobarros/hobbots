@@ -235,6 +235,7 @@ const messagesWhen = (threadId: ThreadId, ready: (all: ReadonlyArray<Message>) =
   );
 
 describe("delegating between Codex and Claude hobs", () => {
+  // covers ADR 024
   it("a Claude hob delegates to a Codex hob, which completes its Task through hub tools, and gets the result", {
     timeout: 60_000,
   }, async () => {
@@ -268,6 +269,7 @@ describe("delegating between Codex and Claude hobs", () => {
     await run(eventually(() => claudeRequests.some((request) => request.prompt.includes("Pip checked the copy"))));
   });
 
+  // covers ADR 024
   it("a Codex hob delegates to a Claude hob through hub tools, and gets the result on Codex", {
     timeout: 60_000,
   }, async () => {

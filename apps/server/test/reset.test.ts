@@ -184,7 +184,7 @@ describe("start over", () => {
   });
 
   // covers #948, #1214
-  it("deletes nothing while a sign-in may still be in the keychain items every hub shared", async () => {
+  it("deletes nothing while a sign-in may still be in the keychain items every hub shared (#1214)", async () => {
     const left =
       "The GitHub sign-in may still be in the keychain item every hub shared: The keychain refused the delete (161).";
     const { calls, exit } = await startOver({}, [left]);

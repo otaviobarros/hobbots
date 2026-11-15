@@ -100,7 +100,7 @@ const namesSomeone = (message: SaidMessage, members: ReadonlyArray<ThreadMember>
 
 describe("answerersFor", () => {
   // covers ADR 039 (Who answers, rule 1)
-  it("wakes nobody for a note to self, whatever it mentions", () => {
+  it("wakes nobody for a note to self, whatever it mentions (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         expect(answerersFor({ ...message, role: "note" }, thread, members)).toEqual([]);
@@ -109,7 +109,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers, rule 1)
-  it("wakes nobody for a hob's message that names no other hob", () => {
+  it("wakes nobody for a hob's message that names no other hob (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         fc.pre(message.role !== "note" && !byPerson(message) && !namesSomeone(message, members, thread.quest));
@@ -120,7 +120,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers, rule 2)
-  it("refuses a mention of a hob that is not a member, naming each such hob once in order", () => {
+  it("refuses a mention of a hob that is not a member, naming each such hob once in order (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         fc.pre(message.role !== "note");
@@ -136,7 +136,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers, rules 2 and 3)
-  it("wakes the mentioned hobs in order, then the hob replied to, each once and never the author", () => {
+  it("wakes the mentioned hobs in order, then the hob replied to, each once and never the author (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         fc.pre(message.role !== "note" && namesSomeone(message, members, thread.quest));
@@ -160,7 +160,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers, rule 3)
-  it("counts a reply to a hob's message as a mention of that hob", () => {
+  it("counts a reply to a hob's message as a mention of that hob (#1460)", () => {
     fc.assert(
       fc.property(cases, hobIds, ({ thread, members }, replied) => {
         fc.pre(hears(replied, members, thread.quest));
@@ -171,7 +171,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers, rule 4)
-  it("with no mention outside a Quest, wakes the only hob, and nobody in a camp with several", () => {
+  it("with no mention outside a Quest, wakes the only hob, and nobody in a camp with several (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         const place = { ...thread, quest: null };
@@ -186,7 +186,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers, rule 5)
-  it("in a running Quest's thread, a message with no mention reaches its lead and a mention its party", () => {
+  it("in a running Quest's thread, a message with no mention reaches its lead and a mention its party (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         fc.pre(thread.quest !== null && message.role !== "note" && byPerson(message));
@@ -202,7 +202,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers: no mention wakes every hob)
-  it("wakes only hobs that hear the message, never more than were named, plus one", () => {
+  it("wakes only hobs that hear the message, never more than were named, plus one (#1460)", () => {
     fc.assert(
       fc.property(cases, ({ message, thread, members }) => {
         const decided = answerersFor(message, thread, members);
@@ -216,7 +216,7 @@ describe("answerersFor", () => {
   });
 
   // covers ADR 039 (Who answers rule 4: there is no answer-rule setting)
-  it("keeps no answer-rule or host setting on a thread", () => {
+  it("keeps no answer-rule or host setting on a thread (#1460)", () => {
     const fields = Object.keys(Thread.fields);
     expect(fields.filter((field) => /answer|host/i.test(field))).toEqual([]);
   });

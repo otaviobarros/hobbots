@@ -39,6 +39,7 @@ const file = (value: string) => ({ kind: "file", label: "skills-feature-explaine
 const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 
 describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
+  // Issue #1219
   it("is refused while the file is outside its folders, and completes once the file is saved inside them", async () => {
     const party = partyHub({ members: runtime, files: true });
     dispose = party.dispose;

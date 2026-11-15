@@ -132,7 +132,7 @@ const records = fc
   .map(({ state, retries }) => new Supervision({ ...watching(page, at), state, retries }));
 
 describe("SupervisionMachine", () => {
-  it("agrees with a model of stopping, retrying within its budget, handing on and clearing", () => {
+  it("agrees with a model of stopping, retrying within its budget, handing on and clearing (#1447)", () => {
     agreesWithModel({
       machine: SupervisionMachine,
       records,
@@ -142,7 +142,7 @@ describe("SupervisionMachine", () => {
     });
   });
 
-  it("retries a failed turn at most twice, then hands it to the lead", () => {
+  it("retries a failed turn at most twice, then hands it to the lead (#1447)", () => {
     let record: Supervision | IllegalSupervisionTransition = watching(page, at);
     const states: Array<string> = [];
     for (const id of ["a1", "a2", "a3"]) {
@@ -251,7 +251,7 @@ const tree = (
   });
 
 describe("deadlines", () => {
-  it("reads a Task's deadline as the earliest its Delegations and Quests above it give", () => {
+  it("reads a Task's deadline as the earliest its Delegations and Quests above it give (#1447)", () => {
     const member = task("page", "top");
     const step = task("draft", "page");
     const minute = 60_000;
@@ -275,7 +275,7 @@ describe("deadlines", () => {
     );
   });
 
-  it("says when a usage limit ended a turn and when it resets", () => {
+  it("says when a usage limit ended a turn and when it resets (#1447)", () => {
     expect(usageLimitOutcome("2026-11-14T11:00:00.000Z")).toBe(
       "The usage limit was reached; it resets at 2026-11-14T11:00:00.000Z.",
     );
@@ -286,7 +286,7 @@ describe("deadlines", () => {
     expect(isUsageLimitOutcome(null)).toBe(false);
   });
 
-  it("holds a Task whose turn ran out of allowance until it is taken on again", () => {
+  it("holds a Task whose turn ran out of allowance until it is taken on again (#1447)", () => {
     const ended = (outcome: string) =>
       new Attempt({
         id: AttemptId.make("a1"),
@@ -313,7 +313,7 @@ describe("deadlines", () => {
     expect(heldByAllowance(member("active"), tree([member("active")], [], [], failed))).toBe(false);
   });
 
-  it("never takes a note from Hobbots for your words", () => {
+  it("never takes a note from Hobbots for your words (#1447)", () => {
     const note = (more: Partial<TaskNote>) =>
       new TaskNote({
         id: NoteId.make("n"),

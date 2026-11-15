@@ -317,6 +317,7 @@ describe("GitHub Charm", () => {
     expect(asked).toEqual([]);
   });
 
+  // covers ADR 015, ADR 031
   it("asks before a read the hob's override sets to Ask, Once only, and again on the next read", async () => {
     const asked: Array<string> = [];
     const now = access([project], "ask");
@@ -422,6 +423,7 @@ describe("GitHub Charm", () => {
     expect(answer).toEqual({ refused: true, text: "The hub is not signed in to GitHub." });
   });
 
+  // covers ADR 031
   it("is registered beside a second Charm: a hob holding both is offered both, one holding one only that one", async () => {
     // A fake Charm with one read, its only change beside GitHub's.
     const lark = Effect.succeed(

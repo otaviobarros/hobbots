@@ -36,7 +36,7 @@ test("keeps a build that is not for production out of search results", async ({ 
   expect(await content(page, 'meta[name="robots"]')).toBe("noindex, nofollow");
 });
 
-test("describes the app and its questions to search engines and language models", async ({ page, request }) => {
+test("describes the app and its questions to search engines and language models (#1224)", async ({ page, request }) => {
   // covers #1224
   await page.goto("/");
   const data = await page
@@ -56,7 +56,7 @@ test("describes the app and its questions to search engines and language models"
   expect(await llms.text()).toContain(`Current version: ${app.softwareVersion} beta`);
 });
 
-test("serves every picture from a hashed name, so it can be cached for good", async ({ page }) => {
+test("serves every picture from a hashed name, so it can be cached for good (#1224)", async ({ page }) => {
   // covers #1224: a changed picture gets a new URL, so no cache purge is needed
   await page.goto("/");
   const sources = await page

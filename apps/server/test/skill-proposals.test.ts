@@ -878,6 +878,7 @@ describe("hobs proposing skills", () => {
     expect(pins).toEqual({ Hob: r1, Everyone: r1, Project: r2 });
   });
 
+  // covers ADR 029 (Proactive hobs), ADR 031
   it("records each call's step before the library changes, and changes nothing when it cannot", async () => {
     await importSkill("release-steps");
     const calls = [
@@ -914,6 +915,7 @@ describe("hobs proposing skills", () => {
     expect(await proposals()).toHaveLength(1);
   });
 
+  // covers ADR 029 (Proactive hobs), ADR 031
   it("each runtime records a skill call's step before the library changes, and changes nothing unrecorded", {
     timeout: 300_000,
   }, async () => {

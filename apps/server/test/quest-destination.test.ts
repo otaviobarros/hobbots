@@ -375,7 +375,8 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("refuses a first question about the place you asked for whose choices none worded to let it go", async () => {
+  // Issue #1219
+  it("refuses a first question about the place you asked for whose choices none worded to let it go (#1219)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, requests } = party;
@@ -454,7 +455,8 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(lead.briefing).toContain("pass their answer on to a member in their own words");
   }, 30_000);
 
-  it("refuses a lead's answer that puts the work at a place of its own after you redirected it, whatever it quotes, and passes your words on", async () => {
+  // Issue #1219
+  it("refuses a lead's answer that puts the work at a place of its own after you redirected it, whatever it quotes, and passes your words on (#1219)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;

@@ -106,7 +106,7 @@ describe("showLastLine", () => {
     expect(client.getQueryState(queryKeys.threads(agentId))?.isInvalidated).toBe(false);
   });
 
-  it("names who wrote the last line with it: the message's own actor, else the thread's hob", () => {
+  it("names who wrote the last line with it: the message's own actor, else the thread's hob (#1563)", () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.threads(agentId), withLine("The plan"));
     const author = () => client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastAuthor;

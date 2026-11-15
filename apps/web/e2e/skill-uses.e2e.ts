@@ -66,7 +66,7 @@ const pickerOf = (page: Page) => page.getByRole("region", { name: "Pip's skills"
 const usedLines = (page: Page) => page.getByRole("list", { name: "Skills Pip used" });
 
 // covers ADR 029 (Explicit use, The use line), #1096
-test("Use a skill keeps the draft, the keyboard picks a skill, and the reply's Used line stays after a reload", async ({
+test("Use a skill keeps the draft, the keyboard picks a skill, and the reply's Used line stays after a reload (#1096)", async ({
   page,
 }) => {
   const { url, pip } = await hubWithSkill();
@@ -108,7 +108,7 @@ test("Use a skill keeps the draft, the keyboard picks a skill, and the reply's U
 });
 
 // covers ADR 029 (Explicit use), STD-REACT-015
-test("when the hob's skills cannot be read, the list says so and Try again brings them", async ({ page }) => {
+test("when the hob's skills cannot be read, the list says so and Try again brings them (#1096)", async ({ page }) => {
   const { url, pip } = await hubWithSkill();
   const hobSkills = "**/api/skills/hobs/*";
   await page.route(hobSkills, (route) => route.fulfill({ status: 500, body: "" }));
@@ -129,7 +129,7 @@ test("when the hob's skills cannot be read, the list says so and Try again bring
 });
 
 // covers ADR 029 (Explicit use), STD-REACT-012
-test("the list follows a skill assigned or taken off while the chat is open", async ({ page }) => {
+test("the list follows a skill assigned or taken off while the chat is open (#1096)", async ({ page }) => {
   const { url, pip, api, addSkill, release } = await hubWithSkill();
   await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   const composer = composerOf(page);
@@ -144,7 +144,7 @@ test("the list follows a skill assigned or taken off while the chat is open", as
 });
 
 // covers ADR 029 (Explicit use)
-test("a long list scrolls inside its own space and keeps the highlighted skill in view", async ({ page }) => {
+test("a long list scrolls inside its own space and keeps the highlighted skill in view (#1096)", async ({ page }) => {
   const names = Array.from({ length: 30 }, (_, index) => `step-${String(index).padStart(2, "0")}`);
   const { url, pip } = await hubWithSkill(names);
   await page.setViewportSize({ width: 1280, height: 640 });
@@ -166,7 +166,7 @@ test("a long list scrolls inside its own space and keeps the highlighted skill i
 });
 
 // covers ADR 029 (Explicit use), STD-UI-003
-test("with the list open, Shift+Enter adds a line, Shift+Tab moves focus back, and a modified arrow moves the cursor", async ({
+test("with the list open, Shift+Enter adds a line, Shift+Tab moves focus back, and a modified arrow moves the cursor (#1096)", async ({
   page,
 }) => {
   const { url, pip } = await hubWithSkill(["review-notes"]);
@@ -188,7 +188,7 @@ test("with the list open, Shift+Enter adds a line, Shift+Tab moves focus back, a
 });
 
 // covers ADR 029 (Scopes, Explicit use), STD-REACT-012
-test("the list follows own and shared folders another window changes", async ({ page }) => {
+test("the list follows own and shared folders another window changes (#1096)", async ({ page }) => {
   const { url, pip, api, addSkill } = await hubWithSkill();
   const siteA = join(dataDir, "folders", "site-a");
   const siteB = join(dataDir, "folders", "site-b");

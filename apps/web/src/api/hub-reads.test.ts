@@ -40,7 +40,7 @@ const summary = {
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("the hub's reads in the window", () => {
-  it("tells a failed status or summaries read from an empty one, and reads it again", async () => {
+  it("tells a failed status or summaries read from an empty one, and reads it again (#1374)", async () => {
     down = true;
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const watching = [hubStatusQuery, activeSummariesQuery].map((query) =>
@@ -56,7 +56,7 @@ describe("the hub's reads in the window", () => {
     for (const stop of watching) stop();
   });
 
-  it("keeps a failed read failed when a later event patches what it holds, until a read answers", async () => {
+  it("keeps a failed read failed when a later event patches what it holds, until a read answers (#1374)", async () => {
     down = true;
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const stop = new QueryObserver(client, hubStatusQuery).subscribe(() => {});

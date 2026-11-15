@@ -233,7 +233,8 @@ const endedAttempts = (thread: Thread, count: number) =>
   });
 
 describe("creating a Git repository from the sandbox, end to end", () => {
-  it("with no identity to commit with, the user is asked in the Quest's chat, and the lead cannot commit its member's open work", async () => {
+  // covers (#742). First, so no turn of an earlier test asks who hobs commit as.
+  it("with no identity to commit with, the user is asked in the Quest's chat, and the lead cannot commit its member's open work (#742)", async () => {
     gitIdentity = { name: null, email: null };
     try {
       await request("PATCH", "/api/setup", {

@@ -318,6 +318,7 @@ test("disconnects a hob's app after asking, and shows an old app that was not fu
 const KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAstandin\n-----END RSA PRIVATE KEY-----";
 const linkedApp = { ...app, appId: 3_141_592, slug: "pips-own-bot", origin: "linked", owner: "the-shire" };
 
+// Issue #1321
 test("links a GitHub app the user already has, and unlinking leaves it on GitHub", async ({ page, scan }) => {
   const { current } = await openPipCharms(page);
   hub = current;

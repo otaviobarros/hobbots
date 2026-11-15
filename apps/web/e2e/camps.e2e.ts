@@ -19,7 +19,7 @@ const aldricsChat = (page: Page) =>
 const campNames = (rail: Locator) =>
   rail.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")));
 
-test("makes a private camp with a goal, sends in it, and archives and restores it", { tag: "@smoke" }, async ({
+test("makes a private camp with a goal, sends in it, and archives and restores it (#1378)", { tag: "@smoke" }, async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();
@@ -85,7 +85,9 @@ test("makes a private camp with a goal, sends in it, and archives and restores i
   await expect(rail.getByRole("link", { name: "2027 taxes" })).toBeVisible();
 });
 
-test("starts the chat fresh from its menu, and the open question carries over to the new chat", async ({ page }) => {
+test("starts the chat fresh from its menu, and the open question carries over to the new chat (#1378)", async ({
+  page,
+}) => {
   const { url, aldric, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   const header = main.locator("header").first();
@@ -133,7 +135,7 @@ test("starts the chat fresh from its menu, and the open question carries over to
   expect(oldChat).toContain(archived[0]?.id);
 });
 
-test("a pinned camp stays above a camp with newer messages in the sidebar", async ({ page }) => {
+test("a pinned camp stays above a camp with newer messages in the sidebar (#1378)", async ({ page }) => {
   const { url, aldric, hub } = await aldricHub();
   const rail = page.getByRole("list", { name: "Camps" });
   const kept = await campAt({ url, headers: hub.headers }, aldric, "Kitchen plans");
@@ -157,7 +159,7 @@ test("a pinned camp stays above a camp with newer messages in the sidebar", asyn
   await expect.poll(() => campNames(rail)).toEqual(["Kitchen plans", "Garden"]);
 });
 
-test("a long Start fresh list scrolls inside the sheet, which keeps its title and buttons in the window", async ({
+test("a long Start fresh list scrolls inside the sheet, which keeps its title and buttons in the window (#1378)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 600 });

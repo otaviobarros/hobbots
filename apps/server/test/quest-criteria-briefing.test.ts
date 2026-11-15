@@ -31,7 +31,7 @@ const taskPart = (briefing: string | null | undefined) => {
 };
 
 describe.each(RUNTIMES)("a Quest lead's criterion ids, on %s", (runtime) => {
-  it("reach a lead in a new session from its briefing, and read_tasks of a member's Task shows them", async () => {
+  it("reach a lead in a new session from its briefing, and read_tasks of a member's Task shows them (#1555)", async () => {
     // Frodo's first turn runs without the newer Task tools, so on Codex his wake starts a new thread (#1543).
     const party = partyHub({
       lead: runtime,
@@ -94,7 +94,7 @@ describe.each(RUNTIMES)("a Quest lead's criterion ids, on %s", (runtime) => {
     expect(quest?.state).toBe("completed");
   }, 30_000);
 
-  it("reach a member that leads a nested Quest, in every turn it is woken for", async () => {
+  it("reach a member that leads a nested Quest, in every turn it is woken for (#1555)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     await party.run(

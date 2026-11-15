@@ -47,6 +47,7 @@ const accessOf = (): ToolAccess => ({
 });
 
 describe("a fake Charm's read on the hub action pipeline", () => {
+  // covers ADR 015, ADR 031
   it("asks for a read whose preset asks, and the grant saved for its site answers later reads", async () => {
     const access = accessOf();
     const user = approvingUser(access, "always");

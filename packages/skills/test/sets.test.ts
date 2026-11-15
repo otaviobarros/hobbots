@@ -59,7 +59,7 @@ const files = async (folder: string, prefix = ""): Promise<ReadonlyArray<string>
 
 describe("skill sets", () => {
   // covers ADR 029 (Skill sets), #1143
-  it("imports agent-engineering from Git as one set: its skills and the files they link to, as laid out", async () => {
+  it("imports agent-engineering from Git as one set: its skills and the files they link to, as laid out (#1143)", async () => {
     const { layer } = await importerLayer();
     const repository = await repositoryOf(agentEngineering());
     await runWith(layer)(
@@ -104,7 +104,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("refuses a link outside the set's root, naming the file and the rule", async () => {
+  it("refuses a link outside the set's root, naming the file and the rule (#1143)", async () => {
     const { layer } = await importerLayer();
     const plugin = await folderOf({
       ".claude-plugin/plugin.json": JSON.stringify({ name: "leaky" }),
@@ -131,7 +131,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("takes a repository's folder of skills that share files as a set named after the folder", async () => {
+  it("takes a repository's folder of skills that share files as a set named after the folder (#1143)", async () => {
     const { layer } = await importerLayer();
     const repository = await folderOf({
       "tools/playbook/skills/one/SKILL.md": linking("one", "two"),
@@ -153,7 +153,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("refuses a set named like Hobbots' own plugin, or with two skills of one name", async () => {
+  it("refuses a set named like Hobbots' own plugin, or with two skills of one name (#1143)", async () => {
     const { layer } = await importerLayer();
     const reserved = await folderOf({
       ".claude-plugin/plugin.json": JSON.stringify({ name: "hobbots-skills" }),
@@ -176,7 +176,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("makes one revision per distinct content of the whole set", async () => {
+  it("makes one revision per distinct content of the whole set (#1143)", async () => {
     const { layer } = await importerLayer();
     const repository = await repositoryOf(agentEngineering());
     await runWith(layer)(
@@ -206,7 +206,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("refuses an edit in Hobbots of a set, and a set as a revision of one skill", async () => {
+  it("refuses an edit in Hobbots of a set, and a set as a revision of one skill (#1143)", async () => {
     const { layer } = await importerLayer();
     const repository = await repositoryOf(agentEngineering());
     const loose = await folderOf({ "SKILL.md": skillMd("agent-engineering") });
@@ -246,7 +246,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets, Backups, exports and Diagnostics), #1143
-  it("exports a set as its folder with a manifest naming it, which another hub imports as the same set", async () => {
+  it("exports a set as its folder with a manifest naming it, which another hub imports as the same set (#1143)", async () => {
     const from = await importerLayer();
     const v5 = await folderOf(agentEngineering("0.5.0"));
     const v6 = await folderOf(agentEngineering("0.6.0"));
@@ -319,7 +319,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Import checks, Skill sets), #1143
-  it("refuses a set over the limits before reading the files that take it over", async () => {
+  it("refuses a set over the limits before reading the files that take it over (#1143)", async () => {
     const big = "x".repeat(6 * 1024 * 1024);
     const folder = await folderOf({
       ".claude-plugin/plugin.json": JSON.stringify({ name: "heavy" }),
@@ -337,7 +337,7 @@ describe("skill sets", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("copies one skill of a set as a skill of its own, with the set's files it links to and its links pointed at them", async () => {
+  it("copies one skill of a set as a skill of its own, with the set's files it links to and its links pointed at them (#1143)", async () => {
     const { layer } = await importerLayer();
     const repository = await repositoryOf(agentEngineering());
     await runWith(layer)(
@@ -382,7 +382,7 @@ describe("skill sets", () => {
     );
   });
 
-  it("keeps every file a copy of a set's skill brings, byte for byte, and gives each one place", async () => {
+  it("keeps every file a copy of a set's skill brings, byte for byte, and gives each one place (#1143)", async () => {
     const folder = await folderOf({
       // It links to plan-change's SKILL.md and to a file beside it named as that SKILL.md is renamed.
       "skills/deliver-change/SKILL.md": skillMd("deliver-change").replace(

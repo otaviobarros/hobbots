@@ -38,7 +38,7 @@ const session = () => {
 
 describe("a turn's session as the thread records it", () => {
   // covers ADR 036 (The read-the-web mark), ADR 039 (Hobs talking to hobs)
-  it("records a new session with the turn's read-the-web mark in the same change, and without one when it holds none", async () => {
+  it("records a new session with the turn's read-the-web mark in the same change, and without one when it holds none (#1463)", async () => {
     const marked = session();
     marked.turn.begin("s-1", null);
     await Effect.runPromise(marked.turn.record("s-1", MessageId.make("reply-1"), MARK));

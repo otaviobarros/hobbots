@@ -754,7 +754,7 @@ describe("The dispatcher", () => {
 describe("Handing items to a running turn", () => {
   const turn = { target: "task:copy", turnId: "a1" };
 
-  it("claims and delivers an item into a running turn, settles it once the runtime took it, and sends it back when it never did", async () => {
+  it("claims and delivers an item into a running turn, settles it once the runtime took it, and sends it back when it never did (#1345)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -789,7 +789,7 @@ describe("Handing items to a running turn", () => {
     ]);
   });
 
-  it("hands a running turn nothing that another turn holds or that is late", async () => {
+  it("hands a running turn nothing that another turn holds or that is late (#1345)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -814,7 +814,7 @@ describe("Handing items to a running turn", () => {
     expect(result.item).toMatchObject({ state: "resolved", disposition: { _tag: "late" } });
   });
 
-  it("keeps the claim of an item handed to a running turn while the runtime is slow to take it, so it is never delivered twice", async () => {
+  it("keeps the claim of an item handed to a running turn while the runtime is slow to take it, so it is never delivered twice (#1345)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -852,7 +852,7 @@ describe("Handing items to a running turn", () => {
     ]);
   }, 15_000);
 
-  it("sends an item back to pending when its hand-off to a running turn is interrupted", async () => {
+  it("sends an item back to pending when its hand-off to a running turn is interrupted (#1345)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -869,7 +869,7 @@ describe("Handing items to a running turn", () => {
     expect(result.item).toMatchObject({ state: "pending", claim: null });
   });
 
-  it("sends an item back to pending when its hand-off is interrupted while it is still being delivered", async () => {
+  it("sends an item back to pending when its hand-off is interrupted while it is still being delivered (#1345)", async () => {
     // The hand-off is interrupted once the item is claimed and while it is being delivered, before
     // it reaches the runtime, as a slow database lets happen.
     const delivering = Deferred.makeUnsafe<void>();

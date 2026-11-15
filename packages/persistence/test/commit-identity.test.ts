@@ -26,7 +26,7 @@ describe("The commit identity the user gave the hub", () => {
 
 // Issue #1241: where the user said not to ask whether a hob will write code.
 describe("Where the user said not to ask about coding setup", () => {
-  it("keeps each choice once, in the order made, and clears them all", async () => {
+  it("keeps each choice once, in the order made, and clears them all (#1241)", async () => {
     const found = await Effect.gen(function* () {
       const dismissals = yield* CodingSetupDismissals;
       const before = yield* dismissals.list;

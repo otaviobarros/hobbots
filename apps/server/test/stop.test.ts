@@ -158,7 +158,8 @@ describe("Stopping a reply", () => {
     expect(result.next.status).toBe("streaming");
   });
 
-  it("a stop meant for one hob's turn leaves another hob's reply running", async () => {
+  // covers ADR 039 (One hob speaks at a time)
+  it("a stop meant for one hob's turn leaves another hob's reply running (#1461)", async () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;

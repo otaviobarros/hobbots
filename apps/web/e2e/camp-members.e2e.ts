@@ -32,7 +32,7 @@ const hobRows = (page: Page) =>
     .getByRole("listitem");
 
 // covers ADR 039 (Members), UX-001
-test("Make a camp picks its hobs by keyboard, the first leading, in the four themes", async ({ page }) => {
+test("Make a camp picks its hobs by keyboard, the first leading, in the four themes (#1467)", async ({ page }) => {
   const { url, aldric } = await aldricHub(undefined, ["Quill", "Pip"]);
   await page.setViewportSize({ width: 1280, height: 860 });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -91,7 +91,7 @@ test("Make a camp picks its hobs by keyboard, the first leading, in the four the
 });
 
 // covers ADR 039 (Members; Status and cost), UX-001
-test("the members sheet lists the camp's hobs and people, adds and takes out a hob, wide and narrow in the four themes", async ({
+test("the members sheet lists the camp's hobs and people, adds and takes out a hob, wide and narrow in the four themes (#1467)", async ({
   page,
 }) => {
   const { url, aldric, members, api, hub } = await aldricHub(undefined, ["Quill", "Pip"], {

@@ -4,7 +4,7 @@ import { lane, openQuest, ticket } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
-test("a Quest its lead stopped at your request reads stopped, with its summary, never finished", async ({
+test("a Quest its lead stopped at your request reads stopped, with its summary, never finished (#1346)", async ({
   page,
   scan,
 }) => {

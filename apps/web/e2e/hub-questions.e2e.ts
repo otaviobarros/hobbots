@@ -108,6 +108,7 @@ test("Home's Needs you shows the hub's question with its choices, and picking on
   await expect(needsYou).not.toContainText("How often should the hub back up your data?");
 });
 
+// covers ADR 039 (For you)
 test("the hub's own questions are on its owner's For you list", async ({ page }) => {
   await hubThatAsks(page);
   const current = hub;

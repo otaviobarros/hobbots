@@ -101,6 +101,7 @@ const decide = async (
 };
 
 describe("Codex's tool calls under the hob's policy", () => {
+  // covers ADR 024
   it("records an allowed command before it runs, then streams its output to the Workbench", async () => {
     const recorded: Array<RuntimeEvent> = [];
     const { answer, events, mapper } = await decide(command("c1", "/bin/bash -lc 'ls -la'"), {
@@ -171,7 +172,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("asks before a push once the session has read the web, where the policy would allow it", async () => {
+  it("asks before a push once the session has read the web, where the policy would allow it (#1268)", async () => {
     const push = () => command("c1", "/bin/bash -lc 'git push origin feature'");
     const unmarked = approvalsAnswering(approve);
     const before = await decide(push(), { preset: "trusting", request: { approvals: unmarked.approvals } });
@@ -210,7 +211,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // regression for #1082
-  it("tells the hob why Hobbots refused its command, and that the user did not refuse it", async () => {
+  it("tells the hob why Hobbots refused its command, and that the user did not refuse it (#1082)", async () => {
     const outsideFolder = await decide(command("c1", `/bin/bash -lc 'rm -rf ${outside}/x'`));
     expect(outsideFolder.answer).toEqual({ decision: "decline" });
     const reason = outsideFolder.events.find((event) => event._tag === "ToolDenied")?.reason ?? "";
@@ -231,7 +232,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // regression for #1082
-  it("tells the hob the user refused its command with their reason, and an expired approval as not refused by them", async () => {
+  it("tells the hob the user refused its command with their reason, and an expired approval as not refused by them (#1082)", async () => {
     const denied = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
     const refused = await decide(command("c1", "/bin/bash -lc 'pnpm test'"), {
       preset: "careful",
@@ -262,6 +263,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(lapsed.told[0]).not.toContain("not asked");
   });
 
+  // covers ADR 024
   it("decides a file change on every file it touches, and shows the user its diff", async () => {
     const inside = [{ path: join(project, "a.txt"), kind: { type: "add" }, diff: "hello\n" }];
     const allowed = await decide(fileChange("f1"), { before: [patchStarted("f1", inside)] });
@@ -299,6 +301,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(unknown.events).toEqual([expect.objectContaining({ _tag: "ToolDenied", reason: UNKNOWN_PATCH })]);
   });
 
+  // covers STD-SEC-002
   it("decides a file change that deletes a file as a deletion, alone or with edits", async () => {
     const removed = { path: join(project, "old.txt"), kind: { type: "delete" }, diff: "" };
     const added = { path: join(project, "new.txt"), kind: { type: "add" }, diff: "hi\n" };

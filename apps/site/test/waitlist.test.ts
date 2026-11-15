@@ -81,7 +81,7 @@ describe("joinWaitlist", () => {
     expect(rows()).toEqual([{ email: "pip@example.com", wants_more_platforms: 0, source: "hero" }]);
   });
 
-  it("keeps one row for a repeated email, and records interest in more platforms asked for later", async () => {
+  it("keeps one row for a repeated email, and records interest in more platforms asked for later (#1224)", async () => {
     // covers #1224: someone who joined from the coming soon page joins again for the Windows and phone apps
     const { deps, rows } = setup();
     await joinWaitlist(input(), deps);

@@ -276,7 +276,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (Addresses)
-  it("asks before a page on a private address under every preset, and Always answers that host alone", async () => {
+  it("asks before a page on a private address under every preset, and Always answers that host alone (#1267)", async () => {
     const page = (host: string, addresses: ReadonlyArray<string>, found = true) =>
       ({ _tag: "Web", host, addresses, page: { url: `http://${host}/`, found } }) as const;
     for (const preset of ["careful", "balanced", "trusting"] as const) {
@@ -309,7 +309,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (Found URLs)
-  it("asks once before a URL the hob wrote itself, under every preset and whatever was granted", async () => {
+  it("asks once before a URL the hob wrote itself, under every preset and whatever was granted (#1267)", async () => {
     const written = {
       _tag: "Web",
       host: "example.com",
@@ -331,7 +331,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("asks, while the session has read the web, before each way data could leave, under every preset", async () => {
+  it("asks, while the session has read the web, before each way data could leave, under every preset (#1268)", async () => {
     const host = { _tag: "Web", host: "collector.example", addresses: [] } as const;
     const push = {
       _tag: "Push",
@@ -398,7 +398,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("leaves found pages, local work, own memory and Never as they were while the session has read the web", async () => {
+  it("leaves found pages, local work, own memory and Never as they were while the session has read the web (#1268)", async () => {
     const balanced = contextFor(home, "balanced");
     const marked = { ...balanced, readWeb: true };
     const found = {

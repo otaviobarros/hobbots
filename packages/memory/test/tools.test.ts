@@ -382,7 +382,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
-  it("refuses a save or a share from a private camp, or a Task in one, before anything is asked or written", async () => {
+  it("refuses a save or a share from a private camp, or a Task in one, before anything is asked or written (#1377)", async () => {
     const hub = makeHub({ shares: true });
     const asked: Array<ApprovalAction> = [];
     const user = { asked, answer: "approve" } as const;
@@ -404,6 +404,7 @@ describe("the memory tools", () => {
     expect(hub.saves.saves().map((save) => save.key)).toHaveLength(1);
   });
 
+  // covers ADR 028 (The memory tools), ADR 031
   it("records each call's step before memory is reached, and reaches nothing when it cannot", async () => {
     const hub = makeHub();
     await callOn(hub, MEMORY_SAVE_TOOL, page("recorded"), { records: true });
@@ -478,7 +479,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("while the session has read the web, a save names the page as its source and a share asks you first", async () => {
+  it("while the session has read the web, a save names the page as its source and a share asks you first (#1268)", async () => {
     const READ = { since: "2026-11-08T12:00:00.000Z", source: "https://lamps.test/lamp" };
     const webMark: WebMark = { current: Effect.succeed(READ), read: () => Effect.void };
     const hub = makeHub({ shares: true });

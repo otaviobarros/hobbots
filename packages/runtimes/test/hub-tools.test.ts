@@ -94,6 +94,7 @@ describe("hub tools on Claude Code's control channel", () => {
     expect(hubToolOf("Bash")).toBeNull();
   });
 
+  // The hub's own tools run only through the hub, which decides each call.
   it("serves the tools, approves their calls in the hook and shows each call as a step", async () => {
     const chatOnly: Options = { tools: [], disallowedTools: ["*"], permissionMode: "dontAsk" };
     expect(withHubTools(chatOnly, null, () => {})).toBe(chatOnly);
@@ -133,6 +134,7 @@ describe("hub tools on Claude Code's control channel", () => {
     ]);
   });
 
+  // No tool is approved before the policy's permission callback is consulted.
   it("leaves a tool turn's permission callback unshadowed", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hub-")));
     const project = join(root, "project");

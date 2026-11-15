@@ -45,7 +45,7 @@ const hobPayload = (name: string) => ({
   instructions: "Write short answers.",
 });
 
-test("renaming a hob from its profile saves a new version, says you summoned it, and follows a rename made elsewhere", async ({
+test("renaming a hob from its profile saves a new version, says you summoned it, and follows a rename made elsewhere (#405)", async ({
   page,
   scan,
 }) => {
@@ -93,7 +93,7 @@ test("renaming a hob from its profile saves a new version, says you summoned it,
   expect(saved).toMatchObject({ name: "Quill", configVersion: 3, summonedBy: null });
 });
 
-test("the profile names a retired hob that summoned it, and says so with Try again when it cannot read it", async ({
+test("the profile names a retired hob that summoned it, and says so with Try again when it cannot read it (#405)", async ({
   page,
   scan,
 }) => {

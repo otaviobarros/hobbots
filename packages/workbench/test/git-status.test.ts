@@ -102,7 +102,7 @@ describe("The repository Git finds from a folder (#742)", () => {
       ),
     );
 
-  it("names one repository however its folder is spelled, a nested one as its own, and none outside any", async () => {
+  it("names one repository however its folder is spelled, a nested one as its own, and none outside any (#742)", async () => {
     const ledger = join(work, "ledger");
     const notes = join(work, "notes");
     const vendor = join(ledger, "vendor");
@@ -130,7 +130,8 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
   const read = <A>(use: (git: GitWorkspace["Service"]) => Effect.Effect<A>) =>
     Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
 
-  it("finds the repositories a folder reaches: the one around it and every one below it", async () => {
+  // Issue #1537
+  it("finds the repositories a folder reaches: the one around it and every one below it (#1537)", async () => {
     const ledger = join(work, "projects", "ledger");
     const vendor = join(ledger, "vendor", "lib");
     const deep = join(work, "projects", "a", "b", "c", "deep");
@@ -150,8 +151,9 @@ describe("What the sandbox closes for what you took over (#1537)", () => {
     expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual({ tops: [], complete: true });
   });
 
+  // covers STD-SEC-002, #1537
   it.skipIf(process.getuid?.() === 0)(
-    "says a scan did not see every folder when one below it cannot be read",
+    "says a scan did not see every folder when one below it cannot be read (#1537)",
     async () => {
       const locked = join(work, "projects", "locked");
       mkdirSync(join(locked, "checkout"), { recursive: true });

@@ -27,7 +27,7 @@ const change = (overrides: Partial<SkillChange>): SkillChange => ({
 
 describe("What changed (ADR 029, The Skills page)", () => {
   // covers ADR 029 (The Skills page, Pins and rollout), #1062
-  it("says each change by day, with what a save moved and held, and Roll back only where there is a way back", () => {
+  it("says each change by day, with what a save moved and held, and Roll back only where there is a way back (#1062)", () => {
     const saved = change({
       scopes: [{ _tag: "Everyone" }],
       held: [{ _tag: "Hob", agentId: bram }],
@@ -60,7 +60,7 @@ describe("What changed (ADR 029, The Skills page)", () => {
   });
 
   // covers ADR 029 (Skill sets, The Skills page), #1193
-  it("names the one skill of a set a hob turned off or on, with its set, never the whole set", () => {
+  it("names the one skill of a set a hob turned off or on, with its set, never the whole set (#1193)", () => {
     const set = { skillId: SkillId.make("set"), name: SkillName.make("agent-engineering"), agentId: bram };
     const member = SkillName.make("plan-change");
     expect(changeText(change({ ...set, kind: "optedOut", member }), hobs)).toEqual({

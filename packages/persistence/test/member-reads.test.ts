@@ -128,7 +128,7 @@ const unreadIds = Effect.flatMap(HobbotsRepository, (repo) => repo.listUnreadThr
 
 describe("read markers per member", () => {
   // covers ADR 039 (Members: the read marker moves to the member)
-  it("gives the owner the thread's marker where it lagged, drops the thread's, and unread counts read the same", async () => {
+  it("gives the owner the thread's marker where it lagged, drops the thread's, and unread counts read the same (#1454)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -183,7 +183,7 @@ describe("read markers per member", () => {
   });
 
   // covers ADR 039 (Members), ADR 013
-  it("takes `unread` out of every journaled thread, at its new version, and the entries decode", async () => {
+  it("takes `unread` out of every journaled thread, at its new version, and the entries decode (#1454)", async () => {
     const carriers = { ThreadUpserted: 5, CampMade: 2, ChatStartedFresh: 2, ChapterMoved: 1 } as const;
     // The versions 20261114004500_member_reads writes, without `unread`.
     const written = { ThreadUpserted: 6, CampMade: 3, ChatStartedFresh: 3, ChapterMoved: 2 } as const;
@@ -240,7 +240,7 @@ describe("read markers per member", () => {
   });
 
   // covers ADR 039 (Members: unread counts, the unread line and catch-up are per person)
-  it("keeps each person's unread threads and unread line their own, in either reading order", async () => {
+  it("keeps each person's unread threads and unread line their own, in either reading order (#1454)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -308,7 +308,7 @@ describe("read markers per member", () => {
   });
 
   // covers ADR 039 (Members), ADR 037 (Chapters)
-  it("keeps a person who had read the thread read when a chapter splits, and one who had not unread", async () => {
+  it("keeps a person who had read the thread read when a chapter splits, and one who had not unread (#1454)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;

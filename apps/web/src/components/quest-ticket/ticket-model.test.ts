@@ -83,7 +83,7 @@ describe("questTicket", () => {
     );
   });
 
-  it("says a Quest its lead stopped at your request was stopped, never finished or cancelled", () => {
+  it("says a Quest its lead stopped at your request was stopped, never finished or cancelled (#1346)", () => {
     const top = ended(task(CAMPAIGN, { brief: "Plan a Black Friday campaign" }), "cancelled", 6);
     const base = withTasks(top, task(COPY, { ownerId: QUILL, state: "cancelled" }));
     const [record] = base.quests;

@@ -152,7 +152,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search), #1047
-    it("finds a page by a question in plain words, a word start, a hyphenated name or a short common word", () =>
+    it("finds a page by a question in plain words, a word start, a hyphenated name or a short common word (#1047)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(
@@ -200,7 +200,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search), #1047
-    it("finds a page by a question in another language, the words common to every page weighing least", () =>
+    it("finds a page by a question in another language, the words common to every page weighing least (#1047)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(
@@ -564,7 +564,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (attribution), #1317
-    it("names who wrote every version in History: each hob, you, and your restores", () =>
+    it("names who wrote every version in History: each hob, you, and your restores (#1317)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/release.md");
@@ -648,7 +648,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Capture and summaries), #1316
-    it("names a chat's page by its summary's title when it is read, as every list names it", () =>
+    it("names a chat's page by its summary's title when it is read, as every list names it (#1316)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f3");

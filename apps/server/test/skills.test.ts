@@ -419,7 +419,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("shows an upstream change in Updates, accepts it as a new revision, and turns Update automatically on", async () => {
+  it("shows an upstream change in Updates, accepts it as a new revision, and turns Update automatically on (#1097)", async () => {
     const root = await folderWith({ "SKILL.md": skillMd("release") });
     const git = (...args: Array<string>) =>
       execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {

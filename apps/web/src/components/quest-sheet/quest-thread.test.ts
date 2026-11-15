@@ -38,7 +38,7 @@ const kinds = (entries: ReturnType<typeof questThread>) =>
   );
 
 describe("a quest's thread in the sheet", () => {
-  it("starts at your request and the lead's plan, and keeps what you and the lead said while it ran", () => {
+  it("starts at your request and the lead's plan, and keeps what you and the lead said while it ran (#1390)", () => {
     const transcript = [
       message("earlier", "user", 0),
       message("earlier-reply", "assistant", 0, { promptId: "earlier" }),
@@ -50,12 +50,12 @@ describe("a quest's thread in the sheet", () => {
     expect(kinds(questThread(quest(), transcript))).toEqual(["yours:ask", "lead:plan", "yours:steer", "lead:answer"]);
   });
 
-  it("leaves out the lead's routine progress, kept quiet, as the chat does", () => {
+  it("leaves out the lead's routine progress, kept quiet, as the chat does (#1390)", () => {
     const transcript = [message("ask", "user", 0), message("progress", "assistant", 20, { quiet: true })];
     expect(kinds(questThread(quest(), transcript))).toEqual(["yours:ask"]);
   });
 
-  it("shows the notes a lead gave its party, and what each member delivered or where it failed", () => {
+  it("shows the notes a lead gave its party, and what each member delivered or where it failed (#1390)", () => {
     const base = blackFriday();
     const done = (task: Task, second: number, summary: string) =>
       new Task({
@@ -103,7 +103,7 @@ describe("a quest's thread in the sheet", () => {
     ).toEqual([]);
   });
 
-  it("keeps the lead's finish, written as the quest ends, and nothing it says after", () => {
+  it("keeps the lead's finish, written as the quest ends, and nothing it says after (#1390)", () => {
     const [campaign, ...rest] = blackFriday().tasks as [Task, ...Task[]];
     const ended = quest({ tasks: [new Task({ ...campaign, state: "completed", updatedAt: at(50) }), ...rest] });
     const transcript = [

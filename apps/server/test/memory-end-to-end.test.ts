@@ -271,6 +271,7 @@ describe("hobs remember through the hub, end to end", () => {
     expect(other).toBeNull();
   });
 
+  // covers ADR 028 (The memory tools), ADR 031
   it("the fake runtime records a memory call's step with the reply before memory is reached", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const ember = await summon("Ember", 957);

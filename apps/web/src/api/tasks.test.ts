@@ -69,7 +69,7 @@ describe("Task reads kept live", () => {
   });
 
   // covers ADR 036 (The read-the-web mark), UX-006
-  it("shows an Attempt's read-the-web mark as it changes, keeping the state the tree knows", () => {
+  it("shows an Attempt's read-the-web mark as it changes, keeping the state the tree knows (#1268)", () => {
     const queryClient = new QueryClient();
     const running = attempt(COPY, "running");
     queryClient.setQueryData<TaskTreeRead>(taskKeys.tree(CAMPAIGN), {

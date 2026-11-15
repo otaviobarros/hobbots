@@ -62,6 +62,7 @@ const withColor = (command: string, cwd: string) => {
 };
 
 describe("color in a hob's commands", () => {
+  // covers ADR 014, ADR 023
   it("makes git diff and git status print color through a pipe, and keeps the hub's git settings", () => {
     const repo = join(root, "repo");
     mkdirSync(repo);
@@ -119,6 +120,7 @@ describe("what a hob reads of a colored command", () => {
     expect(plainBashResponse("Read", { stdout: COLORED_DIFF })).toBeUndefined();
   });
 
+  // covers ADR 023
   it("records a colored command's output on Claude Code and gives the hob the same output without escapes", async () => {
     const turn = toolTurn(access, "on");
     if (turn === null) throw new Error("expected a tool turn");
@@ -147,6 +149,7 @@ describe("what a hob reads of a colored command", () => {
     });
   });
 
+  // covers ADR 023
   it("records a colored command's output on the fake runtime as it was printed", async () => {
     const output = `${GREEN}✓${RESET} built in 1.2s\n`;
     const events = await makeFakeRuntime({ engine })

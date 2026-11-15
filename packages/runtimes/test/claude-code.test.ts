@@ -588,7 +588,9 @@ describe("reading a Claude Code turn", () => {
     expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
   });
 
-  it("a refused call's label is redacted with the turn's redactor before it is shortened", () => {
+  // covers ADR 014 (#1356)
+  // covers ADR 014 (#1356)
+  it("a refused call's label is redacted with the turn's redactor before it is shortened (#1356)", () => {
     const secret = "plain-known-value-7f3a9c";
     const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
     const command = `echo ${"a".repeat(80)} ${secret} done`;
@@ -616,7 +618,8 @@ describe("reading a Claude Code turn", () => {
     expect(denied?._tag === "ToolDenied" ? denied.label : "").not.toContain(secret.slice(0, 8));
   });
 
-  it("a refused call's name is redacted whole with the turn's redactor before it is shortened", () => {
+  // covers ADR 014 (#1356)
+  it("a refused call's name is redacted whole with the turn's redactor before it is shortened (#1356)", () => {
     const secret = "plain-known-value-7f3a9c";
     const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
     // The secret straddles where a name is cut.
@@ -646,7 +649,8 @@ describe("reading a Claude Code turn", () => {
     expect(kept).not.toContain(secret.slice(0, 8));
   });
 
-  it("a call waiting for its result is dropped once any result answers it, and only a bounded number wait", () => {
+  // covers ADR 014 (#1356)
+  it("a call waiting for its result is dropped once any result answers it, and only a bounded number wait (#1356)", () => {
     const read = turnEvents();
     const use = (id: string) => ({ type: "tool_use", id, name: "Bash", input: { command: `echo ${id}` } });
     const result = (id: string, content: string, isError: boolean) => ({
@@ -674,7 +678,8 @@ describe("reading a Claude Code turn", () => {
     ]);
   });
 
-  it("one turn reports a bounded number of refused calls, however many it makes one after another", () => {
+  // covers ADR 014 (#1356)
+  it("one turn reports a bounded number of refused calls, however many it makes one after another (#1356)", () => {
     const read = turnEvents();
     const reported = Array.from({ length: NOT_OFFERED_TURN_MAX + 40 }, (_, each) => {
       const id = `s-${each}`;
@@ -702,7 +707,7 @@ describe("reading a Claude Code turn", () => {
     expect(reported).toHaveLength(NOT_OFFERED_TURN_MAX);
   });
 
-  it("reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
+  it("reports a call Claude Code answered as no such tool as refused, not offered, and no other error (#1356)", () => {
     const read = turnEvents();
     const said = (parent: string | null, content: ReadonlyArray<unknown>) =>
       ({ type: "assistant", parent_tool_use_id: parent, message: { content } }) as unknown as SDKMessage;
@@ -1008,6 +1013,7 @@ describe("the runtime settings", () => {
     expect(options.settings).toMatchObject({ attribution: false });
   });
 
+  // covers ADR 029
   it("loads nothing a claude.ai sign-in or Claude Code itself brings, on chat-only turns too", () => {
     const options = baseOptions({ workspaceDir: "/w" } as ClaudeCodeConfig, "/bin/claude");
     expect(options.strictMcpConfig).toBe(true);
@@ -1038,6 +1044,7 @@ describe("the bot commit note", () => {
 });
 
 describe("the approval note", () => {
+  // Regression for #282
   it("tells a turn that can ask the user that it never sees the request, and no other turn", () => {
     expect(turnInstructions("Be brief.", false, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}`);
     expect(turnInstructions("Be brief.", true, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}`);
@@ -1045,6 +1052,7 @@ describe("the approval note", () => {
     expect(APPROVAL_NOTE).toContain("you do not");
   });
 
+  // Regression for #282
   it("carries the approval note to a resumed session with its instructions, since it keeps its system prompt", () => {
     const request = { prompt: "hi", instructions: "Be brief.", instructionsChanged: true, sessionId: "s1" };
     const prompt = turnPrompt(request, turnInstructions(request.instructions, false, true));

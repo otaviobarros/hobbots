@@ -356,7 +356,8 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "other")).toBeNull();
   });
 
-  it("refuses, without a card, a push that would create a branch with no commit GitHub lacks", async () => {
+  // Issue #1219
+  it("refuses, without a card, a push that would create a branch with no commit GitHub lacks (#1219)", async () => {
     const { folder, repository, remote } = await setUp("nothing-new");
     // The hob's commit was refused, so its new branch is still at main's commit, which GitHub has.
     git(folder, "branch", "feat/empty", "main");
@@ -669,6 +670,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
       ["missing", "uncertain", "The hub stopped while this call was being sent."],
     ]);
   });
+  // covers ADR 020, ADR 031
   it("shows the same card, with the same digest, for the same push as before the pipeline", async () => {
     const { folder, repository } = await setUp("same-card");
     const asked: Array<ApprovalAction> = [];
@@ -712,6 +714,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(digests).toEqual([PUSH_CARD_DIGEST]);
   });
 
+  // covers ADR 020, ADR 031
   it("never stores or shows a secret the hob wrote in a push's input", async () => {
     const { folder, repository, remote } = await setUp("secret-branch");
     const branch = `feat/${SECRET}`;
@@ -734,6 +737,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, branch)).toBeNull();
   });
 
+  // covers ADR 031
   it("records a push's step before it pushes, and pushes nothing when the step cannot be recorded", async () => {
     const { folder, repository, remote, commit } = await setUp("recorded");
     const rows = new Map<string, CharmCall>();

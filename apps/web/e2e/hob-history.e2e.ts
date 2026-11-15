@@ -52,7 +52,7 @@ const hobPayload = (name: string) => ({
   instructions: "Write short answers.",
 });
 
-test("History and the Changes log show who changed a hob and what, live, and Revert undoes the latest change as yours", async ({
+test("History and the Changes log show who changed a hob and what, live, and Revert undoes the latest change as yours (#411)", async ({
   page,
   scan,
 }) => {
@@ -146,7 +146,7 @@ test("History and the Changes log show who changed a hob and what, live, and Rev
 });
 
 // covers #1352 (answers an earlier Summoning change dropped are shown to restore, never restored silently)
-test("History offers to restore the answers a Summoning change dropped, shows it working and failing, and restores them as yours", async ({
+test("History offers to restore the answers a Summoning change dropped, shows it working and failing, and restores them as yours (#1352)", async ({
   page,
   scan,
 }) => {
@@ -218,7 +218,8 @@ test("History offers to restore the answers a Summoning change dropped, shows it
   expect(saved?.policy.overrides).toEqual({ push: "deny", "delete-files": "deny", "use-web": "ask" });
 });
 
-test("a hob's History and Settings › Changes show who turned Summoning for every hob on, live", async ({
+// Issue #1357
+test("a hob's History and Settings › Changes show who turned Summoning for every hob on, live (#1357)", async ({
   page,
   scan,
 }) => {

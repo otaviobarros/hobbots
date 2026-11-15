@@ -56,7 +56,7 @@ const summon = (key: string, names: ReadonlyArray<string>) =>
   `Hire a crew\nfake:hub summoning_summon ${JSON.stringify({ key, hobs: names.map((name) => ({ name, role: "writer" })) })}`;
 
 // covers ADR 034 (Asking is a proposal: the same card in both places, Edit, created cards), #409 done when 1 and 4
-test("a summon card in the chat and the Inbox: Deny one row, Edit one in Summon, Allow the last, and a created card opens its hob", async ({
+test("a summon card in the chat and the Inbox: Deny one row, Edit one in Summon, Allow the last, and a created card opens its hob (#409)", async ({
   page,
 }) => {
   const { url, bram } = await managerHub();
@@ -110,7 +110,7 @@ test("a summon card in the chat and the Inbox: Deny one row, Edit one in Summon,
 });
 
 // covers ADR 034 (Retire is high risk), #409 (the retire card), STD-REACT-015
-test("a retire card reads what the hob has open first, says so when it cannot, and allows it only with the check box", async ({
+test("a retire card reads what the hob has open first, says so when it cannot, and allows it only with the check box (#409)", async ({
   page,
 }) => {
   const { url, api, bram } = await managerHub();
@@ -162,7 +162,7 @@ const tabTo = async (page: Page, target: Locator, limit = 80) => {
 };
 
 // covers STD-TEST-008, ADR 034 (Asking is a proposal), #409
-test("a summon proposal is decided by keyboard alone: open it from the Inbox, Allow one row, Edit the other in Summon, and open a created hob", async ({
+test("a summon proposal is decided by keyboard alone: open it from the Inbox, Allow one row, Edit the other in Summon, and open a created hob (#409)", async ({
   page,
 }) => {
   const { url, api, bram } = await managerHub();
@@ -212,7 +212,7 @@ test("a summon proposal is decided by keyboard alone: open it from the Inbox, Al
 });
 
 // covers ADR 034 ("Always allow" for every field that asked), the design system (one place asks for you)
-test("a hob's change to itself waits in the tray with its fields on one line each, Always allow all sets every field that asked, and focus moves to the composer once it is decided", async ({
+test("a hob's change to itself waits in the tray with its fields on one line each, Always allow all sets every field that asked, and focus moves to the composer once it is decided (#409)", async ({
   page,
 }) => {
   const { url, api, bram } = await managerHub();
@@ -254,7 +254,7 @@ test("a hob's change to itself waits in the tray with its fields on one line eac
 });
 
 // covers STD-TEST-010, the design system (one place asks for you), ADR 034
-test("a tall proposal scrolls inside the tray at the smallest window, with the hobs it made, keeping the composer and Allow all in view", async ({
+test("a tall proposal scrolls inside the tray at the smallest window, with the hobs it made, keeping the composer and Allow all in view (#409)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 960, height: 640 });

@@ -280,6 +280,7 @@ describe("a hob's folders", () => {
     });
   });
 
+  // covers ADR 031
   it("grants a hob the Charms it is given by id, and refuses a Charm the hub does not hold", async () => {
     const agent = await newHob();
     const off = await request("PATCH", permissions(agent), { charms: { granted: [] } });
@@ -301,6 +302,7 @@ describe("a hob's folders", () => {
     });
   });
 
+  // covers ADR 031
   it("lets a hob be granted a Charm that is only registered, and rules on the operations it declares", async () => {
     await dispose();
     // Rook is registered with the Charm registry and declared nowhere else.
@@ -478,7 +480,8 @@ describe("a hob's overrides", () => {
     });
   });
 
-  it("sets Search the web to Never, and refuses Ask for it, which it does not take", async () => {
+  // covers ADR 036
+  it("sets Search the web to Never, and refuses Ask for it, which it does not take (#1266)", async () => {
     const agent = await newHob();
     expect((await request("GET", permissions(agent))).body).toMatchObject({ decisions: { "search-web": "allow" } });
 

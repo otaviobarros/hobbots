@@ -41,7 +41,7 @@ const hob = (id: string, extra: Partial<ConstructorParameters<typeof Agent>[0]> 
   });
 
 describe("Setting changes", () => {
-  it("keeps one record with actor, time, before and after for each authority setting a change moves, journaled with it", async () => {
+  it("keeps one record with actor, time, before and after for each authority setting a change moves, journaled with it (#1357)", async () => {
     const result = await Effect.gen(function* () {
       const setup = yield* SetupRepository;
       const sql = yield* SqlClient.SqlClient;
@@ -91,7 +91,7 @@ describe("Setting changes", () => {
     expect(result.rows.map((row) => Number(row.revision))).toEqual(result.journal.map((row) => Number(row.sequence)));
   });
 
-  it("shows a setting change in the History of each hob it reached, judged by the policy each held when it was made", async () => {
+  it("shows a setting change in the History of each hob it reached, judged by the policy each held when it was made (#1357)", async () => {
     const history = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const setup = yield* SetupRepository;

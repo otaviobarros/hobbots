@@ -120,6 +120,7 @@ describe("member and step sessions offer git_init", () => {
     ]);
   }, 30_000);
 
+  // covers ADR 020, ADR 038
   it("a member is offered the writes of a Charm that offers them outside chats, and only the reads of one that does not", async () => {
     const rows = new Map<string, CharmCall>();
     // The Ledger Charm offers its writes outside chats, as the GitHub Charm does; the Shelf Charm does not.

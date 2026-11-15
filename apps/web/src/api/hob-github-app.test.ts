@@ -6,6 +6,7 @@ import { type LinkOnce, linkOnce, sendLinkOnce } from "./hob-github-app.ts";
 const KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----";
 
 // The user links an app, then the form closes: TanStack Query keeps the mutation's variables.
+// Issue #1321
 it("sends a linked app's key once and keeps no copy in the mutation, whether it succeeds or fails", async () => {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   const sent: Array<string> = [];

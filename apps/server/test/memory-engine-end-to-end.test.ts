@@ -183,6 +183,7 @@ const LESSON = {
 };
 
 describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled ai-memory", () => {
+  // covers ADR 028 (The memory tools, The memory brief)
   it("a lesson a hob learns in one thread is in its next thread's brief and search, and never another hob's", async () => {
     const { project, dataDir } = prepare();
     hub = await start(dataDir);

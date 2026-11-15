@@ -8,7 +8,7 @@ const project = "/work/ledger";
 const found = (command: string) => ghArguments("Bash", { command }, project, "/Users/frodo");
 
 describe("the gh a command line runs (#1349)", () => {
-  it("finds gh behind wrappers and shell keywords, after other commands, inside eval, sh -c and command substitutions, and nothing for any other command", () => {
+  it("finds gh behind wrappers and shell keywords, after other commands, inside eval, sh -c and command substitutions, and nothing for any other command (#1349)", () => {
     expect(found("gh pr create --fill")).toEqual(["pr", "create", "--fill"]);
     expect(found("git add -A && gh pr comment 3 --body 'Looks good'")).toEqual([
       "pr",

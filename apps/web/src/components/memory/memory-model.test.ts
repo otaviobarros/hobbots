@@ -348,7 +348,7 @@ describe("a page", () => {
   });
 
   // covers ADR 028 (Read), #1317
-  it("names nobody for a version memory does not say who wrote", () => {
+  it("names nobody for a version memory does not say who wrote (#1317)", () => {
     const rows = historyRows(
       [
         { version: version("v3"), supersedes: version("v2"), author: byPip, writtenAt: "c", latest: true },

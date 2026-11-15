@@ -156,7 +156,7 @@ describe("Hubs sharing one computer's keychain (#1214)", () => {
   const signIn = Effect.flatMap(Keychain, (keychain) => keychain.read).pipe(Effect.map(Option.map(Redacted.value)));
 
   // covers ADR 020, ADR 022
-  it("keeps each hub's sign-in and app keys apart, so one hub's delete leaves the other's", async () => {
+  it("keeps each hub's sign-in and app keys apart, so one hub's delete leaves the other's (#1214)", async () => {
     const hubA = hubOn("/Users/someone/Library/Application Support/Hobbots");
     const hubB = hubOn("/Users/someone/hobbots-qa/hub-b");
     expect(hubKeychainScope("/a")).not.toBe(hubKeychainScope("/b"));

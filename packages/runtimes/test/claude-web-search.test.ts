@@ -88,7 +88,7 @@ const search = async (
 
 describe("Claude Code's web search", () => {
   // covers ADR 036
-  it("records a search's results with the turn's recorder before the hook returns and reports the search", async () => {
+  it("records a search's results with the turn's recorder before the hook returns and reports the search (#1289)", async () => {
     const order: Array<string> = [];
     const done = await search(EMPTY_HOB_POLICY, {
       recordSearch: (event) =>
@@ -103,7 +103,7 @@ describe("Claude Code's web search", () => {
   });
 
   // covers ADR 036
-  it("offers WebSearch only to a turn the hub let search and a hob allowed to, and never WebFetch", () => {
+  it("offers WebSearch only to a turn the hub let search and a hob allowed to, and never WebFetch (#1266)", () => {
     expect(toolTurn(access(), "on", { webSearch: true })?.tools).toContain("WebSearch");
     expect(toolTurn(access(), "on", { webSearch: true })?.webSearch).toBe(true);
     for (const turn of [toolTurn(access(), "on"), toolTurn(access(NEVER), "on", { webSearch: true })]) {
@@ -114,7 +114,7 @@ describe("Claude Code's web search", () => {
   });
 
   // covers ADR 036
-  it("decides a search as Search the web, reports its query and hits, and labels them as other people's text", async () => {
+  it("decides a search as Search the web, reports its query and hits, and labels them as other people's text (#1266)", async () => {
     const allowed = await search();
     expect(allowed.decision).toBe("allow");
     expect(allowed.events).toContainEqual({
@@ -140,7 +140,7 @@ describe("Claude Code's web search", () => {
   });
 
   // covers ADR 036 (Usage and limits)
-  it("asks the hub's limits before each search and refuses one past them with the hub's words", async () => {
+  it("asks the hub's limits before each search and refuses one past them with the hub's words (#1269)", async () => {
     const queries: Array<string> = [];
     const limit = "This turn reached its limit of 1 web search, set in Settings › Web.";
     const check = (query: string) =>

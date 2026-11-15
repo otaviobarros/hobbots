@@ -294,8 +294,9 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     },
   );
 
+  // Issue #1213
   it.skipIf(runtime.start === null).each(EVERY_IDENTITY)(
-    "tells the hob up front that Hobbots sets who commits, for $why, in new and resumed sessions",
+    "tells the hob up front that Hobbots sets who commits, for $why, in new and resumed sessions (#1213)",
     async (each) => {
       if (runtime.start === null) throw new Error("skipped");
       const turn = (sessionId: string | null) => {
@@ -320,7 +321,8 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     );
   });
 
-  it("refuses a commit the hub holds, as a lead's of a member's open work, with whose work it is", async () => {
+  // Issue #742
+  it("refuses a commit the hub holds, as a lead's of a member's open work, with whose work it is (#742)", async () => {
     const held = `${project} holds changes a member has not committed: LEDGER.md of Task build, which Nettle works on.`;
     const asked: Array<string> = [];
     const lead: CallSteering = {
@@ -372,6 +374,7 @@ const acmeSteering = (pushesFrom: ReadonlyArray<string>): Promise<CallSteering> 
 };
 
 describe.each(RUNTIMES)("how $name steers a git push a Charm takes over (ADR 031)", (runtime) => {
+  // covers ADR 031
   it("points a git push to the tool a fake Charm declares, only where its declaration applies", async () => {
     const tools = access(settleCommitsAs(null, NONE, null));
     const command = "pnpm test && git push origin feature";
@@ -396,7 +399,8 @@ const offering = (names: ReadonlyArray<string>): HubTools => ({
 const GITHUB_CHARM = offering([...GITHUB_TOOLS, ...GITHUB_WRITE_TOOLS].map((tool) => tool.name));
 
 describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runtime) => {
-  it("refuses gh before it runs, naming the Charm tool for what it tried, also inside env, sh -c, if and $(…)", async () => {
+  // covers ADR 020
+  it("refuses gh before it runs, naming the Charm tool for what it tried, also inside env, sh -c, if and $(…) (#1349)", async () => {
     const tools = access(settleCommitsAs(null, NONE, null));
     const cases: ReadonlyArray<readonly [string, string]> = [
       ["gh pr create --fill", "Use the github_open_pull_request tool instead of gh pr create"],
@@ -421,7 +425,7 @@ describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runt
   });
 
   it.skipIf(runtime.start === null)(
-    "tells a hob holding the GitHub Charm that GitHub goes through it, and a resumed session again",
+    "tells a hob holding the GitHub Charm that GitHub goes through it, and a resumed session again (#1349)",
     async () => {
       const as = settleCommitsAs(null, NONE, null);
       const start = runtime.start as NonNullable<Runtime["start"]>;

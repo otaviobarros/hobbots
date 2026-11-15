@@ -182,7 +182,7 @@ const handedOn = (): TaskTree => {
 };
 
 describe("each hob's work in a quest", () => {
-  it("gives the lead a lane and each member of its party one, side by side", () => {
+  it("gives the lead a lane and each member of its party one, side by side (#905)", () => {
     const room = laneRoom(blackFriday(), []);
     expect(room.order.map((lane) => lane.hobId)).toEqual([ALDRIC, QUILL, ADA]);
     expect(room.lanes.map((node) => node.party.length)).toEqual([0, 0, 0]);
@@ -211,7 +211,7 @@ describe("each hob's work in a quest", () => {
     expect(lines(laneOf(room, ADA))).toEqual([`in Landing copy ← ${QUILL}`, "beat Page scaffolded", "now -"]);
   });
 
-  it("marks what a hob did from its records, in the order it did it, with paths inside its folder", () => {
+  it("marks what a hob did from its records, in the order it did it, with paths inside its folder (#905)", () => {
     const steps: ReadonlyArray<ReplyStep> = [
       read("/work/site/brief.md", 1),
       {
@@ -258,7 +258,8 @@ describe("each hob's work in a quest", () => {
     ]);
   });
 
-  it("dates a running lane's last step from the newest thing its records say the hob did", () => {
+  it("dates a running lane's last step from the newest thing its records say the hob did (#1004)", () => {
+    // A running lane says when its hob last did something, from records only (#1004)
     const records = activity(BUILD, {
       attempt: attempt(BUILD, "running"),
       steps: [{ id: "think", kind: "thinking", label: "Thinking", state: "done", startedAt: AT(13) }],
@@ -282,7 +283,8 @@ describe("each hob's work in a quest", () => {
     expect(laneOf(laneRoom(handedOn(), []), ADA).items.at(-1)).toMatchObject({ label: null, since: AT(12) });
   });
 
-  it("names the background command a turn waits on once the hob has gone on past it", () => {
+  it("names the background command a turn waits on once the hob has gone on past it (#1004)", () => {
+    // A running lane says what its hob waits on, from records only (#1004, #1018)
     const dev: ReplyStep = { id: "dev", kind: "tool", label: "Running pnpm dev", state: "running", startedAt: AT(13) };
     const check: ReplyStep = {
       id: "check",
@@ -458,7 +460,7 @@ describe("each hob's work in a quest", () => {
     expect(lines(laneOf(room, ADA))).toEqual([`wait ${QUILL}, you`]);
   });
 
-  it("says Stuck in the lane whose Task has stuck work, until the Task ends (#1087)", () => {
+  it("says Stuck in the lane whose Task has stuck work, until the Task ends (#1087) (#1087)", () => {
     const room = laneRoom(blackFriday(), [], undefined, new Set([COPY]));
     expect(laneOf(room, QUILL).status).toBe("stuck");
     expect(laneOf(room, ALDRIC).status).toBe("running");
@@ -539,7 +541,7 @@ describe("each hob's work in a quest", () => {
     expect(laneAttempts(retried)).not.toContain(first.id);
   });
 
-  it("folds the oldest marks into a count and keeps beats and chips in place", () => {
+  it("folds the oldest marks into a count and keeps beats and chips in place (#905)", () => {
     const records = activity(COPY, {
       commands: Array.from({ length: SHOWN_MARKS + 3 }, (_, index) => command(COPY, `step ${index}`, index + 1)),
     });
@@ -683,7 +685,7 @@ describe("each hob's work in a quest", () => {
     expect(lane.tasks.map((each) => each.id)).toEqual([COPY, SIGNS]);
   });
 
-  it("groups a nested Quest's lanes under its lead, who leads them", () => {
+  it("groups a nested Quest's lanes under its lead, who leads them (#905)", () => {
     const NESTED = QuestId.make("quest-build");
     const base = blackFriday();
     const nested = (member: AgentId, child: TaskId, brief: string) =>

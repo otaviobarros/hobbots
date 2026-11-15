@@ -348,7 +348,8 @@ describe("backup and restore", () => {
     await expect(lstat(restoreMarkerFile(dataDir))).rejects.toThrow();
   });
 
-  it("brings back web searches, pages read, Settings › Web and a hob's own limits", async () => {
+  // covers ADR 036 (Usage and limits: backups)
+  it("brings back web searches, pages read, Settings › Web and a hob's own limits (#1269)", async () => {
     const where = {
       agentId: FRODO,
       threadId,
@@ -415,7 +416,8 @@ describe("backup and restore", () => {
     expect(restored.limits).toEqual(limits);
   });
 
-  it("brings back the history of settings changes, and each hob's History still shows them", async () => {
+  // Issue #1357
+  it("brings back the history of settings changes, and each hob's History still shows them (#1357)", async () => {
     const everyHob = { scope: { summoned: true, self: false, hobs: [] }, overrides: SUMMONING_DEFAULTS };
     const before = await onHub(
       dataDir,
@@ -767,6 +769,7 @@ describe("backup and restore", () => {
     }
   });
 
+  // covers ADR 028 (Backups)
   it("keeps memory in the backup with no bearer, restores it with new bearers, and stops when memory cannot be saved", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
@@ -830,6 +833,7 @@ describe("backup and restore", () => {
     );
     await expect(lstat(failing)).rejects.toThrow();
   });
+  // covers ADR 029 (Backups, exports and Diagnostics), #1064
   it("brings back every skill revision, assignment, hold and pin, with each revision's files read-only", async () => {
     await onHub(dataDir, seed);
     const source = join(root, "release");

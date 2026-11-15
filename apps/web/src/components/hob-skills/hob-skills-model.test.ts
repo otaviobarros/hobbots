@@ -101,7 +101,7 @@ const view: HobSkills = {
 
 describe("a hob's skills (ADR 029, Scopes)", () => {
   // covers ADR 029 (Scopes, Pins and rollout), #1062
-  it("lists what a hob carries by scope, with skills turned off, replaced, clashing and held back", () => {
+  it("lists what a hob carries by scope, with skills turned off, replaced, clashing and held back (#1062)", () => {
     const groups = carriedGroups(view, list);
     expect(groups.map((group) => group.key)).toEqual(["everyone", `project:${docs}`, `project:${site}`, `hob:${pip}`]);
     const rows = groups.map((group) =>
@@ -123,7 +123,7 @@ describe("a hob's skills (ADR 029, Scopes)", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("lists each skill of a set a hob gets, and one it turned off, under the set's scope", () => {
+  it("lists each skill of a set a hob gets, and one it turned off, under the set's scope (#1143)", () => {
     const set = skill("agent-engineering");
     const setEveryone = assignment("agent-engineering", everyone);
     const member = (name: string) => ({
@@ -153,7 +153,7 @@ describe("a hob's skills (ADR 029, Scopes)", () => {
   });
 
   // covers ADR 029 (A hob's Skills tab), #1062
-  it("offers the skills a hob does not carry, and the shared ones it turned off, to turn on again", () => {
+  it("offers the skills a hob does not carry, and the shared ones it turned off, to turn on again (#1062)", () => {
     expect(giveOffers(view, list).map((offer) => [offer._tag, offer.skill.name])).toEqual([
       ["TurnOn", "astro"],
       ["Give", "loose"],

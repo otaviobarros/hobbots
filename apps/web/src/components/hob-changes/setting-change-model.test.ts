@@ -18,7 +18,8 @@ const preset: SettingDiff = { setting: "safetyPreset", before: "balanced", after
 const folders: SettingDiff = { setting: "approvedFolders", before: ["/a"], after: ["/a", "/b"] };
 
 describe("setting changes", () => {
-  it("titles a setting change for Settings and words what it did to each hob it reached", () => {
+  // Issue #1357
+  it("titles a setting change for Settings and words what it did to each hob it reached (#1357)", () => {
     expect([on, answered, off, preset, folders].map(settingTitle)).toEqual([
       "Summoning for every hob turned on",
       "Summoning for every hob changed",
@@ -35,7 +36,8 @@ describe("setting changes", () => {
     ]);
   });
 
-  it("shows only the parts a change moved, before and after, naming picked hobs", () => {
+  // Issue #1357
+  it("shows only the parts a change moved, before and after, naming picked hobs (#1357)", () => {
     expect(settingLines(preset)).toEqual([
       { label: "How careful", before: "Balanced", after: "Careful", lines: false },
     ]);
@@ -59,7 +61,8 @@ describe("setting changes", () => {
     ]);
   });
 
-  it("tells a scope that swapped one picked hob for another of the same name apart by id", () => {
+  // Issue #1357
+  it("tells a scope that swapped one picked hob for another of the same name apart by id (#1357)", () => {
     const swapped: SettingDiff = {
       setting: "summoningForEveryHob",
       before: { scope: { ...scope, hobs: ["ada-1111-aaaa"] }, overrides: {} },

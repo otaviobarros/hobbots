@@ -296,7 +296,7 @@ describe("a message to a member waiting on an approval", () => {
 });
 
 describe("a message to a member whose turn runs", () => {
-  it("a message sent with no delivery to a member whose turn runs reaches it at its next step", async () => {
+  it("a message sent with no delivery to a member whose turn runs reaches it at its next step (#1345)", async () => {
     const tools = toolsHub(party, TOP);
     dispose = tools.dispose;
     const { pip, nettle } = await nested(tools);
@@ -311,7 +311,7 @@ describe("a message to a member whose turn runs", () => {
     expect((await tree()).notes.map((note) => note.delivery)).toEqual(["steer"]);
   });
 
-  it("a steered message to a member whose runtime cannot take one while a turn runs interrupts that turn, and says why", async () => {
+  it("a steered message to a member whose runtime cannot take one while a turn runs interrupts that turn, and says why (#1345)", async () => {
     const tools = toolsHub(party, TOP, Layer.succeed(RuntimeAdapter, { ...makeFakeRuntime(), steersTurns: false }));
     dispose = tools.dispose;
     const { pip, nettle } = await nested(tools);

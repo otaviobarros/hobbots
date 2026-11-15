@@ -1484,7 +1484,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
   });
 
   // covers ADR 022, PE-003, PE-007
-  it("opens a labelled sub-issue as the hob's bot after one card, with tokens for opening issues only", async () => {
+  it("opens a labelled sub-issue as the hob's bot after one card, with tokens for opening issues only (#1350)", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("issue-shed");

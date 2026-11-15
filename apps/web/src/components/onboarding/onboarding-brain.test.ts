@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { setupBrain } from "./onboarding-brain.tsx";
 
 describe("the hub's brain in setup", () => {
-  it("moves the brain to the connected provider's smallest model, and keeps a choice that runs", () => {
+  it("moves the brain to the connected provider's smallest model, and keeps a choice that runs (#1367)", () => {
     // The default is on Claude; with only ChatGPT connected, setup picks ChatGPT's smallest at low effort.
     expect(setupBrain({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }, ["chatgpt"])).toMatchObject({
       provider: "chatgpt",

@@ -202,7 +202,8 @@ describe("Charm call records", () => {
     expect(result.listed.map((c) => c.key)).toEqual(["k1"]);
   });
 
-  it("lists the uncertain calls Tasks' sessions made, and settles one from its Task once, racing a read-back", async () => {
+  // covers ADR 038
+  it("lists the uncertain calls Tasks' sessions made, and settles one from its Task once, racing a read-back (#1343)", async () => {
     const user = Layer.succeed(UserSession, {
       deviceId: WINDOW_DEVICE_ID,
       name: "This computer's Hobbots window",
@@ -267,6 +268,7 @@ describe("Charm call records", () => {
     expect(result.listed).toEqual([]);
   });
 
+  // covers ADR 031
   it("0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
     // Keeps 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its Charms, whether
     // other hobs see it, its good at and who made and summoned it, and its Summoning scope;

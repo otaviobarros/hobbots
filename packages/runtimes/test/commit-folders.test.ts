@@ -10,7 +10,7 @@ const other = "/work/notes";
 const folders = (command: string) => commitFolders("Bash", { command }, project, "/Users/frodo");
 
 describe("the repositories a command line commits in (#742)", () => {
-  it("finds each one after cd, git -C, wrappers that move it, eval and sh -c, and nothing for any other command", () => {
+  it("finds each one after cd, git -C, wrappers that move it, eval and sh -c, and nothing for any other command (#742)", () => {
     expect(folders("git commit -m 'chore: pocket ledger v0.1'")).toEqual([project]);
     expect(folders("git add -A && git commit -am x")).toEqual([project]);
     expect(folders(`cd ${other} && git commit -m x`)).toEqual([other]);

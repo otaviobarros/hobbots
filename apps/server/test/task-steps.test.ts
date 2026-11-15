@@ -380,6 +380,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(finished.tasks.filter((task) => task.parentId === null)).toHaveLength(1);
   });
 
+  // covers ADR 029 (Delivery per runtime)
   it("a step's fresh session gets its hob's skills, as its chat does", async () => {
     const library = makeSkillLibraryFake();
     const hash = SkillRevisionHash.make("a".repeat(64));
@@ -559,7 +560,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
   });
 
-  it("steps of two Quests take the one free slot in turn, not in the order they asked", async () => {
+  it("steps of two Quests take the one free slot in turn, not in the order they asked (#1448)", async () => {
     const { run, control, stepsAsked } = setUp({
       turnLimits: { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } },
     });

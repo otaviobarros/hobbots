@@ -351,14 +351,15 @@ const fake: Runtime = {
 const RUNTIMES: ReadonlyArray<Runtime> = [claudeCode, codex, fake];
 
 describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
-  it("refuses a file tool's write to a path you took over, and lets one elsewhere run", async () => {
+  // Issue #1449
+  it("refuses a file tool's write to a path you took over, and lets one elsewhere run (#1449)", async () => {
     const asked: Array<CallWrites> = [];
     expect(await runtime.write(PLAN, steering(asked))).toContain(TAKEN);
     expect(asked.at(-1)?.paths).toEqual([PLAN]);
     expect(await runtime.write(join(project, "notes.md"), steering(asked))).not.toContain(TAKEN);
   });
 
-  it("refuses a command that writes there, pushes the branch or commits on it", async () => {
+  it("refuses a command that writes there, pushes the branch or commits on it (#1449)", async () => {
     const asked: Array<CallWrites> = [];
     expect(await runtime.run(`echo plan > ${PLAN}`, steering(asked))).toContain(TAKEN);
     expect(asked.at(-1)?.paths).toEqual([PLAN]);
@@ -372,7 +373,8 @@ describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
     expect(asked).toHaveLength(before);
   });
 
-  it("lets a write through once you give back what it writes, asking the hub on every call", async () => {
+  // Issue #1538
+  it("lets a write through once you give back what it writes, asking the hub on every call (#1538)", async () => {
     const asked: Array<CallWrites> = [];
     let yours = true;
     const live: CallSteering = {
@@ -395,7 +397,8 @@ describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
 });
 
 describe.each(RUNTIMES)("writes the hub cannot read from the call, on $name", (runtime) => {
-  it("fails a script's write to a path you took over in the turn's sandbox, and makes its others", async () => {
+  // Issue #1537
+  it("fails a script's write to a path you took over in the turn's sandbox, and makes its others (#1537)", async () => {
     const files = ["docs/plan.md", "notes.md"];
     const taken = { ...access, taken: [join(project, "docs")] };
     const run = await runtime.hidden(taken, files);
@@ -407,7 +410,8 @@ describe.each(RUNTIMES)("writes the hub cannot read from the call, on $name", (r
 });
 
 describe("a write the user approved", () => {
-  it("is refused if you took over what it writes while its card waited", async () => {
+  // Issue #1449
+  it("is refused if you took over what it writes while its card waited (#1449)", async () => {
     const careful = { ...access, policy: { ...access.policy, preset: "careful" as const } };
     const turn = toolTurn(careful, "on");
     if (turn === null) throw new Error("expected a tool turn");

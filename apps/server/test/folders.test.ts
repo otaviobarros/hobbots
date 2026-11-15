@@ -38,12 +38,12 @@ describe("checking a folder on the hub", () => {
 
 describe("adding a folder on the hub", () => {
   // covers #1225: on macOS, opening a protected folder asks the user then, not mid-turn.
-  it("opens the folder once and accepts it", async () => {
+  it("opens the folder once and accepts it (#1225)", async () => {
     expect(await Effect.runPromiseExit(checkNewFolder("~/code", home))).toEqual(Exit.succeed(join(home, "code")));
   });
 
   // root opens any folder, so the refusal shows only for an ordinary user.
-  it.skipIf(process.getuid?.() === 0)("refuses a folder it can't open, saying where to allow it", async () => {
+  it.skipIf(process.getuid?.() === 0)("refuses a folder it can't open, saying where to allow it (#1225)", async () => {
     chmodSync(join(home, "closed"), 0o000);
     const onMac = await Effect.runPromiseExit(checkNewFolder("~/closed", home, true));
     const elsewhere = await Effect.runPromiseExit(checkNewFolder("~/closed", home, false));

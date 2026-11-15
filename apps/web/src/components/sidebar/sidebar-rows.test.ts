@@ -48,7 +48,7 @@ const place = (
 const marina = new User({ id: UserId.make("marina"), name: "Marina", initials: "MR", color: "rose", state: "active" });
 
 describe("sidebar rows", () => {
-  it("joins each camp with its thread, hob, faces and needs-you mark, and waits for a thread not loaded yet", () => {
+  it("joins each camp with its thread, hob, faces and needs-you mark, and waits for a thread not loaded yet (#1469)", () => {
     const aldric = hob("aldric");
     const quill = hob("quill");
     const team = thread("team", "aldric", "camp");
@@ -83,7 +83,7 @@ describe("sidebar rows", () => {
     expect(rows[0]?.needs).toBe(true);
   });
 
-  it("names who wrote a camp's last line: You, a hob or a person, and nobody it does not know", () => {
+  it("names who wrote a camp's last line: You, a hob or a person, and nobody it does not know (#1563)", () => {
     const you = new User({ id: UserId.make("owner"), name: "Otavio", initials: "OB", color: "amber", state: "active" });
     const known = { you, hobs: [hob("aldric")], people: [marina] };
     expect(authorName({ ...known, author: { kind: "user", id: "owner" } })).toBe("You");
@@ -94,7 +94,7 @@ describe("sidebar rows", () => {
     expect(authorName({ ...known, author: null })).toBeNull();
   });
 
-  it("gives a camp's row the name of who wrote its last line", () => {
+  it("gives a camp's row the name of who wrote its last line (#1563)", () => {
     const team = new Thread({
       ...thread("team", "aldric", "camp"),
       lastLine: "one caption idea each?",
@@ -111,7 +111,7 @@ describe("sidebar rows", () => {
     expect(row?.lastAuthor).toBe("Marina");
   });
 
-  it("lists every hob in its order, each with its direct message once the hub lists one", () => {
+  it("lists every hob in its order, each with its direct message once the hub lists one (#1469)", () => {
     const chat = thread("chat-quill", "quill", "chat");
     const rows = directRows({
       hobs: [hob("aldric"), hob("quill")],
@@ -124,14 +124,14 @@ describe("sidebar rows", () => {
     ]);
   });
 
-  it("counts the hub's unread replies, kept in step with the live unread threads", () => {
+  it("counts the hub's unread replies, kept in step with the live unread threads (#1469)", () => {
     const counted = place("c", "aldric", "hob-camp", [], 3);
     expect(unreadCount(counted, undefined)).toBe(3);
     expect(unreadCount(counted, new Set())).toBe(0);
     expect(unreadCount(place("c", "aldric", "hob-camp", [], 0), new Set([ThreadId.make("c")]))).toBe(1);
   });
 
-  it("shows today's time of day, and the day for an older row", () => {
+  it("shows today's time of day, and the day for an older row (#1469)", () => {
     const now = new Date("2026-11-14T15:00:00");
     expect(rowTime(new Date("2026-11-14T09:05:00").toISOString(), now, "en-US")).toBe("9:05 AM");
     expect(rowTime(new Date("2026-11-12T09:05:00").toISOString(), now, "en-US")).toBe("Nov 12");

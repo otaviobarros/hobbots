@@ -52,7 +52,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Storage and revisions), #1196
-  it("leaves a data folder with skills removable with a plain rm -rf, read-only files and all", async () => {
+  it("leaves a data folder with skills removable with a plain rm -rf, read-only files and all (#1196)", async () => {
     const { layer, data } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release"), "notes/steps.md": "Tag, then push." });
     await runWith(layer)(
@@ -66,7 +66,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Storage and revisions), #1196
-  it("opens the folders of revisions an earlier hub sealed, and keeps their files read-only", async () => {
+  it("opens the folders of revisions an earlier hub sealed, and keeps their files read-only (#1196)", async () => {
     const { data } = await importerLayer();
     const sealed = join(data, "skills", "objects", "a".repeat(64));
     await mkdir(join(sealed, "notes"), { recursive: true });

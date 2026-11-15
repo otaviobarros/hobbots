@@ -138,6 +138,7 @@ describe("a turn's skill folder (ADR 029)", () => {
     expect(readdirSync(join(base, SKILL_MOUNTS))).toEqual([]);
   });
 
+  // covers ADR 029
   /** A set's revision, as the library keeps it: skills under `skills/`, and the rules they share. */
   const setRevision = () => {
     const folder = mkdtempSync(join(temp, "set-"));
@@ -158,7 +159,7 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers ADR 029
-  it("holds a set whole, as its own plugin, with only its mounted skills listed", () => {
+  it("holds a set whole, as its own plugin, with only its mounted skills listed (#1143)", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = setRevision();
     const mounts = [member("plan", stored), member("ship", stored, false), mount("alpha", revision("alpha"))];
@@ -187,7 +188,7 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers ADR 029
-  it("refuses a set with Hobbots' own name, two revisions of one set, or a path outside it", () => {
+  it("refuses a set with Hobbots' own name, two revisions of one set, or a path outside it (#1143)", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = setRevision();
     expect(() => writeSkillFolder(base, [member("plan", stored, true, "hobbots-skills")])).toThrow(/not a set name/);
@@ -201,7 +202,7 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers ADR 029
-  it("counts a read inside the turn's folder as a skill's file, and a Codex read of a set's SKILL.md as its use", () => {
+  it("counts a read inside the turn's folder as a skill's file, and a Codex read of a set's SKILL.md as its use (#1143)", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = setRevision();
     const mounts = [member("plan", stored), member("ship", stored)];
@@ -254,6 +255,7 @@ describe("a turn's skill folder (ADR 029)", () => {
     );
   });
 
+  // covers ADR 029
   it("is shared by overlapping turns with the same mounts, kept apart from another revision's, and removed after the last", async () => {
     const base = mkdtempSync(join(temp, "base-"));
     const r4 = [mount("release", revision("release", "Release r4."), true, "r4")];
@@ -293,6 +295,7 @@ describe("a turn's skill folder (ADR 029)", () => {
 });
 
 describe("a turn's skill folder in the sandbox (ADR 029)", () => {
+  // covers ADR 029
   it("is readable, and nothing under the runtime folder's skill folders is writable", () => {
     const runtimeFolder = "/hub/runtimes/hob-1";
     const skillFolder = join(runtimeFolder, SKILL_MOUNTS, "abc");

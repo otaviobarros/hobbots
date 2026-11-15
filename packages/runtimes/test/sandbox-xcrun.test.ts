@@ -27,7 +27,8 @@ const exec = (command: string, args: ReadonlyArray<string>, env: NodeJS.ProcessE
   });
 
 describe("the process sandbox and Apple's developer tool shims", () => {
-  it.runIf(enabled)("runs /usr/bin/git and /usr/bin/python3 without xcrun's cache error", async () => {
+  // Issue #1219
+  it.runIf(enabled)("runs /usr/bin/git and /usr/bin/python3 without xcrun's cache error (#1219)", async () => {
     await Effect.gen(function* () {
       const env = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
       // Outside the sandbox, so xcrun's cache holds both tools, as it does once the user ran them.

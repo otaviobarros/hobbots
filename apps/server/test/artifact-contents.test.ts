@@ -192,7 +192,7 @@ const refused = (exit: Exit.Exit<string, string>) =>
 
 describe("an artifact's contents", () => {
   // covers ADR 037 (Records: Artifact), #1434
-  it("lists its versions newest first, each kept, read now or not kept", async () => {
+  it("lists its versions newest first, each kept, read now or not kept (#1434)", async () => {
     const versions = await runtime.runPromise(
       ArtifactContents.use((contents) => contents.versions(CAMP, RegisteredArtifactId.make("report"))),
     );
@@ -204,7 +204,7 @@ describe("an artifact's contents", () => {
   });
 
   // covers ADR 037 (Records: Artifact), PE-006, #1434
-  it("serves kept and current text redacted, refuses a path outside the hob's folders, a secret's name and a link out", async () => {
+  it("serves kept and current text redacted, refuses a path outside the hob's folders, a secret's name and a link out (#1434)", async () => {
     const [older, latest] = [await content("report", 1), await content("report", 2)];
     expect(older).toEqual(Exit.succeed(expect.stringContaining("# Report\n\nKept ")));
     expect(latest).toEqual(Exit.succeed(expect.stringContaining("# Report\n\nNow ")));
@@ -224,7 +224,7 @@ describe("an artifact's contents", () => {
   });
 
   // covers ADR 039 (camps), ADR 037 (Records: Artifact), PE-006
-  it("serves a file a member hob made in its own folders, and no other file there", async () => {
+  it("serves a file a member hob made in its own folders, and no other file there (#1461)", async () => {
     expect(await content("plan", 1)).toEqual(Exit.succeed(expect.stringContaining("# Plan")));
     // The camp's hob made this one, and the member's folder is not one of its.
     expect(refused(await content("sketch", 1))).toEqual(["outside-folders"]);

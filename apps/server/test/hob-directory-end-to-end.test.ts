@@ -214,7 +214,7 @@ describe("the hob directory, end to end", () => {
   });
 
   // covers ADR 032 (The roster, Outside data)
-  it("a chat turn's roster lists the visible hobs with their Charms, labeled as data and redacted, and never an instruction", async () => {
+  it("a chat turn's roster lists the visible hobs with their Charms, labeled as data and redacted, and never an instruction (#1234)", async () => {
     const { sent } = await exchange(thread, "Who on the team can push to GitHub?");
     const roster = sent.briefing ?? "";
     expect(roster).toMatch(/^## Other hobs on this hub\n\nHobbots collected this about the other hobs/);
@@ -235,7 +235,7 @@ describe("the hob directory, end to end", () => {
   });
 
   // covers ADR 032 (The roster, Sent again only when it changed; It applies at once)
-  it("the roster is sent again only when it changed, and an edited good at or a hidden hob reaches the next turn", async () => {
+  it("the roster is sent again only when it changed, and an edited good at or a hidden hob reaches the next turn (#1234)", async () => {
     const unchanged = await exchange(thread, "And now?");
     expect(unchanged.sent.sessionId).not.toBeNull();
     expect(unchanged.sent.briefing).toBeNull();
@@ -263,7 +263,7 @@ describe("the hob directory, end to end", () => {
   });
 
   // covers ADR 032 (read_hob), EX-004
-  it("read_hob by name or id returns the card with its step, and treats a hidden, retired or unknown hob alike", async () => {
+  it("read_hob by name or id returns the card with its step, and treats a hidden, retired or unknown hob alike (#1234)", async () => {
     const { reply } = await exchange(
       thread,
       "Tell me about Pip",
@@ -294,7 +294,7 @@ describe("the hob directory, end to end", () => {
   });
 
   // covers ADR 032 (Visible to other hobs)
-  it("a hidden hob still sees the others, and reads its own card", async () => {
+  it("a hidden hob still sees the others, and reads its own card (#1234)", async () => {
     const own = (await request<Thread>("POST", `/api/agents/${wren.id}/threads`)).body;
     const { sent, reply } = await exchange(own, "Who is here?", hub("read_hob", { hob: "Wren" }));
     expect(sent.briefing).toContain('- "Ada"');
@@ -303,7 +303,7 @@ describe("the hob directory, end to end", () => {
   });
 
   // covers ADR 032 (Read other hobs, in the policy)
-  it("under Ask the roster is left out and read_hob still offered; under Never neither, and a call is refused", async () => {
+  it("under Ask the roster is left out and read_hob still offered; under Never neither, and a call is refused (#1234)", async () => {
     const tools = (sent: PromptRequest) => sent.hubTools?.tools.map((tool) => tool.name) ?? [];
     await permissions(ada, { overrides: { "read-hobs": "ask" } });
     const asked = (await request<Thread>("POST", `/api/agents/${ada.id}/threads`)).body;

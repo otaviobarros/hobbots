@@ -32,7 +32,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
 const fetchPage = (url: string) => script("web_fetch", { url });
 
 // covers ADR 036 (Usage and limits), UX-006
-test("a reply that searched and read pages shows its steps, its sources, and what Open shows of each", async ({
+test("a reply that searched and read pages shows its steps, its sources, and what Open shows of each (#1271)", async ({
   page,
   scan,
 }) => {
@@ -90,7 +90,10 @@ test("a reply that searched and read pages shows its steps, its sources, and wha
 });
 
 // covers ADR 036 (Asking), UX-006
-test("a page on the local network and an address Aldric wrote ask with their own cards", async ({ page, scan }) => {
+test("a page on the local network and an address Aldric wrote ask with their own cards (#1271)", async ({
+  page,
+  scan,
+}) => {
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -127,7 +130,7 @@ test("a page on the local network and an address Aldric wrote ask with their own
 });
 
 // covers ADR 036 (Settings and Permissions, Usage and limits), UX-006
-test("Permissions, Charms, Settings › Web and Usage show the web in every theme", async ({ page, scan }) => {
+test("Permissions, Charms, Settings › Web and Usage show the web in every theme (#1271)", async ({ page, scan }) => {
   test.setTimeout(180_000);
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -236,7 +239,9 @@ const failing = async (page: Page, method: string, path: RegExp) => {
 };
 
 // covers ADR 036 (Amendment: the screens), STD-REACT-015, STD-REACT-016, STD-UI-009
-test("a web read that fails says so with Try again, and a save that fails keeps what you typed", async ({ page }) => {
+test("a web read that fails says so with Try again, and a save that fails keeps what you typed (#1271)", async ({
+  page,
+}) => {
   test.setTimeout(120_000);
   const { url, aldric } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
   const settingsBack = await failing(page, "GET", /\/api\/web\/settings$/);
@@ -331,7 +336,7 @@ const holding = async (page: Page, method: string, path: RegExp) => {
 };
 
 // covers ADR 036 (Amendment: the screens), STD-REACT-016
-test("what you type while a save runs stays when that save ends", async ({ page }) => {
+test("what you type while a save runs stays when that save ends (#1271)", async ({ page }) => {
   const { url } = await aldricHub({}, [], { HOBBOTS_FAKE_WEB: "on" });
   await page.goto(`${url}/#/settings/web`);
   const pagesField = page.getByLabel("Pages read in one turn");
@@ -361,7 +366,7 @@ test("what you type while a save runs stays when that save ends", async ({ page 
 });
 
 // covers ADR 036 (Validation), UX-006, #1272
-test("under Careful, Aldric searches, asks once for the new site, reads two results and answers with them as sources", async ({
+test("under Careful, Aldric searches, asks once for the new site, reads two results and answers with them as sources (#1272)", async ({
   page,
   scan,
 }) => {

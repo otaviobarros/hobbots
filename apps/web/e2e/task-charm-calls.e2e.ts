@@ -31,7 +31,7 @@ const recordUncertainComment = (dataDir: string, agentId: string, taskId: string
   database.close();
 };
 
-test("a Task's write whose answer was lost waits in its quest and the Inbox, and settles once from the lane", async ({
+test("a Task's write whose answer was lost waits in its quest and the Inbox, and settles once from the lane (#1343)", async ({
   page,
 }) => {
   const { url, headers, dataDir, aldric } = await questHub();
