@@ -4,7 +4,7 @@ import { laneTask } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
-test("a member's failed Task waits in the Inbox and on the lead's tile, and Retry there takes it out", async ({
+test("a member's failed Task waits in the Inbox and on the lead's tile, and Retry there takes it out (#988)", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();

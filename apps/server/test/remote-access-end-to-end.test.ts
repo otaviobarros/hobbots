@@ -59,7 +59,6 @@ import { AS_WINDOW, TEST_WINDOW_KEY } from "./window-device.ts";
 // own routes and event stream behind its device check, on its real loopback, tailnet and serve
 // listeners, over a fake Tailscale that serves the tailnet on 127.0.0.2. Devices are plain HTTP
 // clients that keep their cookies as a browser does. CI runs these on SQLite and on PostgreSQL.
-// The browser side of interaction check 10 is in apps/web/e2e/remote-access-end-to-end.e2e.ts.
 
 // The fake tailnet serves on 127.0.0.2 and its peers come from 127.0.0.5 and 127.0.0.6, so these
 // need a host that routes all of 127.0.0.0/8 to loopback, as Linux does. macOS skips them.

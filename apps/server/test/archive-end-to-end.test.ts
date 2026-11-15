@@ -48,7 +48,6 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // The archive slice's done-when checks over the HTTP API, with the hub's own composition: the
 // setup's preset and folders, one policy engine, approvals, search and the fake runtime, which
 // writes one event every few milliseconds so a reply is still running when the archive is asked.
-// The browser side of the same checks is in apps/web/e2e/archive-end-to-end.e2e.ts.
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-archive-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const project = join(temp, "project");

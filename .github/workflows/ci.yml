@@ -175,13 +175,13 @@ jobs:
           echo "The PostgreSQL shards ended: $RESULT."
           [[ "$RESULT" == success || ("$RESULT" == skipped && "$DATABASE" == false) ]]
 
-  # The browser tests run in eight shards side by side, balanced by recorded test times
+  # The browser tests run in two shards side by side, balanced by recorded test times
   # (apps/web/e2e/shards.ts), with two workers to a runner so each hub and browser gets a CPU
   # (#985). Each shard is a Turbo task with its own cache, so a change that touches neither the web
   # client nor the server and its packages replays the last result. A pull request runs them only
   # when it reaches the web client (scripts/ci-changes.mjs); `main` and the merge queue always do.
   browser-tests:
-    name: Browser tests (${{ matrix.shard }}/8)
+    name: Browser tests (${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.browser == 'true'
     runs-on: ubuntu-latest
@@ -189,9 +189,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2]
     env:
-      HOBBOTS_E2E_SHARD: ${{ matrix.shard }}/8
+      HOBBOTS_E2E_SHARD: ${{ matrix.shard }}/2
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup

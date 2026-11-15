@@ -63,8 +63,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // Issue #391: the Workbench's done-when checks (ADR 023), played over the HTTP API and the event
 // stream as the Workbench reads them, with the hub's own composition of the recorder, the folder
 // scanner, the store and the Task's files, the fake runtime changing a real folder, and the records
-// on SQLite or PostgreSQL (TestDatabase). The browser side of the same checks is in
-// apps/web/e2e/workbench-end-to-end.e2e.ts.
+// on SQLite or PostgreSQL (TestDatabase).
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-workbench-e2e-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
