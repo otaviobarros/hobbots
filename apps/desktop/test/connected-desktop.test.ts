@@ -437,7 +437,7 @@ describe("the connected desktop", () => {
   it("a program that pretends to be a hub is trusted only as the node the user chose, and never gets a real token", async () => {
     const pretender = fakeHub({
       pretend: true,
-      health: { app: "hobbots", name: "Your Hub", version: "0.5.0", connect: 1 },
+      health: { app: "hobbots", name: "Your Hub", version: "0.5.0", connect: CONNECT_PROTOCOL },
     });
     const { lookup } = tailnet();
     const kept: Array<string> = [];

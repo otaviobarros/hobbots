@@ -1,5 +1,6 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { CONNECT_PROTOCOL } from "@hobbots/api";
 import { Effect, Layer, Ref, Result } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { afterEach, describe, expect, it } from "vitest";
@@ -42,13 +43,13 @@ describe("findHubs", () => {
   });
 
   it("lists both hubs on a fake tailnet by their Tailscale names, asks only the user's own online computers, and changes nothing in Tailscale", async () => {
-    const studio = await listen(hub("Studio", 1));
-    const attic = await listen(hub("Attic", 1));
+    const studio = await listen(hub("Studio", CONNECT_PROTOCOL));
+    const attic = await listen(hub("Attic", CONNECT_PROTOCOL));
     const older = await listen(hub("Old desk"));
     const printer = await listen("<html>printer</html>");
-    const tagged = await listen(hub("Tagged server", 1));
-    const someoneElse = await listen(hub("Their hub", 1));
-    const asleep = await listen(hub("Asleep", 1));
+    const tagged = await listen(hub("Tagged server", CONNECT_PROTOCOL));
+    const someoneElse = await listen(hub("Their hub", CONNECT_PROTOCOL));
+    const asleep = await listen(hub("Asleep", CONNECT_PROTOCOL));
     const nothing = await closedPort();
 
     const node = (
@@ -185,7 +186,7 @@ describe("findHubs", () => {
       most = Math.max(most, inFlight);
       await new Promise((done) => setTimeout(done, 20));
       inFlight--;
-      return Response.json({ app: "hobbots", version: "0.4.0", connect: 1 });
+      return Response.json({ app: "hobbots", version: "0.4.0", connect: CONNECT_PROTOCOL });
     };
     const scan = await scanWith(ownComputers(20), slow);
     expect(scan._tag === "Scanned" && scan.hubs.length).toBe(20);
@@ -234,7 +235,7 @@ describe("findHubs with redirects", () => {
   };
   const hubAnswer = (response: ServerResponse) => {
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ app: "hobbots", name: "Trap", version: "0.4.0", connect: 1 }));
+    response.end(JSON.stringify({ app: "hobbots", name: "Trap", version: "0.4.0", connect: CONNECT_PROTOCOL }));
   };
   const redirect = (location: string) => (response: ServerResponse) => {
     response.writeHead(302, { location });
@@ -309,16 +310,19 @@ describe("findHubs with redirects", () => {
 describe("judgeHubHealth", () => {
   it("reads a hub's answer and which side needs an update, and anything else as not Hobbots", () => {
     const answer = (connect?: number) => ({ app: "hobbots", name: "Studio", version: "0.4.0", connect });
-    expect(judgeHubHealth(answer(1))).toEqual({
+    expect(judgeHubHealth(answer(CONNECT_PROTOCOL))).toEqual({
       _tag: "Hub",
       name: "Studio",
       version: "0.4.0",
-      connect: 1,
+      connect: CONNECT_PROTOCOL,
       support: "supported",
     });
     expect(judgeHubHealth({ app: "hobbots", version: "0.3.0" })).toMatchObject({ connect: 0, support: "hubOlder" });
-    expect(judgeHubHealth(answer(2))).toMatchObject({ support: "appOlder" });
-    expect(judgeHubHealth(answer(2), { min: 1, max: 2 })).toMatchObject({ support: "supported" });
+    expect(judgeHubHealth(answer(CONNECT_PROTOCOL - 1))).toMatchObject({ support: "hubOlder" });
+    expect(judgeHubHealth(answer(CONNECT_PROTOCOL + 1))).toMatchObject({ support: "appOlder" });
+    expect(judgeHubHealth(answer(CONNECT_PROTOCOL + 1), { min: 1, max: CONNECT_PROTOCOL + 1 })).toMatchObject({
+      support: "supported",
+    });
     expect(judgeHubHealth({ app: "other", version: "1" })).toEqual({ _tag: "NotHobbots" });
     expect(judgeHubHealth("ok")).toEqual({ _tag: "NotHobbots" });
   });

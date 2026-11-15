@@ -2,12 +2,13 @@
  * The connect protocol (ADR 025): a whole number that counts changes to what a connected desktop's
  * main process relies on: health, pairing, the device's own revoke, the event stream and the reads
  * behind notifications and the menu bar. It goes up only when one of those changes in a way an
- * older app cannot follow. The hub reports its own in the health answer.
+ * older app cannot follow. The hub reports its own in the health answer. 2: a thread is a channel
+ * on the wire, so activity rows, notifications and the bridge say `channelId` (#1610).
  */
-export const CONNECT_PROTOCOL = 1;
+export const CONNECT_PROTOCOL = 2;
 
 /** The connect protocols this app can use, oldest and newest. */
-export const SUPPORTED_CONNECT = { min: 1, max: 1 } as const;
+export const SUPPORTED_CONNECT = { min: 2, max: 2 } as const;
 
 /**
  * Whether this app can connect to a hub that reports `connect`: `ok`, or which side must update.
