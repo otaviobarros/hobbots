@@ -17,6 +17,7 @@
   "skill-updates.e2e.ts": 9700,
   "skill-uses.e2e.ts": 25200,
   "skills.e2e.ts": 39200,
+  "start-over.e2e.ts": 7600,
   "window-guard.e2e.ts": 300,
   "window-scroll.e2e.ts": 45500
 }
