@@ -72,7 +72,8 @@ Codex reviews every pull request with these rules, and with the rules of each ne
 ### Do not flag
 
 - What CI checks: Biome, types, knip, jscpd, complexity, layers, implicit state, machine pages, the glossary, the Markdown check, the standards index.
-- GitHub's merge preview commit, or a footer in a review comment. Only the PR's own commits and current description reach main.
+- The message of GitHub's merge preview, the commit on `refs/pull/<n>/merge` that GitHub builds to test the pull request. GitHub writes it from the description as the pull request was first opened, so it can keep a footer the current description no longer has. It never reaches main. Check only the commits the pull request adds and its current description.
+- A footer in a review comment or a reply on the pull request.
 - Code the diff does not touch, unless the change makes its bug reachable or worse; a race with no concrete interleaving, or one a transaction, row lock or hob admission already serializes; a guard for a state the machine or types rule out.
 - A finding a reply already declined with a reason, unless its code changed; wording, naming or structure no rule backs.
 

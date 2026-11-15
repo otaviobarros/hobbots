@@ -187,7 +187,7 @@ Read data with `useQuery` and handle its states explicitly. Do not use Suspense 
 Change server data with TanStack Query mutations, not React form actions. While a mutation is pending, its control shows progress and cannot be triggered again. When it fails, the user's input stays where it was, and the error follows STD-UI-009. Update the cache optimistically only for actions that rarely fail, such as archive or pin, and roll back on failure.
 
 - **Why:** a double submit or a lost draft costs the user's trust, and mutations already feed the query cache and the live events (STD-REACT-001).
-- **Enforced by:** review, and end-to-end tests of the pending and failure paths.
+- **Enforced by:** review, and unit or component tests of the pending and failure paths (STD-TEST-005).
 - **Applies to:** `apps/web`.
 
 ### STD-REACT-017 Forms validate with an Effect Schema
