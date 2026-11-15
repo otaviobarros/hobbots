@@ -50,8 +50,12 @@ export class TurnSlots extends Context.Service<
         const waking = new Set<string>();
         let counter = 0;
 
-        /** The waiting turns that would start now: the first ones, as many as slots are free. */
-        const due = () => Array.from(waiting.values()).slice(0, Math.max(0, cap - active.size));
+        /**
+         * The waiting turn that would start now: the first in the queue, while a slot is free. Only
+         * the first may take a slot, so turns start in the order they asked even when several slots
+         * free at once; the pump wakes them one by one.
+         */
+        const due = () => (active.size < cap ? Array.from(waiting.values()).slice(0, 1) : []);
 
         const release = (key: number) =>
           Effect.suspend(() => {
@@ -99,7 +103,7 @@ export class TurnSlots extends Context.Service<
               // A turn that asks again keeps its place in the queue.
               const before = waiting.get(request.id);
               const ahead = before === undefined ? waiting.size : Array.from(waiting.keys()).indexOf(request.id);
-              if (active.size + ahead >= cap) {
+              if (active.size >= cap || ahead > 0) {
                 waiting.set(request.id, { turn: request, wake, asks: counter++ });
                 return {
                   slot: null,

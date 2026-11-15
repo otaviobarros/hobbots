@@ -1,6 +1,6 @@
 import { AgentId, MAX_ACTIVE_TURNS, type SlotTurn } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
-import { Effect, Ref } from "effect";
+import { Deferred, Effect, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type TurnSlot, TurnSlots } from "../src/index.ts";
@@ -173,6 +173,33 @@ describe("TurnSlots", () => {
         expect(yield* slots.take(work("thread:first", "bram"), Effect.void)).toBe(null);
         yield* slots.withdraw("thread:second");
         expect((yield* slots.report).waiting.map((each) => each.id)).toEqual(["thread:first", "thread:third"]);
+      }),
+    );
+  });
+
+  it("keeps the queue's order when several slots free at once (#1590)", async () => {
+    await run(2, (slots) =>
+      Effect.gen(function* () {
+        const one = yield* slots.take(work("thread:one"), Effect.void);
+        const two = yield* slots.take(work("thread:two", "bram"), Effect.void);
+        const first = work("thread:first", "cora");
+        const second = work("thread:second", "dain");
+        const go = yield* Deferred.make<void>();
+        const firstSlot = yield* Ref.make<TurnSlot | null>(null);
+        // The first waiter's wake holds until the test lets it ask, so the second can ask before it.
+        const wakeFirst: Effect.Effect<void> = Effect.gen(function* () {
+          yield* Deferred.await(go);
+          yield* Ref.set(firstSlot, yield* slots.take(first, wakeFirst));
+        });
+        expect(yield* slots.take(first, wakeFirst)).toBe(null);
+        expect(yield* slots.take(second, Effect.void)).toBe(null);
+        yield* (one as TurnSlot).release;
+        yield* (two as TurnSlot).release;
+        // Both slots are free, but the second asked after the first: it waits until the first starts.
+        expect(yield* slots.take(second, Effect.void)).toBe(null);
+        yield* Deferred.succeed(go, undefined);
+        yield* waitUntil(Ref.get(firstSlot), isSet, { what: "the first waiter to start", every: "1 millis" });
+        expect(yield* slots.take(second, Effect.void)).not.toBe(null);
       }),
     );
   });
