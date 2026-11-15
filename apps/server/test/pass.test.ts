@@ -66,18 +66,23 @@ describe("pass", () => {
       // Pip, asked first, has nothing to add; Frodo answers after it.
       reactions.push({ on: "plant", lines: [hub(PASS_TOOL, { key: "pass", reason: "Frodo knows the garden" })] });
       await run(send(["@Pip @Frodo what should we plant?"]));
+      // The fake echoes its prompt, so Frodo's answer mentions Pip and wakes it (#1463): the hobs
+      // relay to each other until the relay budget leaves the next relay paused for you.
       const stored = await run(
         waitUntil(
           Effect.promise(requests),
-          (rows) => rows.length === 2 && rows.every((row) => row.state !== "waiting" && row.state !== "speaking"),
-          { what: "every request ended" },
+          (rows) =>
+            rows.some((row) => row.state === "paused") &&
+            rows.every((row) => row.state !== "waiting" && row.state !== "speaking"),
+          { what: "every request ended", within: "20 seconds" },
         ),
       );
       const all = await run(messagesWhen(() => true));
 
       expect(answers.get("pass")).toBe(PASS_TAKEN);
-      expect(replies(all)).toEqual([[FRODO, "complete"]]);
-      expect(stored).toEqual([
+      // Pip's pass left no message: the first reply is Frodo's.
+      expect(replies(all)[0]).toEqual([FRODO, "complete"]);
+      expect(stored.slice(0, 2)).toEqual([
         { hobId: PIP, state: "passed", passReason: "Frodo knows the garden" },
         { hobId: FRODO, state: "answered", passReason: null },
       ]);

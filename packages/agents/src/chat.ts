@@ -49,7 +49,7 @@ import {
   type UnreadThreads,
   waitedSteps,
 } from "@hobbots/domain";
-import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
+import { Context, DateTime, Deferred, Effect, Layer, Option, Ref, Semaphore } from "effect";
 import { HobAdmission, withThreadLock } from "./admission.ts";
 import { type CampRequest, type MoveRequest, makeCampCommands } from "./camp-commands.ts";
 import { buildPack, type Pack } from "./context-pack.ts";
@@ -147,6 +147,12 @@ export class ChatService extends Context.Service<
      * dropped.
      */
     readonly stopAll: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /**
+     * Let them go on (ADR 039, Hobs talking to hobs): the hobs the relay budget paused in the
+     * thread go on, for the budget's turns again, the resumed turn first. A person's message there
+     * drops what was paused instead. With nothing paused, it changes nothing.
+     */
+    readonly letHobsGoOn: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
     /**
      * Stop waiting (#1056): once the hob has answered and its reply only waits on commands it started,
      * ends the reply now. The reply shows as stopping, then completes with its text, and each command
@@ -563,7 +569,8 @@ export class ChatService extends Context.Service<
               if (sent.requests.length > 0) {
                 yield* step(threadId, { _tag: "Release" });
                 yield* advance(threadId, null, sent.message.id);
-              }
+                // Your message dropped what the relay budget paused there, so the line says so.
+              } else yield* lineUp(threadId);
               return { userMessage: sent.message, assistantMessage: null };
             }
             // A message waits while its hob is paused, while a reply runs, behind any request ahead
@@ -588,6 +595,8 @@ export class ChatService extends Context.Service<
             );
             if (sent.value.requests.length === 0) {
               yield* free;
+              // Your message dropped what the relay budget paused there, so the line says so.
+              yield* lineUp(threadId);
               return { userMessage: saved, assistantMessage: null };
             }
             // Work you stopped in this thread may start again once this message is answered.
@@ -674,15 +683,38 @@ export class ChatService extends Context.Service<
       // What is owed is dropped first, so the stopped turn's end finds nothing to start next. Both run
       // under the thread's lock, which every turn is admitted under, so a turn admitted meanwhile is
       // either running for the stop to reach, or never takes its dropped request. Work a dispatch is
-      // putting through before its turn launched is held, so that turn never starts.
+      // putting through before its turn launched is held, so that turn never starts. A turn that
+      // answers no request, as a carried backpack's, can complete between the drop and the stop, and
+      // the relays its reply wrote then are dropped after the stop: once the stop is saved, it writes none.
       const stopAll = Effect.fn("ChatService.stopAll")(function* (threadId: ThreadId) {
         yield* withThreadLock(
           admission,
           yield* findThread(threadId),
-          dropOwed(threadId, TurnRequests.stoppingAll).pipe(
-            Effect.andThen(stop(threadId)),
-            Effect.andThen(holdDispatch(threadId)),
-          ),
+          Effect.gen(function* () {
+            const reply = yield* runningReply(threadId);
+            const running = reply === null ? null : (yield* Ref.get(reply.current)).id;
+            yield* dropOwed(threadId, TurnRequests.stoppingAll);
+            yield* stop(threadId);
+            if (running !== null) {
+              yield* dropOwed(threadId, (open) => open.filter((request) => request.messageId === running));
+            }
+            yield* holdDispatch(threadId);
+          }),
+        );
+      });
+
+      // Let them go on (ADR 039): the paused requests wait again, journaled as one reset of the relay
+      // budget, and the floor moves on to the first of them, under the thread's lock as any start is.
+      const letHobsGoOn = Effect.fn("ChatService.letHobsGoOn")(function* (threadId: ThreadId) {
+        yield* withThreadLock(
+          admission,
+          yield* findThread(threadId),
+          Effect.gen(function* () {
+            const woken = yield* repo
+              .letHobsGoOn(mainLine(threadId), yield* sessionActor)
+              .pipe(Effect.flatMap(announce));
+            if (woken.length > 0) yield* advance(threadId);
+          }),
         );
       });
 
@@ -845,6 +877,7 @@ export class ChatService extends Context.Service<
         sendNow,
         stop,
         stopAll,
+        letHobsGoOn,
         stopWaiting,
         continueReply,
         interruptAgent,

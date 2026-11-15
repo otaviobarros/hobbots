@@ -19,6 +19,7 @@ import {
   isInProgress,
   liveSession,
   type Message,
+  mainLine,
   OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
@@ -146,12 +147,17 @@ const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
 const thread = (id: ThreadId): Promise<Thread> =>
   run(HobbotsRepository.use((repo) => repo.findThread(id)).pipe(Effect.map(Option.getOrThrow)));
 
-/** Sends `content` and waits for the turn to end. */
+/**
+ * Sends `content` and waits for its turn to end, and for the turns hobs it mentioned relay to each
+ * other after it, until the relay budget pauses them (ADR 039).
+ */
 const say = async (id: ThreadId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
+    const owed = await run(HobbotsRepository.use((repo) => repo.openTurnRequests(mainLine(id))));
     expect(all.some((m) => isInProgress(m.status) || m.status === "queued")).toBe(false);
+    expect(owed.filter((request) => request.state !== "paused")).toEqual([]);
     return all.at(-1) as Message;
   });
 };
@@ -190,11 +196,17 @@ describe("runtime sessions keyed by hob", () => {
       expect(asked[runtime][3]?.sessionId).toBe(wren?.sessionId);
       // Wren's own session is told what was said while Quill spoke, on the same brain too.
       expect(asked[runtime][3]?.briefing).toContain("@quill and when?");
+      // Wren's reply echoes what it was told, which mentions Quill, so the two relay to each other
+      // until the relay budget pauses them, each in its own session.
+      const [quillSession, wrenSession] = [quill?.sessionId, wren?.sessionId];
       expect(asked[runtime].map((request) => request.sessionId)).toEqual([
         null,
         null,
-        quill?.sessionId,
-        wren?.sessionId,
+        quillSession,
+        wrenSession,
+        quillSession,
+        wrenSession,
+        quillSession,
       ]);
       const sessions = (await thread(id)).sessions;
       expect(sessions.map((s) => [s.runtime, s.agentId, s.sessionId])).toEqual([

@@ -43,9 +43,12 @@ const CAMP = ThreadId.make("camp");
 const QUIET = ThreadId.make("quiet");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
-/** The migrations that ran before 20261114004500, when each thread kept its own read marker. */
+/**
+ * The migrations that ran before 20261114004500, when each thread kept its own read marker, and the
+ * one that keeps a reply's read-the-web mark, which the repository writes each message with.
+ */
 const earlier = Object.fromEntries(
-  Object.entries(migrations).filter(([id]) => id < "20261114004500"),
+  Object.entries(migrations).filter(([id]) => id < "20261114004500" || id === "20261115002636_message_read_web"),
 ) as typeof migrations;
 
 type Services =

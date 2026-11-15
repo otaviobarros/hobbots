@@ -20,6 +20,7 @@ const run = (revision: number, reply: ThreadRunStatus["reply"] = "working"): Thr
   reply,
   speaking: reply === null ? null : wren,
   next: [],
+  paused: [],
   revision,
 });
 const presence = (revision: number, state: HobPresence["state"]): HobPresence => ({ agentId: wren, state, revision });

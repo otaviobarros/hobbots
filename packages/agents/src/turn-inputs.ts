@@ -111,9 +111,10 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         const trial = thread.skillTrial;
         if (trial !== null) return { recorded: [], mounts: yield* skillMounts.draft(trial), trial };
         // Your message records the skills of the thread's own hob; a member hob that answers it
-        // works with its own (ADR 029).
+        // works with its own (ADR 029), and so does any hob a hob's reply relayed to (ADR 039),
+        // since a reply records the skills of the hob that wrote it.
         const recorded =
-          (speaker.role === "owner" ? yours?.skills : undefined) ??
+          (speaker.role === "owner" && yours?.role === "user" ? yours.skills : undefined) ??
           (yield* skillMounts.resolve({ agentId: agent.id, policy: config.policy, folders: tools?.folders ?? [] }));
         return { recorded, mounts: yield* skillMounts.mounts(recorded), trial };
       });
