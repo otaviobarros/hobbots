@@ -122,9 +122,8 @@ test("takes over a hob's files from the quest's sheet, so its writes there are r
   test.setTimeout(90_000);
   const asks = await askAldric(page);
   const sheet = await openQuest(page, TITLE);
-  // Nothing is accepted yet, so the quest has no cost per outcome, only what it spent.
+  // The quest's cost is what its party spent so far.
   const cost = sheet.getByRole("region", { name: "Cost" });
-  await expect(cost).toContainText("No outcome accepted yet, so there is no cost per outcome.");
   await expect(cost).toContainText("tokens spent in");
 
   const lane = sheet.getByRole("region", { name: "Aldric's work" });

@@ -9,7 +9,6 @@ import {
   NoteId,
   pendingApprovalsOn,
   type Question,
-  questsAbove,
   type RuntimeKind,
   reportsOn,
   type Task,
@@ -34,7 +33,6 @@ import {
   questionChoices,
   refuse,
 } from "./call-scope.ts";
-import { describeCriterion } from "./criteria.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -193,17 +191,6 @@ const sentText = (task: Task, held: Held | undefined, delivery: ReturnType<typeo
   return `Held for ${to}: ${why}. They read your message once that turn ends, as their next turn starts. ${kept}`;
 };
 
-/** The acceptance criteria of the Quest on `root`, as read_tasks shows them (#1445); nothing when it has none. */
-const criteriaOn = (scope: CallScope, root: Task) => {
-  // The nearest Quest the caller leads at or above what it reads, so a member's Task shows them too (#1555).
-  const quest = questsAbove(root, scope.tree.tasks, scope.tree.quests).find(
-    (each) => each.leadId === scope.caller.agentId,
-  );
-  return quest === undefined || quest.criteria.length === 0
-    ? {}
-    : { quest_id: quest.id as string, criteria: quest.criteria.map(describeCriterion) };
-};
-
 /** The Task `read_tasks` reads under: one the caller owns, or one under a Task of its own. */
 const readRoot = (scope: CallScope, id: string | undefined): Effect.Effect<Task, TaskToolRefused> =>
   id === undefined ? ownTask(scope, undefined) : ownTask(scope, id).pipe(Effect.catch(() => ledTask(scope, id)));
@@ -231,7 +218,7 @@ export const makeLeading = ({ tasks, steersTurns }: Deps) => ({
                     ? ""
                     : ` Task ${ended.id} ended as ${ended.state}, so nothing under it changes now.`
                 } ${approvalsWaiting(listed.reduce((sum, task) => sum + task.approvals.length, 0))}`.trimEnd(),
-          details: { tasks: listed, ...criteriaOn(scope, root) },
+          details: { tasks: listed },
         },
         entries: [],
         // It shows each ended Task's state and result, as a briefing does: the turn has read them.

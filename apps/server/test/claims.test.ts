@@ -21,7 +21,6 @@ import {
   type Claim,
   ClaimId,
   type ClaimScope,
-  CriterionId,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   QuestId,
@@ -283,7 +282,6 @@ const hub = () => {
           taskId: parentId,
           goal: "Ship it",
           acceptance: ["It ships"],
-          criteria: [{ id: CriterionId.make(`criterion-${parentId}`), text: "It ships", required: false }],
           limits: DEFAULT_QUEST_LIMITS,
           createdAt: now,
         });

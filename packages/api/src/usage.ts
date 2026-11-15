@@ -30,8 +30,8 @@ export class UsageGroup extends HttpApiGroup.make("usage")
     HttpApiEndpoint.put("setTurnLimits", "/usage/turns/limits", { payload: TurnLimits, success: TurnSlotsReport }),
   )
   .add(
-    // A Quest's cost per accepted outcome (#1449): what its whole party used, from the same records as
-    // the report above, over the criteria accepted on evidence. A sub-quest answers for its top Quest.
+    // What a Quest cost (#1449): what its whole party used, from the same records as the report
+    // above. A sub-quest answers for its top Quest.
     HttpApiEndpoint.get("questCost", "/quests/:questId/cost", {
       params: { questId: QuestId },
       success: QuestCost,

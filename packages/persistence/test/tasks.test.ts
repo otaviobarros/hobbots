@@ -15,7 +15,6 @@ import {
   AttemptId,
   CheckpointId,
   type Committed,
-  CriterionId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
@@ -154,11 +153,6 @@ const campaign = Effect.gen(function* () {
     taskId: TaskId.make("campaign"),
     goal: "A Black Friday campaign",
     acceptance: ["Copy approved", "Campaign built"],
-    // Optional, so these records complete without checks; quest-criteria.test.ts holds the gate.
-    criteria: [
-      { id: CriterionId.make("c-copy"), text: "Copy approved", required: false },
-      { id: CriterionId.make("c-built"), text: "Campaign built", required: false },
-    ],
     limits: DEFAULT_QUEST_LIMITS,
     createdAt: now,
   });

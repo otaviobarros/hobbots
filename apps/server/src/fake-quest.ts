@@ -1,28 +1,24 @@
 import {
   ActivityRepository,
   ClaimRegister,
-  type CriterionCheck,
   HobbotsRepository,
   type NewQuestion,
   TaskRepository,
   TaskTurns,
 } from "@hobbots/agents";
 import {
-  type Actor,
   type AgentId,
   ArtifactId,
   AttemptId,
   CheckpointId,
   ClaimId,
   type Committed,
-  CriterionId,
   cancelMoves,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
   FileChangeId,
-  hobActor,
   isLiveAttempt,
   isTerminalTask,
   Message,
@@ -38,22 +34,6 @@ import {
 } from "@hobbots/domain";
 import { DateTime, Duration, Effect, FiberMap, Layer, Option, Schedule, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";
-
-/** The Black Friday Quest's acceptance criteria (#1445): the copy is required, the schedule optional. */
-const COPY_CRITERION = { key: "criterion-copy", text: "Landing copy approved", required: true } as const;
-const SCHEDULE_CRITERION = { key: "criterion-schedule", text: "Campaign scheduled", required: false } as const;
-
-/** Aldric accepts the schedule on Ada's launch email, or waives it, being optional, when you cancelled her part. */
-const scheduleCheck = (scheduled: boolean, by: Actor, at: string, key: string): CriterionCheck =>
-  scheduled
-    ? {
-        _tag: "Accept",
-        by,
-        reason: "Ada scheduled the launch email for Friday 6:00",
-        at,
-        evidence: [{ _tag: "Returned", artifactId: ArtifactId.make(`art-a-build-${key}`) }],
-      }
-    : { _tag: "Waive", by, reason: "You cancelled Ada's part", at };
 
 /**
  * The Black Friday Quest of ADR 018, played on the hub's records for the fake runtime, so the chat's
@@ -424,15 +404,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             id: QuestId.make(id(name)),
             taskId,
             goal,
-            ...(name === "quest" && script !== "spec-wrap"
-              ? {
-                  acceptance: [COPY_CRITERION.text, SCHEDULE_CRITERION.text],
-                  criteria: [COPY_CRITERION, SCHEDULE_CRITERION].map((each) => ({
-                    ...each,
-                    id: CriterionId.make(id(each.key)),
-                  })),
-                }
-              : { acceptance: [] }),
+            acceptance:
+              name === "quest" && script !== "spec-wrap" ? ["Landing copy approved", "Campaign scheduled"] : [],
             limits: DEFAULT_QUEST_LIMITS,
             createdAt: yield* iso,
           })
@@ -721,26 +694,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     );
     yield* pause;
     const scheduled = (yield* stateOf(build.id)) === "completed";
-    // Aldric checks the Quest's criteria against what Quill and Ada returned before it completes
-    // (#1445). Without Ada's part, which you cancelled, the optional schedule is waived.
-    const lead = hobActor(cast.lead);
-    const checked = (criterion: string, check: CriterionCheck) =>
-      Effect.gen(function* () {
-        if ((yield* stateOf(campaign.id)) === null || !(yield* isOpen(campaign.id))) return;
-        yield* tasks
-          .checkCriterion(QuestId.make(id("quest")), CriterionId.make(id(criterion)), check)
-          .pipe(Effect.flatMap(announce));
-      });
-    if ((yield* stateOf(copy.id)) === "completed") {
-      yield* checked(COPY_CRITERION.key, {
-        _tag: "Accept",
-        by: lead,
-        reason: "The copy leads with 20% off everything, as I answered Quill",
-        at: yield* iso,
-        evidence: [{ _tag: "Returned", artifactId: ArtifactId.make(`art-a-copy-${key}`) }],
-      });
-      yield* checked(SCHEDULE_CRITERION.key, scheduleCheck(scheduled, lead, yield* iso, key));
-    }
     yield* complete(campaign.id, "a-campaign", "Black Friday campaign ready", null);
     // One short summary: what was made, where it is, and who did what.
     yield* say(

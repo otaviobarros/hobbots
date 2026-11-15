@@ -10,7 +10,6 @@ import {
   pauseTargets,
   Quest,
   QuestId,
-  QuestStates,
   resumedAs,
   resumeNote,
   resumeRecipients,
@@ -118,16 +117,6 @@ describe("pause targets", () => {
       task("ada", ADA, "top", "paused"),
     ];
     expect(tasks.map((each) => resumedAs(each, tasks))).toEqual(["active", "queued", "waiting"]);
-  });
-});
-
-describe("a paused Quest's criteria", () => {
-  it("still change, so a turn that ran as you paused finishes its checks, and never once the Quest ended (#1446)", () => {
-    expect(QuestStates.checksCriteria({ state: "paused" })).toBe(true);
-    expect(QuestStates.checksCriteria({ state: "active" })).toBe(true);
-    for (const state of ["stopping", "stopped", "completed", "failed", "cancelled"] as const) {
-      expect(QuestStates.checksCriteria({ state })).toBe(false);
-    }
   });
 });
 

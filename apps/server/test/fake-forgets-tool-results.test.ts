@@ -28,29 +28,20 @@ const carriedOver = (request: PromptRequest | undefined) => {
   return `${at === -1 ? briefing : briefing.slice(0, at)}\n\n${request?.prompt ?? ""}`;
 };
 
-/** Runs a Quest whose lead's wake starts a new session, and gives back that wake and the Quest's criterion ids. */
+/** Runs a Quest whose lead's wake starts a new session, and gives back that wake and the Quest's id. */
 const questWithNewSession = async (firstLines: ReadonlyArray<string>) => {
-  // Frodo's first turn runs without check_criterion, so on Codex his wake starts a new thread (#1543).
+  // Frodo's first turn runs without stop_quest, so on Codex his wake starts a new thread (#1543).
   const party = partyHub({
     lead: "codex",
     members: "codex",
     files: true,
-    withholds: (request) => (isLeadsFirst(request) ? ["check_criterion"] : []),
+    withholds: (request) => (isLeadsFirst(request) ? ["stop_quest"] : []),
   });
   dispose = party.dispose;
   writeFileSync(join(party.project, "index.html"), "<h1>Launch on Friday 6 December</h1>\n");
   party.reactions.push({
     on: CONTINUATION_HEADER,
-    lines: [
-      hub("check_criterion", {
-        key: "accept",
-        criterion_id: "$quest.criteria.0.criterion_id",
-        verdict: "accepted",
-        reason: "It says Friday 6 December",
-        evidence: ["$pip-done.artifacts.0"],
-      }),
-      hub("complete_task", { key: "whole", delivered: true, summary: "The page is written" }),
-    ],
+    lines: [hub("complete_task", { key: "whole", delivered: true, summary: "The page is written" })],
   });
   await party.run(
     send([
@@ -73,8 +64,8 @@ const questWithNewSession = async (firstLines: ReadonlyArray<string>) => {
     ]),
   );
   const finished = await party.run(treeWhen(done));
-  const ids = (finished.quests[0]?.criteria ?? []).map((criterion) => criterion.id as string);
-  if (ids.length === 0) throw new Error("the Quest has no criteria");
+  const ids = finished.quests.map((quest) => quest.id as string);
+  if (ids.length === 0) throw new Error("no Quest started");
   return { wake: party.requests.find(isWake), ids, answer: party.answers.get("quest") ?? "" };
 };
 
