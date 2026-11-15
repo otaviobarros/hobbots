@@ -18,7 +18,7 @@ import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
 /**
  * The quest sheet's rows and controls (ADR 018, CH-005): a request's whole Task tree with who owns each
  * Task, where it stands, how old it is and who it waits on, and the controls you may use on it.
- * Everything here comes from the Task records (STD-UI-008).
+ * Everything here comes from the Task records (STD-REACT-028).
  */
 
 /** Who a Task waits on: a hob, or you when a question climbed every lead or an action waits on your approval. */

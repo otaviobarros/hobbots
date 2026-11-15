@@ -34,7 +34,7 @@ const refusalReason = (reason: string): string =>
 /**
  * Each hob's work in a quest (ADR 027): one per hob on the Quest, built from the Task tree and the
  * Workbench records of its Attempts. Nothing here calls a model or reads what a hob wrote about its
- * own state, so a lane cannot show a step that did not happen (STD-UI-008).
+ * own state, so a lane cannot show a step that did not happen (STD-REACT-028).
  */
 
 /** What a lane says the hob is to its party: the Quest's lead, a member that leads its own party, or a member. */

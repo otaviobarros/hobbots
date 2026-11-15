@@ -50,28 +50,12 @@ Show selection with a fill. No element gets a decorative colored border on its l
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
-### STD-UI-007 The UI calls agents hobs
-
-User-facing text calls an agent a "hob". Code may use `agent` where it names the domain entity.
-
-- **Why:** "hob" is the product's word, and the [glossary](../product/glossary.md) defines it.
-- **Enforced by:** review.
-- **Applies to:** user-facing copy.
-
-### STD-UI-008 Durable records drive every status
-
-Every status shown to the user comes from a durable server record. Text from a model never sets a status.
-
-- **Why:** a model can claim success that did not happen.
-- **Enforced by:** review.
-- **Applies to:** `apps/web`, `apps/server`.
-
 ### STD-UI-009 Every failure says what went wrong and how to recover
 
 When something fails, tell the user in plain words what went wrong and what they can do next: retry, fix an input, reconnect, or go somewhere else. Never show a dead end, a raw error code or a stack trace. Keep what the user typed. Map each failure the client knows to its own message (STD-I18N-005), and give unknown failures a general message that still offers a way out.
 
 - **Why:** UX is a first-class goal, and a user who knows the next step can recover without help.
-- **Enforced by:** review, and end-to-end tests of each flow's failure paths (STD-TEST-004).
+- **Enforced by:** review, and unit tests of each failure's message.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-010 Only primitives take a className, and only for layout

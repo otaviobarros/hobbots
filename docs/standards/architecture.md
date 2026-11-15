@@ -113,11 +113,11 @@ These rules come from [ADR 037](../decisions/037-chat-and-camps.md). The [state 
 
 ### STD-ARCH-013 Every lifecycle is one explicit machine
 
-Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, events, guards and next states in one table, and a pure `transition(state, event)` that returns the next state or the machine's own typed illegal-transition error, such as `IllegalTaskTransition` (STD-EFFECT-004). A guard reads only the machine's state and the event. The state lives in one field and changes only through `transition`. Other code asks the machine's helpers, such as `canArchive`, and never compares its state field. Never spread a state over several booleans, nullable timestamps, or `Set`s and `Map`s keyed by an id.
+Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, events, guards and next states in one table, and a pure `transition(state, event)` that returns the next state or the machine's own typed illegal-transition error, such as `IllegalTaskTransition`. Effects run around the transition, never inside it. A guard reads only the machine's state and the event. The state lives in one field and changes only through `transition`. Other code asks the machine's helpers, such as `canArchive`, and never compares its state field. Never spread a state over several booleans, nullable timestamps, or `Set`s and `Map`s keyed by an id.
 
 - ✅ `ThreadRun.transition(run, { _tag: "Stopped" })`, then `ThreadRun.isRunning(next)`
 - ❌ `busy.has(threadId) || holdBack.has(threadId)`
-- **Why:** one table lists every legal combination, so a new path cannot forget one, and a model-based test and a diagram can read it.
+- **Why:** one table lists every legal combination, so a new path cannot forget one, a model-based test and a diagram can read it, and a pure transition is tested without I/O and replays the same way.
 - **Enforced by:** `scripts/check-implicit-state.mjs` in `pnpm check` (`pnpm lint:state`), which fails on a `Set` or `Map` keyed by an id held for a service's or module's life, and on a machine's state field compared outside its module, with today's cases in `scripts/implicit-state-baseline.json`, a list that only shrinks; `scripts/machines.mjs` in `pnpm check` (`pnpm lint:machines`), which fails when a machine is not its own `defineMachine` export or its diagram in `docs/architecture/machines/` is out of date (`pnpm docs:machines` writes them); a model-based test of each machine with `fast-check` and `agreesWithModel`; and review.
 - **Applies to:** `packages/*`, `apps/server`.
 

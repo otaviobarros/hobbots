@@ -54,7 +54,7 @@ A maintainer triages new issues at least once a week. For each issue labeled `st
 1. Close it with `duplicate`, `invalid` or `wontfix` and a short comment if it will not be worked on as filed.
 2. Ask for details with `status: needs info` if it cannot be understood yet. Issues waiting for information for 30 days may be closed.
 3. Otherwise confirm the `type:` label, add `area:` and `priority:` labels, and set the milestone if it belongs to a release.
-4. Attach tasks to their slice as sub-issues. A slice's last task proves it end to end ("Prove …"), with the checks the slice's ADRs name.
+4. Attach tasks to their slice as sub-issues.
 5. Add `good first issue` or `help wanted` where it fits, then remove `status: triage`.
 
 ## Role requests

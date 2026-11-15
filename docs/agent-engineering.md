@@ -60,6 +60,14 @@ Matching development tasks use the installed [agent-engineering](https://github.
 | Correct review findings | `remediate-findings` |
 | Authorized commit, push or draft PR | `publish-change` |
 
+### How a change is checked
+
+- Locally, run only the checks and tests the change affects. CI runs every suite on the pull request.
+- Tests follow [STD-TEST-002](standards/testing.md) to [STD-TEST-005](standards/testing.md): unit tests for rules, one happy-path browser test for a new flow, and the real runtimes at each milestone's dogfood check.
+- Codex reviews each pull request with the [Code Review Rules](../AGENTS.md#code-review-rules). A pull request should need one review pass and one check of its fixes.
+- There is no evidence record or status page. The tests, their CI runs and the pull request record what was checked.
+- New ADRs are written only for choices that are hard to undo.
+
 The plugin is registered for Claude Code in [`.claude/settings.json`](../.claude/settings.json). Codex users install it themselves; see [CONTRIBUTING.md](../CONTRIBUTING.md#coding-agents).
 
 ## Adoption record
@@ -73,7 +81,7 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 | `pnpm check` before handing work back or opening a PR | Established | [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) | Root; the PR template checks it |
 | Conventional Commits, `Closes #N`, issue forms and labels | Established | [Issues and the project board](contributing/issues-and-board.md) | All contributions |
 | GitHub Issues as requirements owner for tasks | Established | [Issues and the project board](contributing/issues-and-board.md) | Resolve live issue state at task time |
-| Deterministic fakes before real-runtime checks | Established | [STD-TEST-002](standards/testing.md) | Runtime and orchestration work |
+| Deterministic fakes in tests, real runtimes at each milestone's dogfood check | Established | [STD-TEST-002](standards/testing.md) | Runtime and orchestration work |
 | Stable IDs for integration, E2E and regression tests | Not adopted | #1582 | Tests are known by their file and name, a regression test's title names its issue, and Playwright tags group browser tests ([STD-TEST-011](standards/testing.md)). The workflow's test-ID gate does not apply |
 | Branch names `<type>/<issue>-<slug>` | Accepted | Setup interview; recorded in [Issues and the project board](contributing/issues-and-board.md#working-on-an-issue) | Matches Conventional Commit types |
 | Worktree isolation (own install, data folder, port) | Accepted | Setup interview; [Environment and worktrees](#environment-and-worktrees) | Keeps agent work off real user data |

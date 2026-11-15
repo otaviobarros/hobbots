@@ -207,7 +207,7 @@ const appearanceCard = (theme: ThemeChoice): OverviewCard => {
 
 /**
  * The overview: one card per area, in the design's order, and whatever is broken first, so
- * "is everything OK?" has its answer at the top. Only durable hub records decide a state (STD-UI-008).
+ * "is everything OK?" has its answer at the top. Only durable hub records decide a state (STD-REACT-028).
  */
 export const overviewOf = (input: OverviewInput): Overview => {
   const ai = aiArea(input);

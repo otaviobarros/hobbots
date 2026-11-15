@@ -2,11 +2,11 @@
 
 Rules for tests and verification. The [project workflow guide](../agent-engineering.md#checks) lists the test commands and tools.
 
-### STD-TEST-002 Fakes first, then the real runtime
+### STD-TEST-002 Tests use fakes; the real runtimes are checked at each milestone
 
-Verify state transitions, duplicate delivery, restart recovery, permission enforcement and proactive closure with deterministic fake adapters first. Then verify the relevant cases against a real runtime. Report what you could not verify.
+Test state transitions, duplicate delivery, restart recovery, permission enforcement and proactive closure with the deterministic fake runtime. The real runtimes are covered by the clean-runtime contract tests, and run by hand in each milestone's dogfood check. A pull request says what it could not verify.
 
-- **Why:** fakes make failures repeatable, and the real runtime catches what fakes assume.
+- **Why:** fakes make failures repeatable and cheap, and one check on the real runtimes per milestone catches what fakes assume without a manual run per change.
 - **Enforced by:** review.
 - **Applies to:** runtime, orchestration, persistence and permissions work.
 
@@ -18,19 +18,19 @@ Test pure functions with Vitest unit tests, beside the source as `*.test.ts` or 
 - **Enforced by:** review.
 - **Applies to:** all packages.
 
-### STD-TEST-004 Each user flow has an end-to-end test
+### STD-TEST-004 Main flows have a smoke test; rules have unit tests
 
-Cover each user flow with a Playwright test in `apps/web/e2e`, against the fake runtime. A UI change to a flow adds or updates its end-to-end test in the same pull request. Select elements by role and accessible name.
+Each main flow has one Playwright test in `apps/web/e2e`, tagged `@smoke`, against the fake runtime. A new flow adds one happy-path browser test. The rules behind a flow, its edge cases and its errors are proven by unit tests (STD-TEST-003), not by more browser tests. A UI change updates the browser tests it breaks. Select elements by role and accessible name.
 
-- **Why:** an end-to-end test proves the flow the user sees, across the server and the client.
+- **Why:** a few browser tests prove the flows a user sees, and unit tests prove the rules faster and with less upkeep.
 - **Enforced by:** the end-to-end CI job and review.
 - **Applies to:** `apps/web`.
 
-### STD-TEST-005 Component tests only where end-to-end cannot reach
+### STD-TEST-005 Component tests cover interaction logic
 
-Write a component render test only for interaction logic that an end-to-end test cannot reach at a reasonable cost. Test everything else through STD-TEST-003 and STD-TEST-004.
+A component render test is fine for interaction logic, such as keyboard handling, a form's states or a reducer behind a control. It checks behavior through roles and names, never markup or class names.
 
-- **Why:** component tests cost upkeep and often test the framework instead of behavior.
+- **Why:** with fewer browser tests, a component test is the cheaper proof of how a control behaves.
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `packages/ui`.
 
