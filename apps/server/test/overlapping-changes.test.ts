@@ -205,7 +205,7 @@ const findingsWhen = (count: number) =>
 const settle = Effect.sleep("200 millis");
 
 describe("Two Tasks of a Quest changing the same file", () => {
-  it("is no finding for files the lead changed before it delegated, but one for a change while both were at work", async () => {
+  it("is no finding for files the lead changed before it delegated, but one for a change while both were at work (#658)", async () => {
     // Issue #658: Frodo's root Attempt stays open until the Quest ends. Before he delegated, it
     // cleared the last run's files; then Rook and Pip rebuilt them at the same paths.
     const FRODO_ATTEMPT = AttemptId.make("frodo-1");

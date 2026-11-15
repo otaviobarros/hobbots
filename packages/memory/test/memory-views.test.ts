@@ -15,7 +15,7 @@ const draft = (path: string, markdown: string) => ({ path: MemoryPath.make(path)
 
 describe("the Memory page's reads", () => {
   // covers ADR 028 (Browse), #958
-  it("counts the pages of every scope that holds one", () =>
+  it("counts the pages of every scope that holds one (#958)", () =>
     Effect.gen(function* () {
       const { store } = makeMemoryStoreFake();
       expect(yield* memoryScopeCounts(store)).toEqual([]);
@@ -29,7 +29,7 @@ describe("the Memory page's reads", () => {
     }).pipe(Effect.runPromise));
 
   // covers ADR 028 (What changed), #958
-  it("finds each saved version once, with who saved it, newest first", () =>
+  it("finds each saved version once, with who saved it, newest first (#958)", () =>
     Effect.gen(function* () {
       const { store } = makeMemoryStoreFake();
       yield* store.write(asPip, pipsOwn, draft("howtos/preview.md", "# Publishing a preview link"), fresh);
@@ -62,7 +62,7 @@ describe("the Memory page's reads", () => {
     }).pipe(Effect.runPromise));
 
   // covers ADR 028 (What changed), #958
-  it("keeps only the newest changes, and fails while memory is down", () =>
+  it("keeps only the newest changes, and fails while memory is down (#958)", () =>
     Effect.gen(function* () {
       const { store, controls } = makeMemoryStoreFake();
       const watch = yield* makeMemoryChangeWatch(store, { lookback: Duration.days(1), keep: 2 });

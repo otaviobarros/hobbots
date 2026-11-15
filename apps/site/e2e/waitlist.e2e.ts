@@ -75,7 +75,7 @@ test("joins again with the same email in other case, shows the same message and 
   expect(storedRows(email)).toHaveLength(1);
 });
 
-test("refuses an invalid email and says why", async ({ page }) => {
+test("refuses an invalid email and says why (#182)", async ({ page }) => {
   // covers #182: the form checks the email
   await page.goto("/");
   const email = page.getByLabel(LABEL);
@@ -90,7 +90,7 @@ test("refuses an invalid email and says why", async ({ page }) => {
 test.describe("with Reduce motion", () => {
   test.use({ reducedMotion: "reduce" });
 
-  test("joins with every animation stopped", async ({ page }) => {
+  test("joins with every animation stopped (#182)", async ({ page }) => {
     // covers #182: every animation stops with Reduce motion
     await page.goto("/");
     await page.getByLabel(LABEL).fill("pip@example.com");

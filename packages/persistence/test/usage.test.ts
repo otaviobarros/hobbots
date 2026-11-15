@@ -227,7 +227,7 @@ const seedTurns = Effect.gen(function* () {
 
 describe("UsageLedger", () => {
   // regression for #1011: a party member's turns wrote no reply, so Usage left them out
-  it("counts each turn outside a chat under its hob, and a party member's for its Quest", async () => {
+  it("counts each turn outside a chat under its hob, and a party member's for its Quest (#1011)", async () => {
     const { hobs, quests, minutes } = await Effect.gen(function* () {
       yield* seed;
       yield* seedQuests;
@@ -329,7 +329,7 @@ describe("UsageLedger", () => {
   });
 
   // regression for #1011: a turn the hub stopped before it ended was never recorded
-  it("counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it", async () => {
+  it("counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it (#1011)", async () => {
     const period = (ledger: UsageLedger["Service"]) =>
       ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z");
     const haiku = (hobs: ReadonlyArray<HobUsage>) =>

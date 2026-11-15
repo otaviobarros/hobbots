@@ -23,7 +23,7 @@ const watchedList = () => {
 
 describe("memorySharesChanged", () => {
   // covers ADR 028 (Sharing), #960
-  it("drops a first read taken before a hob asked to share, so the share shows", async () => {
+  it("drops a first read taken before a hob asked to share, so the share shows (#960)", async () => {
     const list = watchedList();
     await list.settled();
     const changed = memorySharesChanged(list.client);

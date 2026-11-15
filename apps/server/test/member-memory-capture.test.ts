@@ -51,7 +51,7 @@ const captureOver = (party: ReturnType<typeof partyHub>, memory: ReturnType<type
 
 describe("memory capture of a party's work", () => {
   // covers ADR 028 (Capture and summaries), #1028
-  it("the answer that wakes a member reaches its memory, and its result reaches its lead's thread", async () => {
+  it("the answer that wakes a member reaches its memory, and its result reaches its lead's thread (#1028)", async () => {
     const memory = makeMemoryStoreFake();
     const party = partyHub({ memory: memory.store, activity: true });
     dispose = party.dispose;

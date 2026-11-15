@@ -345,7 +345,7 @@ const journal = async () =>
 
 describe("hobs proposing skills", () => {
   // covers ADR 029 (Proactive hobs), #1063
-  it("a new skill waits for you under every preset, and nothing reaches the library until you add it", async () => {
+  it("a new skill waits for you under every preset, and nothing reaches the library until you add it (#1063)", async () => {
     const answer = await propose("release-steps");
     expect(answer).toEqual({
       text: "Proposed a new skill, release-steps. It waits for the user's review in their Inbox, so nothing changed yet, and you are told when they decide. Do not propose it again.",
@@ -376,7 +376,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("Not now leaves the library unchanged, and the hob is told", async () => {
+  it("Not now leaves the library unchanged, and the hob is told (#1063)", async () => {
     await propose("release-steps");
     const [waiting] = await proposals();
     const declined = await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/decline`);
@@ -388,7 +388,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a retried proposal makes one card, one name waits once, and a hob with three waiting stops", async () => {
+  it("a retried proposal makes one card, one name waits once, and a hob with three waiting stops (#1063)", async () => {
     const first = await propose("release-steps");
     const again = await propose("release-steps");
     expect(again).toEqual(first);
@@ -405,7 +405,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a change you edit rolls out as your edit, and keeps the files it did not change", async () => {
+  it("a change you edit rolls out as your edit, and keeps the files it did not change (#1063)", async () => {
     // Imported with a script that runs, which the HTTP source cannot mark.
     const script = { path: "scripts/tag.sh", text: '#!/bin/sh\ngit tag "$1"\n', executable: true };
     const [imported] = await runtime.runPromise(
@@ -438,7 +438,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs; ~/.agents/skills stays, through Hobbots), #1139
-  it("a change to a skill from ~/.agents/skills is refused, with a hint to propose a copy", async () => {
+  it("a change to a skill from ~/.agents/skills is refused, with a hint to propose a copy (#1139)", async () => {
     await runtime.runPromise(
       SkillLibrary.use((skills) =>
         skills.addRevision(null, {
@@ -467,7 +467,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a stale change keeps the files the skill has now, not those of the revision the hob read", async () => {
+  it("a stale change keeps the files the skill has now, not those of the revision the hob read (#1063)", async () => {
     const add = (files: ReadonlyArray<{ path: string; text: string; executable?: boolean }>, skillId?: string) =>
       runtime.runPromise(
         SkillImporter.use((importer) =>
@@ -503,7 +503,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a proposal sent again after you decided answers as it ended, not with what the library now holds", async () => {
+  it("a proposal sent again after you decided answers as it ended, not with what the library now holds (#1063)", async () => {
     await propose("release-steps");
     const [waiting] = await proposals();
     await request("POST", `/api/skill-proposals/${waiting?.proposal.id}/add`, {});
@@ -520,7 +520,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a change whose kept files cannot be read is refused, waits again, and leaves the library as it was", async () => {
+  it("a change whose kept files cannot be read is refused, waits again, and leaves the library as it was (#1063)", async () => {
     const [first] = await runtime.runPromise(
       SkillImporter.use((importer) =>
         importer.add(
@@ -558,7 +558,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a hub that stopped while adding finishes each proposal it can, and sends back one it cannot", async () => {
+  it("a hub that stopped while adding finishes each proposal it can, and sends back one it cannot (#1063)", async () => {
     const [first] = await runtime.runPromise(
       SkillImporter.use((importer) =>
         importer.add(
@@ -591,7 +591,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a revision that lands while a change is written is not overwritten: the change is built again on it", async () => {
+  it("a revision that lands while a change is written is not overwritten: the change is built again on it (#1063)", async () => {
     const add = (files: ReadonlyArray<{ path: string; text: string; executable?: boolean }>, skillId?: string) =>
       SkillImporter.use((importer) =>
         importer.add(
@@ -648,7 +648,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a change that is an earlier revision again says so, and rolls back to it; the newest again changes nothing", async () => {
+  it("a change that is an earlier revision again says so, and rolls back to it; the newest again changes nothing (#1063)", async () => {
     await importSkill("release-steps");
     const [skill] = await library();
     await call(SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }, accessFor("trusting"));
@@ -689,7 +689,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a note is left on the revision the turn mounted, even after a rollout moved the hob on", async () => {
+  it("a note is left on the revision the turn mounted, even after a rollout moved the hob on (#1063)", async () => {
     await importSkill("release-steps");
     const [skill] = await library();
     await call(SKILL_REQUEST_TOOL, { name: "release-steps", why: "To release." }, accessFor("trusting"));
@@ -737,7 +737,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("the review shows what the checks flag, and checks your edit before it is added", async () => {
+  it("the review shows what the checks flag, and checks your edit before it is added (#1063)", async () => {
     await propose("release-steps", { body: "Read https://example.com/release first.\u200B Then tag." });
     const [waiting] = await proposals();
     expect(waiting?.check?.flags).toEqual([
@@ -763,7 +763,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a hub stopped after writing a proposal finishes what it planned, and never undoes a later rollout", async () => {
+  it("a hub stopped after writing a proposal finishes what it planned, and never undoes a later rollout (#1063)", async () => {
     await importSkill("release-steps");
     const [skill] = await library();
     const skillId = skill?.id as never;
@@ -837,7 +837,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a change that is an earlier revision again rolls back every assignment not held, whatever it is on", async () => {
+  it("a change that is an earlier revision again rolls back every assignment not held, whatever it is on (#1063)", async () => {
     await importSkill("release-steps");
     const [skill] = await library();
     const skillId = skill?.id as never;
@@ -995,7 +995,7 @@ describe("hobs proposing skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1063
-  it("a request goes through under Trusting, asks under Careful and Balanced, and Never offers no tool", async () => {
+  it("a request goes through under Trusting, asks under Careful and Balanced, and Never offers no tool (#1063)", async () => {
     await importSkill("release-steps");
     // Careful and Balanced ask, and a call with no one to ask is refused, with nothing assigned.
     for (const preset of ["careful", "balanced"] as const) {

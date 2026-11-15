@@ -448,7 +448,7 @@ describe("skill assignments", () => {
 // #1064: an exported skill's assignments on another hub (ADR 029, Backups, exports and Diagnostics).
 describe("skill exports", () => {
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("an export's project assignment is given only for a project this hub's hobs work in", async () => {
+  it("an export's project assignment is given only for a project this hub's hobs work in (#1064)", async () => {
     const alpha = join(root, "alpha");
     await mkdir(alpha);
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [alpha] });
@@ -605,7 +605,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (Uses), #1096
-  it("a reply cut off while its skill use is being saved keeps both the line and the use, never one alone", async () => {
+  it("a reply cut off while its skill use is being saved keeps both the line and the use, never one alone (#1096)", async () => {
     const pip = await summon("Pip", 969);
     const skill = await importSkill("release-steps");
     await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });

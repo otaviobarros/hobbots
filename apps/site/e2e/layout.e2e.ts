@@ -13,7 +13,7 @@ const sidewaysScroll = (page: Page) =>
     return max;
   });
 
-test("keeps a space before the email link in the wait-list note", async ({ page }) => {
+test("keeps a space before the email link in the wait-list note (#246)", async ({ page }) => {
   // covers #246
   await page.goto("/");
   await expect(page.locator(".help").first()).toContainText(/write to \S+@hobbots\.app\./);

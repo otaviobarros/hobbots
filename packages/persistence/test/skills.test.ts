@@ -66,7 +66,7 @@ const input = (hash: SkillRevisionHash, more: Partial<SkillRevisionInput> = {}):
 
 describe("skills library", () => {
   // covers ADR 029 (Storage and revisions), #1060
-  it("keeps one revision per content, numbered in order, and records a source once", () =>
+  it("keeps one revision per content, numbered in order, and records a source once (#1060)", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -122,7 +122,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (~/.agents/skills stays, through Hobbots), #1139
-  it("takes a new revision of a ~/.agents/skills skill only from that folder", () =>
+  it("takes a new revision of a ~/.agents/skills skill only from that folder (#1139)", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -184,7 +184,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (Pins and rollout), #1061
-  it("rolls a revision out once, to every assignment that is not held, and a later save never undoes a rollback", () =>
+  it("rolls a revision out once, to every assignment that is not held, and a later save never undoes a rollback (#1061)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -225,7 +225,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (Pins and rollout), #1062
-  it("refuses a revision made from an older one, but takes the same edit again so it can finish its rollout, whose holds only its claim sets", () =>
+  it("refuses a revision made from an older one, but takes the same edit again so it can finish its rollout, whose holds only its claim sets (#1062)", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -343,7 +343,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (The use line), #1096
-  it("records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
+  it("records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's (#1096)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;

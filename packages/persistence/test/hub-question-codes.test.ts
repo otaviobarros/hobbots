@@ -86,7 +86,7 @@ const stored = (old: Old, sequence: number) =>
   });
 
 describe("0078_hub_question_codes", () => {
-  it("turns stored hub questions and their events into codes and keys, and an old answer still applies by key", async () => {
+  it("turns stored hub questions and their events into codes and keys, and an old answer still applies by key (#1045)", async () => {
     const result = await Effect.gen(function* () {
       yield* stored(
         {

@@ -69,7 +69,7 @@ const health = (installationId: string) =>
 
 describe("whether a hub is using a data folder", () => {
   // Issue #999
-  it("trusts a live record, sees past a stale one, and refuses a port that does not answer", async () => {
+  it("trusts a live record, sees past a stale one, and refuses a port that does not answer (#999)", async () => {
     // A hub's record of a live process counts, whatever port it names.
     writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: process.pid, port: 4393 }));
     await closedPort();
@@ -127,7 +127,7 @@ describe("whether a hub is using a data folder", () => {
 
 describe("a hub's record of itself", () => {
   // Issue #999
-  it("a second hub cannot take a live hub's record, and only the hub that holds it updates or removes it", async () => {
+  it("a second hub cannot take a live hub's record, and only the hub that holds it updates or removes it (#999)", async () => {
     const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"]);
     try {
       writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: other.pid, port: 4393 }));
@@ -162,7 +162,7 @@ describe("a hub's record of itself", () => {
 
 describe("hubs that claim a data folder at once", () => {
   // Issue #999
-  it("of hubs starting together on a crashed hub's folder, exactly one takes it", {
+  it("of hubs starting together on a crashed hub's folder, exactly one takes it (#999)", {
     timeout: 60_000,
   }, async () => {
     const gone = spawnSync(process.execPath, ["-e", "process.pid"]).pid;

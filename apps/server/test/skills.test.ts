@@ -116,7 +116,7 @@ const request = async (method: string, path: string, body?: unknown) => {
 
 describe("skills routes", () => {
   // covers ADR 029 (Import, Storage and revisions), #1060
-  it("lists, reads, imports, revises and removes skills, and shows ~/.agents/skills under Everyone", async () => {
+  it("lists, reads, imports, revises and removes skills, and shows ~/.agents/skills under Everyone (#1060)", async () => {
     const listed = await request("GET", "/api/skills");
     expect(listed.status).toBe(200);
     expect(listed.body.skills.map((skill: { name: string }) => skill.name)).toEqual(["shared"]);
@@ -172,7 +172,7 @@ describe("skills routes", () => {
     expect(inUse.body.assignments).toHaveLength(1);
   });
   // covers ADR 029 (Storage and revisions, The Skills page), #1062
-  it("reads a revision's files only by the paths it lists, and edits a skill into a new revision", async () => {
+  it("reads a revision's files only by the paths it lists, and edits a skill into a new revision (#1062)", async () => {
     const folder = await folderWith({
       "SKILL.md": skillMd("release"),
       "references/checks.md": "Check the banner.",
@@ -213,7 +213,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (~/.agents/skills stays, through Hobbots; Make a copy), #1139
-  it("refuses an edit or a revision of a ~/.agents/skills skill, and Make a copy gives an editable one", async () => {
+  it("refuses an edit or a revision of a ~/.agents/skills skill, and Make a copy gives an editable one (#1139)", async () => {
     const listed = await request("GET", "/api/skills");
     const [shared] = listed.body.skills;
     const edit = { base: shared.latest, description: "Changed here.", instructions: "Changed." };
@@ -267,7 +267,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Scopes, The Skills page), #1062
-  it("lists the projects a skill can go to: those hobs work in, before any skill is given to them", async () => {
+  it("lists the projects a skill can go to: those hobs work in, before any skill is given to them (#1062)", async () => {
     const site = join(await mkdtemp(join(tmpdir(), "skills-")), "Site");
     await mkdir(site);
     expect((await request("GET", "/api/skills")).body.projects).toEqual([]);
@@ -288,7 +288,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Pins and rollout, The Skills page), #1062
-  it("keeps the places an edit holds back, changes no hold when it is refused, and never replays its holds", async () => {
+  it("keeps the places an edit holds back, changes no hold when it is refused, and never replays its holds (#1062)", async () => {
     const folder = await folderWith({ "SKILL.md": skillMd("release") });
     const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
     const [{ skill, revision }] = imported.body.imported;
@@ -377,7 +377,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Pins and rollout, The Skills page), #1062
-  it("a save that moves places from different revisions keeps where each came from, for Roll back", async () => {
+  it("a save that moves places from different revisions keeps where each came from, for Roll back (#1062)", async () => {
     const hob = {
       name: "Wren",
       ...roleFields("writer"),

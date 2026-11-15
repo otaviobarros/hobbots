@@ -44,7 +44,7 @@ const summary = (model: string, effort?: string) => ({
 
 describe("the memory model endpoint", () => {
   // covers ADR 028
-  it("runs one turn of no hob's on each runtime's own adapter, and answers as OpenAI does", async () => {
+  it("runs one turn of no hob's on each runtime's own adapter, and answers as OpenAI does (#980)", async () => {
     expect(endpoint.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     const response = await ask("claude-code", summary("careful", "medium"));
     expect(response.status).toBe(200);
@@ -77,7 +77,7 @@ describe("the memory model endpoint", () => {
   });
 
   // covers ADR 028
-  it("runs a model the runtime stopped offering, or the smallest, on its smallest, at an effort it takes", async () => {
+  it("runs a model the runtime stopped offering, or the smallest, on its smallest, at an effort it takes (#980)", async () => {
     await ask("claude-code", summary("smallest", "high"));
     await ask("claude-code", summary("gone-1", "low"));
     // The model the runtime names for quick work; it takes no effort setting.
@@ -95,7 +95,7 @@ describe("the memory model endpoint", () => {
   });
 
   // covers ADR 028
-  it("answers a plan's limit as a transient failure, so the engine's fallback applies, and says when it refills", async () => {
+  it("answers a plan's limit as a transient failure, so the engine's fallback applies, and says when it refills (#980)", async () => {
     const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
     codex.answer({ _tag: "Fail", error: new RuntimeLimitReached({ resetsAt }) });
     const limited = await ask("codex", summary("smallest"));
@@ -111,7 +111,7 @@ describe("the memory model endpoint", () => {
   });
 
   // covers ADR 028
-  it("answers a signed-out runtime as unavailable, and refuses a wrong bearer, runtime or request", async () => {
+  it("answers a signed-out runtime as unavailable, and refuses a wrong bearer, runtime or request (#980)", async () => {
     claude.answer({ _tag: "Fail", error: new RuntimeError({ message: "Claude Code is not signed in." }) });
     const signedOut = await ask("claude-code", summary("smallest"));
     expect(signedOut.status).toBe(503);
@@ -127,7 +127,7 @@ describe("the memory model endpoint", () => {
 });
 
 describe("a memory turn's text", () => {
-  it("names each role when the engine sends a conversation", async () => {
+  it("names each role when the engine sends a conversation (#980)", async () => {
     await ask("claude-code", {
       model: "smallest",
       messages: [

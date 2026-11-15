@@ -46,7 +46,7 @@ const blockersOf = (tree: TaskTree) => {
 const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 
 describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s", (runtime) => {
-  it("sends the member back once in the same session, and completes the Task only by complete_task", async () => {
+  it("sends the member back once in the same session, and completes the Task only by complete_task (#1086)", async () => {
     const party = partyHub({ members: runtime });
     dispose = party.dispose;
     const { run, requests } = party;
@@ -68,7 +68,7 @@ describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s"
     expect(attempt?.runtime).toBe(runtime);
   }, 30_000);
 
-  it("blocks the Task for its lead, with the member's reply as why, when it replies again without finishing", async () => {
+  it("blocks the Task for its lead, with the member's reply as why, when it replies again without finishing (#1086)", async () => {
     const party = partyHub({ members: runtime, repliesWhenSentBack: true });
     dispose = party.dispose;
     const { run, requests } = party;
@@ -85,7 +85,7 @@ describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s"
     expect(`${blocker?.summary} ${blocker?.detail ?? ""}`).toContain("Its member's last reply: Echo:");
   }, 30_000);
 
-  it("blocks the Task on the blocker its member reported, with no send-back and no blocker of the hub's own", async () => {
+  it("blocks the Task on the blocker its member reported, with no send-back and no blocker of the hub's own (#1086)", async () => {
     const party = partyHub({ members: runtime });
     dispose = party.dispose;
     const { run, requests } = party;
@@ -105,7 +105,7 @@ describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s"
     expect(blockersOf(blocked)).toEqual([STUCK.summary]);
   }, 30_000);
 
-  it("blocks the Task on the blocker its member reports once sent back, and adds none of its own", async () => {
+  it("blocks the Task on the blocker its member reports once sent back, and adds none of its own (#1086)", async () => {
     const party = partyHub({ members: runtime, repliesWhenSentBack: true });
     dispose = party.dispose;
     const { run, requests, reactions } = party;
@@ -117,7 +117,7 @@ describe.each(RUNTIMES)("a member's turn that ends without complete_task, on %s"
     expect(attemptsOf(blocked, PIP)).toEqual([[1, "completed"]]);
   }, 30_000);
 
-  it("counts only what the member reported since its turn began, not a blocker an earlier turn of its Attempt cleared", async () => {
+  it("counts only what the member reported since its turn began, not a blocker an earlier turn of its Attempt cleared (#1086)", async () => {
     const party = partyHub({ members: runtime });
     dispose = party.dispose;
     const { run, requests } = party;

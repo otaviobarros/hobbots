@@ -51,7 +51,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-test("once the obstacle clears, the lead's message wakes the blocked member, which finishes with nothing cancelled", async ({
+test("once the obstacle clears, the lead's message wakes the blocked member, which finishes with nothing cancelled (#574)", async ({
   page,
 }) => {
   // Every lead turn's briefing is echoed word by word, so its turns take longer than a member's.
@@ -124,7 +124,7 @@ test("once the obstacle clears, the lead's message wakes the blocked member, whi
   });
 });
 
-test("a lead's message while its member waits for your approval shows as held, then reaches the member once you decide", async ({
+test("a lead's message while its member waits for your approval shows as held, then reaches the member once you decide (#574)", async ({
   page,
 }) => {
   test.setTimeout(120_000);

@@ -124,7 +124,7 @@ const command = (script: string, folder: string, args: ReadonlyArray<string> = [
 
 describe("the command-line tools and a running hub", () => {
   // Issue #999
-  it("reset and restore refuse a hub on a port only it knows, and go ahead once it stops", {
+  it("reset and restore refuse a hub on a port only it knows, and go ahead once it stops (#999)", {
     timeout: 90_000,
   }, async () => {
     const { port, child } = await startHub();
@@ -155,7 +155,7 @@ describe("the command-line tools and a running hub", () => {
   });
 
   // Issue #999
-  it("a second hub on the same data folder does not start, and leaves the first one's record", {
+  it("a second hub on the same data folder does not start, and leaves the first one's record (#999)", {
     timeout: 90_000,
   }, async () => {
     const { port } = await startHub();

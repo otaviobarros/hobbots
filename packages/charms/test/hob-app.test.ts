@@ -443,7 +443,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022, #227
-  it("names the repositories each installation reaches, with one metadata-only token an hour", async () => {
+  it("names the repositories each installation reaches, with one metadata-only token an hour (#227)", async () => {
     const w = world();
     github.createRepository({ owner: "otaviobarros", name: "frodo-docs" });
     github.createRepository({ owner: "otaviobarros", name: "frodo-site" });
@@ -473,7 +473,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022, #227
-  it("still removes every installation on disconnect when GitHub will not name their repositories", async () => {
+  it("still removes every installation on disconnect when GitHub will not name their repositories (#227)", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -592,7 +592,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers #948
-  it("counts a key delete the keychain never answered as kept while the hob's app is recorded, until it is gone", async () => {
+  it("counts a key delete the keychain never answered as kept while the hob's app is recorded, until it is gone (#948)", async () => {
     const w = world();
     const stalled = { value: false };
     // The keychain tool times out, which the hub cannot tell from one that is not there.
@@ -637,7 +637,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers #948
-  it("keeps the hob's app as left over when a key write fails and the key may still be there", async () => {
+  it("keeps the hob's app as left over when a key write fails and the key may still be there (#948)", async () => {
     const w = world();
     const timedOut = new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." });
     const stalled = Layer.succeed(
@@ -690,7 +690,7 @@ const linkBy = (agentId: AgentId, appId: string | number, pem: string) =>
 
 describe("Linking a GitHub App the user already has", () => {
   // covers #1321, ADR 022
-  it("links an app by its ID or client ID and key, keeps the key only in the keychain, and lists its installations", async () => {
+  it("links an app by its ID or client ID and key, keeps the key only in the keychain, and lists its installations (#1321)", async () => {
     const w = world();
     const mine = github.makeAppByHand("Frodo's bot");
     const lean = github.makeAppByHand("Sam's helper", { metadata: "read", contents: "read", issues: "write" });
@@ -759,7 +759,7 @@ describe("Linking a GitHub App the user already has", () => {
   });
 
   // covers #1321, ADR 022
-  it("refuses an ID or key that is not the app's, an app another hob has, and a hob that cannot take one", async () => {
+  it("refuses an ID or key that is not the app's, an app another hob has, and a hob that cannot take one (#1321)", async () => {
     const w = world();
     const first = github.makeAppByHand("First by hand");
     const second = github.makeAppByHand("Second by hand");
@@ -847,7 +847,7 @@ describe("Linking a GitHub App the user already has", () => {
   });
 
   // covers #1321, ADR 022
-  it("unlinking an app, or retiring its hob, forgets its key and leaves its installations on GitHub", async () => {
+  it("unlinking an app, or retiring its hob, forgets its key and leaves its installations on GitHub (#1321)", async () => {
     const w = world();
     const frodoApp = github.makeAppByHand("Frodo unlinks");
     const samApp = github.makeAppByHand("Sam retires");

@@ -256,7 +256,7 @@ describe("skill names, descriptions and files", () => {
 
 describe("Export skills", () => {
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("imports an exported skill only when each older revision it brings passed and is still that revision", () => {
+  it("imports an exported skill only when each older revision it brings passed and is still that revision (#1064)", () => {
     const older = { matches: true, refusal: null };
     const candidate = { refusal: null, existing: null, exported: { older: [older] } };
     expect(importable(candidate)).toBe(true);
@@ -304,7 +304,7 @@ describe("Export skills", () => {
   });
 
   // covers ADR 029 (~/.agents/skills), #1139
-  it("names the ~/.agents/skills folder a skill lives in, and none for a skill of any other source", () => {
+  it("names the ~/.agents/skills folder a skill lives in, and none for a skill of any other source (#1139)", () => {
     const agents = new SkillSource({
       id: SkillSourceId.make("agents"),
       origin: { _tag: "AgentsFolder", path: "/home/me/.agents/skills" },
@@ -318,7 +318,7 @@ describe("Export skills", () => {
   });
 
   // covers ADR 029 (~/.agents/skills), #1220
-  it("names the folder HOBBOTS_AGENTS_SKILLS set, as ~ only when it is inside the hub user's own home", () => {
+  it("names the folder HOBBOTS_AGENTS_SKILLS set, as ~ only when it is inside the hub user's own home (#1220)", () => {
     const at = (path: string) =>
       new SkillSource({ id: SkillSourceId.make("agents"), origin: { _tag: "AgentsFolder", path }, addedAt: AT });
     const pdf = skill("s1", "pdf-forms", "Forms", hash(1), 1, "agents");
@@ -336,7 +336,7 @@ describe("Export skills", () => {
   });
 
   // covers ADR 029 (The use line), #1220
-  it("names the revision places use in the use line, so a rollback names the older one", () => {
+  it("names the revision places use in the use line, so a rollback names the older one (#1220)", () => {
     const release = skill("s1", "release", "Release", hash(2), 2);
     const revisions = [2, 1].map((number) => ({ number, hash: hash(number) }) as unknown as SkillRevision);
     const everyone = assignment("a1", "s1", { _tag: "Everyone" }, hash(1));
@@ -345,7 +345,7 @@ describe("Export skills", () => {
   });
 
   // covers ADR 029 (Proactive hobs), #1144
-  it("offers Draft it with a hob only to hobs that may suggest a skill, Ask included", () => {
+  it("offers Draft it with a hob only to hobs that may suggest a skill, Ask included (#1144)", () => {
     const hob = (name: string, overrides: Agent["policy"]["overrides"]) =>
       ({
         id: AgentId.make(name),

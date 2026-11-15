@@ -51,7 +51,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-test("the quest sheet shows Rook's Task waiting on Quill while Quill's runs, and Rook's runs only once Quill's is done", async ({
+test("the quest sheet shows Rook's Task waiting on Quill while Quill's runs, and Rook's runs only once Quill's is done (#564)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

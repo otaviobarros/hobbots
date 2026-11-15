@@ -36,7 +36,7 @@ const gated = (gates: Map<string, () => Promise<void>>, keys: ReadonlyArray<stri
 };
 
 describe("a member's Attempts", () => {
-  it("a member that leads a nested Quest, woken three times by its member, keeps one Attempt", async () => {
+  it("a member that leads a nested Quest, woken three times by its member, keeps one Attempt (#668)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, gates } = party;
@@ -91,7 +91,7 @@ describe("a member's Attempts", () => {
   }, 30_000);
 
   // regression: a turn stopped on a defect left its Attempt live, which held the Task from any other turn
-  it("a member's turn that breaks on a bug ends its Attempt, and its next turn goes on", async () => {
+  it("a member's turn that breaks on a bug ends its Attempt, and its next turn goes on (#668)", async () => {
     // Pip's turn after your answer breaks once, then goes on.
     let broken = false;
     const party = partyHub({
@@ -126,7 +126,7 @@ describe("a member's Attempts", () => {
     ]);
   }, 30_000);
 
-  it("a member's failed turn still ends its Attempt, and its next turn starts Attempt 2", async () => {
+  it("a member's failed turn still ends its Attempt, and its next turn starts Attempt 2 (#668)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, reactions, gates } = party;
@@ -155,7 +155,7 @@ describe("a member's Attempts", () => {
     ]);
   }, 30_000);
 
-  it("a member's Task retried after it failed starts a new Attempt, never the one that failed", async () => {
+  it("a member's Task retried after it failed starts a new Attempt, never the one that failed (#668)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run } = party;

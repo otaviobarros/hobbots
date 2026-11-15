@@ -74,7 +74,7 @@ const shareHub = async (preset: "balanced" | "trusting" = "balanced") => {
 };
 
 // covers ADR 028 (Sharing), #960
-test("a share arrives in the open Inbox as a Memory request, and Share it then Undo decide it there", async ({
+test("a share arrives in the open Inbox as a Memory request, and Share it then Undo decide it there (#960)", async ({
   page,
 }) => {
   const { url, ask } = await shareHub();
@@ -115,7 +115,7 @@ test("a share arrives in the open Inbox as a Memory request, and Share it then U
 });
 
 // covers ADR 028 (Sharing), #960
-test("Edit in Memory opens the share in To review, where an edit is shared and another kept private", async ({
+test("Edit in Memory opens the share in To review, where an edit is shared and another kept private (#960)", async ({
   page,
 }) => {
   const { url, ask } = await shareHub();
@@ -153,7 +153,7 @@ test("Edit in Memory opens the share in To review, where an edit is shared and a
 });
 
 // covers ADR 028 (Sharing, What changed), #960
-test("under Trusting a project share goes through, and Undo in What changed takes it out", async ({ page }) => {
+test("under Trusting a project share goes through, and Undo in What changed takes it out (#960)", async ({ page }) => {
   const { url, ask } = await shareHub("trusting");
   await page.goto(`${url}/#/memory?view=changes`);
   const main = page.getByRole("main", { name: "Memory" });
@@ -169,7 +169,7 @@ test("under Trusting a project share goes through, and Undo in What changed take
 });
 
 // covers ADR 028 (Sharing), #960
-test("a decision memory does not take, or that was made elsewhere, says so and leaves the share as it was", async ({
+test("a decision memory does not take, or that was made elsewhere, says so and leaves the share as it was (#960)", async ({
   page,
 }) => {
   const { url, ask } = await shareHub();

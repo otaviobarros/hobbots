@@ -558,7 +558,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   };
 
   // Regression for #282
-  it("tells the hob, with the result, that the user approved the call and for how long", async () => {
+  it("tells the hob, with the result, that the user approved the call and for how long (#282)", async () => {
     const once = await deleteCall(approvalsAnswering(approve).approvals);
     expect(once.result).toMatchObject({ behavior: "allow" });
     expect(once.note).toContain("approval request for this call");
@@ -582,7 +582,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // Regression for #282
-  it("tells the hob when an approval the user saved earlier let the call run without asking", async () => {
+  it("tells the hob when an approval the user saved earlier let the call run without asking (#282)", async () => {
     const { asked, approvals } = approvalsAnswering(approve);
     await deleteCall(approvals);
     const action = asked[0];

@@ -369,7 +369,7 @@ describe("the memory tools", () => {
   });
 
   // covers ADR 028 (When memory is down), #1049
-  it("records the Attempt a save outside any chat was made in, so it settles in that Attempt's session", async () => {
+  it("records the Attempt a save outside any chat was made in, so it settles in that Attempt's session (#1049)", async () => {
     const hub = makeHub();
     hub.memory.controls.setDown(true);
     const attemptId = AttemptId.make(crypto.randomUUID());

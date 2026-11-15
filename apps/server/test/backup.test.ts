@@ -834,7 +834,7 @@ describe("backup and restore", () => {
     await expect(lstat(failing)).rejects.toThrow();
   });
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("brings back every skill revision, assignment, hold and pin, with each revision's files read-only", async () => {
+  it("brings back every skill revision, assignment, hold and pin, with each revision's files read-only (#1064)", async () => {
     await onHub(dataDir, seed);
     const source = join(root, "release");
     await mkdir(join(source, "scripts"), { recursive: true });
@@ -923,7 +923,7 @@ describe("backup and restore", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
-  it("holds no file from ~/.agents/skills, and a restore reads the folder again for them", async () => {
+  it("holds no file from ~/.agents/skills, and a restore reads the folder again for them (#1139)", async () => {
     await onHub(dataDir, seed);
     const agents = join(root, "agents-skills");
     const skillFile = (name: string, text: string) =>
@@ -1002,7 +1002,7 @@ describe("backup and restore", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
-  it("leaves out an edit made in Hobbots to a folder skill, and a restore finds what the folder holds now", async () => {
+  it("leaves out an edit made in Hobbots to a folder skill, and a restore finds what the folder holds now (#1139)", async () => {
     await onHub(dataDir, seed);
     const agents = join(root, "agents-skills");
     await mkdir(join(agents, "pdf-forms"), { recursive: true });
@@ -1077,7 +1077,7 @@ describe("backup and restore", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1139
-  it("copies only the revisions the snapshot names, so one the folder adds after it stays out", async () => {
+  it("copies only the revisions the snapshot names, so one the folder adds after it stays out (#1139)", async () => {
     const objects = join(root, "objects");
     const named = "a".repeat(64);
     const later = "b".repeat(64);

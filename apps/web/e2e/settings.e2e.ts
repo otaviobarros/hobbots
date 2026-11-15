@@ -97,7 +97,7 @@ test("a signed-out runtime shows how to fix it in Settings › AI providers", as
 });
 
 // A signed-in Codex is ready now that its turns run (#438).
-test("Settings › AI providers shows a ready, signed-in Codex, and each state that stops it with its fix", async ({
+test("Settings › AI providers shows a ready, signed-in Codex, and each state that stops it with its fix (#438)", async ({
   page,
 }) => {
   await openSettings(page, "connections", {
@@ -162,7 +162,7 @@ test("Help and about shows the version and the licenses, and Your data the hub's
 });
 
 // Issue #1088
-test("Help's check says when it could not read memory, the first time or after an answer, never an old answer", async ({
+test("Help's check says when it could not read memory, the first time or after an answer, never an old answer (#1088)", async ({
   page,
 }) => {
   await openSettings(page, "help");

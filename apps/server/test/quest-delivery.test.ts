@@ -31,7 +31,7 @@ const quest = (wrapUps: ReadonlyArray<object>) =>
   ]);
 
 describe.each(RUNTIMES)("a Quest its lead wraps up, on %s", (runtime) => {
-  it("stays open while its lead does not say it delivered, and completes once it does", async () => {
+  it("stays open while its lead does not say it delivered, and completes once it does (#1181)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;
@@ -52,7 +52,7 @@ describe.each(RUNTIMES)("a Quest its lead wraps up, on %s", (runtime) => {
     expect(done.quests[0]?.state).not.toBe("active");
   }, 30_000);
 
-  it("lets a member complete its own Task without saying it delivered", async () => {
+  it("lets a member complete its own Task without saying it delivered (#1181)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;
@@ -62,7 +62,7 @@ describe.each(RUNTIMES)("a Quest its lead wraps up, on %s", (runtime) => {
     expect(done.tasks.find((each) => each.parentId !== null)?.state).toBe("completed");
   }, 30_000);
 
-  it("lets a member that leads its own Quest under yours complete it without saying it delivered", async () => {
+  it("lets a member that leads its own Quest under yours complete it without saying it delivered (#1181)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;
@@ -98,7 +98,7 @@ describe.each(RUNTIMES)("a Quest its lead wraps up, on %s", (runtime) => {
     expect(ownedBy(done, ROOK)?.state).toBe("completed");
   }, 30_000);
 
-  it("lets a lead complete the Task you asked for without saying it delivered while it is no Quest", async () => {
+  it("lets a lead complete the Task you asked for without saying it delivered while it is no Quest (#1181)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, answers } = party;

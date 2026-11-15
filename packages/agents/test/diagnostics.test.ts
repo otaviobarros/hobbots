@@ -160,7 +160,7 @@ describe("report", () => {
   };
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("keeps each hob's skill names and revisions, and drops anything else a skill carries", () => {
+  it("keeps each hob's skill names and revisions, and drops anything else a skill carries (#1064)", () => {
     const revision = "e".repeat(64) as never;
     const report = allowlistedReport({
       ...input,

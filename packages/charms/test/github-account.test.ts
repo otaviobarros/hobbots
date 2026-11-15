@@ -829,7 +829,7 @@ describe("Edge cases of the hub's sign-in", () => {
 
 describe("Starting over with GitHub connected", () => {
   // covers #948
-  it("keeps the account and says so when the keychain never answers the delete, and forgets it once it does", async () => {
+  it("keeps the account and says so when the keychain never answers the delete, and forgets it once it does (#948)", async () => {
     const stalled = { value: true };
     const keychain = Layer.effect(
       Keychain,
@@ -872,7 +872,7 @@ describe("Starting over with GitHub connected", () => {
   });
 
   // covers #948
-  it("keeps the account after a Disconnect the keychain refused, so a later erase it cannot answer is not taken as done", async () => {
+  it("keeps the account after a Disconnect the keychain refused, so a later erase it cannot answer is not taken as done (#948)", async () => {
     const remove = { error: null as KeychainError | null };
     const keychain = Layer.effect(
       Keychain,
@@ -908,7 +908,7 @@ describe("Starting over with GitHub connected", () => {
   });
 
   // covers #948
-  it("counts a sign-in the hub never stored as gone, even when the keychain cannot be reached", async () => {
+  it("counts a sign-in the hub never stored as gone, even when the keychain cannot be reached (#948)", async () => {
     const unreachable = Layer.succeed(
       Keychain,
       Keychain.of({

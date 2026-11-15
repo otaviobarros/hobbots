@@ -8,7 +8,7 @@ import { TestDatabase } from "../src/testing.ts";
 // as the user told the hub, on SQLite and PostgreSQL alike.
 
 describe("The commit identity the user gave the hub", () => {
-  it("is none until given, round-trips, and a new answer replaces the old one", async () => {
+  it("is none until given, round-trips, and a new answer replaces the old one (#741)", async () => {
     const found = await Effect.gen(function* () {
       const identities = yield* HubCommitIdentities;
       const before = yield* identities.get;

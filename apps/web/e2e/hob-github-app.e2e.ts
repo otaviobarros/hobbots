@@ -319,7 +319,7 @@ const KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAstandin\n-----END 
 const linkedApp = { ...app, appId: 3_141_592, slug: "pips-own-bot", origin: "linked", owner: "the-shire" };
 
 // Issue #1321
-test("links a GitHub app the user already has, and unlinking leaves it on GitHub", async ({ page, scan }) => {
+test("links a GitHub app the user already has, and unlinking leaves it on GitHub (#1321)", async ({ page, scan }) => {
   const { current } = await openPipCharms(page);
   hub = current;
   const section = page.getByRole("region", { name: "Acts on GitHub as" });

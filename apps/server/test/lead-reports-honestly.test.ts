@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("a lead reports only what happened", () => {
-  it("a note on a Task whose question waits for you starts a lead turn told the question is still open, and the question stays open", async () => {
+  it("a note on a Task whose question waits for you starts a lead turn told the question is still open, and the question stays open (#569)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, reactions } = party;
@@ -62,7 +62,7 @@ describe("a lead reports only what happened", () => {
     expect(after.tasks[0]?.ownerId).toBe(FRODO);
   }, 30_000);
 
-  it("a lead's turn always asks it to report only what its tools did, and lists no question once you answered it", async () => {
+  it("a lead's turn always asks it to report only what its tools did, and lists no question once you answered it (#569)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, reactions } = party;
@@ -97,7 +97,7 @@ describe("a lead reports only what happened", () => {
 });
 
 describe("a lead hears the answer to a question it passed up", () => {
-  it("once you answer a question the lead passed up, each later turn of the lead lists it with its answer, and read_tasks shows it answered", async () => {
+  it("once you answer a question the lead passed up, each later turn of the lead lists it with its answer, and read_tasks shows it answered (#569)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, reactions, answers } = party;

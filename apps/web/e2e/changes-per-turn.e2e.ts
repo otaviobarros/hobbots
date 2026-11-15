@@ -21,7 +21,9 @@ const changesOf = async (page: Page, title: string) => {
   return { bench, panel: bench.getByRole("tabpanel", { name: /^Changes/ }) };
 };
 
-test("two steps working in one folder at once each list only their own changes in the Workbench", async ({ page }) => {
+test("two steps working in one folder at once each list only their own changes in the Workbench (#595)", async ({
+  page,
+}) => {
   test.setTimeout(90_000);
   const { url, aldric } = await aldricHub({ "README.md": "# Site\n", "notes.txt": "Notes\n" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);

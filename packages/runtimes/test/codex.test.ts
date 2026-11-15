@@ -250,7 +250,7 @@ describe("the App Server client", () => {
 
 describe("Codex's provider health", () => {
   // Codex turns run now (#438), so a ChatGPT sign-in is ready.
-  it("reports a ChatGPT sign-in as ready, read without a token or a refresh", async () => {
+  it("reports a ChatGPT sign-in as ready, read without a token or a refresh (#438)", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: "me@example.com", planType: "pro", workspaceName: null },
     });
@@ -360,7 +360,7 @@ describe("Codex's models for the brain picker", () => {
   });
 
   // Codex turns run now (#438), so a signed-in Codex offers its models.
-  it("offers a signed-in Codex's models to pick", async () => {
+  it("offers a signed-in Codex's models to pick (#438)", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: null, planType: "plus", workspaceName: null },
       pages: [[{ model: "gpt-6", supportedReasoningEfforts: efforts("low") }]],

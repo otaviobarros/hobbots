@@ -12,7 +12,7 @@ const outside = () => folderOf({ "steps.md": "secret", "SKILL.md": "secret" });
 
 describe("folder source", () => {
   // covers ADR 029 (Import: no links, nothing outside the skill), #1060
-  it("refuses a file swapped for a link, or for another file, after the listing", async () => {
+  it("refuses a file swapped for a link, or for another file, after the listing (#1060)", async () => {
     const root = await listed();
     const elsewhere = await outside();
     const tree = await folderTree(root);

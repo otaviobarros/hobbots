@@ -211,7 +211,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
   });
 
   // covers ADR 028 (The memory tools, Writes), #961
-  it("a chat lists its own saves, Undo puts back what a save replaced or removes the page it made, and the hob's page counts what it reads", async () => {
+  it("a chat lists its own saves, Undo puts back what a save replaced or removes the page it made, and the hob's page counts what it reads (#961)", async () => {
     const { project, dataDir } = prepare();
     hub = await start(dataDir);
     await engineRunning();

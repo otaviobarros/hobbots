@@ -6,7 +6,7 @@ import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-test("the chat menu renames the chat in the header, pins it, searches it, opens the hob's page and archives it with Undo", async ({
+test("the chat menu renames the chat in the header, pins it, searches it, opens the hob's page and archives it with Undo (#510)", async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();

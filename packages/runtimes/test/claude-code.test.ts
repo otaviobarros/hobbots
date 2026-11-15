@@ -497,7 +497,7 @@ describe("one turn over several runs of Claude Code", () => {
   });
 
   // regression for #1011: completion kept only the last run's usage
-  it("counts the tokens of every run, and keeps the first run's timings", () => {
+  it("counts the tokens of every run, and keeps the first run's timings (#1011)", () => {
     const used = (input: number, output: number, cacheRead: number | null, timing: number): ReplyUsage => ({
       timeToRequestMs: timing,
       timeToFirstStreamMs: timing,
@@ -768,7 +768,7 @@ describe("reading a Claude Code turn", () => {
   });
 
   // regression for #1027
-  it("reports a compacted session, so the hub tells it again what it relied on it holding", () => {
+  it("reports a compacted session, so the hub tells it again what it relied on it holding (#1027)", () => {
     const boundary = {
       type: "system",
       subtype: "compact_boundary",
@@ -779,7 +779,7 @@ describe("reading a Claude Code turn", () => {
   });
 
   // regression for #398
-  it("completes a turn with its timings and its main loop's token usage, null where Claude Code omits one", () => {
+  it("completes a turn with its timings and its main loop's token usage, null where Claude Code omits one (#398)", () => {
     const result = (timings: Record<string, number>) =>
       ({
         type: "result",
@@ -1045,7 +1045,7 @@ describe("the bot commit note", () => {
 
 describe("the approval note", () => {
   // Regression for #282
-  it("tells a turn that can ask the user that it never sees the request, and no other turn", () => {
+  it("tells a turn that can ask the user that it never sees the request, and no other turn (#282)", () => {
     expect(turnInstructions("Be brief.", false, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}`);
     expect(turnInstructions("Be brief.", true, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}`);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
@@ -1053,7 +1053,7 @@ describe("the approval note", () => {
   });
 
   // Regression for #282
-  it("carries the approval note to a resumed session with its instructions, since it keeps its system prompt", () => {
+  it("carries the approval note to a resumed session with its instructions, since it keeps its system prompt (#282)", () => {
     const request = { prompt: "hi", instructions: "Be brief.", instructionsChanged: true, sessionId: "s1" };
     const prompt = turnPrompt(request, turnInstructions(request.instructions, false, true));
     expect(prompt).toContain(`Be brief.\n\n${APPROVAL_NOTE}\n</current-instructions>`);

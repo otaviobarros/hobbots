@@ -41,7 +41,7 @@ const ask = async (page: Page, lines: ReadonlyArray<string>) => {
 /** Waits until Aldric's turn, if one runs, has ended. */
 const idle = (page: Page) => expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 90_000 });
 
-test("the nested Black Friday Quest is followed from the room alone, with Ada's question answered in her lane, until Aldric reports it done", async ({
+test("the nested Black Friday Quest is followed from the room alone, with Ada's question answered in her lane, until Aldric reports it done (#911)", async ({
   page,
   scan,
 }) => {
@@ -80,7 +80,7 @@ test("the nested Black Friday Quest is followed from the room alone, with Ada's 
   await expect(room).toBeVisible();
 });
 
-test("from the room, one failed Task is retried and the other is given to another hob, and nothing is left waiting on you", async ({
+test("from the room, one failed Task is retried and the other is given to another hob, and nothing is left waiting on you (#911)", async ({
   page,
   scan,
 }) => {
@@ -122,7 +122,7 @@ test("from the room, one failed Task is retried and the other is given to anothe
 /** A prompt line that makes the fake run a command, with what it prints and how it exits. */
 const run = (input: object) => `fake:run ${JSON.stringify(input)}`;
 
-test("a party's Black Friday Quest is steered from the chat with its receipt, and its Workbench is filtered by lane and by try with the Terminal split by hob", async ({
+test("a party's Black Friday Quest is steered from the chat with its receipt, and its Workbench is filtered by lane and by try with the Terminal split by hob (#911)", async ({
   page,
   scan,
 }) => {
@@ -270,7 +270,7 @@ const themeIds: readonly string[] = (
   }
 ).themes.map((theme) => theme.id);
 
-test("the quest's sheet holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll", async ({
+test("the quest's sheet holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll (#911)", async ({
   page,
   scan,
 }) => {

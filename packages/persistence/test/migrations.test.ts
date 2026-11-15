@@ -1117,7 +1117,7 @@ describe("0053_thread_reads", () => {
 
 describe("0074_milestone_reached_by", () => {
   // Issue #743
-  it("credits every milestone reached before it to its Task's owner, and leaves the rest unreached", async () => {
+  it("credits every milestone reached before it to its Task's owner, and leaves the rest unreached (#743)", async () => {
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const at = "2026-11-01T00:00:00.000Z";

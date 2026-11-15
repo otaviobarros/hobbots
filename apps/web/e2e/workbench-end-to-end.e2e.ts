@@ -43,7 +43,7 @@ const tabsOf = (page: Page, title: string) => {
   return { bench, tabs, open };
 };
 
-test("a Task that edits files and runs commands is followed through every tab while it runs, and read again as history once it ends", async ({
+test("a Task that edits files and runs commands is followed through every tab while it runs, and read again as history once it ends (#391)", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -162,7 +162,7 @@ test("a Task that edits files and runs commands is followed through every tab wh
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden();
 });
 
-test("a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying so, and Browser reads Soon", async ({
+test("a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying so, and Browser reads Soon (#391)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

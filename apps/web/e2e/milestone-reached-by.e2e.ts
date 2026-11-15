@@ -51,7 +51,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-test("a member's milestone reached through its lead's work shows on its Task as reached by the lead", async ({
+test("a member's milestone reached through its lead's work shows on its Task as reached by the lead (#743)", async ({
   page,
   scan,
 }) => {

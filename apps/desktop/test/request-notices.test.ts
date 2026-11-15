@@ -435,7 +435,7 @@ const sharing = (id: string, state: string, scope: unknown = { _tag: "Project", 
 
 describe("memory share notifications", () => {
   // covers ADR 028 (Sharing), #960
-  it("announces a hob asking to share what it learned, opens it in the Inbox, and closes once decided", async () => {
+  it("announces a hob asking to share what it learned, opens it in the Inbox, and closes once decided (#960)", async () => {
     const { hub, notices, options } = questSetup();
     const opened: Array<string> = [];
     const { check } = shareNotices({ ...options, open: (id) => void opened.push(id) });

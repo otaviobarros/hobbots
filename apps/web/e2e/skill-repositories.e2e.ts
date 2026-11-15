@@ -90,7 +90,7 @@ const hubWithRepository = async () => {
 };
 
 // covers ADR 029 (Scopes), #1098
-test("a repository's own skills: offered once, read from the default branch, and imported for the project", async ({
+test("a repository's own skills: offered once, read from the default branch, and imported for the project (#1098)", async ({
   page,
 }) => {
   const { url, site } = await hubWithRepository();

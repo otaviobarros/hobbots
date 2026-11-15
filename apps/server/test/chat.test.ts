@@ -166,7 +166,7 @@ describe("a reply that ends early", () => {
   });
 
   // covers ADR 017; regression for #398
-  it("keeps each reply's latency and token usage next to its runtime and model", async () => {
+  it("keeps each reply's latency and token usage next to its runtime and model (#398)", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;

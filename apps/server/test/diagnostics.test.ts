@@ -451,7 +451,7 @@ describe("Diagnostics", () => {
     expect(Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body).workHeld).toBe(false);
   });
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("names each hob's skills and revisions in Right now and in the report, never their contents", async () => {
+  it("names each hob's skills and revisions in Right now and in the report, never their contents (#1064)", async () => {
     const DESCRIPTION = "How this repository releases, step by step.";
     const hash = SkillRevisionHash.make("d".repeat(64));
     await runtime.runPromise(

@@ -13,7 +13,7 @@ const drift: Judgment<"same" | "drifting"> = {
 };
 
 describe("HubDecider", () => {
-  it("asks the question about the input in the prompt, with the answer's shape", () => {
+  it("asks the question about the input in the prompt, with the answer's shape (#1367)", () => {
     const text = judgmentText(drift);
     // All of it in the prompt, which a runtime never buries under its own system prompt.
     expect(text.prompt).toContain(drift.question);
@@ -23,7 +23,7 @@ describe("HubDecider", () => {
     expect(text.instructions).toContain("JSON");
   });
 
-  it("decodes an answer in the judgment's shape, in a code fence or bare", () => {
+  it("decodes an answer in the judgment's shape, in a code fence or bare (#1367)", () => {
     expect(decodeJudgment(drift, '{"choice":"drifting","confidence":0.8}')).toEqual(
       Option.some({ choice: "drifting", confidence: 0.8 }),
     );
@@ -32,7 +32,7 @@ describe("HubDecider", () => {
     );
   });
 
-  it("decodes nothing from an answer outside the choices, out of range or not JSON", () => {
+  it("decodes nothing from an answer outside the choices, out of range or not JSON (#1367)", () => {
     for (const reply of [
       '{"choice":"maybe","confidence":0.5}',
       '{"choice":"same","confidence":2}',
@@ -44,7 +44,7 @@ describe("HubDecider", () => {
       expect(decodeJudgment(drift, reply)).toEqual(Option.none());
   });
 
-  it("answers every judgment with its rule on a hub with no brain", async () => {
+  it("answers every judgment with its rule on a hub with no brain (#1367)", async () => {
     const decided = await Effect.runPromise(
       Effect.flatMap(HubDecider, (decider) => decider.decide(drift)).pipe(Effect.provide(HubDecider.rules)),
     );

@@ -48,7 +48,9 @@ const hubWithMemory = async (memory: "empty" | "seeded" | "down", lookSeconds = 
 };
 
 // covers ADR 028 (Browse, Read), #958
-test("Memory opens from the sidebar, shows what hobs learned, and reads a page with its changes", async ({ page }) => {
+test("Memory opens from the sidebar, shows what hobs learned, and reads a page with its changes (#958)", async ({
+  page,
+}) => {
   const { url, summon } = await hubWithMemory("seeded");
   const pip = await summon("Pip", 1201);
   await page.goto(`${url}/#/`);
@@ -80,7 +82,9 @@ test("Memory opens from the sidebar, shows what hobs learned, and reads a page w
 });
 
 // covers ADR 028 (Search, What changed), #958
-test("search finds pages across scopes, and What changed shows a new hob's saves as they land", async ({ page }) => {
+test("search finds pages across scopes, and What changed shows a new hob's saves as they land (#958)", async ({
+  page,
+}) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -122,7 +126,7 @@ test("search finds a page by a question in plain words or a word start, and mark
 });
 
 // covers ADR 028 (Browse), #958
-test("with nothing remembered yet, Memory says how it fills", async ({ page }) => {
+test("with nothing remembered yet, Memory says how it fills (#958)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("empty");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -133,7 +137,7 @@ test("with nothing remembered yet, Memory says how it fills", async ({ page }) =
 });
 
 // covers ADR 028 (Browse), #958
-test("while memory is not answering, Memory says so and offers to try again", async ({ page }) => {
+test("while memory is not answering, Memory says so and offers to try again (#958)", async ({ page }) => {
   const { url } = await hubWithMemory("down");
   await page.goto(`${url}/#/memory`);
   const main = page.getByRole("main", { name: "Memory" });
@@ -144,7 +148,7 @@ test("while memory is not answering, Memory says so and offers to try again", as
 });
 
 // covers ADR 028 (Browse), #958
-test("memory stopping after the page loaded shows the banner over what loaded, and clears when it answers again", async ({
+test("memory stopping after the page loaded shows the banner over what loaded, and clears when it answers again (#958)", async ({
   page,
 }) => {
   // The hub never looks for changes during the test, so only the page's own reads find the outage.
@@ -184,7 +188,7 @@ test("memory stopping after the page loaded shows the banner over what loaded, a
 type PageNow = { readonly page: { readonly version: string; readonly markdown: string } };
 
 // covers ADR 028 (Edit, History), #959
-test("Edit saves a page as a new version by you, and Restore brings an older one back", async ({ page }) => {
+test("Edit saves a page as a new version by you, and Restore brings an older one back (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -215,7 +219,7 @@ test("Edit saves a page as a new version by you, and Restore brings an older one
 });
 
 // covers ADR 028 (Pin, Forget, Delete), #959
-test("Pin, a forget day with Keep it, and Delete with Undo each change the page you read", async ({ page }) => {
+test("Pin, a forget day with Keep it, and Delete with Undo each change the page you read (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -251,7 +255,7 @@ test("Pin, a forget day with Keep it, and Delete with Undo each change the page 
 });
 
 // covers ADR 028 (Sharing: About you, Edit), #959
-test("a house rule and a new page are saved as your own pages", async ({ page }) => {
+test("a house rule and a new page are saved as your own pages (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -278,7 +282,7 @@ test("a house rule and a new page are saved as your own pages", async ({ page })
 });
 
 // covers ADR 028 (Edit), #959
-test("an edit that races a save keeps your text, and saves over it only when you say so", async ({ page }) => {
+test("an edit that races a save keeps your text, and saves over it only when you say so (#959)", async ({ page }) => {
   const { url, summon, call } = await hubWithMemory("seeded");
   const pip = await summon("Pip", 1201);
   const scope = `hob:${pip.id}`;
@@ -318,7 +322,7 @@ test("an edit that races a save keeps your text, and saves over it only when you
 });
 
 // covers ADR 028 (Browse), #959
-test("Open folder shows memory's pages in the desktop app, and says when it could not", async ({ page }) => {
+test("Open folder shows memory's pages in the desktop app, and says when it could not (#959)", async ({ page }) => {
   const { url } = await hubWithMemory("seeded");
   await page.addInitScript(() => {
     let calls = 0;
@@ -333,7 +337,7 @@ test("Open folder shows memory's pages in the desktop app, and says when it coul
 });
 
 // covers ADR 028 (Delete), #959
-test("a deleted page reads as gone when Back opens it again, not as it was", async ({ page }) => {
+test("a deleted page reads as gone when Back opens it again, not as it was (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -355,7 +359,9 @@ test("a deleted page reads as gone when Back opens it again, not as it was", asy
 });
 
 // covers ADR 028 (Delete), #959, STD-ARCH-011
-test("a page deleted in one window leaves another window's list, and its open page reads as gone", async ({ page }) => {
+test("a page deleted in one window leaves another window's list, and its open page reads as gone (#959)", async ({
+  page,
+}) => {
   const { url, summon } = await hubWithMemory("seeded", 3600);
   const pip = await summon("Pip", 1201);
   const pageAddress = `${url}/#/memory?scope=hob:${pip.id}&page=howtos/preview-link.md`;
@@ -383,7 +389,7 @@ test("a page deleted in one window leaves another window's list, and its open pa
 });
 
 // covers ADR 028 (Sharing, Check now), #960
-test("Check now lists what it found only in To review, and opens the page it is about", async ({ page }) => {
+test("Check now lists what it found only in To review, and opens the page it is about (#960)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -409,7 +415,7 @@ test("Check now lists what it found only in To review, and opens the page it is 
 });
 
 // covers ADR 028 (Sharing, Check now), #960
-test("Check now says so while memory is not answering, and keeps the last check", async ({ page }) => {
+test("Check now says so while memory is not answering, and keeps the last check (#960)", async ({ page }) => {
   const { url } = await hubWithMemory("seeded");
   await page.goto(`${url}/#/memory?view=review`);
   const main = page.getByRole("main", { name: "Memory" });

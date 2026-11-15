@@ -87,7 +87,7 @@ describe("HobGitHubApps", () => {
 
 describe("HobGitHubApps for a linked app", () => {
   // covers #1321, ADR 022
-  it("keeps whether the hub made a hob's app or the user linked it, and finds the hob that has an app", async () => {
+  it("keeps whether the hub made a hob's app or the user linked it, and finds the hob that has an app (#1321)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed("frodo");

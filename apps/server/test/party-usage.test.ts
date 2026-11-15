@@ -29,7 +29,7 @@ const period = { since: "2000-01-01T00:00:00.000Z", until: "2100-01-01T00:00:00.
 
 describe("what a party spends", () => {
   // regression for #1011
-  it("counts each member's turns under that member, and the whole party for the Quest", async () => {
+  it("counts each member's turns under that member, and the whole party for the Quest (#1011)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run } = party;

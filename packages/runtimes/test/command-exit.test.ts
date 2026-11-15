@@ -66,7 +66,7 @@ const fakeEnd = async (command: string, effect: { readonly output?: string; read
 
 describe("a command's exit code on Claude Code", () => {
   // covers ADR 023
-  it("reports exit code 1 for `false` and 0 for `true`, from Claude Code's recorded hook payloads", async () => {
+  it("reports exit code 1 for `false` and 0 for `true`, from Claude Code's recorded hook payloads (#591)", async () => {
     expect(await realEnd(RECORDED_BASH_HOOKS.false)).toEqual({
       _tag: "ToolFinished",
       id: "t1",
@@ -82,7 +82,7 @@ describe("a command's exit code on Claude Code", () => {
   });
 
   // covers ADR 023
-  it("keeps what a failed command printed without Claude Code's exit code line", async () => {
+  it("keeps what a failed command printed without Claude Code's exit code line (#591)", async () => {
     expect(await realEnd(RECORDED_BASH_HOOKS.printsThenExits2)).toEqual({
       _tag: "ToolFinished",
       id: "t1",
@@ -93,12 +93,12 @@ describe("a command's exit code on Claude Code", () => {
   });
 
   // covers ADR 023
-  it("records no exit code where Claude Code reads a non-zero one as no error and does not say which", async () => {
+  it("records no exit code where Claude Code reads a non-zero one as no error and does not say which (#591)", async () => {
     expect(await realEnd(RECORDED_BASH_HOOKS.grepNoMatch)).toEqual({ _tag: "ToolFinished", id: "t1", failed: false });
   });
 
   // covers ADR 023
-  it("reports a fake runtime's command exactly as the real runtime reports the same command", async () => {
+  it("reports a fake runtime's command exactly as the real runtime reports the same command (#591)", async () => {
     expect(await fakeEnd("false", { exitCode: 1 })).toEqual(await realEnd(RECORDED_BASH_HOOKS.false));
     expect(await fakeEnd("true", { exitCode: 0 })).toEqual(await realEnd(RECORDED_BASH_HOOKS.true));
     expect(await fakeEnd("true", {})).toEqual(await realEnd(RECORDED_BASH_HOOKS.true));

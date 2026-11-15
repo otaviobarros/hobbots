@@ -11,7 +11,7 @@ test.afterEach(stopAldricHub);
 /** A prompt line that makes the fake run a command, with what it prints and how it exits. */
 const run = (input: object) => `fake:run ${JSON.stringify(input)}`;
 
-test("a command that exits non-zero shows as Failed with its exit code, and one that exits 0 as Succeeded", async ({
+test("a command that exits non-zero shows as Failed with its exit code, and one that exits 0 as Succeeded (#591)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -51,7 +51,7 @@ test("a command that exits non-zero shows as Failed with its exit code, and one 
 
 // Issue #702: `git rev-parse …; git init …` exits with its last command's code, so a line of
 // commands run one after another that exits 0 is Finished, never Succeeded: an earlier one may have failed.
-test("a line of commands run one after another that exits 0 shows as Finished, saying an earlier part may have failed", async ({
+test("a line of commands run one after another that exits 0 shows as Finished, saying an earlier part may have failed (#702)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

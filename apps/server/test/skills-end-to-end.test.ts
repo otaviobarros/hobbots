@@ -273,7 +273,7 @@ const setPins = (skills: ReadonlyArray<SkillMount>) =>
 
 describe("the skills library end to end", () => {
   // covers ADR 029 (Import, Skill sets, Scopes, Pins and rollout, A clean runtime, Proactive hobs, The use line), #1057
-  it("one library reaches a Claude Code hob and a Codex hob by scope, a plugin as one set, rolls out past a held pin, keeps the runtimes clean and ~/.agents/skills read-only, waits for you on a proposal and names each use", async () => {
+  it("one library reaches a Claude Code hob and a Codex hob by scope, a plugin as one set, rolls out past a held pin, keeps the runtimes clean and ~/.agents/skills read-only, waits for you on a proposal and names each use (#1057)", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const pip = await summon("Pip", "claude-code", 1065);
     const quill = await summon("Quill", "codex", 1066);

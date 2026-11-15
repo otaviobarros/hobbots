@@ -55,7 +55,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-test("Aldric hands Quill's core.py to Rook, who asked for it while running, and Rook's Task finishes with it", async ({
+test("Aldric hands Quill's core.py to Rook, who asked for it while running, and Rook's Task finishes with it (#566)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

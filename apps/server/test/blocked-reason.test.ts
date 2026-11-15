@@ -10,7 +10,7 @@ import { ALDRIC, hub, memberTask, ROOK, send, sharedDatabase, startHub, taskOf, 
 // the same Task warns the lead.
 
 describe("blocked says why, and waiting is not blocked", () => {
-  it("Rook, with an unreported milestone and an open question, ends his turn waiting, not blocked", async () => {
+  it("Rook, with an unreported milestone and an open question, ends his turn waiting, not blocked (#571)", async () => {
     const { run } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -32,7 +32,7 @@ describe("blocked says why, and waiting is not blocked", () => {
     expect(tree.checkpoints.filter((each) => each.taskId === rook.id && each.kind === "blocker")).toEqual([]);
   }, 30_000);
 
-  it("Rook, with only an unreported milestone, is blocked with a reason that reaches Aldric's next turn", async () => {
+  it("Rook, with only an unreported milestone, is blocked with a reason that reaches Aldric's next turn (#571)", async () => {
     const { run, requests } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -82,7 +82,7 @@ describe("blocked says why, and waiting is not blocked", () => {
     );
   }, 30_000);
 
-  it("a second Task for Rook under the same Task warns Aldric of the open one", async () => {
+  it("a second Task for Rook under the same Task warns Aldric of the open one (#571)", async () => {
     const { run, answers } = await startHub(await sharedDatabase());
     await run(
       send([

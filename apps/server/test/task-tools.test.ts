@@ -704,7 +704,7 @@ describe("hob tools for Tasks and Quests", () => {
   });
 
   // Issue #662
-  it("a lead that cancels or reads what ended completes in the same turn, without retrying", async () => {
+  it("a lead that cancels or reads what ended completes in the same turn, without retrying (#662)", async () => {
     await run(seed);
     await done(ALDRIC, TOP, "start_quest", { key: "quest", goal: "Launch the campaign" });
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
@@ -755,7 +755,7 @@ describe("hob tools for Tasks and Quests", () => {
   });
 
   // Issue #743
-  it("a milestone reached through another hob's work in the same work is recorded with that hob", async () => {
+  it("a milestone reached through another hob's work in the same work is recorded with that hob (#743)", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Copy drafted", "Committed"] });
     await delegate(ALDRIC, TOP, "Pip", "email");

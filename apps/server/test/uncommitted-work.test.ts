@@ -219,7 +219,7 @@ describe("Completing a Task that changed a Git repository", () => {
   });
 
   // Issue #665
-  it("holds the Quest's top Task once on files it left uncommitted, and completes when its lead says why", async () => {
+  it("holds the Quest's top Task once on files it left uncommitted, and completes when its lead says why (#665)", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
     // One turn of the fake runtime: the lead completes, is told which file, and leaves it on purpose.
@@ -266,7 +266,7 @@ describe("Completing a Task that changed a Git repository", () => {
   });
 
   // Issue #665
-  it("keeps holding the Quest's top Task on a file an earlier Attempt left, after a brain or configuration change", async () => {
+  it("keeps holding the Quest's top Task on a file an earlier Attempt left, after a brain or configuration change (#665)", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
     const result = await run(

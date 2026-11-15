@@ -362,7 +362,7 @@ const rowsPast = (terminal: Locator) =>
 
 // Issue #1002: the terminal took xterm.js's default 24 rows whatever the dock's height, ran past the
 // dock and scrolled the panel, the room and the window to show its last row.
-test("the Terminal fits the Workbench at any window height, and reading it scrolls nothing around it", async ({
+test("the Terminal fits the Workbench at any window height, and reading it scrolls nothing around it (#1002)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

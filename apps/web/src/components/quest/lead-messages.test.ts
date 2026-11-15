@@ -18,7 +18,7 @@ const note = (id: string, text: string, senderId: typeof ALDRIC | null) =>
   });
 
 describe("a lead's message on a member's Task", () => {
-  it("never shows among your notes on that Task", () => {
+  it("never shows among your notes on that Task (#574)", () => {
     const quest = blackFriday();
     const withNotes = {
       ...quest,

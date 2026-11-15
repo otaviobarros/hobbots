@@ -10,7 +10,7 @@ test.afterEach(stopAldricHub);
 
 const TITLE = "Tidy the notes file";
 
-test("a step's summary in its lane shows its tool calls live, a refused one with why, and keeps them ended after a reload", async ({
+test("a step's summary in its lane shows its tool calls live, a refused one with why, and keeps them ended after a reload (#892)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

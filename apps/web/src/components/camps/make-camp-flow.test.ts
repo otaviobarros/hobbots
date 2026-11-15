@@ -106,7 +106,7 @@ describe("Make a camp", () => {
   });
 
   // Issue #1551: while a reply runs in the chat, its chapter cannot move, so the camp it comes along with waits.
-  it("holds a camp whose chapter cannot move yet, and makes one without the chapter at once", () => {
+  it("holds a camp whose chapter cannot move yet, and makes one without the chapter at once (#1551)", () => {
     const along = run([{ _tag: "Edit", draft: draft({ chapter: true }) }]);
     expect(run([{ _tag: "Send", key: K1, held: true }], along)).toBe(along);
     expect(run([{ _tag: "Send", key: K1, held: false }], along)).toEqual({

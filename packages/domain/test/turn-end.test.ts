@@ -250,7 +250,7 @@ describe("turnEnded", () => {
     expect(empty).toMatchObject({ _tag: "Complete", summary: "The step finished without a reply." });
   });
 
-  it("holds a member's Task open on what its ledger still has, and gives the root's waits back", () => {
+  it("holds a member's Task open on what its ledger still has, and gives the root's waits back (#571)", () => {
     // Only its own milestones left: blocked, with a reason its lead can act on (#571).
     const short = decide("member", "active", ENDINGS.replied, [milestone("Reviewed")]);
     expect(shown(short.task)).toBe("→blocked");

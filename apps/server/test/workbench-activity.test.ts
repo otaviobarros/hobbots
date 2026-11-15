@@ -363,7 +363,7 @@ describe("a Task's activity", () => {
   }, 30_000);
 
   // Issue #902
-  it("a colored command keeps its colors in the Workbench, redacted where a color splits a secret, and its reply step reads plain", async () => {
+  it("a colored command keeps its colors in the Workbench, redacted where a color splits a secret, and its reply step reads plain (#902)", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     const green = "\u001b[32m";
     const bold = "\u001b[1m";

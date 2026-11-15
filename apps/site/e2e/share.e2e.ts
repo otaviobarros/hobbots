@@ -30,7 +30,7 @@ test("shows the share card and icons, and serves every file they and the page na
   expect(await (await request.get("/robots.txt")).text()).toContain("Sitemap: https://hobbots.app/sitemap.xml");
 });
 
-test("keeps a build that is not for production out of search results", async ({ page }) => {
+test("keeps a build that is not for production out of search results (#186)", async ({ page }) => {
   // covers #186. The local build has no CLOUDFLARE_ENV, like a pull request preview.
   await page.goto("/");
   expect(await content(page, 'meta[name="robots"]')).toBe("noindex, nofollow");

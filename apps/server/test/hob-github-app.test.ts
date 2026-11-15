@@ -524,7 +524,7 @@ describe("A hob's own GitHub App on a hub", () => {
   });
 
   // covers #1321, ADR 022
-  it("links an app the user already has only from the hub's own computer, and unlinking leaves it installed", async () => {
+  it("links an app the user already has only from the hub's own computer, and unlinking leaves it installed (#1321)", async () => {
     const mine = github.makeAppByHand("Rosie by hand");
     github.installApp(mine.app.slug, "all");
     const path = `/api/agents/${ROSIE}/github-app/link`;

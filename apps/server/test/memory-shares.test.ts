@@ -291,7 +291,7 @@ const journal = async () =>
 
 describe("what hobs want to share", () => {
   // covers ADR 028 (Sharing), #960
-  it("waits for you under Careful and Balanced, and writes nothing until you decide", async () => {
+  it("waits for you under Careful and Balanced, and writes nothing until you decide (#960)", async () => {
     for (const preset of ["careful", "balanced"] as const) {
       const answer = await save(preset, "project", { key: `deploy-${preset}`, work: `reply:${preset}` });
       expect(answer).toEqual({
@@ -309,7 +309,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("lets a share to a project through under Trusting, written as the hob, with Undo", async () => {
+  it("lets a share to a project through under Trusting, written as the hob, with Undo (#960)", async () => {
     const answer = await save("trusting", "project");
     expect(answer).toEqual({
       text: `Shared ${PAGE} with the project ${site}. The user can see it in Memory and undo it.`,
@@ -329,7 +329,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("asks you before a share with every hob under every preset, Trusting included", async () => {
+  it("asks you before a share with every hob under every preset, Trusting included (#960)", async () => {
     for (const preset of ["careful", "balanced", "trusting"] as const) {
       const answer = await save(preset, "everyone", { key: `about-${preset}`, work: `reply:${preset}` });
       expect(answer.text).toBe(
@@ -345,7 +345,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("records a retried key once, and answers it as the share now stands", async () => {
+  it("records a retried key once, and answers it as the share now stands (#960)", async () => {
     await save("balanced", "project");
     const again = await save("balanced", "project");
     expect(again.text).toContain("It waits for their review");
@@ -358,7 +358,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("leaves a share to you under Trusting while memory does not answer", async () => {
+  it("leaves a share to you under Trusting while memory does not answer (#960)", async () => {
     controls.setDown(true);
     const answer = await save("trusting", "project");
     controls.setDown(false);
@@ -367,7 +367,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("shares it as the hob wrote it, written as the hob, and you as the one who approved it", async () => {
+  it("shares it as the hob wrote it, written as the hob, and you as the one who approved it (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     const shared = await request<MemoryShare>("POST", `/api/memory/shares/${waiting?.id}/share`, {});
@@ -380,7 +380,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("shares your edit, still as the hob, and marks it edited", async () => {
+  it("shares your edit, still as the hob, and marks it edited (#960)", async () => {
     await save("careful", "everyone");
     const [waiting] = await shares();
     const edited = "# Deploy\n\nRun `pnpm deploy:prod` from the repository root.";
@@ -392,7 +392,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("keeps it private in the hob's own memory, and never in the shared one", async () => {
+  it("keeps it private in the hob's own memory, and never in the shared one (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     const kept = await request<MemoryShare>("POST", `/api/memory/shares/${waiting?.id}/keep`);
@@ -402,7 +402,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("undoes an approved share back to the page it replaced, and never over a later change", async () => {
+  it("undoes an approved share back to the page it replaced, and never over a later change (#960)", async () => {
     await Effect.runPromise(
       store.write(
         you,
@@ -441,7 +441,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), PE-006, #960
-  it("takes a decision only from you, never from a hob's turn", async () => {
+  it("takes a decision only from you, never from a hob's turn (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     // Without a user session, as from a hob, Charm or runtime tool, the decision does not run.
@@ -469,7 +469,7 @@ describe("a share cut short", () => {
   const recover = () => runtime.runPromise(MemoryReviews.use((reviews) => reviews.recover));
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("finishes a share memory took while its answer was lost, and never offers it back to keep private", async () => {
+  it("finishes a share memory took while its answer was lost, and never offers it back to keep private (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     cut.set("write", "after");
@@ -487,7 +487,7 @@ describe("a share cut short", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("writes a share memory never took once memory answers again", async () => {
+  it("writes a share memory never took once memory answers again (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     // Memory goes away between the claim and the write: the page is never written.
@@ -500,7 +500,7 @@ describe("a share cut short", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("resumes an Undo cut short, back to the page it replaced and into the hob's own memory", async () => {
+  it("resumes an Undo cut short, back to the page it replaced and into the hob's own memory (#960)", async () => {
     await Effect.runPromise(
       store.write(
         you,
@@ -538,7 +538,7 @@ describe("a share cut short, then changed meanwhile", () => {
     );
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("knows its own write after a later edit by what it changed, though memory names no author for it", async () => {
+  it("knows its own write after a later edit by what it changed, though memory names no author for it (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     cut.set("write", "after");
@@ -552,7 +552,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("never takes another share by the same hob for its own, and waits for you again", async () => {
+  it("never takes another share by the same hob for its own, and waits for you again (#960)", async () => {
     await save("balanced", "project");
     const [first] = await shares();
     cut.set("write", "before");
@@ -567,7 +567,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("knows its own restore after a later edit, and finishes the Undo", async () => {
+  it("knows its own restore after a later edit, and finishes the Undo (#960)", async () => {
     await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
     await save("trusting", "project");
     const [shared] = await shares();
@@ -581,7 +581,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("records an Undo's restore before the hob's own copy, so a later edit cannot strand it", async () => {
+  it("records an Undo's restore before the hob's own copy, so a later edit cannot strand it (#960)", async () => {
     await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
     await save("trusting", "project");
     const [shared] = await shares();
@@ -597,7 +597,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("never takes the same lines in another order for its own write, and waits for you again", async () => {
+  it("never takes the same lines in another order for its own write, and waits for you again (#960)", async () => {
     await save("balanced", "project");
     const [first] = await shares();
     cut.set("write", "before");
@@ -612,7 +612,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("leaves a share under way while memory cannot answer what a version holds whole, then finishes it", async () => {
+  it("leaves a share under way while memory cannot answer what a version holds whole, then finishes it (#960)", async () => {
     await save("balanced", "project");
     const [waiting] = await shares();
     cut.set("write", "after");
@@ -629,7 +629,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("keeps an Undo past its restore when the hob's own page changes meanwhile, and finishes it", async () => {
+  it("keeps an Undo past its restore when the hob's own page changes meanwhile, and finishes it (#960)", async () => {
     await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
     await save("trusting", "project");
     const [shared] = await shares();
@@ -654,7 +654,7 @@ describe("a share cut short, then changed meanwhile", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("never restores over a change that lands between Undo's read and its restore", async () => {
+  it("never restores over a change that lands between Undo's read and its restore (#960)", async () => {
     await Effect.runPromise(yourEdit("# Deploy\n\nAsk Bram."));
     await save("trusting", "project");
     const [shared] = await shares();
@@ -668,7 +668,7 @@ describe("a share cut short, then changed meanwhile", () => {
 
 describe("Check now", () => {
   // covers ADR 028 (Sharing), #960
-  it("finds pages that disagree or look out of date in every scope, and keeps the last check", async () => {
+  it("finds pages that disagree or look out of date in every scope, and keeps the last check (#960)", async () => {
     expect((await request("GET", "/api/memory/check")).body).toEqual({ checkedAt: null, findings: [] });
     await Effect.runPromise(
       store.write(you, theSite, { path: PAGE, markdown: MARKDOWN, tags: [], pinned: false }, { _tag: "New" }),
@@ -684,7 +684,7 @@ describe("Check now", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("answers 503 while memory does not answer, and changes nothing", async () => {
+  it("answers 503 while memory does not answer, and changes nothing (#960)", async () => {
     controls.setDown(true);
     const checked = await request<{ _tag: string }>("POST", "/api/memory/check");
     controls.setDown(false);

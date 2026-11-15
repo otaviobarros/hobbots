@@ -32,7 +32,7 @@ const write = (path: string, text: string) => `fake:write ${path} ${JSON.stringi
 
 describe("a turn's own changes", () => {
   // covers ADR 023
-  it("two turns writing different files in one folder at the same time each record only their own", async () => {
+  it("two turns writing different files in one folder at the same time each record only their own (#595)", async () => {
     const { run: inHub, release } = setUp({ "README.md": "# Site\n" });
     await inHub(
       say(
@@ -58,7 +58,7 @@ describe("a turn's own changes", () => {
   }, 30_000);
 
   // covers ADR 023
-  it("a file a command makes is the turn's that ran it, not another's working beside it, nor the hub's", async () => {
+  it("a file a command makes is the turn's that ran it, not another's working beside it, nor the hub's (#595)", async () => {
     const { run: inHub, release, holding, folder } = setUp({ "notes.txt": "Notes\n", "scratch/tmp.txt": "tmp\n" });
     await inHub(
       say(
@@ -95,7 +95,7 @@ describe("a turn's own changes", () => {
   }, 30_000);
 
   // covers ADR 023
-  it("leaves build caches and system files out of a turn's changes", async () => {
+  it("leaves build caches and system files out of a turn's changes (#595)", async () => {
     const { run: inHub } = setUp({ "app.py": "print('hi')\n" });
     await inHub(
       say(

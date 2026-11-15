@@ -54,7 +54,7 @@ const lists = async (page: Page) => {
   };
 };
 
-test("a party's Workbench lists every hob's changes and files in one list, each with its hob, and a lane filters every tab", async ({
+test("a party's Workbench lists every hob's changes and files in one list, each with its hob, and a lane filters every tab (#907)", async ({
   page,
 }) => {
   await startParty(page, [
@@ -101,7 +101,7 @@ test("a party's Workbench lists every hob's changes and files in one list, each 
   await expect(changes.getByRole("button")).toHaveCount(2);
 });
 
-test("the Workbench follows the try picked for a lane's Task, with the tries before it, and every other Task's latest that did work", async ({
+test("the Workbench follows the try picked for a lane's Task, with the tries before it, and every other Task's latest that did work (#907)", async ({
   page,
 }) => {
   // Quill writes the copy and fails; on her second try she changes nothing and finishes with a result.
@@ -146,7 +146,7 @@ test("the Workbench follows the try picked for a lane's Task, with the tries bef
   ).not.toContainText("Changed in attempt");
 });
 
-test("a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry", async ({
+test("a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry (#907)", async ({
   page,
   scan,
 }) => {
@@ -177,7 +177,10 @@ test("a file a stopped try made and its retry rewrote reads Added with every lin
   await scan(bench);
 });
 
-test("a file reads under the same path for a lead and for a member narrowed to a subfolder", async ({ page, scan }) => {
+test("a file reads under the same path for a lead and for a member narrowed to a subfolder (#907)", async ({
+  page,
+  scan,
+}) => {
   const { url, aldric, members, api, folder } = await aldricHub({ "test/README.md": "# Tests\n" }, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -218,7 +221,7 @@ test("a file reads under the same path for a lead and for a member narrowed to a
   await scan(bench);
 });
 
-test("a file two hobs changed opens the hob's own record when Files and Changes link to each other", async ({
+test("a file two hobs changed opens the hob's own record when Files and Changes link to each other (#907)", async ({
   page,
 }) => {
   await startParty(page, [
@@ -269,7 +272,7 @@ test("a file two hobs changed opens the hob's own record when Files and Changes 
   await expect(files.getByRole("button", { name: /^notes\.md\s*, by Aldric/ })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("a member's History opens an archived Quest's room in its lead's chat, and Close room reads the chat in the Archive", async ({
+test("a member's History opens an archived Quest's room in its lead's chat, and Close room reads the chat in the Archive (#907)", async ({
   page,
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);

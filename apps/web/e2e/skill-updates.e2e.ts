@@ -80,7 +80,7 @@ const hubWithGitSkill = async () => {
 };
 
 // covers ADR 029 (Updates from a source), #1097
-test("Skills › Updates: check, review the diff, update, update automatically with Roll back, and a script that waits", async ({
+test("Skills › Updates: check, review the diff, update, update automatically with Roll back, and a script that waits (#1097)", async ({
   page,
 }) => {
   const { url, upstream, skillId } = await hubWithGitSkill();

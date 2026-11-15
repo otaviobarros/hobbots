@@ -18,7 +18,7 @@ const said = (page: Page): Locator => receipt(page).getByRole("status");
 /** Your notes in a hob's lane. */
 const notes = (page: Page, name: string): Locator => lane(page, name).getByRole("list", { name: "Your notes" });
 
-test("a message the lead passes to one hob reads got it, then picked up, in the chat and in the lanes", async ({
+test("a message the lead passes to one hob reads got it, then picked up, in the chat and in the lanes (#909)", async ({
   page,
 }) => {
   test.setTimeout(240_000);
@@ -57,7 +57,7 @@ test("a message the lead passes to one hob reads got it, then picked up, in the 
   await expect(notes(page, "Ada").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
 });
 
-test("a message the lead passes to two hobs names each, and each picks it up", async ({ page }) => {
+test("a message the lead passes to two hobs names each, and each picks it up (#909)", async ({ page }) => {
   test.setTimeout(240_000);
   const { current, ids } = await party(["Quill", "Ada"]);
   const { taskIds } = await startWork(
@@ -91,7 +91,7 @@ test("a message the lead passes to two hobs names each, and each picks it up", a
   await expect(notes(page, "Ada").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
 });
 
-test("a message the lead answers without passing on stops at got it", async ({ page }) => {
+test("a message the lead answers without passing on stops at got it (#909)", async ({ page }) => {
   test.setTimeout(240_000);
   const { current, ids } = await party(["Ada"]);
   await startWork(
@@ -118,7 +118,9 @@ test("a message the lead answers without passing on stops at got it", async ({ p
   await expect(notes(page, "Ada")).toHaveCount(0);
 });
 
-test("a note held while its hob waits on your approval says so, and is picked up once you decide", async ({ page }) => {
+test("a note held while its hob waits on your approval says so, and is picked up once you decide (#909)", async ({
+  page,
+}) => {
   test.setTimeout(240_000);
   const { current, ids } = await party(["Quill"]);
   const { thread, taskIds } = await startWork(

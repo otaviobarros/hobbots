@@ -59,7 +59,7 @@ const hubWithHobs = async () => {
 };
 
 // covers ADR 029 (the Skills page, editing and rollout), #1062
-test("Skills: write one, give it out, edit and roll out with one hob held back, roll back, and import a folder", async ({
+test("Skills: write one, give it out, edit and roll out with one hob held back, roll back, and import a folder (#1062)", async ({
   page,
 }) => {
   const { url, folder } = await hubWithHobs();
@@ -239,7 +239,7 @@ test("rollout switches alone, or with text that saves the same, save nothing, an
 });
 
 // covers ADR 029 (Backups, exports and Diagnostics), #1064
-test("Skills: export a set with skills.lock.json, import it on a fresh hub, and see it in Diagnostics", async ({
+test("Skills: export a set with skills.lock.json, import it on a fresh hub, and see it in Diagnostics (#1064)", async ({
   page,
 }) => {
   const { api } = await hubWithHobs();
@@ -378,7 +378,7 @@ test("a skill from ~/.agents/skills is read-only with Make a copy, and Export le
 });
 
 // covers ADR 029 (Skill sets), #1143
-test("a plugin comes in as one set, opens on its own page, and a skill of it opens read-only with Make a copy", async ({
+test("a plugin comes in as one set, opens on its own page, and a skill of it opens read-only with Make a copy (#1143)", async ({
   page,
 }) => {
   const { url } = await hubWithHobs();
@@ -461,7 +461,7 @@ test("a plugin comes in as one set, opens on its own page, and a skill of it ope
 });
 
 // covers ADR 029 (Try in a chat, Health checks), #1099
-test("the Overview shows every finding and what each hob carries, and Try in a chat opens a chat with only the draft and leads back to it", async ({
+test("the Overview shows every finding and what each hob carries, and Try in a chat opens a chat with only the draft and leads back to it (#1099)", async ({
   page,
 }) => {
   const { url, folder, api } = await hubWithHobs();

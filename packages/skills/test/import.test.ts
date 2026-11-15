@@ -26,7 +26,7 @@ const objectFiles = async (folder: string): Promise<ReadonlyArray<string>> => {
 
 describe("skill import", () => {
   // covers ADR 029 (Import, Storage and revisions), #1060
-  it("imports a folder once per content: the same content again returns the existing revision", async () => {
+  it("imports a folder once per content: the same content again returns the existing revision (#1060)", async () => {
     const { layer, data } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release"), "notes/steps.md": "Tag, then push." });
     await runWith(layer)(
@@ -352,7 +352,7 @@ describe("skill import", () => {
 
   // covers STD-SEC-005, ADR 029 (Import), #1060. Three imports of crafted text, each linear but
   // slow on a busy CI machine, so the test has 30 seconds.
-  it("reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes", async () => {
+  it("reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes (#1060)", async () => {
     const { layer } = await importerLayer();
     const crafted = (run: number) =>
       [
@@ -407,7 +407,7 @@ describe("skill import", () => {
     );
   });
   // covers ADR 029 (Storage and revisions), #1062
-  it("edits a revision into a new one: the description and instructions change, every other file stays", async () => {
+  it("edits a revision into a new one: the description and instructions change, every other file stays (#1062)", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({
       "SKILL.md": "---\nname: release\ndescription: Releases.\nlicense: MIT\n---\n\nTag it.\n",
@@ -445,7 +445,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Import, Storage and revisions), #1062
-  it("adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing; the same edit again is the revision it made", async () => {
+  it("adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing; the same edit again is the revision it made (#1062)", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release") });
     await runWith(layer)(

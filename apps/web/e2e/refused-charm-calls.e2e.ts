@@ -4,7 +4,9 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-test("a git_init the hub refused shows as a failed step in the reply and in its lane's summary", async ({ page }) => {
+test("a git_init the hub refused shows as a failed step in the reply and in its lane's summary (#664)", async ({
+  page,
+}) => {
   // Aldric's folder already holds a repository's `.git`, so creating a repository there is refused (#664).
   const { url, aldric, folder } = await aldricHub({ ".git/HEAD": "ref: refs/heads/main\n" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);

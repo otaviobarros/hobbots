@@ -565,7 +565,7 @@ test("where the sandbox cannot start, the profile and provider health say comman
 });
 
 // Regression for #197: hidden radios in a scrolling panel stretched the page, so it scrolled too.
-test("a profile or settings page taller than the window scrolls only its panel", async ({ page }) => {
+test("a profile or settings page taller than the window scrolls only its panel (#197)", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.setViewportSize({ width: 1200, height: 640 });

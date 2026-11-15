@@ -56,7 +56,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-test("Retire lists a hob's open work, hands its Task to another hob, and lets another finish first", async ({
+test("Retire lists a hob's open work, hands its Task to another hob, and lets another finish first (#408)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

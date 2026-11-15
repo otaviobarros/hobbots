@@ -117,7 +117,7 @@ describe("memory save records", () => {
     ));
 
   // covers ADR 028 (In the chat), #961
-  it("finds a save, lists a thread's saves, and marks a saved one undone once", () =>
+  it("finds a save, lists a thread's saves, and marks a saved one undone once (#961)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;

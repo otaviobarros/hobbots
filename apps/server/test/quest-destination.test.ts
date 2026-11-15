@@ -73,7 +73,7 @@ const ESCALATES = {
 };
 
 describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtime) => {
-  it("stays open when its lead answers a question about where else to save it and says it delivered", async () => {
+  it("stays open when its lead answers a question about where else to save it and says it delivered (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions, requests } = party;
@@ -113,7 +113,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(asked?.briefing).toContain("never choose another place yourself");
   }, 30_000);
 
-  it("completes once the file is where you asked, with the file it reads there too", async () => {
+  it("completes once the file is where you asked, with the file it reads there too (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -133,7 +133,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(done.quests[0]?.state).not.toBe("active");
   }, 30_000);
 
-  it("completes somewhere else once you pick the choice that delivers it there instead", async () => {
+  it("completes somewhere else once you pick the choice that delivers it there instead (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -155,7 +155,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(done.questions[0]?.answeredBy).toEqual({ _tag: "User" });
   }, 30_000);
 
-  it("stays open when the question you answered was about something else", async () => {
+  it("stays open when the question you answered was about something else (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -177,7 +177,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("stays open when the place you picked instead has nothing in it", async () => {
+  it("stays open when the place you picked instead has nothing in it (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -202,7 +202,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("completes once the work deleted the file you asked it to, as you approved", async () => {
+  it("completes once the work deleted the file you asked it to, as you approved (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -228,7 +228,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(done.quests[0]?.state).not.toBe("active");
   }, 30_000);
 
-  it("stays open when you answer the question about where to save it by keeping the place you asked for", async () => {
+  it("stays open when you answer the question about where to save it by keeping the place you asked for (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -250,7 +250,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("stays open when the work moved the file you asked to update somewhere you never named", async () => {
+  it("stays open when the work moved the file you asked to update somewhere you never named (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -273,7 +273,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("stays open when your typed answer turns down the place it names", async () => {
+  it("stays open when your typed answer turns down the place it names (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp, reactions } = party;
@@ -295,7 +295,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("stays open when a hob that may delete without asking removed the file you asked to update", async () => {
+  it("stays open when a hob that may delete without asking removed the file you asked to update (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true, preset: "trusting" });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -317,7 +317,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(refused.quests[0]?.state).toBe("active");
   }, 30_000);
 
-  it("completes once you pick the choice that leaves nothing at a file the work removed", async () => {
+  it("completes once you pick the choice that leaves nothing at a file the work removed (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true, preset: "trusting" });
     dispose = party.dispose;
     const { run, answers, project, reactions } = party;
@@ -350,7 +350,7 @@ describe.each(RUNTIMES)("a Quest that delivers a file you named, on %s", (runtim
     expect(done.quests[0]?.state).not.toBe("active");
   }, 30_000);
 
-  it("stays open when the work moved the file you asked to copy, though the copy is where you asked", async () => {
+  it("stays open when the work moved the file you asked to copy, though the copy is where you asked (#1215)", async () => {
     const party = partyHub({ lead: runtime, members: runtime, files: true, activity: true });
     dispose = party.dispose;
     const { run, answers, project } = party;

@@ -111,7 +111,7 @@ describe("a background command on Claude Code", () => {
     expect(foreground.events).toHaveLength(2);
   });
 
-  it("finishes a call whose task ended before its hook said it went to the background", async () => {
+  it("finishes a call whose task ended before its hook said it went to the background (#1018)", async () => {
     const events: Array<RuntimeEvent> = [];
     const background = backgroundCommands((event) => events.push(event));
     await background.ended(taskEnd() as TaskEnd);
@@ -120,7 +120,7 @@ describe("a background command on Claude Code", () => {
     expect(events).toEqual([{ _tag: "ToolFinished", id: "t1", failed: false, exitCode: 0 }]);
   });
 
-  it("reads the exit code only from the end of the summary, not from the command's own words", () => {
+  it("reads the exit code only from the end of the summary, not from the command's own words (#1018)", () => {
     const summary = 'Background command "echo \\"exit code 7\\"" completed (exit code 0: note)';
     expect(backgroundFinished("t1", { status: "completed", summary }, undefined)).toEqual({
       _tag: "ToolFinished",
@@ -146,7 +146,7 @@ describe("a background command on Claude Code", () => {
     });
   });
 
-  it("keeps a completed command's non-zero code out, as Claude Code read it as no error", () => {
+  it("keeps a completed command's non-zero code out, as Claude Code read it as no error (#1018)", () => {
     const summary = 'Background command "grep zzz notes.md" completed (exit code 1: No matches found)';
     expect(backgroundFinished("t1", { status: "completed", summary }, undefined)).toEqual({
       _tag: "ToolFinished",
@@ -155,7 +155,7 @@ describe("a background command on Claude Code", () => {
     });
   });
 
-  it("leaves out an output file linked from elsewhere", async () => {
+  it("leaves out an output file linked from elsewhere (#1018)", async () => {
     const secret = join(root, "secret.txt");
     writeFileSync(secret, "token\n");
     const linked = join(tasks, "linked.output");
@@ -216,7 +216,7 @@ describe("a background command on the fake runtime", () => {
     });
   });
 
-  it("runs a background `sleep` command in the background too, not until the turn ends", async () => {
+  it("runs a background `sleep` command in the background too, not until the turn ends (#1018)", async () => {
     const events = await fakeTurn(
       [
         `fake:run ${JSON.stringify({ command: "sleep 1", background: true, runsFor: "50 millis" })}`,

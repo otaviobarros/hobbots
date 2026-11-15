@@ -52,7 +52,7 @@ const tasksOf = (done: { readonly details: Record<string, unknown> }) =>
   done.details.tasks as ReadonlyArray<{ readonly task_id: string; readonly approvals: ReadonlyArray<unknown> }>;
 
 describe("a member's pending approval reaches its leads", () => {
-  it("read_tasks lists the pending request under the member's Task, wait_for reports it, and both drop it once you decide", async () => {
+  it("read_tasks lists the pending request under the member's Task, wait_for reports it, and both drop it once you decide (#698)", async () => {
     const tools = toolsHub(party, TOP);
     dispose = tools.dispose;
     const { run, call, seed } = tools;

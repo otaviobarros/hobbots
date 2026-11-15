@@ -109,7 +109,7 @@ describe.runIf(engineEnabled)("who wrote each version, when the hub cannot keep 
 
 describe.runIf(engineEnabled)("scopes with nothing in them yet on ai-memory", () => {
   // covers #1032
-  it("reads a hob's, a project's and everyone's empty memory without a warning in the engine's log", async () => {
+  it("reads a hob's, a project's and everyone's empty memory without a warning in the engine's log (#1032)", async () => {
     const { dataDir, keys } = engineDataDir();
     const { store } = await Effect.runPromise(startEngineStore(dataDir, keys));
     const you = { _tag: "You" } as const;
@@ -148,7 +148,7 @@ describe.runIf(engineEnabled)("scopes with nothing in them yet on ai-memory", ()
 
 describe.runIf(engineEnabled)("Check now on ai-memory", () => {
   // covers ADR 028 (Sharing), #960
-  it("finds a page flagged as out of date, as Check now shows it", async () => {
+  it("finds a page flagged as out of date, as Check now shows it (#960)", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const site: MemoryScope = {
       _tag: "Project",
@@ -187,7 +187,7 @@ describe.runIf(engineEnabled)("Check now on ai-memory", () => {
 
 describe.runIf(engineEnabled)("a version's text on ai-memory", () => {
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("answers no text for a version whose diff ai-memory cuts short, never a part of it", async () => {
+  it("answers no text for a version whose diff ai-memory cuts short, never a part of it (#960)", async () => {
     const { store } = await Effect.runPromise(open());
     const site: MemoryScope = {
       _tag: "Project",
@@ -241,7 +241,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("refuses a restore at a version when ai-memory writes the page after the restore read it, and keeps that write", async () => {
+  it("refuses a restore at a version when ai-memory writes the page after the restore read it, and keeps that write (#961)", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
     const you = { _tag: "You" } as const;
@@ -292,7 +292,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
 
 describe.runIf(engineEnabled)("aging on ai-memory", () => {
   // covers ADR 028 (Writes), #959
-  it("has the engine's sweep delete a page past its forget day for good, and leave a pinned page as it is", async () => {
+  it("has the engine's sweep delete a page past its forget day for good, and leave a pinned page as it is (#959)", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const you = { _tag: "You" } as const;
     const own: MemoryScope = { _tag: "Hob", agentId: AgentId.make("h-pip") };

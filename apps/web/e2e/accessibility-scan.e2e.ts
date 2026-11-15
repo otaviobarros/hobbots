@@ -24,7 +24,7 @@ const FADING = `<!doctype html>
 </html>`;
 
 // covers STD-TEST-007, STD-TEST-009, #1000
-test("an accessibility scan checks text that fades in once the fade has finished, on the page and in one part", async ({
+test("an accessibility scan checks text that fades in once the fade has finished, on the page and in one part (#1000)", async ({
   page,
   scan,
 }) => {

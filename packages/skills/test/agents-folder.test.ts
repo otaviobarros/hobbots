@@ -18,7 +18,7 @@ const layerFor = async (path: string) =>
 
 describe("~/.agents/skills", () => {
   // covers ADR 029 (The clean-runtime rule: ~/.agents/skills stays, through Hobbots), #1060
-  it("lists each skill under Everyone, from that folder, and rolls a change out as a new revision", async () => {
+  it("lists each skill under Everyone, from that folder, and rolls a change out as a new revision (#1060)", async () => {
     const folder = await folderOf({
       "release/SKILL.md": skillMd("release"),
       "review/SKILL.md": skillMd("review"),
@@ -71,7 +71,7 @@ describe("~/.agents/skills", () => {
   });
 
   // covers ADR 029 (Pins and rollout), #1061
-  it("a rollback stays while the folder still holds the revision it rolled back from", async () => {
+  it("a rollback stays while the folder still holds the revision it rolled back from (#1061)", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
     await Effect.gen(function* () {
       const library = yield* SkillLibrary;
@@ -124,7 +124,7 @@ describe("~/.agents/skills", () => {
   });
 
   // covers ADR 029 (The clean-runtime rule: ~/.agents/skills stays, through Hobbots), #1060
-  it("notices a change on its own, and outlives the folder being replaced by a file", async () => {
+  it("notices a change on its own, and outlives the folder being replaced by a file (#1060)", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release"), "release/notes/a.md": "a" });
     await Effect.gen(function* () {
       const library = yield* SkillLibrary;

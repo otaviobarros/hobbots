@@ -51,7 +51,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-test("a three-member Quest with a dependency chain runs to finished from one message, with no action of yours", async ({
+test("a three-member Quest with a dependency chain runs to finished from one message, with no action of yours (#565)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

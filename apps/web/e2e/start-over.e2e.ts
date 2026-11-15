@@ -17,7 +17,7 @@ test.afterEach(async () => {
 const fileOf = (dataDir: string, name: string) => readFileSync(join(dataDir, name), "utf8").trim();
 
 // covers #948
-test("starts over from Settings › Your data, and the hub comes back empty at Welcome", async ({
+test("starts over from Settings › Your data, and the hub comes back empty at Welcome (#948)", async ({
   page,
   context,
   browser,

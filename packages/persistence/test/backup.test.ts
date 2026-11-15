@@ -157,7 +157,7 @@ describe("backup and restore in the database", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1139
-  it("notes on the latest restore what reading ~/.agents/skills again moved, and nothing without one", async () => {
+  it("notes on the latest restore what reading ~/.agents/skills again moved, and nothing without one (#1139)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const restores = yield* RestoreRepository;

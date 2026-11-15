@@ -6,7 +6,7 @@ import { applyHunks } from "../src/store/patch.ts";
 
 describe("applyHunks", () => {
   // covers ADR 028 (forget, restore), #961
-  it("applies changes, insertions at the start and removals, and refuses a diff that does not fit", () => {
+  it("applies changes, insertions at the start and removals, and refuses a diff that does not fit (#961)", () => {
     const text = "# A\n\none\ntwo\nthree";
     expect(
       applyHunks(text, [

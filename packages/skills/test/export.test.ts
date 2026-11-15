@@ -78,7 +78,7 @@ const libraryOf = Effect.gen(function* () {
 
 describe("skill export", () => {
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("writes each skill's newest revision, any older one an assignment pins, and a lock that names them", async () => {
+  it("writes each skill's newest revision, any older one an assignment pins, and a lock that names them (#1064)", async () => {
     const { layer } = await importerLayer();
     const folder = await temp("export");
     await runWith(layer)(
@@ -133,7 +133,7 @@ describe("skill export", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("gives a fresh hub the same revisions and assignments, finding a hob by its name", async () => {
+  it("gives a fresh hub the same revisions and assignments, finding a hob by its name (#1064)", async () => {
     const from = await importerLayer();
     const folder = await temp("export");
     const before = await runWith(from.layer)(
@@ -193,7 +193,7 @@ describe("skill export", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("imports a zipped export, and keeps in the library only what a hub without the hob or the project can take", async () => {
+  it("imports a zipped export, and keeps in the library only what a hub without the hob or the project can take (#1064)", async () => {
     const { layer } = await importerLayer();
     const folder = await temp("export");
     const seeded = await runWith(layer)(Effect.flatMap(seedLibrary, (made) => Effect.as(exportTo(folder), made)));
@@ -224,7 +224,7 @@ describe("skill export", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("imports only the export that was scanned: a changed lock or older revision is refused, writing nothing", async () => {
+  it("imports only the export that was scanned: a changed lock or older revision is refused, writing nothing (#1064)", async () => {
     const { layer } = await importerLayer();
     const folder = await temp("export");
     await runWith(layer)(Effect.flatMap(seedLibrary, () => exportTo(folder)));

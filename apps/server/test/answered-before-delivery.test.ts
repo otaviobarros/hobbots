@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("answering a question before it is delivered", () => {
-  it("a lead that answers in the turn that waited gets no later turn asking it again", async () => {
+  it("a lead that answers in the turn that waited gets no later turn asking it again (#573)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, answers, gates } = party;
