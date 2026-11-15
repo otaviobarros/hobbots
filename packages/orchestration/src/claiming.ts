@@ -185,6 +185,7 @@ export const makeClaiming = (deps: Deps) =>
           key,
           onMain: numbersIn(onMain ?? []),
           asked: input.number ?? null,
+          gitFolder: input.scope === "path" ? yield* workspace.value.gitFolder(top) : null,
           taskId: task.id,
           actor: { kind: "hob", id: scope.caller.agentId },
           at: scope.at,

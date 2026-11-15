@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorkspace } from "@hobbots/agents";
@@ -126,44 +126,31 @@ describe("The repository Git finds from a folder (#742)", () => {
   });
 });
 
-describe("What the sandbox closes for what you took over (#1537)", () => {
+describe("What the sandbox closes for what you took over (#1537, #1578)", () => {
   const read = <A>(use: (git: GitWorkspace["Service"]) => Effect.Effect<A>) =>
     Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
 
-  // Issue #1537
-  it("finds the repositories a folder reaches: the one around it and every one below it (#1537)", async () => {
-    const ledger = join(work, "projects", "ledger");
-    const vendor = join(ledger, "vendor", "lib");
-    const deep = join(work, "projects", "a", "b", "c", "deep");
-    const hidden = join(work, "projects", ".worktrees", "task");
-    for (const dir of [join(ledger, "src"), vendor, deep, hidden, join(work, "projects", "node_modules", "pkg")]) {
-      mkdirSync(dir, { recursive: true });
-    }
-    for (const dir of [ledger, vendor, deep, hidden, join(work, "projects", "node_modules", "pkg")]) {
-      gitIn(dir, "init", "-q");
-    }
-    // From inside a repository: that one. From a folder of checkouts: each, however deep or hidden,
-    // past installed packages, and the scan saw every folder.
-    expect(await read((git) => git.repositoriesIn(join(ledger, "src")))).toEqual({ tops: [ledger], complete: true });
-    const reached = await read((git) => git.repositoriesIn(join(work, "projects")));
-    expect([...reached.tops].sort()).toEqual([hidden, deep, ledger, vendor].sort());
-    expect(reached.complete).toBe(true);
-    expect(await read((git) => git.repositoriesIn(join(work, "missing")))).toEqual({ tops: [], complete: true });
+  // Issue #1578
+  it("lists every checkout of a repository from the Git folder they share, and keeps the rest when one is removed (#1578)", async () => {
+    const ledger = join(work, "checkouts", "ledger");
+    const camp = join(work, "checkouts", "camp");
+    const other = join(work, "checkouts", "other");
+    mkdirSync(ledger, { recursive: true });
+    gitIn(ledger, "init", "-q", "-b", "main");
+    gitIn(ledger, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first");
+    gitIn(ledger, "worktree", "add", "-q", "-b", "camp", camp);
+    gitIn(ledger, "worktree", "add", "-q", "-b", "other", other);
+    // Every checkout names the same shared Git folder, the main repository's own.
+    const shared = join(ledger, ".git");
+    expect(await read((git) => git.gitFolder(join(camp, "src")))).toBeNull();
+    expect(await read((git) => git.gitFolder(camp))).toBe(shared);
+    expect(await read((git) => git.gitFolder(ledger))).toBe(shared);
+    expect(await read((git) => git.worktreesOf(shared))).toEqual([camp, ledger, other].sort());
+    // A path claimed in `camp` stays closed in the others once `camp` is removed.
+    rmSync(camp, { recursive: true, force: true });
+    expect(await read((git) => git.worktreesOf(shared))).toEqual([ledger, other].sort());
+    // A folder in no repository, or a missing one, has no Git folder and no checkouts.
+    expect(await read((git) => git.gitFolder(join(work, "checkouts")))).toBeNull();
+    expect(await read((git) => git.worktreesOf(join(work, "missing")))).toEqual([]);
   });
-
-  // covers STD-SEC-002, #1537
-  it.skipIf(process.getuid?.() === 0)(
-    "says a scan did not see every folder when one below it cannot be read (#1537)",
-    async () => {
-      const locked = join(work, "projects", "locked");
-      mkdirSync(join(locked, "checkout"), { recursive: true });
-      gitIn(join(locked, "checkout"), "init", "-q");
-      chmodSync(locked, 0o000);
-      try {
-        expect((await read((git) => git.repositoriesIn(join(work, "projects")))).complete).toBe(false);
-      } finally {
-        chmodSync(locked, 0o755);
-      }
-    },
-  );
 });

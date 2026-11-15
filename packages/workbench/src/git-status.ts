@@ -258,39 +258,40 @@ const currentBranch = async (top: string): Promise<string | null> => {
   return branch ?? null;
 };
 
-/** How many folders `repositoriesIn` reads at most before it says it did not see them all. */
-const REPOSITORY_SCAN_LIMIT = 20_000;
-/** Git's own folder, and folders that hold installed dependencies, never a checkout someone works in. */
-const SKIPPED = new Set([".git", "node_modules"]);
+/**
+ * The Git folder every checkout of the repository at `top` shares (#1578): the main repository's
+ * own Git folder, by its real path, whether `top` is the main checkout or a linked worktree. Null
+ * when `top` is in no repository.
+ */
+const gitFolderOf = async (top: string): Promise<string | null> => {
+  const real = isAbsolute(top) ? await realpath(top).catch(() => null) : null;
+  const repository = real === null ? null : await repositoryOf(real, new Map());
+  return repository === null ? null : realpath(repository.common ?? repository.gitdir).catch(() => null);
+};
 
 /**
- * The repositories `folder` reaches (#1537): the one Git finds from it, and every one inside it, by
- * the real path of each top folder, and whether the scan saw every folder. Links are not followed
- * and Git's own and dependency folders are skipped, hidden ones are not; a scan that reads more
- * folders than its limit, or meets a folder it cannot read, stops and says so, and the caller closes
- * the folder whole rather than miss one.
+ * Every checkout of the repository whose shared Git folder is `gitFolder` (#1578): its main
+ * worktree and each linked one Git lists, by the real path of each top folder. A worktree whose
+ * folder is gone, and a bare repository's own folder, are left out, so a removed worktree costs the
+ * others nothing.
  */
-const repositoriesIn = async (folder: string): Promise<{ tops: ReadonlyArray<string>; complete: boolean }> => {
-  // A folder that is not there holds no repository.
-  const real = isAbsolute(folder) ? await realpath(folder).catch(() => null) : null;
-  if (real === null) return { tops: [], complete: true };
+const worktreesOf = async (gitFolder: string): Promise<ReadonlyArray<string>> => {
+  const common = isAbsolute(gitFolder) ? await realpath(gitFolder).catch(() => null) : null;
+  if (common === null) return [];
   const found = new Set<string>();
-  const holding = await repositoryOf(real, new Map());
-  if (holding !== null) found.add(await realpath(holding.dir));
-  const queue: Array<string> = [real];
-  for (let read = 0; read < queue.length; read++) {
-    if (read >= REPOSITORY_SCAN_LIMIT) return { tops: [...found], complete: false };
-    const entries = await readdir(queue[read] as string, { withFileTypes: true }).catch(() => null);
-    // A folder the hub cannot read may hold a checkout: the scan did not see it whole.
-    if (entries === null) return { tops: [...found], complete: false };
-    for (const entry of entries) {
-      if (!entry.isDirectory() || SKIPPED.has(entry.name)) continue;
-      const child = join(queue[read] as string, entry.name);
-      if ((await gitdirIn(child)) !== null) found.add(child);
-      queue.push(child);
-    }
+  // The main worktree holds the shared Git folder as its `.git`.
+  if (basename(common) === ".git" && (await gitdirIn(dirname(common))) === common) found.add(dirname(common));
+  // Each linked worktree's own Git folder names, in `gitdir`, the `.git` file in its top folder.
+  const linked = await readdir(join(common, "worktrees")).catch(() => []);
+  for (const name of linked) {
+    const named = (await readFile(join(common, "worktrees", name, "gitdir"), "utf8").catch(() => "")).trim();
+    if (named === "") continue;
+    const at = await realpath(dirname(isAbsolute(named) ? named : resolve(common, "worktrees", name, named))).catch(
+      () => null,
+    );
+    if (at !== null && (await gitdirIn(at)) !== null) found.add(at);
   }
-  return { tops: [...found], complete: true };
+  return [...found].sort();
 };
 
 /** The hub's reader of Git state. */
@@ -304,7 +305,7 @@ export const GitWorkspaceLive = Layer.succeed(
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
     placeOf: (path) => Effect.promise(() => placeOf(path).catch(() => null)),
     currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
-    repositoriesIn: (folder) =>
-      Effect.promise(() => repositoriesIn(folder).catch(() => ({ tops: [], complete: false }))),
+    gitFolder: (top) => Effect.promise(() => gitFolderOf(top).catch(() => null)),
+    worktreesOf: (gitFolder) => Effect.promise(() => worktreesOf(gitFolder).catch(() => [])),
   }),
 );

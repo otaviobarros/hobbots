@@ -1,10 +1,12 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HobGitHubApps, HobTools } from "@hobbots/agents";
+import { ClaimRegister, GitWorkspace, HobGitHubApps, HobTools } from "@hobbots/agents";
 import { type Agent, EMPTY_HOB_POLICY, type HobGitHubApp, OWNER_ACTOR } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
+import { GitWorkspaceLive } from "@hobbots/workbench";
 import { Effect, Layer } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -83,5 +85,63 @@ describe("a hob's tools", () => {
     // Without an app, or on a hub without the GitHub Charm, the hob keeps the user's identity.
     expect((await accessWith([project], appsWith({})))?.commitAs).toBeUndefined();
     expect((await accessWith([project]))?.commitAs).toBeUndefined();
+  });
+
+  // Issue #1578
+  it("asks Git nothing while nothing is taken, nor for a read that needs only the folders (#1578)", async () => {
+    // The hob's folder is a checkout whose `docs` you took over.
+    execFileSync("git", ["init", "-q"], { cwd: project });
+    mkdirSync(join(project, "docs"), { recursive: true });
+    let reads = 0;
+    let taken: ReadonlyArray<{ key: string; gitFolder: string }> = [];
+    const git = Layer.effect(
+      GitWorkspace,
+      Effect.map(Effect.service(GitWorkspace), (live) =>
+        GitWorkspace.of({
+          ...live,
+          worktreesOf: (top) =>
+            Effect.suspend(() => {
+              reads += 1;
+              return live.worktreesOf(top);
+            }),
+        }),
+      ),
+    ).pipe(Layer.provide(GitWorkspaceLive));
+    const claims = Layer.succeed(ClaimRegister, {
+      takenCheckouts: Effect.sync(() => taken),
+    } as unknown as ClaimRegister["Service"]);
+    await Effect.gen(function* () {
+      const setup = yield* SetupRepository;
+      yield* setup.update({ approvedFolders: [project] }, OWNER_ACTOR);
+      const tools = yield* HobTools;
+      const full = () => Effect.map(tools.access(hob), (access) => access?.taken);
+      const folders = () => tools.access(hob, undefined, { taken: false });
+
+      // Nothing taken: nothing is closed, and Git is not asked.
+      expect(yield* full()).toBeUndefined();
+      expect((yield* folders())?.folders).toEqual([project]);
+      expect(reads).toBe(0);
+
+      // `docs` taken: the full read closes it; a read of the folders alone asks nothing.
+      taken = [{ key: "docs", gitFolder: join(project, ".git") }];
+      expect(yield* full()).toEqual([join(project, "docs")]);
+      const plain = yield* folders();
+      expect(plain?.taken).toBeUndefined();
+      expect(plain?.folders).toEqual([project]);
+      expect(reads).toBe(1);
+    }).pipe(
+      Effect.provide(
+        HobToolsLive.pipe(
+          Layer.provideMerge(SetupRepository.layer),
+          Layer.provide(NodeFolderChecks),
+          Layer.provide(Layer.mergeAll(git, claims)),
+          Layer.provide(TestDatabase),
+          Layer.provide(
+            Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
+          ),
+        ),
+      ),
+      Effect.runPromise,
+    );
   });
 });

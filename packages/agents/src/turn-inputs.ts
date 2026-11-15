@@ -94,7 +94,7 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
     // keeps them through a rollout. Read with the folders the hob works in now.
     const acceptedSkills = (agent: Agent) =>
       skillMounts.enabled
-        ? Effect.flatMap(hobTools.access(agent), (access) =>
+        ? Effect.flatMap(hobTools.access(agent, undefined, { taken: false }), (access) =>
             skillMounts.resolve({ agentId: agent.id, policy: agent.policy, folders: access?.folders ?? [] }),
           )
         : Effect.succeed(null);

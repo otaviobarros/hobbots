@@ -18,9 +18,21 @@ export interface ClaimRequest {
   readonly onMain: ReadonlyArray<number>;
   /** For a sequence: the number the hob already uses, kept when it is free. */
   readonly asked: number | null;
+  /**
+   * For a path: the real path of the Git folder every checkout of the repository it is claimed in
+   * shares, from whose worktrees a turn's sandbox closes it once you take it over (#1578). Left out,
+   * only the call-level check closes it.
+   */
+  readonly gitFolder?: string | null;
   readonly taskId: TaskId;
   readonly actor: Actor;
   readonly at: string;
+}
+
+/** A path you took over, and the shared Git folder of the repository it was claimed in (#1578). */
+export interface TakenCheckout {
+  readonly key: string;
+  readonly gitFolder: string;
 }
 
 /**
@@ -80,8 +92,12 @@ export class ClaimRegister extends Context.Service<
     readonly giveBack: (request: GiveBackRequest) => Effect.Effect<Committed<ReadonlyArray<Claim>>>;
     /** The claims you took over in a repository, by its identity across clones, oldest first. */
     readonly takenIn: (repository: string) => Effect.Effect<ReadonlyArray<Claim>>;
-    /** Whether you took over any path at all, in any repository (#1537). */
-    readonly anyTakenPath: Effect.Effect<boolean>;
+    /**
+     * Every path you took over whose repository the register knows (#1537, #1578): the path inside
+     * the repository, with `/` between names, and the Git folder its checkouts share. Empty while you
+     * took over no path, which is one query.
+     */
+    readonly takenCheckouts: Effect.Effect<ReadonlyArray<TakenCheckout>>;
   }
 >()("@hobbots/agents/ClaimRegister") {}
 
