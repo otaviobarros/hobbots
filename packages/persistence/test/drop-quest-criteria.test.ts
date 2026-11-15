@@ -37,7 +37,7 @@ const criteria = [
 ];
 
 const upgraded = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = (yield* SqlClient.SqlClient).withoutTransforms();
   const repo = yield* HobbotsRepository;
   const tasks = yield* TaskRepository;
   yield* repo.insertAgent(
@@ -96,6 +96,11 @@ const upgraded = Effect.gen(function* () {
     payload: "{}",
   })}`;
 
+  const needsYou = sql<{
+    readonly needs_you: unknown;
+  }>`SELECT needs_you FROM quest_summaries WHERE quest_id = ${QUEST}`;
+  const before = Number((yield* needsYou)[0]?.needs_you);
+
   yield* dropQuestCriteria;
 
   const questions = yield* sql<{ readonly id: string; readonly state: string }>`SELECT id, state FROM questions
@@ -103,11 +108,16 @@ const upgraded = Effect.gen(function* () {
   const journaled = yield* sql<{ readonly n: unknown }>`SELECT COUNT(*) AS n FROM event_journal
     WHERE type = 'QuestCriteriaChanged'`;
   const [quest] = yield* sql<Record<string, unknown>>`SELECT * FROM quests WHERE id = ${QUEST}`;
-  return { questions, journaled: Number(journaled[0]?.n), quest };
+  return {
+    questions,
+    journaled: Number(journaled[0]?.n),
+    quest,
+    needsYou: [before, Number((yield* needsYou)[0]?.needs_you)],
+  };
 });
 
 describe("dropping a Quest's criteria (#1588)", () => {
-  it("withdraws an open waiver question, keeps the acceptance and drops the criteria and their events (#1588)", async () => {
+  it("withdraws an open waiver question and recounts its summary, keeps the acceptance and drops the criteria and their events (#1588)", async () => {
     const result = await upgraded.pipe(
       Effect.provide(
         Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive).pipe(Layer.provideMerge(TestDatabaseAt(earlier))),
@@ -118,6 +128,8 @@ describe("dropping a Quest's criteria (#1588)", () => {
       { id: "q-own", state: "open" },
       { id: "q-waive", state: "withdrawn" },
     ]);
+    // The Quest's summary no longer counts the withdrawn question as needing you.
+    expect(result.needsYou).toEqual([2, 1]);
     expect(result.journaled).toBe(0);
     expect(result.quest).not.toHaveProperty("criteria");
     expect(JSON.parse(String(result.quest?.acceptance))).toEqual(["Copy approved", "Date set"]);
