@@ -101,8 +101,8 @@ const pin = (messageId: string, pinned = true, threadId: ThreadId = CHAT) =>
   });
 
 describe("pins", () => {
-  // covers CH-001, ADR 037 (Mine: pins)
-  it("[TC-CH-1387-05] pins a message once without making the thread unread, and journals each change", async () => {
+  // covers ADR 037 (Mine: pins)
+  it("pins a message once without making the thread unread, and journals each change (#1387)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -130,8 +130,8 @@ describe("pins", () => {
     expect(Exit.isFailure(result.elsewhere)).toBe(true);
   });
 
-  // covers CH-001, CH-008, ADR 037 (Mine: pins)
-  it("[TC-CH-1387-06] lists a pin under its message's camp once the chapter moves, and drops it with the message", async () => {
+  // covers ADR 037 (Mine: pins)
+  it("lists a pin under its message's camp once the chapter moves, and drops it with the message (#1387)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -166,8 +166,8 @@ describe("pins", () => {
 });
 
 describe("what catch-up reads", () => {
-  // covers CH-001, ADR 037 (Catch-up)
-  it("[TC-CH-1387-07] reads no marker in a thread never read, the marker once read, and the Quests started there", async () => {
+  // covers ADR 037 (Catch-up)
+  it("reads no marker in a thread never read, the marker once read, and the Quests started there (#1387)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -208,7 +208,7 @@ describe("what catch-up reads", () => {
 });
 
 // The note's actor is yours, wherever it is read back.
-it("[TC-CH-1387-08] keeps a note's author as you", async () => {
+it("keeps a note's author as you (#1387)", async () => {
   const note = await run(
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;

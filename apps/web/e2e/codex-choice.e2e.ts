@@ -60,8 +60,7 @@ const openProviders = async (page: Page, current: Hub) => {
   await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
-// covers AG-005, OP-001, RT-001
-test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected Codex alone is enough for the first hob", async ({
+test("onboarding shows a missing Codex with its fix, and a connected Codex alone is enough for the first hob", async ({
   page,
 }) => {
   hub = await startHub(dataDir, { HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir) });
@@ -105,8 +104,7 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   expect(await hobNamed(hub, "Tinker")).toMatchObject({ runtime: "codex", model: "gpt-5.5", effort: "medium" });
 });
 
-// covers AG-001, AG-005, RT-001
-test("[TC-UX-081] Summon shows a missing, signed-out or outdated Codex as unavailable with its fix, and summons a hob on a ready one", async ({
+test("Summon shows a missing, signed-out or outdated Codex as unavailable with its fix, and summons a hob on a ready one", async ({
   page,
 }) => {
   hub = await finishedHub({ HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedInClaudeCode(dataDir) });
@@ -153,8 +151,7 @@ test("[TC-UX-081] Summon shows a missing, signed-out or outdated Codex as unavai
   expect(await hobNamed(hub, "Tinker")).toMatchObject({ runtime: "codex", model: "gpt-5.5", effort: "high" });
 });
 
-// covers AG-002, AG-005, RT-001
-test("[TC-UX-082] the profile moves a hob to Codex with its model and effort, and its next reply thinks with Codex", async ({
+test("the profile moves a hob to Codex with its model and effort, and its next reply thinks with Codex", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -202,8 +199,7 @@ test("[TC-UX-082] the profile moves a hob to Codex with its model and effort, an
   await expect(page.getByRole("menuitem", { name: /^Thinking with Codex · Fake Coder/ })).toBeVisible();
 });
 
-// covers AG-002, AG-005
-test("[TC-UX-083] the profile shows a signed-out Codex as unavailable with its fix, and keeps the hob on Claude", async ({
+test("the profile shows a signed-out Codex as unavailable with its fix, and keeps the hob on Claude", async ({
   page,
 }) => {
   hub = await startHub(dataDir, { HOBBOTS_FAKE_CODEX_AVAILABILITY: "signedOut" });
@@ -231,8 +227,7 @@ test("[TC-UX-083] the profile shows a signed-out Codex as unavailable with its f
   await expect(page.getByRole("radio", { name: /Fake Thinker/ })).toBeChecked();
 });
 
-// covers OP-001
-test("[TC-UX-084] connecting a second provider waits for the first, so both stay connected", async ({ page }) => {
+test("connecting a second provider waits for the first, so both stay connected", async ({ page }) => {
   hub = await startHub(dataDir);
   await openProviders(page, hub);
 
@@ -261,8 +256,7 @@ test("[TC-UX-084] connecting a second provider waits for the first, so both stay
   });
 });
 
-// covers AG-001, AG-005
-test("[TC-AG-105] Summon's Ready leads with a signed-out Claude and how to sign in, and Check again recovers once it is", async ({
+test("Summon's Ready leads with a signed-out Claude and how to sign in, and Check again recovers once it is", async ({
   page,
 }) => {
   hub = await finishedHub({ HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir) });

@@ -35,8 +35,7 @@ const migrationsBefore = (id: string) =>
   Object.fromEntries(Object.entries(migrations).filter(([key]) => key < id)) as typeof migrations;
 
 describe("migrations", () => {
-  // covers DP-003
-  it("[TC-DP-003] applies every migration in order on an empty database and records each one", async () => {
+  it("applies every migration in order on an empty database and records each one", async () => {
     const applied = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql<{ migrationId: unknown; name: string }>`
@@ -55,8 +54,7 @@ describe("migrations", () => {
 });
 
 describe("0005_hob_brain", () => {
-  // covers AG-001, DP-003
-  it("[TC-AG-001] keeps an existing hob's role as its craft and leaves its effort at the model's default", async () => {
+  it("keeps an existing hob's role as its craft and leaves its effort at the model's default", async () => {
     const earlier = migrationsBefore("0005");
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -80,8 +78,7 @@ describe("0005_hob_brain", () => {
 });
 
 describe("0007_hob_config_versions", () => {
-  // covers AG-002, DP-003
-  it("[TC-AG-020] makes every existing hob's configuration its version 1 and marks its replies with it", async () => {
+  it("makes every existing hob's configuration its version 1 and marks its replies with it", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -149,8 +146,7 @@ describe("0007_hob_config_versions", () => {
 });
 
 describe("0008_hob_status", () => {
-  // covers AG-006, DP-003
-  it("[TC-AG-036] keeps every existing hob active", async () => {
+  it("keeps every existing hob active", async () => {
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -170,8 +166,7 @@ describe("0008_hob_status", () => {
 });
 
 describe("0009_hob_retired_at", () => {
-  // covers AG-006, DP-003
-  it("[TC-AG-060] keeps hobs retired before it, with no retirement time", async () => {
+  it("keeps hobs retired before it, with no retirement time", async () => {
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -194,8 +189,7 @@ describe("0009_hob_retired_at", () => {
 });
 
 describe("0010_hob_roles", () => {
-  // covers AG-001, AG-002, DP-003
-  it("[TC-AG-072] moves every hob's craft to a role and keeps any other craft as its own title", async () => {
+  it("moves every hob's craft to a role and keeps any other craft as its own title", async () => {
     const crafts = ["Helper", "Scribe", "Coder", "Researcher", "Bookkeeper", "Guide"];
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -242,8 +236,7 @@ describe("0010_hob_roles", () => {
 });
 
 describe("0013_hob_identity", () => {
-  // covers AG-002, DP-003
-  it("[TC-AG-084] removes only the opening Hobbots wrote from every hob and version, and keeps the rest", async () => {
+  it("removes only the opening Hobbots wrote from every hob and version, and keeps the rest", async () => {
     const hobs = [
       // An old craft opening, then chores.
       [
@@ -325,8 +318,7 @@ describe("0013_hob_identity", () => {
     expect(result.versions).toEqual(expected.flatMap((instructions) => [instructions, instructions]));
   });
 
-  // covers AG-002, DP-003
-  it("[TC-AG-085] removes an opening written for a title the hob had before its role changed", async () => {
+  it("removes an opening written for a title the hob had before its role changed", async () => {
     // Each hob: name, its titles from version 1 on (the last is current), and the instructions it kept.
     const hobs = [
       // Created with its own title, then given a starter role without rewriting the instructions.
@@ -380,8 +372,7 @@ describe("0013_hob_identity", () => {
 });
 
 describe("0014_hob_tone", () => {
-  // covers AG-002, DP-003
-  it("[TC-AG-086] gives every existing hob and version the Default voice and Balanced length", async () => {
+  it("gives every existing hob and version the Default voice and Balanced length", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -414,8 +405,7 @@ describe("0014_hob_tone", () => {
     expect(result.versions).toEqual([{ voice: "default", length: "balanced" }]);
   });
 
-  // covers DP-003
-  it("[TC-DP-051] still reads a hob event journaled before tone existed, with the default tone", async () => {
+  it("still reads a hob event journaled before tone existed, with the default tone", async () => {
     // The AgentUpserted payload as the hub journaled it before 0014, with no voice or length.
     const before = {
       _tag: "AgentUpserted",
@@ -464,8 +454,7 @@ describe("0014_hob_tone", () => {
 });
 
 describe("0015_hob_policy", () => {
-  // covers AG-002, AG-004, DP-003
-  it("[TC-AG-089] gives every existing hob and version an empty policy: no own or hidden folders, no overrides", async () => {
+  it("gives every existing hob and version an empty policy: no own or hidden folders, no overrides", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -499,8 +488,7 @@ describe("0015_hob_policy", () => {
     expect(result.versions).toEqual([empty]);
   });
 
-  // covers DP-003
-  it("[TC-DP-034] still reads a hob event journaled before policies existed, with the empty policy", async () => {
+  it("still reads a hob event journaled before policies existed, with the empty policy", async () => {
     // The AgentUpserted payload as the hub journaled it before 0015, with no policy.
     const before = {
       _tag: "AgentUpserted",
@@ -554,8 +542,7 @@ describe("0015_hob_policy", () => {
 });
 
 describe("0020_thread_brains", () => {
-  // covers DP-003, RT-001
-  it("[TC-DP-035] moves each thread's Claude Code session into its sessions and records each reply's brain", async () => {
+  it("moves each thread's Claude Code session into its sessions and records each reply's brain", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -628,8 +615,7 @@ describe("0020_thread_brains", () => {
     expect(result.versions).toEqual([{ runtime: "claude-code" }]);
   });
 
-  // covers DP-003
-  it("[TC-DP-036] still reads a thread event journaled before brains existed, with no sessions and no brain", async () => {
+  it("still reads a thread event journaled before brains existed, with no sessions and no brain", async () => {
     const before = {
       _tag: "ThreadUpserted",
       thread: {
@@ -666,8 +652,7 @@ describe("0020_thread_brains", () => {
 });
 
 describe("0021_hob_sign_commits", () => {
-  // covers AG-004, DP-003
-  it("[TC-DP-037] leaves every existing hob and version unsigned", async () => {
+  it("leaves every existing hob and version unsigned", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -703,8 +688,7 @@ describe("0021_hob_sign_commits", () => {
 });
 
 describe("0023_thread_archived_at", () => {
-  // covers CH-009, DP-003
-  it("[TC-DP-040] keeps every existing thread live, and still reads thread events journaled before archiving", async () => {
+  it("keeps every existing thread live, and still reads thread events journaled before archiving", async () => {
     const before = {
       _tag: "ThreadUpserted",
       thread: {
@@ -763,8 +747,7 @@ describe("0023_thread_archived_at", () => {
 });
 
 describe("0027_github_charm", () => {
-  // covers DP-003, PE-002
-  it("[TC-PE-145] keeps the GitHub Charm for every existing hob and version, and holds one account with no token", async () => {
+  it("keeps the GitHub Charm for every existing hob and version, and holds one account with no token", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -808,8 +791,7 @@ describe("0027_github_charm", () => {
 });
 
 describe("0029_backpack_blockers", () => {
-  // covers DP-003, IN-007
-  it("[TC-IN-095] gives every item that failed before it a blocker to retry, counting its deliveries, and none to the rest", async () => {
+  it("gives every item that failed before it a blocker to retry, counting its deliveries, and none to the rest", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -873,8 +855,7 @@ describe("0029_backpack_blockers", () => {
 });
 
 describe("0033_withdrawn_questions", () => {
-  // covers DP-003, OR-004
-  it("[TC-OR-169] withdraws the questions left open on Tasks that ended as cancelled or failed, resolves their pending copies as late, and keeps the rest", async () => {
+  it("withdraws the questions left open on Tasks that ended as cancelled or failed, resolves their pending copies as late, and keeps the rest", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const at = "2026-11-01T00:00:00.000Z";
@@ -963,8 +944,7 @@ describe("0033_withdrawn_questions", () => {
 });
 
 describe("0035_task_grants", () => {
-  // covers DP-003, PE-007
-  it("[TC-DP-128] keeps every existing grant with no Task, and still reads grant events journaled before This Task", async () => {
+  it("keeps every existing grant with no Task, and still reads grant events journaled before This Task", async () => {
     const at = "2026-10-28T00:00:00.000Z";
     // A grant as the hub saved and journaled it before 0035, with the unused `questId`.
     const grant = {
@@ -1040,8 +1020,7 @@ describe("0035_task_grants", () => {
 });
 
 describe("0047_versioned_name", () => {
-  // covers AG-002, DP-003
-  it("[TC-AG-103] gives every stored version the name its hob has", async () => {
+  it("gives every stored version the name its hob has", async () => {
     const versions = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       for (const [id, name] of [
@@ -1085,8 +1064,7 @@ describe("0047_versioned_name", () => {
 });
 
 describe("0053_thread_reads", () => {
-  // covers UX-006, DP-003
-  it("[TC-DP-251] counts every thread from before it as read through its last message", async () => {
+  it("counts every thread from before it as read through its last message", async () => {
     const threads = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -1138,8 +1116,8 @@ describe("0053_thread_reads", () => {
 });
 
 describe("0074_milestone_reached_by", () => {
-  // covers DP-003, OR-002 (#743)
-  it("[TC-DP-289] credits every milestone reached before it to its Task's owner, and leaves the rest unreached", async () => {
+  // Issue #743
+  it("credits every milestone reached before it to its Task's owner, and leaves the rest unreached (#743)", async () => {
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const at = "2026-11-01T00:00:00.000Z";
@@ -1182,8 +1160,7 @@ describe("0074_milestone_reached_by", () => {
 });
 
 describe("0079_hob_visibility", () => {
-  // covers AG-002, DP-003
-  it("[TC-DP-1233-01] leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it", async () => {
+  it("leaves every existing hob and version visible to other hobs, and still reads hob events journaled before it (#1233)", async () => {
     const before = {
       _tag: "AgentUpserted",
       agent: {
@@ -1274,8 +1251,7 @@ describe("0080_hob_good_at", () => {
     { id: "long", role: null, roleTitle: "Clerk", instructions: `Your chores, in the user's words:\n${longChores}` },
   ] as const;
 
-  // covers AG-002, DP-003
-  it("[TC-AG-1232-03] fills every hob and version with the good at the profile showed, and shortens one past the limit", async () => {
+  it("fills every hob and version with the good at the profile showed, and shortens one past the limit (#1232)", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       for (const hob of hobs) {
@@ -1337,8 +1313,7 @@ describe("0080_hob_good_at", () => {
     ]);
   });
 
-  // covers DP-003
-  it("[TC-DP-1232-01] still reads a hob event journaled before good at was stored, with none", async () => {
+  it("still reads a hob event journaled before good at was stored, with none (#1232)", async () => {
     // The AgentUpserted payload as the hub journaled it before 0080, with no good at.
     const before = {
       _tag: "AgentUpserted",
@@ -1389,8 +1364,7 @@ describe("0080_hob_good_at", () => {
 });
 
 describe("0082_hob_actors", () => {
-  // covers AG-002, DP-003
-  it("[TC-AG-405-02] records you as the maker of every stored version and the summoner of every hob, and reads older hob events as yours", async () => {
+  it("records you as the maker of every stored version and the summoner of every hob, and reads older hob events as yours (#405)", async () => {
     // The AgentUpserted payload as the hub journaled it before 0082, with no actor and no summoner.
     const before = {
       _tag: "AgentUpserted",
@@ -1485,7 +1459,7 @@ describe("0082_hob_actors", () => {
 
 describe("0083_summoning", () => {
   // covers ADR 034 (Scope, The Charm), DP-003
-  it("[TC-DP-406-01] leaves every hob and version with the default Summoning scope and no Charm withheld, and Summoning for every hob off", async () => {
+  it("leaves every hob and version with the default Summoning scope and no Charm withheld, and Summoning for every hob off (#406)", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -1525,8 +1499,8 @@ describe("0083_summoning", () => {
 });
 
 describe("0084_thread_skill_trial", () => {
-  // covers DP-003, ADR 029 (Try in a chat), #1099
-  it("[TC-DP-1099-01] keeps every thread from before it as an ordinary chat, trying no draft", async () => {
+  // covers ADR 029 (Try in a chat), #1099
+  it("keeps every thread from before it as an ordinary chat, trying no draft (#1099)", async () => {
     const threads = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({

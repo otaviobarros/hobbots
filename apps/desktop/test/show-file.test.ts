@@ -33,8 +33,7 @@ const setup = (files: Readonly<Record<string, boolean>> = { "/Users/me/shop/repo
 };
 
 describe("the Show in Finder bridge", () => {
-  // covers UX-002, PE-005
-  it("[#388] shows only a file the hub lists for the Attempt, found by its ids", async () => {
+  it("shows only a file the hub lists for the Attempt, found by its ids (#388)", async () => {
     const { handlers, read, shown, show } = setup();
     expect([...handlers.keys()]).toEqual([showFileChannel]);
     await expect(show(trusted, "a1", "report")).resolves.toBe(true);
@@ -42,8 +41,7 @@ describe("the Show in Finder bridge", () => {
     expect(shown).toEqual(["/Users/me/shop/report.md"]);
   });
 
-  // covers PE-005
-  it("[#388] shows nothing the hub does not list, a gone file, or one no longer a regular file", async () => {
+  it("shows nothing the hub does not list, a gone file, or one no longer a regular file (#388)", async () => {
     const { read, shown, show } = setup();
     const malformed = { refused: "malformed" };
     await expect(show(trusted, "a1", "/etc/passwd")).resolves.toEqual(malformed);
@@ -57,8 +55,7 @@ describe("the Show in Finder bridge", () => {
     expect(shown).toEqual([]);
   });
 
-  // covers PE-005
-  it("[#388] refuses a page the window is not allowed to show", async () => {
+  it("refuses a page the window is not allowed to show (#388)", async () => {
     const { read, shown, show } = setup();
     await expect(show(stranger, "a1", "report")).resolves.toEqual({ refused: "notAllowed" });
     expect(read).toEqual([]);

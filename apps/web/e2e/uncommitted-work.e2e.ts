@@ -7,10 +7,7 @@ test.afterEach(stopQuestHub);
 // Issue #586: Quill finishes the shop badge with the badge's file left uncommitted, and the
 // summary in its lane keeps it under Still open.
 
-// covers OR-004
-test("[TC-OR-288] a Task that completed with uncommitted changes shows them under Still open in its lane", async ({
-  page,
-}) => {
+test("a Task that completed with uncommitted changes shows them under Still open in its lane", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -29,8 +26,7 @@ test("[TC-OR-288] a Task that completed with uncommitted changes shows them unde
 // Issue #665: Aldric completes the Quest he leads with the spec he edited left uncommitted, and
 // says why, so the top Task's own summary in his lane keeps the file under Still open.
 
-// covers OR-004
-test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Still open in the top Task's lane", async ({
+test("a Quest whose lead left a file uncommitted shows it under Still open in the top Task's lane", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();

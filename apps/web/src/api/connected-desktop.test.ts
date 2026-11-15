@@ -10,8 +10,7 @@ const base = {
 };
 
 describe("the connected desktop's reason", () => {
-  // covers DP-001
-  it("[TC-DP-169] reads the app's reason, and keeps the generic banner for an app from before the reasons", () => {
+  it("reads the app's reason, and keeps the generic banner for an app from before the reasons", () => {
     expect(
       reasonOf({
         ...base,

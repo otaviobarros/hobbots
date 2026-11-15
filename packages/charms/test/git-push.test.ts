@@ -93,8 +93,7 @@ afterAll(async () => {
 const REAL_GIT_TIMEOUT = 30_000;
 
 describe("pushing from the hub's staging repository", { timeout: REAL_GIT_TIMEOUT }, () => {
-  // covers PE-005, PE-008
-  it("[TC-PE-150] pushes the commit fixed when deciding, even after the hob commits again", async () => {
+  it("pushes the commit fixed when deciding, even after the hob commits again", async () => {
     const folder = await makeFolder("fixed");
     const remote = await makeRemote("octo/app");
     const expected = sh(folder, "rev-parse", "feat/x");
@@ -120,8 +119,7 @@ describe("pushing from the hub's staging repository", { timeout: REAL_GIT_TIMEOU
     );
   });
 
-  // covers PE-005, PE-006
-  it("[TC-PE-151] runs no hook or configured program from a hostile repository, and sends the token nowhere else", async () => {
+  it("runs no hook or configured program from a hostile repository, and sends the token nowhere else", async () => {
     const folder = await makeFolder("hostile");
     const remote = await makeRemote("octo/hostile");
     // A replace ref would make Git read another commit for the branch's.
@@ -170,8 +168,7 @@ describe("pushing from the hub's staging repository", { timeout: REAL_GIT_TIMEOU
     expect(ran).toEqual([]);
   });
 
-  // covers PE-005
-  it("[TC-PE-152] refuses a repository whose files point at another one", async () => {
+  it("refuses a repository whose files point at another one", async () => {
     const cases: Array<[string, (gitDir: string) => Promise<void>]> = [
       ["commondir", (gitDir) => fs.writeFile(path.join(gitDir, "commondir"), "../../other/.git\n")],
       ["alternates", (gitDir) => fs.writeFile(path.join(gitDir, "objects", "info", "alternates"), "/elsewhere\n")],
@@ -204,8 +201,7 @@ describe("pushing from the hub's staging repository", { timeout: REAL_GIT_TIMEOU
     ]);
   });
 
-  // covers PE-003, EX-004
-  it("[TC-PE-153] never forces without force, leases a force push, and tells a refused sign-in apart", async () => {
+  it("never forces without force, leases a force push, and tells a refused sign-in apart", async () => {
     const folder = await makeFolder("moved");
     const remote = await makeRemote("octo/moved");
     const first = sh(folder, "rev-parse", "feat/x");
@@ -244,8 +240,7 @@ describe("pushing from the hub's staging repository", { timeout: REAL_GIT_TIMEOU
     expect(sh(remote, "rev-parse", "refs/heads/feat/x")).toBe(results.rewritten.commit);
   });
 
-  // covers PE-005
-  it("[TC-PE-159] pushes over SSH through the user's agent to the resolved repository, whatever the hob's folder sets", async () => {
+  it("pushes over SSH through the user's agent to the resolved repository, whatever the hob's folder sets", async () => {
     const folder = await makeFolder("over-ssh");
     const remote = await makeRemote("octo/ssh");
     const ran = path.join(root, "ran-folder-ssh-command");
@@ -299,8 +294,7 @@ describe("pushing from the hub's staging repository", { timeout: REAL_GIT_TIMEOU
     await expect(fs.access(ran)).rejects.toThrow();
   });
 
-  // covers EX-003, EX-004
-  it("[TC-PE-154] reads an unclear end as uncertain, and only an unreachable GitHub as not sent", () => {
+  it("reads an unclear end as uncertain, and only an unreachable GitHub as not sent", () => {
     const ref = "refs/heads/feat/x";
     expect(pushResult(128, "", "fatal: unable to access: Could not resolve host: github.com", ref)._tag).toBe(
       "NotSent",

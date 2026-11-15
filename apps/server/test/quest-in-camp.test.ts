@@ -20,8 +20,7 @@ const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 const CAMP = ThreadId.make("skills-camp");
 
 describe.each(RUNTIMES)("a quest whose chapter moves into a camp, on %s", (runtime) => {
-  // covers CH-009, OR-004, IN-004, RT-001
-  it("[TC-CH-1389-03] moves whole while its member works, and the lead's next turn, with the member's result, runs in the camp", async () => {
+  it("moves whole while its member works, and the lead's next turn, with the member's result, runs in the camp (#1389)", async () => {
     const party = partyHub({ lead: runtime, members: runtime });
     dispose = party.dispose;
     const { run, gates, requests } = party;

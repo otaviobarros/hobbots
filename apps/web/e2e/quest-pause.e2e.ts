@@ -31,8 +31,7 @@ const press = async (page: Page, name: string) => {
   await page.keyboard.press("Enter");
 };
 
-// covers OR-006, UX-001
-test("[TC-UX-1446-01] Pause and Pause now hold the quest, its Paused banner says so, and Resume puts each hob back", async ({
+test("Pause and Pause now hold the quest, its Paused banner says so, and Resume puts each hob back (#1446)", async ({
   page,
   scan,
 }) => {
@@ -67,8 +66,8 @@ test("[TC-UX-1446-01] Pause and Pause now hold the quest, its Paused banner says
   await expect(banner).toBeHidden({ timeout: 30_000 });
 });
 
-// covers IN-004, OR-002, STD-ARCH-019
-test("[TC-UX-1446-02] an @mention of a member reaches that member, and its receipt starts there, never at the lead", async ({
+// covers STD-ARCH-019
+test("an @mention of a member reaches that member, and its receipt starts there, never at the lead (#1446)", async ({
   page,
 }) => {
   test.setTimeout(240_000);

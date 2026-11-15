@@ -76,8 +76,7 @@ const openRemoteStep = async (page: Page, current: Hub) => {
 /** Other devices goes on to the last step of setup. */
 const atReady = (page: Page) => expect(page.getByRole("heading", { name: "Everything is ready" })).toBeVisible();
 
-// covers DP-001, DP-004
-test("[TC-DP-123] setup turns remote access on and shows the address and its QR code", async ({ page }) => {
+test("setup turns remote access on and shows the address and its QR code", async ({ page }) => {
   test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
   fakeTailscale("running");
   hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
@@ -103,10 +102,7 @@ test("[TC-DP-123] setup turns remote access on and shows the address and its QR 
   expect((await remoteAccess(hub)).enabled).toBe(true);
 });
 
-// covers DP-001, DP-004
-test("[TC-DP-124] setup without Tailscale shows how to get it, notices it, and Skip leaves remote access off", async ({
-  page,
-}) => {
+test("setup without Tailscale shows how to get it, notices it, and Skip leaves remote access off", async ({ page }) => {
   fakeTailscale("notInstalled");
   hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
   await openRemoteStep(page, hub);
@@ -134,10 +130,7 @@ test("[TC-DP-124] setup without Tailscale shows how to get it, notices it, and S
   expect((await remoteAccess(hub)).enabled).toBe(false);
 });
 
-// covers DP-001, DP-004
-test("[TC-DP-127] Skip turns remote access off before leaving setup, and stays when the hub refuses", async ({
-  page,
-}) => {
+test("Skip turns remote access off before leaving setup, and stays when the hub refuses", async ({ page }) => {
   test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
   fakeTailscale("running");
   hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });

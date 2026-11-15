@@ -147,8 +147,7 @@ describe("the command reader", () => {
 });
 
 describe("standing grants", () => {
-  // covers PE-007, PE-008
-  it("[TC-PE-088] answers the preset's Ask for exactly the granted command, folder and hob", async () => {
+  it("answers the preset's Ask for exactly the granted command, folder and hob", async () => {
     const careful = contextFor(home, "careful");
     const granted = await approveAlways(careful, command("pnpm test", home.project));
     const rule = granted.grants[0]?.rule;
@@ -175,8 +174,7 @@ describe("standing grants", () => {
     expect((await decide({ ...granted, grants: [] }, command("pnpm test", home.project))).decision).toBe("ask");
   });
 
-  // covers PE-007
-  it("[TC-PE-089] keeps a quoted glob literal, and never grants or matches an unquoted one", async () => {
+  it("keeps a quoted glob literal, and never grants or matches an unquoted one", async () => {
     const careful = contextFor(home, "careful");
     const literal = await approveAlways(careful, command("rm '*.tmp'", home.project));
     expect(literal.grants[0]?.rule).toMatchObject({ words: ["rm", "*.tmp"] });
@@ -188,8 +186,7 @@ describe("standing grants", () => {
     });
   });
 
-  // covers PE-007, AG-004
-  it("[TC-PE-090] never answers Deny, Never, a narrower Ask, a high-risk push or a safety Ask", async () => {
+  it("never answers Deny, Never, a narrower Ask, a high-risk push or a safety Ask", async () => {
     const careful = contextFor(home, "careful");
     const edit = files("edit-files", home.project, "src/index.ts");
     const granted = await approveAlways(careful, edit);
@@ -242,8 +239,7 @@ describe("standing grants", () => {
     }
   });
 
-  // covers PE-007
-  it("[TC-PE-091] grants a feature-branch push from its folder, a host exactly, and a delete by its path", async () => {
+  it("grants a feature-branch push from its folder, a host exactly, and a delete by its path", async () => {
     const careful = contextFor(home, "careful");
     const push = {
       _tag: "Push",
@@ -280,7 +276,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (Addresses)
-  it("[TC-PE-1267-18] asks before a page on a private address under every preset, and Always answers that host alone", async () => {
+  it("asks before a page on a private address under every preset, and Always answers that host alone (#1267)", async () => {
     const page = (host: string, addresses: ReadonlyArray<string>, found = true) =>
       ({ _tag: "Web", host, addresses, page: { url: `http://${host}/`, found } }) as const;
     for (const preset of ["careful", "balanced", "trusting"] as const) {
@@ -313,7 +309,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (Found URLs)
-  it("[TC-PE-1267-19] asks once before a URL the hob wrote itself, under every preset and whatever was granted", async () => {
+  it("asks once before a URL the hob wrote itself, under every preset and whatever was granted (#1267)", async () => {
     const written = {
       _tag: "Web",
       host: "example.com",
@@ -335,7 +331,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-01] asks, while the session has read the web, before each way data could leave, under every preset", async () => {
+  it("asks, while the session has read the web, before each way data could leave, under every preset (#1268)", async () => {
     const host = { _tag: "Web", host: "collector.example", addresses: [] } as const;
     const push = {
       _tag: "Push",
@@ -402,7 +398,7 @@ describe("standing grants", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-02] leaves found pages, local work, own memory and Never as they were while the session has read the web", async () => {
+  it("leaves found pages, local work, own memory and Never as they were while the session has read the web (#1268)", async () => {
     const balanced = contextFor(home, "balanced");
     const marked = { ...balanced, readWeb: true };
     const found = {
@@ -442,7 +438,6 @@ describe("standing grants", () => {
     ).toBe("deny");
   });
 
-  // covers PE-007
   it("leaves grants out of the policy version, and a This Task grant answers like any grant it is given", async () => {
     const careful = contextFor(home, "careful");
     const granted = await approveAlways(careful, command("pnpm test", home.project));
@@ -462,8 +457,7 @@ describe("standing grants", () => {
 describe("the GitHub Charm's writes", () => {
   const repository = "otaviobarros/hobbots";
 
-  // covers PE-001, PE-003, PE-007
-  it("[TC-PE-200] asks before opening a pull request or commenting, and a rule names only the repository and base", async () => {
+  it("asks before opening a pull request or commenting, and a rule names only the repository and base", async () => {
     const balanced = contextFor(home, "balanced");
     const project = await fs.realpath(home.project);
     expect(await decide(balanced, pullRequest(home.project))).toMatchObject({
@@ -504,8 +498,7 @@ describe("the GitHub Charm's writes", () => {
     expect((await decide(commented, pullRequest(home.project))).decision).toBe("ask");
   });
 
-  // covers PE-001, PE-004
-  it("[TC-PE-201] refuses a GitHub write from outside the hob's folders, and under Never, whatever was granted", async () => {
+  it("refuses a GitHub write from outside the hob's folders, and under Never, whatever was granted", async () => {
     for (const request of [pullRequest(home.root), comment("relative/folder")]) {
       expect(await decide(contextFor(home, "trusting"), request)).toMatchObject({
         decision: "deny",
@@ -567,8 +560,7 @@ describe("a Charm request", () => {
     ...(folder === undefined ? {} : { folder }),
   });
 
-  // covers PE-001, PE-002
-  it("[TC-PE-456] is decided on the answers its Charm declares, and refused when no Charm declares it", async () => {
+  it("is decided on the answers its Charm declares, and refused when no Charm declares it", async () => {
     expect(await decide(withMail("careful"), mail("mail.search"))).toMatchObject({
       decision: "ask",
       operation: "mail.search",
@@ -588,8 +580,7 @@ describe("a Charm request", () => {
     ).toMatchObject({ decision: "deny", reason: { code: "undeclared-operation" } });
   });
 
-  // covers PE-004
-  it("[TC-PE-457] is narrowed by the hob's override and by a restriction, and neither is answered by a grant", async () => {
+  it("is narrowed by the hob's override and by a restriction, and neither is answered by a grant", async () => {
     const overridden = withMail("trusting", {
       hob: { ownFolders: [], hiddenSharedFolders: [], overrides: {}, charms: { overrides: { "mail.label": "deny" } } },
     });
@@ -611,8 +602,7 @@ describe("a Charm request", () => {
     });
   });
 
-  // covers PE-007
-  it("[TC-PE-458] is answered by a CharmSite grant only when every declared site field and the folder match", async () => {
+  it("is answered by a CharmSite grant only when every declared site field and the folder match", async () => {
     const balanced = withMail("balanced");
     const asked = await decide(balanced, mail("mail.label", { label: "done", subject: "ignored" }));
     // The rule names only the declared site fields, never free text such as a subject.
@@ -643,8 +633,7 @@ describe("a Charm request", () => {
     });
   });
 
-  // covers PE-007
-  it("[TC-PE-459] asks before a once-only operation, once only, even where its preset allows it, and Never still wins", async () => {
+  it("asks before a once-only operation, once only, even where its preset allows it, and Never still wins", async () => {
     // Trusting allows sending mail, but a once-only operation is high risk and always waits for you (ADR 015).
     const asked = await decide(withMail("trusting"), mail("mail.send", { to: "ada@example.com" }));
     expect(asked).toMatchObject({
@@ -679,8 +668,7 @@ describe("a Charm request", () => {
     });
   });
 
-  // covers PE-001
-  it("[TC-PE-460] refuses a call found from a folder outside the hob's folders", async () => {
+  it("refuses a call found from a folder outside the hob's folders", async () => {
     for (const folder of [home.root, path.join(home.project, "private-link"), "relative/folder"]) {
       expect(await decide(withMail("trusting"), mail("mail.search", {}, folder))).toMatchObject({
         decision: "deny",
@@ -691,10 +679,9 @@ describe("a Charm request", () => {
 });
 
 describe("GitHub answers saved before the Charm operations", () => {
-  // covers PE-007, DP-003
-  it("[TC-PE-462] answer the same calls whether read in their old form or as 0071 rewrites them", async () => {
+  it("answer the same calls whether read in their old form or as 0071 rewrites them", async () => {
     const repository = "otaviobarros/hobbots";
-    // The stored forms before and after 0071, as [TC-DP-285] writes and checks them.
+    // The stored forms before and after 0071, as the migration test below writes and checks them.
     const stored = {
       before: {
         hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { push: "ask", "read-github": "deny" } },

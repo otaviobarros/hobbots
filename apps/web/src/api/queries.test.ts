@@ -31,8 +31,7 @@ const version = (configVersion: number): HobPermissions => ({
 const keyFor = (configVersion: number) => [...queryKeys.permissions(agentId), configVersion, "balanced"];
 
 describe("storeSavedPermissions", () => {
-  // covers PE-002
-  it("[TC-PE-032] keeps a newer version another window saved when this window's older answer arrives late", async () => {
+  it("keeps a newer version another window saved when this window's older answer arrives late", async () => {
     const client = new QueryClient();
     // This window saved version 2, but the other window's version 3 was read first.
     client.setQueryData(keyFor(2), version(1));
@@ -107,7 +106,7 @@ describe("showLastLine", () => {
     expect(client.getQueryState(queryKeys.threads(agentId))?.isInvalidated).toBe(false);
   });
 
-  it("[TC-UX-1563-03] names who wrote the last line with it: the message's own actor, else the thread's hob", () => {
+  it("names who wrote the last line with it: the message's own actor, else the thread's hob (#1563)", () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.threads(agentId), withLine("The plan"));
     const author = () => client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastAuthor;

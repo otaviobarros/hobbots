@@ -66,7 +66,7 @@ const share = (id: string, overrides: Partial<MemoryShare> = {}) =>
 
 describe("what hobs want to share", () => {
   // covers ADR 028 (Sharing), #960
-  it("[TC-UX-980] names a share by who asks, the kind of page and where it goes, with the lines it adds", () => {
+  it("names a share by who asks, the kind of page and where it goes, with the lines it adds (#960)", () => {
     expect(shareWhat(share("a"), "Ada")).toBe("Ada wants to add a how-to to the site project");
     expect(shareWhat(share("a", { scope: everyone }), "Ada")).toBe("Ada wants to teach every hob");
     expect(shareTitle(share("a"))).toBe("Deploy the site");
@@ -80,7 +80,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-UX-981] lists in To review the shares that wait, then what Check now found, and keeps a decided share open", () => {
+  it("lists in To review the shares that wait, then what Check now found, and keeps a decided share open (#960)", () => {
     const shares = [share("a"), share("bb", { state: "shared" })];
     const check = {
       checkedAt: "2026-11-05T09:30:00.000Z",
@@ -98,7 +98,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-UX-982] shows a share in the Inbox as a Memory kind, with no rush, grouped apart from any chat", () => {
+  it("shows a share in the Inbox as a Memory kind, with no rush, grouped apart from any chat (#960)", () => {
     const waiting = share("a");
     const entries = needsEntries({
       devices: [],
@@ -130,7 +130,7 @@ describe("what hobs want to share", () => {
   });
 
   // covers ADR 028 (Sharing), #960
-  it("[TC-UX-983] finds the share that wrote a version, for Undo in What changed", () => {
+  it("finds the share that wrote a version, for Undo in What changed (#960)", () => {
     const shared = share("a", { state: "shared", through: "preset", version: MemoryVersion.make("v2") });
     const change = { scope: site, path: MemoryPath.make("howtos/deploy.md"), version: MemoryVersion.make("v2") };
     expect(shareOfChange([shared], change)).toBe(shared);

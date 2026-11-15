@@ -116,8 +116,7 @@ const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string
   }
 };
 
-// covers UX-001, CH-009
-test("[TC-UX-1567-01] Home's Pick up where you left off leaves out a Quest whose camp is archived until it is restored", async ({
+test("Home's Pick up where you left off leaves out a Quest whose camp is archived until it is restored (#1567)", async ({
   page,
 }) => {
   dataDir = emptyDataDir();
@@ -147,8 +146,7 @@ test("[TC-UX-1567-01] Home's Pick up where you left off leaves out a Quest whose
   await expect(pickUp.getByRole("listitem")).toHaveCount(2);
 });
 
-// covers UX-001, CH-005, OR-001
-test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldric's quest and open it, never as her thread", async ({
+test("Home's Pick up where you left off and Quill's panel show Aldric's quest and open it, never as her thread", async ({
   page,
 }) => {
   dataDir = emptyDataDir();
@@ -224,8 +222,7 @@ test("[TC-UX-020] Home's Pick up where you left off and Quill's panel show Aldri
   );
 });
 
-// covers UX-001, OR-001
-test("[TC-UX-145] a hob with no chats that has worked on a Quest reads Resting, not New", async ({ page }) => {
+test("a hob with no chats that has worked on a Quest reads Resting, not New", async ({ page }) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
@@ -258,8 +255,7 @@ test("[TC-UX-145] a hob with no chats that has worked on a Quest reads Resting, 
   );
 });
 
-// covers UX-001, OR-001
-test("[TC-UX-146] a chat on its hob's page shows a chip for each Quest it follows", async ({ page }) => {
+test("a chat on its hob's page shows a chip for each Quest it follows", async ({ page }) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   await call("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });

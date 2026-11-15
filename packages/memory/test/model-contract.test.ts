@@ -124,7 +124,7 @@ const probe = async (url: string) => {
 
 describe.runIf(enabled)(`the memory model on the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   // covers ADR 028
-  it("[TC-GEN-217] starts with the hub's endpoint as its only provider, the chosen effort and per-task models, and reports their use", async () => {
+  it("starts with the hub's endpoint as its only provider, the chosen effort and per-task models, and reports their use", async () => {
     await withEngine(
       {
         ...DEFAULT_MEMORY_SETTINGS,
@@ -145,7 +145,7 @@ describe.runIf(enabled)(`the memory model on the bundled ai-memory ${AI_MEMORY_V
   }, 60_000);
 
   // covers ADR 028
-  it("[TC-GEN-218] starts with no model at all under No AI", async () => {
+  it("starts with no model at all under No AI", async () => {
     await withEngine({ ...DEFAULT_MEMORY_SETTINGS, provider: "none" }, async (url) => {
       const { raw, read } = await statusOf(url);
       expect(raw.llm_workloads ?? []).toEqual([]);
@@ -157,7 +157,7 @@ describe.runIf(enabled)(`the memory model on the bundled ai-memory ${AI_MEMORY_V
   }, 60_000);
 
   // covers ADR 028
-  it("[TC-GEN-317] runs the engine's model call as one turn on the chosen runtime's adapter, with no API key", async () => {
+  it("runs the engine's model call as one turn on the chosen runtime's adapter, with no API key", async () => {
     await withEngine({ ...DEFAULT_MEMORY_SETTINGS, effort: "medium" }, async (url) => {
       const { status, body } = await probe(url);
       expect(status).toBe(200);
@@ -170,7 +170,7 @@ describe.runIf(enabled)(`the memory model on the bundled ai-memory ${AI_MEMORY_V
   }, 60_000);
 
   // covers ADR 028
-  it("[TC-GEN-318] falls back to the other runtime when the chosen one hits its plan's limit or is signed out", async () => {
+  it("falls back to the other runtime when the chosen one hits its plan's limit or is signed out", async () => {
     codex.answer({ _tag: "Fail", error: new RuntimeLimitReached({ resetsAt: null }) });
     await withEngine({ ...DEFAULT_MEMORY_SETTINGS, provider: "chatgpt", fallback: "other" }, async (url) => {
       expect(await probe(url)).toMatchObject({ status: 200, body: { ok: true } });

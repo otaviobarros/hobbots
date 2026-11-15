@@ -271,8 +271,8 @@ const idsIn = (rows: ReadonlyArray<{ id: string; threadId: string | null }>, thr
   rows.filter((row) => row.threadId === threadId).map((row) => row.id);
 
 describe("moving a chapter into a camp", () => {
-  // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
-  it("[TC-CH-1385-01] moves a resting chapter's messages, records and quests into a new camp once, and leaves a stub", async () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it)
+  it("moves a resting chapter's messages, records and quests into a new camp once, and leaves a stub (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* chatWithTwoChapters;
@@ -339,8 +339,8 @@ describe("moving a chapter into a camp", () => {
     expect(result.moved.value.camp).toMatchObject({ id: CAMP, kind: "camp", origin: { threadId: CHAT } });
   });
 
-  // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
-  it("[TC-CH-1385-02] moves the live chapter into a camp with messages of its own, which goes on with it", async () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it)
+  it("moves the live chapter into a camp with messages of its own, which goes on with it (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing } = yield* chatWithTwoChapters;
@@ -383,8 +383,8 @@ describe("moving a chapter into a camp", () => {
     ]);
   });
 
-  // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
-  it("[TC-CH-1385-03] leaves nothing moved and no camp made when the move fails midway through its writes", async () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it)
+  it("leaves nothing moved and no camp made when the move fails midway through its writes (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* chatWithTwoChapters;
@@ -410,8 +410,8 @@ describe("moving a chapter into a camp", () => {
     expect(result.retried.value.stub).toMatchObject({ state: "moved", movedTo: CAMP });
   });
 
-  // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
-  it("[TC-CH-1385-04] refuses a move into the same thread, a chat, another hob's camp or a closed camp, and a chapter moved already", async () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it)
+  it("refuses a move into the same thread, a chat, another hob's camp or a closed camp, and a chapter moved already (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first, billing } = yield* chatWithTwoChapters;
@@ -519,8 +519,8 @@ const questPlaces = Effect.gen(function* () {
 });
 
 describe("a quest whose chapter moves into a camp", () => {
-  // covers CH-009, OR-004, ADR 037 (Quests in camps)
-  it("[TC-CH-1389-01] moves whole while it runs: a member's waiting approval and its web use go with it, and its summary names the camp", async () => {
+  // covers ADR 037 (Quests in camps)
+  it("moves whole while it runs: a member's waiting approval and its web use go with it, and its summary names the camp (#1389)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* runningQuest;
@@ -559,8 +559,8 @@ describe("a quest whose chapter moves into a camp", () => {
     expect(result.after.summaries).toEqual([["launch-quest", CAMP]]);
   });
 
-  // covers CH-009, ADR 037 (Quests in camps)
-  it("[TC-CH-1389-02] leaves the quest, its approvals and its summary in the chat when the move fails midway", async () => {
+  // covers ADR 037 (Quests in camps)
+  it("leaves the quest, its approvals and its summary in the chat when the move fails midway (#1389)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* runningQuest;
@@ -577,8 +577,8 @@ describe("a quest whose chapter moves into a camp", () => {
     expect(result.after.quest.summaries).toEqual([["launch-quest", CHAT]]);
   });
 
-  // covers CH-009, PE-006, ADR 037 (Quests in camps)
-  it("[TC-CH-1389-07] a request the member's running session asks after the move is written in the camp", async () => {
+  // covers ADR 037 (Quests in camps)
+  it("a request the member's running session asks after the move is written in the camp (#1389)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first, step } = yield* runningQuest;
@@ -598,8 +598,8 @@ describe("a quest whose chapter moves into a camp", () => {
     expect(result.chat).toEqual([]);
   });
 
-  // covers CH-009, PE-006, ADR 037 (Quests in camps)
-  it("[TC-CH-1389-08] a decision read before the move and saved after it names the camp the request moved to", async () => {
+  // covers ADR 037 (Quests in camps)
+  it("a decision read before the move and saved after it names the camp the request moved to (#1389)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* runningQuest;
@@ -627,8 +627,8 @@ describe("a quest whose chapter moves into a camp", () => {
     expect(result.chat).toEqual([]);
   });
 
-  // covers CH-009, ADR 037 (Moving a chapter into a camp moves it)
-  it("[TC-CH-1389-05] still refuses while an approval the chat's reply waits on is pending", async () => {
+  // covers ADR 037 (Moving a chapter into a camp moves it)
+  it("still refuses while an approval the chat's reply waits on is pending (#1389)", async () => {
     const refused = await run(
       Effect.gen(function* () {
         const { first, step } = yield* runningQuest;
@@ -654,8 +654,8 @@ describe("camp suggestions", () => {
       .filter((entry) => entry.type === "CampSuggested")
       .map((entry) => (entry.payload as { suggestion: CampSuggestion }).suggestion);
 
-  // covers CH-009, ADR 037 (Records: CampSuggestion)
-  it("[TC-CH-1385-05] raises one suggestion when a chat chapter reaches a threshold, and never again once kept", async () => {
+  // covers ADR 037 (Records: CampSuggestion)
+  it("raises one suggestion when a chat chapter reaches a threshold, and never again once kept (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -727,8 +727,8 @@ describe("camp suggestions", () => {
     expect(result.missing).toMatchObject(Exit.fail({ _tag: "CampSuggestionRefused", reason: "not-found" }));
   });
 
-  // covers CH-009, ADR 037 (Records: CampSuggestion)
-  it("[TC-CH-1385-06] accepts a chapter's suggestion when it moves, and expires one whose chapter is merged away or whose chat closes", async () => {
+  // covers ADR 037 (Records: CampSuggestion)
+  it("accepts a chapter's suggestion when it moves, and expires one whose chapter is merged away or whose chat closes (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing } = yield* chatWithTwoChapters;
@@ -780,7 +780,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("[TC-CH-1557-11] offers a pending suggestion with its name and goal, withdraws one, and leaves one settled meanwhile", async () => {
+  it("offers a pending suggestion with its name and goal, withdraws one, and leaves one settled meanwhile (#1557)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing } = yield* chatWithTwoChapters;
@@ -868,7 +868,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("[TC-CH-1557-15] leaves an offer or a withdrawal pending when its chapter was split after it was named, and offers it named afresh", async () => {
+  it("leaves an offer or a withdrawal pending when its chapter was split after it was named, and offers it named afresh (#1557)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing, suggestion, named } = yield* pendingBilling;
@@ -908,7 +908,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records: CampSuggestion), ADR 039 (Chapters run on their own), #1557
-  it("[TC-CH-1557-18] a split that takes what a pending suggestion counted withdraws it, and suggests the part instead", async () => {
+  it("a split that takes what a pending suggestion counted withdraws it, and suggests the part instead (#1557)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing } = yield* chatWithTwoChapters;
@@ -942,7 +942,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records: CampSuggestion), STD-ARCH-014, #1557
-  it("[TC-CH-1557-21] leaves an offer pending when a message of its chapter changed after it was named", async () => {
+  it("leaves an offer pending when a message of its chapter changed after it was named (#1557)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { billing, suggestion, named } = yield* pendingBilling;
@@ -966,7 +966,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 039 (Chapters run on their own), STD-ARCH-014, #1557
-  it("[TC-CH-1557-19] a split the hub judged lands only on the chapter it judged, at the revision it read", async () => {
+  it("a split the hub judged lands only on the chapter it judged, at the revision it read (#1557)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first, billing } = yield* chatWithTwoChapters;
@@ -995,7 +995,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("[TC-CH-1557-16] a split made for a suggestion withdraws it in the split's own commit, and only a suggestion of the chapter it cuts", async () => {
+  it("a split made for a suggestion withdraws it in the split's own commit, and only a suggestion of the chapter it cuts (#1557)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { suggestion } = yield* pendingBilling;
@@ -1083,7 +1083,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Quests in camps, Records), STD-ARCH-014
-  it("[TC-CH-1422-07] recounts a Quest's ready-for-review in the move whose artifact joins one the camp reviewed", async () => {
+  it("recounts a Quest's ready-for-review in the move whose artifact joins one the camp reviewed (#1422)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const first = yield* deliveredThenCamp(["/work/app/plan.md"]);
@@ -1107,7 +1107,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (Records), STD-DATA-001, STD-ARCH-019
-  it("[TC-CH-1422-08] keeps a review settled in the chat when its artifact joins the camp's, and the camp's own when both settled", async () => {
+  it("keeps a review settled in the chat when its artifact joins the camp's, and the camp's own when both settled (#1422)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const first = yield* deliveredThenCamp(["/work/app/notes.md", "/work/app/page.html"]);
@@ -1142,8 +1142,8 @@ describe("camp suggestions", () => {
     expect(result.after).toBe(0);
   });
 
-  // covers CH-009, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-07] refuses while a turn is still owed, as one a paused member hob owes", async () => {
+  // covers ADR 039 (One hob speaks at a time)
+  it("refuses while a turn is still owed, as one a paused member hob owes (#1461)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* chatWithTwoChapters;
@@ -1166,8 +1166,8 @@ describe("camp suggestions", () => {
     expect(result).toEqual({ owed: "reply-running", after: "moved" });
   });
 
-  // covers CH-009, ADR 039 (Members)
-  it("[TC-CH-1461-28] refuses while a Quest in the chapter is led by a hob the camp would not admit, and moves once it ends", async () => {
+  // covers ADR 039 (Members)
+  it("refuses while a Quest in the chapter is led by a hob the camp would not admit, and moves once it ends (#1461)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* chatWithTwoChapters;

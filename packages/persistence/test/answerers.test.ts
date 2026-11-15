@@ -88,7 +88,7 @@ const answered = (sent: { readonly value: { readonly answerers: ReadonlyArray<{ 
 
 describe("deciding who answers as a message is stored", () => {
   // covers ADR 039 (Who answers, rules 2 and 4)
-  it("[TC-PE-1460-01] answers with the only hob, nobody once a second joins, a mentioned hob, and refuses a non-member", async () => {
+  it("answers with the only hob, nobody once a second joins, a mentioned hob, and refuses a non-member (#1460)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -114,7 +114,7 @@ describe("deciding who answers as a message is stored", () => {
   });
 
   // covers ADR 039 (Who answers, rule 5)
-  it("[TC-PE-1460-02] reaches a running Quest's lead with no mention, and its party member by mention", async () => {
+  it("reaches a running Quest's lead with no mention, and its party member by mention (#1460)", async () => {
     const camp = ThreadId.make("quest-camp");
     const result = await run(
       Effect.gen(function* () {
@@ -172,7 +172,7 @@ describe("deciding who answers as a message is stored", () => {
   });
 
   // covers ADR 039 (Who answers), STD-ARCH-014
-  it("[TC-PE-1460-03] decides from the members as the journal orders them when a hob joins at the same moment", async () => {
+  it("decides from the members as the journal orders them when a hob joins at the same moment (#1460)", async () => {
     const camps = Array.from({ length: 12 }, (_, index) => ThreadId.make(`race-${index}`));
     const results = await run(
       Effect.gen(function* () {

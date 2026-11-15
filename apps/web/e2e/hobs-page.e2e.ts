@@ -48,8 +48,7 @@ const hubWithHobs = async (count: number) => {
   return { url: hub.url, ids };
 };
 
-// covers UX-001, UX-005
-test("[TC-UX-089] Your hobs shows every hob as a card, filters by state, finds by role and opens a hob's page", async ({
+test("Your hobs shows every hob as a card, filters by state, finds by role and opens a hob's page", async ({
   page,
 }) => {
   const { url, ids } = await hubWithHobs(24);

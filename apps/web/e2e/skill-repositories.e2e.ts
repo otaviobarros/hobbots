@@ -90,7 +90,7 @@ const hubWithRepository = async () => {
 };
 
 // covers ADR 029 (Scopes), #1098
-test("[TC-UX-1098] a repository's own skills: offered once, read from the default branch, and imported for the project", async ({
+test("a repository's own skills: offered once, read from the default branch, and imported for the project (#1098)", async ({
   page,
 }) => {
   const { url, site } = await hubWithRepository();
@@ -132,7 +132,7 @@ test("[TC-UX-1098] a repository's own skills: offered once, read from the defaul
 });
 
 // covers ADR 029 (Scopes), #1098
-test("[TC-UX-1098-02] Not now closes the offer until the repository holds a new skill", async ({ page }) => {
+test("Not now closes the offer until the repository holds a new skill (#1098)", async ({ page }) => {
   const { url, site } = await hubWithRepository();
   await page.goto(`${url}/#/skills`);
   const main = page.getByRole("main", { name: "Skills" });
@@ -154,7 +154,7 @@ test("[TC-UX-1098-02] Not now closes the offer until the repository holds a new 
 });
 
 // covers ADR 029 (Scopes), STD-REACT-015, #1098
-test("[TC-UX-1098-03] a repository list that cannot be read says so, with Try again, on the overview and in From a project", async ({
+test("a repository list that cannot be read says so, with Try again, on the overview and in From a project (#1098)", async ({
   page,
 }) => {
   const { url } = await hubWithRepository();

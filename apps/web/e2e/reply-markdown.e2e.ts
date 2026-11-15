@@ -126,8 +126,7 @@ const watchStream = async (reply: ReturnType<Page["locator"]>) => {
   return { raw: [...raw], formattedWhileWriting };
 };
 
-// covers CH-004
-test("[TC-CH-130] a reply's headings, lists, tables and code show formatted while it streams and after a reload", async ({
+test("a reply's headings, lists, tables and code show formatted while it streams and after a reload", async ({
   page,
   context,
 }) => {
@@ -152,8 +151,7 @@ test("[TC-CH-130] a reply's headings, lists, tables and code show formatted whil
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('const greeting = "hello";');
 });
 
-// covers CH-004
-test("[TC-CH-181] HTML in a reply shows as text and never runs", async ({ page }) => {
+test("HTML in a reply shows as text and never runs", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(
@@ -172,8 +170,7 @@ test("[TC-CH-181] HTML in a reply shows as text and never runs", async ({ page }
   expect(await page.evaluate(() => (window as { hobbotsRan?: boolean }).hobbotsRan)).toBeUndefined();
 });
 
-// covers CH-004
-test("[TC-CH-182] a reply's links show where they go and its images load only when asked", async ({ page }) => {
+test("a reply's links show where they go and its images load only when asked", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(

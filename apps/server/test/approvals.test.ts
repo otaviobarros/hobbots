@@ -169,8 +169,7 @@ const run = <A, E>(
 ) => effect.pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
 describe("Ask decisions", () => {
-  // covers PE-003
-  it("[TC-PE-060] pauses the turn on an Ask action until the user approves it, then runs it", async () => {
+  it("pauses the turn on an Ask action until the user approves it, then runs it", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -217,8 +216,7 @@ describe("Ask decisions", () => {
     expect(steps.at(-1)).toMatchObject({ id: "fake-tool-1", label: "Running git push origin feature", state: "done" });
   });
 
-  // covers PE-007
-  it("[TC-PE-077] approves a high-risk push only with the user's confirmation", async () => {
+  it("approves a high-risk push only with the user's confirmation", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -249,8 +247,7 @@ describe("Ask decisions", () => {
     expect(result.done.steps.at(-1)).toMatchObject({ state: "done" });
   });
 
-  // covers PE-003, PE-007
-  it("[TC-PE-061] runs the action once when it is approved twice", async () => {
+  it("runs the action once when it is approved twice", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -282,8 +279,7 @@ describe("Ask decisions", () => {
     expect(states.filter((state) => state === "running").length).toBeLessThanOrEqual(1);
   });
 
-  // covers PE-003
-  it("[TC-PE-062] denies with the user's reason, which goes back to the hob, and refuses a later approval", async () => {
+  it("denies with the user's reason, which goes back to the hob, and refuses a later approval", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -321,8 +317,7 @@ describe("Ask decisions", () => {
     expect(Exit.isFailure(result.unknown) && JSON.stringify(result.unknown.cause)).toContain("ApprovalNotFound");
   });
 
-  // covers PE-007
-  it("[TC-PE-063] expires the request when the reply is stopped, so it cannot be approved late", async () => {
+  it("expires the request when the reply is stopped, so it cannot be approved late", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -345,8 +340,7 @@ describe("Ask decisions", () => {
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("expired");
   });
 
-  // covers PE-003, CH-009
-  it("[TC-CH-146] refuses to archive a thread while its approval waits, and archives it once decided", async () => {
+  it("refuses to archive a thread while its approval waits, and archives it once decided", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -366,8 +360,7 @@ describe("Ask decisions", () => {
     expect(result.archived.archivedAt).not.toBeNull();
   });
 
-  // covers PE-007, AG-006
-  it("[TC-PE-072] expires the request when its hob retires, even with its reply left to finish", async () => {
+  it("expires the request when its hob retires, even with its reply left to finish", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -390,8 +383,7 @@ describe("Ask decisions", () => {
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("ApprovalClosed");
   });
 
-  // covers PE-003
-  it("[TC-PE-064] refuses a decision for another action than the one shown", async () => {
+  it("refuses a decision for another action than the one shown", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -411,8 +403,7 @@ describe("Ask decisions", () => {
     expect(result.still?.state).toBe("pending");
   });
 
-  // covers PE-008
-  it("[TC-PE-065] asks again when the policy changes before an approved action runs", async () => {
+  it("asks again when the policy changes before an approved action runs", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -435,8 +426,7 @@ describe("Ask decisions", () => {
     expect(result.done.status).toBe("complete");
   });
 
-  // covers PE-003
-  it("[TC-PE-073] wakes the waiting turn even when the decision's request is cancelled while it is stored", async () => {
+  it("wakes the waiting turn even when the decision's request is cancelled while it is stored", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -500,8 +490,7 @@ describe("Ask decisions", () => {
     expect(result.retried.state).toBe("approved");
   });
 
-  // covers PE-007
-  it("[TC-PE-066] expires requests left pending when the server restarts", async () => {
+  it("expires requests left pending when the server restarts", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -544,8 +533,7 @@ describe("Ask decisions", () => {
     expect(result.after[0]?.decidedAt).not.toBeNull();
   });
 
-  // covers PE-007
-  it("[TC-PE-262] a request expires a day after it was asked, however late its turn starts waiting", async () => {
+  it("a request expires a day after it was asked, however late its turn starts waiting", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);

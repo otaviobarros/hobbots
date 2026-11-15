@@ -111,8 +111,8 @@ const changesOf = (attemptId: AttemptId) =>
   );
 
 describe("changes when two turns' tool calls interleave in one folder", () => {
-  // covers UX-002, ADR 023
-  it("[TC-RT-110] a file another turn edited before a command ran is still the command's when the command changes it", async () => {
+  // covers ADR 023
+  it("a file another turn edited before a command ran is still the command's when the command changes it (#595)", async () => {
     const { run: inHub, folder, one, two } = await twoAttempts();
     const changes = await inHub(
       Effect.gen(function* () {
@@ -136,8 +136,8 @@ describe("changes when two turns' tool calls interleave in one folder", () => {
     expect(changes.b.map(({ path }) => path)).toEqual(["x.txt"]);
   }, 30_000);
 
-  // covers UX-002, ADR 023
-  it("[TC-RT-111] a file another turn's file tool edits while a command runs is not the command's", async () => {
+  // covers ADR 023
+  it("a file another turn's file tool edits while a command runs is not the command's (#595)", async () => {
     const { run: inHub, folder, one, two } = await twoAttempts();
     const changes = await inHub(
       Effect.gen(function* () {
@@ -160,8 +160,8 @@ describe("changes when two turns' tool calls interleave in one folder", () => {
     expect(changes.b).toEqual([{ path: "b.txt", sharedWith: [] }]);
   }, 30_000);
 
-  // covers UX-002, ADR 023
-  it("[TC-RT-112] a file that two running commands may each have made is labeled shared, even when one turn settles first", async () => {
+  // covers ADR 023
+  it("a file that two running commands may each have made is labeled shared, even when one turn settles first (#595)", async () => {
     const { run: inHub, folder, one, two } = await twoAttempts();
     const changes = await inHub(
       Effect.gen(function* () {
@@ -192,8 +192,8 @@ describe("changes when two turns' tool calls interleave in one folder", () => {
     ]);
   }, 30_000);
 
-  // covers UX-002, ADR 023
-  it("[TC-RT-113] a file another turn's file tool was writing when that turn ended without its result is not a command's", async () => {
+  // covers ADR 023
+  it("a file another turn's file tool was writing when that turn ended without its result is not a command's (#595)", async () => {
     const { run: inHub, folder, one, two } = await twoAttempts();
     const changes = await inHub(
       Effect.gen(function* () {
@@ -214,8 +214,8 @@ describe("changes when two turns' tool calls interleave in one folder", () => {
     expect(changes.b).toEqual([{ path: "x.txt", sharedWith: [] }]);
   }, 30_000);
 
-  // covers UX-002, ADR 023
-  it("[TC-RT-114] a file lost with its runtime, while a command runs beside it, is not the command's", async () => {
+  // covers ADR 023
+  it("a file lost with its runtime, while a command runs beside it, is not the command's (#595)", async () => {
     const { run: inHub, folder, one, two } = await twoAttempts();
     const changes = await inHub(
       Effect.gen(function* () {
@@ -236,8 +236,8 @@ describe("changes when two turns' tool calls interleave in one folder", () => {
     expect(changes.b).toEqual([{ path: "x.txt", sharedWith: [] }]);
   }, 30_000);
 
-  // covers UX-002, ADR 023
-  it("[TC-RT-115] a file is labeled shared only with a turn whose folders hold it", async () => {
+  // covers ADR 023
+  it("a file is labeled shared only with a turn whose folders hold it (#595)", async () => {
     const { run: inHub, folder, one, two } = await twoAttempts();
     const p = join(folder, "p");
     const q = join(folder, "q");

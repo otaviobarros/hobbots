@@ -103,8 +103,7 @@ const escapes = (h: Home): ReadonlyArray<readonly [string, PolicyRequest]> => [
 ];
 
 describe("policy engine", () => {
-  // covers PE-001, PE-002, AG-004
-  it("[TC-PE-001] answers each operation as ADR 014's table does, for every preset", async () => {
+  it("answers each operation as ADR 014's table does, for every preset", async () => {
     for (const [i, preset] of SafetyPreset.literals.entries()) {
       expect(PRESET_DECISIONS[preset]).toEqual(
         Object.fromEntries(PolicyOperation.literals.map((op) => [op, ADR_014[op][i]])),
@@ -123,9 +122,8 @@ describe("policy engine", () => {
     }
   });
 
-  // covers PE-002, AG-004
   // 90 real path checks against the filesystem; on a busy two-core CI runner they take longer than the 5 s default.
-  it("[TC-PE-002] refuses escapes through `..`, symlinks and the data folder under every preset", {
+  it("refuses escapes through `..`, symlinks and the data folder under every preset", {
     timeout: 30_000,
   }, async () => {
     for (const preset of SafetyPreset.literals) {
@@ -144,8 +142,7 @@ describe("policy engine", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-003] never reads a file outside the hob's folders, whatever widening is attempted", async () => {
+  it("never reads a file outside the hob's folders, whatever widening is attempted", async () => {
     const widening = { "outside-folders": "allow", "read-files": "allow" } as const;
     for (const preset of SafetyPreset.literals) {
       const context = contextFor(home, preset, {
@@ -177,7 +174,7 @@ describe("policy engine", () => {
     expect(none).toMatchObject({ decision: "deny", reason: { code: "no-target" } });
   });
 
-  it("[#209] refuses a folder a command line moved to unknowably, and relative paths against it", async () => {
+  it("refuses a folder a command line moved to unknowably, and relative paths against it (#209)", async () => {
     const trusting = contextFor(home, "trusting");
     const command = await decide(trusting, { _tag: "Command", operation: "run-commands", cwd: 'cd "$DIR"' });
     expect(command).toMatchObject({ decision: "deny", reason: { code: "unresolvable-path" } });
@@ -276,8 +273,7 @@ describe("policy engine", () => {
     });
   });
 
-  // covers DP-004, PE-001
-  it("[TC-PE-170] never reaches the hub's own tailnet addresses or MagicDNS name, by name or by address", async () => {
+  it("never reaches the hub's own tailnet addresses or MagicDNS name, by name or by address", async () => {
     const hubOnTailnet = PolicyEngine.node.pipe(
       Layer.provide(
         Layer.succeed(HubHosts, {
@@ -402,8 +398,7 @@ describe("policy engine", () => {
     expect((await decide(noSandbox, requests(home).push)).enforcement).toBe("enforced");
   });
 
-  // covers PE-002
-  it("[TC-PE-004] keeps Git hooks and config read-only wherever the folder starts and wherever hooks link", async () => {
+  it("keeps Git hooks and config read-only wherever the folder starts and wherever hooks link", async () => {
     const context = contextFor(home, "trusting", { sharedFolders: [home.repo, path.join(home.repo, ".git")] });
     const insideGit = contextFor(home, "balanced", {
       sharedFolders: [path.join(home.repo, ".git"), path.join(home.repo, "custom-hooks")],
@@ -429,8 +424,7 @@ describe("policy engine", () => {
     expect((await decide(context, files("edit-files", home.repo, "docs/readme.md"))).decision).toBe("allow");
   });
 
-  // covers PE-002
-  it("[TC-PE-007] keeps Git hooks read-only when they link into another approved folder", async () => {
+  it("keeps Git hooks read-only when they link into another approved folder", async () => {
     const outer = path.join(home.root, "linked-repo");
     const nested = path.join(outer, "packages", "nested");
     const other = path.join(home.root, "other");
@@ -497,8 +491,7 @@ describe("policy engine", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-010] notices a nested repository even when its folder's modification time is set back", async () => {
+  it("notices a nested repository even when its folder's modification time is set back", async () => {
     const outer = path.join(home.root, "restored-repo");
     const nested = path.join(outer, "vendor", "lib");
     const other = path.join(home.root, "restored-other");
@@ -523,8 +516,7 @@ describe("policy engine", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-011] never answers from a repository index another decision is still refreshing", async () => {
+  it("never answers from a repository index another decision is still refreshing", async () => {
     const outer = path.join(home.root, "racing-repo");
     const other = path.join(home.root, "racing-other");
     await fs.mkdir(path.join(outer, ".git"), { recursive: true });
@@ -576,8 +568,7 @@ describe("policy engine", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-008] keeps single-file changes open in folders too large to search, and asks instead of guessing", async () => {
+  it("keeps single-file changes open in folders too large to search, and asks instead of guessing", async () => {
     const big = path.join(home.root, "big");
     const bigRepo = path.join(home.root, "big-repo");
     await fs.mkdir(path.join(big, "docs"), { recursive: true });
@@ -613,8 +604,7 @@ describe("policy engine", () => {
     expect((await decide(context("trusting"), files("edit-files", big, "file-1.txt"))).decision).toBe("allow");
   });
 
-  // covers PE-002
-  it("[TC-PE-009] keeps the files a hook links to read-only", async () => {
+  it("keeps the files a hook links to read-only", async () => {
     const repo = path.join(home.root, "hooked-repo");
     await fs.mkdir(path.join(repo, ".git", "hooks"), { recursive: true });
     await fs.mkdir(path.join(repo, "scripts"));
@@ -629,8 +619,7 @@ describe("policy engine", () => {
     expect((await decide(context, files("edit-files", repo, "scripts/build.sh"))).decision).toBe("allow");
   });
 
-  // covers PE-002
-  it("[TC-PE-005] refuses changing a folder that holds the data folder or a repository's hooks and config", async () => {
+  it("refuses changing a folder that holds the data folder or a repository's hooks and config", async () => {
     const context = contextFor(home, "trusting", { sharedFolders: [home.project, home.repo] });
     for (const [cwd, target, code] of [
       [home.project, ".", "data-folder"],
@@ -658,7 +647,7 @@ describe("policy engine", () => {
 describe("GitHub reads", () => {
   const read = (folder: string): PolicyRequest => githubRead(folder);
 
-  it("[TC-PE-130] reads a repository only from the hob's own folders, and never under Ask or Never", async () => {
+  it("reads a repository only from the hob's own folders, and never under Ask or Never", async () => {
     const allowed = await decide(contextFor(home, "careful"), read(home.project));
     expect(allowed).toMatchObject({
       decision: "allow",
@@ -696,7 +685,7 @@ describe("GitHub reads", () => {
 
 describe("the hob directory", () => {
   // covers ADR 032 (Read other hobs, in the policy)
-  it("[TC-PE-1234-02] decides read_hob on the hob's answers alone, and an Ask is answered once only, never by a rule", async () => {
+  it("decides read_hob on the hob's answers alone, and an Ask is answered once only, never by a rule (#1234)", async () => {
     const request: PolicyRequest = { _tag: "Directory", operation: "read-hobs", hob: "Pip" };
     expect(await decide(contextFor(home, "careful"), request)).toMatchObject({
       decision: "allow",
@@ -719,7 +708,7 @@ describe("the hob directory", () => {
 
 describe("searching the web", () => {
   // covers ADR 036 (Search the web, in the policy)
-  it("[TC-PE-1266-01] decides a search on the hob's answers alone, Allow or Never, with an Ask refusing it", async () => {
+  it("decides a search on the hob's answers alone, Allow or Never, with an Ask refusing it (#1266)", async () => {
     const request: PolicyRequest = { _tag: "Search", operation: "search-web", query: "effect 4 release" };
     for (const preset of ["careful", "balanced", "trusting"] as const) {
       expect(await decide(contextFor(home, preset), request)).toMatchObject({

@@ -154,8 +154,7 @@ const refusal = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const tags = (entries: ReadonlyArray<EventEnvelope>) => entries.map((entry) => entry.type);
 
 describe("a Quest's acceptance criteria", () => {
-  // covers OR-004, OR-006, DP-003
-  it("[TC-DP-1445-04] holds the Quest open until each required one is accepted on evidence, and a newer version voids it", async () => {
+  it("holds the Quest open until each required one is accepted on evidence, and a newer version voids it (#1445)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -249,8 +248,7 @@ describe("a Quest's acceptance criteria", () => {
     expect(result.after[0]).toBe("quest-ended");
   });
 
-  // covers OR-004
-  it("[TC-DP-1445-05] waives a required criterion only on your answer to the question it asks you, and completes the Quest once you do", async () => {
+  it("waives a required criterion only on your answer to the question it asks you, and completes the Quest once you do (#1445)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -318,8 +316,7 @@ describe("a Quest's acceptance criteria", () => {
     expect(tags(result.done.entries)).toContain("QuestCompleted");
   });
 
-  // covers OR-004, OR-006, DP-003
-  it("[TC-DP-1445-07] refuses a completion whose own artifacts void the evidence a criterion was accepted on, and changes nothing", async () => {
+  it("refuses a completion whose own artifacts void the evidence a criterion was accepted on, and changes nothing (#1445)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -360,8 +357,7 @@ describe("a Quest's acceptance criteria", () => {
     expect(tags(result.done.entries)).toContain("QuestCompleted");
   });
 
-  // covers DP-003
-  it("[TC-DP-1445-06] gives every Quest stored before one required criterion per line of its acceptance", async () => {
+  it("gives every Quest stored before one required criterion per line of its acceptance (#1445)", async () => {
     const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0113")) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();

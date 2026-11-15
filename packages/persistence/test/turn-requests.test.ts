@@ -132,7 +132,7 @@ const speak = (next: TurnRequest, replyId: string) =>
 
 describe("turn requests as records", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1461-01] writes one waiting request per hob owed, in mention order, with the message", async () => {
+  it("writes one waiting request per hob owed, in mention order, with the message (#1461)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -164,7 +164,7 @@ describe("turn requests as records", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1461-02] takes the floor with the turn's reply, or neither, and drops what a removed message was owed", async () => {
+  it("takes the floor with the turn's reply, or neither, and drops what a removed message was owed (#1461)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -202,7 +202,7 @@ const pipSaid = (threadId: ThreadId, id: string, content: string, status: Messag
 
 describe("relays owed while a turn ends", () => {
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-PE-1463-01] Stop all picked before the turn ended still drops the relay its reply wrote", async () => {
+  it("Stop all picked before the turn ended still drops the relay its reply wrote (#1463)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -231,7 +231,7 @@ describe("relays owed while a turn ends", () => {
   });
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-PE-1463-02] writes a reply's relays as it is saved complete, so a restart before its turn ends keeps them, once", async () => {
+  it("writes a reply's relays as it is saved complete, so a restart before its turn ends keeps them, once (#1463)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -267,7 +267,7 @@ describe("relays owed while a turn ends", () => {
   });
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-PE-1463-03] a reply you asked to stop relays nothing when it completes, even with no request to drop", async () => {
+  it("a reply you asked to stop relays nothing when it completes, even with no request to drop (#1463)", async () => {
     const camp = ThreadId.make("camp");
     const result = await run(
       Effect.gen(function* () {
@@ -288,7 +288,7 @@ describe("relays owed while a turn ends", () => {
 
 describe("recording the answers already owed", () => {
   // covers ADR 039 (One hob speaks at a time, Restart)
-  it("[TC-PE-1461-04] gives each message still queued a waiting request for its thread's hob, in queue order", async () => {
+  it("gives each message still queued a waiting request for its thread's hob, in queue order (#1461)", async () => {
     const chat = ThreadId.make("chat");
     const result = await run(
       Effect.gen(function* () {
@@ -312,7 +312,7 @@ describe("recording the answers already owed", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-PE-1461-05] refuses a request state or cause outside the domain's, on insert and on update", async () => {
+  it("refuses a request state or cause outside the domain's, on insert and on update (#1461)", async () => {
     // A new state or cause needs a migration of its own.
     expect(TURN_REQUEST_STATES).toEqual(TurnRequestState.literals);
     expect(TURN_CAUSES).toEqual(TurnCause.literals);
@@ -487,7 +487,7 @@ const recordStep = (camp: ThreadId, op: Op, n: number) =>
 
 describe("the floor's queue on the records", () => {
   // covers ADR 039 (One hob speaks at a time, Restart)
-  it("[TC-PE-1461-03] agrees with a model of the floor across three hobs, whatever sends, stops, removals and restarts do", async () => {
+  it("agrees with a model of the floor across three hobs, whatever sends, stops, removals and restarts do (#1461)", async () => {
     let camps = 0;
     await run(
       Effect.gen(function* () {

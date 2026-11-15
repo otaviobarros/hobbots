@@ -110,8 +110,7 @@ const ROWS = [
 ] as const;
 
 describe("0046_state_checks", () => {
-  // covers DP-003
-  it("[TC-DP-221] lists every state the domain has, so a new state needs a migration of its own", () => {
+  it("lists every state the domain has, so a new state needs a migration of its own", () => {
     // 0110 let a Quest be stopping and stopped (#1346), and 20261114004439 let a Task and a Quest be paused (#1446).
     expect({ ...STATES, tasks: TASK_STATES, quests: QUEST_STATES }).toEqual({
       tasks: TaskState.literals,
@@ -121,8 +120,7 @@ describe("0046_state_checks", () => {
     });
   });
 
-  // covers DP-003, OR-004
-  it("[TC-DP-222] refuses a state outside the domain's in each state column, and takes every one inside it", async () => {
+  it("refuses a state outside the domain's in each state column, and takes every one inside it", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed();
@@ -155,8 +153,7 @@ describe("0046_state_checks", () => {
     expect(result.inserted).toBe(false);
   });
 
-  // covers DP-003
-  it("[TC-DP-223] stops on a stored row whose state is unknown, naming it", async () => {
+  it("stops on a stored row whose state is unknown, naming it", async () => {
     const exit = await Effect.gen(function* () {
       yield* seed("paused");
       return yield* stateChecks;

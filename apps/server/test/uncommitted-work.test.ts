@@ -189,8 +189,7 @@ const checkpoints = Effect.gen(function* () {
 });
 
 describe("Completing a Task that changed a Git repository", () => {
-  // covers OR-004
-  it("[TC-OR-284] still completes, warns its hob and keeps the files it left uncommitted, named by repository", async () => {
+  it("still completes, warns its hob and keeps the files it left uncommitted, named by repository", async () => {
     const site = repository();
     // The spec is edited after the commit, a new note is never added, and the readme is committed again.
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nWrapped up.\n");
@@ -219,8 +218,8 @@ describe("Completing a Task that changed a Git repository", () => {
     });
   });
 
-  // covers OR-004 (#665)
-  it("[TC-OR-461] holds the Quest's top Task once on files it left uncommitted, and completes when its lead says why", async () => {
+  // Issue #665
+  it("holds the Quest's top Task once on files it left uncommitted, and completes when its lead says why (#665)", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
     // One turn of the fake runtime: the lead completes, is told which file, and leaves it on purpose.
@@ -266,8 +265,8 @@ describe("Completing a Task that changed a Git repository", () => {
     ]);
   });
 
-  // covers OR-004 (#665)
-  it("[TC-OR-463] keeps holding the Quest's top Task on a file an earlier Attempt left, after a brain or configuration change", async () => {
+  // Issue #665
+  it("keeps holding the Quest's top Task on a file an earlier Attempt left, after a brain or configuration change (#665)", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
     const result = await run(
@@ -313,8 +312,7 @@ describe("Completing a Task that changed a Git repository", () => {
     ]);
   });
 
-  // covers OR-004
-  it("[TC-OR-285] says nothing more when everything it changed is committed, or it changed no repository", async () => {
+  it("says nothing more when everything it changed is committed, or it changed no repository", async () => {
     const site = repository();
     writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nWrapped up.\n");
     gitIn(site, "commit", "-q", "-am", "Spec");

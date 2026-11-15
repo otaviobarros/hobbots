@@ -76,8 +76,7 @@ const finishedTask = async (page: Page) => {
   return { files: bench.getByRole("tabpanel", { name: /^Files/ }), folder };
 };
 
-// covers UX-002
-test("[TC-UX-040] a finished Task's Files tab lists what it made first, previews it, and downloads it in a browser", async ({
+test("a finished Task's Files tab lists what it made first, previews it, and downloads it in a browser", async ({
   page,
 }) => {
   const { files } = await finishedTask(page);
@@ -109,8 +108,7 @@ test("[TC-UX-040] a finished Task's Files tab lists what it made first, previews
   await expect(report.getByRole("button", { name: /Show .* in Finder/ })).toHaveCount(0);
 });
 
-// covers UX-002
-test("[TC-UX-041] the Files tab previews images, PDF and text, with each kind and size", async ({ page }) => {
+test("the Files tab previews images, PDF and text, with each kind and size", async ({ page }) => {
   const { files } = await finishedTask(page);
   const list = files.getByRole("navigation", { name: "Files the hobs made or changed" });
 
@@ -135,8 +133,7 @@ test("[TC-UX-041] the Files tab previews images, PDF and text, with each kind an
   await expect(sales).toContainText("Text · 16 byte");
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-042] a file changed or deleted since the Task says so, one no longer there offers no download, and a preview left open shows each new version", async ({
+test("a file changed or deleted since the Task says so, one no longer there offers no download, and a preview left open shows each new version", async ({
   page,
 }) => {
   const { files, folder } = await finishedTask(page);
@@ -176,8 +173,7 @@ test("[TC-UX-042] a file changed or deleted since the Task says so, one no longe
   }
 });
 
-// covers PE-005
-test("[TC-UX-043] a file whose name marks it as secret is listed but never shown or downloaded", async ({ page }) => {
+test("a file whose name marks it as secret is listed but never shown or downloaded", async ({ page }) => {
   const { files } = await finishedTask(page);
   await files.getByRole("button", { name: /^\.env/ }).click();
   const env = files.getByRole("region", { name: ".env" });
@@ -186,8 +182,7 @@ test("[TC-UX-043] a file whose name marks it as secret is listed but never shown
   await expect(env.getByRole("link", { name: /Download/ })).toHaveCount(0);
 });
 
-// covers UX-002
-test("[TC-UX-044] in the desktop app a file shows in Finder instead of downloading, and says when Finder cannot find it", async ({
+test("in the desktop app a file shows in Finder instead of downloading, and says when Finder cannot find it", async ({
   page,
 }) => {
   // The desktop app's bridge, as its preload script gives it to the page: here it records each call.

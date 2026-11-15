@@ -47,8 +47,7 @@ const partyHub = async (dataDir: string) => {
   return { hub: started, aldric: String(ids.Aldric) };
 };
 
-// covers OP-003
-test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data folder is deleted", async ({
+test("backs up from Settings, and Welcome restores it after the data folder is deleted", { tag: "@smoke" }, async ({
   page,
   context,
 }) => {

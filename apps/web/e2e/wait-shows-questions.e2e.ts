@@ -51,8 +51,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers OR-002, OR-003, IN-002, IN-004
-test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and is answered, never held in its backpack", async ({
+test("a question from a Task the lead waits for reaches the lead and is answered, never held in its backpack (#573)", async ({
   page,
 }) => {
   test.setTimeout(120_000);

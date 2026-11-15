@@ -51,8 +51,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers PE-006, OR-002
-test("[TC-IN-062] a party member's request waits in the Inbox under its lead's thread, opens that chat, and Allow once lets the member go on", async ({
+test("a party member's request waits in the Inbox under its lead's thread, opens that chat, and Allow once lets the member go on (#273)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -122,8 +121,7 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
 
 // Issue #698: Nettle's delete waited five minutes in the Inbox while his Task read active and
 // nothing in the Quest said why. The hub-level side is apps/server/test/member-approvals.test.ts.
-// covers PE-003, PE-006, OR-002, UX-002
-test("[TC-PE-445] a party member's request shows in the chat's tray and on the quest sheet, Allow once in the tray lets the member finish, and the Inbox shows it settled", async ({
+test("a party member's request shows in the chat's tray and on the quest sheet, Allow once in the tray lets the member finish, and the Inbox shows it settled (#698)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

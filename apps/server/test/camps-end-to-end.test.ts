@@ -152,8 +152,7 @@ const exchange = async (thread: Thread, content: string) => {
 };
 
 describe("camps and Start fresh over the API", () => {
-  // covers CH-009
-  it("[TC-CH-1376-07] makes a camp and starts a chat fresh once per key, and refuses what does not fit", async () => {
+  it("makes a camp and starts a chat fresh once per key, and refuses what does not fit (#1376)", async () => {
     const { pip, thread } = await pipWithThread();
     await exchange(thread, "Plan the launch");
     const ask = { key: "camp-launch", title: "Launch post", goal: "Write the launch post", private: true };

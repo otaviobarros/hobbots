@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 // Slice 7's done-when checks as the user sees them, with the fake runtime, which decides each
-// scripted call with the hub's policy engine but runs nothing. Asking is `[TC-PE-074]`.
+// scripted call with the hub's policy engine but runs nothing. Asking is in approvals.e2e.ts.
 let hub: Hub | undefined;
 let dataDir = "";
 let shared = "";
@@ -64,8 +64,7 @@ const pipInShared = async () => {
   return { current, pip };
 };
 
-// covers PE-001, PE-002, PE-005
-test("[TC-PE-083] under Balanced Pip edits and runs tests without a card, and a read outside its folder is refused", async ({
+test("under Balanced Pip edits and runs tests without a card, and a read outside its folder is refused", async ({
   page,
 }) => {
   const { current, pip } = await pipInShared();
@@ -102,7 +101,7 @@ const askPip = async (page: Page, current: Hub, pipId: string, lines: ReadonlyAr
 };
 
 // covers #153, #168
-test("[#153] a tool step shows short output whole and long output by its start and end, with the full log", async ({
+test("a tool step shows short output whole and long output by its start and end, with the full log (#153)", async ({
   page,
 }) => {
   const { current, pip } = await pipInShared();
@@ -151,7 +150,7 @@ test("[#153] a tool step shows short output whole and long output by its start a
 });
 
 // covers #168
-test("[#168] a secret a command prints shows redacted in the step and in the full log", async ({ page }) => {
+test("a secret a command prints shows redacted in the step and in the full log (#168)", async ({ page }) => {
   const { current, pip } = await pipInShared();
   const token = `ghp_${"a1B2c3D4e5".repeat(4)}`;
   // Long enough to be cut, with the secret at both ends.
@@ -172,8 +171,7 @@ test("[#168] a secret a command prints shows redacted in the step and in the ful
   expect(text).not.toContain(token);
 });
 
-// covers PE-005, PE-006
-test("[TC-PE-446] a commit as another hob is refused as a step that says who Pip commits as, and the plain commit then runs", async ({
+test("a commit as another hob is refused as a step that says who Pip commits as, and the plain commit then runs", async ({
   page,
 }) => {
   const { current, pip } = await pipInShared();

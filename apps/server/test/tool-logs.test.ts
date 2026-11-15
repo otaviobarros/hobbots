@@ -22,7 +22,7 @@ describe("tool logs", () => {
     expect(await run(ToolLogs.use((logs) => logs.read(key)))).toEqual(Exit.succeed(Option.some("all\n")));
   });
 
-  it("[#153] never empties or reads a file a hard link at the log's name points to", async () => {
+  it("never empties or reads a file a hard link at the log's name points to (#153)", async () => {
     const [name] = readdirSync(folder);
     const target = join(temp, "personal.txt");
     writeFileSync(target, "Not for hobs.\n");

@@ -171,8 +171,7 @@ const dismiss = (request: ApprovalRequest, threadId: ThreadId) =>
   });
 
 describe("Standing grants", () => {
-  // covers PE-007, PE-008
-  it("[TC-PE-092] approving Always runs the next matching action without asking, until the rule is removed", async () => {
+  it("approving Always runs the next matching action without asking, until the rule is removed", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -259,8 +258,7 @@ describe("Standing grants", () => {
     expect(journaled.filter((type) => type.startsWith("Grant"))).toEqual(["GrantCreated", "GrantRevoked"]);
   });
 
-  // covers PE-007
-  it("[TC-PE-093] saves one grant for a doubled Always, and refuses lifetimes and rules the request does not offer", async () => {
+  it("saves one grant for a doubled Always, and refuses lifetimes and rules the request does not offer", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -342,8 +340,7 @@ describe("Standing grants", () => {
     expect(result.saved).toHaveLength(1);
   });
 
-  // covers PE-007, PE-008
-  it("[TC-PE-094] revokes the grants whose authority is taken away, and never brings them back", async () => {
+  it("revokes the grants whose authority is taken away, and never brings them back", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -390,7 +387,7 @@ describe("Standing grants", () => {
   });
 
   // covers ADR 022, PE-007
-  it("[TC-GEN-067] saves no grant from a request asked under the hob's other GitHub identity, and the next call asks again", async () => {
+  it("saves no grant from a request asked under the hob's other GitHub identity, and the next call asks again", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -440,8 +437,7 @@ describe("Standing grants", () => {
     expect(result.live).toHaveLength(1);
   });
 
-  // covers PE-007
-  it("[TC-PE-095] revokes every grant of a hob that retires", async () => {
+  it("revokes every grant of a hob that retires", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -466,8 +462,7 @@ describe("Standing grants", () => {
     expect(result.after[0]).toMatchObject({ revokedBy: "hub", revokeReason: "retired" });
   });
 
-  // covers PE-008
-  it("[TC-PE-100] finishes stopping the hob's turns after a saved removal, even when the request is cancelled", async () => {
+  it("finishes stopping the hob's turns after a saved removal, even when the request is cancelled", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -522,8 +517,7 @@ describe("Standing grants", () => {
     expect(isInProgress(result.stopped.status)).toBe(false);
   });
 
-  // covers PE-007
-  it("[TC-PE-097] asks again for a push that also updates another branch, and offers no rule after a folder change", async () => {
+  it("asks again for a push that also updates another branch, and offers no rule after a folder change", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -561,8 +555,7 @@ describe("Standing grants", () => {
     expect(result.pattern.pending).toMatchObject({ operation: "push", onceOnly: true, grantable: false });
   });
 
-  // covers PE-007, PE-008
-  it("[TC-PE-098] saves no grant once the authority it relies on is narrowed, even while the request waits", async () => {
+  it("saves no grant once the authority it relies on is narrowed, even while the request waits", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {

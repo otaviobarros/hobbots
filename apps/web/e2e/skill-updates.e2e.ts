@@ -80,7 +80,7 @@ const hubWithGitSkill = async () => {
 };
 
 // covers ADR 029 (Updates from a source), #1097
-test("[TC-UX-1097] Skills › Updates: check, review the diff, update, update automatically with Roll back, and a script that waits", async ({
+test("Skills › Updates: check, review the diff, update, update automatically with Roll back, and a script that waits (#1097)", async ({
   page,
 }) => {
   const { url, upstream, skillId } = await hubWithGitSkill();
@@ -147,7 +147,7 @@ test("[TC-UX-1097] Skills › Updates: check, review the diff, update, update au
 });
 
 // covers ADR 029 (Updates from a source), #1097
-test("[TC-UX-1097-02] a SKILL.md too long to review whole says so, and Update waits until you say you read it", async ({
+test("a SKILL.md too long to review whole says so, and Update waits until you say you read it (#1097)", async ({
   page,
 }) => {
   const { url, upstream } = await hubWithGitSkill();

@@ -50,8 +50,7 @@ const hubWithHobs = async (count: number) => {
   return { url: hub.url, ids, api };
 };
 
-// covers UX-001
-test("[TC-UX-001] with 20 hobs the scene shows five and the hall door opens Your hobs", async ({ page }) => {
+test("with 20 hobs the scene shows five and the hall door opens Your hobs", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);
 
@@ -67,8 +66,7 @@ test("[TC-UX-001] with 20 hobs the scene shows five and the hall door opens Your
   await expect(page.getByRole("main", { name: "Your hobs" })).toBeVisible();
 });
 
-// covers UX-001
-test("[TC-UX-161] at 960px with 24 hobs no hob on the stage covers the summary or Summon", async ({ page }) => {
+test("at 960px with 24 hobs no hob on the stage covers the summary or Summon", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 800 });
   const { url } = await hubWithHobs(24);
   await page.goto(url);
@@ -97,8 +95,7 @@ test("[TC-UX-161] at 960px with 24 hobs no hob on the stage covers the summary o
   await expect(page.getByRole("region", { name: "Happening now" })).toHaveCount(0);
 });
 
-// covers UX-001
-test("[TC-UX-004] the hall door opens Your hobs on the family a count chip picked", async ({ page }) => {
+test("the hall door opens Your hobs on the family a count chip picked", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
@@ -107,8 +104,7 @@ test("[TC-UX-004] the hall door opens Your hobs on the family a count chip picke
   await expect(page).toHaveURL(/#\/hobs\?show=resting$/);
 });
 
-// covers UX-001
-test("[TC-UX-005] with five or fewer hobs the Home scene shows each hob's sigil and role", async ({ page }) => {
+test("with five or fewer hobs the Home scene shows each hob's sigil and role", async ({ page }) => {
   const { url } = await hubWithHobs(5);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
@@ -121,8 +117,7 @@ test("[TC-UX-005] with five or fewer hobs the Home scene shows each hob's sigil 
   await expect(scene.getByRole("button", { name: /^Hob 1, Assistant,/ })).toBeVisible();
 });
 
-// covers UX-001
-test("[TC-UX-091] clicking a hob in the Home scene opens a peek whose Open chat starts its chat", async ({ page }) => {
+test("clicking a hob in the Home scene opens a peek whose Open chat starts its chat", async ({ page }) => {
   const { url, ids } = await hubWithHobs(3);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
@@ -145,8 +140,7 @@ test("[TC-UX-091] clicking a hob in the Home scene opens a peek whose Open chat 
   await expect(page).toHaveURL(new RegExp(`#/hobs/${ids["Hob 2"]}/chat$`));
 });
 
-// covers UX-001
-test("[TC-UX-002] ⌘K opens a hob's page from any page", async ({ page }) => {
+test("⌘K opens a hob's page from any page", async ({ page }) => {
   const { url, ids } = await hubWithHobs(20);
   await page.goto(`${url}/#/usage`);
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
@@ -161,8 +155,7 @@ test("[TC-UX-002] ⌘K opens a hob's page from any page", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Wick}$`));
 });
 
-// covers UX-001
-test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", async ({ page }) => {
+test("the finder keeps the hob chosen with the arrows in sight", async ({ page }) => {
   const { url } = await hubWithHobs(20);
   await page.goto(url);
   await expect(page.getByRole("region", { name: "Your hobs right now" })).toBeVisible();
@@ -192,8 +185,7 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}$`));
 });
 
-// covers UX-001, CH-002
-test("[TC-UX-092] Pick up where you left off lists a chat with its last line and opens it", async ({ page }) => {
+test("Pick up where you left off lists a chat with its last line and opens it", async ({ page }) => {
   const { url, ids, api } = await hubWithHobs(1);
   const hob = ids["Hob 1"] ?? "";
   const thread = await api("POST", `/agents/${hob}/threads`, {});

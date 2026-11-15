@@ -51,8 +51,7 @@ afterEach(() => {
 });
 
 describe("the hub's status in the window", () => {
-  // covers UX-002
-  it("[TC-UX-1374-01] keeps a status event that came while the snapshot was read, over the older snapshot", async () => {
+  it("keeps a status event that came while the snapshot was read, over the older snapshot (#1374)", async () => {
     const status = watched();
     await settled();
     applyStatusFrame(status.client, frame({ _tag: "ThreadRunChanged", run: run(5, "thinking") }));
@@ -63,7 +62,7 @@ describe("the hub's status in the window", () => {
     status.unsubscribe();
   });
 
-  it("[TC-UX-1374-02] drops what it held on a Ready and reads the snapshot again, since revisions start again", async () => {
+  it("drops what it held on a Ready and reads the snapshot again, since revisions start again (#1374)", async () => {
     const status = watched();
     await settled();
     pending[0]?.(

@@ -65,8 +65,7 @@ const expectReplies = (page: Page, expected: ReadonlyArray<string>) =>
     timeout: 15_000,
   });
 
-// covers CH-001, CH-008
-test("[TC-CH-011] messages sent during a reply queue and run in order, also after a restart", async ({ page }) => {
+test("messages sent during a reply queue and run in order, also after a restart", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
@@ -87,8 +86,7 @@ test("[TC-CH-011] messages sent during a reply queue and run in order, also afte
   await expectReplies(page, ["Echo: two", "Echo: three"]);
 });
 
-// covers CH-007, CH-008
-test("[TC-CH-012] a queued message can be removed, and Send now stops the reply and runs it next", async ({ page }) => {
+test("a queued message can be removed, and Send now stops the reply and runs it next", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pipId}/chat`);
@@ -109,8 +107,7 @@ test("[TC-CH-012] a queued message can be removed, and Send now stops the reply 
   await expect(page.getByRole("main").getByText("Echo: three")).toHaveCount(0);
 });
 
-// covers AG-006, CH-008
-test("[TC-CH-014] messages sent to a paused hob queue and run once it wakes", async ({ page }) => {
+test("messages sent to a paused hob queue and run once it wakes", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pipId}/chat`);

@@ -24,8 +24,7 @@ const api = async <T>(current: Hub, method: string, path: string, body?: unknown
   return (await response.json()) as T;
 };
 
-// covers AG-006
-test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which Settings › Your data leads to", async ({
+test("a retired hob's threads open read-only from the Archive, which Settings › Your data leads to", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -109,8 +108,7 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   await expect(page.getByRole("main").getByText("Echo: Plan my week", { exact: true })).toHaveCount(0);
 });
 
-// covers AG-006
-test("[TC-AG-062] Retired hobs says so when no hob has retired", async ({ page }) => {
+test("Retired hobs says so when no hob has retired", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
   await page.goto(`${hub.url}/#/archive?tab=hobs`);
@@ -119,10 +117,7 @@ test("[TC-AG-062] Retired hobs says so when no hob has retired", async ({ page }
   await expect(archive.getByRole("tab", { name: /Retired hobs/ })).toContainText("0");
 });
 
-// covers AG-006
-test("[TC-AG-116] a retired hob comes back from the Archive with its chats, and Undo retires it again", async ({
-  page,
-}) => {
+test("a retired hob comes back from the Archive with its chats, and Undo retires it again", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await api(current, "PATCH", "/setup", { completed: true });
@@ -176,8 +171,7 @@ test("[TC-AG-116] a retired hob comes back from the Archive with its chats, and 
   await expect(page.getByRole("main").getByText("Echo: Plan next week too", { exact: true })).toBeVisible();
 });
 
-// covers AG-006
-test("[TC-AG-117] Settings › Your data brings a retired hob back", async ({ page }) => {
+test("Settings › Your data brings a retired hob back", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await api(current, "PATCH", "/setup", { completed: true });

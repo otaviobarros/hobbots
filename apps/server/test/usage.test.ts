@@ -6,8 +6,7 @@ const now = DateTime.makeUnsafe("2026-11-02T18:00:00.000Z");
 const iso = (time: DateTime.Utc) => DateTime.formatIso(time);
 
 describe("the Usage report's period", () => {
-  // covers OP-002
-  it("[TC-OP-075] starts at the client's own midnight, else the rolling days before now", () => {
+  it("starts at the client's own midnight, else the rolling days before now", () => {
     // A reader at UTC-3 at 15:00 on November 2: its 7 days start at midnight on October 27, local.
     expect(iso(periodStart(now, 7, "2026-10-27T03:00:00.000Z"))).toBe("2026-10-27T03:00:00.000Z");
     // Across a clock change, the reader's 7 days can be an hour longer than 7 times 24 hours.

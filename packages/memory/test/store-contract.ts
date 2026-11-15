@@ -60,7 +60,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
 
   describe(`MemoryStore contract: ${name}`, () => {
     // covers ADR 028 (The MemoryStore service)
-    it("[TC-GEN-170] starts empty and answers on its first run", () =>
+    it("starts empty and answers on its first run", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.health;
@@ -72,7 +72,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (attribution), #954
-    it("[TC-GEN-171] keeps a hob's page, attributed to it, across a second run", () =>
+    it("keeps a hob's page, attributed to it, across a second run", () =>
       run(({ store, reopen }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/tests.md");
@@ -116,7 +116,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (MemoryConflict)
-    it("[TC-GEN-172] refuses a write that would overwrite a version it did not see", () =>
+    it("refuses a write that would overwrite a version it did not see", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const first = yield* store.write(asPip, pipsOwn, draft("notes/pr.md", "# PRs\n\nSmall."), fresh);
@@ -132,7 +132,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search scopes)
-    it("[TC-GEN-173] searches only the scopes it is given", () =>
+    it("searches only the scopes it is given", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(asPip, pipsOwn, draft("notes/deploy.md", "# Deploy\n\nPip deploys with fly."), fresh);
@@ -152,7 +152,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search), #1047
-    it("[TC-GEN-1047-01] finds a page by a question in plain words, a word start, a hyphenated name or a short common word", () =>
+    it("finds a page by a question in plain words, a word start, a hyphenated name or a short common word (#1047)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(
@@ -200,7 +200,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (memory_search), #1047
-    it("[TC-GEN-1047-02] finds a page by a question in another language, the words common to every page weighing least", () =>
+    it("finds a page by a question in another language, the words common to every page weighing least (#1047)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(
@@ -246,7 +246,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (the hub is the boundary), #954
-    it("[TC-GEN-174] never lets a hob touch another hob's memory or a project it does not work in, and leaves forget and restore to you", () =>
+    it("never lets a hob touch another hob's memory or a project it does not work in, and leaves forget and restore to you", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/secret.md");
@@ -270,7 +270,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Sharing), STD-DATA-001, #960
-    it("[TC-GEN-383] answers an earlier version's exact text from one whose text is held, lines in their order", () =>
+    it("answers an earlier version's exact text from one whose text is held, lines in their order", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("howtos/order.md");
@@ -304,7 +304,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (forget, restore)
-    it("[TC-GEN-175] restores an earlier version only while the page is as expected, and brings back a page it forgot", () =>
+    it("restores an earlier version only while the page is as expected, and brings back a page it forgot", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/style.md");
@@ -348,7 +348,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (forget, restore), #961
-    it("[TC-GEN-349] restores an earlier version line for line, with its blank and last lines", () =>
+    it("restores an earlier version line for line, with its blank and last lines", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/launch.md");
@@ -367,7 +367,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (forget, restore), #961
-    it("[TC-GEN-349] restores an earlier version line for line, with its blank and last lines", () =>
+    it("restores an earlier version line for line, with its blank and last lines", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/launch.md");
@@ -386,7 +386,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Browse)
-    it("[TC-GEN-176] lists pinned pages first, then the newest, up to a limit, and the pages changed since a time", () =>
+    it("lists pinned pages first, then the newest, up to a limit, and the pages changed since a time", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(asPip, pipsOwn, draft("notes/a.md", "# A"), fresh);
@@ -409,7 +409,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
 
     // covers ADR 028 (Backups), OP-002
     it(
-      "[TC-OP-103] names every page a scope holds as changed since the epoch, past the engine's longest answer",
+      "names every page a scope holds as changed since the epoch, past the engine's longest answer",
       () =>
         run(({ store }) =>
           Effect.gen(function* () {
@@ -428,7 +428,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
     );
 
     // covers ADR 028 (Backups), OP-002
-    it("[TC-OP-094] names the scopes that hold pages, within what the actor may reach", () =>
+    it("names the scopes that hold pages, within what the actor may reach", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           expect(yield* store.scopes(you)).toEqual([]);
@@ -445,7 +445,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Browse)
-    it("[TC-GEN-192] lists every pinned page first, also more than a search answers and older than the newest", () =>
+    it("lists every pinned page first, also more than a search answers and older than the newest", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const pins = Array.from({ length: 11 }, (_, at) => `pins/p${String(at).padStart(2, "0")}.md`);
@@ -469,7 +469,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
 
     // covers ADR 028 (Browse)
     it(
-      "[TC-GEN-193] keeps every version in a page's history, past the engine's longest answer",
+      "keeps every version in a page's history, past the engine's longest answer",
       () =>
         run(({ store }) =>
           Effect.gen(function* () {
@@ -486,7 +486,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
     );
 
     // covers ADR 028 (Browse), #958
-    it("[TC-GEN-230] answers what each version changed against the one it replaced, and nothing for a page it forgot", () =>
+    it("answers what each version changed against the one it replaced, and nothing for a page it forgot", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("howtos/preview.md");
@@ -525,7 +525,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Writes), #959
-    it("[TC-GEN-330] keeps a page's forget day until a write clears it, and leaves a page past it out of lists and search", () =>
+    it("keeps a page's forget day until a write clears it, and leaves a page past it out of lists and search", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/launch.md");
@@ -564,7 +564,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (attribution), #1317
-    it("[TC-GEN-1317-01] names who wrote every version in History: each hob, you, and your restores", () =>
+    it("names who wrote every version in History: each hob, you, and your restores (#1317)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("notes/release.md");
@@ -583,7 +583,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Writes), #959
-    it("[TC-GEN-331] restores a hob's version as a new version written by you, with its tags and pin", () =>
+    it("restores a hob's version as a new version written by you, with its tags and pin", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const path = MemoryPath.make("howtos/deploy.md");
@@ -618,7 +618,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Capture and summaries), #959
-    it("[TC-GEN-332] never rewrites a chat note you pinned when its thread's session ends again", () =>
+    it("never rewrites a chat note you pinned when its thread's session ends again", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f2");
@@ -648,7 +648,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Capture and summaries), #1316
-    it("[TC-GEN-1316-01] names a chat's page by its summary's title when it is read, as every list names it", () =>
+    it("names a chat's page by its summary's title when it is read, as every list names it (#1316)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f3");
@@ -683,7 +683,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (The MemoryStore service, Capture and summaries)
-    it("[TC-GEN-307] keeps a thread's capture in its hob's own memory, refusing any other scope", () =>
+    it("keeps a thread's capture in its hob's own memory, refusing any other scope", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f1");
@@ -703,7 +703,7 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Sharing), #960
-    it("[TC-GEN-372] checks a scope for pages that disagree or look out of date, changing nothing, for you alone", () =>
+    it("checks a scope for pages that disagree or look out of date, changing nothing, for you alone", () =>
       run(({ store }) =>
         Effect.gen(function* () {
           yield* store.write(you, theSite, draft("howtos/deploy.md", "# Deploy\n\nRun `pnpm deploy`."), fresh);

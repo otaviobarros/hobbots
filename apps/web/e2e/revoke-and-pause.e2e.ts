@@ -21,11 +21,7 @@ const setupDone = (current: Hub) =>
     body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
   });
 
-// covers DP-004
-test("[TC-DP-099] a browser revoked while it is open sees it was removed, and its cookie is gone", async ({
-  page,
-  context,
-}) => {
+test("a browser revoked while it is open sees it was removed, and its cookie is gone", async ({ page, context }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await setupDone(current);
@@ -56,10 +52,7 @@ const revokeBrowser = async (current: Hub) => {
   return fetch(`${current.url}/api/devices/${browser?.id}/revoke`, { method: "POST", headers: current.headers });
 };
 
-// covers DP-004
-test("[TC-DP-104] a browser revoked while closed sees it was removed on its first read, before any retry", async ({
-  page,
-}) => {
+test("a browser revoked while closed sees it was removed on its first read, before any retry", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await setupDone(current);
@@ -90,8 +83,7 @@ const onTailnet = (port: number) =>
     (error: Error & { cause?: { code?: string } }) => error.cause?.code ?? error.name,
   );
 
-// covers DP-004
-test("[TC-DP-100] Pause remote access leaves the tailnet while this computer keeps working, and Settings resumes it", async ({
+test("Pause remote access leaves the tailnet while this computer keeps working, and Settings resumes it", async ({
   page,
 }) => {
   test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");

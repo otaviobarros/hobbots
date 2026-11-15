@@ -83,8 +83,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
 
   let session = "";
 
-  // covers RT-001, AG-005
-  it("[TC-RT-029] answers, then resumes its thread in a new process with changed instructions", {
+  it("answers, then resumes its thread in a new process with changed instructions", {
     timeout: 60_000,
   }, async () => {
     model.moves.push({ say: "Hello there." });
@@ -135,9 +134,8 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
     expect(resumed).toContain("You are Pip, now loud.");
   });
 
-  // covers RT-001, EX-004
   // covers ADR 024
-  it("[TC-RT-743] reads the hob's Codex settings with apps, connectors, plugins and the browser off", {
+  it("reads the hob's Codex settings with apps, connectors, plugins and the browser off", {
     timeout: 60_000,
   }, async () => {
     model.moves.push({ say: "Hi." });
@@ -153,7 +151,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
     for (const feature of CLOSED_CODEX_FEATURES) expect([feature, state.get(feature)]).toEqual([feature, "false"]);
   });
 
-  it("[TC-RT-030] stops mid-turn once Codex acknowledges the interrupt, and the thread goes on", {
+  it("stops mid-turn once Codex acknowledges the interrupt, and the thread goes on", {
     timeout: 60_000,
   }, async () => {
     model.moves.push({ hang: true });
@@ -180,8 +178,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
     expect(Exit.isSuccess(after) ? after.value.at(-1) : after).toMatchObject({ _tag: "Completed", text: "Back." });
   });
 
-  // covers RT-001, EX-004
-  it("[TC-RT-031] ends a turn whose Codex was killed as uncertain", { timeout: 60_000 }, async () => {
+  it("ends a turn whose Codex was killed as uncertain", { timeout: 60_000 }, async () => {
     // Codex runs through a script that leaves its process ID behind, so the test can kill it.
     const pidFile = join(temp, "codex.pid");
     const wrapper = join(temp, "codex-wrapper");
@@ -206,8 +203,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
     );
     expect(exit).toEqual(Exit.fail(new RuntimeError({ message: LOST_TURN })));
   });
-  // covers OR-001, PE-003, EX-004
-  it("[TC-RT-083] serves hub tools as dynamic tools, and a resumed thread keeps the ones it started with", {
+  it("serves hub tools as dynamic tools, and a resumed thread keeps the ones it started with", {
     timeout: 60_000,
   }, async () => {
     const calls: Array<{ readonly name: string; readonly input: unknown; readonly step: string | undefined }> = [];
@@ -376,8 +372,8 @@ describe.runIf(sandboxed && outsideAddress !== undefined)("a turn on an installe
 
   const turn = (prompt: string, sessionId: string | null) => policyTurn(config, access, prompt, sessionId);
 
-  // covers PE-003, EX-004, PE-005, ADR 023, ADR 024
-  it("[TC-RT-068] holds a command for approval, runs it after Allow in the sandbox, and a rule it writes never skips the policy", {
+  // covers ADR 023, ADR 024
+  it("holds a command for approval, runs it after Allow in the sandbox, and a rule it writes never skips the policy", {
     timeout: 120_000,
   }, async () => {
     const { home } = codexFolders(runtimeFolder);
@@ -480,8 +476,8 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
     rmSync(root, { recursive: true, force: true });
   });
 
-  // covers PE-003, EX-004, ADR 023, ADR 024
-  it("[TC-RT-069] holds a command for approval, runs it after Allow, streams it to the Workbench, and records a patch", {
+  // covers ADR 023, ADR 024
+  it("holds a command for approval, runs it after Allow, streams it to the Workbench, and records a patch", {
     timeout: 60_000,
   }, async () => {
     model.moves.push(runs("c1", "printf ran; printf ' twice'"), adds("p1", "notes.txt", "hello"), { say: "Done." });
@@ -507,7 +503,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
   });
 
   // regression for #1082
-  it("[TC-RT-1082-04] tells the hob why a command was refused, beside the rejection in its next model request", {
+  it("tells the hob why a command was refused, beside the rejection in its next model request (#1082)", {
     timeout: 60_000,
   }, async () => {
     // The commit sets its own identity, which the hub refuses; told why, the hob commits without it.
@@ -531,7 +527,7 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex under the hob'
   });
 
   // regression for #1048
-  it("[TC-RT-1048-03] waits for a command that outlives Codex's turn, records how it really ended and tells the hob", {
+  it("waits for a command that outlives Codex's turn, records how it really ended and tells the hob (#1048)", {
     timeout: 60_000,
   }, async () => {
     // Codex answers the call once its wait ends while the command goes on, and the model replies.

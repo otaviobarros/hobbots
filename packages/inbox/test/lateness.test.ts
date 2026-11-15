@@ -88,8 +88,7 @@ describe("lateness", () => {
     });
   });
 
-  // covers OR-006
-  it("[TC-IN-140] finds an item late once a cancel was asked for the Task it is checked against", () => {
+  it("finds an item late once a cancel was asked for the Task it is checked against", () => {
     const tree = [task("campaign", ALDRIC, null, "cancelling", 9), task("copy", QUILL, "campaign", "cancelled", 8)];
     expect(lateness(item(ALDRIC, "copy"), tree)).toEqual({ taskRevision: 9 });
     expect(lateness(item(QUILL, "copy", "message"), tree)).toEqual({ taskRevision: 8 });
@@ -105,8 +104,7 @@ describe("the late work of a Task that is over", () => {
   // Quill's note waits under his Task, Rook's under his; Aldric waits for Quill's result.
   const work = [item(QUILL, "copy", "message"), item(ROOK, "ads", "message"), item(ALDRIC, "copy")];
 
-  // covers OR-006, EX-001
-  it("[TC-OR-185] takes only the cancelled Task's own late work, and leaves a failed sibling's for its retry", () => {
+  it("takes only the cancelled Task's own late work, and leaves a failed sibling's for its retry", () => {
     const tree = [
       task("campaign", ALDRIC, null),
       task("copy", QUILL, "campaign", "cancelled"),

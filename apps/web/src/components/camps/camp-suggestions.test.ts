@@ -35,7 +35,7 @@ const suggestion = (title: string | null, goal: string | null) =>
 
 describe("a camp made from a suggestion", () => {
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("[TC-CH-1557-13] prefills the name and goal the hub suggests, else the chapter's own title, never Chapter N", () => {
+  it("prefills the name and goal the hub suggests, else the chapter's own title, never Chapter N (#1557)", () => {
     const named = suggestedFrom(suggestion("Launch plan", "Ship it by Friday."), chapter(null));
     expect(named).toMatchObject({ title: "Chapter 1", name: "Launch plan", goal: "Ship it by Friday." });
     expect(startMakeCamp(named.name, true, named.goal).draft).toEqual({

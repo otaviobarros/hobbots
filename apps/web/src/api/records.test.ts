@@ -66,7 +66,7 @@ const watch = (client: QueryClient, key: ReadonlyArray<unknown>) => {
 };
 
 describe("record events", () => {
-  it("[TC-CH-1387-20] reads the thread's decisions, artifacts and brief again, cancelling a read on its way first", async () => {
+  it("reads the thread's decisions, artifacts and brief again, cancelling a read on its way first (#1387)", async () => {
     for (const [event, key] of [
       [{ _tag: "DecisionRecorded", decision } as const, recordKeys.decisions(threadId)],
       [{ _tag: "DecisionSuperseded", decision } as const, recordKeys.decisions(threadId)],
@@ -86,7 +86,7 @@ describe("record events", () => {
     }
   });
 
-  it("[TC-CH-1387-21] reads a thread's pins and camp suggestions again on their events", async () => {
+  it("reads a thread's pins and camp suggestions again on their events (#1387)", async () => {
     const pins = new QueryClient();
     const pinCalls = watch(pins, ["threads", threadId, "pins"]);
     await applyPinEvent(pins, {
@@ -118,7 +118,7 @@ describe("record events", () => {
     expect(suggestionCalls).toEqual(["cancel", "invalidate"]);
   });
 
-  it("[TC-CH-1387-30] reads both threads' decisions, artifacts and pins again when a chapter moves between them", async () => {
+  it("reads both threads' decisions, artifacts and pins again when a chapter moves between them (#1387)", async () => {
     const camp = ThreadId.make("camp-2");
     const client = new QueryClient();
     const keys = [threadId, camp].flatMap((each) => [
@@ -142,7 +142,7 @@ describe("record events", () => {
 });
 
 describe("catch-up reads", () => {
-  it("[TC-CH-1387-31] keys each visit's read on its own and drops it once nothing reads it", () => {
+  it("keys each visit's read on its own and drops it once nothing reads it (#1387)", () => {
     const first = catchUpQuery(threadId, "m1:1");
     const remounted = catchUpQuery(threadId, "m2:1");
     expect(first.queryKey).not.toEqual(remounted.queryKey);
@@ -151,7 +151,7 @@ describe("catch-up reads", () => {
 });
 
 describe("artifact reviews", () => {
-  it("[TC-CH-1387-32] tells a review the hub refused from one that did not reach it", () => {
+  it("tells a review the hub refused from one that did not reach it (#1387)", () => {
     expect(reviewArtifactError(new ApiError("refused", "ArtifactReviewChangeRefused"))).toBe("refused");
     expect(reviewArtifactError(new ApiError("gone", "ThreadNotFound"))).toBe("unreachable");
     expect(reviewArtifactError(new Error("offline"))).toBe("unreachable");
@@ -168,7 +168,7 @@ describe("artifact reads (#1434)", () => {
     return { promise, resolve };
   };
 
-  it("[TC-CH-1434-08] a new version cancels the first read of its versions on its way, so the read after the event is kept", async () => {
+  it("a new version cancels the first read of its versions on its way, so the read after the event is kept (#1434)", async () => {
     const client = new QueryClient();
     const queryKey = recordKeys.versions(threadId, artifact.id);
     const first = deferred<string>();
@@ -187,7 +187,7 @@ describe("artifact reads (#1434)", () => {
     stop();
   });
 
-  it("[TC-CH-1434-09] a chapter move drops each artifact's versions and kept contents, and reads the shown ones again", async () => {
+  it("a chapter move drops each artifact's versions and kept contents, and reads the shown ones again (#1434)", async () => {
     const client = new QueryClient();
     const versions = recordKeys.versions(threadId, artifact.id);
     const kept = recordKeys.content(threadId, artifact.id, 1);

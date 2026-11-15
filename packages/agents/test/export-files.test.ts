@@ -11,8 +11,7 @@ const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 describe("an export's copied files", () => {
-  // covers OP-003
-  it("[TC-OP-047] apply the size limits to what is written, after redaction has made it longer", () => {
+  it("apply the size limits to what is written, after redaction has made it longer", () => {
     const text = `${SHORT}\n`.repeat(4);
     const redacted = `${MARKER}\n`.repeat(4);
     const limits = { file: redacted.length, total: 1000 };

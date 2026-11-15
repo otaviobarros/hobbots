@@ -428,7 +428,7 @@ describe("Quest summaries", () => {
     });
 
   // covers ADR 037 (Quests in camps), STD-ARCH-015, STD-ARCH-016
-  it("[TC-OR-1373-01] journals each Quest's summary in the change's transaction, only when it changes, and always as a fold of its tree", async () => {
+  it("journals each Quest's summary in the change's transaction, only when it changes, and always as a fold of its tree (#1373)", async () => {
     let runs = 0;
     await fc.assert(
       fc.asyncProperty(fc.array(ops, { minLength: 8, maxLength: 40 }), (script) =>
@@ -508,7 +508,7 @@ describe("Quest summaries", () => {
   }, 120_000);
 
   // covers ADR 037 (Quests in camps), STD-ARCH-014
-  it("[TC-OR-1373-02] writes a summary only with the change that caused it: a change rolled back leaves the summary as it was", async () => {
+  it("writes a summary only with the change that caused it: a change rolled back leaves the summary as it was (#1373)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -563,7 +563,7 @@ describe("Quest summaries", () => {
   });
 
   // covers ADR 037 (Quests in camps), DP-003
-  it("[TC-DP-1373-03] gives every Quest stored before it its summary, folded from its tree, and journals nothing", async () => {
+  it("gives every Quest stored before it its summary, folded from its tree, and journals nothing (#1373)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -646,7 +646,7 @@ describe("Quest summaries", () => {
     });
 
   // covers ADR 037 (Quests in camps, Records), STD-ARCH-014, STD-ARCH-015
-  it("[TC-OR-1422-04] lowers the ready-for-review count as you review or dismiss, or GitHub ends a pull request, in the same transaction", async () => {
+  it("lowers the ready-for-review count as you review or dismiss, or GitHub ends a pull request, in the same transaction (#1422)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const records = yield* RecordRepository;
@@ -727,7 +727,7 @@ describe("Quest summaries", () => {
   });
 
   // covers ADR 037 (Quests in camps, Records), DP-003
-  it("[TC-DP-1422-03] gives every stored artifact a waiting review and every stored summary its count of what waits, journaling nothing", async () => {
+  it("gives every stored artifact a waiting review and every stored summary its count of what waits, journaling nothing (#1422)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

@@ -45,8 +45,7 @@ const passUntilFailed = (at?: string) =>
   );
 
 describe.each(RUNTIMES)("the supervisor, with members on %s", (members) => {
-  // covers OR-005, EX-003
-  it("[TC-OR-1447-10] stops a member past its deadline, fails its Task, and tells its lead why", async () => {
+  it("stops a member past its deadline, fails its Task, and tells its lead why (#1447)", async () => {
     const party = partyHub({ members, supervisor: true });
     dispose = party.dispose;
     const { run, requests, gates } = party;
@@ -93,8 +92,7 @@ describe.each(RUNTIMES)("the supervisor, with members on %s", (members) => {
     );
   }, 30_000);
 
-  // covers OR-005, OR-006
-  it("[TC-OR-1447-14] leaves work you paused alone past its deadline, and stops it once you resume it", async () => {
+  it("leaves work you paused alone past its deadline, and stops it once you resume it (#1447)", async () => {
     const party = partyHub({ members, supervisor: true });
     dispose = party.dispose;
     const { run, gates } = party;
@@ -128,8 +126,7 @@ describe.each(RUNTIMES)("the supervisor, with members on %s", (members) => {
     await run(passUntilFailed(later));
   }, 30_000);
 
-  // covers OR-006, IN-007
-  it("[TC-OR-1447-11] fails a member out of allowance whose own member still works, ending that work first", async () => {
+  it("fails a member out of allowance whose own member still works, ending that work first (#1447)", async () => {
     const party = partyHub({ members, supervisor: true });
     dispose = party.dispose;
     const { run, gates } = party;
@@ -172,8 +169,7 @@ describe.each(RUNTIMES)("the supervisor, with members on %s", (members) => {
     ]);
   }, 30_000);
 
-  // covers OR-006, IN-007
-  it("[TC-OR-1447-12] fails a member whose runtime ran out of allowance, and says when it resets", async () => {
+  it("fails a member whose runtime ran out of allowance, and says when it resets (#1447)", async () => {
     const party = partyHub({ members, supervisor: true });
     dispose = party.dispose;
     const { run, requests } = party;
@@ -270,8 +266,7 @@ describe("the supervisor's retries", () => {
       Supervisor.layer({ every: null, limits }),
     );
 
-  // covers OR-004, EX-004
-  it("[TC-OR-1447-15] retries a failed Task only while its hob and its tree have room for it", async () => {
+  it("retries a failed Task only while its hob and its tree have room for it (#1447)", async () => {
     const runtime = ManagedRuntime.make(records);
     dispose = () => runtime.dispose();
     await runtime.runPromise(seed);

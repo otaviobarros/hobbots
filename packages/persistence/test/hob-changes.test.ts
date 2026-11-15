@@ -27,8 +27,7 @@ const hob = (id: AgentId, name: string) =>
   });
 
 describe("HobChanges", () => {
-  // covers AG-002, AG-006, DP-003
-  it("[TC-AG-411-03] keeps every version and status change with its actor past the journal, and finds the call behind a hob's change", async () => {
+  it("keeps every version and status change with its actor past the journal, and finds the call behind a hob's change (#411)", async () => {
     const reply: ChangeActor = { _tag: "Hob", hobId: chief, call: { scope: "reply:m1", key: "k1" } };
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;

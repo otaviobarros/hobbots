@@ -404,8 +404,7 @@ const laterReply = (gate: string, requests: ReadonlyArray<PromptRequest>) =>
   });
 
 describe("cancelling with confirmed outcomes", () => {
-  // covers OR-006
-  it("[TC-OR-143] cancelling the Quest shows it cancelling until every Task confirms, and starts nothing after", async () => {
+  it("cancelling the Quest shows it cancelling until every Task confirms, and starts nothing after", async () => {
     const { run, requests } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -445,8 +444,7 @@ describe("cancelling with confirmed outcomes", () => {
     );
   }, 20_000);
 
-  // covers OR-006
-  it("[TC-OR-144] cancelling a member's Task that waits with no turn running confirms it, and its lead hears of it", async () => {
+  it("cancelling a member's Task that waits with no turn running confirms it, and its lead hears of it", async () => {
     const { run, release } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -465,8 +463,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(done.quests[0]?.state).toBe("active");
   }, 20_000);
 
-  // covers OR-006, EX-003
-  it("[TC-OR-145] a session that does not stop in time leaves its cancel unresolved, and the Quest still ends", async () => {
+  it("a session that does not stop in time leaves its cancel unresolved, and the Quest still ends", async () => {
     const { run, unstick } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay([STUCK]))));
     const before = await run(treeWhen(underWay));
@@ -490,8 +487,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(after.attempts.find((each) => each.id === stop?.id)?.state).toBe("unresolved");
   }, 20_000);
 
-  // covers OR-006, IN-003
-  it("[TC-OR-146] a late result from a cancelled Task changes nothing", async () => {
+  it("a late result from a cancelled Task changes nothing", async () => {
     const { run, release } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -518,8 +514,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(after.artifacts).toEqual([]);
     expect(ownedBy(after, QUILL)?.revision).toBe(ownedBy(cancelled, QUILL)?.revision);
   }, 20_000);
-  // covers OR-006, OR-004
-  it("[TC-OR-164] cancelling the Quest reaches every level of a nested one, each Task confirmed, and starts nothing after", async () => {
+  it("cancelling the Quest reaches every level of a nested one, each Task confirmed, and starts nothing after", async () => {
     const { run, requests } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, nestedUnderWay)));
     const before = await run(treeWhen(nestedRunning));
@@ -544,8 +539,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(continuations(await run(messages()))).toEqual([]);
   }, 20_000);
 
-  // covers OR-006, OR-004
-  it("[TC-OR-165] cancelling Rook's Task cancels Pip's under it and leaves Aldric's Quest going; neither changes hands across levels", async () => {
+  it("cancelling Rook's Task cancels Pip's under it and leaves Aldric's Quest going; neither changes hands across levels", async () => {
     const { run } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, nestedUnderWay)));
     const before = await run(treeWhen(nestedRunning));
@@ -580,8 +574,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(told).not.toContain(`Task ${pip.id} ended`);
   }, 20_000);
 
-  // covers OR-006
-  it("[TC-OR-150] cancelling the Task you asked for waits for a later reply working on it to stop, and starts nothing in its place", async () => {
+  it("cancelling the Task you asked for waits for a later reply working on it to stop, and starts nothing in its place", async () => {
     const { run, release, requests } = setUp();
     const top = await run(requestDone);
     // A turn briefed on the Task before the cancel, which goes on calling after its Attempt ended.
@@ -612,8 +605,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(trees[0]?.tasks.map((task) => task.state)).toEqual(["cancelled", "completed"]);
   }, 20_000);
 
-  // covers OR-006, EX-003
-  it("[TC-OR-154] a later reply that does not stop in time leaves the cancel of the Task you asked for unresolved", async () => {
+  it("a later reply that does not stop in time leaves the cancel of the Task you asked for unresolved", async () => {
     const { run, unstick, requests } = setUp();
     const top = await run(requestDone);
     await run(laterReply(STUCK, requests));
@@ -636,8 +628,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(after[0]?.tasks[0]?.state).toBe("cancelled");
     expect(after[0]?.attempts.find((each) => each.id === stop?.id)?.state).toBe("unresolved");
   }, 20_000);
-  // covers OR-006, IN-003
-  it("[TC-OR-180] cancelling the Quest while its lead reads a member's result leaves nothing waiting in any backpack", async () => {
+  it("cancelling the Quest while its lead reads a member's result leaves nothing waiting in any backpack", async () => {
     const { run, release, requests } = setUp();
     // Rook's result holds Aldric's continuation once its session has started, so the cancel stops it.
     const prompt = [
@@ -713,8 +704,7 @@ describe("cancelling with confirmed outcomes", () => {
     await run(Effect.sleep("300 millis"));
     expect(requests).toHaveLength(sent);
   }, 20_000);
-  // covers OR-006, IN-005
-  it("[TC-OR-184] cancelling the Quest resolves the routine progress its party reported, with no turn to carry it", async () => {
+  it("cancelling the Quest resolves the routine progress its party reported, with no turn to carry it", async () => {
     const { run, release, requests } = setUp();
     // Rook's step reports progress and finishes; its result holds Rook's continuation once started.
     // The progress waits for Aldric, whose Task waits on Rook with no turn running.
@@ -779,8 +769,7 @@ describe("cancelling with confirmed outcomes", () => {
 });
 
 describe("retrying and reassigning", () => {
-  // covers EX-001, OR-006
-  it("[TC-OR-147] retrying a failed step runs it again as a new Attempt of the same Task", async () => {
+  it("retrying a failed step runs it again as a new Attempt of the same Task", async () => {
     const { run } = setUp();
     const prompt = [
       "Write the copy",
@@ -806,8 +795,7 @@ describe("retrying and reassigning", () => {
     expect(again).toMatchObject({ _tag: "TaskNotControllable", reason: "task-state" });
   }, 20_000);
 
-  // covers OR-006, EX-001
-  it("[TC-OR-148] a retired member's failed Task goes to another hob, which finishes it with the history kept", async () => {
+  it("a retired member's failed Task goes to another hob, which finishes it with the history kept", async () => {
     const { run, release, requests } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -859,8 +847,7 @@ describe("retrying and reassigning", () => {
     ]);
   }, 20_000);
 
-  // covers OR-006
-  it("[TC-OR-149] a reassignment is refused while its turn runs, to a hob above it, for the Task you asked for and to a retired hob", async () => {
+  it("a reassignment is refused while its turn runs, to a hob above it, for the Task you asked for and to a retired hob", async () => {
     const { run } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const tree = await run(treeWhen(underWay));
@@ -878,8 +865,7 @@ describe("retrying and reassigning", () => {
     expect(ownedBy(await run(treeWhen(() => true)), QUILL)?.ownerId).toBe(QUILL);
   }, 20_000);
 
-  // covers OR-006, EX-001
-  it("[TC-OR-151] a Task given back to a hob it had before starts afresh there, not in its old session", async () => {
+  it("a Task given back to a hob it had before starts afresh there, not in its old session", async () => {
     const { run, requests } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -923,8 +909,7 @@ describe("retiring a hob with open work", () => {
       Effect.flatMap((found) => (found._tag === "Some" ? Effect.succeed(found.value) : Effect.die("no hob"))),
     );
 
-  // covers AG-006, OR-006
-  it("[TC-AG-1240] Stop and hand over gives each open Task to the hob named, which finishes it, and no Task fails", async () => {
+  it("Stop and hand over gives each open Task to the hob named, which finishes it, and no Task fails", async () => {
     const { run, release } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -960,8 +945,7 @@ describe("retiring a hob with open work", () => {
     expect(await run(lifecycle((each) => each.handOver(QUILL, ROOK)))).toMatchObject({ status: "retired" });
   }, 20_000);
 
-  // covers AG-006, OR-006
-  it("[TC-AG-1241] a hand-over is refused with nothing changed when a Task cannot go to that hob", async () => {
+  it("a hand-over is refused with nothing changed when a Task cannot go to that hob", async () => {
     const { run } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -988,8 +972,7 @@ describe("retiring a hob with open work", () => {
     expect(after.attempts.some((each) => each.agentId === QUILL && isLive(each.state))).toBe(true);
   }, 20_000);
 
-  // covers AG-006, OR-006
-  it("[TC-AG-1249] a hand-over whose taker starts retiring while the work stops keeps the Task with its hob, which is not retired", async () => {
+  it("a hand-over whose taker starts retiring while the work stops keeps the Task with its hob, which is not retired", async () => {
     const { run, hooks } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -1018,8 +1001,7 @@ describe("retiring a hob with open work", () => {
     ).toMatchObject({ _tag: "TaskRefused", reason: "owner-unavailable" });
   }, 20_000);
 
-  // covers AG-006
-  it("[TC-AG-1250] Finish, then retire gives no Task to the hob once it counted nothing open, and retires it", async () => {
+  it("Finish, then retire gives no Task to the hob once it counted nothing open, and retires it", async () => {
     const { run, hooks } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -1060,8 +1042,7 @@ describe("retiring a hob with open work", () => {
     expect(after.tasks.some((task) => task.state === "failed")).toBe(false);
   }, 20_000);
 
-  // covers AG-006
-  it("[TC-AG-1251] a hob finishing first can continue a reply in the thread of its open Task, and nowhere else", async () => {
+  it("a hob finishing first can continue a reply in the thread of its open Task, and nowhere else", async () => {
     const { run } = setUp();
     const other = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
     await run(ChatService.use((chat) => chat.sendPrompt(other.id, "fake:limit\nSomething else")));
@@ -1096,8 +1077,7 @@ describe("retiring a hob with open work", () => {
     ).toMatchObject({ _tag: "HobUnavailable", status: "retiring" });
   }, 20_000);
 
-  // covers AG-006
-  it("[TC-AG-1252] a hob whose last Task ended while the hub was down retires when the hub starts", async () => {
+  it("a hob whose last Task ended while the hub was down retires when the hub starts", async () => {
     const { run } = setUp();
     // Waiting to retire with nothing left open, as the hub finds it at start.
     await run(
@@ -1108,8 +1088,7 @@ describe("retiring a hob with open work", () => {
     expect(await run(hobNow(PIP))).toMatchObject({ status: "retired", retiring: null });
   }, 20_000);
 
-  // covers AG-006
-  it("[TC-AG-1242] Finish, then retire takes no new work, keeps working the open Task, and retires once it ends", async () => {
+  it("Finish, then retire takes no new work, keeps working the open Task, and retires once it ends", async () => {
     const { run, release } = setUp();
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
     const before = await run(treeWhen(underWay));
@@ -1157,8 +1136,7 @@ describe("retiring a hob with open work", () => {
     expect(retired.retiredAt).not.toBeNull();
   }, 20_000);
 
-  // covers AG-006
-  it("[TC-AG-1243] Finish, then retire refuses messages that would start new work, and retires a hob with nothing open at once", async () => {
+  it("Finish, then retire refuses messages that would start new work, and retires a hob with nothing open at once", async () => {
     const { run } = setUp();
     const other = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));

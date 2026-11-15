@@ -101,8 +101,7 @@ const answer = (page: Page, end: unknown) =>
 
 const studio = { computer: "studio", address: "http://studio.example.ts.net:4317" };
 
-// covers DP-001, DP-002
-test("[TC-DP-204] Connect lists the hubs found, refuses a local address, waits with the code, and Deny then Allow each show", async ({
+test("Connect lists the hubs found, refuses a local address, waits with the code, and Deny then Allow each show", async ({
   page,
 }) => {
   await openSetup(page);
@@ -149,8 +148,7 @@ test("[TC-DP-204] Connect lists the hubs found, refuses a local address, waits w
   expect(calls).toEqual(["192.168.1.20", studio.address, studio.address]);
 });
 
-// covers DP-001, DP-002
-test("[TC-DP-205] an expired request or an unreachable hub says why, Cancel keeps the address, and Run here starts the hub", async ({
+test("an expired request or an unreachable hub says why, Cancel keeps the address, and Run here starts the hub", async ({
   page,
 }) => {
   await openSetup(page);
@@ -182,10 +180,7 @@ test("[TC-DP-205] an expired request or an unreachable hub says why, Cancel keep
   ).toBe(true);
 });
 
-// covers DP-001
-test("[TC-DP-207] Back while connecting stops the request, and an answer that comes after changes nothing", async ({
-  page,
-}) => {
+test("Back while connecting stops the request, and an answer that comes after changes nothing", async ({ page }) => {
   await openSetup(page);
   await page.getByRole("button", { name: "I already use Hobbots" }).click();
   await page.getByLabel("Address").fill("slow");

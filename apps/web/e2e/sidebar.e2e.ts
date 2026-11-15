@@ -78,8 +78,8 @@ const pickTheme = async (page: Page, theme: string) => {
 
 const widthOf = async (page: Page) => (await sidebar(page).boundingBox())?.width;
 
-// covers UX-001, ADR 039 (The sidebar)
-test("[TC-UX-1469-10] the wide sidebar shows Find, the four places, Camps, Direct messages and you, in the four themes", async ({
+// covers ADR 039 (The sidebar)
+test("the wide sidebar shows Find, the four places, Camps, Direct messages and you, in the four themes (#1469)", async ({
   page,
 }) => {
   const { url, ids } = await hubWithHobs();
@@ -108,8 +108,8 @@ test("[TC-UX-1469-10] the wide sidebar shows Find, the four places, Camps, Direc
   }
 });
 
-// covers UX-001, ADR 039 (The sidebar)
-test("[TC-UX-1469-11] at 1024 and 960 wide the sidebar is a 76px rail of icons, each named, in the four themes", async ({
+// covers ADR 039 (The sidebar)
+test("at 1024 and 960 wide the sidebar is a 76px rail of icons, each named, in the four themes (#1469)", async ({
   page,
 }) => {
   const { url, ids } = await hubWithHobs();
@@ -141,8 +141,8 @@ test("[TC-UX-1469-11] at 1024 and 960 wide the sidebar is a 76px rail of icons, 
   expect(await widthOf(page)).toBe(276);
 });
 
-// covers UX-001, ADR 039 (The sidebar)
-test("[TC-UX-1469-12] a hob's direct message opens its chat, a camp opens itself, and Find opens the finder", async ({
+// covers ADR 039 (The sidebar)
+test("a hob's direct message opens its chat, a camp opens itself, and Find opens the finder (#1469)", async ({
   page,
 }) => {
   const { url, ids } = await hubWithHobs();
@@ -165,8 +165,8 @@ test("[TC-UX-1469-12] a hob's direct message opens its chat, a camp opens itself
   await expect(page).toHaveURL(/#\/summon/);
 });
 
-// covers UX-001, ADR 039 (The sidebar), STD-REACT-015
-test("[TC-UX-1469-15] Camps and Direct messages hold their place while they load, then say when they are empty", async ({
+// covers ADR 039 (The sidebar), STD-REACT-015
+test("Camps and Direct messages hold their place while they load, then say when they are empty (#1469)", async ({
   page,
 }) => {
   dataDir = emptyDataDir();
@@ -200,8 +200,7 @@ test("[TC-UX-1469-15] Camps and Direct messages hold their place while they load
   await expectAccessible(page, nav);
 });
 
-// covers UX-001
-test("[TC-UX-1431-01] Camps lists five camps, then Show more, and always shows the open camp", async ({ page }) => {
+test("Camps lists five camps, then Show more, and always shows the open camp (#1431)", async ({ page }) => {
   const { url, ids } = await hubWithHobs();
   // Aldric has two camps already; five more make seven.
   const titles = ["Camp three", "Camp four", "Camp five", "Camp six", "Camp seven"];
@@ -232,8 +231,7 @@ test("[TC-UX-1431-01] Camps lists five camps, then Show more, and always shows t
   await expect(nav.getByRole("button", { name: "Show 1 more" })).toBeVisible();
 });
 
-// covers UX-001
-test("[TC-UX-161] with many hobs only Camps and Direct messages scroll: the places above and you below stay on screen", async ({
+test("with many hobs only Camps and Direct messages scroll: the places above and you below stay on screen", async ({
   page,
 }) => {
   const { url } = await hubWithHobs(Array.from({ length: 22 }, (_, i) => `Hob ${i + 3}`));
@@ -259,7 +257,7 @@ test("[TC-UX-161] with many hobs only Camps and Direct messages scroll: the plac
   await expect(nav.getByRole("img", { name: "Owner" })).toBeInViewport();
 });
 
-test("[TC-UX-162] a browser tab shows no window title strip, which belongs to the desktop app", async ({ page }) => {
+test("a browser tab shows no window title strip, which belongs to the desktop app", async ({ page }) => {
   const { url } = await hubWithHobs();
   await page.goto(url);
   await expect(sidebar(page)).toBeVisible();
@@ -285,8 +283,8 @@ const shareCamp = async (page: Page, campId: string, members: ReadonlyArray<stri
   });
 };
 
-// covers UX-001, ADR 039 (The sidebar)
-test("[TC-UX-1563-04] a shared camp's row names who wrote its last line as it lands, in the four themes, and the rail shows only its faces", async ({
+// covers ADR 039 (The sidebar)
+test("a shared camp's row names who wrote its last line as it lands, in the four themes, and the rail shows only its faces (#1563)", async ({
   page,
   browser,
 }) => {

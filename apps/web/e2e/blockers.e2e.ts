@@ -46,8 +46,7 @@ const aldricHub = async () => {
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers IN-007, OR-007, UX-004
-test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-you tray and in the Inbox, and Retry starts it again", async ({
+test("work whose turn is cut off shows as stuck in the chat's Needs-you tray and in the Inbox, and Retry starts it again", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -98,8 +97,7 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   await expect(stuck).toBeHidden();
 });
 
-// covers IN-007
-test("[TC-IN-097] Dismiss takes stuck work out of the chat's tray and out of Needs you", async ({ page }) => {
+test("Dismiss takes stuck work out of the chat's tray and out of Needs you", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -129,8 +127,7 @@ test("[TC-IN-097] Dismiss takes stuck work out of the chat's tray and out of Nee
 /** The read of the blockers, without the decision endpoint under it. */
 const blockersList = /\/api\/blockers(\?.*)?$/;
 
-// covers IN-007, UX-004
-test("[TC-IN-098] Needs you never says nothing needs you while stuck work is still being read, or could not be read", async ({
+test("Needs you never says nothing needs you while stuck work is still being read, or could not be read", async ({
   page,
 }) => {
   const { url } = await aldricHub();

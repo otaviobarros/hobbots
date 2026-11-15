@@ -126,7 +126,7 @@ const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 /**
  * Stands in for the hob's sandbox, which this hub's CI cannot start: it runs the program as it is,
  * after writing the environment the program gets to `sandboxRecords`, so the last case can look for
- * a credential there. The Charm's own fence is proven against the real sandbox in TC-PE-152.
+ * a credential there. The Charm's own fence is proven against the real sandbox in @hobbots/charms git-push.test.ts.
  */
 const RecordingSandbox = Layer.succeed(
   FolderSandbox,
@@ -426,7 +426,7 @@ const ensureUserConnected = async () => {
 
 describe("A hob's own GitHub identity, end to end against a fake GitHub", () => {
   // covers ADR 022, PE-005
-  it("[TC-GEN-110] gives a hob its own app from the hub's page, and the hob then commits locally as its bot", async () => {
+  it("gives a hob its own app from the hub's page, and the hob then commits locally as its bot", async () => {
     await ensureUserConnected();
     const hob = await frodo();
     const back = await createOnGitHub(hob);
@@ -466,7 +466,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
     expect(git(shire, ["log", "-1", "--format=%an <%ae>|%cn <%ce>|%G?"])).toBe(`${BOT} <${email}>|${BOT} <${email}>|N`);
   }, 30_000);
   // covers ADR 022, PE-003, PE-007
-  it("[TC-GEN-111] pushes as the hob's bot after a card that names it, and GitHub shows the commits as the bot's, Verified", async () => {
+  it("pushes as the hob's bot after a card that names it, and GitHub shows the commits as the bot's, Verified", async () => {
     const hob = await frodo();
     const local = git(shire, ["rev-parse", "HEAD"]);
     const fromMade = github.madeCommits.length;
@@ -513,7 +513,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022, PE-003, PE-007
-  it("[TC-GEN-112] opens a draft pull request and comments as the hob's bot, with cards and steps that name it", async () => {
+  it("opens a draft pull request and comments as the hob's bot, with cards and steps that name it", async () => {
     const hob = await frodo();
     const fromRequest = github.requests.length;
     const opening = await turn(
@@ -551,7 +551,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022, PE-003
-  it("[TC-GEN-113] keeps a hob without its own app on the user's account, with the user's commits and name", async () => {
+  it("keeps a hob without its own app on the user's account, with the user's commits and name", async () => {
     const hob = await sam();
     git(shire, ["checkout", "--quiet", "main"]);
     git(shire, ["checkout", "--quiet", "-b", "sam/pans"]);
@@ -577,7 +577,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022
-  it("[TC-GEN-114] replaces the hob's token after its hour without asking the user, and never sends the lapsed one", async () => {
+  it("replaces the hob's token after its hour without asking the user, and never sends the lapsed one", async () => {
     const hob = await frodo();
     const read = () => turn(hob, call("github_repository", {}));
     const first = await read();
@@ -606,7 +606,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022
-  it("[TC-GEN-115] fails clearly when the hob's app is uninstalled, marks it for reinstalling, never acts as the user, and works again once reinstalled", async () => {
+  it("fails clearly when the hob's app is uninstalled, marks it for reinstalling, never acts as the user, and works again once reinstalled", async () => {
     const hob = await frodo();
     const installation = frodoApp().installations[0]?.id;
     github.uninstallApp("frodo-hobbots");
@@ -641,7 +641,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022
-  it("[TC-GEN-116] marks the hob's app for a reconnect when GitHub refuses its key, sends nothing more, and never acts as the user", async () => {
+  it("marks the hob's app for a reconnect when GitHub refuses its key, sends nothing more, and never acts as the user", async () => {
     const hob = await frodo();
     frodoApp().keyLive = false;
     // An hour on, the hob's token has lapsed and the hub must sign in with the key again.
@@ -677,7 +677,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022, PE-007
-  it("[TC-GEN-117] disconnecting removes the app's installations and key and the hob acts as the user; retiring a hob deletes its key", async () => {
+  it("disconnecting removes the app's installations and key and the hob acts as the user; retiring a hob deletes its key", async () => {
     const hob = await frodo();
     const disconnected = await request("POST", `/api/agents/${hob.id}/github-app/disconnect`);
     expect(disconnected.body).toEqual({
@@ -708,7 +708,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022, PE-005, PE-006
-  it("[TC-GEN-118] keeps the app's key, its JWTs and its tokens out of the sandbox's environment, the files a hob can read, the database and tool output", async () => {
+  it("keeps the app's key, its JWTs and its tokens out of the sandbox's environment, the files a hob can read, the database and tool output", async () => {
     const secrets = github.secrets();
     // The app's key, the JWTs it signed and the tokens GitHub gave it are all among them.
     expect(secrets.some((secret) => secret.includes("PRIVATE KEY"))).toBe(true);

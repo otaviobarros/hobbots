@@ -87,8 +87,7 @@ const access: ToolAccess = {
 };
 
 describe("a party member's session", () => {
-  // covers PE-004
-  it("[TC-PE-161] works under its own policy narrowed by its delegation: the delegation's decisions and only its folders", () => {
+  it("works under its own policy narrowed by its delegation: the delegation's decisions and only its folders", () => {
     const read = tree([delegation("copy", QUILL, ["/work/copy"])]);
     const narrowed = delegatedAccess(access, read.tasks[1] as Task, read, "/");
     expect(narrowed?.policy.restrictions).toEqual([{ "edit-files": "ask", push: "deny" }]);

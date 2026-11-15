@@ -65,8 +65,7 @@ const assignment = item("task", { _tag: "task", task: migrate, delegation: null 
 const message = item("message", { _tag: "message", senderId: FRODO, text: "The staging database is back." });
 
 describe("what a member's first turn is told besides its Task", () => {
-  // covers IN-001, IN-004
-  it("[TC-OR-260] lists what arrived before the turn started, leaves out the Task itself, and is empty when nothing else waits", () => {
+  it("lists what arrived before the turn started, leaves out the Task itself, and is empty when nothing else waits", () => {
     const text = startingText([assignment, message]);
     expect(text).toMatch(/^Hobbots wrote this, not the user\. This also arrived for you before you started:/);
     expect(text).toContain("The staging database is back.");

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { githubRepositoriesQuery, REPOSITORY_WATCH, stillWatching } from "./github.ts";
 
 describe("the repositories the app reaches", () => {
-  it("[TC-GEN-039] are read again every few seconds after you go to choose them, until the list changes or the watch runs out", () => {
+  it("are read again every few seconds after you go to choose them, until the list changes or the watch runs out", () => {
     const watch = { until: 1_000 + REPOSITORY_WATCH.forMs, seen: "octohob/workshop" };
     expect(stillWatching(watch, "octohob/workshop", 2_000)).toBe(true);
     // A repository was added on GitHub.

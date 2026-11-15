@@ -127,8 +127,7 @@ const status = HobbotsRepository.use((repo) => repo.findAgent(HOB_ID)).pipe(
 );
 
 describe("lifecycle changes that overlap other requests", () => {
-  // covers AG-006, CH-004
-  it("[TC-AG-037] stops a reply that was being admitted when retirement with stop arrived", async () => {
+  it("stops a reply that was being admitted when retirement with stop arrived", async () => {
     const result = await run((gate) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -162,8 +161,7 @@ describe("lifecycle changes that overlap other requests", () => {
     expect(result.status).toBe("retired");
   });
 
-  // covers AG-006
-  it("[TC-AG-038] refuses a message that arrives while the hob is being retired", async () => {
+  it("refuses a message that arrives while the hob is being retired", async () => {
     const result = await run((gate) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -199,8 +197,7 @@ describe("lifecycle changes that overlap other requests", () => {
     expect(result.threads).toHaveLength(1);
   });
 
-  // covers AG-006
-  it("[TC-AG-039] keeps a hob retired when a wake read it as paused before the retirement", async () => {
+  it("keeps a hob retired when a wake read it as paused before the retirement", async () => {
     const result = await run((gate) =>
       Effect.gen(function* () {
         const lifecycle = yield* HobLifecycle;
@@ -228,8 +225,7 @@ describe("lifecycle changes that overlap other requests", () => {
     expect(Exit.isFailure(result.wakeAgain)).toBe(true);
   });
 
-  // covers AG-006, AG-002
-  it("[TC-AG-040] announces the retirement after an edit that overlapped it, so the hob stays archived", async () => {
+  it("announces the retirement after an edit that overlapped it, so the hob stays archived", async () => {
     const result = await run((gate, events) =>
       Effect.gen(function* () {
         gate.arm("updateAgentConfig");

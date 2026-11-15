@@ -33,7 +33,7 @@ const camp = new Thread({
 
 describe("a turn's speaker", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1549-03] names the hob that speaks, its line and reason, and whether the camp is its own", () => {
+  it("names the hob that speaks, its line and reason, and whether the camp is its own (#1549)", () => {
     const reason = { cause: "mention", by: { kind: "user", id: "leo" } } as const;
     expect(speakerIn(camp, QUILL, reason)).toEqual({
       thread: camp,

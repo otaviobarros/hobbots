@@ -146,8 +146,7 @@ const comment = (turn: ChatTaskTurn, message: string) =>
   );
 
 describe("tool call keys across a Task's replies", () => {
-  // covers OR-001, EX-001, EX-003
-  it("[TC-OR-425] a later reply on a Task finds the calls its first reply made, a Charm write included, and replays them", async () => {
+  it("a later reply on a Task finds the calls its first reply made, a Charm write included, and replays them", async () => {
     await run(seed);
     const first = await chatTurn("reply-1");
     // Before the Task starts, Frodo comments on GitHub; then he starts the Quest and reports.

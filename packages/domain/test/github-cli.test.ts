@@ -31,7 +31,7 @@ describe("where a gh command is pointed (#1349)", () => {
     }
   });
 
-  it("names every Charm tool for other commands, and asks the user without them", () => {
+  it("names every Charm tool for other commands, and asks the user without them (#1350)", () => {
     // Opening issues is the GitHub Charm's own tool (#1350); where Never keeps it out, it is named, not pointed to.
     expect(steerGh(words("issue create -t x"), ["github_item"])).toBe(
       "gh cannot sign in from your sandbox, since no credential enters it. The github_open_issue tool does what gh issue create would, and you are not offered it now. Tell the user what you need from GitHub instead.",

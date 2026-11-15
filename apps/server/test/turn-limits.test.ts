@@ -174,8 +174,7 @@ const finish = (start: Start | undefined) =>
   Effect.runPromise(Deferred.succeed(start?.gate as Deferred.Deferred<void>, undefined));
 
 describe("turn limits in chat", () => {
-  // covers OR-005
-  it("[TC-CH-1448-01] keeps a message queued while its hob runs as many turns as allowed, then starts it", async () => {
+  it("keeps a message queued while its hob runs as many turns as allowed, then starts it (#1448)", async () => {
     const { hub, starts } = await start([{ hob: "aldric", runtime: "claude-code", ids: ["a-1", "a-2"] }], {
       ...DEFAULT_TURN_LIMITS,
       perHob: 1,
@@ -209,8 +208,7 @@ describe("turn limits in chat", () => {
     expect(await statusOf(hub, "a-2")).toEqual(["user:complete", "assistant:complete"]);
   });
 
-  // covers OR-005
-  it("[TC-CH-1448-02] limits each runtime on its own, Claude Code and Codex alike", async () => {
+  it("limits each runtime on its own, Claude Code and Codex alike (#1448)", async () => {
     const { hub, starts } = await start(
       [
         { hob: "aldric", runtime: "claude-code", ids: ["a-1"] },
@@ -253,8 +251,7 @@ describe("turn limits in chat", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-CH-1448-03] keeps the limits and the waiting message across a restart, and starts it then", async () => {
+  it("keeps the limits and the waiting message across a restart, and starts it then (#1448)", async () => {
     const { hub, starts, open } = await start([{ hob: "aldric", runtime: "claude-code", ids: ["a-1", "a-2"] }], {
       ...DEFAULT_TURN_LIMITS,
       perHob: 1,

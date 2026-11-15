@@ -25,8 +25,8 @@ const pip = (fields: Partial<Agent> = {}) =>
   );
 
 describe("a member hob's turn registered in a camp", () => {
-  // covers AG-006, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-22] stops only when the hob is gone or its running work was stopped", () => {
+  // covers ADR 039 (One hob speaks at a time)
+  it("stops only when the hob is gone or its running work was stopped (#1461)", () => {
     // Paused, or retired letting running replies finish: nothing stopped its work, so it finishes.
     expect(memberTurnLeft(pip({ status: "paused" }), null, launched)).toBe(false);
     expect(memberTurnLeft(pip({ status: "retired", retiredAt: "2026-11-14T10:00:01.000Z" }), null, launched)).toBe(

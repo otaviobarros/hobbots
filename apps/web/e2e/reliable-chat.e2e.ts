@@ -137,8 +137,7 @@ const LONG_PROMPT = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
 const streamingReply = (page: Page, words: number) =>
   chatView(page).getByText(new RegExp(`^Echo: word0 .*\\bword${words}\\b`));
 
-// covers CH-004, DP-003
-test("[TC-CH-120] a hub killed mid-reply comes back with the reply interrupted, its saved text kept, and nothing shown twice", async ({
+test("a hub killed mid-reply comes back with the reply interrupted, its saved text kept, and nothing shown twice", async ({
   page,
 }) => {
   const { current, threadId, composer } = await openThread(page);
@@ -183,8 +182,7 @@ test("[TC-CH-120] a hub killed mid-reply comes back with the reply interrupted, 
   await showsExactly(page, messages);
 });
 
-// covers CH-004, DP-003
-test("[TC-CH-121] a page cut off mid-reply replays exactly what it missed when it reconnects", async ({ page }) => {
+test("a page cut off mid-reply replays exactly what it missed when it reconnects", async ({ page }) => {
   const { current, threadId, composer } = await openThread(page);
   await composer.fill(LONG_PROMPT);
   await composer.press("Enter");
@@ -230,8 +228,7 @@ const compactJournal = (current: Hub) => {
   }
 };
 
-// covers CH-004, DP-003
-test("[TC-CH-122] a page away past the journal's retention loads the thread again and shows each message once", async ({
+test("a page away past the journal's retention loads the thread again and shows each message once", async ({
   page,
 }) => {
   const { current, threadId } = await openThread(page);
@@ -271,10 +268,7 @@ test("[TC-CH-122] a page away past the journal's retention loads the thread agai
 
 const DATABASE_FILES = ["hobbots.sqlite", "hobbots.sqlite-wal", "hobbots.sqlite-shm"];
 
-// covers CH-004, DP-003
-test("[TC-CH-123] after a backup is restored the page shows the restored thread, not what it had cached", async ({
-  page,
-}) => {
+test("after a backup is restored the page shows the restored thread, not what it had cached", async ({ page }) => {
   const { current, threadId, composer } = await openThread(page);
   await current.stop();
   const backup = join(dataDir, "backup");

@@ -5,8 +5,7 @@ import { endedActivity, fakeRun, hub, say, setUp, treeWhen } from "./workbench-h
 // on SQLite or PostgreSQL (TestDatabase).
 
 describe("a command's exit code in a Task's activity", () => {
-  // covers UX-002, UX-006
-  it("[TC-RT-104] keeps each command's exit code, and records one that exits non-zero as failed", async () => {
+  it("keeps each command's exit code, and records one that exits non-zero as failed (#591)", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     await inHub(
       say(

@@ -133,8 +133,8 @@ const askForCampaign = Effect.gen(function* () {
 });
 
 describe("FakeQuestLive", () => {
-  // covers CH-009, OR-001, ADR 037 (Quests in camps)
-  it("[TC-CH-1389-04] a Quest whose chapter moves into a camp while it runs goes on there, and its lead's next messages land in the camp", async () => {
+  // covers ADR 037 (Quests in camps)
+  it("a Quest whose chapter moves into a camp while it runs goes on there, and its lead's next messages land in the camp (#1389)", async () => {
     runtime = ManagedRuntime.make(App);
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -197,7 +197,7 @@ describe("FakeQuestLive", () => {
     );
   }, 20_000);
 
-  it("[TC-OR-166] cancelling Ada's Task before Quill finishes cancels only Ada's, and Quill's copy still completes", async () => {
+  it("cancelling Ada's Task before Quill finishes cancels only Ada's, and Quill's copy still completes", async () => {
     runtime = ManagedRuntime.make(App);
     await runtime.runPromise(
       Effect.gen(function* () {

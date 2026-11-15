@@ -24,9 +24,7 @@ const giftCards = async (page: import("@playwright/test").Page) => {
 };
 
 // covers ADR 037 (quests in the camp)
-test("[TC-UX-1390-12] opens a quest from the camp's pill, steers it from the sheet and sees the receipt", async ({
-  page,
-}) => {
+test("opens a quest from the camp's pill, steers it from the sheet and sees the receipt (#1390)", async ({ page }) => {
   await giftCards(page);
   const main = page.getByRole("main", { name: "Chat" });
 
@@ -72,7 +70,7 @@ test("[TC-UX-1390-12] opens a quest from the camp's pill, steers it from the she
 });
 
 // covers ADR 037 (Heads-up)
-test("[TC-UX-1390-13] a path clash between two tasks shows a Heads-up in the camp", async ({ page }) => {
+test("a path clash between two tasks shows a Heads-up in the camp (#1390)", async ({ page }) => {
   await giftCards(page);
   const main = page.getByRole("main", { name: "Chat" });
   const headsUp = main.getByRole("region", { name: "Heads-up: 2 tasks change the same files" });
@@ -97,7 +95,7 @@ test("[TC-UX-1390-13] a path clash between two tasks shows a Heads-up in the cam
 });
 
 // covers ADR 037 (quests in the camp), STD-REACT-015
-test("[TC-UX-1390-15] a pinned quest whose chat could not be read says so, never that nothing was said, and Try again reads it", async ({
+test("a pinned quest whose chat could not be read says so, never that nothing was said, and Try again reads it (#1390)", async ({
   page,
 }) => {
   const { url, headers, aldric, camp } = await giftCards(page);
@@ -138,9 +136,7 @@ test("[TC-UX-1390-15] a pinned quest whose chat could not be read says so, never
 });
 
 // covers ADR 016, ADR 037 (quests in the camp)
-test("[TC-UX-1390-16] a quest message refused after its sheet closed comes back in the quest's box", async ({
-  page,
-}) => {
+test("a quest message refused after its sheet closed comes back in the quest's box (#1390)", async ({ page }) => {
   const { camp } = await giftCards(page);
   const main = page.getByRole("main", { name: "Chat" });
   const pill = main.getByRole("button", { name: /^1 quest.*Open the camp's quests$/ });

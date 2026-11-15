@@ -22,11 +22,3 @@ Search matches every word of the query as a prefix. SQLite ignores accents and P
 Memory is the one exception to a single database: [ADR 028](028-memory.md) keeps memory pages, their history and their index in ai-memory's own data folder, `<data folder>/memory`, written only by its process. Everything Hobbots decides and journals stays in this database.
 
 Backups use the SQLite online backup API plus the artifact folder. Moving data between installations is an export and import, not replication. [ADR 026](026-backup-export-diagnostics.md) decides what a backup holds, how a restore works and what an export is.
-
-## Validation
-
-The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
-
-- Every migration applies in order on an empty SQLite database and on PostgreSQL: `[TC-DP-003]`, run on both in CI.
-- Search finds a thread by a word from an old message, from a worker thread on SQLite: `[TC-CH-060]`, `[TC-CH-063]`, `[TC-CH-065]`.
-- An online backup restores the hub to the backed-up state. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452), with evidence from [#457](https://github.com/otaviobarros/hobbots/issues/457).

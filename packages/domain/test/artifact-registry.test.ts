@@ -150,7 +150,7 @@ describe("artifactSightings", () => {
   });
 
   // #1434: a Task that returned `social.md` and an Attempt that wrote `<folder>/social.md` were two rows.
-  it("keeps a relative result to resolve against its Attempt's folder, where its file change is", () => {
+  it("keeps a relative result to resolve against its Attempt's folder, where its file change is (#1434)", () => {
     const [result] = artifactSightings([
       { _tag: "TaskCompleted", task: undefined as never, artifacts: [ref("file", "./docs/../social.md")] },
     ]);

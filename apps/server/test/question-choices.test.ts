@@ -16,8 +16,7 @@ const PLAYFUL = { label: "Playful", consequence: "Puns welcome" };
 const FORMAL = { label: "Formal", consequence: "No jokes" };
 
 describe("a question with choices, through the tools", () => {
-  // covers OR-003, OR-004, IN-004
-  it("[TC-OR-580] reaches the lead with its choices, climbs to you, and tells the member which one you picked", async () => {
+  it("reaches the lead with its choices, climbs to you, and tells the member which one you picked (#740)", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, answers, requests, reactions } = party;

@@ -55,8 +55,7 @@ const hub = ChatService.layer
   .pipe(Layer.provideMerge(Layer.mergeAll(EventBus.layer, HobAdmission.layer, HangingRuntime)));
 
 describe("event journal", () => {
-  // covers DP-003, CH-002
-  it("[TC-DP-031] publishes committed journal entries, checkpoints streamed text unjournaled, and journals recovery after a crash", async () => {
+  it("publishes committed journal entries, checkpoints streamed text unjournaled, and journals recovery after a crash", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const journal = yield* EventJournal;

@@ -50,8 +50,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers IN-001, IN-002, IN-004, OR-003
-test("[TC-IN-150] Aldric's page and his Task's backpack show Quill's result as awaiting him until his continuation handles it", async ({
+test("Aldric's page and his Task's backpack show Quill's result as awaiting him until his continuation handles it (#297)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

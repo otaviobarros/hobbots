@@ -4,8 +4,7 @@ import { lane, openQuest, ticket } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
-// covers OR-004, OR-006, UX-001
-test("[TC-UX-1346-07] a Quest its lead stopped at your request reads stopped, with its summary, never finished", async ({
+test("a Quest its lead stopped at your request reads stopped, with its summary, never finished (#1346)", async ({
   page,
   scan,
 }) => {

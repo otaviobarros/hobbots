@@ -100,7 +100,7 @@ describe("Diagnostics copy", () => {
 
 describe("skillsText", () => {
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("names each skill and its revision, and says when a hob has none", () => {
+  it("names each skill and its revision, and says when a hob has none (#1064)", () => {
     const revision = "a".repeat(64) as never;
     const hob = { agentId: AgentId.make("pip"), runtime: "codex" as const, clashes: [] };
     expect(skillsText({ ...hob, skills: [] })).toBe("No skills");

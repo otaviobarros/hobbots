@@ -206,8 +206,7 @@ describe("Claude Code health before the runtime starts", () => {
     expect(Exit.isFailure(refused) && String(refused.cause)).toContain("could not be started");
   });
 
-  // covers PE-005
-  it("[TC-PE-041] declares the sandbox unsupported, with why, in its enforcement and its health", async () => {
+  it("declares the sandbox unsupported, with why, in its enforcement and its health", async () => {
     const adapter = await Effect.runPromise(
       makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable: join(newHome(), "missing", "claude") }),
     );
@@ -308,8 +307,7 @@ describe("a hob's instructions on a resumed Claude Code session", () => {
     expect(turnPrompt({ ...request, sessionId: "s1", instructionsChanged: false })).toBe("hi");
   });
 
-  // covers RT-001
-  it("[TC-CH-185] delivers a briefing on what the session missed after the instructions and before the prompt", () => {
+  it("delivers a briefing on what the session missed after the instructions and before the prompt", () => {
     expect(turnPrompt({ ...request, sessionId: null, briefing: "## This thread so far" })).toBe(
       "## This thread so far\n\nhi",
     );
@@ -326,8 +324,7 @@ describe("a hob's instructions on a resumed Claude Code session", () => {
 });
 
 describe("asking Claude Code for its models", () => {
-  // covers AG-005
-  it("[TC-AG-005] closes a Claude Code that never answers when the check times out", async () => {
+  it("closes a Claude Code that never answers when the check times out", async () => {
     const pidFile = join(newHome(), "pid");
     const executable = executableAt(
       join(newHome(), "claude"),
@@ -345,8 +342,7 @@ describe("asking Claude Code for its models", () => {
     expect(await until(() => !isRunning(pid))).toBe(true);
   });
 
-  // covers AG-005
-  it("[TC-AG-006] asks again once a list expires, though the binary is unchanged", async () => {
+  it("asks again once a list expires, though the binary is unchanged", async () => {
     const lists = [
       { ...fallbackModels, source: "runtime" as const, models: fallbackModels.models.slice(0, 2) },
       { ...fallbackModels, source: "runtime" as const, models: fallbackModels.models.slice(0, 1) },
@@ -378,8 +374,7 @@ describe("asking Claude Code for its models", () => {
 });
 
 describe("stopping a Claude Code turn", () => {
-  // covers CH-007
-  it("[TC-CH-020] ends a cancelled turn only once Claude Code has exited, even while a read is pending", async () => {
+  it("ends a cancelled turn only once Claude Code has exited, even while a read is pending", async () => {
     const pidFile = join(newHome(), "pid");
     // Never answers, ignores the end of its input and takes a moment to exit once asked to stop.
     const executable = executableAt(
@@ -407,8 +402,7 @@ describe("stopping a Claude Code turn", () => {
     expect(isRunning(pid)).toBe(false);
   }, 20_000);
 
-  // covers CH-007
-  it("[TC-CH-021] kills a Claude Code that is still running after the grace period", async () => {
+  it("kills a Claude Code that is still running after the grace period", async () => {
     const child = spawn("/bin/sh", ["-c", "trap '' TERM; echo ready; while :; do sleep 0.1; done"], {
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -423,7 +417,7 @@ describe("stopping a Claude Code turn", () => {
 
 describe("a Claude Code turn of no hob's", () => {
   // covers ADR 028
-  it("[TC-RT-505] keeps no session of an ephemeral turn, and keeps a hob's", async () => {
+  it("keeps no session of an ephemeral turn, and keeps a hob's", async () => {
     const argsFile = join(newHome(), "args");
     // Records how it was started, then fails, as no session can run here.
     const executable = executableAt(
@@ -456,8 +450,7 @@ describe("a Claude Code turn of no hob's", () => {
 });
 
 describe("a Claude Code turn that fails", () => {
-  // covers CH-004
-  it("[TC-CH-022] shows what Claude Code wrote to stderr when its process fails", async () => {
+  it("shows what Claude Code wrote to stderr when its process fails", async () => {
     const executable = executableAt(
       join(newHome(), "claude"),
       `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.400 (Claude Code)"; exit 0; fi\necho "Error: model not available" >&2\nexit 1\n`,
@@ -481,8 +474,7 @@ describe("a Claude Code turn that fails", () => {
     expect(JSON.stringify(exit)).toContain("Error: model not available");
   });
 
-  // covers CH-004
-  it("[TC-CH-023] keeps only the end of a long error output", async () => {
+  it("keeps only the end of a long error output", async () => {
     const child = spawn("/bin/sh", ["-c", "head -c 5000 /dev/zero | tr '\\0' x >&2; echo >&2; echo the end >&2"], {
       stdio: ["ignore", "ignore", "pipe"],
     });
@@ -498,16 +490,14 @@ describe("one turn over several runs of Claude Code", () => {
   const completed = (text: string): RuntimeEvent => ({ _tag: "Completed", sessionId: "s", text });
 
   // regression: a background command woke the session after it replied, and the second `init` broke the turn
-  // covers EX-001
-  it("[TC-RT-507] starts once, and completes when Claude Code stops, with what each run replied", () => {
+  it("starts once, and completes when Claude Code stops, with what each run replied", () => {
     const whole = wholeTurn();
     expect([started, completed("Waiting."), started, completed("Done.")].flatMap(whole.read)).toEqual([started]);
     expect(whole.end()).toEqual([completed("Waiting.\n\nDone.")]);
   });
 
   // regression for #1011: completion kept only the last run's usage
-  // covers OP-002
-  it("[TC-RT-508] counts the tokens of every run, and keeps the first run's timings", () => {
+  it("counts the tokens of every run, and keeps the first run's timings (#1011)", () => {
     const used = (input: number, output: number, cacheRead: number | null, timing: number): ReplyUsage => ({
       timeToRequestMs: timing,
       timeToFirstStreamMs: timing,
@@ -545,7 +535,7 @@ describe("one turn over several runs of Claude Code", () => {
   });
 
   // covers ADR 029
-  it("[TC-RT-529] reports the skill you picked as used once, as the session starts", () => {
+  it("reports the skill you picked as used once, as the session starts", () => {
     const whole = wholeTurn("release-steps");
     expect([started, completed("Waiting."), started].flatMap(whole.read)).toEqual([
       started,
@@ -554,7 +544,7 @@ describe("one turn over several runs of Claude Code", () => {
   });
 
   // covers ADR 029
-  it("[TC-RT-530] mentions the skill you picked ahead of the prompt, only when the turn mounted it", () => {
+  it("mentions the skill you picked ahead of the prompt, only when the turn mounted it", () => {
     const mount = { name: "release-steps", revision: "r", folder: "/f", implicit: false };
     const request = {
       prompt: "Ship it.",
@@ -586,7 +576,7 @@ describe("one turn over several runs of Claude Code", () => {
 describe("reading a Claude Code turn", () => {
   const stream = (event: unknown) => ({ type: "stream_event", parent_tool_use_id: null, event }) as SDKMessage;
 
-  it("[TC-CH-096] shows each thinking block as a step that ends when the block stops", () => {
+  it("shows each thinking block as a step that ends when the block stops", () => {
     const read = turnEvents();
     expect(read(stream({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }))).toEqual([
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
@@ -598,9 +588,9 @@ describe("reading a Claude Code turn", () => {
     expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
   });
 
-  // covers PE-001, ADR 014 (#1356)
-  // covers SEC-001, ADR 014 (#1356)
-  it("[TC-PE-1356-14] a refused call's label is redacted with the turn's redactor before it is shortened", () => {
+  // covers ADR 014 (#1356)
+  // covers ADR 014 (#1356)
+  it("a refused call's label is redacted with the turn's redactor before it is shortened (#1356)", () => {
     const secret = "plain-known-value-7f3a9c";
     const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
     const command = `echo ${"a".repeat(80)} ${secret} done`;
@@ -628,8 +618,8 @@ describe("reading a Claude Code turn", () => {
     expect(denied?._tag === "ToolDenied" ? denied.label : "").not.toContain(secret.slice(0, 8));
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-18] a refused call's name is redacted whole with the turn's redactor before it is shortened", () => {
+  // covers ADR 014 (#1356)
+  it("a refused call's name is redacted whole with the turn's redactor before it is shortened (#1356)", () => {
     const secret = "plain-known-value-7f3a9c";
     const read = turnEvents(null, (text) => text.replaceAll(secret, "[secret]"));
     // The secret straddles where a name is cut.
@@ -659,8 +649,8 @@ describe("reading a Claude Code turn", () => {
     expect(kept).not.toContain(secret.slice(0, 8));
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-20] a call waiting for its result is dropped once any result answers it, and only a bounded number wait", () => {
+  // covers ADR 014 (#1356)
+  it("a call waiting for its result is dropped once any result answers it, and only a bounded number wait (#1356)", () => {
     const read = turnEvents();
     const use = (id: string) => ({ type: "tool_use", id, name: "Bash", input: { command: `echo ${id}` } });
     const result = (id: string, content: string, isError: boolean) => ({
@@ -688,8 +678,8 @@ describe("reading a Claude Code turn", () => {
     ]);
   });
 
-  // covers SEC-002, ADR 014 (#1356)
-  it("[TC-PE-1356-21] one turn reports a bounded number of refused calls, however many it makes one after another", () => {
+  // covers ADR 014 (#1356)
+  it("one turn reports a bounded number of refused calls, however many it makes one after another (#1356)", () => {
     const read = turnEvents();
     const reported = Array.from({ length: NOT_OFFERED_TURN_MAX + 40 }, (_, each) => {
       const id = `s-${each}`;
@@ -717,7 +707,7 @@ describe("reading a Claude Code turn", () => {
     expect(reported).toHaveLength(NOT_OFFERED_TURN_MAX);
   });
 
-  it("[TC-PE-1356-03] reports a call Claude Code answered as no such tool as refused, not offered, and no other error", () => {
+  it("reports a call Claude Code answered as no such tool as refused, not offered, and no other error (#1356)", () => {
     const read = turnEvents();
     const said = (parent: string | null, content: ReadonlyArray<unknown>) =>
       ({ type: "assistant", parent_tool_use_id: parent, message: { content } }) as unknown as SDKMessage;
@@ -778,7 +768,7 @@ describe("reading a Claude Code turn", () => {
   });
 
   // regression for #1027
-  it("[TC-RT-1019] reports a compacted session, so the hub tells it again what it relied on it holding", () => {
+  it("reports a compacted session, so the hub tells it again what it relied on it holding (#1027)", () => {
     const boundary = {
       type: "system",
       subtype: "compact_boundary",
@@ -789,7 +779,7 @@ describe("reading a Claude Code turn", () => {
   });
 
   // regression for #398
-  it("[TC-RT-051] completes a turn with its timings and its main loop's token usage, null where Claude Code omits one", () => {
+  it("completes a turn with its timings and its main loop's token usage, null where Claude Code omits one (#398)", () => {
     const result = (timings: Record<string, number>) =>
       ({
         type: "result",
@@ -823,8 +813,7 @@ describe("reading a Claude Code turn", () => {
     ]);
   });
 
-  // covers OP-002
-  it("[TC-OP-072] reads the plan's meters from the /usage report as sent, and nothing from a report without them", () => {
+  it("reads the plan's meters from the /usage report as sent, and nothing from a report without them", () => {
     const at = "2026-11-03T01:00:00.000Z";
     const report = (rateLimits: SDKUsageReport["rate_limits"]) =>
       ({
@@ -908,7 +897,7 @@ describe("reading a Claude Code turn", () => {
     ).toEqual({ ...nothing, extraUsage: { enabled: false, monthlyLimit: null, usedCredits: 900, currency: null } });
   });
 
-  it("[TC-CH-097] ends the turn at a rejected rate limit, with when it resets, unless overage covers it", () => {
+  it("ends the turn at a rejected rate limit, with when it resets, unless overage covers it", () => {
     const read = turnEvents();
     const limit = (info: Record<string, unknown>) =>
       ({ type: "rate_limit_event", rate_limit_info: info, uuid: "u", session_id: "s" }) as unknown as SDKMessage;
@@ -921,16 +910,14 @@ describe("reading a Claude Code turn", () => {
 });
 
 describe("the sandbox note", () => {
-  // covers PE-005
-  it("[TC-PE-087] tells a sandboxed turn that Git's config and hooks are read-only, and no other turn", () => {
+  it("tells a sandboxed turn that Git's config and hooks are read-only, and no other turn", () => {
     expect(turnInstructions("Be brief.", true)).toBe(`Be brief.\n\n${SANDBOX_NOTE}`);
     expect(turnInstructions("", true)).toBe(SANDBOX_NOTE);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(SANDBOX_NOTE).toContain("could not write config file .git/config: Operation not permitted");
   });
 
-  // covers PE-005
-  it("[TC-PE-1319] tells a sandboxed turn whose commands are read-only that its folders and .git cannot be written, and what still works", () => {
+  it("tells a sandboxed turn whose commands are read-only that its folders and .git cannot be written, and what still works", () => {
     expect(turnInstructions("Be brief.", true, false, undefined, "", true)).toBe(
       `Be brief.\n\n${READ_ONLY_SANDBOX_NOTE}`,
     );
@@ -972,8 +959,7 @@ describe("the sandbox note", () => {
     expect(start(tools({})).instructions).toContain(SANDBOX_NOTE);
   });
 
-  // covers PE-005, RT-001
-  it("[TC-PE-1321] tells a resumed session the sandbox it runs in now, into read-only and back out, since its system prompt stays", () => {
+  it("tells a resumed session the sandbox it runs in now, into read-only and back out, since its system prompt stays", () => {
     const tools = (overrides: Record<string, "allow" | "ask" | "deny">): ToolAccess => ({
       policy: {
         preset: "balanced",
@@ -1021,14 +1007,14 @@ describe("the sandbox note", () => {
 
 describe("the runtime settings", () => {
   // covers ADR 022
-  it("[TC-CH-201] adds no Claude attribution to a hob's commits or pull requests", () => {
+  it("adds no Claude attribution to a hob's commits or pull requests", () => {
     const options = baseOptions({ workspaceDir: "/w" } as ClaudeCodeConfig, "/bin/claude");
     expect(options.settingSources).toEqual([]);
     expect(options.settings).toMatchObject({ attribution: false });
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-509] loads nothing a claude.ai sign-in or Claude Code itself brings, on chat-only turns too", () => {
+  // covers ADR 029
+  it("loads nothing a claude.ai sign-in or Claude Code itself brings, on chat-only turns too", () => {
     const options = baseOptions({ workspaceDir: "/w" } as ClaudeCodeConfig, "/bin/claude");
     expect(options.strictMcpConfig).toBe(true);
     expect(options.skills).toEqual([]);
@@ -1045,7 +1031,7 @@ describe("the runtime settings", () => {
 
 describe("the bot commit note", () => {
   // covers ADR 022
-  it("[TC-CH-200] tells a hob with its own app that it commits unsigned as its bot and GitHub signs on push, and no other hob", () => {
+  it("tells a hob with its own app that it commits unsigned as its bot and GitHub signs on push, and no other hob", () => {
     const bot = hobAppCommitIdentity({ slug: "frodo-hobbots", botUserId: 90001000 });
     const note = botCommitNote(bot);
     expect(turnInstructions("Be brief.", true, true, bot)).toBe(
@@ -1058,16 +1044,16 @@ describe("the bot commit note", () => {
 });
 
 describe("the approval note", () => {
-  // covers PE-003; regression for #282
-  it("[TC-PE-123] tells a turn that can ask the user that it never sees the request, and no other turn", () => {
+  // Regression for #282
+  it("tells a turn that can ask the user that it never sees the request, and no other turn (#282)", () => {
     expect(turnInstructions("Be brief.", false, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}`);
     expect(turnInstructions("Be brief.", true, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}`);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(APPROVAL_NOTE).toContain("you do not");
   });
 
-  // covers PE-003; regression for #282
-  it("[TC-PE-124] carries the approval note to a resumed session with its instructions, since it keeps its system prompt", () => {
+  // Regression for #282
+  it("carries the approval note to a resumed session with its instructions, since it keeps its system prompt (#282)", () => {
     const request = { prompt: "hi", instructions: "Be brief.", instructionsChanged: true, sessionId: "s1" };
     const prompt = turnPrompt(request, turnInstructions(request.instructions, false, true));
     expect(prompt).toContain(`Be brief.\n\n${APPROVAL_NOTE}\n</current-instructions>`);

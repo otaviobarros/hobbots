@@ -45,8 +45,7 @@ const get = (path: string, headers: Record<string, string> = {}) =>
   handler(new Request(`http://localhost:4317${path}`, { headers: { host: "localhost:4317", ...headers } }));
 
 describe("web client routes", () => {
-  // covers DP-001
-  it("[TC-DP-005] serves the web client's index and assets next to the API", async () => {
+  it("serves the web client's index and assets next to the API", async () => {
     const index = await get("/");
     expect(index.status).toBe(200);
     expect(index.headers.get("content-type")).toContain("text/html");
@@ -60,8 +59,7 @@ describe("web client routes", () => {
     expect(await api.text()).toBe("api");
   });
 
-  // covers DP-001
-  it("[TC-DP-006] falls back to index.html for client routes but not for missing files", async () => {
+  it("falls back to index.html for client routes but not for missing files", async () => {
     const route = await get("/agents/aldric", { accept: "text/html" });
     expect(route.status).toBe(200);
     const html = await route.text();
@@ -76,8 +74,7 @@ describe("web client routes", () => {
     expect((await get("/../package.json")).status).toBe(404);
   });
 
-  // covers DP-001
-  it("[TC-DP-274] has the browser check index.html with the hub on every load and keep hashed assets", async () => {
+  it("has the browser check index.html with the hub on every load and keep hashed assets", async () => {
     // index.html names the hashed bundle, so a copy reused without asking runs an old client after an update.
     // Paths the static server answers with index.html under /assets/: extensionless, also once
     // decoded, and folded back out of it.
@@ -108,8 +105,7 @@ describe("web client routes", () => {
     expect((await get("/assets/missing.js")).headers.get("cache-control")).toBeNull();
   });
 
-  // covers DP-004
-  it("[TC-DP-007] refuses requests addressed to a host name other than localhost", async () => {
+  it("refuses requests addressed to a host name other than localhost", async () => {
     const response = await get("/", { host: "attacker.example:4317" });
     expect(response.status).toBe(421);
     expect((await get("/api/health", { host: "127.0.0.1:4317" })).status).toBe(200);
@@ -142,8 +138,7 @@ describe("isOwnHost", () => {
 });
 
 describe("HubListeners", () => {
-  // covers DP-004
-  it("[TC-DP-008] answers on 127.0.0.1 and ::1 and on no other address", async () => {
+  it("answers on 127.0.0.1 and ::1 and on no other address", async () => {
     const server: Server = createServer((_, response) => response.end("hub"));
     await new Promise<void>((resolve) => server.listen({ host: "127.0.0.1", port: 0 }, resolve));
     const { port, address } = server.address() as AddressInfo;

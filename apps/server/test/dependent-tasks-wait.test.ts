@@ -60,8 +60,7 @@ const expectQueued = (tree: TaskTree, requests: Parameters<typeof promptsTo>[0])
 const rounds = Effect.sleep("300 millis");
 
 describe("a dependent Task waits for its dependencies", () => {
-  // covers OR-002, OR-003
-  it("[TC-OR-200] Rook's Task starts no turn while Quill's runs, then exactly one once Quill's completes", async () => {
+  it("Rook's Task starts no turn while Quill's runs, then exactly one once Quill's completes", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase());
     await run(send(["Build the app", backend(), frontend(["$backend.task_id"])]));
 
@@ -82,8 +81,7 @@ describe("a dependent Task waits for its dependencies", () => {
     expect(rook.result?.summary).toBe("Frontend ready");
   }, 30_000);
 
-  // covers OR-002, OR-003, OR-004
-  it("[TC-OR-201] a dependency that fails or is cancelled keeps the dependent queued, its lead hears of it, and a reassignment lets it start", async () => {
+  it("a dependency that fails or is cancelled keeps the dependent queued, its lead hears of it, and a reassignment lets it start", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase());
     await run(send(["Build the app", backend(), frontend(["$backend.task_id"])]));
     await run(treeWhen((tree) => memberTask(tree, QUILL)?.state === "active" && memberTask(tree, ROOK) !== undefined));
@@ -112,8 +110,7 @@ describe("a dependent Task waits for its dependencies", () => {
     expect(attemptsOf(done, taskOf(done, ROOK))).toEqual(["completed"]);
   }, 30_000);
 
-  // covers OR-002, OR-003, OR-006
-  it("[TC-OR-202] a dependent of a cancelled Task stays queued until it is cancelled too, with nothing left open", async () => {
+  it("a dependent of a cancelled Task stays queued until it is cancelled too, with nothing left open", async () => {
     const { run, requests } = await startHub(await sharedDatabase());
     await run(send(["Build the app", backend(), frontend(["$backend.task_id"])]));
     const running = await run(
@@ -133,8 +130,7 @@ describe("a dependent Task waits for its dependencies", () => {
     await run(nothingOpen);
   }, 30_000);
 
-  // covers OR-002, OR-003
-  it("[TC-OR-203] a Task that depends on two starts only once the second of them completes", async () => {
+  it("a Task that depends on two starts only once the second of them completes", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase());
     await run(
       send([

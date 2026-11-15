@@ -75,8 +75,7 @@ describe("remote access in Settings", () => {
 describe("HTTPS through tailscale serve in Settings", () => {
   const serving = { enabled: true, port: 4318, listening: true, forwarding: true, detail: null } as const;
 
-  // covers DP-004
-  it("[TC-DP-137] gives the HTTPS address only while Tailscale serves the hub there", () => {
+  it("gives the HTTPS address only while Tailscale serves the hub there", () => {
     expect(remoteAddress(status({ https: serving }))).toBe("https://studio-desk.example.ts.net");
     // On but not forwarded yet, or forwarded with HTTPS off: the HTTP address stays.
     expect(remoteAddress(status({ https: { ...serving, forwarding: false } }))).toBe(
@@ -89,8 +88,7 @@ describe("HTTPS through tailscale serve in Settings", () => {
     expect(remoteAddress(status({ https: serving, listening: [] }))).toBeNull();
   });
 
-  // covers DP-004
-  it("[TC-DP-138] asks to run or remove tailscale serve, and moves the page to the HTTPS address and back", () => {
+  it("asks to run or remove tailscale serve, and moves the page to the HTTPS address and back", () => {
     const off = { enabled: false, port: 4318, listening: false, forwarding: false, detail: null } as const;
     expect(serveAsk(status({ https: off }))).toBeNull();
     expect(serveAsk(status({ https: { ...serving, forwarding: false } }))).toBe("forward");

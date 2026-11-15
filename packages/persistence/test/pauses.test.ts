@@ -98,8 +98,7 @@ const stateOf = (id: string) =>
   Effect.map(treeOf, (tree) => tree.tasks.find((each) => each.id === id) ?? Option.getOrThrow(Option.none()));
 
 describe("pausing a Quest's work", () => {
-  // covers OR-006
-  it("[TC-OR-1446-10] pauses a Task with nothing running at once, the Quest with it, and resumes it where it stood", async () => {
+  it("pauses a Task with nothing running at once, the Quest with it, and resumes it where it stood (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -130,8 +129,7 @@ describe("pausing a Quest's work", () => {
     expect(result.after.quests[0]?.state).toBe("active");
   });
 
-  // covers OR-006, EX-001
-  it("[TC-OR-1446-11] waits for a running turn as pausing, and settles paused only once that turn has ended", async () => {
+  it("waits for a running turn as pausing, and settles paused only once that turn has ended (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -165,8 +163,7 @@ describe("pausing a Quest's work", () => {
 });
 
 describe("work under a paused Task", () => {
-  // covers OR-006
-  it("[TC-OR-1446-16] starts no turn, and is neither retried nor reassigned, until the Task above is resumed", async () => {
+  it("starts no turn, and is neither retried nor reassigned, until the Task above is resumed (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -216,8 +213,8 @@ describe("work under a paused Task", () => {
 });
 
 describe("a change written with another", () => {
-  // covers OR-006, STD-ARCH-014
-  it("[TC-OR-1446-17] commits a resume with its note, or neither when the note cannot be left", async () => {
+  // covers STD-ARCH-014
+  it("commits a resume with its note, or neither when the note cannot be left (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -255,8 +252,7 @@ describe("a change written with another", () => {
 });
 
 describe("a lead's retry and reassign", () => {
-  // covers EX-001, OR-006
-  it("[TC-OR-1446-12] refuses a retry while the last Attempt may still run", async () => {
+  it("refuses a retry while the last Attempt may still run (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -284,8 +280,7 @@ describe("a lead's retry and reassign", () => {
     expect(result.refused).toMatchObject({ reason: "attempt-unresolved" });
   });
 
-  // covers OR-006, EX-001
-  it("[TC-OR-1446-27] refuses a retry of a retired hob's Task, which stays failed for another hob to take", async () => {
+  it("refuses a retry of a retired hob's Task, which stays failed for another hob to take (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -303,8 +298,8 @@ describe("a lead's retry and reassign", () => {
     expect(result.after.state).toBe("failed");
   });
 
-  // covers OR-006, STD-SEC-003
-  it("[TC-OR-1446-13] gives the new hob the authority worked out for it, and journals the lead and its reason", async () => {
+  // covers STD-SEC-003
+  it("gives the new hob the authority worked out for it, and journals the lead and its reason (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -329,7 +324,7 @@ describe("a lead's retry and reassign", () => {
 
 describe("your note straight to a member", () => {
   // covers STD-ARCH-019
-  it("[TC-OR-1446-14] reaches the member's Task as yours, from your message, and never its lead", async () => {
+  it("reaches the member's Task as yours, from your message, and never its lead (#1446)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -365,7 +360,7 @@ describe("your note straight to a member", () => {
   });
 
   // covers STD-ARCH-019
-  it("[TC-OR-1446-24] refuses your note to a member whose Task changed hands meanwhile", async () => {
+  it("refuses your note to a member whose Task changed hands meanwhile (#1446)", async () => {
     const refused = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -394,8 +389,7 @@ describe("your note straight to a member", () => {
     expect(refused).toMatchObject({ reason: "not-recipient" });
   });
 
-  // covers IN-004
-  it("[TC-OR-1446-06] finds whom a message mentions as the hub stores it, and nobody in Markdown code", async () => {
+  it("finds whom a message mentions as the hub stores it, and nobody in Markdown code (#1446)", async () => {
     const found = await run(
       Effect.gen(function* () {
         yield* campaign;

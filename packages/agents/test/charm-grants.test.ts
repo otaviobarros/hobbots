@@ -66,8 +66,8 @@ const grant = (rule: GrantRule) =>
   });
 
 describe("a hob's Charms", () => {
-  // covers PE-008, ADR 031
-  it("[TC-PE-504] stops a running turn when the hob loses a Charm, and keeps it when it gains one", () => {
+  // covers ADR 031
+  it("stops a running turn when the hob loses a Charm, and keeps it when it gains one", () => {
     const both = access(policy({ granted: ["github", "pip"] }));
     expect(narrows(both, access(policy({ granted: ["pip"] })))).toBe(true);
     expect(narrows(access(policy(undefined)), access(policy({ granted: [] })))).toBe(true);
@@ -78,8 +78,8 @@ describe("a hob's Charms", () => {
     expect(narrows(access(policy(undefined)), access(policy({ granted: ["github"] })))).toBe(false);
   });
 
-  // covers PE-008, ADR 031
-  it("[TC-PE-505] stops a running turn when a Charm operation's answer gets narrower, not when it widens", () => {
+  // covers ADR 031
+  it("stops a running turn when a Charm operation's answer gets narrower, not when it widens", () => {
     const allowed = access(policy({ granted: ["github"] }));
     const asks = access(policy({ granted: ["github"], overrides: { "github.read": "ask" } }));
     expect(narrows(allowed, asks)).toBe(true);
@@ -87,8 +87,8 @@ describe("a hob's Charms", () => {
     expect(narrows(asks, allowed)).toBe(false);
   });
 
-  // covers PE-007, ADR 031
-  it("[TC-PE-506] revokes the grants that relied on a Charm taken away, its sites and what it takes over", () => {
+  // covers ADR 031
+  it("revokes the grants that relied on a Charm taken away, its sites and what it takes over", () => {
     const site = grant({ _tag: "CharmSite", charm: "github", operation: "github.read", site: { repository: "o/r" } });
     const push = grant({ _tag: "Push", cwd: "/work", remote: "origin", branch: "main" });
     const command = grant({ _tag: "Command", operation: "run-commands", cwd: "/work", words: ["ls"] });
@@ -102,8 +102,8 @@ describe("a hob's Charms", () => {
     expect([site, push].map((each) => lostAuthority(each, undeclared))).toEqual(["narrowed", null]);
   });
 
-  // covers AG-150, ADR 031
-  it("[TC-AG-165] matches a skill's Charm hint against the hob's set of Charm ids", () => {
+  // covers ADR 031
+  it("matches a skill's Charm hint against the hob's set of Charm ids", () => {
     expect(hobCharms(policy(undefined))).toEqual(["github"]);
     expect(hobCharms(policy({ granted: ["github", "pip", "github"] }))).toEqual(["github", "pip"]);
     expect(hobCharms(policy({ granted: [] }))).toEqual([]);
@@ -111,8 +111,8 @@ describe("a hob's Charms", () => {
 });
 
 describe("what you took over, for a running turn", () => {
-  // covers PE-005, OR-006, #1537
-  it("[TC-OR-1537-08] stops a turn only for a path its sandbox left open, not one inside a folder it already closed", () => {
+  // Issue #1537
+  it("stops a turn only for a path its sandbox left open, not one inside a folder it already closed (#1537)", () => {
     const base = access(policy(undefined));
     const closing = (...taken: Array<string>): ToolAccess => ({ ...base, taken });
     expect(takesMore(closing(), closing("/work/repo/docs"))).toBe(true);

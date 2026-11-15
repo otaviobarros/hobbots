@@ -117,10 +117,7 @@ const denyWith = async (card: Locator, reason: string) => {
   await card.getByRole("button", { name: "Deny" }).click();
 };
 
-// covers PE-003, PE-007
-test("[TC-PE-129] double-clicking Allow once or Save the rule runs the action once and saves one rule", async ({
-  page,
-}) => {
+test("double-clicking Allow once or Save the rule runs the action once and saves one rule", async ({ page }) => {
   const current = await pipsChat(page);
 
   const push = await ask(page, PUSH);
@@ -144,8 +141,7 @@ test("[TC-PE-129] double-clicking Allow once or Save the rule runs the action on
   expect(await api<ReadonlyArray<Grant>>(current, "/api/grants?include=all")).toHaveLength(1);
 });
 
-// covers PE-003, PE-007, UX-004
-test("[TC-IN-018] Always and Deny with a reason give the same result from the Inbox as from the chat", async ({
+test("Always and Deny with a reason give the same result from the Inbox as from the chat", async ({
   page,
   context,
 }) => {

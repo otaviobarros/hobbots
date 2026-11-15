@@ -43,7 +43,7 @@ const frodoAsked = (requests: ReadonlyArray<PromptRequest>, first: string) =>
 
 describe("the directory beside Tasks", () => {
   // covers ADR 032 (Visible to other hobs: Delegation by name still works), ADR 018
-  it("[TC-OR-1235-01] a hidden hob is in no roster and unknown to read_hob, yet takes a Task delegated to it by name", async () => {
+  it("a hidden hob is in no roster and unknown to read_hob, yet takes a Task delegated to it by name (#1235)", async () => {
     const party = partyHub({ directory: true });
     dispose = party.dispose;
     const { run, requests, answers } = party;
@@ -72,7 +72,7 @@ describe("the directory beside Tasks", () => {
   }, 30_000);
 
   // covers ADR 032 (The public card: Never on the card)
-  it("[TC-OR-1235-02] no roster or card gives away another hob's memory, Tasks or instructions", async () => {
+  it("no roster or card gives away another hob's memory, Tasks or instructions (#1235)", async () => {
     const memory = makeMemoryStoreFake();
     await Effect.runPromise(
       memory.store.write(

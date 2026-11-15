@@ -46,7 +46,7 @@ describe("Make a camp", () => {
   });
 
   // covers ADR 039 (Members), #1467
-  it("[TC-CH-1467-01] keeps the hobs in the order picked, the first leading, and sends the others", () => {
+  it("keeps the hobs in the order picked, the first leading, and sends the others (#1467)", () => {
     expect(toggleHob([ALDRIC], QUILL)).toEqual([ALDRIC, QUILL]);
     expect(toggleHob([ALDRIC, QUILL], PIP)).toEqual([ALDRIC, QUILL, PIP]);
     // Unticking the lead makes the next hob picked lead.
@@ -106,7 +106,7 @@ describe("Make a camp", () => {
   });
 
   // Issue #1551: while a reply runs in the chat, its chapter cannot move, so the camp it comes along with waits.
-  it("holds a camp whose chapter cannot move yet, and makes one without the chapter at once", () => {
+  it("holds a camp whose chapter cannot move yet, and makes one without the chapter at once (#1551)", () => {
     const along = run([{ _tag: "Edit", draft: draft({ chapter: true }) }]);
     expect(run([{ _tag: "Send", key: K1, held: true }], along)).toBe(along);
     expect(run([{ _tag: "Send", key: K1, held: false }], along)).toEqual({

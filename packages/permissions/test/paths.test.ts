@@ -62,8 +62,7 @@ describe("canonical paths", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-006] is not fooled into case folding by a link whose name differs only in case", async (ctx) => {
+  it("is not fooled into case folding by a link whose name differs only in case", async (ctx) => {
     const dir = path.join(home.root, "case");
     await fs.mkdir(path.join(dir, "project"), { recursive: true });
     const sensitive = await fs.mkdir(path.join(dir, "Project")).then(

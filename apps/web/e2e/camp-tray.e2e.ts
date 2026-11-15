@@ -86,8 +86,7 @@ const askInBoth = async (page: Page) => {
   return { camp, chat: page.url(), current, aldric: aldric.id };
 };
 
-// covers IN-002, UX-001
-test("[TC-IN-1423-01] a camp's tray shows only that camp's questions and approvals, and Everywhere shows the rest with where each waits", async ({
+test("a camp's tray shows only that camp's questions and approvals, and Everywhere shows the rest with where each waits (#1423)", async ({
   page,
   scan,
 }) => {
@@ -124,8 +123,7 @@ test("[TC-IN-1423-01] a camp's tray shows only that camp's questions and approva
   await expect(tray(page).getByRole("region", { name: "Aldric asks you" })).toBeVisible();
 });
 
-// covers IN-002, UX-001
-test("[TC-IN-1423-02] See all from a camp's tray opens the Inbox on that camp, and Everywhere lists every request", async ({
+test("See all from a camp's tray opens the Inbox on that camp, and Everywhere lists every request (#1423)", async ({
   page,
   scan,
 }) => {
@@ -156,8 +154,7 @@ test("[TC-IN-1423-02] See all from a camp's tray opens the Inbox on that camp, a
   await expect(list.getByRole("link", { name: /Approval/ })).toHaveCount(1);
 });
 
-// covers IN-002, UX-001
-test("[TC-IN-1423-03] a camp where nothing waits says what waits elsewhere, and Everywhere still opens it", async ({
+test("a camp where nothing waits says what waits elsewhere, and Everywhere still opens it (#1423)", async ({
   page,
   scan,
 }) => {
@@ -176,8 +173,7 @@ test("[TC-IN-1423-03] a camp where nothing waits says what waits elsewhere, and 
   await expect(elsewhere).toHaveCount(0);
 });
 
-// covers IN-002, IN-001
-test("[TC-IN-1423-04] the Inbox on a chat stops counting a request once you decide it there", async ({ page }) => {
+test("the Inbox on a chat stops counting a request once you decide it there (#1423)", async ({ page }) => {
   await askInBoth(page);
   await tray(page).getByRole("link", { name: "See all in Inbox" }).click();
   const main = page.getByRole("main");

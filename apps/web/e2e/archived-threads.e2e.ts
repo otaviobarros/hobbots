@@ -67,8 +67,7 @@ const hubWithArchive = async () => {
   return { current, hob, archived, live };
 };
 
-// covers CH-009
-test("[TC-CH-160] an archived thread opens read-only from the Archive and comes back on Restore", async ({ page }) => {
+test("an archived thread opens read-only from the Archive and comes back on Restore", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
 
@@ -111,10 +110,7 @@ test("[TC-CH-160] an archived thread opens read-only from the Archive and comes 
   await expect(chat.getByText("Echo: Try a shorter name", { exact: true })).toBeVisible();
 });
 
-// covers CH-009
-test("[TC-CH-1466] a long message in an archived chat stays inside the column, beside the read-only bar", async ({
-  page,
-}) => {
+test("a long message in an archived chat stays inside the column, beside the read-only bar", async ({ page }) => {
   const { current, hob } = await hubWithArchive();
   // A pasted script: a rule of box-drawing dashes and a long path, neither with a place to break.
   const script = `What does this script do?\n\n# ${"─".repeat(160)}\nopen_url "https://example.com/${"a".repeat(180)}"`;
@@ -142,8 +138,7 @@ test("[TC-CH-1466] a long message in an archived chat stays inside the column, b
   expect(await read.evaluate((main) => main.scrollWidth - main.clientWidth)).toBe(0);
 });
 
-// covers CH-009
-test("[TC-CH-218] Undo after a Restore in the Archive archives the chat again", async ({ page }) => {
+test("Undo after a Restore in the Archive archives the chat again", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/archive`);
   const archive = page.getByRole("main", { name: "Archive" });
@@ -160,8 +155,7 @@ test("[TC-CH-218] Undo after a Restore in the Archive archives the chat again", 
   expect(back.map((t) => t.id)).toEqual([archived.id]);
 });
 
-// covers CH-009
-test("[TC-CH-219] an archived chat's address shows when it is no longer archived", async ({ page }) => {
+test("an archived chat's address shows when it is no longer archived", async ({ page }) => {
   const { current, hob, live } = await hubWithArchive();
   await page.goto(`${current.url}/#/archive/chats/${hob.id}/${live.id}`);
   await expect(page.getByText("This chat is no longer archived.")).toBeVisible();
@@ -169,8 +163,7 @@ test("[TC-CH-219] an archived chat's address shows when it is no longer archived
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${live.id}`));
 });
 
-// covers CH-009
-test("[TC-CH-161] restoring the last archived thread from the Archive leaves the empty state", async ({ page }) => {
+test("restoring the last archived thread from the Archive leaves the empty state", async ({ page }) => {
   const { current, hob } = await hubWithArchive();
   await page.goto(`${current.url}/#/hobs/${hob.id}/archived`);
   await expect(page).toHaveURL(new RegExp(`#/archive\\?hob=${hob.id}$`));
@@ -185,8 +178,7 @@ test("[TC-CH-161] restoring the last archived thread from the Archive leaves the
   expect(threads.map((t) => t.title)).toContain("Rename the newsletter");
 });
 
-// covers CH-006, CH-009
-test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only in the Archive", async ({ page }) => {
+test("⌘K marks an archived thread and opens it read-only in the Archive", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.goto(`${current.url}/#/hobs/${hob.id}`);
   // ⌘K listens once the page is up.
@@ -211,8 +203,7 @@ test("[TC-CH-162] ⌘K marks an archived thread and opens it read-only in the Ar
 /** The hub's answer for a hob's archived threads, which these cases hold back or refuse. */
 const archivedList = /\/api\/agents\/[^/]+\/threads\?archived=true$/;
 
-// covers CH-009
-test("[TC-CH-163] an archived thread opened by its address shows no composer while its lists load, then opens in the Archive", async ({
+test("an archived thread opened by its address shows no composer while its lists load, then opens in the Archive", async ({
   page,
 }) => {
   const { current, hob, archived } = await hubWithArchive();
@@ -236,8 +227,7 @@ test("[TC-CH-163] an archived thread opened by its address shows no composer whi
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
-// covers CH-009
-test("[TC-CH-164] an archived thread whose lookup fails stays without a composer until Try again", async ({ page }) => {
+test("an archived thread whose lookup fails stays without a composer until Try again", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.route(archivedList, (route) => route.fulfill({ status: 500, body: "" }));
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);

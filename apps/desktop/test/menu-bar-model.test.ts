@@ -128,8 +128,7 @@ describe("the menu-bar icon on a connected desktop", () => {
     expect(connectedTrayModel({ state: "unreachable" }, hub).icon).toBe("stopped");
   });
 
-  // covers DP-001
-  it("[TC-DP-169] gives each reason the hub cannot be reached its own words and what the user can do", () => {
+  it("gives each reason the hub cannot be reached its own words and what the user can do", () => {
     const hub = { nodeName: "studio.example.ts.net", address: "http://studio.example.ts.net:4317" };
     const model = (state: Parameters<typeof connectedTrayModel>[0]) => {
       const { title, detail, actions } = connectedTrayModel(state, hub);

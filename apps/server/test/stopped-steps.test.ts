@@ -76,8 +76,7 @@ const untilBlocked = async (reactions: ReadonlyArray<Reaction>) => {
 };
 
 describe("a step that stops on a finding holds the steps after it", () => {
-  // covers OR-002, OR-004
-  it("[TC-OR-400] step 1 is blocked, step 2 waits, and Aldric completing step 1 releases step 2", async () => {
+  it("step 1 is blocked, step 2 waits, and Aldric completing step 1 releases step 2", async () => {
     const goOn: Reaction = {
       on: BLOCKED_ARRIVAL,
       lines: [
@@ -112,8 +111,7 @@ describe("a step that stops on a finding holds the steps after it", () => {
     expect(second.result?.summary).toBe("Notes written");
   }, 30_000);
 
-  // covers OR-002, OR-006
-  it("[TC-OR-401] step 2 never runs when Aldric cancels both steps and plans again", async () => {
+  it("step 2 never runs when Aldric cancels both steps and plans again", async () => {
     const replan: Reaction = {
       on: BLOCKED_ARRIVAL,
       lines: [
@@ -144,8 +142,7 @@ describe("a step that stops on a finding holds the steps after it", () => {
     expect(promptsTo(requests, second)).toEqual([]);
   }, 30_000);
 
-  // covers OR-002, EX-004
-  it("[TC-OR-403] a step held for Aldric stays held, with step 2 queued, after Hobbots restarts", async () => {
+  it("a step held for Aldric stays held, with step 2 queued, after Hobbots restarts", async () => {
     const { database, run, requests, stop } = await untilBlocked([]);
     // Stops once Aldric's turn that hears of the block has ended, so the first hub has nothing
     // left to start on the shared database while the second one recovers.

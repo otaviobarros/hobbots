@@ -26,8 +26,7 @@ import {
 const COMMIT = "git commit -m 'Add the app'";
 
 describe("a delegation whose authority leaves the member no tool for its brief", () => {
-  // covers OR-002, PE-005
-  it("[TC-OR-430] is refused when it gives Local Git and Run commands but has Edit files ask, and no Task is made", async () => {
+  it("is refused when it gives Local Git and Run commands but has Edit files ask, and no Task is made", async () => {
     const { run, answers } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -62,8 +61,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
     expect(answer).toContain("Pip will have: file reads, file edits, git_init; no commands.");
   }, 30_000);
 
-  // covers OR-002, PE-005
-  it("[TC-OR-1423] gives a member with Edit files Never read-only commands: it runs git log, and cannot write a file", async () => {
+  it("gives a member with Edit files Never read-only commands: it runs git log, and cannot write a file", async () => {
     const { run, answers, requests } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -109,8 +107,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
     expect(write.map((each) => [each.operation, each.decision])).toEqual([["edit-files", "deny"]]);
   }, 30_000);
 
-  // covers OR-002, PE-005
-  it("[TC-OR-431] tells the lead what a member given Local Git will have, and that member can commit", async () => {
+  it("tells the lead what a member given Local Git will have, and that member can commit", async () => {
     const { run, answers, requests } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -142,8 +139,7 @@ describe("a delegation whose authority leaves the member no tool for its brief",
     expect(verdicts.map((each) => [each.operation, each.decision])).toEqual([["local-git", "allow"]]);
   }, 30_000);
 
-  // covers OR-002, PE-005
-  it("[TC-OR-433] tells the lead a member with no folder in common will have no tools, and its turn is chat-only", async () => {
+  it("tells the lead a member with no folder in common will have no tools, and its turn is chat-only", async () => {
     const { run, answers, requests } = await startHub(await sharedDatabase());
     await run(
       send([

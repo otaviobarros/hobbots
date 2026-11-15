@@ -156,8 +156,7 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     rmSync(dataDir, { recursive: true, force: true });
   });
 
-  // covers EX-005
-  it("[TC-EX-008] keeps the server and a running reply alive after the window closes", async () => {
+  it("keeps the server and a running reply alive after the window closes", async () => {
     assert.equal(identity.app, "hobbots");
     assert.equal(identity.dataDir, dataDir);
 
@@ -227,8 +226,7 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     assert.deepEqual(await health(), identity);
   });
 
-  // covers DP-001
-  it("[TC-DP-010] a second launch shows the running instance's window and starts no second server", async () => {
+  it("a second launch shows the running instance's window and starts no second server", async () => {
     assert.deepEqual(appProcesses(), { main: 1, servers: 1 });
 
     const second = launch();
@@ -244,8 +242,7 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     assert.deepEqual(appProcesses(), { main: 1, servers: 1 });
   });
 
-  // covers EX-005
-  it("[TC-EX-009] registers the login item on first start and reports what macOS made of it", async (t) => {
+  it("registers the login item on first start and reports what macOS made of it", async (t) => {
     const [window] = await windows();
     assert.ok(window);
     const state = (await evaluate(window, "window.hobbots.loginItem.get()")) as {
@@ -258,8 +255,7 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
     assert.ok(["enabled", "requires-approval", "not-registered", "not-found"].includes(state.status), state.status);
   });
 
-  // covers EX-005
-  it("[TC-EX-010] Quit stops the server the app launched", async () => {
+  it("Quit stops the server the app launched", async () => {
     // Electron quits gracefully on SIGTERM, which runs the app's before-quit handler.
     first.kill("SIGTERM");
     const code = await Promise.race([exited(first), sleep(20_000).then(() => "still running" as const)]);

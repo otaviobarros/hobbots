@@ -48,10 +48,7 @@ const aldricHub = async () => {
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers OR-001, OR-005, CH-005
-test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and finishes with one result", async ({
-  page,
-}) => {
+test("a Task split into four steps shows step 2 of 4 in the chat and finishes with one result", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });

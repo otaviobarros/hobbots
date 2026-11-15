@@ -45,7 +45,7 @@ test.afterEach(async ({ page }, testInfo) => {
 const LABEL = "Get one email when yours is out";
 const JOINED = "You are on the list.";
 
-test("[TC-GEN-008] joins the wait-list for the apps that are not out yet", async ({ page }) => {
+test("joins the wait-list for the apps that are not out yet", async ({ page }) => {
   // covers #182 and #1224: anyone can join the wait-list, from the Download section
   const email = `pip-${randomUUID()}@example.com`;
   await page.goto("/");
@@ -57,9 +57,7 @@ test("[TC-GEN-008] joins the wait-list for the apps that are not out yet", async
   expect(storedRows(email)).toEqual([{ wants_more_platforms: 1, source: "hero" }]);
 });
 
-test("[TC-GEN-011] joins again with the same email in other case, shows the same message and stores it once", async ({
-  page,
-}) => {
+test("joins again with the same email in other case, shows the same message and stores it once", async ({ page }) => {
   // covers #182 and #185: joining again shows the same success message and stores nothing new
   const email = `pip-${randomUUID()}@example.com`;
   await page.goto("/");
@@ -77,7 +75,7 @@ test("[TC-GEN-011] joins again with the same email in other case, shows the same
   expect(storedRows(email)).toHaveLength(1);
 });
 
-test("[TC-GEN-009] refuses an invalid email and says why", async ({ page }) => {
+test("refuses an invalid email and says why (#182)", async ({ page }) => {
   // covers #182: the form checks the email
   await page.goto("/");
   const email = page.getByLabel(LABEL);
@@ -92,7 +90,7 @@ test("[TC-GEN-009] refuses an invalid email and says why", async ({ page }) => {
 test.describe("with Reduce motion", () => {
   test.use({ reducedMotion: "reduce" });
 
-  test("[TC-GEN-010] joins with every animation stopped", async ({ page }) => {
+  test("joins with every animation stopped (#182)", async ({ page }) => {
     // covers #182: every animation stops with Reduce motion
     await page.goto("/");
     await page.getByLabel(LABEL).fill("pip@example.com");

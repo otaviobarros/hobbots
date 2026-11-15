@@ -53,7 +53,7 @@ React's [You Might Not Need an Effect](https://react.dev/learn/you-might-not-nee
 Show a hob's, thread's and quest's status from the hub's projections, such as `ThreadRunChanged`, `HobPresence` and `QuestSummary`. A client never works one out from messages or Task states. Only view state, such as a label or tone for a state, is local.
 
 - **Why:** two devices then always agree, and a rule is not copied into every screen. See [ADR 037](../decisions/037-chat-and-camps.md).
-- **Enforced by:** review; `[TC-UX-1374-05]` and `[TC-UX-1374-06]` check that two devices show the same status.
+- **Enforced by:** review, and browser tests that check two devices show the same status.
 - **Applies to:** `apps/web`, `apps/desktop`.
 
 ### STD-REACT-029 A flow is a reducer with one type per state

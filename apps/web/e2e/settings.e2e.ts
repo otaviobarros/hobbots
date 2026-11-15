@@ -49,10 +49,7 @@ const runningAnimation = (page: Page) =>
     return name;
   });
 
-// covers UX-003, UX-005
-test("[TC-UX-023] Reduce motion follows the system until changed, and stops every animation when on", async ({
-  page,
-}) => {
+test("Reduce motion follows the system until changed, and stops every animation when on", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await openSettings(page, "app");
   const section = page.getByRole("region", { name: "This app" });
@@ -85,8 +82,7 @@ test("[TC-UX-023] Reduce motion follows the system until changed, and stops ever
   expect(await runningAnimation(page)).toBe("hb-bob");
 });
 
-// covers AG-005, UX-005
-test("[TC-UX-024] a signed-out runtime shows how to fix it in Settings › AI providers", async ({ page }) => {
+test("a signed-out runtime shows how to fix it in Settings › AI providers", async ({ page }) => {
   await openSettings(page, "connections", {
     HOBBOTS_RUNTIME: "claude",
     HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir),
@@ -100,9 +96,8 @@ test("[TC-UX-024] a signed-out runtime shows how to fix it in Settings › AI pr
   await expect(providers.getByRole("heading", { name: "Enforcement on this hub" })).toBeVisible();
 });
 
-// covers AG-005, RT-001
-// TC-RT-012 is retired: a signed-in Codex is ready now that its turns run (#438), checked by TC-RT-036.
-test("[TC-RT-036] Settings › AI providers shows a ready, signed-in Codex, and each state that stops it with its fix", async ({
+// A signed-in Codex is ready now that its turns run (#438).
+test("Settings › AI providers shows a ready, signed-in Codex, and each state that stops it with its fix (#438)", async ({
   page,
 }) => {
   await openSettings(page, "connections", {
@@ -141,10 +136,7 @@ test("[TC-RT-036] Settings › AI providers shows a ready, signed-in Codex, and 
   await expect(codex.getByRole("button", { name: "Check again" })).toBeHidden();
 });
 
-// covers UX-005
-test("[TC-UX-025] Help and about shows the version and the licenses, and Your data the hub's data folder", async ({
-  page,
-}) => {
+test("Help and about shows the version and the licenses, and Your data the hub's data folder", async ({ page }) => {
   const current = await openSettings(page, "help");
   const about = page.getByRole("region", { name: "Help and about" });
 
@@ -169,8 +161,8 @@ test("[TC-UX-025] Help and about shows the version and the licenses, and Your da
   ).toBeVisible();
 });
 
-// covers OP-002 (#1088)
-test("[TC-UX-1088] Help's check says when it could not read memory, the first time or after an answer, never an old answer", async ({
+// Issue #1088
+test("Help's check says when it could not read memory, the first time or after an answer, never an old answer (#1088)", async ({
   page,
 }) => {
   await openSettings(page, "help");
@@ -198,8 +190,7 @@ test("[TC-UX-1088] Help's check says when it could not read memory, the first ti
   await expect(check).not.toContainText("Memory is turned off (optional)");
 });
 
-// covers UX-005
-test("[TC-UX-121] Settings opens on an overview that puts what is broken first, and Find a setting opens its section", async ({
+test("Settings opens on an overview that puts what is broken first, and Find a setting opens its section", async ({
   page,
 }) => {
   const current = await openSettings(page, "", {
@@ -241,10 +232,7 @@ test("[TC-UX-121] Settings opens on an overview that puts what is broken first, 
   await expect(page).toHaveURL(/#\/settings$/);
 });
 
-// covers UX-005
-test("[TC-UX-122] Safety, Connections and Devices hold what the old panels did, in the redesign's sections", async ({
-  page,
-}) => {
+test("Safety, Connections and Devices hold what the old panels did, in the redesign's sections", async ({ page }) => {
   const current = await openSettings(page, "safety");
 
   // Safety: one of three levels, what it means, the folders and the Always rules.
@@ -278,10 +266,7 @@ test("[TC-UX-122] Safety, Connections and Devices hold what the old panels did, 
   await expect(page.getByRole("switch", { name: "Use Hobbots from my other devices" })).toBeVisible();
 });
 
-// covers UX-005
-test("[TC-UX-123] Your data holds Backups with Restore and Export as files, retired hobs and the data folder", async ({
-  page,
-}) => {
+test("Your data holds Backups with Restore and Export as files, retired hobs and the data folder", async ({ page }) => {
   await openSettings(page, "data");
   const backups = page.getByRole("region", { name: "Backups" });
   await expect(backups).toContainText("Not backed up yet");
@@ -302,10 +287,7 @@ test("[TC-UX-123] Your data holds Backups with Restore and Export as files, reti
   await expect(page.getByRole("region", { name: "Data folder" }).getByRole("button", { name: "Copy" })).toBeVisible();
 });
 
-// covers UX-005
-test("[TC-UX-125] Help and about links the getting started guide and lists every keyboard shortcut", async ({
-  page,
-}) => {
+test("Help and about links the getting started guide and lists every keyboard shortcut", async ({ page }) => {
   await openSettings(page, "help");
   const about = page.getByRole("region", { name: "Help and about" });
   await expect(about.getByRole("link", { name: "Getting started guide" })).toHaveAttribute(

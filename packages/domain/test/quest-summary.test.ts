@@ -95,7 +95,7 @@ describe("questSummaryOf", () => {
   });
 
   // covers #1422
-  it("counts each reviewable artifact completed Tasks made that still waits for you, once", () => {
+  it("counts each reviewable artifact completed Tasks made that still waits for you, once (#1422)", () => {
     const delivered: SummaryTree = {
       ...tree,
       delivered: [

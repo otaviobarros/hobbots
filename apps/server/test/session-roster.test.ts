@@ -21,7 +21,7 @@ const names = (request: PromptRequest | undefined) =>
 
 describe("the roster outside chats", () => {
   // covers ADR 032 (The roster, read_hob), OR-004
-  it("[TC-OR-1234-01] a member's and a step's sessions see the other hobs, never themselves, and a member reads a card", async () => {
+  it("a member's and a step's sessions see the other hobs, never themselves, and a member reads a card (#1234)", async () => {
     const party = partyHub({ directory: true });
     dispose = party.dispose;
     const { run, requests, answers } = party;
@@ -66,7 +66,7 @@ describe("the roster outside chats", () => {
   });
 
   // covers ADR 032 (The roster, Sent again only when it changed)
-  it("[TC-OR-1234-02] a member's resumed session hears the roster again only when it changed", async () => {
+  it("a member's resumed session hears the roster again only when it changed (#1234)", async () => {
     const party = partyHub({ directory: true });
     dispose = party.dispose;
     const { run, requests, gates } = party;

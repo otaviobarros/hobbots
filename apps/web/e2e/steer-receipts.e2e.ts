@@ -18,8 +18,7 @@ const said = (page: Page): Locator => receipt(page).getByRole("status");
 /** Your notes in a hob's lane. */
 const notes = (page: Page, name: string): Locator => lane(page, name).getByRole("list", { name: "Your notes" });
 
-// covers OR-002, UX-006
-test("[TC-UX-260] a message the lead passes to one hob reads got it, then picked up, in the chat and in the lanes", async ({
+test("a message the lead passes to one hob reads got it, then picked up, in the chat and in the lanes (#909)", async ({
   page,
 }) => {
   test.setTimeout(240_000);
@@ -58,8 +57,7 @@ test("[TC-UX-260] a message the lead passes to one hob reads got it, then picked
   await expect(notes(page, "Ada").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
 });
 
-// covers OR-002, UX-006
-test("[TC-UX-261] a message the lead passes to two hobs names each, and each picks it up", async ({ page }) => {
+test("a message the lead passes to two hobs names each, and each picks it up (#909)", async ({ page }) => {
   test.setTimeout(240_000);
   const { current, ids } = await party(["Quill", "Ada"]);
   const { taskIds } = await startWork(
@@ -93,8 +91,7 @@ test("[TC-UX-261] a message the lead passes to two hobs names each, and each pic
   await expect(notes(page, "Ada").getByRole("listitem")).toHaveText([/Your note, via Aldric$/]);
 });
 
-// covers OR-002, UX-006
-test("[TC-UX-262] a message the lead answers without passing on stops at got it", async ({ page }) => {
+test("a message the lead answers without passing on stops at got it (#909)", async ({ page }) => {
   test.setTimeout(240_000);
   const { current, ids } = await party(["Ada"]);
   await startWork(
@@ -121,8 +118,7 @@ test("[TC-UX-262] a message the lead answers without passing on stops at got it"
   await expect(notes(page, "Ada")).toHaveCount(0);
 });
 
-// covers OR-002, PE-003, UX-006
-test("[TC-UX-263] a note held while its hob waits on your approval says so, and is picked up once you decide", async ({
+test("a note held while its hob waits on your approval says so, and is picked up once you decide (#909)", async ({
   page,
 }) => {
   test.setTimeout(240_000);

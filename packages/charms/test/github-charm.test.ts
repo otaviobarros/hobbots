@@ -230,7 +230,7 @@ const callWith = (
   }).pipe(Effect.provide(charmLayer(layers)), Effect.runPromise);
 
 describe("GitHub Charm", () => {
-  it("[TC-PE-158] points a git push to github_push only in the hob's folders whose origin is on GitHub", async () => {
+  it("points a git push to github_push only in the hob's folders whose origin is on GitHub", async () => {
     const noRemote = path.join(root, "runtimes");
     const { steered } = await callWith({ asked: [] }, access([project, noRemote]), "github_repository", {}, [
       project,
@@ -243,7 +243,7 @@ describe("GitHub Charm", () => {
     expect(chatOnly.steered).toEqual([null]);
   });
 
-  it("[TC-PE-131] reads the repository of the hob's own folder, on the hub", async () => {
+  it("reads the repository of the hob's own folder, on the hub", async () => {
     const asked: Array<string> = [];
     const { names, answer } = await callWith({ asked }, access([project]), "github_search", { kind: "issue" });
     expect(names).toEqual([
@@ -269,7 +269,7 @@ describe("GitHub Charm", () => {
     expect(item.answer.text).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123456789");
   });
 
-  it("[TC-PE-132] never reads a repository outside the hob's folders, or under Ask or Never", async () => {
+  it("never reads a repository outside the hob's folders, or under Ask or Never", async () => {
     const asked: Array<string> = [];
     // A folder the hob was not given, though the hub could read its repository.
     const outside = await callWith({ asked }, access([project]), "github_repository", { folder: other });
@@ -289,7 +289,7 @@ describe("GitHub Charm", () => {
 
     const never = await callWith({ asked }, access([project], "deny"), "github_repository", {});
     expect(never.answer).toEqual({ refused: true, text: "This hob's own permissions never allows reading GitHub." });
-    // Under Ask, a turn with nobody to ask refuses the read (ADR 031); one that can ask asks (TC-PE-466).
+    // Under Ask, a turn with nobody to ask refuses the read (ADR 031); one that can ask asks (hub-actions.test.ts in @hobbots/agents).
     const ask = await callWith({ asked }, access([project], "ask"), "github_repository", {});
     expect(ask.answer).toEqual({
       refused: true,
@@ -317,8 +317,8 @@ describe("GitHub Charm", () => {
     expect(asked).toEqual([]);
   });
 
-  // covers PE-003, PE-007, EX-004, ADR 015, ADR 031
-  it("[TC-PE-468] asks before a read the hob's override sets to Ask, Once only, and again on the next read", async () => {
+  // covers ADR 015, ADR 031
+  it("asks before a read the hob's override sets to Ask, Once only, and again on the next read", async () => {
     const asked: Array<string> = [];
     const now = access([project], "ask");
     // Even a user who would save the approval for always is offered no rule for an Ask they narrowed.
@@ -381,7 +381,7 @@ describe("GitHub Charm", () => {
     expect(asked).toEqual(["repository otaviobarros/hobbots", "repository otaviobarros/hobbots"]);
   });
 
-  it("[TC-PE-140] offers its actions only to a hob with the Charm while GitHub is connected", async () => {
+  it("offers its actions only to a hob with the Charm while GitHub is connected", async () => {
     const asked: Array<string> = [];
     const on = await offered({ asked }, access([project]));
     expect(on?.tools.map((tool) => tool.name)).toEqual([
@@ -405,7 +405,7 @@ describe("GitHub Charm", () => {
     expect(asked).toEqual([]);
   });
 
-  it("[TC-GEN-034] asks the credential whether it reaches the repository before reading it", async () => {
+  it("asks the credential whether it reaches the repository before reading it", async () => {
     const asked: Array<string> = [];
     const elsewhere = await callWith(
       { asked, remote: { owner: "someone", name: "public" } },
@@ -423,8 +423,8 @@ describe("GitHub Charm", () => {
     expect(answer).toEqual({ refused: true, text: "The hub is not signed in to GitHub." });
   });
 
-  // covers PE-002, PE-005, ADR 031
-  it("[TC-PE-509] is registered beside a second Charm: a hob holding both is offered both, one holding one only that one", async () => {
+  // covers ADR 031
+  it("is registered beside a second Charm: a hob holding both is offered both, one holding one only that one", async () => {
     // A fake Charm with one read, its only change beside GitHub's.
     const lark = Effect.succeed(
       defineCharm({
@@ -594,7 +594,7 @@ describe("GitHub API", () => {
     expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "failed" } });
   });
 
-  it("[TC-PE-141] tries a refused token once more after a refresh, then disconnects", async () => {
+  it("tries a refused token once more after a refresh, then disconnects", async () => {
     const { result, seen, credential } = await run(401, { message: "Bad credentials" }, (api) =>
       api.repository(hob, { owner: "o", name: "r" }),
     );
@@ -612,7 +612,7 @@ describe("Git remotes", () => {
     }).pipe(Effect.provide(GitRemotes.layer.pipe(Layer.provide(NodeServices.layer))), Effect.runPromise);
   const git = (cwd: string, ...args: Array<string>) => execFileSync("git", args, { cwd, stdio: "ignore" });
 
-  it("[TC-PE-133] finds the repository from the folder's own origin remote, and nothing else", async () => {
+  it("finds the repository from the folder's own origin remote, and nothing else", async () => {
     const repo = path.join(root, "repo");
     await fs.mkdir(repo);
     expect(await repositoryOf(repo)).toBeNull();

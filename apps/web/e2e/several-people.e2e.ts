@@ -9,7 +9,7 @@ import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 test.afterEach(stopAldricHub);
 
 // covers ADR 039 (Users as actors)
-test("[TC-CH-1457-01] Bruna and Leo sign in on two devices, see each other's messages in one camp, and each message names its writer", async ({
+test("Bruna and Leo sign in on two devices, see each other's messages in one camp, and each message names its writer (#1457)", async ({
   browser,
 }) => {
   const { aldric, hub } = await aldricHub(undefined, [], { HOBBOTS_TEST_PEOPLE: "on" });

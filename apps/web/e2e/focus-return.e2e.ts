@@ -47,8 +47,7 @@ const inView = (locator: Locator) =>
     return box.top >= 0 && box.bottom <= window.innerHeight;
   });
 
-// covers UX-002, UX-006
-test("[TC-UX-160] the quest opened from the ticket by keyboard takes focus, and Close the quest gives it back to the ticket", async ({
+test("the quest opened from the ticket by keyboard takes focus, and Close the quest gives it back to the ticket", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -95,8 +94,7 @@ const archivedChats = async (current: Hub, hobId: string, titles: ReadonlyArray<
   }
 };
 
-// covers CH-009
-test("[TC-CH-280] after Restore in the Archive, focus moves to the next row's Restore, then the one before, then the empty list", async ({
+test("after Restore in the Archive, focus moves to the next row's Restore, then the one before, then the empty list", async ({
   page,
 }) => {
   const current = await setUpHub();
@@ -144,8 +142,7 @@ test("[TC-CH-280] after Restore in the Archive, focus moves to the next row's Re
   expect(await focusOnPage(page)).toBe(false);
 });
 
-// covers OP-001
-test("[TC-OP-080] First run keeps the focused field clear of its sticky footer and starts each step on its heading", async ({
+test("First run keeps the focused field clear of its sticky footer and starts each step on its heading", async ({
   page,
 }) => {
   const current = await setUpHub(false);
@@ -180,8 +177,7 @@ test("[TC-OP-080] First run keeps the focused field clear of its sticky footer a
   expect(await inView(next)).toBe(true);
 });
 
-// covers AG-001
-test("[TC-AG-120] Summon's next step opens at its top with focus on its heading", async ({ page }) => {
+test("Summon's next step opens at its top with focus on its heading", async ({ page }) => {
   const current = await setUpHub();
   await page.setViewportSize({ width: 1280, height: 560 });
   await page.goto(`${current.url}/#/summon`);

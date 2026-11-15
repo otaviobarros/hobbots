@@ -356,8 +356,7 @@ const eventually = <A>(read: () => A | undefined) =>
   );
 
 describe("a Quest's whole Workbench", () => {
-  // covers UX-002, OR-002, OR-007
-  it("[TC-IN-520] reads every Attempt of a party, a retry and a nested Quest in one call, each naming its Task, owner and Attempt", async () => {
+  it("reads every Attempt of a party, a retry and a nested Quest in one call, each naming its Task, owner and Attempt", async () => {
     await runtime.runPromise(campaign);
 
     const read = await readTree("campaign");
@@ -404,8 +403,7 @@ describe("a Quest's whole Workbench", () => {
     ]);
   });
 
-  // covers UX-002, UX-006
-  it("[TC-IN-521] says when a tree's details were cleared past the retention window, as each Attempt's read does", async () => {
+  it("says when a tree's details were cleared past the retention window, as each Attempt's read does", async () => {
     await runtime.runPromise(
       Effect.gen(function* () {
         yield* campaign;
@@ -432,8 +430,7 @@ describe("a Quest's whole Workbench", () => {
     expect(campaignRead.activity.attempts.every(({ activity }) => activity.detailsClearedAt === null)).toBe(true);
   });
 
-  // covers PE-006
-  it("[TC-IN-522] refuses a read or a stream without an approved device, and answers 404 for a Task that is not there", async () => {
+  it("refuses a read or a stream without an approved device, and answers 404 for a Task that is not there", async () => {
     await runtime.runPromise(campaign);
 
     expect((await get("/api/tasks/campaign/workbench", false)).status).toBe(401);
@@ -445,8 +442,7 @@ describe("a Quest's whole Workbench", () => {
     ).toBe(404);
   });
 
-  // covers UX-002, OR-007
-  it("[TC-IN-523] streams the records and the live output of every hob in the tree from the read's cursor, and nothing of another tree", async () => {
+  it("streams the records and the live output of every hob in the tree from the read's cursor, and nothing of another tree", async () => {
     await runtime.runPromise(campaign);
     const read = await readTree("campaign");
     const stream = await follow(`/api/tasks/campaign/workbench/events?after=${read.cursor}`);

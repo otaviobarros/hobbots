@@ -195,8 +195,7 @@ const delegate = async (agentId: AgentId, taskId: TaskId, hob: string, key: stri
   );
 
 describe("hob tools for Tasks and Quests", () => {
-  // covers OR-001, EX-001
-  it("[TC-OR-010] plans steps once per key, however often the call is retried", async () => {
+  it("plans steps once per key, however often the call is retried", async () => {
     await run(seed);
     const input = { key: "plan-1", steps: [{ brief: "Research keywords" }, { brief: "Draft copy", after: [1] }] };
     const first = await done(ALDRIC, TOP, "plan_steps", input);
@@ -230,8 +229,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await tree()).checkpoints.map((each) => each.summary)).toContain("Keywords listed");
   });
 
-  // covers OR-001, OR-002
-  it("[TC-OR-011] a first delegation makes the Task a Quest, and a retry delegates once", async () => {
+  it("a first delegation makes the Task a Quest, and a retry delegates once", async () => {
     await run(seed);
     const input = { key: "copy", hob: "Quill", brief: "Draft the copy", milestones: ["Outline"] };
     const first = await done(ALDRIC, TOP, "delegate_task", input);
@@ -248,8 +246,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(milestones.map((each) => each.title)).toEqual(["Outline"]);
   });
 
-  // covers OR-001, OR-002, UX-002
-  it("[TC-OR-541] a checkpoint keeps its short summary and its detail apart, and the first delegation in the chat asks for the plan once", async () => {
+  it("a checkpoint keeps its short summary and its detail apart, and the first delegation in the chat asks for the plan once", async () => {
     await run(seed);
     const first = await done(ALDRIC, TOP, "delegate_task", { key: "copy", hob: "Quill", brief: "Draft the copy" });
     expect(first.message).toContain("tell the user the plan in a line or two");
@@ -290,8 +287,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(nested.message).not.toContain("tell the user the plan");
   });
 
-  // covers OR-002, PE-004
-  it("[TC-OR-012] a member's authority is the lead's narrowed by the brief, never wider", async () => {
+  it("a member's authority is the lead's narrowed by the brief, never wider", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy", {
       authority: { decisions: { push: "deny", "run-commands": "ask" }, folders: [join(work, "copy")] },
@@ -351,8 +347,7 @@ describe("hob tools for Tasks and Quests", () => {
     }
   });
 
-  // covers OR-001, OR-004
-  it("[TC-OR-013] a hob never acts outside its own subtree", async () => {
+  it("a hob never acts outside its own subtree", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
     const ada = await delegate(ALDRIC, TOP, "Ada", "build");
@@ -422,8 +417,7 @@ describe("hob tools for Tasks and Quests", () => {
     await onlyRefusalsSince(before);
   });
 
-  // covers OR-004
-  it("[TC-OR-014] delegation past the depth limit or in a cycle is refused with a reason", async () => {
+  it("delegation past the depth limit or in a cycle is refused with a reason", async () => {
     await run(seed);
     const rook = await delegate(ALDRIC, TOP, "Rook", "rook");
     const pip = await delegate(ROOK, rook, "Pip", "pip");
@@ -448,8 +442,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await head()).sequence).toBeGreaterThan(before.sequence);
   });
 
-  // covers OR-004
-  it("[TC-OR-024] a Quest started above another one later still limits the work under both", async () => {
+  it("a Quest started above another one later still limits the work under both", async () => {
     await run(seed);
     const planned = await done(ALDRIC, TOP, "plan_steps", { key: "s", steps: [{ brief: "Research" }] });
     const [step] = (planned.details.steps as Array<{ readonly task_id: string }>).map((each) =>
@@ -481,8 +474,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(later.message).toContain("2099-01-01T00:00:00.000Z");
   });
 
-  // covers OR-004
-  it("[TC-OR-015] open-Task limits hold per hob and per tree", async () => {
+  it("open-Task limits hold per hob and per tree", async () => {
     await run(seed);
     for (const key of ["a", "b", "c", "d"]) await delegate(ALDRIC, TOP, "Quill", key);
     const full = await refused(ALDRIC, TOP, "delegate_task", { key: "e", hob: "Quill", brief: "One too many" });
@@ -491,8 +483,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, TOP, "plan_steps", { key: "many", steps })).reason).toBe("concurrency-limit");
   });
 
-  // covers OR-004, OR-006
-  it("[TC-OR-1446-18] a reassign at the tree's limit counts the Task once, as it only changes hands", async () => {
+  it("a reassign at the tree's limit counts the Task once, as it only changes hands (#1446)", async () => {
     await run(seed);
     const copy: Array<TaskId> = [];
     for (const key of ["a", "b", "c", "d"]) copy.push(await delegate(ALDRIC, TOP, "Quill", key));
@@ -514,8 +505,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(moved.details).toMatchObject({ task_id: moving.id, hob: "Pip" });
   });
 
-  // covers OR-001, OR-006
-  it("[TC-OR-1446-25] a retry of a failed Task at the tree's limit is refused, as it adds an open Task", async () => {
+  it("a retry of a failed Task at the tree's limit is refused, as it adds an open Task (#1446)", async () => {
     await run(seed);
     const failing = await delegate(ALDRIC, TOP, "Pip", "x");
     const before = (await tree()).tasks.find((each) => each.id === failing);
@@ -537,8 +527,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await tree()).tasks.find((each) => each.id === failing)?.state).toBe("failed");
   });
 
-  // covers OR-005, OR-006
-  it("[TC-OR-1447-13] a lead's retry or reassign of a member's Task past its deadline is refused", async () => {
+  it("a lead's retry or reassign of a member's Task past its deadline is refused (#1447)", async () => {
     await run(seed);
     // Pip's Task was given a minute on the first of the month, long past by now, and failed.
     await delegate(ALDRIC, TOP, "Quill", "quest");
@@ -578,8 +567,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await tree()).tasks.find((each) => each.id === late)?.state).toBe("failed");
   });
 
-  // covers OR-001, OR-003, OR-006
-  it("[TC-OR-016] questions climb, results hand off, waits record and cancels reach the subtree", async () => {
+  it("questions climb, results hand off, waits record and cancels reach the subtree", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
     const ada = await delegate(ALDRIC, TOP, "Ada", "build", { depends_on: [quill] });
@@ -668,8 +656,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ADA, ada, "ask", { key: "q2", question: "Still there?" })).reason).toBe("task-ended");
   });
 
-  // covers IN-006, EX-006
-  it("[TC-OR-050] completing a Quest with a member's result still unread is refused and names that result", async () => {
+  it("completing a Quest with a member's result still unread is refused and names that result", async () => {
     await run(seed);
     await done(ALDRIC, TOP, "start_quest", { key: "quest", goal: "Launch the campaign" });
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
@@ -716,8 +703,8 @@ describe("hob tools for Tasks and Quests", () => {
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
-  // covers IN-006, OR-001 (#662)
-  it("[TC-OR-460] a lead that cancels or reads what ended completes in the same turn, without retrying", async () => {
+  // Issue #662
+  it("a lead that cancels or reads what ended completes in the same turn, without retrying (#662)", async () => {
     await run(seed);
     await done(ALDRIC, TOP, "start_quest", { key: "quest", goal: "Launch the campaign" });
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
@@ -767,8 +754,8 @@ describe("hob tools for Tasks and Quests", () => {
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
-  // covers OR-001, OR-002 (#743)
-  it("[TC-OR-654] a milestone reached through another hob's work in the same work is recorded with that hob", async () => {
+  // Issue #743
+  it("a milestone reached through another hob's work in the same work is recorded with that hob (#743)", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Copy drafted", "Committed"] });
     await delegate(ALDRIC, TOP, "Pip", "email");
@@ -823,8 +810,8 @@ describe("hob tools for Tasks and Quests", () => {
     );
   });
 
-  // covers OR-001, OR-002 (#1219)
-  it("[TC-OR-1219-01] a lead's own milestone is never credited to a member it leads, nor to a hob beside it", async () => {
+  // Issue #1219
+  it("a lead's own milestone is never credited to a member it leads, nor to a hob beside it (#1219)", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy", { milestones: ["Review written"] });
     await delegate(ALDRIC, TOP, "Rook", "art");
@@ -863,8 +850,7 @@ describe("hob tools for Tasks and Quests", () => {
     ]);
   });
 
-  // covers OR-001
-  it("[TC-OR-017] a refused or malformed call writes nothing and says why", async () => {
+  it("a refused or malformed call writes nothing and says why", async () => {
     await run(seed);
     const before = await head();
     expect((await refused(ALDRIC, TOP, "summon_army", { key: "k" })).reason).toBe("unknown-tool");
@@ -889,8 +875,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(unstarted.reason).toBe("no-attempt");
   });
 
-  // covers OR-001, EX-001
-  it("[TC-OR-018] the fake runtime scripts every tool through the turn's hub tools", async () => {
+  it("the fake runtime scripts every tool through the turn's hub tools", async () => {
     await run(seed);
     const prompt = [
       "Plan the campaign",
@@ -948,8 +933,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(seen.map((entry) => entry.type)).toEqual(["CheckpointRecorded"]);
   });
 
-  // covers IN-003, OR-001
-  it("[TC-IN-166] a turn whose backpack claim ran out or passed to another turn writes nothing through any hob tool", async () => {
+  it("a turn whose backpack claim ran out or passed to another turn writes nothing through any hob tool", async () => {
     await run(seed);
     const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
     const [item] = await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: QUILL })));

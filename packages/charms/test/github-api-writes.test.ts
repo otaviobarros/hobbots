@@ -87,8 +87,7 @@ const NEW_PULL = { head: "feat/x", base: "main", title: "T", body: "B", draft: t
 const refusedConnection = new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } });
 
 describe("GitHub API writes", () => {
-  // covers EX-004, PE-005
-  it("[TC-GEN-041] tells a write's ends apart: done, refused, not sent, rate limited and uncertain", async () => {
+  it("tells a write's ends apart: done, refused, not sent, rate limited and uncertain", async () => {
     const done = await run([{ status: 201, body: PULL }], (api) => api.openPullRequest(hob, repository, NEW_PULL));
     expect(done.value).toEqual({
       _tag: "Done",
@@ -127,8 +126,7 @@ describe("GitHub API writes", () => {
     }
   });
 
-  // covers EX-003, EX-004
-  it("[TC-GEN-045] leaves a write uncertain when GitHub sends its headers and then never ends the body", async () => {
+  it("leaves a write uncertain when GitHub sends its headers and then never ends the body", async () => {
     const stalled = await run([{ stalls: 201 }], (api) =>
       Effect.gen(function* () {
         const writing = yield* api.comment(hob, repository, 7, "Hi").pipe(Effect.forkChild);
@@ -140,8 +138,7 @@ describe("GitHub API writes", () => {
     expect(stalled.seen).toHaveLength(1);
   });
 
-  // covers PE-005, EX-004
-  it("[TC-GEN-042] sends once more with a refreshed token after a 401, and disconnects GitHub after a second", async () => {
+  it("sends once more with a refreshed token after a 401, and disconnects GitHub after a second", async () => {
     const comment = { html_url: "https://github.com/octo/app/issues/7#c1", user: { login: "me" }, body: "Hi" };
     const refreshed = await run([{ status: 401 }, { status: 201, body: comment }], (api) =>
       api.comment(hob, repository, 7, "Hi"),
@@ -155,8 +152,7 @@ describe("GitHub API writes", () => {
     expect(disconnected.credential).toEqual(["refused", "revoked"]);
   });
 
-  // covers EX-003
-  it("[TC-GEN-043] reads back pull requests in every state from one head, and comments since a call page by page", async () => {
+  it("reads back pull requests in every state from one head, and comments since a call page by page", async () => {
     const pulls = await run([{ status: 200, body: [PULL] }], (api) =>
       api.pullRequests(hob, repository, "feat/x", "main"),
     );
@@ -179,8 +175,7 @@ describe("GitHub API writes", () => {
     expect(new URL(comments.seen[0]?.url ?? "").searchParams.get("since")).toBe("2026-11-02T00:00:00.000Z");
   });
 
-  // covers PE-006, EX-003
-  it("[TC-GEN-044] hides the hub's call markers from what a hob reads of an issue and its comments", async () => {
+  it("hides the hub's call markers from what a hob reads of an issue and its comments", async () => {
     const marker = "<!-- hobbots-call: 0f0f0f0f-0000-0000-0000-000000000000 -->";
     const read = await run(
       [

@@ -95,8 +95,7 @@ describe("a reply cut off or limited by the provider", () => {
 });
 
 describe("a reply's steps when its turn ends", () => {
-  // covers CH-004, CH-007, EX-004
-  it("[TC-CH-113] leaves a running tool call uncertain and other steps unfinished for good, so Continue cannot revive them", () => {
+  it("leaves a running tool call uncertain and other steps unfinished for good, so Continue cannot revive them", () => {
     const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
     const withSteps = MessageTransitions.setSteps(MessageTransitions.appendDelta(streaming, "Hel") as Message, [
       { id: "t1", kind: "tool", label: "Running pnpm test", state: "running", call },
@@ -191,8 +190,7 @@ describe("AgentTransitions", () => {
     expect(AgentTransitions.wake(retired)).toBeInstanceOf(InvalidAgentTransition);
   });
 
-  // covers AG-006
-  it("[TC-AG-1245] has a hob finish its open Tasks before it retires, taking no new work meanwhile", () => {
+  it("has a hob finish its open Tasks before it retires, taking no new work meanwhile", () => {
     const retiring = { since: "2026-11-08T12:00:00.000Z", by: YOU };
     const waiting = AgentTransitions.retireWhenDone(hob, retiring) as Agent;
     expect(waiting).toMatchObject({ status: "active", retiring });

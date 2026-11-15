@@ -66,9 +66,8 @@ const readOnlyTurn = <A>(use: (prepared: PreparedSandbox) => Promise<A>) =>
 const AS_NETTLE = "-c user.name=Nettle -c user.email=nettle@example.com";
 
 describe("read-only commands in the sandbox", () => {
-  // covers PE-005, PE-006
   it.runIf(sandboxed)(
-    "[TC-PE-1318] reads the folder and its Git history, runs a read-only test, and fails every write to the folder and its .git",
+    "reads the folder and its Git history, runs a read-only test, and fails every write to the folder and its .git",
     async () => {
       hubGit("init", "--quiet", "--template=", "--", project);
       writeFileSync(join(project, "README.md"), "hello\n");

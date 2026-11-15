@@ -12,8 +12,7 @@ import { describe, expect, it } from "vitest";
 import { GITHUB_CHARM } from "../src/github-operations.ts";
 
 describe("the GitHub Charm's declaration", () => {
-  // covers PE-001
-  it("[TC-GEN-404] answers each GitHub operation as ADR 020's table does, under its new id", () => {
+  it("answers each GitHub operation as ADR 020's table does, under its new id", () => {
     // ADR 020's rows for Read GitHub, Open pull requests and Comment on GitHub, written out so a change shows.
     const table = {
       "github.read": ["allow", "allow", "allow"],
@@ -36,7 +35,7 @@ describe("the GitHub Charm's declaration", () => {
 
 describe("a hob's card with the GitHub Charm", () => {
   // covers ADR 032 (Answers), #1351
-  it("[TC-AG-1351-03] read_hob lists each GitHub operation's answer after the built-in ones, an override marked", () => {
+  it("read_hob lists each GitHub operation's answer after the built-in ones, an override marked (#1351)", () => {
     const pip = new Agent({
       id: AgentId.make("pip"),
       name: "Pip",

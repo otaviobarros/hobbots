@@ -150,8 +150,7 @@ const count = Effect.gen(function* () {
 });
 
 describe("A hob's backpack", () => {
-  // covers IN-001
-  it("[TC-IN-020] records a backpack item in the transaction of the change that causes it, and none when the change is refused", async () => {
+  it("records a backpack item in the transaction of the change that causes it, and none when the change is refused", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -209,8 +208,7 @@ describe("A hob's backpack", () => {
     expect(result.headAfter).toEqual(result.headBefore);
   });
 
-  // covers IN-001, IN-003
-  it("[TC-IN-021] keys an item from a hob tool call by the call's key, so the call retried records no second item", async () => {
+  it("keys an item from a hob tool call by the call's key, so the call retried records no second item", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -257,8 +255,7 @@ describe("A hob's backpack", () => {
     ]);
   });
 
-  // covers IN-001, IN-002, IN-005
-  it("[TC-IN-022] records each kind for the hob it needs, and keeps routine progress from being actionable", async () => {
+  it("records each kind for the hob it needs, and keeps routine progress from being actionable", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -318,8 +315,7 @@ describe("A hob's backpack", () => {
     ]);
   });
 
-  // covers IN-002
-  it("[TC-IN-023] moves an item only through legal steps under its claim, recording each delivery and acknowledgement", async () => {
+  it("moves an item only through legal steps under its claim, recording each delivery and acknowledgement", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -373,8 +369,7 @@ describe("A hob's backpack", () => {
     expect(result.open.map((item) => item.taskId)).not.toContain("copy");
   });
 
-  // covers IN-002, IN-003
-  it("[TC-IN-024] refuses a write under another owner, an older token or a lapsed lease, and expiring a claim raises its token", async () => {
+  it("refuses a write under another owner, an older token or a lapsed lease, and expiring a claim raises its token", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy, build } = yield* campaign;
@@ -422,8 +417,7 @@ describe("A hob's backpack", () => {
     ]);
   });
 
-  // covers IN-001
-  it("[TC-IN-025] reads a hob's, a Quest's and the workspace's open items, highest priority first", async () => {
+  it("reads a hob's, a Quest's and the workspace's open items, highest priority first", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -465,8 +459,7 @@ describe("A hob's backpack", () => {
     expect(result.missing).toMatchObject({ _tag: "BackpackItemMissing" });
   });
 
-  // covers IN-002, IN-003
-  it("[TC-IN-032] lets a renewal wait for an effect fenced by the same claim, never deadlock with it", async () => {
+  it("lets a renewal wait for an effect fenced by the same claim, never deadlock with it", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -587,8 +580,7 @@ const pendingApproval = Effect.gen(function* () {
 });
 
 describe("The responsibility ledger", () => {
-  // covers IN-006
-  it("[TC-IN-040] lists open work, waits, dependencies, questions, milestones, approvals and backpack items without asking the hob", async () => {
+  it("lists open work, waits, dependencies, questions, milestones, approvals and backpack items without asking the hob", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy, build } = yield* campaign;
@@ -670,8 +662,7 @@ describe("The responsibility ledger", () => {
     });
   });
 
-  // covers IN-006, EX-006
-  it("[TC-IN-041] a hob completes its Task from the turn its Task item started, and an item that arrived meanwhile still blocks", async () => {
+  it("a hob completes its Task from the turn its Task item started, and an item that arrived meanwhile still blocks", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -736,8 +727,7 @@ describe("The responsibility ledger", () => {
     expect(result.taskItem.revision).toBe(changed[1]?.sequence);
   });
 
-  // covers IN-006, IN-003
-  it("[TC-IN-042] a carried item counts only while the turn's claim holds, or while it is still pending and unclaimed at the token the turn saw", async () => {
+  it("a carried item counts only while the turn's claim holds, or while it is still pending and unclaimed at the token the turn saw", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -778,8 +768,7 @@ describe("The responsibility ledger", () => {
     expect(result.done.value.state).toBe("completed");
   });
 
-  // covers IN-005, IN-006
-  it("[TC-OR-186] routine progress never blocks a lead's completion, which resolves what no turn carried as late and leaves a claimed one to its turn", async () => {
+  it("routine progress never blocks a lead's completion, which resolves what no turn carried as late and leaves a claimed one to its turn", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -841,8 +830,7 @@ describe("The responsibility ledger", () => {
     expect(changed).not.toContain(result.buildItem.id);
   });
 
-  // covers IN-003, IN-005, IN-006
-  it("[TC-OR-188] progress the completing turn carries is consumed with the completion, so a restart before the turn settles leaves nothing pending", async () => {
+  it("progress the completing turn carries is consumed with the completion, so a restart before the turn settles leaves nothing pending", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;

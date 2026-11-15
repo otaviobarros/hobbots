@@ -116,7 +116,7 @@ const request = async (method: string, path: string, body?: unknown) => {
 
 describe("skills routes", () => {
   // covers ADR 029 (Import, Storage and revisions), #1060
-  it("[TC-AG-134] lists, reads, imports, revises and removes skills, and shows ~/.agents/skills under Everyone", async () => {
+  it("lists, reads, imports, revises and removes skills, and shows ~/.agents/skills under Everyone (#1060)", async () => {
     const listed = await request("GET", "/api/skills");
     expect(listed.status).toBe(200);
     expect(listed.body.skills.map((skill: { name: string }) => skill.name)).toEqual(["shared"]);
@@ -155,7 +155,7 @@ describe("skills routes", () => {
     expect((await request("GET", `/api/skills/${skill.id}`)).status).toBe(404);
   });
 
-  it("[TC-AG-135] refuses what fails a check with the rule and the file, and a skill something assigns", async () => {
+  it("refuses what fails a check with the rule and the file, and a skill something assigns", async () => {
     const broken = { _tag: "Written", files: [{ path: "SKILL.md", text: "# No front matter" }] };
     const refused = await request("POST", "/api/skills", { source: broken });
     expect(refused).toMatchObject({
@@ -172,7 +172,7 @@ describe("skills routes", () => {
     expect(inUse.body.assignments).toHaveLength(1);
   });
   // covers ADR 029 (Storage and revisions, The Skills page), #1062
-  it("[TC-AG-146] reads a revision's files only by the paths it lists, and edits a skill into a new revision", async () => {
+  it("reads a revision's files only by the paths it lists, and edits a skill into a new revision (#1062)", async () => {
     const folder = await folderWith({
       "SKILL.md": skillMd("release"),
       "references/checks.md": "Check the banner.",
@@ -213,7 +213,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (~/.agents/skills stays, through Hobbots; Make a copy), #1139
-  it("[TC-AG-163] refuses an edit or a revision of a ~/.agents/skills skill, and Make a copy gives an editable one", async () => {
+  it("refuses an edit or a revision of a ~/.agents/skills skill, and Make a copy gives an editable one (#1139)", async () => {
     const listed = await request("GET", "/api/skills");
     const [shared] = listed.body.skills;
     const edit = { base: shared.latest, description: "Changed here.", instructions: "Changed." };
@@ -267,7 +267,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Scopes, The Skills page), #1062
-  it("[TC-AG-148] lists the projects a skill can go to: those hobs work in, before any skill is given to them", async () => {
+  it("lists the projects a skill can go to: those hobs work in, before any skill is given to them (#1062)", async () => {
     const site = join(await mkdtemp(join(tmpdir(), "skills-")), "Site");
     await mkdir(site);
     expect((await request("GET", "/api/skills")).body.projects).toEqual([]);
@@ -288,7 +288,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Pins and rollout, The Skills page), #1062
-  it("[TC-AG-149] keeps the places an edit holds back, changes no hold when it is refused, and never replays its holds", async () => {
+  it("keeps the places an edit holds back, changes no hold when it is refused, and never replays its holds (#1062)", async () => {
     const folder = await folderWith({ "SKILL.md": skillMd("release") });
     const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
     const [{ skill, revision }] = imported.body.imported;
@@ -324,7 +324,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (The Skills page, Journal events), #1062, #1220
-  it("[TC-AG-151] What changed lists each save with what its rollout moved and held, rollbacks, and skills given or removed", async () => {
+  it("What changed lists each save with what its rollout moved and held, rollbacks, and skills given or removed", async () => {
     const folder = await folderWith({ "SKILL.md": skillMd("release") });
     const imported = await request("POST", "/api/skills", { source: { _tag: "Folder", path: folder } });
     const [{ skill, revision }] = imported.body.imported;
@@ -377,7 +377,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Pins and rollout, The Skills page), #1062
-  it("[TC-AG-160] a save that moves places from different revisions keeps where each came from, for Roll back", async () => {
+  it("a save that moves places from different revisions keeps where each came from, for Roll back (#1062)", async () => {
     const hob = {
       name: "Wren",
       ...roleFields("writer"),
@@ -419,7 +419,7 @@ describe("skills routes", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-05] shows an upstream change in Updates, accepts it as a new revision, and turns Update automatically on", async () => {
+  it("shows an upstream change in Updates, accepts it as a new revision, and turns Update automatically on (#1097)", async () => {
     const root = await folderWith({ "SKILL.md": skillMd("release") });
     const git = (...args: Array<string>) =>
       execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {

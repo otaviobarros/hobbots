@@ -60,8 +60,7 @@ const continuations = (all: ReadonlyArray<Message>) =>
   all.filter((m, index) => m.role === "assistant" && all[index - 1]?.role !== "user");
 
 describe("a dependency that completes wakes its dependent", () => {
-  // covers OR-002, OR-003, IN-004
-  it("[TC-OR-207] Aldric waits on Rook; Quill's completion starts Rook's one turn with Quill's result, and the Quest finishes from your one message", async () => {
+  it("Aldric waits on Rook; Quill's completion starts Rook's one turn with Quill's result, and the Quest finishes from your one message", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase(), [wrapUp]);
     await run(
       send([
@@ -92,8 +91,7 @@ describe("a dependency that completes wakes its dependent", () => {
     await run(nothingOpen);
   }, 30_000);
 
-  // covers OR-002, OR-003, EX-004
-  it("[TC-OR-208] a hub that stops between Quill's completion and Rook's start loses nothing: Rook starts once after the restart, with Quill's result once", async () => {
+  it("a hub that stops between Quill's completion and Rook's start loses nothing: Rook starts once after the restart, with Quill's result once", async () => {
     const database = await sharedDatabase();
     const first = await startHub(database);
     await first.run(send(["Build the app", backend, frontend]));

@@ -76,8 +76,7 @@ const exported = (folder: string) => {
   };
 };
 
-// covers OP-003, UX-005
-test("[TC-OP-045] Settings › Export saves a hob's export as a folder that opens without Hobbots, never inside a hob's folder", async ({
+test("Settings › Export saves a hob's export as a folder that opens without Hobbots, never inside a hob's folder", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -115,8 +114,7 @@ test("[TC-OP-045] Settings › Export saves a hob's export as a folder that open
   expect(text).not.toContain(TOKEN);
 });
 
-// covers OP-003
-test("[TC-OP-046] a thread's menu and a hob's profile export just that thread or hob", async ({ page }) => {
+test("a thread's menu and a hob's profile export just that thread or hob", async ({ page }) => {
   hub = await startHub(dataDir);
   const project = join(saved, "project");
   mkdirSync(project);

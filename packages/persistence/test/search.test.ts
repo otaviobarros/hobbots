@@ -70,8 +70,7 @@ const ids = (hits: ReadonlyArray<{ thread: Thread; matches: ReadonlyArray<{ mess
   hits.map((hit) => [hit.thread.id, hit.matches.map((m) => m.messageId)]);
 
 describe("SearchIndex", () => {
-  // covers CH-006
-  it("[TC-CH-060] finds threads by a word from their title or messages, newest thread first", async () => {
+  it("finds threads by a word from their title or messages, newest thread first", async () => {
     const result = await Effect.gen(function* () {
       yield* seed;
       const index = yield* SearchIndex;
@@ -107,8 +106,7 @@ describe("SearchIndex", () => {
     ]);
   });
 
-  // covers CH-006
-  it("[TC-CH-061] indexes a reply once it finishes and follows its later changes", async () => {
+  it("indexes a reply once it finishes and follows its later changes", async () => {
     const result = await Effect.gen(function* () {
       yield* seed;
       const repo = yield* HobbotsRepository;
@@ -137,8 +135,7 @@ describe("SearchIndex", () => {
     expect(result.newTitle.map((hit) => hit.thread.id)).toEqual(["taxes"]);
   });
 
-  // covers CH-006
-  it("[TC-CH-067] a thread with hundreds of matches leaves room for another thread's old match", async () => {
+  it("a thread with hundreds of matches leaves room for another thread's old match", async () => {
     const result = await Effect.gen(function* () {
       yield* seed;
       const repo = yield* HobbotsRepository;
@@ -157,8 +154,7 @@ describe("SearchIndex", () => {
     // default 5 second limit.
   }, 20_000);
 
-  // covers CH-006
-  it("[TC-CH-068] the exact accented word finds an accented message", async () => {
+  it("the exact accented word finds an accented message", async () => {
     const result = await Effect.gen(function* () {
       yield* seed;
       yield* (yield* HobbotsRepository).upsertMessage(message("t3", "taxes", "Receipts from the Café"));
@@ -170,8 +166,7 @@ describe("SearchIndex", () => {
     expect(ids(result.prefix)).toEqual([["taxes", ["t3"]]]);
   });
 
-  // covers CH-006, CH-008
-  it("[TC-CH-070] a queued message joins the index when its turn starts, and a stopped reply when it stops", async () => {
+  it("a queued message joins the index when its turn starts, and a stopped reply when it stops", async () => {
     const queued = (id: string, content: string) =>
       new Message({ ...message(id, "taxes", content, "queued"), role: "user", actor: OWNER_ACTOR });
     const result = await Effect.gen(function* () {
@@ -207,8 +202,7 @@ describe("SearchIndex", () => {
     expect(result.stopped[0]?.matchCount).toBe(2);
   });
 
-  // covers CH-006, DP-003
-  it("[TC-CH-062] finds threads and messages written before the index existed", async () => {
+  it("finds threads and messages written before the index existed", async () => {
     const before = Object.fromEntries(
       Object.entries(migrations).filter(([key]) => key !== "0011_search_index"),
     ) as typeof migrations;
@@ -228,8 +222,7 @@ describe("SearchIndex", () => {
     expect(result.title.map((hit) => hit.thread.id)).toEqual(["garden"]);
   });
 
-  // covers CH-006
-  it("[TC-CH-063] searches a SQLite file from a worker thread that sees the server's writes", async () => {
+  it("searches a SQLite file from a worker thread that sees the server's writes", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hobbots-search-"));
     try {
       const filename = join(dir, "hobbots.sqlite");

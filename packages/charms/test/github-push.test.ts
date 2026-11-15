@@ -264,7 +264,7 @@ const REAL_GIT_TIMEOUT = 30_000;
 
 /** The commit `setUp` makes on `feat/x`, with its fixed dates. */
 const PUSHED_COMMIT = "b05beb9e959c75c153574049bc9c21b0ec56ac9e";
-/** The card's summary, and the digest of the card in TC-PE-497, as the hub showed them before the pipeline (#619). */
+/** The card's summary, and the digest of the card below, as the hub showed them before the pipeline (#619). */
 const PUSH_SUMMARY = [
   "Push b05beb9e959c from feat/x to octo/same-card branch feat/x",
   "Creates the branch on GitHub.",
@@ -275,8 +275,7 @@ const PUSH_SUMMARY = [
 const PUSH_CARD_DIGEST = "060f28d191dcd7749c0e496684fbda186e0572e4189cfe9d4ec007a35c4e6ccb";
 
 describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
-  // covers PE-003, PE-007
-  it("[TC-PE-155] pushes a branch under Balanced after the user approves exactly what the card showed", async () => {
+  it("pushes a branch under Balanced after the user approves exactly what the card showed", async () => {
     const { folder, repository, remote, commit } = await setUp("balanced");
     const asked: Array<ApprovalAction> = [];
     const events: Array<RuntimeEvent> = [];
@@ -314,8 +313,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolStarted"]);
   });
 
-  // covers PE-003, PE-007
-  it("[TC-PE-156] asks once only for a force push or a push to the default branch, and never under Never", async () => {
+  it("asks once only for a force push or a push to the default branch, and never under Never", async () => {
     const { folder, repository, remote } = await setUp("risky");
     const asked: Array<ApprovalAction> = [];
     const forced = await push(
@@ -358,8 +356,8 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "other")).toBeNull();
   });
 
-  // covers PE-003, PE-007 (#1219)
-  it("[TC-PE-1219-01] refuses, without a card, a push that would create a branch with no commit GitHub lacks", async () => {
+  // Issue #1219
+  it("refuses, without a card, a push that would create a branch with no commit GitHub lacks (#1219)", async () => {
     const { folder, repository, remote } = await setUp("nothing-new");
     // The hob's commit was refused, so its new branch is still at main's commit, which GitHub has.
     git(folder, "branch", "feat/empty", "main");
@@ -379,8 +377,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "feat/empty")).toBeNull();
   });
 
-  // covers PE-001, PE-003
-  it("[TC-PE-157] pushes under Trusting without asking, and refuses a denied push or an option-shaped branch", async () => {
+  it("pushes under Trusting without asking, and refuses a denied push or an option-shaped branch", async () => {
     const { folder, repository, remote, commit } = await setUp("trusting");
     const asked: Array<ApprovalAction> = [];
     const trusted = await push(
@@ -430,8 +427,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headRef.refused).toBe(true);
   });
 
-  // covers PE-005, EX-004
-  it("[TC-IN-055] pushes with a refreshed token when GitHub refused the sign-in, and disconnects when it refuses that too", async () => {
+  it("pushes with a refreshed token when GitHub refused the sign-in, and disconnects when it refuses that too", async () => {
     const { folder, repository, remote, commit } = await setUp("refreshed");
     const refreshed = fixedCredential("ghu_expired", TOKEN);
     const pushed = await push(
@@ -457,7 +453,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-065] never retries a push over the user's SSH key once the hob's app it was checked under is gone", async () => {
+  it("never retries a push over the user's SSH key once the hob's app it was checked under is gone", async () => {
     const { folder, repository, remote } = await setUp("app-gone");
     // The hob has its own app when the push is checked and first sent, and none from then on.
     let appConnected = true;
@@ -549,8 +545,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "feat/x")).toBeNull();
   });
 
-  // covers PE-003, PE-005
-  it("[TC-IN-057] does not push under another GitHub account connected while the card waits, and asks again", async () => {
+  it("does not push under another GitHub account connected while the card waits, and asks again", async () => {
     const { folder, repository, remote, commit } = await setUp("switched");
     const credential = fixedCredential(TOKEN);
     const asked: Array<ApprovalAction> = [];
@@ -577,8 +572,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "feat/x")).toBe(commit);
   });
 
-  // covers IN-003, EX-004
-  it("[TC-IN-053] returns the first result for a retried key without asking or pushing again", async () => {
+  it("returns the first result for a retried key without asking or pushing again", async () => {
     const { folder, repository } = await setUp("retried");
     const rows = new Map<string, CharmCall>();
     const asked: Array<ApprovalAction> = [];
@@ -594,8 +588,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(github.requests.length).toBe(before);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-OR-070] settles a push whose answer was lost as applied when GitHub shows its commit", async () => {
+  it("settles a push whose answer was lost as applied when GitHub shows its commit", async () => {
     const { folder, repository, remote, commit } = await setUp("lost-applied");
     const rows = new Map<string, CharmCall>();
     github.drop = { after: github.requests.length, when: "after" };
@@ -617,8 +610,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(events.map((event) => event._tag)).toEqual(["ToolStarted"]);
   });
 
-  // covers EX-003, EX-004
-  it("[TC-OR-071] keeps a push uncertain when its effect is not found, and refuses another push to that branch", async () => {
+  it("keeps a push uncertain when its effect is not found, and refuses another push to that branch", async () => {
     const { folder, repository, remote } = await setUp("lost-unknown");
     const rows = new Map<string, CharmCall>();
     github.drop = { after: github.requests.length, when: "before" };
@@ -639,8 +631,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, "feat/x")).toBeNull();
   });
 
-  // covers EX-003
-  it("[TC-OR-072] reads back calls the hub left in flight when it starts, and settles them once their effect shows", async () => {
+  it("reads back calls the hub left in flight when it starts, and settles them once their effect shows", async () => {
     const { folder, repository, remote, commit } = await setUp("restarted");
     git(folder, "push", "--quiet", remote, "feat/x");
     const plan = { repository: "octo/restarted", remoteBranch: "feat/x", commit };
@@ -679,8 +670,8 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
       ["missing", "uncertain", "The hub stopped while this call was being sent."],
     ]);
   });
-  // covers PE-003, PE-007, ADR 020, ADR 031
-  it("[TC-PE-497] shows the same card, with the same digest, for the same push as before the pipeline", async () => {
+  // covers ADR 020, ADR 031
+  it("shows the same card, with the same digest, for the same push as before the pipeline", async () => {
     const { folder, repository } = await setUp("same-card");
     const asked: Array<ApprovalAction> = [];
     await push(
@@ -723,8 +714,8 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(digests).toEqual([PUSH_CARD_DIGEST]);
   });
 
-  // covers PE-003, ADR 020, ADR 031
-  it("[TC-PE-498] never stores or shows a secret the hob wrote in a push's input", async () => {
+  // covers ADR 020, ADR 031
+  it("never stores or shows a secret the hob wrote in a push's input", async () => {
     const { folder, repository, remote } = await setUp("secret-branch");
     const branch = `feat/${SECRET}`;
     git(folder, "branch", branch, "feat/x");
@@ -746,8 +737,8 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     expect(headOf(remote, branch)).toBeNull();
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-499] records a push's step before it pushes, and pushes nothing when the step cannot be recorded", async () => {
+  // covers ADR 031
+  it("records a push's step before it pushes, and pushes nothing when the step cannot be recorded", async () => {
     const { folder, repository, remote, commit } = await setUp("recorded");
     const rows = new Map<string, CharmCall>();
     const unrecorded = await push(

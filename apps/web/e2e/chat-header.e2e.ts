@@ -6,8 +6,7 @@ import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers UX-001
-test("[TC-CH-260] the hob's tile and name in the chat header each open its page", async ({ page }) => {
+test("the hob's tile and name in the chat header each open its page (#507)", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   const header = page.getByRole("main", { name: "Chat" }).locator("header").first();
   const hero = page.getByRole("region", { name: "Aldric", exact: true });
@@ -23,8 +22,7 @@ test("[TC-CH-260] the hob's tile and name in the chat header each open its page"
   await expect(hero.getByRole("heading", { name: "Aldric" })).toBeVisible();
 });
 
-// covers UX-001
-test("[TC-CH-281] the back arrow in the chat header returns to the hob's chats", async ({ page }) => {
+test("the back arrow in the chat header returns to the hob's chats (#507)", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   const header = page.getByRole("main", { name: "Chat" }).locator("header").first();
 

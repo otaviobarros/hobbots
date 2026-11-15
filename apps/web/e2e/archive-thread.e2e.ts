@@ -67,8 +67,7 @@ const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>, setup
 // The open hob's threads show under it in the expanded sidebar.
 const threadLink = sidebarThread;
 
-// covers CH-009, UX-003
-test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings it back", async ({ page, browser }) => {
+test("archiving the open thread opens the next one, and Undo brings it back", async ({ page, browser }) => {
   hub = await startHub(dataDir);
   // Newest first in the list: Weekly digest, Support triage, Tagline ideas.
   const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas", "Support triage", "Weekly digest"]);
@@ -97,8 +96,7 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
   await other.close();
 });
 
-// covers CH-009, UX-003
-test("[TC-CH-151] a chat row's menu on the hob's page archives it by keyboard, and ⌘Z undoes it", async ({ page }) => {
+test("a chat row's menu on the hob's page archives it by keyboard, and ⌘Z undoes it", async ({ page }) => {
   hub = await startHub(dataDir);
   const { pip } = await pipWithThreads(hub, ["Tagline ideas", "Weekly digest"]);
 
@@ -123,8 +121,7 @@ test("[TC-CH-151] a chat row's menu on the hob's page archives it by keyboard, a
   expect(await api<Array<unknown>>(hub, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
 });
 
-// covers CH-009
-test("[TC-CH-275] archiving a hob's only chat opens its fresh page and keeps the Undo toast", async ({ page }) => {
+test("archiving a hob's only chat opens its fresh page and keeps the Undo toast", async ({ page }) => {
   hub = await startHub(dataDir);
   const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas"]);
 
@@ -140,8 +137,7 @@ test("[TC-CH-275] archiving a hob's only chat opens its fresh page and keeps the
   expect(await api<Array<unknown>>(hub, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
 });
 
-// covers CH-009
-test("[TC-CH-152] a thread cannot be archived while its reply runs, by menu or by shortcut", async ({ page }) => {
+test("a thread cannot be archived while its reply runs, by menu or by shortcut", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   const { pip, threads } = await pipWithThreads(current, ["Tagline ideas"]);
@@ -197,8 +193,7 @@ const holdRequests = async (page: Page, pattern: RegExp) => {
   };
 };
 
-// covers CH-009
-test("[TC-CH-153] an archive that fails after the user moved on leaves them where they are, and Try again archives it", async ({
+test("an archive that fails after the user moved on leaves them where they are, and Try again archives it", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -233,10 +228,7 @@ test("[TC-CH-153] an archive that fails after the user moved on leaves them wher
   ).toEqual([triage]);
 });
 
-// covers CH-009
-test("[TC-CH-154] a refusal that arrives late puts the thread back and reopens it, with the hub's reason", async ({
-  page,
-}) => {
+test("a refusal that arrives late puts the thread back and reopens it, with the hub's reason", async ({ page }) => {
   hub = await startHub(dataDir);
   const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas", "Support triage"]);
   const [tagline, triage] = threads;
@@ -261,8 +253,7 @@ test("[TC-CH-154] a refusal that arrives late puts the thread back and reopens i
   await expect(page).toHaveURL(new RegExp(`threads/${triage}$`));
 });
 
-// covers CH-009
-test("[TC-CH-155] an Undo that fails offers Try again, which brings the thread back", async ({ page }) => {
+test("an Undo that fails offers Try again, which brings the thread back", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   const { pip } = await pipWithThreads(current, ["Tagline ideas", "Support triage"]);
@@ -286,10 +277,7 @@ test("[TC-CH-155] an Undo that fails offers Try again, which brings the thread b
   expect(await api<Array<unknown>>(current, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
 });
 
-// covers CH-009, PE-003
-test("[TC-CH-156] a thread waiting for approval cannot be archived, and Show request focuses the card", async ({
-  page,
-}) => {
+test("a thread waiting for approval cannot be archived, and Show request focuses the card", async ({ page }) => {
   hub = await startHub(dataDir);
   const shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
   try {

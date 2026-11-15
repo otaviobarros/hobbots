@@ -39,8 +39,7 @@ beforeEach(() => {
 });
 
 describe("the request log", () => {
-  // covers DP-002
-  it("[TC-DP-044] leaves successful reads out and logs writes and failures", async () => {
+  it("leaves successful reads out and logs writes and failures", async () => {
     await send("GET", "/api/approvals");
     await send("GET", "/api/missing");
     await send("POST", "/api/agents");
@@ -52,7 +51,7 @@ describe("the request log", () => {
     ]);
   });
 
-  it("[TC-DP-054] logs successful reads at Debug when the log level asks for them", async () => {
+  it("logs successful reads at Debug when the log level asks for them", async () => {
     minimum = "Debug";
     await send("GET", "/api/approvals?thread=1");
     await send("POST", "/api/agents");

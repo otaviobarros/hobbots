@@ -169,7 +169,7 @@ const join = (id: ThreadId) =>
 describe("runtime sessions keyed by hob", () => {
   // covers ADR 039 (The context pack with several hobs), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1464-01] on %s, each hob in a thread resumes its own session, and a new one starts from the pack",
+    "on %s, each hob in a thread resumes its own session, and a new one starts from the pack (#1464)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");

@@ -122,7 +122,7 @@ describe("Overlapping changes", () => {
 
   // Issue #658: the lead's root Attempt stays open until its Quest ends, so a file it deleted before
   // it delegated was still one of its current changes when each member rebuilt that file.
-  it("is no overlap for a lead's change from before it delegated the other Task", () => {
+  it("is no overlap for a lead's change from before it delegated the other Task (#658)", () => {
     const later = delegated(pip, 3);
     const cleared = change(lead, "/work/test", "web/badge.png", 1);
     const rebuilt = {

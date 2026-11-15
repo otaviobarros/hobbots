@@ -19,9 +19,3 @@ The chat view is keyed by thread, so it remounts on every switch, and a reply ca
 
 - Drafts of deleted threads stay in local storage until cleared. Two windows do not sync their drafts with each other.
 - The stores are not part of the Query cache, so a resync never replaces unsent text.
-
-## Validation
-
-- A draft survives switching threads and a reload, and a sent draft does not come back: `[TC-CH-132]`, and the unit tests in `drafts.test.ts`.
-- A refused send puts its text back in the composer: `[TC-CH-133]`.
-- Messages sent while the hub is away wait and go out in order, also after a resync: `[TC-CH-094]`, `[TC-CH-102]`, `[TC-CH-107]`.

@@ -75,8 +75,7 @@ const expectOneLine = async (hint: Locator) => {
   expect(fits, (await hint.textContent()) ?? "").toEqual({ oneLine: true, whole: true });
 };
 
-// covers CH-007, CH-008
-test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself, and Send says when it goes", async ({
+test("while Moss replies the hint is one line, Stop describes itself, and Send says when it goes (#1034)", async ({
   page,
   scan,
 }) => {
@@ -156,8 +155,7 @@ test("[TC-CH-290] while Moss replies the hint is one line, Stop describes itself
   await expect(composerCard(page)).toContainText(KEYS);
 });
 
-// covers AG-006, CH-008
-test("[TC-CH-291] a paused hob keeps Wake first and Queue in a thread, and a new thread keeps its draft", async ({
+test("a paused hob keeps Wake first and Queue in a thread, and a new thread keeps its draft (#1034)", async ({
   page,
   scan,
 }) => {
@@ -202,11 +200,10 @@ const themeIds: readonly string[] = (
   }
 ).themes.map((theme) => theme.id);
 
-test.describe("beside a quest's Workbench", () => {
+test.describe("beside a quest's Workbench (#1034)", () => {
   test.afterEach(stopAldricHub);
 
-  // covers CH-007, UX-002
-  test("[TC-CH-292] beside a quest's Workbench the busy hint keeps only the dot and Replying, on one line in every theme and at larger text", async ({
+  test("beside a quest's Workbench the busy hint keeps only the dot and Replying, on one line in every theme and at larger text (#1034)", async ({
     page,
     scan,
   }) => {

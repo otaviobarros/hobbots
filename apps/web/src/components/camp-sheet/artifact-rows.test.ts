@@ -19,7 +19,7 @@ const artifact = (id: string, kind: Artifact["kind"], locator = `/work/${id}`) =
   });
 
 describe("the Artifacts tab's chips", () => {
-  it("[TC-CH-1387-29] groups the registry's kinds under each chip, keeping the hub's order", () => {
+  it("groups the registry's kinds under each chip, keeping the hub's order (#1387)", () => {
     const all = [artifact("a", "code"), artifact("b", "doc"), artifact("c", "pr"), artifact("d", "image")];
     expect(filterArtifacts(all, "all")).toEqual(all);
     expect(filterArtifacts(all, "code").map((each) => each.id)).toEqual(["a", "c"]);
@@ -33,7 +33,7 @@ describe("the Artifacts tab's chips", () => {
 });
 
 describe("the chips a camp shows", () => {
-  it("[TC-CH-1434-06] shows All and only the kinds the camp has, and falls back to All when a kind is gone", () => {
+  it("shows All and only the kinds the camp has, and falls back to All when a kind is gone (#1434)", () => {
     const all = [artifact("a", "doc"), artifact("b", "pr")];
     expect(shownFilters(all)).toEqual(["all", "code", "docs"]);
     expect(shownFilters([])).toEqual(["all"]);

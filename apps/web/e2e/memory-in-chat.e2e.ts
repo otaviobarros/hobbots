@@ -71,7 +71,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
 const savedLines = (page: Page) => page.getByRole("list", { name: "What Pip saved to memory" });
 
 // covers ADR 028 (The memory tools, Writes), #961
-test("[TC-UX-971] a save shows a quiet line under its reply, Open reads the page, and Undo removes a page it made", async ({
+test("a save shows a quiet line under its reply, Open reads the page, and Undo removes a page it made (#961)", async ({
   page,
 }) => {
   const { url, pip } = await hubWithMemory("empty");
@@ -109,7 +109,7 @@ test("[TC-UX-971] a save shows a quiet line under its reply, Open reads the page
 
 // covers ADR 028 (Writes), #961
 // covers ADR 028 (The memory brief), through the whole server rather than a hub built for the test
-test("[TC-UX-978] a page a hob saved reaches its next thread's brief", async ({ page }) => {
+test("a page a hob saved reaches its next thread's brief (#961)", async ({ page }) => {
   const { url, pip } = await hubWithMemory("empty");
   await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["Remember this.", saveLine("brief", "# Launch day\n\nLaunch emails go out Tuesday at 9 AM.")]);
@@ -121,7 +121,7 @@ test("[TC-UX-978] a page a hob saved reaches its next thread's brief", async ({ 
   await expect(page.getByRole("article").last()).toContainText("Launch emails go out Tuesday at 9 AM.");
 });
 
-test("[TC-UX-972] Undo puts back the version a save replaced, and refuses an older save the page has moved past", async ({
+test("Undo puts back the version a save replaced, and refuses an older save the page has moved past", async ({
   page,
 }) => {
   const { url, pip } = await hubWithMemory("empty");
@@ -148,7 +148,7 @@ test("[TC-UX-972] Undo puts back the version a save replaced, and refuses an old
 });
 
 // covers ADR 028 (Scopes, The memory tools), #961
-test("[TC-UX-973] a hob's Memory tab shows what it learned and what it reads, and links to its Memory permissions", async ({
+test("a hob's Memory tab shows what it learned and what it reads, and links to its Memory permissions (#961)", async ({
   page,
 }) => {
   const { url, pip } = await hubWithMemory("seeded");
@@ -184,9 +184,7 @@ test("[TC-UX-973] a hob's Memory tab shows what it learned and what it reads, an
 });
 
 // covers ADR 028 (The memory tools), #961, STD-REACT-015
-test("[TC-UX-977] when a chat's saves cannot be read, it says so and Try again brings the lines back", async ({
-  page,
-}) => {
+test("when a chat's saves cannot be read, it says so and Try again brings the lines back (#961)", async ({ page }) => {
   const { url, pip } = await hubWithMemory("empty");
   await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, [

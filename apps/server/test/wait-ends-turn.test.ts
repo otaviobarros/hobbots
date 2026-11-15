@@ -95,8 +95,7 @@ const treeOf = (taskId: TaskId) =>
   run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(taskId))).then(Option.getOrThrow);
 
 describe("a wait ends the turn", () => {
-  // covers OR-003
-  it("[TC-OR-240] wait_for tells the hob to end its turn, and the same wait again in that turn records nothing", async () => {
+  it("wait_for tells the hob to end its turn, and the same wait again in that turn records nothing", async () => {
     await run(seed);
     const turn = await run(chatTurn("m-1"));
     const delegated = await run(
@@ -130,8 +129,7 @@ describe("a wait ends the turn", () => {
     expect(await head()).not.toEqual(before);
   });
 
-  // covers OR-003, EX-002
-  it("[TC-OR-241] the waiting Task stays active while its turn runs and shows waiting once the turn ends", async () => {
+  it("the waiting Task stays active while its turn runs and shows waiting once the turn ends", async () => {
     await run(seed);
     const turn = await run(chatTurn("m-1"));
     const delegated = await run(
@@ -162,8 +160,7 @@ describe("a wait ends the turn", () => {
     expect((await treeOf(top)).tasks[0]?.state).toBe("waiting");
   });
 
-  // covers OR-003
-  it("[TC-OR-522] asking again for what it already waits on records nothing, after one of them ended too", async () => {
+  it("asking again for what it already waits on records nothing, after one of them ended too", async () => {
     await run(seed);
     const turn = await run(chatTurn("m-1"));
     const delegate = async (key: string, brief: string) => {
@@ -190,8 +187,7 @@ describe("a wait ends the turn", () => {
     expect(await head()).toEqual(before);
   });
 
-  // covers OR-003, OR-005
-  it("[TC-OR-523] wait_for refuses a question's id saying it takes Task ids, and names the question's Task", async () => {
+  it("wait_for refuses a question's id saying it takes Task ids, and names the question's Task", async () => {
     await run(seed);
     const turn = await run(chatTurn("m-1"));
     const delegated = await run(

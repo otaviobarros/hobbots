@@ -14,7 +14,7 @@ const sha256 = (data: string) => createHash("sha256").update(data).digest("hex")
 
 describe("the hob's files, as the Files tab looks at them", () => {
   // The Files tab remembers what it hashed, and hashes a file again whenever it may have changed.
-  it("[#388] looks again at a file rewritten under the same size, and remembers one left alone", async () => {
+  it("looks again at a file rewritten under the same size, and remembers one left alone (#388)", async () => {
     const files = makeHobFiles();
     const look = () => Effect.runPromise(files.look(temp, "notes.txt")).then(Option.getOrNull);
     writeFileSync(join(temp, "notes.txt"), "first\n");
@@ -27,7 +27,7 @@ describe("the hob's files, as the Files tab looks at them", () => {
   });
 
   // A file the hub would never serve is measured, not read through: a multi-GB export costs one stat.
-  it("[#388] measures a file larger than the hub serves without hashing it", async () => {
+  it("measures a file larger than the hub serves without hashing it (#388)", async () => {
     writeFileSync(join(temp, "export.bin"), "");
     truncateSync(join(temp, "export.bin"), SERVED_FILE_BYTES + 1);
     const found = await Effect.runPromise(makeHobFiles().look(temp, "export.bin")).then(Option.getOrNull);

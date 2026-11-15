@@ -10,4 +10,4 @@ The web app holds the routes and screens every client shows. These rules add to 
 - Every data section shows its loading, empty and error states (STD-REACT-015), and every failure says what went wrong and how to recover (STD-UI-009).
 - User-facing copy lives in a `messages.ts` module (STD-I18N-001), and the UI calls agents hobs (STD-UI-007).
 - Styles use theme tokens only (STD-UI-001) and build on the shared primitives (STD-UI-002). Every control works by keyboard and has a name (STD-UI-003).
-- A UI change to a flow adds or updates its end-to-end test in `apps/web/e2e`, with a case ID, against the fake runtime (STD-TEST-004).
+- A UI change to a flow adds or updates its end-to-end test in `apps/web/e2e`, against the fake runtime (STD-TEST-004).

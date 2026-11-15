@@ -76,8 +76,7 @@ const tree = new TaskTree({
 const nth = (index: number) => tree.tasks[index] as Task;
 
 describe("how commits are made, as every brief that can commit says", () => {
-  // covers OR-003, OR-004
-  it("[TC-OR-742-01] the lead's briefing, a member's prompt and a step's prompt each carry the commit rule", () => {
+  it("the lead's briefing, a member's prompt and a step's prompt each carry the commit rule (#742)", () => {
     const briefs = {
       lead: ownerBriefing(nth(0), tree),
       member: memberPrompt(nth(1), tree, "Frodo"),

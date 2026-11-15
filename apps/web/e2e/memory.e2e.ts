@@ -48,7 +48,7 @@ const hubWithMemory = async (memory: "empty" | "seeded" | "down", lookSeconds = 
 };
 
 // covers ADR 028 (Browse, Read), #958
-test("[TC-UX-951] Memory opens from the sidebar, shows what hobs learned, and reads a page with its changes", async ({
+test("Memory opens from the sidebar, shows what hobs learned, and reads a page with its changes (#958)", async ({
   page,
 }) => {
   const { url, summon } = await hubWithMemory("seeded");
@@ -82,7 +82,7 @@ test("[TC-UX-951] Memory opens from the sidebar, shows what hobs learned, and re
 });
 
 // covers ADR 028 (Search, What changed), #958
-test("[TC-UX-952] search finds pages across scopes, and What changed shows a new hob's saves as they land", async ({
+test("search finds pages across scopes, and What changed shows a new hob's saves as they land (#958)", async ({
   page,
 }) => {
   const { url, summon } = await hubWithMemory("seeded");
@@ -106,7 +106,7 @@ test("[TC-UX-952] search finds pages across scopes, and What changed shows a new
 });
 
 // covers ADR 028 (Search), #1047
-test("[TC-UX-1047-01] search finds a page by a question in plain words or a word start, and marks the words it matched", async ({
+test("search finds a page by a question in plain words or a word start, and marks the words it matched (#1047)", async ({
   page,
 }) => {
   const { url, summon } = await hubWithMemory("seeded");
@@ -126,7 +126,7 @@ test("[TC-UX-1047-01] search finds a page by a question in plain words or a word
 });
 
 // covers ADR 028 (Browse), #958
-test("[TC-UX-953] with nothing remembered yet, Memory says how it fills", async ({ page }) => {
+test("with nothing remembered yet, Memory says how it fills (#958)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("empty");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -137,7 +137,7 @@ test("[TC-UX-953] with nothing remembered yet, Memory says how it fills", async 
 });
 
 // covers ADR 028 (Browse), #958
-test("[TC-UX-954] while memory is not answering, Memory says so and offers to try again", async ({ page }) => {
+test("while memory is not answering, Memory says so and offers to try again (#958)", async ({ page }) => {
   const { url } = await hubWithMemory("down");
   await page.goto(`${url}/#/memory`);
   const main = page.getByRole("main", { name: "Memory" });
@@ -148,7 +148,7 @@ test("[TC-UX-954] while memory is not answering, Memory says so and offers to tr
 });
 
 // covers ADR 028 (Browse), #958
-test("[TC-UX-958] memory stopping after the page loaded shows the banner over what loaded, and clears when it answers again", async ({
+test("memory stopping after the page loaded shows the banner over what loaded, and clears when it answers again (#958)", async ({
   page,
 }) => {
   // The hub never looks for changes during the test, so only the page's own reads find the outage.
@@ -188,9 +188,7 @@ test("[TC-UX-958] memory stopping after the page loaded shows the banner over wh
 type PageNow = { readonly page: { readonly version: string; readonly markdown: string } };
 
 // covers ADR 028 (Edit, History), #959
-test("[TC-UX-990] Edit saves a page as a new version by you, and Restore brings an older one back", async ({
-  page,
-}) => {
+test("Edit saves a page as a new version by you, and Restore brings an older one back (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -221,9 +219,7 @@ test("[TC-UX-990] Edit saves a page as a new version by you, and Restore brings 
 });
 
 // covers ADR 028 (Pin, Forget, Delete), #959
-test("[TC-UX-991] Pin, a forget day with Keep it, and Delete with Undo each change the page you read", async ({
-  page,
-}) => {
+test("Pin, a forget day with Keep it, and Delete with Undo each change the page you read (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -259,7 +255,7 @@ test("[TC-UX-991] Pin, a forget day with Keep it, and Delete with Undo each chan
 });
 
 // covers ADR 028 (Sharing: About you, Edit), #959
-test("[TC-UX-992] a house rule and a new page are saved as your own pages", async ({ page }) => {
+test("a house rule and a new page are saved as your own pages (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -286,9 +282,7 @@ test("[TC-UX-992] a house rule and a new page are saved as your own pages", asyn
 });
 
 // covers ADR 028 (Edit), #959
-test("[TC-UX-993] an edit that races a save keeps your text, and saves over it only when you say so", async ({
-  page,
-}) => {
+test("an edit that races a save keeps your text, and saves over it only when you say so (#959)", async ({ page }) => {
   const { url, summon, call } = await hubWithMemory("seeded");
   const pip = await summon("Pip", 1201);
   const scope = `hob:${pip.id}`;
@@ -328,9 +322,7 @@ test("[TC-UX-993] an edit that races a save keeps your text, and saves over it o
 });
 
 // covers ADR 028 (Browse), #959
-test("[TC-UX-994] Open folder shows memory's pages in the desktop app, and says when it could not", async ({
-  page,
-}) => {
+test("Open folder shows memory's pages in the desktop app, and says when it could not (#959)", async ({ page }) => {
   const { url } = await hubWithMemory("seeded");
   await page.addInitScript(() => {
     let calls = 0;
@@ -345,7 +337,7 @@ test("[TC-UX-994] Open folder shows memory's pages in the desktop app, and says 
 });
 
 // covers ADR 028 (Delete), #959
-test("[TC-UX-995] a deleted page reads as gone when Back opens it again, not as it was", async ({ page }) => {
+test("a deleted page reads as gone when Back opens it again, not as it was (#959)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -367,7 +359,7 @@ test("[TC-UX-995] a deleted page reads as gone when Back opens it again, not as 
 });
 
 // covers ADR 028 (Delete), #959, STD-ARCH-011
-test("[TC-UX-996] a page deleted in one window leaves another window's list, and its open page reads as gone", async ({
+test("a page deleted in one window leaves another window's list, and its open page reads as gone (#959)", async ({
   page,
 }) => {
   const { url, summon } = await hubWithMemory("seeded", 3600);
@@ -397,9 +389,7 @@ test("[TC-UX-996] a page deleted in one window leaves another window's list, and
 });
 
 // covers ADR 028 (Sharing, Check now), #960
-test("[TC-UX-989] Check now lists what it found only in To review, and opens the page it is about", async ({
-  page,
-}) => {
+test("Check now lists what it found only in To review, and opens the page it is about (#960)", async ({ page }) => {
   const { url, summon } = await hubWithMemory("seeded");
   await summon("Pip", 1201);
   await page.goto(`${url}/#/memory`);
@@ -425,7 +415,7 @@ test("[TC-UX-989] Check now lists what it found only in To review, and opens the
 });
 
 // covers ADR 028 (Sharing, Check now), #960
-test("[TC-UX-997] Check now says so while memory is not answering, and keeps the last check", async ({ page }) => {
+test("Check now says so while memory is not answering, and keeps the last check (#960)", async ({ page }) => {
   const { url } = await hubWithMemory("seeded");
   await page.goto(`${url}/#/memory?view=review`);
   const main = page.getByRole("main", { name: "Memory" });

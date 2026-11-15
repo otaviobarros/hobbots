@@ -261,7 +261,7 @@ const journaled = (type: string) =>
 describe("a chapter moved into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1385-13] on %s, the moved chapter goes on in the camp from its pack, and the chat starts afresh without it",
+    "on %s, the moved chapter goes on in the camp from its pack, and the chat starts afresh without it (#1385)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
@@ -293,7 +293,7 @@ describe("a chapter moved into a camp", () => {
 describe("a resting chapter moved into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1385-19] on %s, the chat's live chapter, which had a session, starts afresh once an earlier chapter moves out",
+    "on %s, the chat's live chapter, which had a session, starts afresh once an earlier chapter moves out (#1385)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "What should I plant?");
@@ -323,7 +323,7 @@ describe("a resting chapter moved into a camp", () => {
 
 describe("camp suggestions", () => {
   // covers ADR 037 (Records: CampSuggestion), CH-009
-  it("[TC-CH-1385-14] offers a chapter grown past a threshold once, and Keep in chat keeps it from coming back", async () => {
+  it("offers a chapter grown past a threshold once, and Keep in chat keeps it from coming back (#1385)", async () => {
     const id = await start("claude-code");
     await say(id, "Let us plan the launch.");
     const decide = (n: number) =>
@@ -353,7 +353,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (The hub's brain), STD-ARCH-016
-  it("[TC-CH-1385-15] under No AI, a rested chapter is never judged and gets no drift suggestion", async () => {
+  it("under No AI, a rested chapter is never judged and gets no drift suggestion (#1385)", async () => {
     const id = await start("claude-code");
     await say(id, "My cat is called Miso.");
     await startChapter(id, "garden", "The garden");
@@ -363,7 +363,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (The hub's brain), STD-ARCH-016
-  it("[TC-CH-1385-16] the hub's brain suggests a drifted chapter once, sure enough, and resumes from its cursor after a restart", async () => {
+  it("the hub's brain suggests a drifted chapter once, sure enough, and resumes from its cursor after a restart (#1385)", async () => {
     const id = await start("claude-code", brain({ drift: ["camp", CAMP_DRIFT_CONFIDENCE] }));
     await say(id, "My cat is called Miso.");
     await startChapter(id, "garden", "The garden");
@@ -395,7 +395,7 @@ describe("camp suggestions", () => {
   });
 
   // covers ADR 037 (The hub's brain)
-  it("[TC-CH-1385-17] a brain that is not sure enough raises nothing", async () => {
+  it("a brain that is not sure enough raises nothing (#1385)", async () => {
     const id = await start("claude-code", brain({ drift: ["camp", CAMP_DRIFT_CONFIDENCE - 0.1] }));
     await say(id, "My cat is called Miso.");
     await startChapter(id, "garden", "The garden");
@@ -407,7 +407,7 @@ describe("camp suggestions", () => {
 
 describe("a suggested camp's name and goal", () => {
   // covers ADR 037 (The hub's brain), #1557
-  it("[TC-CH-1557-04] the hub's brain names the camp and its goal from the chapter's topic", async () => {
+  it("the hub's brain names the camp and its goal from the chapter's topic (#1557)", async () => {
     const id = await start(
       "claude-code",
       brain({ naming: [{ topics: "one", title: "  Launch plan\n", goal: "Ship the launch by Friday." }] }),
@@ -429,7 +429,7 @@ describe("a suggested camp's name and goal", () => {
   });
 
   // covers ADR 037 (The hub's brain), #1557
-  it("[TC-CH-1557-17] names a suggestion once from its chapter as it is after a chapter change, and offers it", async () => {
+  it("names a suggestion once from its chapter as it is after a chapter change, and offers it (#1557)", async () => {
     const id = await start("claude-code", brain({ naming: [{ topics: "one", title: "Launch plan", goal: "" }] }));
     await say(id, "Let us plan the launch.");
     await decideMany(id, CAMP_SUGGESTION_DECISIONS);
@@ -441,7 +441,7 @@ describe("a suggested camp's name and goal", () => {
   });
 
   // covers ADR 037 (The hub's brain), #1557
-  it("[TC-CH-1557-20] a suggestion raised before its chapter has a line to judge is named once a message arrives", async () => {
+  it("a suggestion raised before its chapter has a line to judge is named once a message arrives (#1557)", async () => {
     const id = await start("claude-code", brain({ naming: [{ topics: "one", title: "Launch plan", goal: "" }] }));
     await decideMany(id, CAMP_SUGGESTION_DECISIONS);
     await runDrift();
@@ -452,7 +452,7 @@ describe("a suggested camp's name and goal", () => {
   });
 
   // covers ADR 037 (The hub's brain), #1557
-  it("[TC-CH-1557-05] under No AI, and on a fallback, the camp takes the chapter's own title and no goal", async () => {
+  it("under No AI, and on a fallback, the camp takes the chapter's own title and no goal (#1557)", async () => {
     for (const decider of [Layer.empty, brain({})]) {
       const id = await start("claude-code", decider);
       await say(id, "My cat is called Miso.");
@@ -469,7 +469,7 @@ describe("a suggested camp's name and goal", () => {
 describe("a chapter that holds several topics", () => {
   // covers ADR 037 (Records: CampSuggestion), ADR 039 (Chapters run on their own), #1557
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1557-06] on %s, under No AI, is never offered whole: its last topic, after an idle gap, splits off and starts afresh",
+    "on %s, under No AI, is never offered whole: its last topic, after an idle gap, splits off and starts afresh (#1557)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
@@ -500,7 +500,7 @@ describe("a chapter that holds several topics", () => {
   );
 
   // covers ADR 037 (The hub's brain), #1557
-  it("[TC-CH-1557-07] with the brain, splits where it says the last topic starts, and raises that part on its own counts", async () => {
+  it("with the brain, splits where it says the last topic starts, and raises that part on its own counts (#1557)", async () => {
     const id = await start(
       "claude-code",
       brain({
@@ -527,7 +527,7 @@ describe("a chapter that holds several topics", () => {
   });
 
   // covers ADR 037 (The hub's brain), #1557
-  it("[TC-CH-1557-14] is withdrawn when the brain names no line its last topic could start at", async () => {
+  it("is withdrawn when the brain names no line its last topic could start at (#1557)", async () => {
     const id = await start("claude-code", brain({ naming: [{ topics: "several", from: 1, title: "Garden" }] }));
     await say(id, "My cat is called Miso.");
     await decideMany(id, CAMP_SUGGESTION_DECISIONS);
@@ -541,7 +541,7 @@ describe("a chapter that holds several topics", () => {
 describe("chapters that start on their own", () => {
   // covers ADR 039 (Chapters run on their own), RT-001, #1557
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1557-08] on %s, under No AI, a message after an idle gap starts the next chapter, and the turn after it a fresh session",
+    "on %s, under No AI, a message after an idle gap starts the next chapter, and the turn after it a fresh session (#1557)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
@@ -578,7 +578,7 @@ describe("chapters that start on their own", () => {
   );
 
   // covers ADR 039 (Chapters run on their own), #1557
-  it("[TC-CH-1557-09] the hub's brain starts one where a message opens a new topic, titled by it, and never at a chapter's start", async () => {
+  it("the hub's brain starts one where a message opens a new topic, titled by it, and never at a chapter's start (#1557)", async () => {
     const id = await start("claude-code", brain({ break: [{ topic: "new", title: "The garden" }] }));
     await say(id, "My cat is called Miso.");
     await runBreaks();
@@ -593,7 +593,7 @@ describe("chapters that start on their own", () => {
   });
 
   // covers ADR 039 (Chapters run on their own), #1557
-  it("[TC-CH-1557-10] a brain that hears the same topic, or is not sure enough, starts none, even after a gap", async () => {
+  it("a brain that hears the same topic, or is not sure enough, starts none, even after a gap (#1557)", async () => {
     const id = await start("claude-code", brain({ break: [{ topic: "same", title: "" }] }));
     await say(id, "My cat is called Miso.");
     await idleFor(id, CHAPTER_BREAK_IDLE_MINUTES * 2);

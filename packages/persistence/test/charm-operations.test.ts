@@ -224,8 +224,7 @@ const commentSite = {
 };
 
 describe("0071_charm_operations", () => {
-  // covers DP-003, PE-007
-  it("[TC-DP-285] renames stored overrides, approvals and grants to the Charm's operations and rules, once", async () => {
+  it("renames stored overrides, approvals and grants to the Charm's operations and rules, once", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;
@@ -318,8 +317,7 @@ describe("0071_charm_operations", () => {
     ]);
   });
 
-  // covers DP-003, DP-051
-  it("[TC-DP-286] still reads hob, approval and grant events journaled before it, under the new names", async () => {
+  it("still reads hob, approval and grant events journaled before it, under the new names", async () => {
     const agent = {
       id: "nettle",
       name: "Nettle",
@@ -435,8 +433,7 @@ describe("0071_charm_operations", () => {
     ]);
   });
 
-  // covers DP-003, DP-051
-  it("[TC-DP-288] still reads a Delegation journaled before it, its authority under the new names", async () => {
+  it("still reads a Delegation journaled before it, its authority under the new names", async () => {
     const created = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;

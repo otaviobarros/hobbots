@@ -61,8 +61,7 @@ const holdRoute = async (page: Page, url: string) => {
   };
 };
 
-// covers AG-002
-test("[TC-UX-180] a slow model list waits in place in How it thinks, names the provider, then offers Try again", async ({
+test("a slow model list waits in place in How it thinks, names the provider, then offers Try again", async ({
   page,
 }) => {
   test.slow();
@@ -91,10 +90,7 @@ test("[TC-UX-180] a slow model list waits in place in How it thinks, names the p
   await expect(thinks.getByRole("status")).toHaveCount(0);
 });
 
-// covers AG-001
-test("[TC-UX-181] Summon's Ready step keeps its rows and the provider cards while the providers are checked", async ({
-  page,
-}) => {
+test("Summon's Ready step keeps its rows and the provider cards while the providers are checked", async ({ page }) => {
   const current = await startHub(dataDir);
   hub = current;
   await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
@@ -112,8 +108,7 @@ test("[TC-UX-181] Summon's Ready step keeps its rows and the provider cards whil
   await expect(summary).toHaveCount(4);
 });
 
-// covers AG-001
-test("[TC-UX-182] Arrived draws its stage at once while the hobs are read after a reload", async ({ page }) => {
+test("Arrived draws its stage at once while the hobs are read after a reload", async ({ page }) => {
   const { current, pipId } = await hubWithPip();
   hub = current;
   const agents = await holdRoute(page, "**/api/agents");

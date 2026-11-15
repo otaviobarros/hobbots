@@ -109,7 +109,7 @@ describe("the status a client holds", () => {
   });
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-DM-1463-04] shows an idle run whose hobs wait for a person, from the snapshot as from an event", () => {
+  it("shows an idle run whose hobs wait for a person, from the snapshot as from an event (#1463)", () => {
     const waiting: ThreadRunStatus = { ...run("idle", 4), paused: [hob] };
     expect(shownStatus(withSnapshot(noStatus, snapshot({ runsRevision: 4, runs: [waiting] }))).runs).toEqual([waiting]);
     expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: waiting })).runs).toEqual([waiting]);
@@ -154,8 +154,7 @@ describe("leadsNeedingYou", () => {
   const thread = ThreadId.make("t1");
   const leadOf = (id: ThreadId) => (id === thread ? aldric : undefined);
 
-  // covers UX-002, OR-005
-  it("[TC-UX-191] marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
+  it("marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
     const needs = leadsNeedingYou({
       approvals: [
         { agentId: ada, threadId: thread, state: "pending" },

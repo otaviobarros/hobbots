@@ -138,9 +138,8 @@ const commitReadme =
   "echo hello > README.md && git add README.md && git -c user.name=Nettle -c user.email=nettle@example.com commit --quiet --no-gpg-sign -m 'First'";
 
 describe("a Git repository in the sandbox", () => {
-  // covers PE-005
   it.runIf(sandboxed)(
-    "[TC-PE-320] a hob commits in a repository the hub creates in its empty folder, while the repository's hooks and config stay read-only, and cannot reach where the hub makes it",
+    "a hob commits in a repository the hub creates in its empty folder, while the repository's hooks and config stay read-only, and cannot reach where the hub makes it",
     async () => {
       const project = newProject();
       await inTurn(project, async (prepared) => {
@@ -196,9 +195,8 @@ describe("a Git repository in the sandbox", () => {
     60_000,
   );
 
-  // covers PE-005
   it.runIf(sandboxed)(
-    "[TC-PE-321] a turn's commands write their own temporary folder, TMPDIR, and never the shared /tmp",
+    "a turn's commands write their own temporary folder, TMPDIR, and never the shared /tmp",
     async () => {
       const project = newProject();
       const name = `hobbots-578-${process.pid}-${Date.now()}`;
@@ -220,9 +218,8 @@ describe("a Git repository in the sandbox", () => {
     30_000,
   );
 
-  // covers PE-005
   it.runIf(sandboxed)(
-    "[TC-PE-454] a here-document writes a file, since zsh keeps its temporary file in the turn's own folder",
+    "a here-document writes a file, since zsh keeps its temporary file in the turn's own folder",
     async () => {
       const project = newProject();
       await inTurn(project, async (prepared) => {
@@ -240,8 +237,7 @@ describe("a Git repository in the sandbox", () => {
 });
 
 describe("pointing a hob to what works in its sandbox", () => {
-  // covers PE-005
-  it("[TC-PE-322] refuses a git init command and points it to git_init when the turn offers it, wherever the line runs it", async () => {
+  it("refuses a git init command and points it to git_init when the turn offers it, wherever the line runs it", async () => {
     const project = newProject();
     for (const command of [
       "git init",
@@ -268,8 +264,7 @@ describe("pointing a hob to what works in its sandbox", () => {
     });
   });
 
-  // covers PE-005
-  it("[TC-PE-323] a refused write to a shared temporary folder names TMPDIR, and the sandbox note names it and git_init", async () => {
+  it("a refused write to a shared temporary folder names TMPDIR, and the sandbox note names it and git_init", async () => {
     const project = newProject();
     // A command that writes there is refused before it runs, and so is a file tool's write.
     for (const command of [
@@ -311,11 +306,10 @@ describe("pointing a hob to what works in its sandbox", () => {
 });
 
 // #663: deleting a repository from the sandbox leaves its config and hooks, which no hob may remove,
-// and git_init then replaces what is left (in @hobbots/charms, TC-PE-440).
+// and git_init then replaces what is left (local-git.test.ts in @hobbots/charms).
 describe("a repository a hob deletes", () => {
-  // covers PE-005
   it.runIf(sandboxed)(
-    "[TC-PE-443] an approved delete of a repository leaves only its config and hooks, whose files stay read-only, and its output names git_init",
+    "an approved delete of a repository leaves only its config and hooks, whose files stay read-only, and its output names git_init",
     async () => {
       const project = newProject();
       hubGit("init", "--quiet", "--", project);
@@ -345,8 +339,7 @@ describe("a repository a hob deletes", () => {
     60_000,
   );
 
-  // covers PE-005
-  it("[TC-PE-444] a delete refused for a repository's config or hooks, and one the sandbox kept them from, both point to git_init", async () => {
+  it("a delete refused for a repository's config or hooks, and one the sandbox kept them from, both point to git_init", async () => {
     const project = newProject();
     hubGit("init", "--quiet", "--", project);
     // The policy refuses a delete it can read that holds the config or hooks, and says what to do.

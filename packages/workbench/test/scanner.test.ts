@@ -41,8 +41,7 @@ const folder = (name: string, files: Record<string, string>) => {
 const paths = (listing: ReadonlyMap<string, unknown>) => [...listing.keys()].sort();
 
 describe("the folder scan", () => {
-  // covers UX-002, PE-002
-  it("[TC-PE-276] reads a Git folder as files and never runs its config, hooks or tools", async () => {
+  it("reads a Git folder as files and never runs its config, hooks or tools", async () => {
     const marker = join(temp, "ran");
     const script = join(temp, "monitor.sh");
     writeFileSync(script, `#!/bin/sh\ntouch ${marker}\n`);
@@ -65,8 +64,7 @@ describe("the folder scan", () => {
     expect(compareListings(first.listing, second.listing).map((each) => each.kind)).toEqual(["edited"]);
   });
 
-  // covers PE-002, PE-005
-  it("[TC-PE-277] records a link as a link and never reads through it out of the folder", async () => {
+  it("records a link as a link and never reads through it out of the folder", async () => {
     const outside = folder("outside", { "diary.txt": "Not for hobs.\n" });
     const root = folder("linked", { "notes.md": "# Notes\n" });
     symlinkSync(outside, join(root, "personal"));
@@ -87,8 +85,7 @@ describe("the folder scan", () => {
     );
   });
 
-  // covers PE-002, PE-005
-  it("[TC-PE-280] never reads outside the folder while a command swaps a folder in it for a link and back", async () => {
+  it("never reads outside the folder while a command swaps a folder in it for a link and back", async () => {
     const outside = folder("elsewhere", { "notes.md": "SECRET outside\n" });
     const root = folder("swapped", { "docs/notes.md": "inside\n" });
     const secret = createHash("sha256").update("SECRET outside\n").digest("hex");
@@ -119,8 +116,7 @@ describe("the folder scan", () => {
     expect(seen.some((each) => each.includes("SECRET") || each === secret)).toBe(false);
   }, 20_000);
 
-  // covers PE-002, PE-005
-  it("[TC-PE-284] never reads the folder's new target when the folder itself is swapped for a link", async () => {
+  it("never reads the folder's new target when the folder itself is swapped for a link", async () => {
     const outside = folder("beyond", { "notes.md": "SECRET beyond\n" });
     const root = folder("given", { "notes.md": "inside\n" });
     const scanner = makeFolderScanner();
@@ -133,8 +129,7 @@ describe("the folder scan", () => {
     expect(await Effect.runPromise(scanner.scan(root, limits))).toMatchObject({ stopped: "unreadable" });
   });
 
-  // covers UX-002
-  it("[TC-GEN-079] skips what .gitignore files ignore in a Git folder only, and .git and node_modules in any", async () => {
+  it("skips what .gitignore files ignore in a Git folder only, and .git and node_modules in any", async () => {
     const files = {
       ".gitignore": "dist/\n*.log\n!keep.log\n",
       "docs/.gitignore": "drafts/\n",
@@ -166,8 +161,7 @@ describe("the folder scan", () => {
     ]);
   });
 
-  // covers UX-002
-  it("[TC-GEN-080] catches a rewrite of the same size that puts the old modification time back", async () => {
+  it("catches a rewrite of the same size that puts the old modification time back", async () => {
     const root = folder("racy", { "config.json": '{"mode":"a"}\n' });
     const path = join(root, "config.json");
     const scanner = makeFolderScanner();
@@ -188,8 +182,7 @@ describe("the folder scan", () => {
     ]);
   });
 
-  // covers UX-002
-  it("[TC-GEN-081] stops tracking a folder past its file limit, and says why", async () => {
+  it("stops tracking a folder past its file limit, and says why", async () => {
     const root = folder("big", { "a.md": "a", "b.md": "b", "c.md": "c" });
     const scanned = await Effect.runPromise(makeFolderScanner().scan(root, { ...limits, maxFiles: 2 }));
     expect(scanned.stopped).toBe("too-many-files");
@@ -198,8 +191,7 @@ describe("the folder scan", () => {
 });
 
 describe("the details store", () => {
-  // covers PE-005
-  it("[TC-PE-278] keeps contents once per hash and never serves a file it did not write", async () => {
+  it("keeps contents once per hash and never serves a file it did not write", async () => {
     const root = join(temp, "store");
     const store = makeActivityStore(root);
     const bytes = new TextEncoder().encode("formatted 3 files\n");

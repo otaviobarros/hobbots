@@ -4,8 +4,7 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers OR-007, PE-005, UX-002
-test("[TC-PE-425] a git_init the hub refused shows as a failed step in the reply and in its lane's summary", async ({
+test("a git_init the hub refused shows as a failed step in the reply and in its lane's summary (#664)", async ({
   page,
 }) => {
   // Aldric's folder already holds a repository's `.git`, so creating a repository there is refused (#664).

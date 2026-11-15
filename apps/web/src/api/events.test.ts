@@ -45,7 +45,7 @@ const reply = (status: Message["status"], content: string) =>
   });
 
 describe("applyEvent", () => {
-  it("[TC-UX-1062-01] reads the Skills page again when a skill changes elsewhere, but not a revision, which never changes", async () => {
+  it("reads the Skills page again when a skill changes elsewhere, but not a revision, which never changes (#1062)", async () => {
     const client = new QueryClient();
     const hash = SkillRevisionHash.make("a".repeat(64));
     const skill = new Skill({
@@ -70,7 +70,7 @@ describe("applyEvent", () => {
   });
 
   // covers ADR 029 (skill_feedback), STD-REACT-012, #1062
-  it("[TC-UX-1062-09] a note left while a skill's first read of its notes is under way is read again, not lost", async () => {
+  it("a note left while a skill's first read of its notes is under way is read again, not lost (#1062)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const skillId = SkillId.make("s1");
     const reads: Array<(answer: { feedback: ReadonlyArray<SkillFeedback> }) => void> = [];
@@ -155,8 +155,7 @@ describe("applyEvent", () => {
     expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([]);
   });
 
-  // covers CH-009
-  it("[TC-CH-1376-08] drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there", async () => {
+  it("drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there (#1376)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const hobId = AgentId.make("aldric");
     const old = new Thread({ id: threadId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now });
@@ -309,7 +308,7 @@ describe("applyEvent", () => {
   });
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-UX-1462-01] drops the reply of a hob that passed, which leaves no message, and reads what is unread again", async () => {
+  it("drops the reply of a hob that passed, which leaves no message, and reads what is unread again (#1462)", async () => {
     const client = new QueryClient();
     // The passed reply had ended, so the camp showed as unread.
     client.setQueryData(queryKeys.unreadThreads, [threadId]);
@@ -399,7 +398,7 @@ describe("approval events", () => {
   });
 
   // covers ADR 037 (Quests in camps), #1389
-  it("[TC-CH-1389-06] moves a request that went with its quest out of the thread it left and into the camp's list", () => {
+  it("moves a request that went with its quest out of the thread it left and into the camp's list (#1389)", () => {
     const client = new QueryClient();
     const camp = ThreadId.make("camp-1");
     const asked = approval("pending", 1);
@@ -416,8 +415,7 @@ describe("approval events", () => {
 
 // Settings reads remote access again as its stream connects, and the menu-bar icon pauses it while
 // that read is on its way: the read was answered before the pause, and lands after its event.
-// covers DP-004
-it("[TC-DP-140] a read answered before a pause never undoes the pause the hub announced after it", async () => {
+it("a read answered before a pause never undoes the pause the hub announced after it", async () => {
   vi.stubGlobal("location", new URL("http://127.0.0.1:4317/#/settings"));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const reads: Array<(answer: RemoteAccessStatus) => void> = [];

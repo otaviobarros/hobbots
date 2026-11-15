@@ -33,8 +33,7 @@ const expectInside = async (inner: Locator, outer: Locator) => {
 const lines = (element: Locator) =>
   element.evaluate((each) => Math.round(each.clientHeight / Number.parseFloat(getComputedStyle(each).lineHeight)));
 
-// covers UX-001
-test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the chat, its cards and the Quest room", async ({
+test("a Task whose brief is a paragraph with a deep folder fits the chat, its cards and the Quest room", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });

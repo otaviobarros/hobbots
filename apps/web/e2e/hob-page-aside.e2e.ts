@@ -3,8 +3,7 @@ import { questHub, stopQuestHub } from "./quest-hub.ts";
 
 test.afterEach(stopQuestHub);
 
-// covers CH-005, UX-001, UX-005
-test("[TC-UX-131] a hob's page shows the Quests it leads, its backpack, its folders and its brain beside the chats", async ({
+test("a hob's page shows the Quests it leads, its backpack, its folders and its brain beside the chats", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();

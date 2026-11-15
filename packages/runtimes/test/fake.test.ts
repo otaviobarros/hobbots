@@ -160,7 +160,7 @@ describe("fake runtime's scripted hub calls", () => {
 
   // A real model's reply rarely repeats a tool result, so the fake's leaves the hub's answers out
   // unless the prompt asks for them (#1560).
-  it("[TC-RT-1560-01] leaves the hub's answers out of its reply unless the prompt says fake:say-answers", async () => {
+  it("leaves the hub's answers out of its reply unless the prompt says fake:say-answers (#1560)", async () => {
     const hubTools = {
       tools: [{ name: "start_quest", description: "Start", inputSchema: {}, label: "Starting" }],
       call: () => Effect.succeed({ text: `Started.\n${JSON.stringify({ criterion_id: "crit-7" })}`, refused: false }),
@@ -179,8 +179,8 @@ describe("fake runtime's scripted hub calls", () => {
     );
   });
 
-  // covers PE-001 (#1356)
-  it("[TC-PE-1356-04] refuses a call to a hub tool the turn was not offered, as a runtime does, without the hub", async () => {
+  // Issue #1356
+  it("refuses a call to a hub tool the turn was not offered, as a runtime does, without the hub (#1356)", async () => {
     const calls: Array<string> = [];
     const hubTools = {
       tools: [{ name: "read_tasks", description: "Read", inputSchema: {}, label: "Reading" }],
@@ -233,7 +233,7 @@ describe("fake runtime's hub tools on a resumed session", () => {
     return { started, text: completed?._tag === "Completed" ? completed.text : "" };
   };
 
-  it("[TC-RT-1543-01] fake Codex holds the hub tools its session started with, and refuses a newer one", async () => {
+  it("fake Codex holds the hub tools its session started with, and refuses a newer one (#1543)", async () => {
     const fake = makeFakeRuntime({ runtime: "codex" });
     expect(fake.resumeKeepsHubTools).toBe(true);
     const calls: Array<string> = [];
@@ -251,7 +251,7 @@ describe("fake runtime's hub tools on a resumed session", () => {
     expect(calls).toEqual(["check_criterion"]);
   });
 
-  it("[TC-RT-1543-02] fake Claude Code is offered each turn's hub tools, resumed or not", async () => {
+  it("fake Claude Code is offered each turn's hub tools, resumed or not (#1543)", async () => {
     const fake = makeFakeRuntime();
     expect(fake.resumeKeepsHubTools).toBeUndefined();
     const calls: Array<string> = [];

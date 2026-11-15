@@ -4,8 +4,7 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers OR-007, UX-002
-test("[TC-OR-306] a Task tool call the hub refused shows as a failed step in the reply and in its lane's summary", async ({
+test("a Task tool call the hub refused shows as a failed step in the reply and in its lane's summary", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

@@ -40,8 +40,7 @@ const firstPrompt = (requests: ReadonlyArray<PromptRequest>, task: Task) =>
 const stepUnder = (tree: TaskTree, parent: Task) => tree.tasks.find((task) => task.parentId === parent.id);
 
 describe("member and step sessions offer git_init", () => {
-  // covers OR-002, PE-005
-  it("[TC-OR-495] a member's and a step's session list git_init when their authority opens it, and not when it doesn't", async () => {
+  it("a member's and a step's session list git_init when their authority opens it, and not when it doesn't", async () => {
     const { run, requests } = await startHub(await sharedDatabase());
     const withStep = (brief: string, key: string) =>
       [brief, hub("plan_steps", { key, steps: [{ brief: `${brief}, step one` }] })].join("\n");
@@ -84,8 +83,7 @@ describe("member and step sessions offer git_init", () => {
     expect(await offeredTo(stepUnder(tree, pip))).not.toContain(GIT_INIT_TOOL);
   }, 30_000);
 
-  // covers PE-005, OR-007
-  it("[TC-OR-496] a member's git_init creates the repository and is recorded on its Task, as is one refused", async () => {
+  it("a member's git_init creates the repository and is recorded on its Task, as is one refused", async () => {
     const { run } = await startHub(await sharedDatabase());
     const folder = join(project, "rook-app");
     await run(
@@ -122,8 +120,8 @@ describe("member and step sessions offer git_init", () => {
     ]);
   }, 30_000);
 
-  // covers PE-005, ADR 020, ADR 038
-  it("[TC-OR-497] a member is offered the writes of a Charm that offers them outside chats, and only the reads of one that does not", async () => {
+  // covers ADR 020, ADR 038
+  it("a member is offered the writes of a Charm that offers them outside chats, and only the reads of one that does not", async () => {
     const rows = new Map<string, CharmCall>();
     // The Ledger Charm offers its writes outside chats, as the GitHub Charm does; the Shelf Charm does not.
     const charms = Charms.layer([

@@ -64,8 +64,7 @@ const tree = (tasks: ReadonlyArray<Task>, artifacts: ReadonlyArray<ArtifactRef> 
   });
 
 describe("a dependent member's prompt", () => {
-  // covers OR-002, OR-003
-  it("[TC-OR-205] carries the result and artifacts of every Task it comes after, so no hand-off is needed", () => {
+  it("carries the result and artifacts of every Task it comes after, so no hand-off is needed", () => {
     const read = tree(
       [
         task("backend", QUILL, "completed", [], "Stores amounts as integer cents."),
@@ -82,7 +81,7 @@ describe("a dependent member's prompt", () => {
     expect(prompt).not.toContain("hand-off");
   });
 
-  it("[TC-OR-206] keeps what the Tasks it comes after returned within the step input limit", () => {
+  it("keeps what the Tasks it comes after returned within the step input limit", () => {
     const long = "x".repeat(5_000);
     const many = Array.from({ length: 6 }, (_, index) => task(`dep${index}`, QUILL, "completed", [], long));
     const read = tree([

@@ -189,8 +189,7 @@ const CONNECTION: HubConnection = {
 };
 
 describe("the connected desktop", () => {
-  // covers DP-001, DP-002
-  it("[TC-DP-157] starts with no server and keeps only its settings here, with the token only in the keychain", async () => {
+  it("starts with no server and keeps only its settings here, with the token only in the keychain", async () => {
     const dataDir = mkdtempSync(join(temp, "data-"));
     const settings = fileSettingsStore(join(dataDir, "desktop-settings.json"));
     const hub = fakeHub();
@@ -224,8 +223,7 @@ describe("the connected desktop", () => {
     expect(hubSettings.read().mode).toBe("hub");
   });
 
-  // covers DP-001
-  it("[TC-DP-158] keeps the hub's 400-day refresh of the device cookie out of the window's cookie store, and every other cookie in", () => {
+  it("keeps the hub's 400-day refresh of the device cookie out of the window's cookie store, and every other cookie in", () => {
     const answer = {
       "content-type": ["application/json"],
       "Set-Cookie": [
@@ -244,8 +242,7 @@ describe("the connected desktop", () => {
     expect(withoutDeviceCookies({ "cache-control": ["no-store"] })).toEqual({ "cache-control": ["no-store"] });
   });
 
-  // covers DP-001, DP-002
-  it("[TC-DP-159] the window carries the token as two session cookies, and the main process sends it as a bearer token", async () => {
+  it("the window carries the token as two session cookies, and the main process sends it as a bearer token", async () => {
     // Both of the hub's origins, HttpOnly and SameSite=Strict, with no expiry and no Domain.
     const cookies = deviceCookies(ORIGINS, "hbd_token");
     expect(cookies).toEqual([
@@ -302,8 +299,7 @@ describe("the connected desktop", () => {
     expect(await connected.refusal()).toBe("revoked");
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-176] the window's requests reach the hub's origins only while its address is the pinned node's", async () => {
+  it("the window's requests reach the hub's origins only while its address is the pinned node's", async () => {
     const { nodes, lookup } = tailnet();
     let now = 0;
     // The window's session, as Electron's webRequest hands each request to the guard.
@@ -356,8 +352,7 @@ describe("the connected desktop", () => {
     expect(await broken("http://studio.example.ts.net:4317/")).toBe("cancel");
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-161] an address that now belongs to another Tailscale node gets no token and no page", async () => {
+  it("an address that now belongs to another Tailscale node gets no token and no page", async () => {
     const hub = fakeHub();
     const { nodes, lookup } = tailnet();
     let now = 0;
@@ -404,8 +399,7 @@ describe("the connected desktop", () => {
     expect(outcome.kind).toBe("otherNode");
   });
 
-  // covers DP-001
-  it("[TC-DP-162] never pairs with a hub outside the connect protocol range, and says which side to update", async () => {
+  it("never pairs with a hub outside the connect protocol range, and says which side to update", async () => {
     const { lookup } = tailnet();
     const tryHub = async (health: unknown) => {
       const hub = fakeHub({ health });
@@ -440,8 +434,7 @@ describe("the connected desktop", () => {
     expect(await connected.verify()).toEqual({ state: "unsupported", side: "appOlder", version: "0.3.0" });
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-174] a program that pretends to be a hub is trusted only as the node the user chose, and never gets a real token", async () => {
+  it("a program that pretends to be a hub is trusted only as the node the user chose, and never gets a real token", async () => {
     const pretender = fakeHub({
       pretend: true,
       health: { app: "hobbots", name: "Your Hub", version: "0.5.0", connect: 1 },
@@ -513,8 +506,7 @@ describe("Disconnect on a connected desktop", () => {
     expect(startMode(settings, { installationId: undefined })).toEqual({ start: "setup", page: "where" });
   };
 
-  // covers DP-001, DP-004
-  it("[TC-DP-167] revokes this device on the hub as itself, deletes the keychain item and clears the mode", async () => {
+  it("revokes this device on the hub as itself, deletes the keychain item and clears the mode", async () => {
     const hub = fakeHub();
     const { lookup } = tailnet();
     const desktop = await connectedTo(hub, lookup);
@@ -543,8 +535,7 @@ describe("Disconnect on a connected desktop", () => {
     await forgotten(removed);
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-168] with the hub out of reach, still forgets the hub here and says the device stays listed there", async () => {
+  it("with the hub out of reach, still forgets the hub here and says the device stays listed there", async () => {
     const hub = fakeHub();
     hub.setReachable(false);
     const desktop = await connectedTo(hub, tailnet().lookup);
@@ -561,8 +552,7 @@ describe("Disconnect on a connected desktop", () => {
     await forgotten(other);
   });
 
-  // covers DP-001, DP-004
-  it("[TC-DP-218] a keychain that cannot delete the token fails Disconnect before the hub revokes anything, so it can be asked again", async () => {
+  it("a keychain that cannot delete the token fails Disconnect before the hub revokes anything, so it can be asked again", async () => {
     const hub = fakeHub();
     const { lookup } = tailnet();
     const desktop = await connectedTo(hub, lookup);

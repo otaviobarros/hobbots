@@ -23,8 +23,7 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
   return (await response.json()) as A;
 };
 
-// covers UX-006, CH-002
-test("[TC-UX-193] a reply that lands while you are elsewhere leaves a dot on the chat and the hob, and reading it clears both on every device", async ({
+test("a reply that lands while you are elsewhere leaves a dot on the chat and the hob, and reading it clears both on every device", async ({
   page,
   browser,
 }) => {

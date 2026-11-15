@@ -73,8 +73,7 @@ const LONG_PROMPT = Array.from({ length: 150 }, (_, i) => `word${i}`).join(" ");
 // Long enough for both devices to see the turn run: about 2.4 s.
 const TURN_PROMPT = Array.from({ length: 60 }, (_, i) => `turn${i}`).join(" ");
 
-// covers UX-002, CH-007
-test("[TC-UX-1374-05] two devices show the same hob and thread status through a full turn and a stop", async ({
+test("two devices show the same hob and thread status through a full turn and a stop (#1374)", async ({
   page,
   browser,
 }) => {
@@ -119,8 +118,7 @@ test("[TC-UX-1374-05] two devices show the same hob and thread status through a 
   await other.close();
 });
 
-// covers UX-002, OR-004
-test("[TC-UX-1374-06] two devices show the same quest progress and the same lead needing you through a quest step", async ({
+test("two devices show the same quest progress and the same lead needing you through a quest step (#1374)", async ({
   page,
   browser,
 }) => {
@@ -156,8 +154,7 @@ test("[TC-UX-1374-06] two devices show the same quest progress and the same lead
   await other.close();
 });
 
-// covers UX-002
-test("[TC-UX-1374-09] says when the hub's status cannot be read, keeps a paused hob paused, and reads it again", async ({
+test("says when the hub's status cannot be read, keeps a paused hob paused, and reads it again (#1374)", async ({
   page,
 }) => {
   dataDir = emptyDataDir();

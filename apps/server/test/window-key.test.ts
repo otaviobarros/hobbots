@@ -21,8 +21,7 @@ const start = () =>
   }).pipe(Effect.provide(WindowKeyLive(dataDir).pipe(Layer.provideMerge(DeviceSecretsLive))), Effect.runPromise);
 
 describe("the window key", () => {
-  // covers DP-004
-  it("[TC-DP-084] writes a fresh key on every start that only the user can read, and keeps only its hash", async () => {
+  it("writes a fresh key on every start that only the user can read, and keeps only its hash", async () => {
     const first = await start();
     const second = await start();
     expect(first.key).toMatch(/^hbw_[A-Za-z0-9_-]{43}$/);

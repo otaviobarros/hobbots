@@ -86,8 +86,7 @@ const run = (turnConfig: CodexTurnConfig, request: PromptRequest = prompt()) =>
 const events = (exit: Exit.Exit<ReadonlyArray<RuntimeEvent>, unknown>) => (Exit.isSuccess(exit) ? exit.value : []);
 
 describe("a Codex turn", () => {
-  // covers RT-001, AG-005
-  it("[TC-RT-020] streams the reply, completes with its text and this turn's token usage only", async () => {
+  it("streams the reply, completes with its text and this turn's token usage only", async () => {
     const server = fakeServer({
       script: [
         n("turn/started", { turn: { id: TURN } }),
@@ -131,8 +130,8 @@ describe("a Codex turn", () => {
     expect(server.closed()).toBe(1);
   });
 
-  // covers RT-001, ADR 024
-  it("[TC-RT-021] starts a Codex thread that asks about every call, inside Hobbots' sandbox, with no Codex attribution", async () => {
+  // covers ADR 024
+  it("starts a Codex thread that asks about every call, inside Hobbots' sandbox, with no Codex attribution", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     const turnConfig = config(server.start);
     await run(turnConfig, prompt({ model: "gpt-5.5-codex", effort: "high" }));
@@ -167,7 +166,7 @@ describe("a Codex turn", () => {
   });
 
   // covers ADR 028
-  it("[TC-RT-506] starts an ephemeral turn's Codex thread without saving it, and a hob's as it was", async () => {
+  it("starts an ephemeral turn's Codex thread without saving it, and a hob's as it was", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     await run(config(server.start), prompt({ ephemeral: true, model: "gpt-mini" }));
     await run(config(server.start), prompt());
@@ -176,8 +175,8 @@ describe("a Codex turn", () => {
     expect(starts[1]?.params).not.toHaveProperty("ephemeral");
   });
 
-  // covers RT-001, CH-004, ADR 017
-  it("[TC-RT-022] resumes the thread's Codex session, with changed instructions and a briefing inside the turn", async () => {
+  // covers ADR 017
+  it("resumes the thread's Codex session, with changed instructions and a briefing inside the turn", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     await run(
       config(server.start),
@@ -196,8 +195,7 @@ describe("a Codex turn", () => {
     expect(text.endsWith("Hello")).toBe(true);
   });
 
-  // covers RT-001, EX-004
-  it("[TC-RT-023] cancels by interrupting the turn and ends only once Codex acknowledges it", async () => {
+  it("cancels by interrupting the turn and ends only once Codex acknowledges it", async () => {
     const server = fakeServer({ script: [delta("m1", "Working")] });
     const exit = await Effect.runPromise(
       Effect.gen(function* () {
@@ -220,8 +218,7 @@ describe("a Codex turn", () => {
     expect(server.closed()).toBe(1);
   });
 
-  // covers RT-001, EX-004
-  it("[TC-RT-033] ends the process after the grace period when Codex never answers the interrupt", async () => {
+  it("ends the process after the grace period when Codex never answers the interrupt", async () => {
     const server = fakeServer({ script: [delta("m1", "Working")], deaf: true });
     const seen = await Effect.runPromise(
       Effect.gen(function* () {
@@ -240,15 +237,14 @@ describe("a Codex turn", () => {
     expect(server.closed()).toBe(1);
   });
 
-  // covers RT-001, EX-004
-  it("[TC-RT-024] ends a turn whose App Server exited first as uncertain, never as done", async () => {
+  it("ends a turn whose App Server exited first as uncertain, never as done", async () => {
     const server = fakeServer({ script: [delta("m1", "Half")], dies: true });
     const exit = await run(config(server.start));
     expect(exit).toEqual(Exit.fail(new RuntimeError({ message: LOST_TURN })));
   });
 
-  // covers PE-005, ADR 024
-  it("[TC-RT-025] refuses every tool call on a turn without tools, and the turn goes on", async () => {
+  // covers ADR 024
+  it("refuses every tool call on a turn without tools, and the turn goes on", async () => {
     const ask = (method: string, params: Record<string, unknown>) => ({
       method,
       params: { threadId: THREAD, turnId: TURN, ...params },
@@ -291,7 +287,7 @@ describe("a Codex turn", () => {
   });
 
   // regression for #1082
-  it("[TC-RT-1082-03] tells the running turn why each call was refused, as input the model reads next", async () => {
+  it("tells the running turn why each call was refused, as input the model reads next (#1082)", async () => {
     const ask = (method: string, params: Record<string, unknown>) => ({
       method,
       params: { threadId: THREAD, turnId: TURN, ...params },
@@ -328,8 +324,7 @@ describe("a Codex turn", () => {
     expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", text: "I could not run it." });
   });
 
-  // covers RT-001
-  it("[TC-RT-026] fails a turn Codex failed, and reports a reached usage limit as its own error", async () => {
+  it("fails a turn Codex failed, and reports a reached usage limit as its own error", async () => {
     const failed = await run(
       config(
         fakeServer({
@@ -348,8 +343,8 @@ describe("a Codex turn", () => {
     expect(limited).toEqual(Exit.fail(new RuntimeLimitReached({ resetsAt: null })));
   });
 
-  // covers RT-001, ADR 024
-  it("[TC-RT-027] signs the turn in through the protocol and answers Codex's refresh with a fresh token", async () => {
+  // covers ADR 024
+  it("signs the turn in through the protocol and answers Codex's refresh with a fresh token", async () => {
     let issued = 0;
     const signIn = Effect.sync(
       (): ChatGptTokens => ({ accessToken: `token-${++issued}`, chatgptAccountId: "ws-1", chatgptPlanType: "plus" }),
@@ -370,7 +365,7 @@ describe("a Codex turn", () => {
   });
 
   // covers ADR 024
-  it("[TC-RT-028] writes the hob's Codex settings: no image viewer, sub-agents, web search, apps or plugins", async () => {
+  it("writes the hob's Codex settings: no image viewer, sub-agents, web search, apps or plugins", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     const runtimeFolder = mkdtempSync(join(temp, "hob-"));
     await run(config(server.start), prompt({ tools: { runtimeFolder } as NonNullable<PromptRequest["tools"]> }));
@@ -420,8 +415,8 @@ describe("a Codex turn", () => {
   const toolDone = (id: string, tool: string, success: boolean) =>
     item("item/completed", { type: "dynamicToolCall", id, tool, status: success ? "completed" : "failed", success });
 
-  // covers EX-004, ADR 031: the step-recording contract every adapter passes (clean-runtime.ts).
-  it("[TC-PE-473] records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
+  // covers ADR 031: the step-recording contract every adapter passes (clean-runtime.ts).
+  it("records a hub tool call's step with the turn's recorder before the hub runs it", async () => {
     for (const records of [true, false]) {
       const contract = stepRecordingContract(records);
       const server = fakeServer({
@@ -437,8 +432,8 @@ describe("a Codex turn", () => {
     }
   });
 
-  // covers OR-001, PE-003, ADR 024
-  it("[TC-RT-080] declares the turn's hub tools on a new Codex thread and answers each call through the hub, as a step", async () => {
+  // covers ADR 024
+  it("declares the turn's hub tools on a new Codex thread and answers each call through the hub, as a step", async () => {
     hubCalls.length = 0;
     const server = fakeServer({
       asks: [toolCall("call_1", "delegate_task", { hob: "Quill" })],
@@ -475,8 +470,8 @@ describe("a Codex turn", () => {
     expect(Object.keys(command?.env ?? {}).filter((name) => /HOBBOTS|HUB|TOKEN/i.test(name))).toEqual([]);
   });
 
-  // covers PE-003, ADR 024
-  it("[TC-RT-081] refuses a hub tool the turn does not offer, including on a resumed thread that offers none", async () => {
+  // covers ADR 024
+  it("refuses a hub tool the turn does not offer, including on a resumed thread that offers none", async () => {
     hubCalls.length = 0;
     const offered = fakeServer({
       asks: [toolCall("call_1", "github_push")],
@@ -515,8 +510,8 @@ describe("a Codex turn", () => {
     expect(hubCalls).toHaveLength(1);
   });
 
-  // covers EX-004, IN-002, ADR 024
-  it("[TC-RT-086] starts the turn only once the hub has taken the session, so no hub call comes before it", async () => {
+  // covers ADR 024
+  it("starts the turn only once the hub has taken the session, so no hub call comes before it", async () => {
     const server = fakeServer({ script: [completed("completed")] });
     let taken = false;
     let startedAfterTaken: boolean | undefined;
@@ -545,8 +540,8 @@ describe("a Codex turn", () => {
     expect(startedAfterTaken).toBe(true);
   });
 
-  // covers EX-004, ADR 024
-  it("[TC-RT-082] marks a hub tool call uncertain when Codex stops before it recorded the answer", async () => {
+  // covers ADR 024
+  it("marks a hub tool call uncertain when Codex stops before it recorded the answer", async () => {
     hubCalls.length = 0;
     const server = fakeServer({ asks: [toolCall("call_1", "delegate_task", { hob: "Quill" })], dies: true });
     const seen: Array<RuntimeEvent> = [];
@@ -568,8 +563,8 @@ describe("a Codex turn", () => {
 });
 
 describe("a Codex turn with tools", () => {
-  // covers PE-005, ADR 014, ADR 024
-  it("[TC-RT-067] starts Codex in the sandbox, in the hob's folder, with its home closed but for what it writes", async () => {
+  // covers ADR 014, ADR 024
+  it("starts Codex in the sandbox, in the hob's folder, with its home closed but for what it writes", async () => {
     const root = realpathSync(mkdtempSync(join(temp, "tools-")));
     const repository = join(root, "repo");
     const project = join(repository, "app");
@@ -723,7 +718,7 @@ describe("reading a Codex turn", () => {
   });
 
   // regression for #1027
-  it("[TC-RT-1020] reports a compacted thread, so the hub tells it again what it relied on it holding", () => {
+  it("reports a compacted thread, so the hub tells it again what it relied on it holding (#1027)", () => {
     const read = codexTurnEvents(THREAD);
     expect(read.map(item("item/started", { type: "contextCompaction", id: "k1" })).events).toEqual([]);
     expect(read.map(item("item/completed", { type: "contextCompaction", id: "k1" })).events).toEqual([
@@ -776,7 +771,7 @@ describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
       commandActions: [{ type: "read", command: `cat ${path}`, name: "SKILL.md", path }],
     });
 
-  it("[TC-RT-528] counts a finished read of a mounted SKILL.md as a use, and nothing else", () => {
+  it("counts a finished read of a mounted SKILL.md as a use, and nothing else", () => {
     const events = codexTurnEvents(THREAD, [ROOT]);
     expect(events.map(read("c1", `${ROOT}/release-steps/SKILL.md`)).events).toEqual([
       { _tag: "SkillUsed", source: "library", name: "release-steps", explicit: false },
@@ -794,7 +789,7 @@ describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
   });
 
   // covers ADR 029 (The use line)
-  it("[TC-RT-531] counts a read of an organization skill Codex was let load, and no other file beside it", () => {
+  it("counts a read of an organization skill Codex was let load, and no other file beside it", () => {
     const org = { name: "org-steps", path: "/etc/codex/skills/org-steps/SKILL.md" };
     const events = codexTurnEvents(THREAD, [], [org]);
     expect(events.map(read("o1", org.path)).events).toEqual([
@@ -805,7 +800,7 @@ describe("a Codex turn's skill uses (ADR 029, #1096)", () => {
   });
 
   // covers ADR 029 (Admin policy still applies)
-  it("[TC-RT-534] names where each skill of the same name was read from, the turn's folder or an administrator's", () => {
+  it("names where each skill of the same name was read from, the turn's folder or an administrator's", () => {
     const events = codexTurnEvents(
       THREAD,
       [ROOT],
@@ -898,7 +893,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   const runsSleep = runs("c1");
 
   // regression for #1048
-  it("[TC-RT-1048-01] waits for the command, records its real exit code and tells the hob in a follow-up turn", async () => {
+  it("waits for the command, records its real exit code and tells the hob in a follow-up turn (#1048)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -936,8 +931,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
     });
   });
 
-  // covers CH-004, EX-004
-  it("[TC-RT-1056-01] says the reply waits on the outlived command once the hob has answered, and keeps waiting", async () => {
+  it("says the reply waits on the outlived command once the hob has answered, and keeps waiting (#1056)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -962,7 +956,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   });
 
   // regression for #1048
-  it("[TC-RT-1048-02] ends with no follow-up when every command ended inside the turn", async () => {
+  it("ends with no follow-up when every command ended inside the turn (#1048)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -980,7 +974,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   });
 
   // regression for #1048
-  it("[TC-RT-1048-04] reports each of two outlived commands as it ends, saying how many still run", async () => {
+  it("reports each of two outlived commands as it ends, saying how many still run (#1048)", async () => {
     const turn3 = "turn-3";
     const server = fakeServer({
       asks: [runs("c1"), runs("c2", "make build")],
@@ -1027,7 +1021,7 @@ describe("a Codex command that outlives its turn (#1048)", () => {
   });
 
   // regression for #1048
-  it("[TC-RT-1048-05] cancelling during a follow-up turn interrupts that turn and ends once Codex acknowledges it", async () => {
+  it("cancelling during a follow-up turn interrupts that turn and ends once Codex acknowledges it (#1048)", async () => {
     const server = fakeServer({
       asks: [runsSleep],
       script: [
@@ -1114,7 +1108,7 @@ const realSandbox = process.platform === "darwin" || process.env.HOBBOTS_SANDBOX
 
 describe.runIf(realSandbox)("Codex's command in the real sandbox", () => {
   // covers ADR 014, ADR 024, STD-SEC-002
-  it("[TC-RT-071] keeps the turn's temporary folder and no Claude variable in the command that starts Codex", async () => {
+  it("keeps the turn's temporary folder and no Claude variable in the command that starts Codex", async () => {
     const root = realpathSync(mkdtempSync(join(temp, "launch-")));
     const project = join(root, "project");
     mkdirSync(project);
@@ -1179,8 +1173,8 @@ describe("a Codex turn's skills (ADR 029)", () => {
   const scripted = (skills: NonNullable<Parameters<typeof fakeServer>[0]["skills"]>) =>
     fakeServer({ script: [message("m1", "Hi."), completed("completed")], skills });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-521] gives the App Server the turn's folder as its only extra root, with every other skill off", async () => {
+  // covers ADR 029
+  it("gives the App Server the turn's folder as its only extra root, with every other skill off", async () => {
     const server = scripted([]);
     // A home of its own, so no other test sees its skill.
     const turnConfig = { ...config(server.start), userHome: mkdtempSync(join(temp, "home-")) };
@@ -1206,8 +1200,8 @@ describe("a Codex turn's skills (ADR 029)", () => {
     expect(existsSync(root)).toBe(false);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-522] does not start a turn Codex would load another skill in, and lets an administrator's through", async () => {
+  // covers ADR 029
+  it("does not start a turn Codex would load another skill in, and lets an administrator's through", async () => {
     const refused = scripted([
       { name: "stray", path: "/repo/.agents/skills/stray/SKILL.md", scope: "repo", enabled: true },
     ]);
@@ -1239,7 +1233,7 @@ describe("a Codex turn's skills (ADR 029)", () => {
   });
 
   // covers ADR 029 (The use line)
-  it("[TC-RT-532] reports an administrator's skill the model reads as used, from your organization", async () => {
+  it("reports an administrator's skill the model reads as used, from your organization", async () => {
     const orgPath = "/etc/codex/skills/org-steps/SKILL.md";
     const server = fakeServer({
       script: [
@@ -1265,7 +1259,7 @@ describe("a Codex turn's skills (ADR 029)", () => {
   });
 
   // covers ADR 029 (Explicit use)
-  it("[TC-RT-533] reports the skill you picked as used only once Codex takes the turn with it", async () => {
+  it("reports the skill you picked as used only once Codex takes the turn with it", async () => {
     const asked = { ...prompt({ skills: mounted() }), askedSkill: "release" };
     const taken = scripted([]);
     const ran = await run(config(taken.start), asked);

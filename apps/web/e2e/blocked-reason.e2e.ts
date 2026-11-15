@@ -51,8 +51,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers OR-004, UX-002
-test("[TC-OR-223] Rook's lane says why its Task is blocked, not a bare Blocked", async ({ page }) => {
+test("Rook's lane says why its Task is blocked, not a bare Blocked (#571)", async ({ page }) => {
   const current = await startHub(dataDir);
   hub = current;
   await api(current, "PATCH", "/api/setup", {

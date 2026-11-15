@@ -57,7 +57,7 @@ const save = (key: string, overrides: Partial<MemorySave> = {}) =>
 
 describe("memory save records", () => {
   // covers ADR 028 (The memory tools, When memory is down)
-  it("[TC-GEN-240] records and journals a save once per key, and returns it for the same key", () =>
+  it("records and journals a save once per key, and returns it for the same key", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -81,7 +81,7 @@ describe("memory save records", () => {
       }),
     ));
 
-  it("[TC-GEN-241] settles a save once, keeps a queued save to send, and lists what is unsent", () =>
+  it("settles a save once, keeps a queued save to send, and lists what is unsent", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -104,7 +104,7 @@ describe("memory save records", () => {
       }),
     ));
 
-  it("[TC-GEN-242] refuses a state the record does not know", () =>
+  it("refuses a state the record does not know", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -117,7 +117,7 @@ describe("memory save records", () => {
     ));
 
   // covers ADR 028 (In the chat), #961
-  it("[TC-GEN-346] finds a save, lists a thread's saves, and marks a saved one undone once", () =>
+  it("finds a save, lists a thread's saves, and marks a saved one undone once (#961)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;

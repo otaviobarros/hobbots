@@ -113,8 +113,7 @@ const completes = (text: string) =>
   );
 
 describe("a tool call cut off by a crash", () => {
-  // covers EX-004, CH-004, CH-007
-  it("[TC-EX-012] is recorded before it runs, comes back uncertain after a restart, and Continue is told to check it instead of running it again", async () => {
+  it("is recorded before it runs, comes back uncertain after a restart, and Continue is told to check it instead of running it again", async () => {
     const result = await Effect.gen(function* () {
       const prompts: Array<string> = [];
       const { thread, running, recovered, chat } = yield* crashMidPush(
@@ -151,8 +150,7 @@ describe("a tool call cut off by a crash", () => {
     expect(result.continued.steps.map((step) => [step.id, step.state])).toEqual([["t1", "uncertain"]]);
   });
 
-  // covers EX-004, CH-008
-  it("[TC-EX-015] tells every turn after the crash about the uncertain call, a queued one and one after a completed reply included", async () => {
+  it("tells every turn after the crash about the uncertain call, a queued one and one after a completed reply included", async () => {
     const briefings = await Effect.gen(function* () {
       const told: Array<string | null> = [];
       const release = yield* Deferred.make<void>();

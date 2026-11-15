@@ -66,10 +66,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
 };
 
 // covers ADR 032 (The roster, read_hob)
-test("[TC-UX-1234-01] a hob's reply sees the visible hobs and reads one card with its step shown", async ({
-  page,
-  scan,
-}) => {
+test("a hob's reply sees the visible hobs and reads one card with its step shown (#1234)", async ({ page, scan }) => {
   const { url, pip } = await hubWithTeam();
   await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   // The fake answers this with the roster its turn was briefed with.
@@ -87,7 +84,7 @@ test("[TC-UX-1234-01] a hob's reply sees the visible hobs and reads one card wit
 });
 
 // covers ADR 032 (Read other hobs, in the policy), PE-001
-test("[TC-UX-1234-02] Permissions sets Read other hobs, which is Allow under Balanced, and Never saves as the next version", async ({
+test("Permissions sets Read other hobs, which is Allow under Balanced, and Never saves as the next version (#1234)", async ({
   page,
   scan,
 }) => {
@@ -129,7 +126,7 @@ const pipsRoster = async (page: Page, url: string, pip: Hob) => {
 };
 
 // covers ADR 032 (Good at, Visible to other hobs, It applies at once), AG-002
-test("[TC-UX-1235-01] good at edited and Visible to other hobs turned off and on in a profile reach another hob's next turn", async ({
+test("good at edited and Visible to other hobs turned off and on in a profile reach another hob's next turn (#1235)", async ({
   page,
   scan,
 }) => {
@@ -167,7 +164,7 @@ test("[TC-UX-1235-01] good at edited and Visible to other hobs turned off and on
 });
 
 // covers ADR 032 (Answers), #1351
-test("[TC-UX-1351-01] a hob reads another's card with its answers, and a change on the Permissions tab shows on its next read", async ({
+test("a hob reads another's card with its answers, and a change on the Permissions tab shows on its next read (#1351)", async ({
   page,
   scan,
 }) => {

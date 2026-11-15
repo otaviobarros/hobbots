@@ -104,8 +104,7 @@ describe("Commits a hob makes without its own app", () => {
     }
   };
 
-  // covers OR-004
-  it("[TC-OR-286] commit under the user's configured name and email, unless the repository names its own", () => {
+  it("commit under the user's configured name and email, unless the repository names its own", () => {
     // The turn names no one: Git settles the name from config, so no repository's own is overridden.
     expect(turn.GIT_AUTHOR_NAME).toBeUndefined();
     expect(Object.entries(turn).filter(([, value]) => value === "user.name")).toEqual([]);
@@ -119,8 +118,7 @@ describe("Commits a hob makes without its own app", () => {
     expect(commit(repo, "closed")).toBe("Site Bot <site@example.com>, Site Bot <site@example.com>");
   });
 
-  // covers OR-004
-  it("[TC-OR-287] fail with no identity rather than one made up from the computer's name, keeping the other settings", () => {
+  it("fail with no identity rather than one made up from the computer's name, keeping the other settings", () => {
     const env = withUserIdentity(gitConfigEnv([["commit.gpgsign", "false"]]), { name: "Ada Lovelace", email: null });
     expect(env).toMatchObject({
       GIT_CONFIG_COUNT: "2",
@@ -132,8 +130,7 @@ describe("Commits a hob makes without its own app", () => {
     expect(commit(repo, "closed", env)).toMatch(/^failed: .*no email was given and auto-detection is disabled/s);
   });
 
-  // covers OR-004
-  it("[TC-OR-292] a repository that sets only its email commits under that email and the user's name", () => {
+  it("a repository that sets only its email commits under that email and the user's name", () => {
     git(repo, "config", "user.email", "site@example.com");
     expect(commit(repo)).toBe("Ada Lovelace <site@example.com>, Ada Lovelace <site@example.com>");
     // One that sets only its name keeps it, with the user's email, whether or not the user's config is open.
@@ -143,8 +140,7 @@ describe("Commits a hob makes without its own app", () => {
     expect(commit(repo, "closed")).toBe("Site Bot <ada@example.com>, Site Bot <ada@example.com>");
   });
 
-  // covers OR-004
-  it("[TC-OR-293] each repository settles its own commits, however deep: nested, side by side and in a worktree", () => {
+  it("each repository settles its own commits, however deep: nested, side by side and in a worktree", () => {
     // `work/a/b/c/d/e/site` names itself deep inside the approved `work`; `notes` beside it does not.
     const site = join(repo, "a", "b", "c", "d", "e", "site");
     init(site);
@@ -162,8 +158,7 @@ describe("Commits a hob makes without its own app", () => {
     expect(commit(linked)).toBe("Site Bot <site@example.com>, Site Bot <site@example.com>");
   });
 
-  // covers OR-004
-  it("[TC-OR-630] with no identity in the user's config, commit under the one they gave Hobbots, or not at all (#741)", () => {
+  it("with no identity in the user's config, commit under the one they gave Hobbots, or not at all (#741)", () => {
     const empty = join(root, "empty-home");
     mkdirSync(empty);
     const given = { name: "otaviobarros", email: "35647586+otaviobarros@users.noreply.github.com" };
@@ -217,9 +212,8 @@ describe("what a hob is told about who it commits as (#1213)", () => {
     { why: "the hob's own bot", as: settleCommitsAs(bot, none, given) },
   ];
 
-  // covers OR-004
   it.each(cases)(
-    "[TC-OR-1213-01] tells the hob, for $why, that Hobbots sets who commits and it runs git commit without an identity",
+    "tells the hob, for $why, that Hobbots sets who commits and it runs git commit without an identity (#1213)",
     ({ as }) => {
       const commits = turnCommits({ commitsAs: as });
       // In the system prompt, before the first commit, and again in every resumed session's prompt.

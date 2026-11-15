@@ -22,8 +22,7 @@ const finishSetup = async (current: Hub) => {
   expect(response.ok).toBe(true);
 };
 
-// covers DP-004
-test("[TC-DP-115] a browser waits with a code, and after Allow on an approved device it works without asking again", async ({
+test("a browser waits with a code, and after Allow on an approved device it works without asking again", async ({
   page,
   browser,
 }) => {
@@ -62,8 +61,7 @@ test("[TC-DP-115] a browser waits with a code, and after Allow on an approved de
   await stranger.close();
 });
 
-// covers DP-004
-test("[TC-DP-116] a denied browser is told so and can ask again later", async ({ page, browser }) => {
+test("a denied browser is told so and can ask again later", async ({ page, browser }) => {
   const current = await startHub(dataDir);
   hub = current;
   await finishSetup(current);
@@ -92,8 +90,7 @@ const asDesktop = () => {
   (window as unknown as Record<string, unknown>).hobbots = { onOpenRequest: () => () => undefined };
 };
 
-// covers DP-004
-test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it until it is answered, then gives focus back", async ({
+test("the prompt over the hub's window keeps the keyboard inside it until it is answered, then gives focus back", async ({
   page,
   browser,
 }) => {

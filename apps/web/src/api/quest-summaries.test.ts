@@ -87,8 +87,7 @@ const hubModel = (client: QueryClient) => {
 };
 
 describe("the hub's Quest summaries in the window", () => {
-  // covers UX-002
-  it("[TC-UX-1374-03] ends with each Quest's newest summary, whatever order changes and reads arrive in", async () => {
+  it("ends with each Quest's newest summary, whatever order changes and reads arrive in (#1374)", async () => {
     await fc.assert(
       fc.asyncProperty(steps, async (script: ReadonlyArray<Step>) => {
         pending.length = 0;

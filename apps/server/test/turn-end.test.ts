@@ -120,8 +120,7 @@ const endsWith = (runner: TurnRunner) =>
   });
 
 describe("ending a turn under a cancel", () => {
-  // covers EX-001, OR-006
-  it("[TC-OR-458] a member's or step's turn that ends after its Task's cancel was asked records a cancelled Attempt naming who cancelled it, and one that ended first keeps completed", async () => {
+  it("a member's or step's turn that ends after its Task's cancel was asked records a cancelled Attempt naming who cancelled it, and one that ended first keeps completed", async () => {
     for (const runner of ["member", "step"] as const) {
       // The cancel arrives while the turn runs; the turn then ends with its reply.
       const underCancel = await run(Effect.andThen(Effect.andThen(turnRunning(), cancel), endsWith(runner)));

@@ -20,21 +20,21 @@ const defaults = (brief: string, folders: ReadonlyArray<string> = lead) =>
   Effect.runPromise(defaultFolders(hub, folders, brief, "/"));
 
 describe("A member's default folders", () => {
-  it("are the quoted folder the brief names with a space in it, not the one its first word names", async () => {
+  it("are the quoted folder the brief names with a space in it, not the one its first word names (#582)", async () => {
     const spaced = checks([...lead, "/work/test/my site", "/work/test/my"]);
     expect(await Effect.runPromise(defaultFolders(spaced, lead, 'Work only in "/work/test/my site".', "/"))).toEqual([
       "/work/test/my site",
     ]);
   });
 
-  it("are the folders the brief names inside the lead's, as the hub stores them", async () => {
+  it("are the folders the brief names inside the lead's, as the hub stores them (#582)", async () => {
     expect(await defaults("Build the site in /work/test/site, and keep the shop (/work/test/shop) as it is.")).toEqual([
       "/work/test/site",
       "/work/test/shop",
     ]);
   });
 
-  it("leave out what the brief names outside the lead's folders, files, and paths that are not on the hub", async () => {
+  it("leave out what the brief names outside the lead's folders, files, and paths that are not on the hub (#582)", async () => {
     expect(
       await defaults(
         "Read /elsewhere and /work/test/site/README.md, then write /work/test/missing. See https://x.dev/a.",
@@ -42,7 +42,7 @@ describe("A member's default folders", () => {
     ).toEqual(["/work/test"]);
   });
 
-  it("are the folder the lead's Task works in when the brief names none, and none when the lead has none", async () => {
+  it("are the folder the lead's Task works in when the brief names none, and none when the lead has none (#582)", async () => {
     expect(await defaults("Make the badge")).toEqual(["/work/test"]);
     expect(await defaults("Make the badge", [])).toEqual([]);
   });
@@ -59,7 +59,7 @@ describe("A member's default folders", () => {
     expect(await defaults("Save it as /work/other/new/page.html and /elsewhere/page.html.")).toEqual(["/work/test"]);
   });
 
-  it("are within the lead's, so the authority given is narrowed to them", async () => {
+  it("are within the lead's, so the authority given is narrowed to them (#582)", async () => {
     const folders = await defaults("Work in /work/test/site.");
     const given = delegatedAuthority({ decisions: {} as never, fixed: [], folders: lead }, { folders }, "/");
     expect(given).toMatchObject({ _tag: "Narrowed", authority: { folders: ["/work/test/site"] } });
@@ -71,13 +71,13 @@ describe("A Quest's folders", () => {
   const folders = (requested: ReadonlyArray<string>) =>
     Effect.runPromise(Effect.result(requestedFolders(hub, lead, requested, "/")));
 
-  it("[TC-OR-482] are the lead's own or inside one, and any other is refused", async () => {
+  it("are the lead's own or inside one, and any other is refused (#582)", async () => {
     expect(await folders(["/work/test/site"])).toMatchObject({ _tag: "Success", success: ["/work/test/site"] });
     expect(await folders(["/elsewhere"])).toMatchObject({ _tag: "Failure", failure: { reason: "authority-wider" } });
     expect(await folders(["/work/missing"])).toMatchObject({ _tag: "Failure", failure: { reason: "invalid-input" } });
   });
 
-  it("[TC-OR-483] are those the text names inside the lead's when it names none, and none leaves the limits as they are", async () => {
+  it("are those the text names inside the lead's when it names none, and none leaves the limits as they are (#582)", async () => {
     expect(
       await Effect.runPromise(namedFolders(hub, lead, "Build it in /work/test/site, not /elsewhere.", "/")),
     ).toEqual(["/work/test/site"]);
@@ -89,7 +89,7 @@ describe("A Quest's folders", () => {
 });
 
 describe("Paths in a brief", () => {
-  it("are the absolute ones, without the sentence's punctuation around them", () => {
+  it("are the absolute ones, without the sentence's punctuation around them (#582)", () => {
     expect(pathsIn('Use "/a/b", then (/c/d). Not a/b or https://e.dev/f; and /g.', "/")).toEqual([
       "/a/b",
       "/c/d",
@@ -97,7 +97,7 @@ describe("Paths in a brief", () => {
     ]);
   });
 
-  it("keep the spaces of a quoted path, and end an unquoted one at the first space", () => {
+  it("keep the spaces of a quoted path, and end an unquoted one at the first space (#582)", () => {
     expect(pathsIn("Work only in \"/work/test/my site\". Then '/a b/c' and `/d e`, not /f g.", "/")).toEqual([
       "/work/test/my site",
       "/a b/c",
@@ -109,7 +109,7 @@ describe("Paths in a brief", () => {
   });
 
   // STD-SEC-005: a crafted brief cannot stall the hub.
-  it("are found in one pass, however the text is shaped", () => {
+  it("are found in one pass, however the text is shaped (#582)", () => {
     const long = 200_000;
     const started = performance.now();
     expect(pathsIn(`/${".".repeat(long)}x`, "/")).toEqual([`/${".".repeat(long)}x`]);
@@ -118,7 +118,7 @@ describe("Paths in a brief", () => {
     expect(performance.now() - started).toBeLessThan(1_000);
   });
 
-  it("start at a drive on Windows", () => {
+  it("start at a drive on Windows (#582)", () => {
     expect(pathsIn(String.raw`Work in C:\Users\you\site.`, "\\")).toEqual([String.raw`C:\Users\you\site`]);
   });
 });

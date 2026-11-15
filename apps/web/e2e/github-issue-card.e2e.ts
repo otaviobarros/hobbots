@@ -71,8 +71,8 @@ const recordIssueRequest = (folder: string) => {
   database.close();
 };
 
-// covers PE-003, ADR 020 (Amendment: opening issues)
-test("[TC-PE-1350-07] the card for an issue shows its title, labels, parent and body, who opens it, and what it risks", async ({
+// covers ADR 020 (Amendment: opening issues)
+test("the card for an issue shows its title, labels, parent and body, who opens it, and what it risks (#1350)", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

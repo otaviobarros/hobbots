@@ -10,8 +10,7 @@ test.afterEach(stopAldricHub);
 
 const TITLE = "Ship the launch copy";
 
-// covers UX-004, OR-001
-test("[TC-UX-1004-02] a running lane that goes quiet says when its hob's last step was, live, and drops it once the hob moves again", async ({
+test("a running lane that goes quiet says when its hob's last step was, live, and drops it once the hob moves again (#1004)", async ({
   page,
 }) => {
   test.setTimeout(150_000);
@@ -52,8 +51,7 @@ test("[TC-UX-1004-02] a running lane that goes quiet says when its hob's last st
   await expect(now).not.toContainText("sleep");
 });
 
-// covers UX-004, OR-001
-test("[TC-UX-1004-04] a lane names the background command its hob's turn waits on, then moves on once it ends", async ({
+test("a lane names the background command its hob's turn waits on, then moves on once it ends (#1004)", async ({
   page,
 }) => {
   test.setTimeout(120_000);

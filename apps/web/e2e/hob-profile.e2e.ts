@@ -82,8 +82,7 @@ const editHob = async (page: Page) => {
   await page.getByRole("menuitem", { name: "Edit hob" }).click();
 };
 
-// covers AG-002
-test("[TC-AG-070] editing instructions in the profile changes the next reply", async ({ page }) => {
+test("editing instructions in the profile changes the next reply", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
@@ -125,10 +124,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
     ]);
 });
 
-// covers AG-002
-test("[TC-AG-104] renaming a hob and changing its look in the profile shows them everywhere, past chats too", async ({
-  page,
-}) => {
+test("renaming a hob and changing its look in the profile shows them everywhere, past chats too", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
@@ -169,10 +165,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
   await expect(page.getByRole("main", { name: "Chat" }).getByText("Pip", { exact: true })).toHaveCount(0);
 });
 
-// covers AG-006
-test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to the Archive's Retired hobs", async ({
-  page,
-}) => {
+test("pausing, waking and retiring from the profile moves the hob to the Archive's Retired hobs", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
@@ -210,10 +203,7 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
   ).toBeVisible();
 });
 
-// covers AG-002, UX-005
-test("[TC-AG-075] changing the role in the profile updates Your hobs, the hob's page and profile at once", async ({
-  page,
-}) => {
+test("changing the role in the profile updates Your hobs, the hob's page and profile at once", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   // Your hobs shows the hob's role on its card.
@@ -271,8 +261,7 @@ test("[TC-AG-075] changing the role in the profile updates Your hobs, the hob's 
   expect(saved).toMatchObject({ role: null, roleTitle: "Bug hunter", sigil: "qa", configVersion: 3 });
 });
 
-// covers AG-002
-test("[TC-AG-088] picking a voice and a length in the profile saves them as the next version", async ({ page }) => {
+test("picking a voice and a length in the profile saves them as the next version", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
@@ -298,8 +287,7 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
   await expect(tone.getByRole("radio", { name: /^Brief/ })).toBeChecked();
 });
 
-// covers AG-002
-test("[TC-AG-1233-03] turning Visible to other hobs off and on in the profile saves each as the next version", async ({
+test("turning Visible to other hobs off and on in the profile saves each as the next version (#1233)", async ({
   page,
   scan,
 }) => {
@@ -345,8 +333,7 @@ interface Permissions {
   readonly decisions: Record<string, string>;
 }
 
-// covers AG-004, PE-001, PE-002
-test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule as new versions", async ({ page }) => {
+test("the Permissions tab adds a hob's own folder and narrows a rule as new versions", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   // Beside the hub's data folder, not inside it: hobs never reach Hobbots' own data.
@@ -428,8 +415,8 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     .toMatchObject({ configVersion: 7, folders: [], policy: { ownFolders: [], overrides: {} } });
 });
 
-// covers AG-004, PE-001, ADR 036
-test("[TC-PE-1266-04] the Permissions tab sets Search the web to Never, and offers it no Ask", async ({ page }) => {
+// covers ADR 036
+test("the Permissions tab sets Search the web to Never, and offers it no Ask (#1266)", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
@@ -446,8 +433,7 @@ test("[TC-PE-1266-04] the Permissions tab sets Search the web to Never, and offe
     .toMatchObject({ policy: { overrides: { "search-web": "deny" } }, decisions: { "search-web": "deny" } });
 });
 
-// covers AG-004, PE-005
-test("[TC-PE-1320] the Permissions tab says commands are read-only while Change files is Never, and closed while it asks", async ({
+test("the Permissions tab says commands are read-only while Change files is Never, and closed while it asks", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
@@ -482,10 +468,7 @@ test("[TC-PE-1320] the Permissions tab says commands are read-only while Change 
   await expect(closed).toHaveCount(1);
 });
 
-// covers AG-004, PE-005
-test("[TC-PE-086] the Permissions tab turns commit signing with 1Password on, with its SSH warning, and off", async ({
-  page,
-}) => {
+test("the Permissions tab turns commit signing with 1Password on, with its SSH warning, and off", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
@@ -512,8 +495,7 @@ test("[TC-PE-086] the Permissions tab turns commit signing with 1Password on, wi
     .not.toHaveProperty("signCommits");
 });
 
-// covers PE-001
-test("[TC-PE-031] hiding a shared folder still works after another hidden one stops being shared", async ({ page }) => {
+test("hiding a shared folder still works after another hidden one stops being shared", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   const [kept, dropped] = [mkdtempSync(`${dataDir}-kept-`), mkdtempSync(`${dataDir}-dropped-`)].map((dir) => {
@@ -535,8 +517,7 @@ test("[TC-PE-031] hiding a shared folder still works after another hidden one st
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
-// covers PE-001, PE-002
-test("[TC-PE-033] an open Permissions tab follows a safety change made in another window", async ({ page }) => {
+test("an open Permissions tab follows a safety change made in another window", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   const shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
@@ -554,8 +535,7 @@ test("[TC-PE-033] an open Permissions tab follows a safety change made in anothe
   await expect(page.getByRole("list", { name: "Shared folders" })).toContainText(shared);
 });
 
-// covers PE-005
-test("[TC-PE-043] where the sandbox cannot start, the profile and provider health say commands are blocked and why", async ({
+test("where the sandbox cannot start, the profile and provider health say commands are blocked and why", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip({ HOBBOTS_FAKE_SANDBOX: "unavailable" });
@@ -585,7 +565,7 @@ test("[TC-PE-043] where the sandbox cannot start, the profile and provider healt
 });
 
 // Regression for #197: hidden radios in a scrolling panel stretched the page, so it scrolled too.
-test("[TC-UX-006] a profile or settings page taller than the window scrolls only its panel", async ({ page }) => {
+test("a profile or settings page taller than the window scrolls only its panel (#197)", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.setViewportSize({ width: 1200, height: 640 });

@@ -51,8 +51,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers OR-004, UX-001
-test("[TC-OR-247] the quest sheet says a member's own Quest has no one brought in yet", async ({ page }) => {
+test("the quest sheet says a member's own Quest has no one brought in yet (#576)", async ({ page }) => {
   const current = await startHub(dataDir);
   hub = current;
   await request(current, "PATCH", "/api/setup", {

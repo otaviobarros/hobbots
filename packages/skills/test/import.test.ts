@@ -26,7 +26,7 @@ const objectFiles = async (folder: string): Promise<ReadonlyArray<string>> => {
 
 describe("skill import", () => {
   // covers ADR 029 (Import, Storage and revisions), #1060
-  it("[TC-AG-121] imports a folder once per content: the same content again returns the existing revision", async () => {
+  it("imports a folder once per content: the same content again returns the existing revision (#1060)", async () => {
     const { layer, data } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release"), "notes/steps.md": "Tag, then push." });
     await runWith(layer)(
@@ -52,7 +52,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Storage and revisions), #1196
-  it("[TC-AG-1196-01] leaves a data folder with skills removable with a plain rm -rf, read-only files and all", async () => {
+  it("leaves a data folder with skills removable with a plain rm -rf, read-only files and all (#1196)", async () => {
     const { layer, data } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release"), "notes/steps.md": "Tag, then push." });
     await runWith(layer)(
@@ -66,7 +66,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Storage and revisions), #1196
-  it("[TC-AG-1196-02] opens the folders of revisions an earlier hub sealed, and keeps their files read-only", async () => {
+  it("opens the folders of revisions an earlier hub sealed, and keeps their files read-only (#1196)", async () => {
     const { data } = await importerLayer();
     const sealed = join(data, "skills", "objects", "a".repeat(64));
     await mkdir(join(sealed, "notes"), { recursive: true });
@@ -84,7 +84,7 @@ describe("skill import", () => {
     expect((await stat(join(sealed, "SKILL.md"))).mode & 0o777).toBe(0o444);
   });
 
-  it("[TC-AG-122] makes a new revision for new content of a skill, and refuses a new skill of a name the library has", async () => {
+  it("makes a new revision for new content of a skill, and refuses a new skill of a name the library has", async () => {
     const { layer } = await importerLayer();
     const one = await folderOf({ "SKILL.md": skillMd("release") });
     const two = await folderOf({ "SKILL.md": skillMd("release", "How releases go now.") });
@@ -105,7 +105,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-123] refuses an archive with a link outside the skill, and writes nothing", async () => {
+  it("refuses an archive with a link outside the skill, and writes nothing", async () => {
     const { layer, data } = await importerLayer();
     const bytes = await archiveOf({
       "release/SKILL.md": skillMd("release"),
@@ -122,7 +122,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-124] refuses a SKILL.md without valid front matter, and a link out of the skill in its text", async () => {
+  it("refuses a SKILL.md without valid front matter, and a link out of the skill in its text", async () => {
     const { layer, data } = await importerLayer();
     const cases = [
       { "SKILL.md": "# Release\n\nNo front matter.\n" },
@@ -149,7 +149,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-125] refuses a link in a folder and a skill over the limits", async () => {
+  it("refuses a link in a folder and a skill over the limits", async () => {
     const { layer } = await importerLayer();
     const linked = await folderOf({ "SKILL.md": skillMd("release"), home: { text: "/", link: true } });
     const many = await folderOf(
@@ -169,7 +169,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-126] imports a Claude Code plugin as one set of its skills, and notes what it dropped", async () => {
+  it("imports a Claude Code plugin as one set of its skills, and notes what it dropped", async () => {
     const { layer } = await importerLayer();
     const plugin = await folderOf({
       ".claude-plugin/plugin.json": JSON.stringify({ name: "acme", version: "2.1.0" }),
@@ -213,7 +213,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-127] drops Codex's tool dependencies and keeps them, and metadata.hobbots.charms, as Charm hints", async () => {
+  it("drops Codex's tool dependencies and keeps them, and metadata.hobbots.charms, as Charm hints", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({
       "SKILL.md": skillMd("pull-requests", "PRs.", "metadata:\n  hobbots:\n    charms: [linear]\n"),
@@ -248,7 +248,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-128] flags a script, a URL and hidden text, and runs nothing", async () => {
+  it("flags a script, a URL and hidden text, and runs nothing", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({
       "SKILL.md": skillMd("release", "Releases.").replace("Steps", "Read https://example.com/guide.​ Steps"),
@@ -270,7 +270,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-129] imports from a Git commit, lists a repository's skills to pick from, and keeps the commit", async () => {
+  it("imports from a Git commit, lists a repository's skills to pick from, and keeps the commit", async () => {
     const { layer } = await importerLayer();
     const repository = await repositoryOf({
       "README.md": "Skills.",
@@ -302,7 +302,7 @@ describe("skill import", () => {
     );
   });
 
-  it("[TC-AG-130] reads skills-lock.json, so a skill the skills CLI installed keeps its version and its source", async () => {
+  it("reads skills-lock.json, so a skill the skills CLI installed keeps its version and its source", async () => {
     const { layer } = await importerLayer();
     const installed = { "SKILL.md": skillMd("pnpm"), "notes.md": "Use pnpm." };
     // The skills CLI's own hash of the installed copy: SHA-256 over each path and then its contents.
@@ -352,7 +352,7 @@ describe("skill import", () => {
 
   // covers STD-SEC-005, ADR 029 (Import), #1060. Three imports of crafted text, each linear but
   // slow on a busy CI machine, so the test has 30 seconds.
-  it("[TC-AG-136] reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes", async () => {
+  it("reads crafted text and names in linear time: long runs of dots, line breaks, fences and slashes (#1060)", async () => {
     const { layer } = await importerLayer();
     const crafted = (run: number) =>
       [
@@ -393,7 +393,7 @@ describe("skill import", () => {
     );
   }, 30_000);
 
-  it("[TC-AG-131] imports a skill written in Hobbots, with no source", async () => {
+  it("imports a skill written in Hobbots, with no source", async () => {
     const { layer } = await importerLayer();
     await runWith(layer)(
       Effect.gen(function* () {
@@ -407,7 +407,7 @@ describe("skill import", () => {
     );
   });
   // covers ADR 029 (Storage and revisions), #1062
-  it("[TC-AG-145] edits a revision into a new one: the description and instructions change, every other file stays", async () => {
+  it("edits a revision into a new one: the description and instructions change, every other file stays (#1062)", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({
       "SKILL.md": "---\nname: release\ndescription: Releases.\nlicense: MIT\n---\n\nTag it.\n",
@@ -445,7 +445,7 @@ describe("skill import", () => {
   });
 
   // covers ADR 029 (Import, Storage and revisions), #1062
-  it("[TC-AG-147] adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing; the same edit again is the revision it made", async () => {
+  it("adds only what was looked at: a source that changed since its scan, or an edit of an older revision, writes nothing; the same edit again is the revision it made (#1062)", async () => {
     const { layer } = await importerLayer();
     const folder = await folderOf({ "SKILL.md": skillMd("release") });
     await runWith(layer)(

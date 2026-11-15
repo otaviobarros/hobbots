@@ -8,10 +8,11 @@
  * Several reports, such as one per shard, can be passed at once.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { type Durations, tagOf } from "./shards.ts";
+import { basename, resolve } from "node:path";
+import type { Durations } from "./shards.ts";
 
 interface Suite {
+  readonly file?: string;
   readonly suites?: ReadonlyArray<Suite>;
   readonly specs?: ReadonlyArray<{
     readonly title: string;
@@ -19,17 +20,20 @@ interface Suite {
   }>;
 }
 
-/** Each test's time in the reports, by tag, rounded to a tenth of a second; shared tags add up. */
+/**
+ * Each spec file's time in the reports, by file name, rounded to a tenth of a second: the time of
+ * its tests added up, each test's longest run, across nested suites and reports.
+ */
 export const durationsOf = (reports: ReadonlyArray<{ readonly suites: ReadonlyArray<Suite> }>): Durations => {
   const totals = new Map<string, number>();
-  const visit = (suite: Suite) => {
+  const visit = (suite: Suite, file: string) => {
     for (const spec of suite.specs ?? []) {
       const runs = spec.tests.flatMap((test) => test.results.map((result) => result.duration));
-      totals.set(tagOf(spec.title), (totals.get(tagOf(spec.title)) ?? 0) + Math.max(0, ...runs));
+      totals.set(file, (totals.get(file) ?? 0) + Math.max(0, ...runs));
     }
-    for (const child of suite.suites ?? []) visit(child);
+    for (const child of suite.suites ?? []) visit(child, file);
   };
-  for (const report of reports) for (const suite of report.suites) visit(suite);
+  for (const report of reports) for (const suite of report.suites) visit(suite, basename(suite.file ?? ""));
   return Object.fromEntries(
     [...totals].sort(([a], [b]) => (a < b ? -1 : 1)).map(([tag, ms]) => [tag, Math.round(ms / 100) * 100]),
   );

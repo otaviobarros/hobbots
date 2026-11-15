@@ -97,8 +97,7 @@ const lead = (tree: TaskTree) => tree.tasks[0] as Task;
 const parts = (tree: TaskTree) => [...ownerBriefingParts(lead(tree), tree), ...reportingRules(lead(tree), tree)];
 
 describe("a lead's briefing on a resumed session", () => {
-  // covers OR-004, OR-005
-  it("[TC-OR-600] a lead told of its Task before is told only what changed, its rules once", () => {
+  it("a lead told of its Task before is told only what changed, its rules once", () => {
     let told = renderBrief(lead(finishedBy(0)).id, parts(finishedBy(0)), null).told;
     const sizes: number[] = [];
     for (let done = 1; done <= MEMBERS.length; done++) {
@@ -120,8 +119,7 @@ describe("a lead's briefing on a resumed session", () => {
     );
   });
 
-  // covers OR-004
-  it("[TC-OR-601] a session told nothing, or told of another Task, is told the whole briefing", () => {
+  it("a session told nothing, or told of another Task, is told the whole briefing", () => {
     const tree = finishedBy(2);
     const whole = renderBrief(lead(tree).id, parts(tree), null);
     expect(whole.text).not.toContain(SINCE_LAST_TURN);
@@ -140,8 +138,7 @@ describe("a lead's briefing on a resumed session", () => {
     expect(same.told).toEqual(whole.told);
   });
 
-  // covers OR-004, OR-005
-  it("[TC-OR-620] a rule that comes to apply, or changes, partway is told on the next wake, and once", () => {
+  it("a rule that comes to apply, or changes, partway is told on the next wake, and once", () => {
     const tree = finishedBy(1);
     const noQuest = new TaskTree({ ...tree, quests: [] });
     // Before the Quest starts on the Task, there is no lead guidance to tell.
@@ -164,8 +161,7 @@ describe("a lead's briefing on a resumed session", () => {
     for (const told of RULES) expect(resent.text).toContain(told);
   });
 
-  // covers OR-004
-  it("[TC-OR-621] a rule whose text changes, or that stops applying and applies again, is told again once", () => {
+  it("a rule whose text changes, or that stops applying and applies again, is told again once", () => {
     const id = lead(finishedBy(0)).id;
     const briefed = (...rules: ReadonlyArray<BriefPart>) => [fixed("You are working on it."), ...rules];
     const first = renderBrief(id, briefed(rule("chat", "Write only the plan.")), null);
@@ -185,8 +181,7 @@ describe("a lead's briefing on a resumed session", () => {
     );
   });
 
-  // covers OR-004, IN-004
-  it("[TC-OR-602] the questions waiting for the user are told on every turn, so a note is never taken for an answer", () => {
+  it("the questions waiting for the user are told on every turn, so a note is never taken for an answer", () => {
     const tree = finishedBy(0);
     const waiting = new TaskTree({
       ...tree,
@@ -221,8 +216,7 @@ describe("a lead's briefing on a resumed session", () => {
 });
 
 describe("a result that arrives with a lead's turn", () => {
-  // covers OR-004, OR-005
-  it("[TC-OR-622] is told in the briefing alone, whole up to the result limit, and once", () => {
+  it("is told in the briefing alone, whole up to the result limit, and once", () => {
     const before = finishedBy(1);
     const told = renderBrief(lead(before).id, parts(before), null).told;
     const tree = finishedBy(2);

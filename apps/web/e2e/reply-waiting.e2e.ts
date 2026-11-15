@@ -43,8 +43,7 @@ const leadWokeAndEnded = (page: Page) =>
     )
     .toBe(true);
 
-// covers CH-004, CH-007, CH-008
-test("[TC-CH-1056-03] a reply waiting on a command says which one and for how long, and Stop waiting ends it with the command stopped", async ({
+test("a reply waiting on a command says which one and for how long, and Stop waiting ends it with the command stopped (#1056)", async ({
   page,
   scan,
 }) => {

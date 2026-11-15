@@ -26,8 +26,7 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 // The fake runtime writes one word every 40 ms and takes 600 ms to end a stopped turn.
 const LONG_PROMPT = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
 
-// covers CH-007
-test("[TC-CH-005] Stop shows Stopping, then Stopped with the partial reply kept, and a second Stop is harmless", async ({
+test("Stop shows Stopping, then Stopped with the partial reply kept, and a second Stop is harmless", async ({
   page,
 }) => {
   hub = await startHub(dataDir);

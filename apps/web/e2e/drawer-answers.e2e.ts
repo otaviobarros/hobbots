@@ -22,8 +22,7 @@ const openAdasTask = async (page: Page) => {
   return { url, drawer };
 };
 
-// covers OR-004, IN-002, UX-001
-test("[TC-UX-085] a question waiting for you is answered in its lane in the Quest room, goes back to the hob that asked, and leaves the Inbox", async ({
+test("a question waiting for you is answered in its lane in the Quest room, goes back to the hob that asked, and leaves the Inbox", async ({
   page,
 }) => {
   const { url, drawer } = await openAdasTask(page);
@@ -54,8 +53,7 @@ test("[TC-UX-085] a question waiting for you is answered in its lane in the Ques
   await expect(page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Question/ })).toHaveCount(0);
 });
 
-// covers OR-004, IN-002, UX-001
-test("[TC-IN-489] an answer given in the Inbox says so in the Quest room and on the chat's card", async ({ page }) => {
+test("an answer given in the Inbox says so in the Quest room and on the chat's card", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -79,8 +77,7 @@ test("[TC-IN-489] an answer given in the Inbox says so in the Quest room and on 
   await expect(drawer).toContainText("You answered in the Inbox: Yes, Dec 12.");
 });
 
-// covers UX-006
-test("[TC-UX-218] answering in the chat's Needs-you tray moves focus to the composer once nothing else waits, and says what was sent", async ({
+test("answering in the chat's Needs-you tray moves focus to the composer once nothing else waits, and says what was sent", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();

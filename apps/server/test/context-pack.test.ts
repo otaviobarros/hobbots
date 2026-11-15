@@ -217,7 +217,7 @@ const summarizedEntries = () =>
 describe("the context pack", () => {
   // covers ADR 037 (The context pack), CH-001, RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1380-10] on %s, a new chapter's first session gets the open Task, its question, the decisions and the last chapter's summary from the pack alone",
+    "on %s, a new chapter's first session gets the open Task, its question, the decisions and the last chapter's summary from the pack alone (#1380)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
@@ -251,7 +251,7 @@ describe("the context pack", () => {
 
   // covers ADR 037 (The context pack, Records), CH-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1383-11] on %s, a new chapter's first session gets the decisions that hold and what the thread made, and no crossed-out decision",
+    "on %s, a new chapter's first session gets the decisions that hold and what the thread made, and no crossed-out decision (#1383)",
     async (runtime) => {
       const id = await start(runtime, Layer.empty, StoredRecords);
       const reply = await say(id, "Plan the launch emails.");
@@ -300,7 +300,7 @@ describe("the context pack", () => {
   );
 
   // covers ADR 037 (The context pack), STD-ARCH-016
-  it("[TC-CH-1380-11] the summary projector writes each resting chapter's summary once, and resumes from its cursor after a restart", async () => {
+  it("the summary projector writes each resting chapter's summary once, and resumes from its cursor after a restart (#1380)", async () => {
     const id = await start("claude-code", Brain);
     await say(id, "My cat is called Miso.");
     await startChapter(id, "chapter-2", "The garden");
@@ -331,7 +331,7 @@ describe("the context pack", () => {
   });
 
   // covers ADR 037 (The context pack), STD-ARCH-014, STD-ARCH-016
-  it("[TC-CH-1380-13] a summary the brain wrote while a split changed its chapter is never kept: the chapter is summarized again from what it now holds", async () => {
+  it("a summary the brain wrote while a split changed its chapter is never kept: the chapter is summarized again from what it now holds (#1380)", async () => {
     // The brain's first answer waits until the split has landed, and says it is stale.
     let reached = () => {};
     const atBrain = new Promise<void>((resolve) => {
@@ -392,7 +392,7 @@ describe("the context pack", () => {
   });
 
   // covers ADR 037 (The context pack), ADR 028
-  it("[TC-CH-1380-12] a private camp's chapter summary stays in that camp: memory capture takes nothing of it, and another camp's pack never reads it", async () => {
+  it("a private camp's chapter summary stays in that camp: memory capture takes nothing of it, and another camp's pack never reads it (#1380)", async () => {
     const chat = await start("claude-code");
     const camp = await run(
       ChatService.use((service) =>

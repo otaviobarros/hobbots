@@ -208,8 +208,8 @@ const exchange = async (thread: Thread, content: string) => {
 };
 
 describe("decisions over the API", () => {
-  // covers CH-001, ADR 037 (Records)
-  it("[TC-CH-1383-08] keeps a hob's decision from its turn, and yours that replaces it, crossed out and listed", async () => {
+  // covers ADR 037 (Records)
+  it("keeps a hob's decision from its turn, and yours that replaces it, crossed out and listed (#1383)", async () => {
     const { thread } = await pipWithThread();
     const call = { key: "tuesdays", text: "Launch emails go out on Tuesdays." };
     const reply = await exchange(thread, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
@@ -260,8 +260,8 @@ describe("decisions over the API", () => {
 });
 
 describe("camp suggestions over the API", () => {
-  // covers CH-009, ADR 037 (Records: CampSuggestion, Moving a chapter into a camp moves it)
-  it("[TC-CH-1385-18] offers a grown chat chapter, keeps it in the chat, and moves it into a new camp once", async () => {
+  // covers ADR 037 (Records: CampSuggestion, Moving a chapter into a camp moves it)
+  it("offers a grown chat chapter, keeps it in the chat, and moves it into a new camp once (#1385)", async () => {
     const { thread } = await pipWithThread();
     await exchange(thread, "Let us plan the launch.");
     for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) {
@@ -322,8 +322,8 @@ describe("camp suggestions over the API", () => {
 });
 
 describe("the camp sheet over the API", () => {
-  // covers CH-001, ADR 037 (Mine: notes to self never wake a hob)
-  it("[TC-CH-1387-01] keeps a note to self that wakes no hob, once under its key", async () => {
+  // covers ADR 037 (Mine: notes to self never wake a hob)
+  it("keeps a note to self that wakes no hob, once under its key (#1387)", async () => {
     const { thread } = await pipWithThread();
     await exchange(thread, "Hello.");
     const note = { key: "note-1", content: "Ask Ana about the venue." };
@@ -343,8 +343,8 @@ describe("the camp sheet over the API", () => {
     expect((await request("POST", "/api/threads/nope/notes", note)).status).toBe(404);
   });
 
-  // covers CH-001, ADR 037 (Mine: pins)
-  it("[TC-CH-1387-02] pins a message once, lists it, and unpins it", async () => {
+  // covers ADR 037 (Mine: pins)
+  it("pins a message once, lists it, and unpins it (#1387)", async () => {
     const { thread } = await pipWithThread();
     const reply = await exchange(thread, "Hello.");
     const path = `/api/threads/${thread.id}/messages/${reply.id}/pinned`;
@@ -358,8 +358,8 @@ describe("the camp sheet over the API", () => {
     expect(elsewhere).toMatchObject({ status: 404, body: { _tag: "MessageNotFound" } });
   });
 
-  // covers CH-001, ADR 037 (Catch-up)
-  it("[TC-CH-1387-03] catches you up on the replies and records since you read, and on nothing after", async () => {
+  // covers ADR 037 (Catch-up)
+  it("catches you up on the replies and records since you read, and on nothing after (#1387)", async () => {
     const { thread } = await pipWithThread();
     const first = await exchange(thread, "Hello.");
     await request("PUT", `/api/threads/${thread.id}/read`, { messageId: first.id, revision: first.revision });
@@ -376,7 +376,7 @@ describe("the camp sheet over the API", () => {
   });
 
   // covers ADR 039 (Cards every thread shares › For you)
-  it("[TC-CH-1456-01] lists in For you, for the person asking, the changes catch-up lists, and nothing once read", async () => {
+  it("lists in For you, for the person asking, the changes catch-up lists, and nothing once read (#1456)", async () => {
     const { thread } = await pipWithThread();
     const first = await exchange(thread, "Hello.");
     await request("PUT", `/api/threads/${thread.id}/read`, { messageId: first.id, revision: first.revision });
@@ -397,8 +397,8 @@ describe("the camp sheet over the API", () => {
     expect((await forYou()).forYou.away.find((part) => part.threadId === thread.id)).toBeUndefined();
   });
 
-  // covers CH-001, ADR 037 (Private camps), #1377
-  it("[TC-CH-1387-04] makes a camp private later, and refuses it for a chat", async () => {
+  // covers ADR 037 (Private camps), #1377
+  it("makes a camp private later, and refuses it for a chat (#1387)", async () => {
     const { thread } = await pipWithThread();
     const chat = await request("PUT", `/api/threads/${thread.id}/private`, { private: true });
     expect(chat).toMatchObject({ status: 409, body: { _tag: "ThreadNotCamp" } });
@@ -414,7 +414,7 @@ describe("the camp sheet over the API", () => {
 
 describe("the sidebar over the API", () => {
   // covers ADR 039 (The sidebar), #1469
-  it("[TC-UX-1469-01] lists a hob's chat in Direct messages and its camps in Camps, with your unread replies, sorted on every read", async () => {
+  it("lists a hob's chat in Direct messages and its camps in Camps, with your unread replies, sorted on every read (#1469)", async () => {
     const { pip, thread } = await pipWithThread();
     await exchange(thread, "Hello.");
     const camp = await request<Thread>("POST", `/api/agents/${pip.id}/camps`, {

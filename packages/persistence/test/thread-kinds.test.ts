@@ -103,8 +103,7 @@ const layer = Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer).pipe(
 );
 
 describe("0095_thread_kinds", () => {
-  // covers CH-009, DP-003
-  it("[TC-DP-1269] makes each hob's most recent open thread its chat and every other thread a camp with its title", async () => {
+  it("makes each hob's most recent open thread its chat and every other thread a camp with its title (#1375)", async () => {
     sequence = 0;
     const result = await Effect.gen(function* () {
       for (const hob of ["ada", "bo", "cy", "di"]) yield* storedHob(hob);
@@ -172,8 +171,7 @@ describe("0095_thread_kinds", () => {
     expect(journaled).toEqual(kindsOf(result.threads));
   });
 
-  // covers CH-009, DP-003
-  it("[TC-DP-1270] refuses a second open chat for a hob in the database, and takes an archived one or another hob's", async () => {
+  it("refuses a second open chat for a hob in the database, and takes an archived one or another hob's (#1375)", async () => {
     sequence = 0;
     const result = await Effect.gen(function* () {
       yield* storedHob("ada");

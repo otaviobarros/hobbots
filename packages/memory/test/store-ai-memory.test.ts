@@ -60,7 +60,7 @@ describe("ai-memory scopes", () => {
   });
 
   // covers ADR 028 (Backups), OP-002
-  it("[TC-OP-101] reads each engine project back as the scope it holds", () => {
+  it("reads each engine project back as the scope it holds", () => {
     const app = memoryProjectIdentity("git@github.com:me/app.git", "app");
     const pip = AgentId.make("h-pip");
     for (const scope of [{ _tag: "Everyone" }, { _tag: "Hob", agentId: pip }] as const) {
@@ -76,7 +76,7 @@ describe("ai-memory scopes", () => {
 
 describe.runIf(engineEnabled)("who wrote each version, when the hub cannot keep it", () => {
   // covers ADR 028 (forget, restore), #1317
-  it("[TC-GEN-1317-03] still writes, forgets with its Undo, and restores when the record of authors fails", async () => {
+  it("still writes, forgets with its Undo, and restores when the record of authors fails (#1317)", async () => {
     const { dataDir, keys } = engineDataDir();
     const broken = MemoryVersionAuthors.of({
       record: () => Effect.die(new Error("the database is gone")),
@@ -109,7 +109,7 @@ describe.runIf(engineEnabled)("who wrote each version, when the hub cannot keep 
 
 describe.runIf(engineEnabled)("scopes with nothing in them yet on ai-memory", () => {
   // covers #1032
-  it("[TC-GEN-399] reads a hob's, a project's and everyone's empty memory without a warning in the engine's log", async () => {
+  it("reads a hob's, a project's and everyone's empty memory without a warning in the engine's log (#1032)", async () => {
     const { dataDir, keys } = engineDataDir();
     const { store } = await Effect.runPromise(startEngineStore(dataDir, keys));
     const you = { _tag: "You" } as const;
@@ -148,7 +148,7 @@ describe.runIf(engineEnabled)("scopes with nothing in them yet on ai-memory", ()
 
 describe.runIf(engineEnabled)("Check now on ai-memory", () => {
   // covers ADR 028 (Sharing), #960
-  it("[TC-GEN-373] finds a page flagged as out of date, as Check now shows it", async () => {
+  it("finds a page flagged as out of date, as Check now shows it (#960)", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const site: MemoryScope = {
       _tag: "Project",
@@ -187,7 +187,7 @@ describe.runIf(engineEnabled)("Check now on ai-memory", () => {
 
 describe.runIf(engineEnabled)("a version's text on ai-memory", () => {
   // covers ADR 028 (Sharing), STD-DATA-001, #960
-  it("[TC-GEN-384] answers no text for a version whose diff ai-memory cuts short, never a part of it", async () => {
+  it("answers no text for a version whose diff ai-memory cuts short, never a part of it (#960)", async () => {
     const { store } = await Effect.runPromise(open());
     const site: MemoryScope = {
       _tag: "Project",
@@ -209,7 +209,7 @@ describe.runIf(engineEnabled)("a version's text on ai-memory", () => {
 
 describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   // covers ADR 028 (Backups), OP-002
-  it("[TC-OP-102] says memory did not answer in full rather than leave a project it cannot name out", async () => {
+  it("says memory did not answer in full rather than leave a project it cannot name out", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const app: MemoryScope = { _tag: "Project", identity: memoryProjectIdentity("git@github.com:me/app.git", "app") };
     const you = { _tag: "You" } as const;
@@ -241,7 +241,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
   });
 
   // covers ADR 028 (Writes), #961
-  it("[TC-GEN-348] refuses a restore at a version when ai-memory writes the page after the restore read it, and keeps that write", async () => {
+  it("refuses a restore at a version when ai-memory writes the page after the restore read it, and keeps that write (#961)", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
     const you = { _tag: "You" } as const;
@@ -292,7 +292,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
 
 describe.runIf(engineEnabled)("aging on ai-memory", () => {
   // covers ADR 028 (Writes), #959
-  it("[TC-GEN-333] has the engine's sweep delete a page past its forget day for good, and leave a pinned page as it is", async () => {
+  it("has the engine's sweep delete a page past its forget day for good, and leave a pinned page as it is (#959)", async () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const you = { _tag: "You" } as const;
     const own: MemoryScope = { _tag: "Hob", agentId: AgentId.make("h-pip") };
