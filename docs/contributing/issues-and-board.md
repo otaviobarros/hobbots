@@ -15,12 +15,14 @@ A **vertical slice** is an outcome a user can try end to end, cutting through ev
 
 ## Opening an issue
 
-Open a new issue and pick a form. Blank issues are turned off so every issue starts with the details triage needs. Maintainers file slices and their tasks themselves.
+Open a new issue and pick a form. Blank issues are turned off so every issue starts with the details triage needs.
 
 | Form | Use it for | Labels it adds |
 |---|---|---|
 | Bug report | Something does not work as documented. | `type: bug`, `status: triage` |
 | Feature request | New behavior you would like to see. | `type: feature`, `status: triage` |
+| Vertical slice | Maintainers planning a milestone. | `type: slice`, `status: triage` |
+| Task | One step of a slice, or a small standalone change. | `type: task`, `status: triage` |
 | Role request | A hob role missing from the starter set. See [Role requests](#role-requests). | `type: feature`, `area: design`, `status: triage` |
 
 Search existing issues first, write one problem per issue, and never paste API keys, device tokens or private files. Report security vulnerabilities privately through the repository's Security tab, not in a public issue.

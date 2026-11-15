@@ -1,0 +1,29 @@
+name: Task
+description: One piece of work, usually a sub-issue of a slice.
+labels: ["type: task", "status: triage"]
+body:
+  - type: input
+    id: slice
+    attributes:
+      label: Slice
+      description: The slice this task belongs to. Also add the task as a sub-issue of that slice.
+      placeholder: "#12"
+  - type: textarea
+    id: what
+    attributes:
+      label: What to do
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      value: |
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Pointers to code, docs or decisions that help.

@@ -1,0 +1,42 @@
+name: Vertical slice
+description: An end-to-end outcome that a user can try. Maintainers open these when planning a milestone.
+title: "Slice: "
+labels: ["type: slice", "status: triage"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences on what a user can do when this slice is done.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What this slice builds, across every layer it touches.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: What a person can do once the slice is done, checked at the milestone's dogfood check.
+      value: |
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: ADRs and issues this slice builds on.
+      placeholder: "ADR 039, #1450"
+  - type: markdown
+    attributes:
+      value: |
+        After creating the slice, add its steps as sub-issues using the Task form.
