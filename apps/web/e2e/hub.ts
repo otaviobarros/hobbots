@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { TEST_PEOPLE_FILE, type TestPersonSeat, TestPersonSeats } from "@hobbots/api";
-import { type Browser, type BrowserContext, test as base, expect, type Locator } from "@playwright/test";
+import { type Browser, type BrowserContext, test as base, expect, type Locator, type Page } from "@playwright/test";
 import { Schema } from "effect";
 import { expectAccessible, type SetAside } from "./accessibility.ts";
 import { type WindowWatch, watchWindow } from "./window-still.ts";
@@ -263,6 +263,13 @@ export const campAt = async (
   const camp = (await response.json()) as { readonly id: string };
   return { id: camp.id, url: `${current.url}/#/hobs/${hobId}/threads/${camp.id}` };
 };
+
+/** A camp in the sidebar's Camps, a link named by its title (ADR 039, The sidebar). */
+export const sidebarThread = (page: Page, title: string) =>
+  page
+    .getByRole("navigation", { name: "Sections" })
+    .getByRole("list", { name: "Camps" })
+    .getByRole("link", { name: title, exact: true });
 
 const stopProcess = (child: ChildProcess, signal: NodeJS.Signals = "SIGTERM") =>
   new Promise<void>((done) => {

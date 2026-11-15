@@ -1,0 +1,123 @@
+import { readFileSync } from "node:fs";
+import type { Page } from "@playwright/test";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+
+let hub: Hub | undefined;
+let dataDir = "";
+
+test.beforeEach(() => {
+  dataDir = emptyDataDir();
+});
+
+test.afterEach(async () => {
+  await hub?.stop();
+  hub = undefined;
+  removeDataDir(dataDir);
+});
+
+interface ThemeFile {
+  readonly themes: readonly { readonly id: string }[];
+  readonly color: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
+
+const themes: ThemeFile = JSON.parse(
+  readFileSync(new URL("../../../docs/design/themes.json", import.meta.url), "utf8"),
+);
+
+/** A token's `#rrggbb` value in a theme, as the browser reports a computed color. */
+const rgb = (token: string, theme: string) => {
+  const hex = themes.color[token]?.[theme] ?? "";
+  const [r, g, b] = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+};
+
+/** The page's background, and what a probe styled like a primary button shows and runs. */
+const looks = (page: Page) =>
+  page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.className = "animate-hb-bob bg-primary text-text-strong";
+    const card = document.createElement("div");
+    card.className = "cut lbl";
+    document.body.append(probe, card);
+    const style = getComputedStyle(probe);
+    const shape = getComputedStyle(card);
+    const seen = {
+      background: getComputedStyle(document.body).backgroundColor,
+      primary: style.backgroundColor,
+      text: style.color,
+      animation: style.animationName,
+      corner: shape.borderTopLeftRadius,
+      clipped: shape.clipPath !== "none",
+      labelCase: shape.textTransform,
+    };
+    probe.remove();
+    card.remove();
+    return seen;
+  });
+
+/** Starts a hub whose setup is finished and opens Settings on it. */
+const openSettings = async (page: Page) => {
+  hub = await startHub(dataDir);
+  const response = await fetch(`${hub.url}/api/setup`, {
+    method: "PATCH",
+    headers: { ...hub.headers, "content-type": "application/json" },
+    body: JSON.stringify({ completed: true }),
+  });
+  if (!response.ok) throw new Error(`Finishing setup answered ${response.status}`);
+  await page.goto(`${hub.url}/#/settings/app`);
+};
+
+test("This app picks the look, Light, Dark or Automatic and the text size, and keeps them on this device", async ({
+  page,
+}) => {
+  await openSettings(page);
+  const appearance = page.getByRole("region", { name: "Appearance" });
+  await expect(appearance.getByRole("radio", { name: /Workshop/ })).toBeChecked();
+  await expect(appearance.getByRole("radio", { name: "Dark", exact: true })).toHaveAttribute("aria-checked", "true");
+
+  // The look keeps the mode, and the mode keeps the look.
+  await appearance.getByText("Lamplight", { exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-dusk");
+  await appearance.getByRole("radio", { name: "Light", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-paper");
+  expect((await looks(page)).background).toBe(rgb("ground", "lamplight-paper"));
+  await appearance.getByText("Workshop", { exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+
+  // Automatic follows the system's light or dark, and changes with it.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await appearance.getByRole("radio", { name: "Automatic" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+  await expect(appearance.getByRole("radio", { name: "Automatic" })).toHaveAttribute("aria-checked", "true");
+
+  // Larger scales the whole app, which still fits the window.
+  await appearance.getByRole("radio", { name: "Larger" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
+  // The frame is sized to the screen, so it must end at the window's bottom edge, not past it.
+  const fits = () =>
+    page.evaluate(() => ({
+      zoom: getComputedStyle(document.documentElement).zoom,
+      overflows:
+        (document.querySelector("#root")?.firstElementChild?.getBoundingClientRect().bottom ?? 0) > innerHeight + 1,
+    }));
+  expect(await fits()).toEqual({ zoom: "1.125", overflows: false });
+
+  // Both survive a restart, and Standard takes Larger back.
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+  await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
+  await page.getByRole("region", { name: "Appearance" }).getByRole("radio", { name: "Standard" }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-text-size", /.*/);
+
+  // The arrow keys pick the segment they move to, as in every segmented control.
+  const sizes = page.getByRole("region", { name: "Appearance" }).getByRole("radiogroup", { name: "Text size" });
+  await page.keyboard.press("ArrowRight");
+  await expect(sizes.getByRole("radio", { name: "Larger" })).toBeFocused();
+  await expect(sizes.getByRole("radio", { name: "Larger" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-text-size", "larger");
+  await page.keyboard.press("ArrowLeft");
+  await expect(sizes.getByRole("radio", { name: "Standard" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).not.toHaveAttribute("data-text-size", /.*/);
+});
